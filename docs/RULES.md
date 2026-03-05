@@ -1,0 +1,13 @@
+- use red/green testing 
+- make build test must be run always and must always succeed (make test)
+- ensure there are unit tests for all code written (make test-unit)
+- ensure there are integration tests for all code writte (make test-integration)
+- ensure there are playright tests for all endpoints (make test-playwright)
+- do not drift documentation against code; as you code, you must update the DESIGN and USER_GUIDE to be consistent
+- externalise strings to constants.go where possible
+- assess the drift between code and design and explain where you believe you are
+
+- `review` means re-read TODO, DESIGN and USER_GUIDE against the code and and propose the next steps
+- `continue` means re-read TODO, DESIGN and USER_GUIDE against the continue the implementation
+- `linear` or `walkthrough` means Read the source and then plan a linear walkthrough of the code that explains how it all works in detail.  Then run “uvx showboat –help” to learn showboat - use showboat to create a walkthrough.md file in the repo and build the walkthrough in there, using showboat note for commentary and showboat exec plus sed or grep or cat or whatever you need to include snippets of code you are talking about
+- `pr` means file a PR for the branch.  The PR should contain the task ID.

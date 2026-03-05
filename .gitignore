@@ -1,0 +1,12 @@
+.beads
+bin/
+commands.sh
+commands2.sh
+tk
+task
+parser
+task.db
+ticket.db
+node_modules/
+playwright-report/
+test-results/

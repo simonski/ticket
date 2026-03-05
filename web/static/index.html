@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>task</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe7;
+        --card: #fffdf8;
+        --ink: #1f2430;
+        --muted: #5d6470;
+        --accent: #006d77;
+        --border: #d7d0c4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at top left, #fef6e4 0, transparent 28rem),
+          linear-gradient(180deg, #f4efe7 0%, #ebe2d4 100%);
+        color: var(--ink);
+      }
+
+      main {
+        max-width: 56rem;
+        margin: 0 auto;
+        padding: 4rem 1.5rem;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0 1rem 2rem rgba(31, 36, 48, 0.08);
+      }
+
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(2.5rem, 8vw, 4.5rem);
+        line-height: 0.95;
+      }
+
+      p {
+        margin: 0 0 1rem;
+        max-width: 42rem;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      form {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        max-width: 24rem;
+      }
+
+      input,
+      button {
+        font: inherit;
+      }
+
+      input {
+        border: 1px solid var(--border);
+        border-radius: 0.6rem;
+        padding: 0.8rem 0.9rem;
+        background: white;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 0.8rem 1rem;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+      }
+
+      .row {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .secondary {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+      }
+
+      .status {
+        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 0.75rem;
+        background: #f8f4ed;
+        border: 1px solid var(--border);
+      }
+
+      .project-panel {
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .task-list {
+        margin-top: 1rem;
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .task-card {
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        background: white;
+      }
+
+      .task-meta {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .task-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1fr;
+      }
+
+      @media (min-width: 860px) {
+        .task-grid {
+          grid-template-columns: 1.1fr 0.9fr;
+        }
+      }
+
+      .detail-card {
+        margin-top: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        background: #fffaf2;
+      }
+
+      .detail-list {
+        margin-top: 1rem;
+        padding-left: 1rem;
+        color: var(--muted);
+      }
+
+      .view-tabs {
+        margin-top: 1rem;
+      }
+
+      .view-tabs button[aria-pressed="true"] {
+        background: var(--accent);
+        color: white;
+      }
+
+      .board {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+        margin-top: 1rem;
+      }
+
+      @media (min-width: 860px) {
+        .board {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+
+      .board-column {
+        border: 1px solid var(--border);
+        border-radius: 0.85rem;
+        padding: 0.85rem;
+        background: #fffaf2;
+      }
+
+      .board-column h3 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+      }
+
+      .mini-card {
+        margin-top: 0.6rem;
+        padding: 0.75rem;
+        border-radius: 0.7rem;
+        border: 1px solid var(--border);
+        background: white;
+        cursor: pointer;
+      }
+
+      .hierarchy {
+        margin-top: 1rem;
+        display: grid;
+        gap: 1rem;
+      }
+
+      .epic-group {
+        border: 1px solid var(--border);
+        border-radius: 0.85rem;
+        padding: 1rem;
+        background: #fffaf2;
+      }
+
+      .epic-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: baseline;
+      }
+
+      .child-list {
+        margin-top: 0.75rem;
+        display: grid;
+        gap: 0.5rem;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .spec-card {
+        margin-top: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.85rem;
+        padding: 1rem;
+        background: #fffaf2;
+      }
+
+      select {
+        border: 1px solid var(--border);
+        border-radius: 0.6rem;
+        padding: 0.8rem 0.9rem;
+        background: white;
+        font: inherit;
+      }
+
+      code {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>ticket</h1>
+        <p>A lightweight ticket and project management system.</p>
+        <p>The backend is running. Authentication is available through the same API used by the CLI.</p>
+        <div class="status" id="status">Checking server status...</div>
+        <form id="login-form">
+          <input id="username" name="username" placeholder="Username" autocomplete="username" required />
+          <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+          <div class="row">
+            <button type="submit">Log In</button>
+            <button class="secondary" type="button" id="logout">Log Out</button>
+          </div>
+        </form>
+        <section class="project-panel">
+          <p>Projects are loaded from the authenticated API session and the selected project is remembered in the browser.</p>
+          <div class="row">
+            <select id="project-select">
+              <option value="">No active project</option>
+            </select>
+            <button class="secondary" type="button" id="refresh-projects">Refresh Projects</button>
+          </div>
+          <form id="project-form">
+            <input id="project-prefix" name="project-prefix" placeholder="Prefix (e.g. CUS)" required />
+            <input id="project-title" name="project-title" placeholder="New project title" required />
+            <input id="project-description" name="project-description" placeholder="Description (optional)" />
+            <button type="submit">Create Project</button>
+          </form>
+          <form id="ticket-form">
+            <select id="task-type">
+              <option value="task">Task</option>
+              <option value="epic">Epic</option>
+              <option value="bug">Bug</option>
+              <option value="spike">Spike</option>
+              <option value="chore">Chore</option>
+            </select>
+            <input id="task-title" name="task-title" placeholder="New work item title" required />
+            <input id="task-description" name="task-description" placeholder="Description (optional)" />
+            <button type="submit">Create Ticket</button>
+          </form>
+          <div class="row" style="margin-top: 1rem;">
+            <select id="filter-type">
+              <option value="">All types</option>
+              <option value="task">Task</option>
+              <option value="epic">Epic</option>
+              <option value="bug">Bug</option>
+              <option value="spike">Spike</option>
+              <option value="chore">Chore</option>
+            </select>
+            <select id="filter-status">
+              <option value="">All statuses</option>
+              <option value="design/idle">Design / Idle</option>
+              <option value="design/active">Design / Active</option>
+              <option value="develop/idle">Develop / Idle</option>
+              <option value="develop/active">Develop / Active</option>
+              <option value="test/idle">Test / Idle</option>
+              <option value="test/active">Test / Active</option>
+              <option value="done/complete">Done / Complete</option>
+            </select>
+            <input id="filter-search" placeholder="Search tickets" />
+            <button class="secondary" type="button" id="apply-filters">Filter</button>
+          </div>
+          <div class="row view-tabs">
+            <button class="secondary" type="button" id="view-list" aria-pressed="true">List</button>
+            <button class="secondary" type="button" id="view-board" aria-pressed="false">Board</button>
+            <button class="secondary" type="button" id="view-hierarchy" aria-pressed="false">Hierarchy</button>
+          </div>
+          <div class="task-grid">
+            <div>
+              <div class="task-list" id="task-list"></div>
+              <div class="board" id="task-board" hidden></div>
+              <div class="hierarchy" id="task-hierarchy" hidden></div>
+            </div>
+            <div class="detail-card" id="task-detail">Select a ticket to inspect and update it.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script>
+      const statusEl = document.getElementById("status");
+      const form = document.getElementById("login-form");
+      const logoutButton = document.getElementById("logout");
+      const projectSelect = document.getElementById("project-select");
+      const refreshProjectsButton = document.getElementById("refresh-projects");
+      const projectForm = document.getElementById("project-form");
+      const taskForm = document.getElementById("ticket-form");
+      const taskList = document.getElementById("task-list");
+      const taskBoard = document.getElementById("task-board");
+      const taskHierarchy = document.getElementById("task-hierarchy");
+      const taskDetail = document.getElementById("task-detail");
+      const filterType = document.getElementById("filter-type");
+      const filterStatus = document.getElementById("filter-status");
+      const filterSearch = document.getElementById("filter-search");
+      const applyFilters = document.getElementById("apply-filters");
+      const viewButtons = {
+        list: document.getElementById("view-list"),
+        board: document.getElementById("view-board"),
+        hierarchy: document.getElementById("view-hierarchy"),
+      };
+      let refreshTimer = null;
+      let lastTasks = [];
+
+      async function refreshStatus() {
+        const response = await fetch("/api/status", {
+          headers: authHeaders(),
+        });
+        const data = await response.json();
+        if (!data.authenticated) {
+          statusEl.textContent = "Not authenticated. Log in to start using ticket.";
+          renderProjects([]);
+          return;
+        }
+        statusEl.textContent = `Authenticated as ${data.user.username} (${data.user.role})`;
+        await loadProjects();
+        startLiveRefresh();
+      }
+
+      function authHeaders() {
+        const token = localStorage.getItem("task-token");
+        return token ? { Authorization: `Bearer ${token}` } : {};
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+        const response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          statusEl.textContent = data.error || "Login failed.";
+          return;
+        }
+        localStorage.setItem("task-token", data.token);
+        statusEl.textContent = `Authenticated as ${data.user.username} (${data.user.role})`;
+        await loadProjects();
+      });
+
+      logoutButton.addEventListener("click", async () => {
+        const token = localStorage.getItem("task-token");
+        if (token) {
+          await fetch("/api/logout", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+        localStorage.removeItem("task-token");
+        localStorage.removeItem("task-project");
+        localStorage.removeItem("task-view");
+        statusEl.textContent = "Not authenticated. Log in to start using ticket.";
+        renderProjects([]);
+        renderTasks([]);
+        renderBoard([]);
+        renderHierarchy([]);
+        stopLiveRefresh();
+      });
+
+      refreshProjectsButton.addEventListener("click", () => {
+        loadProjects().catch(() => {
+          statusEl.textContent = "Unable to load projects.";
+        });
+      });
+
+      projectSelect.addEventListener("change", () => {
+        localStorage.setItem("task-project", projectSelect.value);
+        localStorage.removeItem("task-selected");
+        loadTasks().catch(() => {
+          statusEl.textContent = "Unable to load tasks.";
+        });
+      });
+
+      applyFilters.addEventListener("click", () => {
+        loadTasks().catch(() => {
+          statusEl.textContent = "Unable to filter tasks.";
+        });
+      });
+
+      Object.entries(viewButtons).forEach(([view, button]) => {
+        button.addEventListener("click", () => {
+          localStorage.setItem("task-view", view);
+          updateView();
+        });
+      });
+
+      projectForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const response = await fetch("/api/projects", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({
+            prefix: document.getElementById("project-prefix").value,
+            title: document.getElementById("project-title").value,
+            description: document.getElementById("project-description").value,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          statusEl.textContent = data.error || "Project creation failed.";
+          return;
+        }
+        localStorage.setItem("task-project", String(data.project_id));
+        projectForm.reset();
+        await loadProjects();
+        await loadTasks();
+      });
+
+      taskForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const currentProject = localStorage.getItem("task-project");
+        if (!currentProject) {
+          statusEl.textContent = "Select a project before creating work items.";
+          return;
+        }
+        const projectsResponse = await fetch("/api/projects/" + currentProject, {
+          headers: authHeaders(),
+        });
+        const project = await projectsResponse.json();
+        const response = await fetch("/api/tickets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+          },
+          body: JSON.stringify({
+            project_id: project.project_id,
+            type: document.getElementById("task-type").value,
+            title: document.getElementById("task-title").value,
+            description: document.getElementById("task-description").value,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          statusEl.textContent = data.error || "Ticket creation failed.";
+          return;
+        }
+        taskForm.reset();
+        await loadTasks();
+      });
+
+      async function loadProjects() {
+        const response = await fetch("/api/projects", {
+          headers: authHeaders(),
+        });
+        if (!response.ok) {
+          renderProjects([]);
+          return;
+        }
+        const projects = await response.json();
+        renderProjects(projects);
+      }
+
+      function renderProjects(projects) {
+        const current = localStorage.getItem("task-project") || "";
+        projectSelect.innerHTML = '<option value="">No active project</option>';
+        for (const project of projects) {
+          const option = document.createElement("option");
+          option.value = String(project.project_id);
+          option.textContent = `${project.prefix || project.project_id}: ${project.title}`;
+          if (String(project.project_id) === current) {
+            option.selected = true;
+          }
+          projectSelect.appendChild(option);
+        }
+      }
+
+      async function loadTasks() {
+        const currentProject = localStorage.getItem("task-project");
+        if (!currentProject) {
+          renderTasks([]);
+          renderBoard([]);
+          renderHierarchy([]);
+          renderTaskDetail(null);
+          return;
+        }
+        const params = new URLSearchParams();
+        if (filterType.value) params.set("type", filterType.value);
+        if (filterStatus.value) params.set("status", filterStatus.value);
+        if (filterSearch.value.trim()) params.set("q", filterSearch.value.trim());
+        const suffix = params.toString() ? `?${params.toString()}` : "";
+        const response = await fetch(`/api/projects/${currentProject}/tickets${suffix}`, {
+          headers: authHeaders(),
+        });
+        if (!response.ok) {
+          renderTasks([]);
+          renderBoard([]);
+          renderHierarchy([]);
+          renderTaskDetail(null);
+          return;
+        }
+        const tasks = await response.json();
+        lastTasks = tasks;
+        renderTasks(tasks);
+        renderBoard(tasks);
+        renderHierarchy(tasks);
+        updateView();
+        const selected = localStorage.getItem("task-selected");
+        const selectedTask = tasks.find((task) => String(task.task_id) === selected);
+        renderTaskDetail(selectedTask || null);
+      }
+
+      function renderTasks(tasks) {
+        taskList.innerHTML = "";
+        if (tasks.length === 0) {
+          taskList.innerHTML = "<div class=\"task-card\">No work items yet.</div>";
+          return;
+        }
+        for (const task of tasks) {
+          const card = document.createElement("div");
+          card.className = "task-card";
+          card.dataset.id = task.task_id;
+          card.innerHTML = `
+            <strong>${escapeHtml(task.title)}</strong>
+            <div class="task-meta">#${task.task_id} · ${escapeHtml(task.type)} · ${escapeHtml(task.status)}${task.parent_id ? ` · parent ${task.parent_id}` : ""}</div>
+            <p>${escapeHtml(task.description || "")}</p>
+          `;
+          card.addEventListener("click", () => {
+            localStorage.setItem("task-selected", String(task.task_id));
+            renderTaskDetail(task);
+          });
+          taskList.appendChild(card);
+        }
+      }
+
+      function renderBoard(tasks) {
+        const statuses = [
+          ["design", "Design"],
+          ["develop", "Develop"],
+          ["test", "Test"],
+          ["done", "Done"],
+        ];
+        taskBoard.innerHTML = "";
+        for (const [status, label] of statuses) {
+          const column = document.createElement("section");
+          column.className = "board-column";
+          const items = tasks.filter((task) => task.stage === status);
+          column.innerHTML = `<h3>${label}</h3>`;
+          if (items.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "muted";
+            empty.textContent = "No items";
+            column.appendChild(empty);
+          }
+          for (const task of items) {
+            const card = document.createElement("div");
+            card.className = "mini-card";
+            card.innerHTML = `<strong>${escapeHtml(task.title)}</strong><div class="task-meta">${escapeHtml(task.type)}${task.parent_id ? ` · parent ${task.parent_id}` : ""}</div>`;
+            card.addEventListener("click", () => {
+              localStorage.setItem("task-selected", String(task.task_id));
+              renderTaskDetail(task);
+            });
+            column.appendChild(card);
+          }
+          taskBoard.appendChild(column);
+        }
+      }
+
+      function renderHierarchy(tasks) {
+        taskHierarchy.innerHTML = "";
+        const epics = tasks.filter((task) => task.type === "epic");
+        const children = tasks.filter((task) => task.parent_id);
+
+        if (epics.length === 0 && tasks.length > 0) {
+          const orphanGroup = document.createElement("section");
+          orphanGroup.className = "epic-group";
+          orphanGroup.innerHTML = "<div class=\"epic-title\"><strong>Unparented work</strong><span class=\"muted\">No epics yet</span></div>";
+          const childList = document.createElement("div");
+          childList.className = "child-list";
+          for (const task of tasks) {
+            if (task.parent_id) continue;
+            childList.appendChild(renderHierarchyCard(task));
+          }
+          orphanGroup.appendChild(childList);
+          taskHierarchy.appendChild(orphanGroup);
+          return;
+        }
+
+        for (const epic of epics) {
+          const section = document.createElement("section");
+          section.className = "epic-group";
+          section.innerHTML = `<div class="epic-title"><strong>${escapeHtml(epic.title)}</strong><span class="muted">${escapeHtml(epic.status)}</span></div>`;
+          const childList = document.createElement("div");
+          childList.className = "child-list";
+          const grouped = children.filter((task) => task.parent_id === epic.task_id);
+          if (grouped.length === 0) {
+            childList.innerHTML = `<div class="muted">No child items</div>`;
+          } else {
+            for (const task of grouped) {
+              childList.appendChild(renderHierarchyCard(task));
+            }
+          }
+          section.appendChild(childList);
+          section.addEventListener("click", () => {
+            localStorage.setItem("task-selected", String(epic.task_id));
+            renderTaskDetail(epic);
+          });
+          taskHierarchy.appendChild(section);
+        }
+
+        const standalone = tasks.filter((task) => task.type !== "epic" && !task.parent_id);
+        if (standalone.length > 0) {
+          const section = document.createElement("section");
+          section.className = "epic-group";
+          section.innerHTML = `<div class="epic-title"><strong>Unparented work</strong><span class="muted">${standalone.length} items</span></div>`;
+          const childList = document.createElement("div");
+          childList.className = "child-list";
+          for (const task of standalone) {
+            childList.appendChild(renderHierarchyCard(task));
+          }
+          section.appendChild(childList);
+          taskHierarchy.appendChild(section);
+        }
+      }
+
+      function renderHierarchyCard(task) {
+        const card = document.createElement("div");
+        card.className = "mini-card";
+        card.innerHTML = `<strong>${escapeHtml(task.title)}</strong><div class="task-meta">${escapeHtml(task.type)} · ${escapeHtml(task.status)}</div>`;
+        card.addEventListener("click", (event) => {
+          event.stopPropagation();
+          localStorage.setItem("task-selected", String(task.task_id));
+          renderTaskDetail(task);
+        });
+        return card;
+      }
+
+      function renderTaskDetail(task) {
+        if (!task) {
+          taskDetail.innerHTML = "Select a ticket to inspect and update it.";
+          return;
+        }
+        taskDetail.innerHTML = `
+          <h3>${escapeHtml(task.title)}</h3>
+          <div class="task-meta">#${task.task_id} · ${escapeHtml(task.type)} · project ${task.project_id}</div>
+          <form id="task-detail-form">
+            <input id="detail-title" value="${escapeHtml(task.title)}" />
+            <input id="detail-description" value="${escapeHtml(task.description || "")}" />
+            <select id="detail-stage">
+              ${["design", "develop", "test", "done"].map((stage) => `<option value="${stage}" ${task.stage === stage ? "selected" : ""}>${stage}</option>`).join("")}
+            </select>
+            <select id="detail-state">
+              ${["idle", "active", "complete"].filter((state) => task.stage !== "done" || state === "complete").map((state) => `<option value="${state}" ${task.state === state ? "selected" : ""}>${state}</option>`).join("")}
+            </select>
+            <button type="submit">Save Ticket</button>
+          </form>
+          <form id="comment-form">
+            <input id="comment-text" placeholder="Add a comment" />
+            <button type="submit">Add Comment</button>
+          </form>
+          <div id="detail-history"></div>
+          <div id="detail-comments"></div>
+        `;
+        document.getElementById("task-detail-form").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const response = await fetch(`/api/tickets/${task.task_id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeaders(),
+            },
+            body: JSON.stringify({
+              title: document.getElementById("detail-title").value,
+              description: document.getElementById("detail-description").value,
+              parent_id: task.parent_id,
+              stage: document.getElementById("detail-stage").value,
+              state: document.getElementById("detail-state").value,
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            statusEl.textContent = data.error || "Ticket update failed.";
+            return;
+          }
+          localStorage.setItem("task-selected", String(data.task_id));
+          await loadTasks();
+        });
+        document.getElementById("comment-form").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const response = await fetch(`/api/tickets/${task.task_id}/comments`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeaders(),
+            },
+            body: JSON.stringify({ comment: document.getElementById("comment-text").value }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            statusEl.textContent = data.error || "Comment failed.";
+            return;
+          }
+          await loadTaskActivity(task.task_id);
+          document.getElementById("comment-form").reset();
+        });
+        loadTaskActivity(task.task_id);
+      }
+
+      function updateView() {
+        const view = localStorage.getItem("task-view") || "list";
+        taskList.hidden = view !== "list";
+        taskBoard.hidden = view !== "board";
+        taskHierarchy.hidden = view !== "hierarchy";
+        Object.entries(viewButtons).forEach(([name, button]) => {
+          button.setAttribute("aria-pressed", String(name === view));
+        });
+      }
+
+      function startLiveRefresh() {
+        stopLiveRefresh();
+        refreshTimer = setInterval(() => {
+          if (!localStorage.getItem("task-token") || !localStorage.getItem("task-project")) {
+            return;
+          }
+          loadTasks().catch(() => {
+            statusEl.textContent = "Live refresh failed.";
+          });
+        }, 5000);
+      }
+
+      function stopLiveRefresh() {
+        if (refreshTimer) {
+          clearInterval(refreshTimer);
+          refreshTimer = null;
+        }
+      }
+
+      async function loadTaskActivity(taskID) {
+        const [historyResponse, commentsResponse] = await Promise.all([
+          fetch(`/api/tickets/${taskID}/history`, { headers: authHeaders() }),
+          fetch(`/api/tickets/${taskID}/comments`, { headers: authHeaders() }),
+        ]);
+        const history = historyResponse.ok ? await historyResponse.json() : [];
+        const comments = commentsResponse.ok ? await commentsResponse.json() : [];
+
+        document.getElementById("detail-history").innerHTML = `
+          <h4>History</h4>
+          <ul class="detail-list">
+            ${history.map((event) => `<li>${escapeHtml(event.event_type)} · ${escapeHtml(event.created_at)}</li>`).join("") || "<li>No history yet.</li>"}
+          </ul>
+        `;
+        document.getElementById("detail-comments").innerHTML = `
+          <h4>Comments</h4>
+          <ul class="detail-list">
+            ${comments.map((comment) => `<li>${escapeHtml(comment.comment)} · user ${comment.user_id}</li>`).join("") || "<li>No comments yet.</li>"}
+          </ul>
+        `;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      refreshStatus().catch(() => {
+        statusEl.textContent = "Server unavailable.";
+      });
+      updateView();
+    </script>
+  </body>
+</html>
