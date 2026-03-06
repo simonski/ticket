@@ -17,6 +17,9 @@ jobs:
     - name: Install dependencies
       run: make setup
 
+    - name: Build tools
+      run: make tools
+
     - name: Run test
       run: make test
 
