@@ -1,4 +1,4 @@
-.PHONY: help default build tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean
+.PHONY: help default build setup setup-go setup-node setup-playwright tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean
 
 VERSION_FILE := cmd/ticket/VERSION
 
@@ -9,6 +9,10 @@ help:
 	@printf "  make build           Build ticket into ./bin/ticket and symlink ./tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
 	@printf "  make tools           Build helper binaries in the repo root.\n"
+	@printf "  make setup           Install development dependencies (Go + Node).\n"
+	@printf "  make setup-go        Download and cache Go module dependencies.\n"
+	@printf "  make setup-node      Install Node dependencies.\n"
+	@printf "  make setup-playwright Install Chromium for Playwright.\n"
 	@printf "  make test            Run all tests.\n"
 	@printf "  make test-go         Run Go tests.\n"
 	@printf "  make test-unit       Run unit-oriented Go test packages.\n"
@@ -23,6 +27,17 @@ build:
 	@mkdir -p bin
 	go build -o ./bin/ticket ./cmd/ticket
 	@ln -sf ./bin/ticket ./tk
+
+setup: setup-go setup-node setup-playwright
+
+setup-go:
+	go mod download
+
+setup-node:
+	npm install
+
+setup-playwright:
+	npx playwright install chromium
 
 tools:
 	@mkdir -p bin
@@ -102,4 +117,3 @@ dev:
 	@echo "export TICKET_MODE=local"
 	@echo "export TICKET_HOME=`pwd`"
 	@echo "\nAnd you are now in a position to extend ticket itself.\n"
-
