@@ -2,9 +2,10 @@
 bin/
 commands.sh
 commands2.sh
-tk
-task
-parser
+./tk
+./task
+./parser
+./wiggum
 task.db
 ticket.db
 node_modules/
