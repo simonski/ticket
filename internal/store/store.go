@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 	estimate_complete TEXT NOT NULL DEFAULT '',
 	health_score INTEGER NOT NULL DEFAULT 0,
 	assignee TEXT NOT NULL DEFAULT '',
+	open INTEGER NOT NULL DEFAULT 1,
 	archived INTEGER NOT NULL DEFAULT 0,
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -265,6 +266,18 @@ func migrateSchema(db *sql.DB) error {
 	}
 	if !columnExists(db, "tasks", "health_score") {
 		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tasks", "open") {
+		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
+			return err
+		}
+		// Legacy behavior used archived for close/open. Preserve closed state and reset archived.
+		if _, err := db.Exec(`UPDATE tasks SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`UPDATE tasks SET archived = 0`); err != nil {
 			return err
 		}
 	}

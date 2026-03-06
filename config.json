@@ -1,7 +1,7 @@
 {
-  "server_url": "",
+  "server_url": "http://localhost:8080",
   "token": "",
-  "username": "",
+  "username": "admin",
   "current_project": "1",
-  "current_epic_id": 2
+  "current_epic_id": 4
 }

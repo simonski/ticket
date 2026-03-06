@@ -494,6 +494,78 @@ func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Tick
 	return task, err
 }
 
+func (c *Client) CloseTicket(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetTicketOpen(db, id, false, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/close", id), nil, &ticket)
+	return ticket, err
+}
+
+func (c *Client) OpenTicket(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetTicketOpen(db, id, true, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/open", id), nil, &ticket)
+	return ticket, err
+}
+
+func (c *Client) ArchiveTicket(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetTicketArchived(db, id, true, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/archive", id), nil, &ticket)
+	return ticket, err
+}
+
+func (c *Client) UnarchiveTicket(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetTicketArchived(db, id, false, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/unarchive", id), nil, &ticket)
+	return ticket, err
+}
+
 func (c *Client) DeleteTicket(id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

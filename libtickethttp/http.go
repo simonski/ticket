@@ -95,6 +95,22 @@ func (s *Service) UpdateTicket(id int64, request libticket.TicketUpdateRequest) 
 	return s.client.UpdateTicket(id, client.TicketUpdateRequest(request))
 }
 
+func (s *Service) CloseTicket(id int64) (store.Ticket, error) {
+	return s.client.CloseTicket(id)
+}
+
+func (s *Service) OpenTicket(id int64) (store.Ticket, error) {
+	return s.client.OpenTicket(id)
+}
+
+func (s *Service) ArchiveTicket(id int64) (store.Ticket, error) {
+	return s.client.ArchiveTicket(id)
+}
+
+func (s *Service) UnarchiveTicket(id int64) (store.Ticket, error) {
+	return s.client.UnarchiveTicket(id)
+}
+
 func (s *Service) DeleteTicket(id int64) error {
 	return s.client.DeleteTicket(id)
 }

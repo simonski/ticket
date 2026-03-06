@@ -584,6 +584,58 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeJSON(w, http.StatusCreated, cloned)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "close" && r.Method == http.MethodPost {
+				ticket, err := store.SetTicketOpen(db, id, false, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "open" && r.Method == http.MethodPost {
+				ticket, err := store.SetTicketOpen(db, id, true, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "archive" && r.Method == http.MethodPost {
+				ticket, err := store.SetTicketArchived(db, id, true, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "unarchive" && r.Method == http.MethodPost {
+				ticket, err := store.SetTicketArchived(db, id, false, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
 
 			switch r.Method {
 			case http.MethodGet:

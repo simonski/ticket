@@ -216,7 +216,7 @@ func TestRunHealthExecutePersistsScores(t *testing.T) {
 
 	firstID := createLocalTask(t, []string{"add", "Task One"})
 	secondID := createLocalTask(t, []string{"add", "Task Two", "-ac", "criteria", "-parent", strconv.FormatInt(firstID, 10)})
-		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(secondID, 10), "Approved by reviewer"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(secondID, 10), "Approved by reviewer"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
@@ -1125,17 +1125,17 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 	openID := createLocalTask(t, []string{"add", "Moon Open Task"})
 	inProgressID := createLocalTask(t, []string{"add", "Moon Inprogress Task"})
 	completeID := createLocalTask(t, []string{"add", "Moon Complete Task"})
-		if err := run([]string{"develop", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
+	if err := run([]string{"develop", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
 		t.Fatalf("develop error = %v", err)
 	}
-		if err := run([]string{"active", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
+	if err := run([]string{"active", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
 		t.Fatalf("active error = %v", err)
 	}
-		if err := run([]string{"complete", "-id", strconv.FormatInt(completeID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", strconv.FormatInt(completeID, 10)}); err != nil {
 		t.Fatalf("complete error = %v", err)
 	}
 
-		if err := run([]string{"develop", "-id", strconv.FormatInt(openID, 10)}); err != nil {
+	if err := run([]string{"develop", "-id", strconv.FormatInt(openID, 10)}); err != nil {
 		t.Fatalf("develop open task error = %v", err)
 	}
 
@@ -1220,13 +1220,13 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "-d", "findable description", "-ac", "ship it", "-estimate_effort", "8", "-estimate_complete", "2026-04-20T17:00:00Z", "Ticket Alpha"})
 	depID := createLocalTask(t, []string{"add", "Ticket Beta"})
-		if err := run([]string{"develop", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"develop", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 		t.Fatalf("develop task alpha error = %v", err)
 	}
 	if err := run([]string{"develop", "-id", strconv.FormatInt(depID, 10)}); err != nil {
 		t.Fatalf("develop task beta error = %v", err)
 	}
-		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "latest note"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "latest note"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
@@ -1251,7 +1251,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	dependencyOutput := captureStdout(t, func() {
-	if err := run([]string{"dependency", "add", "-id", strconv.FormatInt(taskID, 10), strconv.FormatInt(depID, 10)}); err != nil {
+		if err := run([]string{"dependency", "add", "-id", strconv.FormatInt(taskID, 10), strconv.FormatInt(depID, 10)}); err != nil {
 			t.Fatalf("dependency add error = %v", err)
 		}
 	})
@@ -1341,6 +1341,27 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 }
 
+func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Current Epic"})
+	taskID := createLocalTask(t, []string{"add", "Auto Parented Task"})
+	bugID := createLocalTask(t, []string{"bug", "Auto Parented Bug"})
+	choreID := createLocalTask(t, []string{"add", "-t", "chore", "Auto Parented Chore"})
+
+	for _, id := range []int64{taskID, bugID, choreID} {
+		getOutput := captureStdout(t, func() {
+			if err := run([]string{"get", "-id", strconv.FormatInt(id, 10)}); err != nil {
+				t.Fatalf("get error = %v", err)
+			}
+		})
+		want := "ParentID     : " + strconv.FormatInt(epicID, 10)
+		if !strings.Contains(getOutput, want) {
+			t.Fatalf("get output missing %q:\n%s", want, getOutput)
+		}
+	}
+}
+
 func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -1364,7 +1385,7 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	if err := run([]string{"claim", strconv.FormatInt(matchingID, 10)}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
-		if err := run([]string{"update", "-id", strconv.FormatInt(matchingID, 10), "-stage", "develop", "-state", "active", "-priority", "4"}); err != nil {
+	if err := run([]string{"update", "-id", strconv.FormatInt(matchingID, 10), "-stage", "develop", "-state", "active", "-priority", "4"}); err != nil {
 		t.Fatalf("update matching task error = %v", err)
 	}
 	if err := run([]string{"update", "-id", strconv.FormatInt(otherID, 10), "-priority", "2"}); err != nil {
@@ -1797,6 +1818,7 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	epicID := createLocalTask(t, []string{"epic", "Parent Epic"})
+	clearCurrentEpicID(t)
 	taskID := createLocalTask(t, []string{"add", "-parent", strconv.FormatInt(epicID, 10), "Child Task"})
 	orphanID := createLocalTask(t, []string{"add", "Orphan Task"})
 
@@ -1860,6 +1882,7 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 func TestRunOrphansExcludesEpicRoots(t *testing.T) {
 	setupLocalCLI(t)
 	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
+	clearCurrentEpicID(t)
 	orphanID := createLocalTask(t, []string{"add", "Task with no parent"})
 
 	orphansOutput := captureStdout(t, func() {
@@ -1882,7 +1905,7 @@ func TestRunSetParentDisallowsEpicUnderTask(t *testing.T) {
 	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
 	taskID := createLocalTask(t, []string{"add", "Task Parent"})
 
-		if err := run([]string{"set-parent", "-id", strconv.FormatInt(epicID, 10), strconv.FormatInt(taskID, 10)}); err == nil {
+	if err := run([]string{"set-parent", "-id", strconv.FormatInt(epicID, 10), strconv.FormatInt(taskID, 10)}); err == nil {
 		t.Fatalf("set-parent should reject epic parenting by task")
 	} else if !strings.Contains(err.Error(), "task cannot parent epic") {
 		t.Fatalf("set-parent error = %v", err)
@@ -1995,6 +2018,18 @@ func ticketLabelByID(t *testing.T, id int64) string {
 		return task.Key
 	}
 	return strconv.FormatInt(id, 10)
+}
+
+func clearCurrentEpicID(t *testing.T) {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.CurrentEpicID = 0
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
 }
 
 func svcGetTicket(t *testing.T, ref string) (store.Ticket, error) {

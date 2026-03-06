@@ -262,6 +262,58 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 	})
 }
 
+func (s *LocalService) CloseTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketOpen(db, id, false, user.Username, user.ID)
+}
+
+func (s *LocalService) OpenTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketOpen(db, id, true, user.Username, user.ID)
+}
+
+func (s *LocalService) ArchiveTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketArchived(db, id, true, user.Username, user.ID)
+}
+
+func (s *LocalService) UnarchiveTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketArchived(db, id, false, user.Username, user.ID)
+}
+
 func (s *LocalService) DeleteTicket(id int64) error {
 	db, err := s.openDB()
 	if err != nil {

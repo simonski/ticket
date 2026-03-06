@@ -1,4 +1,4 @@
-QUICKSTARt.md
+QUICKSTART.md
 
 1. Write a DESIGN.md document
 

@@ -21,6 +21,10 @@ type Service interface {
 	ListTickets(projectID int64) ([]store.Ticket, error)
 	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error)
 	UpdateTicket(id int64, request TicketUpdateRequest) (store.Ticket, error)
+	CloseTicket(id int64) (store.Ticket, error)
+	OpenTicket(id int64) (store.Ticket, error)
+	ArchiveTicket(id int64) (store.Ticket, error)
+	UnarchiveTicket(id int64) (store.Ticket, error)
 	DeleteTicket(id int64) error
 	SetTicketParent(id, parentID int64) (store.Ticket, error)
 	UnsetTicketParent(id int64) (store.Ticket, error)

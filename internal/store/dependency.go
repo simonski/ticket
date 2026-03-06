@@ -15,6 +15,16 @@ type Dependency struct {
 }
 
 func AddDependency(db *sql.DB, projectID, taskID, dependsOn, createdBy int64) (Dependency, error) {
+	ticket, err := GetTicket(db, taskID)
+	if err != nil {
+		return Dependency{}, err
+	}
+	if !ticket.Open {
+		return Dependency{}, ErrTicketClosed
+	}
+	if ticket.Archived {
+		return Dependency{}, ErrTicketClosed
+	}
 	result, err := db.Exec(`
 		INSERT INTO dependencies (project_id, task_id, depends_on, created_by)
 		VALUES (?, ?, ?, ?)
@@ -62,6 +72,16 @@ func ListDependencies(db *sql.DB, taskID int64) ([]Dependency, error) {
 }
 
 func DeleteDependency(db *sql.DB, projectID, taskID, dependsOn int64) error {
+	ticket, err := GetTicket(db, taskID)
+	if err != nil {
+		return err
+	}
+	if !ticket.Open {
+		return ErrTicketClosed
+	}
+	if ticket.Archived {
+		return ErrTicketClosed
+	}
 	result, err := db.Exec(`
 		DELETE FROM dependencies
 		WHERE project_id = ? AND task_id = ? AND depends_on = ?

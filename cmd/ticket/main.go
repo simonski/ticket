@@ -183,8 +183,8 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket project CUS update -title \"Customer Portal\"",
 	},
 	"list": {
-		usage:   "ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [--unicode] [--plain]",
-		details: []string{"Lists tasks in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit."},
+		usage:   "ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a] [--unicode] [--plain]",
+		details: []string{"Lists tasks in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default archived tickets are hidden; use `-a` to include them."},
 		example: "ticket list --type bug --status develop/idle -u alice -n 20",
 	},
 	"orphans": {
@@ -208,9 +208,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-	usage:   "ticket update -id <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]",
+		usage:   "ticket update -id <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]",
 		details: []string{"Updates one or more task fields in a single command.", "Use `-stage` and `-state` or `-status <stage/state>` to edit the lifecycle directly on leaf tickets. `estimate_complete` must be RFC3339, for example `2026-03-31T17:00:00Z`."},
-	example: "ticket update -id 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
+		example: "ticket update -id 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
 	},
 	"set-parent": {
 		usage:   "ticket set-parent -id <id> <parent-id>",
@@ -291,6 +291,26 @@ var helpIndex = map[string]commandHelp{
 		usage:   "ticket clone|cp <id>",
 		details: []string{"Clones a task or epic.", "Cloned items are unassigned, reset to `design/idle`, and keep a `clone_of` reference to the source item. Cloning an epic also clones its child tasks."},
 		example: "ticket clone 42",
+	},
+	"close": {
+		usage:   "ticket close -id <id>",
+		details: []string{"Closes a ticket so it remains visible but frozen.", "Closed tickets cannot be modified until reopened."},
+		example: "ticket close -id TK-1",
+	},
+	"open": {
+		usage:   "ticket open -id <id>",
+		details: []string{"Reopens a closed ticket so it can be updated again.", "Open and close actions are recorded in ticket history."},
+		example: "ticket open -id TK-1",
+	},
+	"archive": {
+		usage:   "ticket archive -id <id>",
+		details: []string{"Archives a ticket.", "Archived tickets are hidden from default `ticket ls` output."},
+		example: "ticket archive -id TK-1",
+	},
+	"unarchive": {
+		usage:   "ticket unarchive -id <id>",
+		details: []string{"Unarchives a ticket so it appears in default `ticket ls` output."},
+		example: "ticket unarchive -id TK-1",
 	},
 	"delete": {
 		usage:   "ticket rm|delete -id <id>",
@@ -495,6 +515,14 @@ func run(args []string) error {
 		return runComment(trimmedArgs[1:])
 	case "clone", "cp":
 		return runClone(trimmedArgs[1:])
+	case "close":
+		return runSetTicketClosed(trimmedArgs[1:], true)
+	case "open":
+		return runSetTicketClosed(trimmedArgs[1:], false)
+	case "archive":
+		return runSetTicketArchived(trimmedArgs[1:], true)
+	case "unarchive":
+		return runSetTicketArchived(trimmedArgs[1:], false)
 	case "rm", "delete":
 		return runDeleteTicket(trimmedArgs[1:])
 	case "curate":
@@ -1421,11 +1449,12 @@ func runList(args []string) error {
 	limit := fs.Int("n", 0, "maximum number of tasks to return; 0 means all")
 	useUnicode := fs.Bool("unicode", true, "render status symbols as unicode")
 	plain := fs.Bool("plain", false, "render status as plain text")
+	includeArchived := fs.Bool("a", false, "include archived tickets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *limit < 0 {
-		return errors.New("usage: ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>]")
+		return errors.New("usage: ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a]")
 	}
 	statusUnicode := *useUnicode && !*plain
 	resolvedStage, resolvedState, err := resolveLifecycleInput(*status, *stage, *state)
@@ -1439,6 +1468,15 @@ func runList(args []string) error {
 	tasks, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit)
 	if err != nil {
 		return err
+	}
+	if !*includeArchived {
+		filtered := make([]store.Ticket, 0, len(tasks))
+		for _, task := range tasks {
+			if !task.Archived {
+				filtered = append(filtered, task)
+			}
+		}
+		tasks = filtered
 	}
 	dependenciesByTask := make(map[int64]string, len(tasks))
 	for _, task := range tasks {
@@ -2741,6 +2779,92 @@ func runDeleteTicket(args []string) error {
 	return nil
 }
 
+func runSetTicketClosed(args []string, closed bool) error {
+	command := "open"
+	if closed {
+		command = "close"
+	}
+	usage := fmt.Sprintf("ticket %s -id <id>", command)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+		return errors.New("usage: " + usage)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	if err != nil {
+		return err
+	}
+	var updated store.Ticket
+	if closed {
+		updated, err = svc.CloseTicket(task.ID)
+	} else {
+		updated, err = svc.OpenTicket(task.ID)
+	}
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	printTicket(updated)
+	return nil
+}
+
+func runSetTicketArchived(args []string, archived bool) error {
+	command := "unarchive"
+	if archived {
+		command = "archive"
+	}
+	usage := fmt.Sprintf("ticket %s -id <id>", command)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+		return errors.New("usage: " + usage)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	if err != nil {
+		return err
+	}
+	var updated store.Ticket
+	if archived {
+		updated, err = svc.ArchiveTicket(task.ID)
+	} else {
+		updated, err = svc.UnarchiveTicket(task.ID)
+	}
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	printTicket(updated)
+	return nil
+}
+
 func runCurate(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: ticket curate <id> [id...]")
@@ -3030,9 +3154,24 @@ func createTicket(opts ticketCreateOptions) error {
 			return err
 		}
 	}
+	parentID := opts.ParentID
+	ticketType := strings.TrimSpace(strings.ToLower(opts.TicketType))
+	if parentID == nil && cfg.CurrentEpicID > 0 && (ticketType == "task" || ticketType == "bug" || ticketType == "chore") {
+		epic, err := api.GetTicket(strconv.FormatInt(cfg.CurrentEpicID, 10))
+		if err != nil {
+			return fmt.Errorf("current epic id %d is invalid: %w", cfg.CurrentEpicID, err)
+		}
+		if strings.TrimSpace(strings.ToLower(epic.Type)) != "epic" {
+			return fmt.Errorf("current epic id %d is not an epic", cfg.CurrentEpicID)
+		}
+		if epic.ProjectID != project.ID {
+			return fmt.Errorf("current epic id %d belongs to project %d, active project is %d", cfg.CurrentEpicID, epic.ProjectID, project.ID)
+		}
+		parentID = &epic.ID
+	}
 	task, err := api.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID:          project.ID,
-		ParentID:           opts.ParentID,
+		ParentID:           parentID,
 		Type:               opts.TicketType,
 		Title:              opts.Title,
 		Description:        opts.Description,
@@ -3147,6 +3286,8 @@ func printTicket(task store.Ticket) {
 	fmt.Printf("key: %s\n", task.Key)
 	fmt.Printf("type: %s\n", task.Type)
 	fmt.Printf("status: %s\n", task.Status)
+	fmt.Printf("open: %s\n", ticketOpenLabel(task))
+	fmt.Printf("archived: %t\n", task.Archived)
 	fmt.Printf("project_id: %d\n", task.ProjectID)
 	if task.ParentID != nil {
 		fmt.Printf("parent_id: %d\n", *task.ParentID)
@@ -3189,6 +3330,8 @@ func printTicketDetails(task store.Ticket, dependencies []store.Dependency, hist
 	fmt.Printf("Status       : %s\n", task.Status)
 	fmt.Printf("Stage        : %s\n", task.Stage)
 	fmt.Printf("State        : %s\n", task.State)
+	fmt.Printf("Open         : %s\n", ticketOpenLabel(task))
+	fmt.Printf("Archived     : %t\n", task.Archived)
 	fmt.Printf("Priority     : %d\n", task.Priority)
 	fmt.Printf("Created      : %s\n", task.CreatedAt)
 	fmt.Printf("LastModified : %s\n", task.UpdatedAt)
@@ -3633,8 +3776,10 @@ CLIENT COMMANDS
 	clientRows := [][2]string{
 		{"add", "Create a task in the active project"},
 		{"active", "Set a ticket state to active"},
+		{"archive", "Archive a ticket"},
 		{"claim", "Assign yourself to a task"},
 		{"clone", "Clone a task or epic"},
+		{"close", "Close a ticket and freeze modifications"},
 		{"comment", "Add comments to a task"},
 		{"complete", "Set a ticket state to success"},
 		{"count", "Count users, projects, and work by type"},
@@ -3651,6 +3796,7 @@ CLIENT COMMANDS
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
 		{"onboard", "Append the embedded AGENTS.md template in the current directory"},
+		{"open", "Reopen a closed ticket"},
 		{"orphans", "List tasks with no parent"},
 		{"project", "Manage projects and active project context"},
 		{"register", "Create a user account on the server"},
@@ -3667,6 +3813,7 @@ CLIENT COMMANDS
 		{"unset-parent", "Clear the parent of a task"},
 		{"detach", "Alias for unset-parent"},
 		{"unclaim", "Remove yourself from a task"},
+		{"unarchive", "Unarchive a ticket"},
 		{"upgrade", "Check whether a newer version is available"},
 		{"update", "Update a task"},
 		{"version", "Print the current version from VERSION"},
@@ -3734,7 +3881,7 @@ func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statu
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+	fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
 	for _, task := range tasks {
 		symbol := formatTicketStatusSymbol(task.Status, statusUnicode)
 		assignee := task.Assignee
@@ -3753,9 +3900,16 @@ func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statu
 		if strings.TrimSpace(key) == "" {
 			key = strconv.FormatInt(task.ID, 10)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, ticketOpenLabel(task), task.Archived, parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
 	}
 	_ = w.Flush()
+}
+
+func ticketOpenLabel(task store.Ticket) string {
+	if !task.Open {
+		return "closed"
+	}
+	return "open"
 }
 
 func formatTicketStatusSymbol(status string, useUnicode bool) string {

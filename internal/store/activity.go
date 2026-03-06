@@ -8,7 +8,7 @@ import (
 type HistoryEvent struct {
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`
-	TicketID    int64  `json:"ticket_id"`
+	TicketID  int64  `json:"ticket_id"`
 	EventType string `json:"event_type"`
 	Payload   string `json:"payload"`
 	CreatedBy int64  `json:"created_by"`
@@ -70,6 +70,16 @@ func ListHistoryEvents(db *sql.DB, taskID int64) ([]HistoryEvent, error) {
 }
 
 func AddComment(db *sql.DB, taskID, userID int64, comment string) (Comment, error) {
+	ticket, err := GetTicket(db, taskID)
+	if err != nil {
+		return Comment{}, err
+	}
+	if !ticket.Open {
+		return Comment{}, ErrTicketClosed
+	}
+	if ticket.Archived {
+		return Comment{}, ErrTicketClosed
+	}
 	result, err := db.Exec(`
 		INSERT INTO comments (item_id, user_id, comment)
 		VALUES (?, ?, ?)
