@@ -5,9 +5,19 @@
 It models:
 
 - projects with unique prefixes such as `CUS`
-- tickets with human keys such as `CUS-T-42`
+- tickets with human keys such as `CUS-42`
 - ticket types `epic`, `task`, `bug`, `spike`, and `chore`
 - lifecycle as `stage/state`, for example `develop/active`
+- stage: [design, develop, test, done]
+  design: the ticket is in design and not ready for development
+  develop: the ticket is ready for development
+  test: the ticket is in formal testing
+  done: it has completely passed
+- state: [idle, active, success, fail]
+  idle: it is not active in the stage
+  active: it is currently being worked in in the stage
+  success: it has completed this stage and is deemed a success
+  fail: it has completed this stage and is deemed a failure
 
 The authoritative system contract is in [SPEC.md](./SPEC.md). User-facing
 workflow details are in [USER_GUIDE.md](./USER_GUIDE.md). Implementation and
@@ -37,7 +47,7 @@ smoke test.
 ## Run
 
 ```bash
-ticket initdb
+ticket init
 ticket server
 ```
 

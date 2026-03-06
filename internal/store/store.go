@@ -85,7 +85,7 @@ func Init(path, adminUsername, adminPassword string) error {
 	if _, err := CreateProjectWithParams(db, ProjectCreateParams{
 		Prefix:             defaultProjectPrefix,
 		Title:              "Default Project",
-		Description:        "Bootstrap project created during initdb.",
+		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
 		CreatedBy:          1,
 	}); err != nil {
@@ -290,14 +290,17 @@ func migrateSchema(db *sql.DB) error {
 				ELSE COALESCE(NULLIF(TRIM(stage), ''), 'design')
 			END,
 			state = CASE
+				WHEN LOWER(TRIM(state)) = 'complete' THEN 'success'
+				WHEN LOWER(TRIM(state)) = 'fail' THEN 'fail'
 				WHEN status IN ('notready', 'open') THEN 'idle'
 				WHEN status = 'inprogress' THEN 'active'
-				WHEN status IN ('complete', 'fail') THEN 'complete'
+				WHEN status = 'complete' THEN 'success'
+				WHEN status = 'fail' THEN 'fail'
 				ELSE COALESCE(NULLIF(TRIM(state), ''), 'idle')
 			END
 		WHERE COALESCE(NULLIF(TRIM(stage), ''), '') = '' OR COALESCE(NULLIF(TRIM(state), ''), '') = ''
 		   OR stage NOT IN ('design', 'develop', 'test', 'done')
-		   OR state NOT IN ('idle', 'active', 'complete')
+		   OR state NOT IN ('idle', 'active', 'success', 'fail')
 	`); err != nil {
 		return err
 	}

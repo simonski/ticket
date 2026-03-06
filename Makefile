@@ -94,3 +94,12 @@ clean:
 	@rm -rf bin
 	@rm -f tk
 	@rm -f parser
+
+dev:
+    # prints out the env vars I need to set to go into a ticket dev mode
+	@echo ""
+	@echo "Run the following:\n"
+	@echo "export TICKET_MODE=local"
+	@echo "export TICKET_HOME=`pwd`"
+	@echo "\nAnd you are now in a position to extend ticket itself.\n"
+

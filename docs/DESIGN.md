@@ -104,6 +104,18 @@ Projects are the top-level container for work items.
 - `updated_at`
 - `archived`
 
+- stage: [design, develop, test, done]
+  design: the ticket is in design and not ready for development
+  develop: the ticket is ready for development
+  test: the ticket is in formal testing
+  done: it has completely passed
+- state: [idle, active, success, fail]
+  idle: it is not active in the stage
+  active: it is currently being worked in in the stage
+  success: it has completed this stage and is deemed a success
+  fail: it has completed this stage and is deemed a failuree
+
+
 Supported `type` values in the first release:
 
 - `epic`
@@ -163,9 +175,9 @@ Typical history events:
 
 The product must support local initialization of a SQLite database from the CLI.
 
-The bootstrap command is `ticket initdb`.
+The bootstrap command is `ticket init`.
 
-`ticket initdb` must:
+`ticket init` must:
 
 1. create the schema in a new SQLite database
 2. create an `admin` account
@@ -174,7 +186,7 @@ The bootstrap command is `ticket initdb`.
 Representative flow:
 
 ```bash
-ticket initdb -f ticket.db --force -password secret
+ticket init -f ticket.db --force -password secret
 ```
 
 Bootstrap defaults:
@@ -277,7 +289,7 @@ The LOCAL result must then print:
 
 If the database does not exist in LOCAL mode, `ticket status` must also print:
 
-- `hint: run ticket initdb`
+- `hint: run ticket init`
 
 If `-nocolor` is set, the same output must be printed without ANSI colors.
 
@@ -289,7 +301,7 @@ The CLI must resolve the server URL from `-url` first, then `TICKET_SERVER`, the
 
 The CLI must expose `ticket version`, which prints the semantic version embedded into the binary at build time.
 
-`ticket initdb` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.
+`ticket init` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.
 
 Admin-only user-management requests must be rejected by the server when the caller is authenticated but not an admin. Those requests must return HTTP 403 with an error explaining that the user is not an admin.
 
@@ -657,3 +669,17 @@ It is either assigned a task, or no work is available. If assigned, the task is 
 If the user has already been assigned a `develop/active` ticket, that ticket is returned. If the user has been assigned a `develop/idle` ticket, then the oldest assigned `develop/idle` ticket is returned.
 
     
+## Version checking
+
+```bash
+ticket upgrade
+```
+
+Should lookup the VERSION file at the path github.com/simonski/ticket/cmd/ticket/VERSION and compare it to the go:embed VERSION
+
+Outcomes
+
+- network unavailable: fail fast (3s), indicate wiht friendly message.
+- same version "You are on the latest version (VERSION)"
+- out of date "A newer version of ticket is available, upgrade using `go install github.com/simonski/ticket@latest"
+- local-newer "Your local copy is newer than the repo"

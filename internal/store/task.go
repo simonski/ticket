@@ -269,6 +269,11 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 	if err != nil {
 		return Ticket{}, err
 	}
+	if current.Stage != ticket.Stage || current.State != ticket.State {
+		if err := addTicketLifecycleHistoryEvent(db, current, ticket.Stage, ticket.State, "manual update", params.ActorUsername, params.UpdatedBy); err != nil {
+			return Ticket{}, err
+		}
+	}
 	if err := AddHistoryEvent(db, ticket.ProjectID, ticket.ID, "ticket_updated", map[string]any{
 		"key":                 ticket.Key,
 		"title":               ticket.Title,
@@ -290,6 +295,28 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 		return Ticket{}, err
 	}
 	return GetTicket(db, id)
+}
+
+func addTicketLifecycleHistoryEvent(db *sql.DB, current Ticket, nextStage, nextState, reason, actorUsername string, actorID int64) error {
+	fromStatus := RenderLifecycleStatus(current.Stage, current.State)
+	toStatus := RenderLifecycleStatus(nextStage, nextState)
+	if fromStatus == toStatus {
+		return nil
+	}
+	if err := AddHistoryEvent(db, current.ProjectID, current.ID, "ticket_lifecycle_changed", map[string]any{
+		"from_stage":  current.Stage,
+		"from_state":  current.State,
+		"from_status": fromStatus,
+		"to_stage":    nextStage,
+		"to_state":    nextState,
+		"to_status":   toStatus,
+		"reason":      reason,
+		"who":         actorUsername,
+		"who_id":      actorID,
+	}, actorID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func SetTicketHealth(db *sql.DB, id int64, score int) (Ticket, error) {
@@ -564,29 +591,38 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 	}
 
 	nextStage := StageDone
-	allComplete := true
+	allSuccess := true
+	anyFail := false
 	anyActive := false
 	for _, child := range children {
 		if CompareStageOrder(child.Stage, nextStage) < 0 {
 			nextStage = child.Stage
 		}
-		if child.State != StateComplete {
-			allComplete = false
+		childState := normalizeState(child.State)
+		if childState != StateSuccess {
+			allSuccess = false
 		}
-		if child.State == StateActive {
+		if childState == StateActive {
 			anyActive = true
+		}
+		if childState == StateFail {
+			anyFail = true
 		}
 	}
 	nextState := StateIdle
 	switch {
-	case allComplete:
-		nextState = StateComplete
+	case allSuccess:
+		nextState = StateSuccess
 	case anyActive:
 		nextState = StateActive
+	case anyFail:
+		nextState = StateFail
 	}
-	if nextStage == task.Stage && nextState == task.State {
+	taskState := normalizeState(task.State)
+	if nextStage == task.Stage && nextState == taskState {
 		return task.ParentID, nil
 	}
+	taskStatus := RenderLifecycleStatus(task.Stage, taskState)
 
 	if _, err := db.Exec(`
 		UPDATE tasks
@@ -596,17 +632,16 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 		return nil, err
 	}
 
-	if actorID != 0 {
-		_ = AddHistoryEvent(db, task.ProjectID, task.ID, "ticket_parent_lifecycle_changed", map[string]any{
-			"key":         task.Key,
-			"from_stage":  task.Stage,
-			"from_state":  task.State,
-			"from_status": RenderLifecycleStatus(task.Stage, task.State),
-			"to_stage":    nextStage,
-			"to_state":    nextState,
-			"to_status":   RenderLifecycleStatus(nextStage, nextState),
-		}, actorID)
-	}
+	_ = AddHistoryEvent(db, task.ProjectID, task.ID, "ticket_parent_lifecycle_changed", map[string]any{
+		"key":         task.Key,
+		"from_stage":  task.Stage,
+		"from_state":  taskState,
+		"from_status": taskStatus,
+		"to_stage":    nextStage,
+		"to_state":    nextState,
+		"to_status":   RenderLifecycleStatus(nextStage, nextState),
+		"reason":      "child lifecycle aggregation",
+	}, actorID)
 	return task.ParentID, nil
 }
 
@@ -658,10 +693,14 @@ func normalizeTicketType(ticketType string) string {
 
 func parseRenderedLifecycle(status string) (string, string, error) {
 	parts := strings.SplitN(normalizeOptional(status), "/", 2)
-	if len(parts) != 2 || !ValidLifecycle(parts[0], parts[1]) {
+	if len(parts) != 2 {
 		return "", "", fmt.Errorf("invalid status %q", status)
 	}
-	return parts[0], parts[1], nil
+	state := normalizeState(parts[1])
+	if !ValidLifecycle(parts[0], state) {
+		return "", "", fmt.Errorf("invalid status %q", status)
+	}
+	return parts[0], state, nil
 }
 
 func validateEstimateComplete(raw string) error {
@@ -714,7 +753,7 @@ func nullableInt64(v *int64) any {
 
 func resolveLifecycleForCreate(stage, state, assignee string) (string, string, error) {
 	rawStage := normalizeOptional(stage)
-	rawState := normalizeOptional(state)
+	rawState := normalizeState(state)
 	if rawStage == "" && rawState == "" {
 		return StageDesign, StateIdle, nil
 	}
@@ -734,7 +773,7 @@ func resolveLifecycleForUpdate(current Ticket, stage, state, assignee string) (s
 	nextStage := current.Stage
 	nextState := current.State
 	rawStage := normalizeOptional(stage)
-	rawState := normalizeOptional(state)
+	rawState := normalizeState(state)
 	if rawStage != "" || rawState != "" {
 		if rawStage == "" || rawState == "" {
 			return "", "", errors.New("stage and state must be set together")

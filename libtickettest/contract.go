@@ -240,7 +240,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("UpdateTicket(complete) error = %v", err)
 		}
-		if completed.Status != "done/complete" {
+		if completed.Status != "done/success" {
 			t.Fatalf("UpdateTicket(complete).Status = %q", completed.Status)
 		}
 

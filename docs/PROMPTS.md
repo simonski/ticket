@@ -310,7 +310,7 @@ TICKET_USERNAME and TICKET_PASSWORD are NOT used in local mode.  The username is
          connection: success   (green)
          connection: failure   (red)
     - if the database does not exist, print:
-         hint: run ticket initdb
+         hint: run ticket init
     - if `-nocolor` is set, print the same output without ANSI colors
 
 ------------------------------------------------------------------
@@ -598,6 +598,7 @@ ticket claim
 ticket claim -dryrun
 
 
+## COMMENT SYSTEM
 
 all entities can have comments
     (id, user, date, comment)
@@ -625,3 +626,12 @@ ticket comment update -id N -comment_id X -comment "blah blah"
 # delete comment for an entity (cannot delete other users comments)
 ticket comment update -id N -comment_id X
 
+## 
+
+rename the `ticket initdb` command to `ticket init`
+
+## Start using ticket as the method of work
+
+Store the ticket DB in the repo
+Start execing using the ticket db.
+The workflow can be external for now bu tthe souce of truth shoudl be the ticketdb.

@@ -14,7 +14,7 @@ func TestValidStage(t *testing.T) {
 }
 
 func TestValidState(t *testing.T) {
-	for _, state := range []string{StateIdle, StateActive, StateComplete} {
+	for _, state := range []string{StateIdle, StateActive, StateSuccess, StateFail, StateComplete} {
 		if !ValidState(state) {
 			t.Fatalf("ValidState(%q) = false, want true", state)
 		}
@@ -32,10 +32,14 @@ func TestValidLifecycle(t *testing.T) {
 	}{
 		{StageDesign, StateIdle, true},
 		{StageDevelop, StateActive, true},
-		{StageTest, StateComplete, true},
+		{StageTest, StateSuccess, true},
+		{StageDone, StateSuccess, true},
+		{StageDone, StateFail, true},
 		{StageDone, StateComplete, true},
 		{StageDone, StateIdle, false},
 		{StageDone, StateActive, false},
+		{StageDesign, StateSuccess, true},
+		{StageDesign, StateFail, true},
 		{"open", StateIdle, false},
 		{StageDesign, "open", false},
 	}

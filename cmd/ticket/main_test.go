@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,9 +31,10 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"USAGE",
 		"CLIENT COMMANDS",
 		"ADMIN COMMANDS",
-		"initdb",
+		"init",
 		"server",
 		"version",
+		"upgrade",
 		"login",
 		"project",
 		"help",
@@ -85,9 +87,12 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  search",
 		"  set-parent",
 		"  status",
+		"  stage",
+		"  state",
 		"  test",
 		"  unset-parent",
 		"  unclaim",
+		"  upgrade",
 		"  update",
 		"  version",
 	}
@@ -103,7 +108,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		last = idx
 	}
 
-	adminOrder := []string{"  assign", "  initdb", "  server", "  unassign", "  user"}
+	adminOrder := []string{"  assign", "  init", "  server", "  unassign", "  user"}
 	last = -1
 	for _, item := range adminOrder {
 		idx := strings.Index(usage, item)
@@ -143,7 +148,7 @@ func TestRunHealthReportsTicketHealthSection(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "-parent", strconv.FormatInt(parentID, 10), "-ac", "Child has AC", "-title", "Child Task"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"comment", "add", strconv.FormatInt(taskID, 10), "Reviewer approved this ticket."}); err != nil {
+		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "Reviewer approved this ticket."}); err != nil {
 			t.Fatalf("comment add error = %v", err)
 		}
 		if err := run([]string{"health", strconv.FormatInt(taskID, 10)}); err != nil {
@@ -211,7 +216,7 @@ func TestRunHealthExecutePersistsScores(t *testing.T) {
 
 	firstID := createLocalTask(t, []string{"add", "Task One"})
 	secondID := createLocalTask(t, []string{"add", "Task Two", "-ac", "criteria", "-parent", strconv.FormatInt(firstID, 10)})
-	if err := run([]string{"comment", "add", strconv.FormatInt(secondID, 10), "Approved by reviewer"}); err != nil {
+		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(secondID, 10), "Approved by reviewer"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
@@ -261,14 +266,14 @@ func TestRenderBannerContainsTaskArtAndColors(t *testing.T) {
 }
 
 func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
-	help := renderCommandHelp("initdb")
+	help := renderCommandHelp("init")
 
 	for _, want := range []string{
 		"USAGE",
-		"ticket initdb",
+		"ticket init",
 		"DETAILS",
 		"EXAMPLE",
-		"ticket initdb -f $TICKET_HOME/ticket.db --force -password secret",
+		"ticket init -f $TICKET_HOME/ticket.db --force -password secret",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("command help missing %q:\n%s", want, help)
@@ -353,6 +358,45 @@ func TestHasCommandHelpRejectsInvalidCommand(t *testing.T) {
 func TestRunHelpRejectsInvalidCommand(t *testing.T) {
 	if err := runHelp([]string{"orhphans"}); err == nil || err.Error() != `no such command "orhphans"` {
 		t.Fatalf("runHelp(invalid) error = %v", err)
+	}
+}
+
+func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
+	for _, name := range []string{
+		"TICKET_MODE",
+		"TICKET_HOME",
+		"TICKET_CONFIG_DIR",
+		"TICKET_DB_OVERRIDE",
+		"TICKET_SERVER",
+		"TICKET_URL",
+		"TICKET_USERNAME",
+		"TICKET_PASSWORD",
+	} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("TICKET_HOME", "/tmp/ticket-home")
+	t.Setenv("TICKET_MODE", "local")
+
+	output := captureStdout(t, func() {
+		if err := runHelp([]string{}); err != nil {
+			t.Fatalf("runHelp() error = %v", err)
+		}
+	})
+
+	for _, want := range []string{
+		"ENVIRONMENT",
+		"  TICKET_HOME: /tmp/ticket-home",
+		"  TICKET_MODE: local",
+		"  TICKET_CONFIG_DIR: <unset>",
+		"  TICKET_DB_OVERRIDE: <unset>",
+		"  TICKET_SERVER: <unset>",
+		"  TICKET_URL: <unset>",
+		"  TICKET_USERNAME: <unset>",
+		"  TICKET_PASSWORD: <unset>",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("help output missing %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -534,6 +578,94 @@ func TestEmbeddedVersionMatchesBuildVersionFile(t *testing.T) {
 	}
 	if strings.TrimSpace(embeddedVersion) != strings.TrimSpace(string(data)) {
 		t.Fatalf("embeddedVersion = %q, want %q", strings.TrimSpace(embeddedVersion), strings.TrimSpace(string(data)))
+	}
+}
+
+func TestRunUpgradeReportsNetworkUnavailable(t *testing.T) {
+	original := fetchRepoVersion
+	fetchRepoVersion = func() (string, error) {
+		return "", errors.New("network down")
+	}
+	defer func() { fetchRepoVersion = original }()
+
+	err := runUpgrade(nil)
+	if err == nil {
+		t.Fatal("runUpgrade() error = nil, want network unavailable error")
+	}
+	if got := err.Error(); got != "Unable to check for updates right now. Check your network connection and try again." {
+		t.Fatalf("runUpgrade() error = %q", got)
+	}
+}
+
+func TestRunUpgradeReportsLatestVersion(t *testing.T) {
+	original := fetchRepoVersion
+	fetchRepoVersion = func() (string, error) {
+		return strings.TrimSpace(embeddedVersion), nil
+	}
+	defer func() { fetchRepoVersion = original }()
+
+	output := captureStdout(t, func() {
+		if err := runUpgrade(nil); err != nil {
+			t.Fatalf("runUpgrade() error = %v", err)
+		}
+	})
+	want := fmt.Sprintf("You are on the latest version (%s)", strings.TrimSpace(embeddedVersion))
+	if !strings.Contains(output, want) {
+		t.Fatalf("runUpgrade() output missing %q:\n%s", want, output)
+	}
+}
+
+func TestRunUpgradeReportsOutdatedLocalVersion(t *testing.T) {
+	original := fetchRepoVersion
+	fetchRepoVersion = func() (string, error) {
+		return "999.0.0", nil
+	}
+	defer func() { fetchRepoVersion = original }()
+
+	output := captureStdout(t, func() {
+		if err := runUpgrade(nil); err != nil {
+			t.Fatalf("runUpgrade() error = %v", err)
+		}
+	})
+	want := "A newer version of ticket is available, upgrade using `go install github.com/simonski/ticket@latest`"
+	if !strings.Contains(output, want) {
+		t.Fatalf("runUpgrade() output missing %q:\n%s", want, output)
+	}
+}
+
+func TestRunUpgradeReportsLocalVersionNewerThanRepo(t *testing.T) {
+	original := fetchRepoVersion
+	fetchRepoVersion = func() (string, error) {
+		return "0.0.1", nil
+	}
+	defer func() { fetchRepoVersion = original }()
+
+	output := captureStdout(t, func() {
+		if err := runUpgrade(nil); err != nil {
+			t.Fatalf("runUpgrade() error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Your local copy is newer than the repo") {
+		t.Fatalf("runUpgrade() output = %q", output)
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	cases := []struct {
+		left  string
+		right string
+		want  int
+	}{
+		{"0.1.10", "0.1.10", 0},
+		{"0.1.9", "0.1.10", -1},
+		{"0.2.0", "0.1.99", 1},
+		{"v1.2.0", "1.2.0", 0},
+		{"1.2", "1.2.0", 0},
+	}
+	for _, tc := range cases {
+		if got := compareVersions(tc.left, tc.right); got != tc.want {
+			t.Fatalf("compareVersions(%q, %q) = %d, want %d", tc.left, tc.right, got, tc.want)
+		}
 	}
 }
 
@@ -804,7 +936,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 		"mode: local",
 		"db_exists: false",
 		"failure",
-		"hint: run ticket initdb",
+		"hint: run ticket init",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
@@ -850,6 +982,8 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			Title:              "Example Task",
 			Type:               "task",
 			Status:             "design/idle",
+			Stage:              "design",
+			State:              "idle",
 			Description:        "Example description",
 			ProjectID:          7,
 			Priority:           1,
@@ -861,7 +995,9 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			Comments: []store.Comment{
 				{Author: "alice", Text: "latest comment", CreatedAt: "2026-03-02 10:00:00"},
 			},
-		}, nil)
+		}, nil, []store.HistoryEvent{
+			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: 1, Payload: "{\"status\":\"design/idle\"}"},
+		})
 	})
 
 	for _, want := range []string{
@@ -877,15 +1013,55 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 		"EstimateComplete : 2026-04-01T12:00:00Z",
 		"DependsOn    : []",
 		"Status       : design/idle",
+		"Stage        : design",
+		"State        : idle",
 		"Priority     : 1",
 		"Created      : 2026-03-01 12:00:00",
 		"LastModified : 2026-03-02 09:30:00",
 		"Acceptance Criteria : - does the thing",
 		"Comments     :",
 		"[2026-03-02 10:00:00] alice: latest comment",
+		"History      :",
+		"[2026-03-01 12:00:00] ticket_created by 1: {\"status\":\"design/idle\"}",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("printTicketDetails() missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "-ac", "criteria", "Ticket Beta"})
+
+	stageOutput := captureStdout(t, func() {
+		if err := run([]string{"stage", "-id", strconv.FormatInt(taskID, 10), "develop", "-json"}); err != nil {
+			t.Fatalf("stage command error = %v", err)
+		}
+	})
+	var stageData map[string]any
+	if err := json.Unmarshal([]byte(stageOutput), &stageData); err != nil {
+		t.Fatalf("stage output parse error = %v\n%s", err, stageOutput)
+	}
+	for _, want := range []string{"develop/idle", "develop", "idle"} {
+		if got := stageData["status"]; got != want && stageData["stage"] != want && stageData["state"] != want {
+			t.Fatalf("stage output missing %q in status/stage/state: %#v", want, stageData)
+		}
+	}
+
+	stateOutput := captureStdout(t, func() {
+		if err := run([]string{"state", "-id", strconv.FormatInt(taskID, 10), "active", "-json"}); err != nil {
+			t.Fatalf("state command error = %v", err)
+		}
+	})
+	var stateData map[string]any
+	if err := json.Unmarshal([]byte(stateOutput), &stateData); err != nil {
+		t.Fatalf("state output parse error = %v\n%s", err, stateOutput)
+	}
+	for _, want := range []string{"develop/active", "develop", "active"} {
+		if got := stateData["status"]; got != want && stateData["stage"] != want && stateData["state"] != want {
+			t.Fatalf("state output missing %q in status/stage/state: %#v", want, stateData)
 		}
 	}
 }
@@ -949,17 +1125,17 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 	openID := createLocalTask(t, []string{"add", "Moon Open Task"})
 	inProgressID := createLocalTask(t, []string{"add", "Moon Inprogress Task"})
 	completeID := createLocalTask(t, []string{"add", "Moon Complete Task"})
-	if err := run([]string{"develop", strconv.FormatInt(inProgressID, 10)}); err != nil {
+		if err := run([]string{"develop", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
 		t.Fatalf("develop error = %v", err)
 	}
-	if err := run([]string{"active", strconv.FormatInt(inProgressID, 10)}); err != nil {
+		if err := run([]string{"active", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
 		t.Fatalf("active error = %v", err)
 	}
-	if err := run([]string{"complete", strconv.FormatInt(completeID, 10)}); err != nil {
+		if err := run([]string{"complete", "-id", strconv.FormatInt(completeID, 10)}); err != nil {
 		t.Fatalf("complete error = %v", err)
 	}
 
-	if err := run([]string{"develop", strconv.FormatInt(openID, 10)}); err != nil {
+		if err := run([]string{"develop", "-id", strconv.FormatInt(openID, 10)}); err != nil {
 		t.Fatalf("develop open task error = %v", err)
 	}
 
@@ -982,10 +1158,10 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 		}
 	}
 	checkRow("◑", "develop/active")
-	checkRow("◉", "design/complete")
+	checkRow("◉", "design/success")
 	checkRow("○", "develop/idle")
 
-	for _, want := range []string{"develop/active", "develop/idle", "design/complete"} {
+	for _, want := range []string{"develop/active", "develop/idle", "design/success"} {
 		if !strings.Contains(unicodeOutput, want) {
 			t.Fatalf("list unicode output missing %q:\n%s", want, unicodeOutput)
 		}
@@ -1044,18 +1220,18 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "-d", "findable description", "-ac", "ship it", "-estimate_effort", "8", "-estimate_complete", "2026-04-20T17:00:00Z", "Ticket Alpha"})
 	depID := createLocalTask(t, []string{"add", "Ticket Beta"})
-	if err := run([]string{"develop", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"develop", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 		t.Fatalf("develop task alpha error = %v", err)
 	}
-	if err := run([]string{"develop", strconv.FormatInt(depID, 10)}); err != nil {
+	if err := run([]string{"develop", "-id", strconv.FormatInt(depID, 10)}); err != nil {
 		t.Fatalf("develop task beta error = %v", err)
 	}
-	if err := run([]string{"comment", "add", strconv.FormatInt(taskID, 10), "latest note"}); err != nil {
+		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "latest note"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1075,7 +1251,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	dependencyOutput := captureStdout(t, func() {
-		if err := run([]string{"dependency", "add", strconv.FormatInt(taskID, 10), strconv.FormatInt(depID, 10)}); err != nil {
+	if err := run([]string{"dependency", "add", "-id", strconv.FormatInt(taskID, 10), strconv.FormatInt(depID, 10)}); err != nil {
 			t.Fatalf("dependency add error = %v", err)
 		}
 	})
@@ -1138,7 +1314,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	commentOutput := captureStdout(t, func() {
-		if err := run([]string{"comment", "add", strconv.FormatInt(taskID, 10), "hello"}); err != nil {
+		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "hello"}); err != nil {
 			t.Fatalf("comment error = %v", err)
 		}
 	})
@@ -1147,7 +1323,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	setParentOutput := captureStdout(t, func() {
-		if err := run([]string{"set-parent", strconv.FormatInt(depID, 10), strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"set-parent", "-id", strconv.FormatInt(depID, 10), strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("set-parent error = %v", err)
 		}
 	})
@@ -1156,7 +1332,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	unsetParentOutput := captureStdout(t, func() {
-		if err := run([]string{"unset-parent", strconv.FormatInt(depID, 10)}); err != nil {
+		if err := run([]string{"unset-parent", "-id", strconv.FormatInt(depID, 10)}); err != nil {
 			t.Fatalf("unset-parent error = %v", err)
 		}
 	})
@@ -1188,10 +1364,10 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	if err := run([]string{"claim", strconv.FormatInt(matchingID, 10)}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
-	if err := run([]string{"update", strconv.FormatInt(matchingID, 10), "-stage", "develop", "-state", "active", "-priority", "4"}); err != nil {
+		if err := run([]string{"update", "-id", strconv.FormatInt(matchingID, 10), "-stage", "develop", "-state", "active", "-priority", "4"}); err != nil {
 		t.Fatalf("update matching task error = %v", err)
 	}
-	if err := run([]string{"update", strconv.FormatInt(otherID, 10), "-priority", "2"}); err != nil {
+	if err := run([]string{"update", "-id", strconv.FormatInt(otherID, 10), "-priority", "2"}); err != nil {
 		t.Fatalf("update other task error = %v", err)
 	}
 
@@ -1251,6 +1427,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	updateOutput := captureStdout(t, func() {
 		if err := run([]string{
 			"update",
+			"-id",
 			strconv.FormatInt(taskID, 10),
 			"-title", "Ticket Beta",
 			"-desc", "new description",
@@ -1282,7 +1459,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1308,17 +1485,43 @@ func TestRunUpdateSupportsDescriptionAlias(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "-d", "old description", "Ticket Alpha"})
 
-	if err := run([]string{"update", strconv.FormatInt(taskID, 10), "-description", "updated description"}); err != nil {
+	if err := run([]string{"update", "-id", strconv.FormatInt(taskID, 10), "-description", "updated description"}); err != nil {
 		t.Fatalf("update with -description error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "Description  : updated description") {
 		t.Fatalf("get output = %q", output)
+	}
+}
+
+func TestRunUpdateRequiresIDFlag(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Needs ID Update"})
+
+	if err := run([]string{"update", strconv.FormatInt(taskID, 10), "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: ticket update -id") {
+		t.Fatalf("expected usage error for positional id, got %v", err)
+	}
+
+	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: ticket update -id") {
+		t.Fatalf("expected usage error for missing -id, got %v", err)
+	}
+}
+
+func TestRunGetRequiresIDFlag(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Needs ID Get"})
+
+	if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err == nil || !strings.Contains(err.Error(), "usage: ticket get -id") {
+		t.Fatalf("expected usage error for positional id, got %v", err)
+	}
+
+	if err := run([]string{"get"}); err == nil || !strings.Contains(err.Error(), "usage: ticket get -id") {
+		t.Fatalf("expected usage error for missing -id, got %v", err)
 	}
 }
 
@@ -1328,7 +1531,7 @@ func TestRunTaskCreateSupportsInterspersedFlags(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "the", "thing", "-type", "epic"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1348,7 +1551,7 @@ func TestRunTypedTaskCreateSupportsEstimateFlags(t *testing.T) {
 	taskID := createLocalTask(t, []string{"epic", "-estimate_effort", "8", "-estimate_complete", "2026-04-20T17:00:00Z", "Estimated Epic"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1378,7 +1581,7 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"create", "-t", "epic", "-title", "foo"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1445,12 +1648,12 @@ func TestRunStatusChangeInLocalModeDoesNotRequireOwnership(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "Ownership-free local task"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"complete", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"complete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("complete error = %v", err)
 		}
 	})
 
-	if !strings.Contains(output, "status: design/complete") {
+	if !strings.Contains(output, "status: design/success") {
 		t.Fatalf("complete output = %q", output)
 	}
 }
@@ -1460,14 +1663,14 @@ func TestRunDeleteTicketInLocalMode(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "Delete me"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"delete", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"delete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("delete error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "deleted ticket ") {
 		t.Fatalf("delete output = %q", output)
 	}
-	if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err == nil || err.Error() != "ticket not found" {
+	if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err == nil || err.Error() != "ticket not found" {
 		t.Fatalf("get deleted task error = %v, want ticket not found", err)
 	}
 }
@@ -1480,8 +1683,20 @@ func TestRunDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 	if childID == 0 {
 		t.Fatal("child task id = 0")
 	}
-	if err := run([]string{"rm", strconv.FormatInt(parentID, 10)}); err == nil || err.Error() != "ticket has child tickets" {
+	if err := run([]string{"rm", "-id", strconv.FormatInt(parentID, 10)}); err == nil || err.Error() != "ticket has child tickets" {
 		t.Fatalf("delete parent error = %v, want ticket has child tickets", err)
+	}
+}
+
+func TestRunDeleteRequiresIDFlag(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Needs ID Delete"})
+
+	if err := run([]string{"delete", strconv.FormatInt(taskID, 10)}); err == nil || !strings.Contains(err.Error(), "usage: ticket rm|delete -id") {
+		t.Fatalf("expected positional delete usage error, got %v", err)
+	}
+	if err := run([]string{"delete"}); err == nil || !strings.Contains(err.Error(), "usage: ticket rm|delete -id") {
+		t.Fatalf("expected missing -id usage error, got %v", err)
 	}
 }
 
@@ -1489,15 +1704,15 @@ func TestRunGetJSONUsesCommentAuthorDateTextShape(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "JSON Task"})
-	if err := run([]string{"comment", "add", strconv.FormatInt(taskID, 10), "first"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "first"}); err != nil {
 		t.Fatalf("comment add first error = %v", err)
 	}
-	if err := run([]string{"comment", "add", strconv.FormatInt(taskID, 10), "second"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "second"}); err != nil {
 		t.Fatalf("comment add second error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-json", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-json", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
 			t.Fatalf("get -json error = %v", err)
 		}
 	})
@@ -1603,6 +1818,17 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 		t.Fatalf("history output = %q", historyOutput)
 	}
 
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	for _, want := range []string{"History      :", "ticket_created"} {
+		if !strings.Contains(getOutput, want) {
+			t.Fatalf("get output missing %q:\n%s", want, getOutput)
+		}
+	}
+
 	orphansOutput := captureStdout(t, func() {
 		if err := run([]string{"orphans"}); err != nil {
 			t.Fatalf("orphans error = %v", err)
@@ -1656,7 +1882,7 @@ func TestRunSetParentDisallowsEpicUnderTask(t *testing.T) {
 	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
 	taskID := createLocalTask(t, []string{"add", "Task Parent"})
 
-	if err := run([]string{"set-parent", strconv.FormatInt(epicID, 10), strconv.FormatInt(taskID, 10)}); err == nil {
+		if err := run([]string{"set-parent", "-id", strconv.FormatInt(epicID, 10), strconv.FormatInt(taskID, 10)}); err == nil {
 		t.Fatalf("set-parent should reject epic parenting by task")
 	} else if !strings.Contains(err.Error(), "task cannot parent epic") {
 		t.Fatalf("set-parent error = %v", err)
@@ -1670,14 +1896,14 @@ func TestRunNegativeCommandCasesInLocalMode(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"get", "abc"}, "ticket not found"},
-		{[]string{"dependency", "add", "1", "abc"}, "ticket not found"},
+		{[]string{"get", "-id", "abc"}, "ticket not found"},
+		{[]string{"dependency", "add", "-id", "1", "abc"}, "ticket not found"},
 		{[]string{"request", "abc"}, "ticket not found"},
 		{[]string{"project", "get"}, "usage: ticket project get <id>"},
 		{[]string{"list", "-n", "-1"}, "usage: ticket list|ls"},
-		{[]string{"comment", "add", "1"}, "usage: ticket comment add <id> \"comment\""},
-		{[]string{"set-parent", "1", "abc"}, "ticket not found"},
-		{[]string{"unset-parent", "abc"}, "ticket not found"},
+		{[]string{"comment", "add", "1"}, "usage: ticket comment add -id <id> \"comment\""},
+		{[]string{"set-parent", "-id", "1", "abc"}, "ticket not found"},
+		{[]string{"unset-parent", "-id", "abc"}, "ticket not found"},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {

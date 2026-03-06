@@ -74,6 +74,16 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("UpdateTicket() estimates = %#v", updated)
 	}
 
+	history, err := ListHistoryEvents(db, task.ID)
+	if err != nil {
+		t.Fatalf("ListHistoryEvents() error = %v", err)
+	}
+	for _, event := range history {
+		if event.EventType == "ticket_lifecycle_changed" {
+			t.Fatalf("ticket_lifecycle_changed unexpectedly present for title-only update: %+v", event)
+		}
+	}
+
 	statusUpdated, err := UpdateTicket(db, task.ID, TicketUpdateParams{
 		Title:            updated.Title,
 		Description:      updated.Description,
@@ -94,6 +104,45 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	}
 	if statusUpdated.Stage != StageDevelop || statusUpdated.State != StateActive {
 		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want develop/active", statusUpdated.Stage, statusUpdated.State)
+	}
+
+	history, err = ListHistoryEvents(db, task.ID)
+	if err != nil {
+		t.Fatalf("ListHistoryEvents() error = %v", err)
+	}
+	var transitions [][2]string
+	var reasons []string
+	for _, event := range history {
+		if event.EventType != "ticket_lifecycle_changed" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			t.Fatalf("json.Unmarshal(%q) error = %v", event.Payload, err)
+		}
+		fromStatus, ok := payload["from_status"].(string)
+		if !ok {
+			t.Fatalf("history event missing from_status: %#v", payload)
+		}
+		toStatus, ok := payload["to_status"].(string)
+		if !ok {
+			t.Fatalf("history event missing to_status: %#v", payload)
+		}
+		transitions = append(transitions, [2]string{fromStatus, toStatus})
+		reason, ok := payload["reason"].(string)
+		if !ok {
+			t.Fatalf("history event missing reason: %#v", payload)
+		}
+		reasons = append(reasons, reason)
+	}
+	if len(transitions) != 1 {
+		t.Fatalf("ticket lifecycle transitions = %#v, want [[\"design/idle\", \"develop/active\"]]", transitions)
+	}
+	if transitions[0] != ([2]string{"design/idle", "develop/active"}) {
+		t.Fatalf("ticket lifecycle transition = %#v, want [\"design/idle\" \"develop/active\"]", transitions[0])
+	}
+	if len(reasons) != 1 || reasons[0] != "manual update" {
+		t.Fatalf("ticket lifecycle reason = %#v, want [\"manual update\"]", reasons)
 	}
 
 	filtered, err := ListTickets(db, TicketListParams{
@@ -530,7 +579,7 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 		Title:     "Closed task",
 		Assignee:  "alice",
 		Stage:     StageDone,
-		State:     StateComplete,
+		State:     StateSuccess,
 		CreatedBy: 1,
 	})
 	if err != nil {
@@ -811,7 +860,7 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 		ParentID:      leafBug.ParentID,
 		Assignee:      "alice",
 		Stage:         StageDone,
-		State:         StateComplete,
+		State:         StateSuccess,
 		UpdatedBy:     1,
 		ActorUsername: "admin",
 		ActorRole:     "admin",
@@ -823,24 +872,24 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if err != nil {
 		t.Fatalf("GetTicket(parentTask after complete) error = %v", err)
 	}
-	if reloadedParent.Status != "done/complete" {
-		t.Fatalf("parent task status after complete = %q, want done/complete", reloadedParent.Status)
+	if reloadedParent.Status != "done/success" {
+		t.Fatalf("parent task status after complete = %q, want done/success", reloadedParent.Status)
 	}
 	reloadedEpic, err = GetTicket(db, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(epic after complete) error = %v", err)
 	}
-	if reloadedEpic.Status != "done/complete" {
-		t.Fatalf("epic status after complete = %q, want done/complete", reloadedEpic.Status)
+	if reloadedEpic.Status != "done/success" {
+		t.Fatalf("epic status after complete = %q, want done/success", reloadedEpic.Status)
 	}
 
 	assertDerivedLifecycleHistory(t, db, parentTask.ID, [][2]string{
 		{"design/idle", "develop/active"},
-		{"develop/active", "done/complete"},
+		{"develop/active", "done/success"},
 	})
 	assertDerivedLifecycleHistory(t, db, epic.ID, [][2]string{
 		{"design/idle", "develop/active"},
-		{"develop/active", "done/complete"},
+		{"develop/active", "done/success"},
 	})
 }
 

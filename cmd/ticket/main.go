@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	_ "embed"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net/http"
 	"os"
 	"os/exec"
 	osuser "os/user"
@@ -17,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
@@ -39,7 +42,10 @@ var (
 	noColorOutput     bool
 	runAgentCommand   = defaultRunTicketAgentCommand
 	selectBannerWord  = randomBannerWord
+	fetchRepoVersion  = defaultFetchRepoVersion
 )
+
+const repoVersionURL = "https://raw.githubusercontent.com/simonski/ticket/refs/heads/main/cmd/ticket/VERSION"
 
 func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
@@ -111,10 +117,10 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Appends the embedded onboarding template to `${CWD}/AGENTS.md`.", "Creates `${CWD}/AGENTS.md` if it does not already exist."},
 		example: "ticket onboard",
 	},
-	"initdb": {
-		usage:   "ticket initdb [-f <db-path>] [--force] [-password <password>]",
+	"init": {
+		usage:   "ticket init [-f <db-path>] [--force] [-password <password>]",
 		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database is created at `$TICKET_HOME/ticket.db`.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten."},
-		example: "ticket initdb -f $TICKET_HOME/ticket.db --force -password secret",
+		example: "ticket init -f $TICKET_HOME/ticket.db --force -password secret",
 	},
 	"server": {
 		usage:   "ticket server [-f <db-path>] [-addr :8080] [-v]",
@@ -125,6 +131,11 @@ var helpIndex = map[string]commandHelp{
 		usage:   "ticket version",
 		details: []string{"Prints the semantic version embedded into the binary from the build-time `VERSION` file."},
 		example: "ticket version",
+	},
+	"upgrade": {
+		usage:   "ticket upgrade",
+		details: []string{"Checks the repository VERSION file and compares it to the embedded local version.", "The network check fails fast after 3 seconds if the repository cannot be reached."},
+		example: "ticket upgrade",
 	},
 	"login": {
 		usage:   "ticket login [-username <name>] [-password <password>] [-url <server-url>]",
@@ -182,14 +193,14 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket orphans",
 	},
 	"get": {
-		usage:   "ticket get <id> [-url <server-url>]",
+		usage:   "ticket get -id <id> [-url <server-url>]",
 		details: []string{"Shows a single task with comments and history.", "Output uses subtle color unless `-nocolor` is supplied."},
-		example: "ticket get 42",
+		example: "ticket get -id 42",
 	},
 	"show": {
-		usage:   "ticket show <id> [-url <server-url>]",
+		usage:   "ticket show -id <id>",
 		details: []string{"Alias for `ticket get`."},
-		example: "ticket show 42",
+		example: "ticket show -id 42",
 	},
 	"search": {
 		usage:   "ticket search <free form query> [-stage <stage>] [-state <state>] [-status <stage/state>] [-title <text>] [-description <text>] [-priority <n>] [-owner <user>] [-allprojects]",
@@ -197,64 +208,74 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage:   "ticket update <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]",
+	usage:   "ticket update -id <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]",
 		details: []string{"Updates one or more task fields in a single command.", "Use `-stage` and `-state` or `-status <stage/state>` to edit the lifecycle directly on leaf tickets. `estimate_complete` must be RFC3339, for example `2026-03-31T17:00:00Z`."},
-		example: "ticket update 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
+	example: "ticket update -id 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
 	},
 	"set-parent": {
-		usage:   "ticket set-parent <id> <parent-id>",
+		usage:   "ticket set-parent -id <id> <parent-id>",
 		details: []string{"Sets the parent of a task or epic.", "Both ids must be numeric task ids in the active project.", "If the child is an epic, the parent must also be an epic."},
-		example: "ticket set-parent 1 2",
+		example: "ticket set-parent -id 1 2",
 	},
 	"attach": {
-		usage:   "ticket attach <id> <parent-id>",
+		usage:   "ticket attach -id <id> <parent-id>",
 		details: []string{"Alias for `ticket set-parent`."},
-		example: "ticket attach CUS-T-12 CUS-E-3",
+		example: "ticket attach -id CUS-T-12 CUS-E-3",
 	},
 	"unset-parent": {
-		usage:   "ticket unset-parent <id>",
+		usage:   "ticket unset-parent -id <id>",
 		details: []string{"Clears the parent of a task or story.", "After this, the task becomes an orphan."},
-		example: "ticket unset-parent 1",
+		example: "ticket unset-parent -id 1",
 	},
 	"detach": {
-		usage:   "ticket detach <id>",
+		usage:   "ticket detach -id <id>",
 		details: []string{"Alias for `ticket unset-parent`."},
-		example: "ticket detach CUS-T-12",
+		example: "ticket detach -id CUS-T-12",
 	},
 	"design": {
-		usage:   "ticket design <id>",
+		usage:   "ticket design -id <id>",
 		details: []string{"Sets the ticket stage to `design` and the state to `idle`."},
-		example: "ticket design 42",
+		example: "ticket design -id 42",
+	},
+	"stage": {
+		usage:   "ticket stage -id <id> <design|develop|test|done>",
+		details: []string{"Sets a ticket stage directly. `done` sets state to `success`; other stages set state to `idle`."},
+		example: "ticket stage -id 42 develop",
 	},
 	"develop": {
-		usage:   "ticket develop <id>",
+		usage:   "ticket develop -id <id>",
 		details: []string{"Sets the ticket stage to `develop` and the state to `idle`."},
-		example: "ticket develop 42",
+		example: "ticket develop -id 42",
 	},
 	"test": {
-		usage:   "ticket test <id>",
+		usage:   "ticket test -id <id>",
 		details: []string{"Sets the ticket stage to `test` and the state to `idle`."},
-		example: "ticket test 42",
+		example: "ticket test -id 42",
 	},
 	"done": {
-		usage:   "ticket done <id>",
-		details: []string{"Sets the ticket stage to `done` and the state to `complete`."},
-		example: "ticket done 42",
+		usage:   "ticket done -id <id>",
+		details: []string{"Sets the ticket stage to `done` and the state to `success`."},
+		example: "ticket done -id 42",
 	},
 	"idle": {
-		usage:   "ticket idle <id>",
+		usage:   "ticket idle -id <id>",
 		details: []string{"Sets the ticket state to `idle` without changing the stage."},
-		example: "ticket idle 42",
+		example: "ticket idle -id 42",
+	},
+	"state": {
+		usage:   "ticket state -id <id> <idle|active|success|fail>",
+		details: []string{"Sets a ticket state directly while preserving the current stage."},
+		example: "ticket state -id 42 active",
 	},
 	"active": {
-		usage:   "ticket active <id>",
+		usage:   "ticket active -id <id>",
 		details: []string{"Sets the ticket state to `active` without changing the stage.", "`active` requires an assignee; if the ticket is unassigned the CLI claims it for the current user first."},
-		example: "ticket active 42",
+		example: "ticket active -id 42",
 	},
 	"complete": {
-		usage:   "ticket complete <id>",
-		details: []string{"Sets the ticket state to `complete` without changing the stage."},
-		example: "ticket complete 42",
+		usage:   "ticket complete -id <id>",
+		details: []string{"Sets the ticket state to `success` without changing the stage."},
+		example: "ticket complete -id 42",
 	},
 	"add": {
 		usage:   "ticket add|create|new [-title <title>] [-t <type>] [-p <priority>] [-a <assignee>] [-d <description>] [-ac <criteria>] [-parent <id>] [-project <project>] [-estimate_effort <n>] [-estimate_complete <rfc3339>] [title words]",
@@ -262,9 +283,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket add \"Customers can reset their password.\"",
 	},
 	"comment": {
-		usage:   "ticket comment add <id> \"comment\" [-url <server-url>]",
+		usage:   "ticket comment add -id <id> \"comment\"",
 		details: []string{"Adds a comment to a task and records a corresponding history event."},
-		example: "ticket comment add 42 \"Need product sign-off.\"",
+		example: "ticket comment add -id 42 \"Need product sign-off.\"",
 	},
 	"clone": {
 		usage:   "ticket clone|cp <id>",
@@ -272,9 +293,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket clone 42",
 	},
 	"delete": {
-		usage:   "ticket rm|delete <id>",
+		usage:   "ticket rm|delete -id <id>",
 		details: []string{"Deletes a task permanently.", "Fails if the task still has child tasks."},
-		example: "ticket delete 42",
+		example: "ticket delete -id 42",
 	},
 	"assign": {
 		usage:   "ticket assign <id> <name>",
@@ -307,9 +328,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket remove-dependency 4 2",
 	},
 	"dependency": {
-		usage:   "ticket dependency <add|remove> <id> <dependency-id[,dependency-id...]>",
+		usage:   "ticket dependency <add|remove> -id <id> <dependency-id[,dependency-id...]>",
 		details: []string{"Manages `depends_on` links for a task.", "`add` creates dependency links; `remove` deletes them."},
-		example: "ticket dependency add 4 1,2,3",
+		example: "ticket dependency add -id 4 1,2,3",
 	},
 	"request": {
 		usage:   "ticket request [--dryrun] [<id>]",
@@ -380,13 +401,15 @@ func run(args []string) error {
 	case "onboard":
 		return runOnboard(trimmedArgs[1:])
 	case "init":
-		return errors.New("use `ticket initdb`")
-	case "initdb":
 		return runInitDB(trimmedArgs[1:])
+	case "initdb":
+		return errors.New("use `ticket init`")
 	case "server":
 		return runServer(trimmedArgs[1:])
 	case "version":
 		return runVersion(trimmedArgs[1:])
+	case "upgrade":
+		return runUpgrade(trimmedArgs[1:])
 	case "register":
 		if mode != config.ModeRemote {
 			return errors.New("ticket register requires TICKET_MODE=remote")
@@ -425,23 +448,27 @@ func run(args []string) error {
 	case "update":
 		return runUpdate(trimmedArgs[1:])
 	case "set-parent", "attach":
-		return runSetParent(trimmedArgs[1:])
+		return runSetParent(trimmedArgs[1:], trimmedArgs[0])
 	case "unset-parent", "detach":
-		return runUnsetParent(trimmedArgs[1:])
+		return runUnsetParent(trimmedArgs[1:], trimmedArgs[0])
 	case "design":
 		return runTicketStageAlias(trimmedArgs[1:], store.StageDesign, "design")
 	case "develop":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageDevelop, "develop")
+		return runTicketStageAlias(trimmedArgs[1:], store.StageDevelop, trimmedArgs[0])
 	case "test":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageTest, "test")
+		return runTicketStageAlias(trimmedArgs[1:], store.StageTest, trimmedArgs[0])
 	case "done":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageDone, "done")
+		return runTicketStageAlias(trimmedArgs[1:], store.StageDone, trimmedArgs[0])
+	case "stage":
+		return runTicketStage(trimmedArgs[1:])
 	case "idle":
-		return runTicketStateAlias(trimmedArgs[1:], store.StateIdle, "idle")
+		return runTicketStateAlias(trimmedArgs[1:], store.StateIdle, trimmedArgs[0])
+	case "state":
+		return runTicketState(trimmedArgs[1:])
 	case "active":
-		return runTicketStateAlias(trimmedArgs[1:], store.StateActive, "active")
+		return runTicketStateAlias(trimmedArgs[1:], store.StateActive, trimmedArgs[0])
 	case "complete":
-		return runTicketStateAlias(trimmedArgs[1:], store.StateComplete, "complete")
+		return runTicketStateAlias(trimmedArgs[1:], store.StateSuccess, trimmedArgs[0])
 	case "assign":
 		return runAssign(trimmedArgs[1:])
 	case "unassign":
@@ -504,12 +531,15 @@ func run(args []string) error {
 func runHelp(args []string) error {
 	if len(args) == 0 {
 		fmt.Print(renderRootUsage())
+		printTicketEnvironment()
 		return nil
 	}
 	if !hasCommandHelp(args[0]) {
 		return fmt.Errorf("no such command %q", args[0])
 	}
+	fmt.Print(renderBanner())
 	fmt.Print(renderCommandHelp(args[0]))
+	printTicketEnvironment()
 	return nil
 }
 
@@ -562,7 +592,7 @@ func runOnboard(args []string) error {
 }
 
 func runInitDB(args []string) error {
-	fs := flag.NewFlagSet("initdb", flag.ContinueOnError)
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
 	defaultDBPath, err := defaultDatabasePath()
@@ -659,6 +689,99 @@ func runVersion(args []string) error {
 	}
 	fmt.Println(strings.TrimSpace(embeddedVersion))
 	return nil
+}
+
+func runUpgrade(args []string) error {
+	if len(args) != 0 {
+		return errors.New("usage: ticket upgrade")
+	}
+
+	localVersion := strings.TrimSpace(embeddedVersion)
+	repoVersion, err := fetchRepoVersion()
+	if err != nil {
+		return errors.New("Unable to check for updates right now. Check your network connection and try again.")
+	}
+
+	switch compareVersions(localVersion, repoVersion) {
+	case 0:
+		fmt.Printf("You are on the latest version (%s)\n", localVersion)
+	case -1:
+		fmt.Println("A newer version of ticket is available, upgrade using `go install github.com/simonski/ticket@latest`")
+	default:
+		fmt.Println("Your local copy is newer than the repo")
+	}
+	return nil
+}
+
+func defaultFetchRepoVersion() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, repoVersionURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("version lookup failed with status %s", resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(string(body))
+	if version == "" {
+		return "", errors.New("empty repo version")
+	}
+	return version, nil
+}
+
+func compareVersions(left, right string) int {
+	leftParts := parseVersionParts(left)
+	rightParts := parseVersionParts(right)
+	maxLen := len(leftParts)
+	if len(rightParts) > maxLen {
+		maxLen = len(rightParts)
+	}
+	for i := 0; i < maxLen; i++ {
+		var leftPart, rightPart int
+		if i < len(leftParts) {
+			leftPart = leftParts[i]
+		}
+		if i < len(rightParts) {
+			rightPart = rightParts[i]
+		}
+		switch {
+		case leftPart < rightPart:
+			return -1
+		case leftPart > rightPart:
+			return 1
+		}
+	}
+	return 0
+}
+
+func parseVersionParts(raw string) []int {
+	trimmed := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(raw), "v"))
+	if trimmed == "" {
+		return []int{0}
+	}
+	parts := strings.Split(trimmed, ".")
+	values := make([]int, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			values = append(values, 0)
+			continue
+		}
+		values = append(values, n)
+	}
+	return values
 }
 
 func runRegister(args []string) error {
@@ -1360,8 +1483,18 @@ func runOrphans(args []string) error {
 }
 
 func runGet(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket get <id>")
+	usage := "ticket get -id <id>"
+	fs := flag.NewFlagSet("get", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" {
+		return errors.New("usage: " + usage)
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1371,15 +1504,16 @@ func runGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(args[0])
+	task, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
 	dependencies, _ := svc.ListDependencies(task.ID)
+	history, _ := svc.ListHistory(task.ID)
 	if outputJSON {
 		return printJSON(task)
 	}
-	printTicketDetails(task, dependencies)
+	printTicketDetails(task, dependencies, history)
 	return nil
 }
 
@@ -1554,9 +1688,19 @@ func taskMatchesSearch(task store.Ticket, query, stage, state, status, title, de
 	return true
 }
 
-func runSetParent(args []string) error {
-	if len(args) != 2 {
-		return errors.New("usage: ticket set-parent <id> <parent-id>")
+func runSetParent(args []string, command string) error {
+	usage := fmt.Sprintf("ticket %s -id <id> <parent-id>", command)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "task id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" {
+		return errors.New("usage: " + usage)
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1566,11 +1710,11 @@ func runSetParent(args []string) error {
 	if err != nil {
 		return err
 	}
-	child, err := svc.GetTicket(args[0])
+	child, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
-	parent, err := svc.GetTicket(args[1])
+	parent, err := svc.GetTicket(fs.Args()[0])
 	if err != nil {
 		return err
 	}
@@ -1585,9 +1729,16 @@ func runSetParent(args []string) error {
 	return nil
 }
 
-func runUnsetParent(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket unset-parent <id>")
+func runUnsetParent(args []string, command string) error {
+	usage := fmt.Sprintf("ticket %s -id <id>", command)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1597,7 +1748,7 @@ func runUnsetParent(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(args[0])
+	task, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
@@ -1613,17 +1764,67 @@ func runUnsetParent(args []string) error {
 }
 
 func runTicketStageAlias(args []string, stage, command string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: ticket %s <id>", command)
+	fs := flag.NewFlagSet("ticket "+command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	return updateTicketStage(args[0], stage)
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+		return fmt.Errorf("usage: ticket %s -id <id>", command)
+	}
+	return updateTicketStage(strings.TrimSpace(*id), stage)
 }
 
 func runTicketStateAlias(args []string, state, command string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: ticket %s <id>", command)
+	fs := flag.NewFlagSet("ticket "+command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	return updateTicketState(args[0], state)
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+		return fmt.Errorf("usage: ticket %s -id <id>", command)
+	}
+	return updateTicketState(strings.TrimSpace(*id), state)
+}
+
+func runTicketStage(args []string) error {
+	usage := "ticket stage -id <id> <design|develop|test|done>"
+	fs := flag.NewFlagSet("ticket stage", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
+		return errors.New("usage: " + usage)
+	}
+	switch strings.ToLower(strings.TrimSpace(fs.Args()[0])) {
+	case store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone:
+		return updateTicketStage(strings.TrimSpace(*id), strings.ToLower(strings.TrimSpace(fs.Args()[0])))
+	default:
+		return errors.New("usage: " + usage)
+	}
+}
+
+func runTicketState(args []string) error {
+	usage := "ticket state -id <id> <idle|active|success|fail>"
+	fs := flag.NewFlagSet("ticket state", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
+		return errors.New("usage: " + usage)
+	}
+	switch strings.ToLower(strings.TrimSpace(fs.Args()[0])) {
+	case store.StateIdle, store.StateActive, store.StateSuccess, store.StateFail:
+		return updateTicketState(strings.TrimSpace(*id), strings.ToLower(strings.TrimSpace(fs.Args()[0])))
+	default:
+		return errors.New("usage: " + usage)
+	}
 }
 
 func updateTicketStage(idArg, stage string) error {
@@ -1641,7 +1842,7 @@ func updateTicketStage(idArg, stage string) error {
 	}
 	nextState := store.StateIdle
 	if stage == store.StageDone {
-		nextState = store.StateComplete
+		nextState = store.StateSuccess
 	}
 	return updateTicketLifecycleRequest(svc, current.ID, current, stage, nextState)
 }
@@ -1696,8 +1897,10 @@ func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store
 }
 
 func runUpdate(args []string) error {
+	usage := "ticket update -id <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "task id")
 	title := fs.String("title", "", "task title")
 	description := fs.String("description", "", "task description")
 	desc := fs.String("desc", "", "task description")
@@ -1710,29 +1913,29 @@ func runUpdate(args []string) error {
 	stage := fs.String("stage", "", "task stage")
 	state := fs.String("state", "", "task state")
 	parentIDRaw := fs.String("parent_id", "", "task parent id")
-	if len(args) == 0 {
-		return errors.New("usage: ticket update <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]")
-	}
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 {
-		return errors.New("usage: ticket update <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]")
+	if strings.TrimSpace(*id) == "" {
+		return errors.New("usage: " + usage)
 	}
-	hasTitle := containsFlag(args[1:], "-title")
-	hasDescription := containsFlag(args[1:], "-description")
-	hasDesc := containsFlag(args[1:], "-desc")
-	hasAC := containsFlag(args[1:], "-ac")
-	hasPriority := containsFlag(args[1:], "-priority")
-	hasOrder := containsFlag(args[1:], "-order")
-	hasEstimateEffort := containsFlag(args[1:], "-estimate_effort")
-	hasEstimateComplete := containsFlag(args[1:], "-estimate_complete")
-	hasStatus := containsFlag(args[1:], "-status")
-	hasStage := containsFlag(args[1:], "-stage")
-	hasState := containsFlag(args[1:], "-state")
-	hasParentID := containsFlag(args[1:], "-parent_id")
+	if fs.NArg() != 0 {
+		return errors.New("usage: " + usage)
+	}
+	hasTitle := containsFlag(args, "-title")
+	hasDescription := containsFlag(args, "-description")
+	hasDesc := containsFlag(args, "-desc")
+	hasAC := containsFlag(args, "-ac")
+	hasPriority := containsFlag(args, "-priority")
+	hasOrder := containsFlag(args, "-order")
+	hasEstimateEffort := containsFlag(args, "-estimate_effort")
+	hasEstimateComplete := containsFlag(args, "-estimate_complete")
+	hasStatus := containsFlag(args, "-status")
+	hasStage := containsFlag(args, "-stage")
+	hasState := containsFlag(args, "-state")
+	hasParentID := containsFlag(args, "-parent_id")
 	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID {
-		return errors.New("usage: ticket update <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]")
+		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1742,7 +1945,7 @@ func runUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(args[0])
+	current, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
@@ -1820,7 +2023,8 @@ func runUpdate(args []string) error {
 		return printJSON(updated)
 	}
 	dependencies, _ := svc.ListDependencies(current.ID)
-	printTicketDetails(updated, dependencies)
+	history, _ := svc.ListHistory(updated.ID)
+	printTicketDetails(updated, dependencies, history)
 	return nil
 }
 
@@ -2260,16 +2464,39 @@ func runDependencyCommand(args []string, add bool) error {
 }
 
 func runDependency(args []string) error {
+	usage := "ticket dependency <add|remove> -id <id> <dependency-id[,dependency-id...]>"
 	if len(args) == 0 {
-		return errors.New("usage: ticket dependency <add|remove> <id> <dependency-id[,dependency-id...]>")
+		return errors.New("usage: " + usage)
 	}
+	action := args[0]
 	switch args[0] {
 	case "add":
-		return runDependencyCommand(args[1:], true)
+		fs := flag.NewFlagSet("dependency add", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.String("id", "", "ticket id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
+			return errors.New("usage: " + usage)
+		}
+		return runDependencyCommand([]string{strings.TrimSpace(*id), strings.TrimSpace(fs.Args()[0])}, true)
 	case "remove":
-		return runDependencyCommand(args[1:], false)
+		fs := flag.NewFlagSet("dependency remove", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.String("id", "", "ticket id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
+			return errors.New("usage: " + usage)
+		}
+		return runDependencyCommand([]string{strings.TrimSpace(*id), strings.TrimSpace(fs.Args()[0])}, false)
 	default:
-		return fmt.Errorf("unknown dependency action %q", args[0])
+		if action == "" {
+			return errors.New("usage: " + usage)
+		}
+		return fmt.Errorf("unknown dependency action %q", action)
 	}
 }
 
@@ -2411,12 +2638,19 @@ func parseIDList(raw string) ([]int64, error) {
 
 func runComment(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ticket comment add <id> \"comment\"")
+		return errors.New("usage: ticket comment add -id <id> \"comment\"")
 	}
 	switch args[0] {
 	case "add":
-		if len(args) != 3 {
-			return errors.New("usage: ticket comment add <id> \"comment\"")
+		fs := flag.NewFlagSet("ticket comment add", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.String("id", "", "ticket id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		commentValues := fs.Args()
+		if strings.TrimSpace(*id) == "" || len(commentValues) != 1 {
+			return errors.New("usage: ticket comment add -id <id> \"comment\"")
 		}
 		cfg, err := config.Load()
 		if err != nil {
@@ -2426,11 +2660,11 @@ func runComment(args []string) error {
 		if err != nil {
 			return err
 		}
-		task, err := svc.GetTicket(args[1])
+		task, err := svc.GetTicket(strings.TrimSpace(*id))
 		if err != nil {
 			return err
 		}
-		comment, err := svc.AddComment(task.ID, args[2])
+		comment, err := svc.AddComment(task.ID, commentValues[0])
 		if err != nil {
 			return err
 		}
@@ -2472,8 +2706,18 @@ func runClone(args []string) error {
 }
 
 func runDeleteTicket(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket rm|delete <id>")
+	usage := "ticket rm|delete -id <id>"
+	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" {
+		return errors.New("usage: " + usage)
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -2483,7 +2727,7 @@ func runDeleteTicket(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(args[0])
+	task, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
@@ -2921,7 +3165,7 @@ func printTicket(task store.Ticket) {
 	}
 }
 
-func printTicketDetails(task store.Ticket, dependencies []store.Dependency) {
+func printTicketDetails(task store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent) {
 	parentID := ""
 	if task.ParentID != nil {
 		parentID = fmt.Sprintf("%d", *task.ParentID)
@@ -2943,6 +3187,8 @@ func printTicketDetails(task store.Ticket, dependencies []store.Dependency) {
 	fmt.Printf("EstimateComplete : %s\n", task.EstimateComplete)
 	fmt.Printf("DependsOn    : %s\n", dependsOn)
 	fmt.Printf("Status       : %s\n", task.Status)
+	fmt.Printf("Stage        : %s\n", task.Stage)
+	fmt.Printf("State        : %s\n", task.State)
 	fmt.Printf("Priority     : %d\n", task.Priority)
 	fmt.Printf("Created      : %s\n", task.CreatedAt)
 	fmt.Printf("LastModified : %s\n", task.UpdatedAt)
@@ -2951,6 +3197,16 @@ func printTicketDetails(task store.Ticket, dependencies []store.Dependency) {
 		fmt.Println("Comments     :")
 		for _, comment := range task.Comments {
 			fmt.Printf("  - [%s] %s: %s\n", comment.CreatedAt, comment.Author, comment.Text)
+		}
+	}
+	if len(history) > 0 {
+		fmt.Println("History      :")
+		for _, event := range history {
+			fmt.Printf("  - [%s] %s by %d", event.CreatedAt, event.EventType, event.CreatedBy)
+			if strings.TrimSpace(event.Payload) != "" && event.Payload != "{}" {
+				fmt.Printf(": %s", event.Payload)
+			}
+			fmt.Println()
 		}
 	}
 }
@@ -3237,7 +3493,7 @@ func runLocalStatus() error {
 	err = localStatusCheck(dbPath)
 	printConnectionLine(err == nil)
 	if !dbExists {
-		fmt.Println("hint: run ticket initdb")
+		fmt.Println("hint: run ticket init")
 	}
 	return err
 }
@@ -3380,7 +3636,7 @@ CLIENT COMMANDS
 		{"claim", "Assign yourself to a task"},
 		{"clone", "Clone a task or epic"},
 		{"comment", "Add comments to a task"},
-		{"complete", "Set a ticket state to complete"},
+		{"complete", "Set a ticket state to success"},
 		{"count", "Count users, projects, and work by type"},
 		{"design", "Set a ticket stage to design"},
 		{"dependency", "Manage dependency links between tasks"},
@@ -3405,16 +3661,19 @@ CLIENT COMMANDS
 		{"set-parent", "Set the parent of a task"},
 		{"attach", "Alias for set-parent"},
 		{"status", "Show server and authentication status"},
+		{"stage", "Set a ticket stage directly"},
+		{"state", "Set a ticket state directly"},
 		{"test", "Set a ticket stage to test"},
 		{"unset-parent", "Clear the parent of a task"},
 		{"detach", "Alias for unset-parent"},
 		{"unclaim", "Remove yourself from a task"},
+		{"upgrade", "Check whether a newer version is available"},
 		{"update", "Update a task"},
 		{"version", "Print the current version from VERSION"},
 	}
 	adminRows := [][2]string{
 		{"assign", "Admin-only task assignment"},
-		{"initdb", "Initialize the database, bootstrap admin, and create the default project"},
+		{"init", "Initialize the database, bootstrap admin, and create the default project"},
 		{"server", "Start the API server and embedded web UI"},
 		{"unassign", "Admin-only task unassignment"},
 		{"user", "Admin-only user management"},
@@ -3514,7 +3773,7 @@ func formatTicketStatusSymbol(status string, useUnicode bool) string {
 		return "○"
 	case state == store.StateActive:
 		return "◑"
-	case state == store.StateComplete:
+	case state == store.StateSuccess:
 		return "◉"
 	default:
 		return ""
@@ -3522,18 +3781,27 @@ func formatTicketStatusSymbol(status string, useUnicode bool) string {
 }
 
 func formatStatusCounts(statuses map[string]int) string {
-	order := []string{"design/idle", "design/active", "design/complete", "develop/idle", "develop/active", "develop/complete", "test/idle", "test/active", "test/complete", "done/complete"}
+	order := []string{
+		"design/idle", "design/active", "design/success", "design/fail",
+		"develop/idle", "develop/active", "develop/success", "develop/fail",
+		"test/idle", "test/active", "test/success", "test/fail",
+		"done/success", "done/fail",
+	}
 	labels := map[string]string{
-		"design/idle":      "design/idle",
-		"design/active":    "design/active",
-		"design/complete":  "design/complete",
-		"develop/idle":     "develop/idle",
-		"develop/active":   "develop/active",
-		"develop/complete": "develop/complete",
-		"test/idle":        "test/idle",
-		"test/active":      "test/active",
-		"test/complete":    "test/complete",
-		"done/complete":    "done/complete",
+		"design/idle":     "design/idle",
+		"design/active":   "design/active",
+		"design/success":  "design/success",
+		"design/fail":     "design/fail",
+		"develop/idle":    "develop/idle",
+		"develop/active":  "develop/active",
+		"develop/success": "develop/success",
+		"develop/fail":    "develop/fail",
+		"test/idle":       "test/idle",
+		"test/active":     "test/active",
+		"test/success":    "test/success",
+		"test/fail":       "test/fail",
+		"done/success":    "done/success",
+		"done/fail":       "done/fail",
 	}
 	var parts []string
 	for _, status := range order {
@@ -3606,6 +3874,29 @@ func renderCommandHelp(command string) string {
 	b.WriteString(info.example)
 	b.WriteString("\n")
 	return b.String()
+}
+
+func printTicketEnvironment() {
+	variableNames := []string{
+		"TICKET_MODE",
+		"TICKET_HOME",
+		"TICKET_CONFIG_DIR",
+		"TICKET_DB_OVERRIDE",
+		"TICKET_SERVER",
+		"TICKET_URL",
+		"TICKET_USERNAME",
+		"TICKET_PASSWORD",
+	}
+
+	fmt.Println()
+	fmt.Println("ENVIRONMENT")
+	for _, name := range variableNames {
+		value := envValue(name)
+		if value == "" {
+			value = "<unset>"
+		}
+		fmt.Printf("  %s: %s\n", name, value)
+	}
 }
 
 func hasCommandHelp(command string) bool {

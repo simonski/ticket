@@ -218,13 +218,13 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		Description: task.Description,
 		ParentID:    task.ParentID,
 		Assignee:    task.Assignee,
-		Status:      "done/complete",
+		Status:      "done/success",
 	})
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
-	if updated.Status != "done/complete" {
-		t.Fatalf("UpdateTicket().Status = %q, want done/complete", updated.Status)
+	if updated.Status != "done/success" {
+		t.Fatalf("UpdateTicket().Status = %q, want done/success", updated.Status)
 	}
 }
 
