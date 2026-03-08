@@ -228,17 +228,17 @@ func TestTaskAPI(t *testing.T) {
 	if createTaskResp.Code != http.StatusCreated {
 		t.Fatalf("create task status = %d body=%s", createTaskResp.Code, createTaskResp.Body.String())
 	}
-	var task store.Ticket
-	decodeResponse(t, createTaskResp, &task)
+	var ticket store.Ticket
+	decodeResponse(t, createTaskResp, &ticket)
 
 	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets", nil, auth.Token)
 	if listResp.Code != http.StatusOK {
 		t.Fatalf("list tasks status = %d", listResp.Code)
 	}
-	var tasks []store.Ticket
-	decodeResponse(t, listResp, &tasks)
-	if len(tasks) != 2 {
-		t.Fatalf("tasks len = %d, want 2", len(tasks))
+	var tickets []store.Ticket
+	decodeResponse(t, listResp, &tickets)
+	if len(tickets) != 2 {
+		t.Fatalf("tasks len = %d, want 2", len(tickets))
 	}
 
 	limitedResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets?limit=1", nil, auth.Token)
@@ -251,18 +251,18 @@ func TestTaskAPI(t *testing.T) {
 		t.Fatalf("limited tasks len = %d, want 1", len(limitedTasks))
 	}
 
-	assignResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	assignResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"parent_id":   epic.ID,
 		"assignee":    "alice",
-		"status":      task.Status,
+		"status":      ticket.Status,
 	}, auth.Token)
 	if assignResp.Code != http.StatusOK {
 		t.Fatalf("assign task status = %d body=%s", assignResp.Code, assignResp.Body.String())
 	}
 
-	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
 		"title":       "Add password reset flow",
 		"description": "Email reset support",
 		"parent_id":   epic.ID,
@@ -273,7 +273,7 @@ func TestTaskAPI(t *testing.T) {
 		t.Fatalf("update task status = %d body=%s", updateResp.Code, updateResp.Body.String())
 	}
 
-	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(task.ID, 10), nil, auth.Token)
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), nil, auth.Token)
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("get task status = %d body=%s", getResp.Code, getResp.Body.String())
 	}
@@ -289,11 +289,11 @@ func TestTaskAPI(t *testing.T) {
 	}
 	var filtered []store.Ticket
 	decodeResponse(t, filteredResp, &filtered)
-	if len(filtered) != 1 || filtered[0].ID != task.ID {
-		t.Fatalf("filtered tasks = %#v", filtered)
+	if len(filtered) != 1 || filtered[0].ID != ticket.ID {
+		t.Fatalf("filtered tickets = %#v", filtered)
 	}
 
-	historyResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(task.ID, 10)+"/history", nil, auth.Token)
+	historyResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/history", nil, auth.Token)
 	if historyResp.Code != http.StatusOK {
 		t.Fatalf("history status = %d body=%s", historyResp.Code, historyResp.Body.String())
 	}
@@ -303,14 +303,14 @@ func TestTaskAPI(t *testing.T) {
 		t.Fatalf("history events = %#v", events)
 	}
 
-	commentResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+strconv.FormatInt(task.ID, 10)+"/comments", map[string]string{
+	commentResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/comments", map[string]string{
 		"comment": "Waiting on API changes.",
 	}, auth.Token)
 	if commentResp.Code != http.StatusCreated {
 		t.Fatalf("comment status = %d body=%s", commentResp.Code, commentResp.Body.String())
 	}
 
-	commentsResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(task.ID, 10)+"/comments", nil, auth.Token)
+	commentsResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/comments", nil, auth.Token)
 	if commentsResp.Code != http.StatusOK {
 		t.Fatalf("comments status = %d body=%s", commentsResp.Code, commentsResp.Body.String())
 	}
@@ -322,14 +322,14 @@ func TestTaskAPI(t *testing.T) {
 
 	dependencyCreateResp := doJSONRequest(t, handler, http.MethodPost, "/api/dependencies", map[string]any{
 		"project_id": project.ID,
-		"ticket_id":  task.ID,
+		"ticket_id":  ticket.ID,
 		"depends_on": epic.ID,
 	}, auth.Token)
 	if dependencyCreateResp.Code != http.StatusCreated {
 		t.Fatalf("dependency create status = %d body=%s", dependencyCreateResp.Code, dependencyCreateResp.Body.String())
 	}
 
-	dependencyResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(task.ID, 10)+"/dependencies", nil, auth.Token)
+	dependencyResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/dependencies", nil, auth.Token)
 	if dependencyResp.Code != http.StatusOK {
 		t.Fatalf("dependency status = %d body=%s", dependencyResp.Code, dependencyResp.Body.String())
 	}
@@ -489,8 +489,8 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 	if createTaskResp.Code != http.StatusCreated {
 		t.Fatalf("create task status = %d, want %d body=%s", createTaskResp.Code, http.StatusCreated, createTaskResp.Body.String())
 	}
-	var task store.Ticket
-	decodeResponse(t, createTaskResp, &task)
+	var ticket store.Ticket
+	decodeResponse(t, createTaskResp, &ticket)
 
 	countResp := doJSONRequest(t, handler, http.MethodGet, "/api/count?project_id="+strconv.FormatInt(project.ID, 10), nil, adminAuth.Token)
 	if countResp.Code != http.StatusOK {
@@ -505,11 +505,11 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 		t.Fatalf("count payload types = %#v", countPayload.Types)
 	}
 
-	claimResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	claimResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"assignee":    "alice",
-		"status":      task.Status,
+		"status":      ticket.Status,
 	}, aliceAuth.Token)
 	if claimResp.Code != http.StatusOK {
 		t.Fatalf("claim status = %d, want %d body=%s", claimResp.Code, http.StatusOK, claimResp.Body.String())
@@ -531,26 +531,26 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 	}
 	decodeResponse(t, bobLogin, &bobAuth)
 
-	claimConflictResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	claimConflictResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"assignee":    "bob",
-		"status":      task.Status,
+		"status":      ticket.Status,
 	}, bobAuth.Token)
 	if claimConflictResp.Code != http.StatusBadRequest {
 		t.Fatalf("claim conflict status = %d, want %d body=%s", claimConflictResp.Code, http.StatusBadRequest, claimConflictResp.Body.String())
 	}
 	var claimConflictPayload map[string]string
 	decodeResponse(t, claimConflictResp, &claimConflictPayload)
-	if claimConflictPayload["error"] != "task is already assigned to alice" {
+	if claimConflictPayload["error"] != "ticket is already assigned to alice" {
 		t.Fatalf("claim conflict payload = %#v", claimConflictPayload)
 	}
 
-	overrideResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	overrideResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"assignee":    "charlie",
-		"status":      task.Status,
+		"status":      ticket.Status,
 	}, bobAuth.Token)
 	if overrideResp.Code != http.StatusForbidden {
 		t.Fatalf("override status = %d, want %d body=%s", overrideResp.Code, http.StatusForbidden, overrideResp.Body.String())
@@ -561,11 +561,11 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 		t.Fatalf("override payload = %#v", overridePayload)
 	}
 
-	missingAssignResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	missingAssignResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"assignee":    "nobody",
-		"status":      task.Status,
+		"status":      ticket.Status,
 	}, adminAuth.Token)
 	if missingAssignResp.Code != http.StatusBadRequest {
 		t.Fatalf("missing assign status = %d, want %d body=%s", missingAssignResp.Code, http.StatusBadRequest, missingAssignResp.Body.String())
@@ -580,11 +580,11 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 	if disableAliceResp.Code != http.StatusOK {
 		t.Fatalf("disable alice status = %d, want %d body=%s", disableAliceResp.Code, http.StatusOK, disableAliceResp.Body.String())
 	}
-	disabledAssignResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	disabledAssignResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"assignee":    "alice",
-		"status":      task.Status,
+		"status":      ticket.Status,
 	}, adminAuth.Token)
 	if disabledAssignResp.Code != http.StatusBadRequest {
 		t.Fatalf("disabled assign status = %d, want %d body=%s", disabledAssignResp.Code, http.StatusBadRequest, disabledAssignResp.Body.String())
@@ -595,9 +595,9 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 		t.Fatalf("disabled assign payload = %#v", disabledAssignPayload)
 	}
 
-	statusForbiddenResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(task.ID, 10), map[string]any{
-		"title":       task.Title,
-		"description": task.Description,
+	statusForbiddenResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
 		"assignee":    "",
 		"status":      "inprogress",
 	}, aliceAuth.Token)
@@ -791,17 +791,17 @@ func TestCloneTicketAPI(t *testing.T) {
 	}
 
 	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets", nil, auth.Token)
-	var tasks []store.Ticket
-	decodeResponse(t, listResp, &tasks)
+	var tickets []store.Ticket
+	decodeResponse(t, listResp, &tickets)
 	var clonedChild *store.Ticket
-	for i := range tasks {
-		if tasks[i].CloneOf != nil && *tasks[i].CloneOf == child.ID {
-			clonedChild = &tasks[i]
+	for i := range tickets {
+		if tickets[i].CloneOf != nil && *tickets[i].CloneOf == child.ID {
+			clonedChild = &tickets[i]
 			break
 		}
 	}
 	if clonedChild == nil {
-		t.Fatalf("cloned child not found in %#v", tasks)
+		t.Fatalf("cloned child not found in %#v", tickets)
 	}
 	if clonedChild.ParentID == nil || *clonedChild.ParentID != clonedEpic.ID || clonedChild.Status != "design/idle" || clonedChild.Assignee != "" {
 		t.Fatalf("cloned child = %#v", clonedChild)
@@ -826,15 +826,15 @@ func TestDeleteTicketAPI(t *testing.T) {
 		"type":       "task",
 		"title":      "Delete me",
 	}, auth.Token)
-	var task store.Ticket
-	decodeResponse(t, taskResp, &task)
+	var ticket store.Ticket
+	decodeResponse(t, taskResp, &ticket)
 
-	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/tickets/"+strconv.FormatInt(task.ID, 10), nil, auth.Token)
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), nil, auth.Token)
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("delete status = %d, want %d body=%s", deleteResp.Code, http.StatusOK, deleteResp.Body.String())
 	}
 
-	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(task.ID, 10), nil, auth.Token)
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), nil, auth.Token)
 	if getResp.Code != http.StatusNotFound {
 		t.Fatalf("get deleted status = %d, want %d body=%s", getResp.Code, http.StatusNotFound, getResp.Body.String())
 	}

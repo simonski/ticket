@@ -461,16 +461,16 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			CreatedBy:          user.ID,
 		})
 	}
-	var task store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets", request, &task)
-	return task, err
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, "/api/tickets", request, &ticket)
+	return ticket, err
 }
 
 func (c *Client) ListTickets(projectID int64) ([]store.Ticket, error) {
 	return c.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
 }
 
-func (c *Client) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
+func (c *Client) ListTicketsFiltered(projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -479,7 +479,7 @@ func (c *Client) ListTicketsFiltered(projectID int64, taskType, stage, state, st
 		defer db.Close()
 		return store.ListTickets(db, store.TicketListParams{
 			ProjectID:       projectID,
-			Type:            taskType,
+			Type:            ticketType,
 			Stage:           stage,
 			State:           state,
 			Status:          status,
@@ -489,10 +489,10 @@ func (c *Client) ListTicketsFiltered(projectID int64, taskType, stage, state, st
 			IncludeArchived: includeArchived,
 		})
 	}
-	var tasks []store.Ticket
+	var tickets []store.Ticket
 	values := url.Values{}
-	if taskType != "" {
-		values.Set("type", taskType)
+	if ticketType != "" {
+		values.Set("type", ticketType)
 	}
 	if stage != "" {
 		values.Set("stage", stage)
@@ -519,8 +519,8 @@ func (c *Client) ListTicketsFiltered(projectID int64, taskType, stage, state, st
 	if encoded := values.Encode(); encoded != "" {
 		path += "?" + encoded
 	}
-	err := c.doJSON(http.MethodGet, path, nil, &tasks)
-	return tasks, err
+	err := c.doJSON(http.MethodGet, path, nil, &tickets)
+	return tickets, err
 }
 
 func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Ticket, error) {
@@ -556,9 +556,9 @@ func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Tick
 			ActorRole: "admin",
 		})
 	}
-	var task store.Ticket
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/tickets/%d", id), request, &task)
-	return task, err
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/tickets/%d", id), request, &ticket)
+	return ticket, err
 }
 
 func (c *Client) CloseTicket(id int64) (store.Ticket, error) {
@@ -694,9 +694,9 @@ func (c *Client) GetTicketByID(id int64) (store.Ticket, error) {
 		defer db.Close()
 		return store.GetTicket(db, id)
 	}
-	var task store.Ticket
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d", id), nil, &task)
-	return task, err
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d", id), nil, &ticket)
+	return ticket, err
 }
 
 func (c *Client) GetTicket(ref string) (store.Ticket, error) {
@@ -708,9 +708,9 @@ func (c *Client) GetTicket(ref string) (store.Ticket, error) {
 		defer db.Close()
 		return store.GetTicketByRef(db, ref)
 	}
-	var task store.Ticket
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(strings.TrimSpace(ref)), nil, &task)
-	return task, err
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(strings.TrimSpace(ref)), nil, &ticket)
+	return ticket, err
 }
 
 func (c *Client) CloneTicket(id int64) (store.Ticket, error) {
@@ -726,9 +726,9 @@ func (c *Client) CloneTicket(id int64) (store.Ticket, error) {
 		}
 		return store.CloneTicket(db, id, user.ID)
 	}
-	var task store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/clone", id), nil, &task)
-	return task, err
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/clone", id), nil, &ticket)
+	return ticket, err
 }
 
 func (c *Client) ListHistory(id int64) ([]store.HistoryEvent, error) {

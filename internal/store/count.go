@@ -31,7 +31,7 @@ func CountEverything(db *sql.DB, projectID *int64) (CountSummary, error) {
 
 	query := `
 		SELECT type, stage, state, COUNT(*)
-		FROM tasks
+		FROM tickets
 	`
 	var rows *sql.Rows
 	var err error
@@ -48,20 +48,20 @@ func CountEverything(db *sql.DB, projectID *int64) (CountSummary, error) {
 
 	byType := map[string]*TypeCount{}
 	for rows.Next() {
-		var taskType string
+		var ticketType string
 		var stage string
 		var state string
 		var count int
-		if err := rows.Scan(&taskType, &stage, &state, &count); err != nil {
+		if err := rows.Scan(&ticketType, &stage, &state, &count); err != nil {
 			return CountSummary{}, err
 		}
-		entry, ok := byType[taskType]
+		entry, ok := byType[ticketType]
 		if !ok {
 			entry = &TypeCount{
-				Type:     taskType,
+				Type:     ticketType,
 				Statuses: map[string]int{},
 			}
-			byType[taskType] = entry
+			byType[ticketType] = entry
 		}
 		entry.Total += count
 		entry.Statuses[RenderLifecycleStatus(stage, state)] = count
@@ -70,8 +70,8 @@ func CountEverything(db *sql.DB, projectID *int64) (CountSummary, error) {
 		return CountSummary{}, err
 	}
 
-	for _, taskType := range []string{"epic", "task", "bug", "spike", "chore"} {
-		if entry, ok := byType[taskType]; ok {
+	for _, ticketType := range []string{"epic", "task", "bug", "spike", "chore"} {
+		if entry, ok := byType[ticketType]; ok {
 			summary.Types = append(summary.Types, *entry)
 		}
 	}

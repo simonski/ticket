@@ -130,8 +130,8 @@ CREATE TABLE IF NOT EXISTS projects (
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
-CREATE TABLE IF NOT EXISTS tasks (
-	task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS tickets (
+	ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	key TEXT NOT NULL DEFAULT '',
 	project_id INTEGER NOT NULL,
 	parent_id INTEGER,
@@ -155,34 +155,34 @@ CREATE TABLE IF NOT EXISTS tasks (
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(parent_id) REFERENCES tasks(task_id),
-	FOREIGN KEY(clone_of) REFERENCES tasks(task_id),
+	FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS history_events (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	task_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS ticket_history (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	task_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
@@ -192,20 +192,20 @@ CREATE TABLE IF NOT EXISTS comments (
 	user_id INTEGER NOT NULL,
 	comment TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(item_id) REFERENCES tasks(task_id),
+	FOREIGN KEY(item_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS dependencies (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	task_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
 	depends_on INTEGER NOT NULL,
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(task_id) REFERENCES tasks(task_id),
-	FOREIGN KEY(depends_on) REFERENCES tasks(task_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
@@ -232,6 +232,33 @@ CREATE TABLE IF NOT EXISTS project_members (
 }
 
 func migrateSchema(db *sql.DB) error {
+	// Rename tasks table and task_id column to use ticket terminology.
+	if tableExists(db, "tasks") && !tableExists(db, "tickets") {
+		if _, err := db.Exec(`ALTER TABLE tasks RENAME TO tickets`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "tickets", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE tickets RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "history_events", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE history_events RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "ticket_history", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE ticket_history RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "dependencies", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE dependencies RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+
 	if !columnExists(db, "projects", "prefix") {
 		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN prefix TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
@@ -259,55 +286,55 @@ func migrateSchema(db *sql.DB) error {
 		return err
 	}
 
-	if !columnExists(db, "tasks", "key") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN key TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(db, "tickets", "key") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN key TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "sort_order") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(db, "tickets", "sort_order") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "estimate_effort") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN estimate_effort INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(db, "tickets", "estimate_effort") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_effort INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "estimate_complete") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(db, "tickets", "estimate_complete") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "health_score") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(db, "tickets", "health_score") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "open") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
+	if !columnExists(db, "tickets", "open") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
 			return err
 		}
 		// Legacy behavior used archived for close/open. Preserve closed state and reset archived.
-		if _, err := db.Exec(`UPDATE tasks SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
+		if _, err := db.Exec(`UPDATE tickets SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`UPDATE tasks SET archived = 0`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(db, "tasks", "stage") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
+		if _, err := db.Exec(`UPDATE tickets SET archived = 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "state") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'`); err != nil {
+	if !columnExists(db, "tickets", "stage") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tickets", "state") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'`); err != nil {
 			return err
 		}
 	}
 	if _, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET
 			stage = CASE
 				WHEN status = 'notready' THEN 'design'
@@ -339,8 +366,8 @@ func migrateSchema(db *sql.DB) error {
 		return err
 	}
 	if _, err := db.Exec(`
-		INSERT INTO ticket_history (id, project_id, task_id, event_type, payload, created_by, created_at)
-		SELECT h.id, h.project_id, h.task_id, h.event_type, h.payload, h.created_by, h.created_at
+		INSERT INTO ticket_history (id, project_id, ticket_id, event_type, payload, created_by, created_at)
+		SELECT h.id, h.project_id, h.ticket_id, h.event_type, h.payload, h.created_by, h.created_at
 		FROM history_events h
 		WHERE NOT EXISTS (SELECT 1 FROM ticket_history th WHERE th.id = h.id)
 	`); err != nil {
@@ -386,11 +413,11 @@ func backfillProjectPrefixes(db *sql.DB) error {
 	for _, project := range projects {
 		if strings.TrimSpace(project.prefix) != "" {
 			if project.id == 1 && strings.TrimSpace(project.title) == "Default Project" {
-				var taskCount int
-				if err := db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE project_id = ?`, project.id).Scan(&taskCount); err != nil {
+				var ticketCount int
+				if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE project_id = ?`, project.id).Scan(&ticketCount); err != nil {
 					return err
 				}
-				if taskCount == 0 {
+				if ticketCount == 0 {
 					prefix := defaultProjectPrefix
 					if prefix != strings.TrimSpace(project.prefix) {
 						prefix, err := nextUniqueProjectPrefix(db, prefix)
@@ -422,10 +449,10 @@ func backfillProjectPrefixes(db *sql.DB) error {
 
 func backfillTicketKeys(db *sql.DB) error {
 	rows, err := db.Query(`
-		SELECT t.task_id, t.project_id, t.type, t.key, p.prefix
-		FROM tasks t
+		SELECT t.ticket_id, t.project_id, t.type, t.key, p.prefix
+		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
-		ORDER BY t.project_id, t.task_id
+		ORDER BY t.project_id, t.ticket_id
 	`)
 	if err != nil {
 		return err
@@ -433,20 +460,20 @@ func backfillTicketKeys(db *sql.DB) error {
 	defer rows.Close()
 
 	type row struct {
-		taskID    int64
+		ticketID  int64
 		projectID int64
-		taskType  string
+		ticketType string
 		key       string
 		prefix    string
 	}
-	var tasks []row
+	var tickets []row
 	maxSeq := map[int64]int64{}
 	for rows.Next() {
 		var item row
-		if err := rows.Scan(&item.taskID, &item.projectID, &item.taskType, &item.key, &item.prefix); err != nil {
+		if err := rows.Scan(&item.ticketID, &item.projectID, &item.ticketType, &item.key, &item.prefix); err != nil {
 			return err
 		}
-		tasks = append(tasks, item)
+		tickets = append(tickets, item)
 		if seq := parseTicketSequence(item.key); seq > maxSeq[item.projectID] {
 			maxSeq[item.projectID] = seq
 		}
@@ -454,14 +481,14 @@ func backfillTicketKeys(db *sql.DB) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	for _, task := range tasks {
-		if strings.TrimSpace(task.key) == "" {
-			maxSeq[task.projectID]++
-			key, err := generateTicketKey(task.prefix, task.taskType, maxSeq[task.projectID])
+	for _, ticket := range tickets {
+		if strings.TrimSpace(ticket.key) == "" {
+			maxSeq[ticket.projectID]++
+			key, err := generateTicketKey(ticket.prefix, ticket.ticketType, maxSeq[ticket.projectID])
 			if err != nil {
 				return err
 			}
-			if _, err := db.Exec(`UPDATE tasks SET key = ? WHERE task_id = ?`, key, task.taskID); err != nil {
+			if _, err := db.Exec(`UPDATE tickets SET key = ? WHERE ticket_id = ?`, key, ticket.ticketID); err != nil {
 				return err
 			}
 		}
@@ -492,6 +519,12 @@ func parseTicketSequence(key string) int64 {
 	default:
 		return 0
 	}
+}
+
+func tableExists(db *sql.DB, tableName string) bool {
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tableName).Scan(&count)
+	return err == nil && count > 0
 }
 
 func columnExists(db *sql.DB, tableName, columnName string) bool {

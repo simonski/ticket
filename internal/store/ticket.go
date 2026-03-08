@@ -151,7 +151,7 @@ func CreateTicket(db *sql.DB, params TicketCreateParams) (Ticket, error) {
 		return Ticket{}, err
 	}
 	result, err := tx.Exec(`
-		INSERT INTO tasks (key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, created_by)
+		INSERT INTO tickets (key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, created_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, key, params.ProjectID, nullableInt64(params.ParentID), nullableInt64(params.CloneOf), params.Type, params.Title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), params.CreatedBy)
 	if err != nil {
@@ -261,9 +261,9 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 	}
 
 	result, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET title = ?, description = ?, acceptance_criteria = ?, parent_id = ?, assignee = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nullableInt64(params.ParentID), assignee, stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), id)
 	if err != nil {
 		return Ticket{}, err
@@ -316,9 +316,9 @@ func SetTicketOpen(db *sql.DB, id int64, open bool, actorUsername string, actorI
 		return current, nil
 	}
 	result, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET open = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 	`, boolToInt(open), id)
 	if err != nil {
 		return Ticket{}, err
@@ -345,9 +345,9 @@ func SetTicketArchived(db *sql.DB, id int64, archived bool, actorUsername string
 		return current, nil
 	}
 	result, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET archived = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 	`, boolToInt(archived), id)
 	if err != nil {
 		return Ticket{}, err
@@ -438,9 +438,9 @@ func SetTicketHealth(db *sql.DB, id int64, score int) (Ticket, error) {
 		return Ticket{}, ErrTicketArchived
 	}
 	result, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET health_score = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 	`, score, id)
 	if err != nil {
 		return Ticket{}, err
@@ -465,14 +465,14 @@ func ListTickets(db *sql.DB, params TicketListParams) ([]Ticket, error) {
 	}
 
 	query := `
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
 		WHERE project_id = ?
 	`
 	args := []any{params.ProjectID}
-	if taskType := normalizeOptional(params.Type); taskType != "" {
+	if ticketType := normalizeOptional(params.Type); ticketType != "" {
 		query += ` AND type = ?`
-		args = append(args, taskType)
+		args = append(args, ticketType)
 	}
 	if stage := normalizeOptional(params.Stage); stage != "" {
 		if !ValidStage(stage) {
@@ -508,7 +508,7 @@ func ListTickets(db *sql.DB, params TicketListParams) ([]Ticket, error) {
 	if !params.IncludeArchived {
 		query += ` AND archived = 0`
 	}
-	query += ` ORDER BY created_at, task_id`
+	query += ` ORDER BY created_at, ticket_id`
 	if params.Limit < 0 {
 		return nil, errors.New("limit must be zero or greater")
 	}
@@ -523,7 +523,7 @@ func ListTickets(db *sql.DB, params TicketListParams) ([]Ticket, error) {
 	}
 	defer rows.Close()
 
-	var tickets []Ticket
+	tickets := make([]Ticket, 0)
 	for rows.Next() {
 		ticket, err := scanTicket(rows)
 		if err != nil {
@@ -543,9 +543,9 @@ func SearchTickets(db *sql.DB, projectID int64, query string) ([]Ticket, error) 
 
 func GetTicketByProject(db *sql.DB, projectID, id int64) (Ticket, error) {
 	row := db.QueryRow(`
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
-		WHERE project_id = ? AND task_id = ?
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
+		WHERE project_id = ? AND ticket_id = ?
 	`, projectID, id)
 	ticket, err := scanTicket(row)
 	if err != nil {
@@ -559,9 +559,9 @@ func GetTicketByProject(db *sql.DB, projectID, id int64) (Ticket, error) {
 
 func GetTicket(db *sql.DB, id int64) (Ticket, error) {
 	row := db.QueryRow(`
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
-		WHERE task_id = ?
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
+		WHERE ticket_id = ?
 	`, id)
 
 	ticket, err := scanTicket(row)
@@ -583,8 +583,8 @@ func GetTicketByRef(db *sql.DB, raw string) (Ticket, error) {
 		return GetTicket(db, id)
 	}
 	row := db.QueryRow(`
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
 		WHERE key = ?
 	`, strings.ToUpper(raw))
 	ticket, err := scanTicket(row)
@@ -658,7 +658,7 @@ func hydrateTicket(db *sql.DB, ticket Ticket) (Ticket, error) {
 
 func ticketHasChildren(db *sql.DB, id int64) (bool, error) {
 	var count int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE parent_id = ?`, id).Scan(&count); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE parent_id = ?`, id).Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -698,7 +698,7 @@ func syncTicketAndAncestors(db *sql.DB, id int64, actorID int64) error {
 }
 
 func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, error) {
-	task, err := getStoredTicket(db, id)
+	ticket, err := getStoredTicket(db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -707,7 +707,7 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 		return nil, err
 	}
 	if len(children) == 0 {
-		return task.ParentID, nil
+		return ticket.ParentID, nil
 	}
 
 	nextStage := StageDone
@@ -738,46 +738,46 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 	case anyFail:
 		nextState = StateFail
 	}
-	taskState := normalizeState(task.State)
-	if nextStage == task.Stage && nextState == taskState {
-		return task.ParentID, nil
+	ticketState := normalizeState(ticket.State)
+	if nextStage == ticket.Stage && nextState == ticketState {
+		return ticket.ParentID, nil
 	}
-	taskStatus := RenderLifecycleStatus(task.Stage, taskState)
+	ticketStatus := RenderLifecycleStatus(ticket.Stage, ticketState)
 
 	if _, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET stage = ?, state = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 	`, nextStage, nextState, RenderLifecycleStatus(nextStage, nextState), id); err != nil {
 		return nil, err
 	}
 
-	_ = AddHistoryEvent(db, task.ProjectID, task.ID, "ticket_parent_lifecycle_changed", map[string]any{
-		"key":         task.Key,
-		"from_stage":  task.Stage,
-		"from_state":  taskState,
-		"from_status": taskStatus,
+	_ = AddHistoryEvent(db, ticket.ProjectID, ticket.ID, "ticket_parent_lifecycle_changed", map[string]any{
+		"key":         ticket.Key,
+		"from_stage":  ticket.Stage,
+		"from_state":  ticketState,
+		"from_status": ticketStatus,
 		"to_stage":    nextStage,
 		"to_state":    nextState,
 		"to_status":   RenderLifecycleStatus(nextStage, nextState),
 		"reason":      "child lifecycle aggregation",
 	}, actorID)
-	return task.ParentID, nil
+	return ticket.ParentID, nil
 }
 
 func listStoredChildTickets(db *sql.DB, parentID int64) ([]Ticket, error) {
 	rows, err := db.Query(`
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
 		WHERE parent_id = ?
-		ORDER BY created_at, task_id
+		ORDER BY created_at, ticket_id
 	`, parentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var tickets []Ticket
+	tickets := make([]Ticket, 0)
 	for rows.Next() {
 		ticket, err := scanTicket(rows)
 		if err != nil {
@@ -790,9 +790,9 @@ func listStoredChildTickets(db *sql.DB, parentID int64) ([]Ticket, error) {
 
 func getStoredTicket(db *sql.DB, id int64) (Ticket, error) {
 	ticket, err := scanTicket(db.QueryRow(`
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
-		WHERE task_id = ?
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
+		WHERE ticket_id = ?
 	`, id))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -927,16 +927,16 @@ func validateTicketAssignmentChange(currentAssignee, nextAssignee, actorUsername
 	}
 	if nextAssignee == actorUsername {
 		if currentAssignee != "" && currentAssignee != actorUsername {
-			return fmt.Errorf("task is already assigned to %s", currentAssignee)
+			return fmt.Errorf("ticket is already assigned to %s", currentAssignee)
 		}
 		return nil
 	}
 	if nextAssignee == "" {
 		if currentAssignee != actorUsername {
 			if currentAssignee == "" {
-				return errors.New("task is not assigned to you")
+				return errors.New("ticket is not assigned to you")
 			}
-			return fmt.Errorf("task is assigned to %s", currentAssignee)
+			return fmt.Errorf("ticket is assigned to %s", currentAssignee)
 		}
 		return nil
 	}
@@ -949,21 +949,21 @@ func RequestTicket(db *sql.DB, params TicketRequestParams) (Ticket, string, erro
 		return Ticket{}, "", errors.New("username is required")
 	}
 
-	if task, ok, err := findAssignedTicketForUser(db, params.ProjectID, username, StageDevelop, StateActive); err != nil {
+	if ticket, ok, err := findAssignedTicketForUser(db, params.ProjectID, username, StageDevelop, StateActive); err != nil {
 		return Ticket{}, "", err
 	} else if ok {
-		return task, "ASSIGNED", nil
+		return ticket, "ASSIGNED", nil
 	}
 
 	if params.TicketID != nil || strings.TrimSpace(params.TicketRef) != "" {
-		task, err := resolveRequestedTicket(db, params)
+		ticket, err := resolveRequestedTicket(db, params)
 		if err != nil {
 			return Ticket{}, "", err
 		}
-		if strings.TrimSpace(task.Assignee) == username {
-			return task, "ASSIGNED", nil
+		if strings.TrimSpace(ticket.Assignee) == username {
+			return ticket, "ASSIGNED", nil
 		}
-		ok, err := ticketClaimable(db, task, params.ProjectID)
+		ok, err := ticketClaimable(db, ticket, params.ProjectID)
 		if err != nil {
 			return Ticket{}, "", err
 		}
@@ -971,18 +971,18 @@ func RequestTicket(db *sql.DB, params TicketRequestParams) (Ticket, string, erro
 			return Ticket{}, "REJECTED", nil
 		}
 		if params.DryRun {
-			return withClaimPreview(task, username), "AVAILABLE", nil
+			return withClaimPreview(ticket, username), "AVAILABLE", nil
 		}
-		assigned, err := UpdateTicket(db, task.ID, TicketUpdateParams{
-			Title:              task.Title,
-			Description:        task.Description,
-			AcceptanceCriteria: task.AcceptanceCriteria,
-			ParentID:           task.ParentID,
+		assigned, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+			Title:              ticket.Title,
+			Description:        ticket.Description,
+			AcceptanceCriteria: ticket.AcceptanceCriteria,
+			ParentID:           ticket.ParentID,
 			Assignee:           username,
-			Stage:              task.Stage,
+			Stage:              ticket.Stage,
 			State:              StateActive,
-			Priority:           task.Priority,
-			Order:              task.Order,
+			Priority:           ticket.Priority,
+			Order:              ticket.Order,
 			UpdatedBy:          params.UserID,
 			ActorUsername:      username,
 			ActorRole:          "admin",
@@ -993,7 +993,7 @@ func RequestTicket(db *sql.DB, params TicketRequestParams) (Ticket, string, erro
 		return assigned, "ASSIGNED", nil
 	}
 
-	task, ok, err := findClaimCandidate(db, params.ProjectID)
+	ticket, ok, err := findClaimCandidate(db, params.ProjectID)
 	if err != nil {
 		return Ticket{}, "", err
 	}
@@ -1001,18 +1001,18 @@ func RequestTicket(db *sql.DB, params TicketRequestParams) (Ticket, string, erro
 		return Ticket{}, "NO-WORK", nil
 	}
 	if params.DryRun {
-		return withClaimPreview(task, username), "AVAILABLE", nil
+		return withClaimPreview(ticket, username), "AVAILABLE", nil
 	}
-	assigned, err := UpdateTicket(db, task.ID, TicketUpdateParams{
-		Title:              task.Title,
-		Description:        task.Description,
-		AcceptanceCriteria: task.AcceptanceCriteria,
-		ParentID:           task.ParentID,
+	assigned, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+		Title:              ticket.Title,
+		Description:        ticket.Description,
+		AcceptanceCriteria: ticket.AcceptanceCriteria,
+		ParentID:           ticket.ParentID,
 		Assignee:           username,
-		Stage:              task.Stage,
+		Stage:              ticket.Stage,
 		State:              StateActive,
-		Priority:           task.Priority,
-		Order:              task.Order,
+		Priority:           ticket.Priority,
+		Order:              ticket.Order,
 		UpdatedBy:          params.UserID,
 		ActorUsername:      username,
 		ActorRole:          "admin",
@@ -1067,8 +1067,8 @@ func ticketClaimable(db *sql.DB, ticket Ticket, projectID int64) (bool, error) {
 
 func findAssignedTicketForUser(db *sql.DB, projectID int64, username, stage, state string) (Ticket, bool, error) {
 	query := `
-		SELECT task_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
-		FROM tasks
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		FROM tickets
 		WHERE assignee = ? AND open = 1 AND archived = 0 AND stage = ? AND state = ?
 	`
 	args := []any{username, stage, state}
@@ -1076,28 +1076,28 @@ func findAssignedTicketForUser(db *sql.DB, projectID int64, username, stage, sta
 		query += ` AND project_id = ?`
 		args = append(args, projectID)
 	}
-	query += ` ORDER BY created_at, task_id LIMIT 1`
-	task, err := scanTicket(db.QueryRow(query, args...))
+	query += ` ORDER BY created_at, ticket_id LIMIT 1`
+	ticket, err := scanTicket(db.QueryRow(query, args...))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Ticket{}, false, nil
 		}
 		return Ticket{}, false, err
 	}
-	return task, true, nil
+	return ticket, true, nil
 }
 
 func findClaimCandidate(db *sql.DB, projectID int64) (Ticket, bool, error) {
 	if projectID == 0 {
 		return Ticket{}, false, errors.New("project is required")
 	}
-	task, err := scanTicket(db.QueryRow(`
-		SELECT t.task_id, t.key, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, t.open, t.archived, COALESCE(t.created_by, 0), t.created_at, t.updated_at
-		FROM tasks t
+	ticket, err := scanTicket(db.QueryRow(`
+		SELECT t.ticket_id, t.key, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, t.open, t.archived, COALESCE(t.created_by, 0), t.created_at, t.updated_at
+		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		WHERE t.project_id = ? AND p.status = 'open' AND t.open = 1 AND t.archived = 0 AND t.stage = ? AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
-		  AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = t.task_id)
-		ORDER BY t.priority DESC, t.created_at, t.key, t.task_id
+		  AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id)
+		ORDER BY t.priority DESC, t.created_at, t.key, t.ticket_id
 		LIMIT 1
 	`, projectID, StageDevelop, StateIdle))
 	if err != nil {
@@ -1106,7 +1106,7 @@ func findClaimCandidate(db *sql.DB, projectID int64) (Ticket, bool, error) {
 		}
 		return Ticket{}, false, err
 	}
-	return task, true, nil
+	return ticket, true, nil
 }
 
 func CloneTicket(db *sql.DB, id, createdBy int64) (Ticket, error) {
@@ -1160,13 +1160,13 @@ func cloneTicketRecursive(db *sql.DB, original Ticket, parentID *int64, createdB
 }
 
 func DeleteTicket(db *sql.DB, id int64) error {
-	task, err := GetTicket(db, id)
+	ticket, err := GetTicket(db, id)
 	if err != nil {
 		return err
 	}
-	parentID := task.ParentID
+	parentID := ticket.ParentID
 
-	children, err := ListTickets(db, TicketListParams{ProjectID: task.ProjectID, IncludeArchived: true})
+	children, err := ListTickets(db, TicketListParams{ProjectID: ticket.ProjectID, IncludeArchived: true})
 	if err != nil {
 		return err
 	}
@@ -1182,22 +1182,22 @@ func DeleteTicket(db *sql.DB, id int64) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`UPDATE tasks SET clone_of = NULL WHERE clone_of = ?`, id); err != nil {
+	if _, err := tx.Exec(`UPDATE tickets SET clone_of = NULL WHERE clone_of = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM dependencies WHERE task_id = ? OR depends_on = ?`, id, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM dependencies WHERE ticket_id = ? OR depends_on = ?`, id, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM comments WHERE item_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM history_events WHERE task_id = ?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM history_events WHERE ticket_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_history WHERE task_id = ?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ticket_history WHERE ticket_id = ?`, id); err != nil {
 		return err
 	}
-	result, err := tx.Exec(`DELETE FROM tasks WHERE task_id = ?`, id)
+	result, err := tx.Exec(`DELETE FROM tickets WHERE ticket_id = ?`, id)
 	if err != nil {
 		return err
 	}

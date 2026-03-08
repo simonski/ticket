@@ -199,19 +199,6 @@
           </div>
         </form>
         <div id="login-status" class="status"></div>
-        <div id="compat-controls" class="stack hidden" style="margin-top:0.8rem;">
-          <div class="row">
-            <button class="btn" type="button">Create Project</button>
-            <button class="btn" type="button">Create Ticket</button>
-          </div>
-          <input id="project-prefix" value="TK" readonly />
-          <select id="filter-status">
-            <option>All</option>
-            <option>Design / Idle</option>
-            <option>Develop / Active</option>
-            <option>Done / Complete</option>
-          </select>
-        </div>
       </div>
     </section>
 
@@ -274,7 +261,6 @@
       const app = document.getElementById("app");
       const loginStatus = document.getElementById("login-status");
       const appStatus = document.getElementById("app-status");
-      const compatControls = document.getElementById("compat-controls");
       const projectSelect = document.getElementById("project-select");
       const boardEl = document.getElementById("board");
       const modalOverlay = document.getElementById("modal-overlay");
@@ -331,14 +317,10 @@
       function canRegister(enabled) {
         showRegisterBtn.classList.toggle("hidden", !enabled);
       }
-      function showCompatControls(enabled) {
-        compatControls.classList.toggle("hidden", !enabled);
-      }
 
       async function init() {
         try {
           const status = await call("/api/status", { headers: headers() });
-          showCompatControls(false);
           canRegister(Boolean(status.registration_enabled));
           if (!status.authenticated) {
             showLogin("Please log in.");
@@ -349,13 +331,12 @@
           await loadTickets();
           connectWS();
         } catch (err) {
-          showCompatControls(true);
           showLogin(`Server unavailable: ${err.message}`);
         }
       }
 
       async function loadProjects() {
-        projects = await call("/api/projects", { headers: headers() });
+        projects = await call("/api/projects", { headers: headers() }) || [];
         const current = selectedProjectID();
         if (current && !projects.some((project) => String(project.project_id) === current)) {
           setSelectedProjectID("");
@@ -380,7 +361,7 @@
           return;
         }
         try {
-          tickets = await call(`/api/projects/${projectID}/tickets`, { headers: headers() });
+          tickets = await call(`/api/projects/${projectID}/tickets`, { headers: headers() }) || [];
         } catch (error) {
           if (String(error.message || "").toLowerCase().includes("project not found")) {
             setSelectedProjectID("");
@@ -428,13 +409,13 @@
             card.innerHTML = `
               <div class="ticket-top">
                 <strong>${escape(ticket.title)}</strong>
-                <span class="muted">${escape(ticket.key || "#" + ticket.task_id)}</span>
+                <span class="muted">${escape(ticket.key || "#" + ticket.ticket_id)}</span>
               </div>
               <div class="muted">${escape(ticket.type)} · ${escape(ticket.state)}</div>
               <div class="state-line ${stateColorClass(ticket.state)}"></div>
             `;
             card.addEventListener("dragstart", (event) => {
-              event.dataTransfer.setData("text/ticket-id", String(ticket.task_id));
+              event.dataTransfer.setData("text/ticket-id", String(ticket.ticket_id));
             });
             card.addEventListener("click", () => openEdit(ticket));
             lane.appendChild(card);
@@ -450,7 +431,7 @@
       }
 
       async function moveTicketToStage(id, stage) {
-        const ticket = tickets.find((item) => String(item.task_id) === String(id));
+        const ticket = tickets.find((item) => String(item.ticket_id) === String(id));
         if (!ticket || ticket.stage === stage) return;
         const payload = {
           title: ticket.title,
@@ -465,7 +446,7 @@
           stage,
           state: normalizeStateForStage(stage, ticket.state),
         };
-        await call(`/api/tickets/${ticket.task_id}`, { method: "PUT", headers: headers(true), body: JSON.stringify(payload) });
+        await call(`/api/tickets/${ticket.ticket_id}`, { method: "PUT", headers: headers(true), body: JSON.stringify(payload) });
         await loadTickets();
       }
 
@@ -486,7 +467,7 @@
 
       function openEdit(ticket) {
         draft = { mode: "edit", ticket: structuredClone(ticket) };
-        modalTitle.textContent = ticket.key || `Ticket #${ticket.task_id}`;
+        modalTitle.textContent = ticket.key || `Ticket #${ticket.ticket_id}`;
         setModalValues(ticket);
         modalOverlay.classList.remove("hidden");
       }
@@ -509,7 +490,7 @@
         document.getElementById("ticket-state").value = ticket.state || "idle";
         document.getElementById("ticket-close-open").textContent = ticket.open === false ? "Open" : "Close";
         document.getElementById("ticket-archive").textContent = ticket.archived ? "Unarchive" : "Archive";
-        document.getElementById("ticket-delete").disabled = !ticket.task_id;
+        document.getElementById("ticket-delete").disabled = !ticket.ticket_id;
       }
 
       function queueAutosave() {
@@ -542,14 +523,14 @@
           });
           draft.mode = "edit";
           draft.ticket = created;
-          modalTitle.textContent = created.key || `Ticket #${created.task_id}`;
+          modalTitle.textContent = created.key || `Ticket #${created.ticket_id}`;
           setModalValues(created);
           await loadTickets();
           return;
         }
         if (!draft.ticket) return;
         const current = draft.ticket;
-        const updated = await call(`/api/tickets/${current.task_id}`, {
+        const updated = await call(`/api/tickets/${current.ticket_id}`, {
           method: "PUT",
           headers: headers(true),
           body: JSON.stringify({
@@ -613,10 +594,12 @@
       });
 
       showRegisterBtn.addEventListener("click", () => {
+        document.getElementById("login-form").classList.add("hidden");
         registerForm.classList.remove("hidden");
       });
       document.getElementById("hide-register").addEventListener("click", () => {
         registerForm.classList.add("hidden");
+        document.getElementById("login-form").classList.remove("hidden");
       });
       registerForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -632,6 +615,7 @@
           loginStatus.textContent = "Registered. You can now login.";
           registerForm.reset();
           registerForm.classList.add("hidden");
+          document.getElementById("login-form").classList.remove("hidden");
         } catch (err) {
           loginStatus.textContent = `Registration failed: ${err.message}`;
         }
@@ -666,7 +650,7 @@
 
       document.getElementById("ticket-delete").addEventListener("click", async () => {
         if (!draft || !draft.ticket) return;
-        await call(`/api/tickets/${draft.ticket.task_id}`, { method: "DELETE", headers: headers() });
+        await call(`/api/tickets/${draft.ticket.ticket_id}`, { method: "DELETE", headers: headers() });
         closeModal();
         await loadTickets();
       });
@@ -674,7 +658,7 @@
       document.getElementById("ticket-close-open").addEventListener("click", async () => {
         if (!draft || !draft.ticket) return;
         const next = draft.ticket.open === false ? "open" : "close";
-        const updated = await call(`/api/tickets/${draft.ticket.task_id}/${next}`, { method: "POST", headers: headers() });
+        const updated = await call(`/api/tickets/${draft.ticket.ticket_id}/${next}`, { method: "POST", headers: headers() });
         draft.ticket = updated;
         setModalValues(updated);
         await loadTickets();
@@ -683,7 +667,7 @@
       document.getElementById("ticket-archive").addEventListener("click", async () => {
         if (!draft || !draft.ticket) return;
         const next = draft.ticket.archived ? "unarchive" : "archive";
-        const updated = await call(`/api/tickets/${draft.ticket.task_id}/${next}`, { method: "POST", headers: headers() });
+        const updated = await call(`/api/tickets/${draft.ticket.ticket_id}/${next}`, { method: "POST", headers: headers() });
         draft.ticket = updated;
         setModalValues(updated);
         await loadTickets();

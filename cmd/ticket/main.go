@@ -184,17 +184,17 @@ var helpIndex = map[string]commandHelp{
 	},
 	"list": {
 		usage:   "ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a] [--unicode] [--plain]",
-		details: []string{"Lists tasks in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default archived tickets are hidden; use `-a` to include them."},
+		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default archived tickets are hidden; use `-a` to include them."},
 		example: "ticket list --type bug --status develop/idle -u alice -n 20",
 	},
 	"orphans": {
 		usage:   "ticket orphans [-url <server-url>]",
-		details: []string{"Lists unparented non-epic tasks in the active project."},
+		details: []string{"Lists unparented non-epic tickets in the active project."},
 		example: "ticket orphans",
 	},
 	"get": {
 		usage:   "ticket get -id <id> [-url <server-url>]",
-		details: []string{"Shows a single task with comments and history.", "Output uses subtle color unless `-nocolor` is supplied."},
+		details: []string{"Shows a single ticket with comments and history.", "Output uses subtle color unless `-nocolor` is supplied."},
 		example: "ticket get -id 42",
 	},
 	"show": {
@@ -204,7 +204,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"search": {
 		usage:   "ticket search <free form query> [-stage <stage>] [-state <state>] [-status <stage/state>] [-title <text>] [-description <text>] [-priority <n>] [-owner <user>] [-allprojects]",
-		details: []string{"Searches tasks in the active project by default.", "Use `-allprojects` to search across every project. Optional filters narrow by lifecycle, title text, description text, priority, and owner."},
+		details: []string{"Searches tickets in the active project by default.", "Use `-allprojects` to search across every project. Optional filters narrow by lifecycle, title text, description text, priority, and owner."},
 		example: "ticket search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
@@ -228,7 +228,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"set-parent": {
 		usage:   "ticket set-parent -id <id> <parent-id>",
-		details: []string{"Sets the parent of a task or epic.", "Both ids must be numeric task ids in the active project.", "If the child is an epic, the parent must also be an epic."},
+		details: []string{"Sets the parent of a ticket or epic.", "Both ids must be numeric ticket ids in the active project.", "If the child is an epic, the parent must also be an epic."},
 		example: "ticket set-parent -id 1 2",
 	},
 	"attach": {
@@ -238,7 +238,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"unset-parent": {
 		usage:   "ticket unset-parent -id <id>",
-		details: []string{"Clears the parent of a task or story.", "After this, the task becomes an orphan."},
+		details: []string{"Clears the parent of a ticket or story.", "After this, the ticket becomes an orphan."},
 		example: "ticket unset-parent -id 1",
 	},
 	"detach": {
@@ -293,17 +293,17 @@ var helpIndex = map[string]commandHelp{
 	},
 	"add": {
 		usage:   "ticket add|create|new [-title <title>] [-t <type>] [-p <priority>] [-a <assignee>] [-d <description>] [-ac <criteria>] [-parent <id>] [-project <project>] [-estimate_effort <n>] [-estimate_complete <rfc3339>] [title words]",
-		details: []string{"Creates a task-like entity in the active project.", "Positional title words and `-title` are equivalent ways to set the title.", "Defaults: `type=task`, `stage=design`, `state=idle`, `priority=1`, blank assignee, blank description, blank acceptance criteria, blank parent, current project, `estimate_effort=0`, blank `estimate_complete`."},
+		details: []string{"Creates a ticket-like entity in the active project.", "Positional title words and `-title` are equivalent ways to set the title.", "Defaults: `type=ticket`, `stage=design`, `state=idle`, `priority=1`, blank assignee, blank description, blank acceptance criteria, blank parent, current project, `estimate_effort=0`, blank `estimate_complete`."},
 		example: "ticket add \"Customers can reset their password.\"",
 	},
 	"comment": {
 		usage:   "ticket comment add -id <id> \"comment\"",
-		details: []string{"Adds a comment to a task and records a corresponding history event."},
+		details: []string{"Adds a comment to a ticket and records a corresponding history event."},
 		example: "ticket comment add -id 42 \"Need product sign-off.\"",
 	},
 	"clone": {
 		usage:   "ticket clone|cp <id>",
-		details: []string{"Clones a task or epic.", "Cloned items are unassigned, reset to `design/idle`, and keep a `clone_of` reference to the source item. Cloning an epic also clones its child tasks."},
+		details: []string{"Clones a ticket or epic.", "Cloned items are unassigned, reset to `design/idle`, and keep a `clone_of` reference to the source item. Cloning an epic also clones its child tickets."},
 		example: "ticket clone 42",
 	},
 	"close": {
@@ -328,42 +328,42 @@ var helpIndex = map[string]commandHelp{
 	},
 	"delete": {
 		usage:   "ticket rm|delete -id <id>",
-		details: []string{"Deletes a task permanently.", "Fails if the task still has child tasks."},
+		details: []string{"Deletes a ticket permanently.", "Fails if the ticket still has child tickets."},
 		example: "ticket delete -id 42",
 	},
 	"assign": {
 		usage:   "ticket assign <id> <name>",
-		details: []string{"Admin-only command that assigns a task to a user.", "The target user must exist and be enabled."},
+		details: []string{"Admin-only command that assigns a ticket to a user.", "The target user must exist and be enabled."},
 		example: "ticket assign 42 alice",
 	},
 	"unassign": {
 		usage:   "ticket unassign <id> <name>",
-		details: []string{"Admin-only command that clears a task assignment from the named user.", "The named user must exist and be enabled."},
+		details: []string{"Admin-only command that clears a ticket assignment from the named user.", "The named user must exist and be enabled."},
 		example: "ticket unassign 42 alice",
 	},
 	"claim": {
 		usage:   "ticket claim <id>",
-		details: []string{"Assigns the caller to the task.", "Fails if the task is already assigned to another user."},
+		details: []string{"Assigns the caller to the ticket.", "Fails if the ticket is already assigned to another user."},
 		example: "ticket claim 42",
 	},
 	"unclaim": {
 		usage:   "ticket unclaim <id>",
-		details: []string{"Clears the caller's assignment from the task.", "Fails unless the caller is the current assignee."},
+		details: []string{"Clears the caller's assignment from the ticket.", "Fails unless the caller is the current assignee."},
 		example: "ticket unclaim 42",
 	},
 	"add-dependency": {
 		usage:   "ticket add-dependency <id> <dependency-id[,dependency-id...]>",
-		details: []string{"Adds one or more `depends_on` links from the task to the listed task IDs.", "Comma-separated dependency IDs are supported."},
+		details: []string{"Adds one or more `depends_on` links from the ticket to the listed ticket IDs.", "Comma-separated dependency IDs are supported."},
 		example: "ticket add-dependency 4 1,2,3",
 	},
 	"remove-dependency": {
 		usage:   "ticket remove-dependency <id> <dependency-id[,dependency-id...]>",
-		details: []string{"Removes one or more `depends_on` links from the task to the listed task IDs.", "Comma-separated dependency IDs are supported."},
+		details: []string{"Removes one or more `depends_on` links from the ticket to the listed ticket IDs.", "Comma-separated dependency IDs are supported."},
 		example: "ticket remove-dependency 4 2",
 	},
 	"dependency": {
 		usage:   "ticket dependency <add|remove> -id <id> <dependency-id[,dependency-id...]>",
-		details: []string{"Manages `depends_on` links for a task.", "`add` creates dependency links; `remove` deletes them."},
+		details: []string{"Manages `depends_on` links for a ticket.", "`add` creates dependency links; `remove` deletes them."},
 		example: "ticket dependency add -id 4 1,2,3",
 	},
 	"request": {
@@ -373,7 +373,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"request-dryrun": {
 		usage:   "ticket request-dryrun [<id>]",
-		details: []string{"Simulates a request assignment without mutating state and shows what task would be assigned."},
+		details: []string{"Simulates a request assignment without mutating state and shows what ticket would be assigned."},
 		example: "ticket request-dryrun 42",
 	},
 	"user": {
@@ -1522,13 +1522,13 @@ func resolveLifecycleInput(status, stage, state string) (string, string, error) 
 func runList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	taskType := fs.String("type", "", "filter by task type")
-	stage := fs.String("stage", "", "filter by task stage")
-	state := fs.String("state", "", "filter by task state")
-	status := fs.String("status", "", "filter by rendered task status")
+	taskType := fs.String("type", "", "filter by ticket type")
+	stage := fs.String("stage", "", "filter by ticket stage")
+	state := fs.String("state", "", "filter by ticket state")
+	status := fs.String("status", "", "filter by rendered ticket status")
 	assignee := fs.String("user", "", "filter by assignee")
 	fs.StringVar(assignee, "u", "", "filter by assignee")
-	limit := fs.Int("n", 0, "maximum number of tasks to return; 0 means all")
+	limit := fs.Int("n", 0, "maximum number of tickets to return; 0 means all")
 	useUnicode := fs.Bool("unicode", true, "render status symbols as unicode")
 	plain := fs.Bool("plain", false, "render status as plain text")
 	includeArchived := fs.Bool("a", false, "include archived tickets")
@@ -1547,22 +1547,22 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
-	tasks, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit, *includeArchived)
+	tickets, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit, *includeArchived)
 	if err != nil {
 		return err
 	}
-	dependenciesByTask := make(map[int64]string, len(tasks))
-	for _, task := range tasks {
-		dependencies, err := api.ListDependencies(task.ID)
+	dependenciesByTicket := make(map[int64]string, len(tickets))
+	for _, ticket := range tickets {
+		dependencies, err := api.ListDependencies(ticket.ID)
 		if err != nil {
 			return err
 		}
-		dependenciesByTask[task.ID] = formatDependsOn(dependencies)
+		dependenciesByTicket[ticket.ID] = formatDependsOn(dependencies)
 	}
 	if outputJSON {
-		return printJSON(tasks)
+		return printJSON(tickets)
 	}
-	printTicketTable(tasks, dependenciesByTask, statusUnicode, *includeArchived)
+	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeArchived)
 	return nil
 }
 
@@ -1574,21 +1574,21 @@ func runOrphans(args []string) error {
 	if err != nil {
 		return err
 	}
-	tasks, err := api.ListTickets(project.ID)
+	tickets, err := api.ListTickets(project.ID)
 	if err != nil {
 		return err
 	}
 	var orphans []store.Ticket
-	for _, task := range tasks {
-		if task.ParentID == nil && strings.TrimSpace(task.Type) != "epic" {
-			orphans = append(orphans, task)
+	for _, ticket := range tickets {
+		if ticket.ParentID == nil && strings.TrimSpace(ticket.Type) != "epic" {
+			orphans = append(orphans, ticket)
 		}
 	}
 	if outputJSON {
 		return printJSON(orphans)
 	}
-	for _, task := range orphans {
-		fmt.Printf("%s\t%s\t%s\t%s\n", ticketLabel(task), task.Type, task.Status, task.Title)
+	for _, ticket := range orphans {
+		fmt.Printf("%s\t%s\t%s\t%s\n", ticketLabel(ticket), ticket.Type, ticket.Status, ticket.Title)
 	}
 	return nil
 }
@@ -1615,16 +1615,16 @@ func runGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
-	dependencies, _ := svc.ListDependencies(task.ID)
-	history, _ := svc.ListHistory(task.ID)
+	dependencies, _ := svc.ListDependencies(ticket.ID)
+	history, _ := svc.ListHistory(ticket.ID)
 	if outputJSON {
-		return printJSON(task)
+		return printJSON(ticket)
 	}
-	printTicketDetails(task, dependencies, history)
+	printTicketDetails(ticket, dependencies, history)
 	return nil
 }
 
@@ -1657,24 +1657,24 @@ func runSearch(args []string) error {
 		}
 		projects = []store.Project{project}
 	}
-	var tasks []store.Ticket
+	var tickets []store.Ticket
 	for _, project := range projects {
 		projectTasks, err := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
 		if err != nil {
 			return err
 		}
-		for _, task := range projectTasks {
-			if !taskMatchesSearch(task, query, filters.stage, filters.state, filters.status, filters.title, filters.description, filters.priority, filters.owner) {
+		for _, ticket := range projectTasks {
+			if !ticketMatchesSearch(ticket, query, filters.stage, filters.state, filters.status, filters.title, filters.description, filters.priority, filters.owner) {
 				continue
 			}
-			tasks = append(tasks, task)
+			tickets = append(tickets, ticket)
 		}
 	}
 	if outputJSON {
-		return printJSON(tasks)
+		return printJSON(tickets)
 	}
-	for _, task := range tasks {
-		fmt.Printf("%s\t%s\t%s\t%s\n", ticketLabel(task), task.Type, task.Status, task.Title)
+	for _, ticket := range tickets {
+		fmt.Printf("%s\t%s\t%s\t%s\n", ticketLabel(ticket), ticket.Type, ticket.Status, ticket.Title)
 	}
 	return nil
 }
@@ -1750,16 +1750,16 @@ func parseSearchArgs(args []string) (string, searchFilters, error) {
 	return strings.TrimSpace(strings.Join(terms, " ")), filters, nil
 }
 
-func taskMatchesSearch(task store.Ticket, query, stage, state, status, title, description string, priority int, owner string) bool {
+func ticketMatchesSearch(ticket store.Ticket, query, stage, state, status, title, description string, priority int, owner string) bool {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query != "" {
 		haystack := strings.ToLower(strings.Join([]string{
-			task.Title,
-			task.Description,
-			task.AcceptanceCriteria,
-			task.Assignee,
-			task.Status,
-			strconv.Itoa(task.Priority),
+			ticket.Title,
+			ticket.Description,
+			ticket.AcceptanceCriteria,
+			ticket.Assignee,
+			ticket.Status,
+			strconv.Itoa(ticket.Priority),
 		}, "\n"))
 		if !strings.Contains(haystack, query) {
 			return false
@@ -1768,32 +1768,32 @@ func taskMatchesSearch(task store.Ticket, query, stage, state, status, title, de
 	if trimmed := strings.TrimSpace(status); trimmed != "" {
 		stageFilter, stateFilter, err := resolveLifecycleInput(trimmed, "", "")
 		if err == nil {
-			if task.Stage != strings.TrimSpace(stageFilter) || task.State != strings.TrimSpace(stateFilter) {
+			if ticket.Stage != strings.TrimSpace(stageFilter) || ticket.State != strings.TrimSpace(stateFilter) {
 				return false
 			}
-		} else if task.Status != trimmed {
+		} else if ticket.Status != trimmed {
 			return false
 		}
 	}
-	if trimmed := strings.TrimSpace(stage); trimmed != "" && task.Stage != trimmed {
+	if trimmed := strings.TrimSpace(stage); trimmed != "" && ticket.Stage != trimmed {
 		return false
 	}
-	if trimmed := strings.TrimSpace(state); trimmed != "" && task.State != trimmed {
+	if trimmed := strings.TrimSpace(state); trimmed != "" && ticket.State != trimmed {
 		return false
 	}
-	if trimmed := strings.ToLower(strings.TrimSpace(title)); trimmed != "" && !strings.Contains(strings.ToLower(task.Title), trimmed) {
+	if trimmed := strings.ToLower(strings.TrimSpace(title)); trimmed != "" && !strings.Contains(strings.ToLower(ticket.Title), trimmed) {
 		return false
 	}
 	if trimmed := strings.ToLower(strings.TrimSpace(description)); trimmed != "" {
-		descriptionFields := strings.ToLower(task.Description + "\n" + task.AcceptanceCriteria)
+		descriptionFields := strings.ToLower(ticket.Description + "\n" + ticket.AcceptanceCriteria)
 		if !strings.Contains(descriptionFields, trimmed) {
 			return false
 		}
 	}
-	if priority != 0 && task.Priority != priority {
+	if priority != 0 && ticket.Priority != priority {
 		return false
 	}
-	if trimmed := strings.TrimSpace(owner); trimmed != "" && task.Assignee != trimmed {
+	if trimmed := strings.TrimSpace(owner); trimmed != "" && ticket.Assignee != trimmed {
 		return false
 	}
 	return true
@@ -1803,7 +1803,7 @@ func runSetParent(args []string, command string) error {
 	usage := fmt.Sprintf("ticket %s -id <id> <parent-id>", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	id := fs.String("id", "", "task id")
+	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1859,11 +1859,11 @@ func runUnsetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
-	updated, err := svc.UnsetTicketParent(task.ID)
+	updated, err := svc.UnsetTicketParent(ticket.ID)
 	if err != nil {
 		return err
 	}
@@ -2011,19 +2011,19 @@ func runUpdate(args []string) error {
 	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	id := fs.String("id", "", "task id")
-	title := fs.String("title", "", "task title")
-	description := fs.String("description", "", "task description")
-	desc := fs.String("desc", "", "task description")
-	acceptanceCriteria := fs.String("ac", "", "task acceptance criteria")
-	priority := fs.Int("priority", 0, "task priority")
-	order := fs.Int("order", 0, "task order")
+	id := fs.String("id", "", "ticket id")
+	title := fs.String("title", "", "ticket title")
+	description := fs.String("description", "", "ticket description")
+	desc := fs.String("desc", "", "ticket description")
+	acceptanceCriteria := fs.String("ac", "", "ticket acceptance criteria")
+	priority := fs.Int("priority", 0, "ticket priority")
+	order := fs.Int("order", 0, "ticket order")
 	estimateEffort := fs.Int("estimate_effort", 0, "estimated effort")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
-	status := fs.String("status", "", "rendered task status (<stage>/<state>)")
-	stage := fs.String("stage", "", "task stage")
-	state := fs.String("state", "", "task state")
-	parentIDRaw := fs.String("parent_id", "", "task parent id")
+	status := fs.String("status", "", "rendered ticket status (<stage>/<state>)")
+	stage := fs.String("stage", "", "ticket stage")
+	state := fs.String("state", "", "ticket state")
+	parentIDRaw := fs.String("parent_id", "", "ticket parent id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2285,7 +2285,7 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool) error {
 		return err
 	}
 	if strings.TrimSpace(current.Assignee) != strings.TrimSpace(expectedAssignee) {
-		return fmt.Errorf("task is not assigned to %s", expectedAssignee)
+		return fmt.Errorf("ticket is not assigned to %s", expectedAssignee)
 	}
 	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title,
@@ -2322,11 +2322,11 @@ func runHistory(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(args[0])
+	ticket, err := svc.GetTicket(args[0])
 	if err != nil {
 		return err
 	}
-	events, err := svc.ListHistory(task.ID)
+	events, err := svc.ListHistory(ticket.ID)
 	if err != nil {
 		return err
 	}
@@ -2372,19 +2372,19 @@ func runHealth(args []string) error {
 		}
 
 		results := make([]map[string]any, 0, len(projectTickets))
-		for _, task := range projectTickets {
-			comments, err := svc.ListComments(task.ID)
+		for _, ticket := range projectTickets {
+			comments, err := svc.ListComments(ticket.ID)
 			if err != nil {
 				return err
 			}
-			checks := ticketHealthCheck(task, comments)
-			updated, err := svc.SetTicketHealth(task.ID, checks.score)
+			checks := ticketHealthCheck(ticket, comments)
+			updated, err := svc.SetTicketHealth(ticket.ID, checks.score)
 			if err != nil {
 				return err
 			}
 			result := map[string]any{
-				"ticket_id":                  task.ID,
-				"ticket_key":                 task.Key,
+				"ticket_id":                  ticket.ID,
+				"ticket_key":                 ticket.Key,
 				"score":                      checks.score,
 				"not_an_orphan":              checks.notOrphan,
 				"has_acceptance_criteria":    checks.hasAC,
@@ -2420,17 +2420,17 @@ func runHealth(args []string) error {
 		return nil
 	}
 
-	task, err := svc.GetTicket(args[0])
+	ticket, err := svc.GetTicket(args[0])
 	if err != nil {
 		return err
 	}
-	comments, err := svc.ListComments(task.ID)
+	comments, err := svc.ListComments(ticket.ID)
 	if err != nil {
 		return err
 	}
 
-	checks := ticketHealthCheck(task, comments)
-	updated, err := svc.SetTicketHealth(task.ID, checks.score)
+	checks := ticketHealthCheck(ticket, comments)
+	updated, err := svc.SetTicketHealth(ticket.ID, checks.score)
 	if err != nil {
 		return err
 	}
@@ -2445,8 +2445,8 @@ func runHealth(args []string) error {
 		return printJSON(map[string]any{
 			"ticket_health": section,
 			"ticket": map[string]any{
-				"ticket_id":    task.ID,
-				"ticket_key":   ticketLabel(task),
+				"ticket_id":    ticket.ID,
+				"ticket_key":   ticketLabel(ticket),
 				"health_score": updated.HealthScore,
 			},
 		})
@@ -2468,13 +2468,13 @@ type ticketHealthResult struct {
 	ready              bool
 }
 
-func ticketHealthCheck(task store.Ticket, comments []store.Comment) ticketHealthResult {
-	notOrphan := task.Type == "epic" || task.ParentID != nil
-	hasAC := strings.TrimSpace(task.AcceptanceCriteria) != ""
+func ticketHealthCheck(ticket store.Ticket, comments []store.Comment) ticketHealthResult {
+	notOrphan := ticket.Type == "epic" || ticket.ParentID != nil
+	hasAC := strings.TrimSpace(ticket.AcceptanceCriteria) != ""
 	reviewedByReviewer := hasReviewerAgentComment(comments)
-	ready := task.Status == "design/idle"
+	ready := ticket.Status == "design/idle"
 	if !ready {
-		stage, state, err := store.ParseLifecycleStatus(task.Status)
+		stage, state, err := store.ParseLifecycleStatus(ticket.Status)
 		if err == nil {
 			ready = stage == store.StageDesign && state == store.StateIdle
 		}
@@ -2531,7 +2531,7 @@ func runDependencyCommand(args []string, add bool) error {
 	if err != nil {
 		return err
 	}
-	task, err := api.GetTicket(args[0])
+	ticket, err := api.GetTicket(args[0])
 	if err != nil {
 		return err
 	}
@@ -2546,7 +2546,7 @@ func runDependencyCommand(args []string, add bool) error {
 		}
 		dependencyRequest := libticket.DependencyRequest{
 			ProjectID: project.ID,
-			TicketID:  task.ID,
+			TicketID:  ticket.ID,
 			DependsOn: dependencyTicket.ID,
 		}
 		if add {
@@ -2561,7 +2561,7 @@ func runDependencyCommand(args []string, add bool) error {
 	}
 	if outputJSON {
 		return printJSON(map[string]any{
-			"task_id":      task.ID,
+			"task_id":      ticket.ID,
 			"dependencies": args[1],
 			"action":       map[bool]string{true: "added", false: "removed"}[add],
 		})
@@ -2570,7 +2570,7 @@ func runDependencyCommand(args []string, add bool) error {
 	if !add {
 		action = "removed"
 	}
-	fmt.Printf("%s dependencies for %s: %s\n", action, ticketLabel(task), args[1])
+	fmt.Printf("%s dependencies for %s: %s\n", action, ticketLabel(ticket), args[1])
 	return nil
 }
 
@@ -2771,18 +2771,18 @@ func runComment(args []string) error {
 		if err != nil {
 			return err
 		}
-		task, err := svc.GetTicket(strings.TrimSpace(*id))
+		ticket, err := svc.GetTicket(strings.TrimSpace(*id))
 		if err != nil {
 			return err
 		}
-		comment, err := svc.AddComment(task.ID, commentValues[0])
+		comment, err := svc.AddComment(ticket.ID, commentValues[0])
 		if err != nil {
 			return err
 		}
 		if outputJSON {
 			return printJSON(comment)
 		}
-		fmt.Printf("commented on %s: %s\n", ticketLabel(task), comment.Comment)
+		fmt.Printf("commented on %s: %s\n", ticketLabel(ticket), comment.Comment)
 		return nil
 	default:
 		return fmt.Errorf("unknown comment command %q", args[0])
@@ -2805,14 +2805,14 @@ func runClone(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.CloneTicket(taskRef.ID)
+	ticket, err := svc.CloneTicket(taskRef.ID)
 	if err != nil {
 		return err
 	}
 	if outputJSON {
-		return printJSON(task)
+		return printJSON(ticket)
 	}
-	printTicket(task)
+	printTicket(ticket)
 	return nil
 }
 
@@ -2838,17 +2838,17 @@ func runDeleteTicket(args []string) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
-	if err := svc.DeleteTicket(task.ID); err != nil {
+	if err := svc.DeleteTicket(ticket.ID); err != nil {
 		return err
 	}
 	if outputJSON {
-		return printJSON(map[string]any{"status": "deleted", "ticket_id": task.ID, "key": task.Key})
+		return printJSON(map[string]any{"status": "deleted", "ticket_id": ticket.ID, "key": ticket.Key})
 	}
-	fmt.Printf("deleted ticket %s\n", ticketLabel(task))
+	fmt.Printf("deleted ticket %s\n", ticketLabel(ticket))
 	return nil
 }
 
@@ -2875,15 +2875,15 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
 	var updated store.Ticket
 	if closed {
-		updated, err = svc.CloseTicket(task.ID)
+		updated, err = svc.CloseTicket(ticket.ID)
 	} else {
-		updated, err = svc.OpenTicket(task.ID)
+		updated, err = svc.OpenTicket(ticket.ID)
 	}
 	if err != nil {
 		return err
@@ -2918,15 +2918,15 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if err != nil {
 		return err
 	}
-	task, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
 	if err != nil {
 		return err
 	}
 	var updated store.Ticket
 	if archived {
-		updated, err = svc.ArchiveTicket(task.ID)
+		updated, err = svc.ArchiveTicket(ticket.ID)
 	} else {
-		updated, err = svc.UnarchiveTicket(task.ID)
+		updated, err = svc.UnarchiveTicket(ticket.ID)
 	}
 	if err != nil {
 		return err
@@ -2949,12 +2949,12 @@ func runCurate(args []string) error {
 	var sourceIDs []int64
 	var titles []string
 	for _, arg := range args {
-		task, err := api.GetTicket(arg)
+		ticket, err := api.GetTicket(arg)
 		if err != nil {
 			return err
 		}
-		sourceIDs = append(sourceIDs, task.ID)
-		titles = append(titles, task.Title)
+		sourceIDs = append(sourceIDs, ticket.ID)
+		titles = append(titles, ticket.Title)
 	}
 	title := "Curated requirement"
 	if len(titles) > 0 {
@@ -2984,12 +2984,12 @@ func runReview(args []string) error {
 	if err != nil {
 		return err
 	}
-	tasks, err := api.ListTicketsFiltered(project.ID, "requirement", "", "", *status, "", "", 0, false)
+	tickets, err := api.ListTicketsFiltered(project.ID, "requirement", "", "", *status, "", "", 0, false)
 	if err != nil {
 		return err
 	}
-	for _, task := range tasks {
-		fmt.Printf("%s\t%s\t%s\n", ticketLabel(task), task.Status, task.Title)
+	for _, ticket := range tickets {
+		fmt.Printf("%s\t%s\t%s\n", ticketLabel(ticket), ticket.Status, ticket.Title)
 	}
 	return nil
 }
@@ -3080,7 +3080,7 @@ func runDecision(args []string) error {
 		if err != nil {
 			return err
 		}
-		task, err := api.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := api.CreateTicket(libticket.TicketCreateRequest{
 			ProjectID:   project.ID,
 			Type:        "decision",
 			Title:       args[1],
@@ -3089,19 +3089,19 @@ func runDecision(args []string) error {
 		if err != nil {
 			return err
 		}
-		printTicket(task)
+		printTicket(ticket)
 		return nil
 	case "list":
 		_, api, project, err := resolveCurrentProjectClient()
 		if err != nil {
 			return err
 		}
-		tasks, err := api.ListTicketsFiltered(project.ID, "decision", "", "", "", "", "", 0, false)
+		tickets, err := api.ListTicketsFiltered(project.ID, "decision", "", "", "", "", "", 0, false)
 		if err != nil {
 			return err
 		}
-		for _, task := range tasks {
-			fmt.Printf("%s\t%s\t%s\n", ticketLabel(task), task.Status, task.Title)
+		for _, ticket := range tickets {
+			fmt.Printf("%s\t%s\t%s\n", ticketLabel(ticket), ticket.Status, ticket.Title)
 		}
 		return nil
 	default:
@@ -3140,19 +3140,19 @@ func runTicketCreate(args []string) error {
 	}
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	taskType := fs.String("type", "task", "task type")
-	fs.StringVar(taskType, "t", "task", "task type")
-	titleFlag := fs.String("title", "", "task title")
-	priority := fs.Int("priority", 1, "task priority")
-	fs.IntVar(priority, "p", 1, "task priority")
+	taskType := fs.String("type", "task", "ticket type")
+	fs.StringVar(taskType, "t", "task", "ticket type")
+	titleFlag := fs.String("title", "", "ticket title")
+	priority := fs.Int("priority", 1, "ticket priority")
+	fs.IntVar(priority, "p", 1, "ticket priority")
 	estimateEffort := fs.Int("estimate_effort", 0, "estimated effort")
-	assignee := fs.String("assignee", "", "task assignee")
-	fs.StringVar(assignee, "a", "", "task assignee")
-	description := fs.String("description", "", "task description")
-	fs.StringVar(description, "d", "", "task description")
+	assignee := fs.String("assignee", "", "ticket assignee")
+	fs.StringVar(assignee, "a", "", "ticket assignee")
+	description := fs.String("description", "", "ticket description")
+	fs.StringVar(description, "d", "", "ticket description")
 	acceptanceCriteria := fs.String("ac", "", "acceptance criteria")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
-	parent := fs.Int64("parent", 0, "parent task id")
+	parent := fs.Int64("parent", 0, "parent ticket id")
 	project := fs.String("project", "", "project id")
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return err
@@ -3242,7 +3242,7 @@ func createTicket(opts ticketCreateOptions) error {
 		}
 		parentID = &epic.ID
 	}
-	task, err := api.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := api.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID:          project.ID,
 		ParentID:           parentID,
 		Type:               opts.TicketType,
@@ -3258,15 +3258,15 @@ func createTicket(opts ticketCreateOptions) error {
 		return err
 	}
 	if outputJSON {
-		return printJSON(task)
+		return printJSON(ticket)
 	}
-	if task.Type == "epic" {
-		cfg.CurrentEpicID = task.ID
+	if ticket.Type == "epic" {
+		cfg.CurrentEpicID = ticket.ID
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
 	}
-	fmt.Println(ticketLabel(task))
+	fmt.Println(ticketLabel(ticket))
 	return nil
 }
 
@@ -3382,76 +3382,76 @@ func printProjectTable(projects []store.Project, currentProjectID string) {
 	_ = w.Flush()
 }
 
-func ticketLabel(task store.Ticket) string {
-	if strings.TrimSpace(task.Key) != "" {
-		return task.Key
+func ticketLabel(ticket store.Ticket) string {
+	if strings.TrimSpace(ticket.Key) != "" {
+		return ticket.Key
 	}
-	return strconv.FormatInt(task.ID, 10)
+	return strconv.FormatInt(ticket.ID, 10)
 }
 
-func printTicket(task store.Ticket) {
+func printTicket(ticket store.Ticket) {
 	if outputJSON {
-		_ = printJSON(task)
+		_ = printJSON(ticket)
 		return
 	}
-	fmt.Printf("ticket: %s\n", task.Title)
-	fmt.Printf("id: %d\n", task.ID)
-	fmt.Printf("key: %s\n", task.Key)
-	fmt.Printf("type: %s\n", task.Type)
-	fmt.Printf("status: %s\n", task.Status)
-	fmt.Printf("open: %s\n", ticketOpenLabel(task))
-	fmt.Printf("archived: %t\n", task.Archived)
-	fmt.Printf("project_id: %d\n", task.ProjectID)
-	if task.ParentID != nil {
-		fmt.Printf("parent_id: %d\n", *task.ParentID)
+	fmt.Printf("ticket: %s\n", ticket.Title)
+	fmt.Printf("id: %d\n", ticket.ID)
+	fmt.Printf("key: %s\n", ticket.Key)
+	fmt.Printf("type: %s\n", ticket.Type)
+	fmt.Printf("status: %s\n", ticket.Status)
+	fmt.Printf("open: %s\n", ticketOpenLabel(ticket))
+	fmt.Printf("archived: %t\n", ticket.Archived)
+	fmt.Printf("project_id: %d\n", ticket.ProjectID)
+	if ticket.ParentID != nil {
+		fmt.Printf("parent_id: %d\n", *ticket.ParentID)
 	}
-	if task.CloneOf != nil {
-		fmt.Printf("clone_of: %d\n", *task.CloneOf)
+	if ticket.CloneOf != nil {
+		fmt.Printf("clone_of: %d\n", *ticket.CloneOf)
 	}
-	if task.Description != "" {
-		fmt.Printf("description: %s\n", task.Description)
+	if ticket.Description != "" {
+		fmt.Printf("description: %s\n", ticket.Description)
 	}
-	if task.EstimateEffort != 0 {
-		fmt.Printf("estimate_effort: %d\n", task.EstimateEffort)
+	if ticket.EstimateEffort != 0 {
+		fmt.Printf("estimate_effort: %d\n", ticket.EstimateEffort)
 	}
-	if task.EstimateComplete != "" {
-		fmt.Printf("estimate_complete: %s\n", task.EstimateComplete)
+	if ticket.EstimateComplete != "" {
+		fmt.Printf("estimate_complete: %s\n", ticket.EstimateComplete)
 	}
 }
 
-func printTicketDetails(task store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent) {
+func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent) {
 	parentID := ""
-	if task.ParentID != nil {
-		parentID = fmt.Sprintf("%d", *task.ParentID)
+	if ticket.ParentID != nil {
+		parentID = fmt.Sprintf("%d", *ticket.ParentID)
 	}
 	dependsOn := formatDependsOn(dependencies)
-	fmt.Printf("ID           : %d\n", task.ID)
-	fmt.Printf("Key          : %s\n", task.Key)
-	fmt.Printf("Type         : %s\n", task.Type)
-	fmt.Printf("Description  : %s\n", task.Description)
+	fmt.Printf("ID           : %d\n", ticket.ID)
+	fmt.Printf("Key          : %s\n", ticket.Key)
+	fmt.Printf("Type         : %s\n", ticket.Type)
+	fmt.Printf("Description  : %s\n", ticket.Description)
 	fmt.Printf("ParentID     : %s\n", parentID)
-	if task.CloneOf != nil {
-		fmt.Printf("CloneOf      : %d\n", *task.CloneOf)
+	if ticket.CloneOf != nil {
+		fmt.Printf("CloneOf      : %d\n", *ticket.CloneOf)
 	}
-	fmt.Printf("ProjectID    : %d\n", task.ProjectID)
-	fmt.Printf("Title        : %s\n", task.Title)
-	fmt.Printf("Assignee     : %s\n", task.Assignee)
-	fmt.Printf("Order        : %d\n", task.Order)
-	fmt.Printf("EstimateEffort   : %d\n", task.EstimateEffort)
-	fmt.Printf("EstimateComplete : %s\n", task.EstimateComplete)
+	fmt.Printf("ProjectID    : %d\n", ticket.ProjectID)
+	fmt.Printf("Title        : %s\n", ticket.Title)
+	fmt.Printf("Assignee     : %s\n", ticket.Assignee)
+	fmt.Printf("Order        : %d\n", ticket.Order)
+	fmt.Printf("EstimateEffort   : %d\n", ticket.EstimateEffort)
+	fmt.Printf("EstimateComplete : %s\n", ticket.EstimateComplete)
 	fmt.Printf("DependsOn    : %s\n", dependsOn)
-	fmt.Printf("Status       : %s\n", task.Status)
-	fmt.Printf("Stage        : %s\n", task.Stage)
-	fmt.Printf("State        : %s\n", task.State)
-	fmt.Printf("Open         : %s\n", ticketOpenLabel(task))
-	fmt.Printf("Archived     : %t\n", task.Archived)
-	fmt.Printf("Priority     : %d\n", task.Priority)
-	fmt.Printf("Created      : %s\n", task.CreatedAt)
-	fmt.Printf("LastModified : %s\n", task.UpdatedAt)
-	fmt.Printf("Acceptance Criteria : %s\n", task.AcceptanceCriteria)
-	if len(task.Comments) > 0 {
+	fmt.Printf("Status       : %s\n", ticket.Status)
+	fmt.Printf("Stage        : %s\n", ticket.Stage)
+	fmt.Printf("State        : %s\n", ticket.State)
+	fmt.Printf("Open         : %s\n", ticketOpenLabel(ticket))
+	fmt.Printf("Archived     : %t\n", ticket.Archived)
+	fmt.Printf("Priority     : %d\n", ticket.Priority)
+	fmt.Printf("Created      : %s\n", ticket.CreatedAt)
+	fmt.Printf("LastModified : %s\n", ticket.UpdatedAt)
+	fmt.Printf("Acceptance Criteria : %s\n", ticket.AcceptanceCriteria)
+	if len(ticket.Comments) > 0 {
 		fmt.Println("Comments     :")
-		for _, comment := range task.Comments {
+		for _, comment := range ticket.Comments {
 			fmt.Printf("  - [%s] %s: %s\n", comment.CreatedAt, comment.Author, comment.Text)
 		}
 	}
@@ -3887,55 +3887,55 @@ USAGE
 CLIENT COMMANDS
 `)
 	clientRows := [][2]string{
-		{"add", "Create a task in the active project"},
+		{"add", "Create a ticket in the active project"},
 		{"active", "Set a ticket state to active"},
 		{"archive", "Archive a ticket"},
-		{"claim", "Assign yourself to a task"},
-		{"clone", "Clone a task or epic"},
+		{"claim", "Assign yourself to a ticket"},
+		{"clone", "Clone a ticket or epic"},
 		{"close", "Close a ticket and freeze modifications"},
-		{"comment", "Add comments to a task"},
+		{"comment", "Add comments to a ticket"},
 		{"complete", "Set a ticket state to success"},
 		{"count", "Count users, projects, and work by type"},
 		{"design", "Set a ticket stage to design"},
-		{"dependency", "Manage dependency links between tasks"},
-		{"delete", "Delete a task permanently"},
+		{"dependency", "Manage dependency links between tickets"},
+		{"delete", "Delete a ticket permanently"},
 		{"develop", "Set a ticket stage to develop"},
 		{"done", "Set a ticket stage to done"},
-		{"get", "Show a task with history and comments"},
+		{"get", "Show a ticket with history and comments"},
 		{"help", "Show command help"},
 		{"health", "Compute ticket health by project-specific heuristics"},
 		{"idle", "Set a ticket state to idle"},
-		{"list", "List tasks in the active project"},
+		{"list", "List tickets in the active project"},
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
 		{"onboard", "Append the embedded AGENTS.md template in the current directory"},
 		{"open", "Reopen a closed ticket"},
-		{"orphans", "List tasks with no parent"},
+		{"orphans", "List tickets with no parent"},
 		{"project", "Manage projects and active project context"},
 		{"register", "Create a user account on the server"},
 		{"ticket", "Generate requirements via an external agent"},
 		{"request", "Request work for the current user"},
 		{"request-dryrun", "Simulate a request assignment without mutation"},
-		{"search", "Search tasks in the active project or across all projects"},
-		{"set-parent", "Set the parent of a task"},
+		{"search", "Search tickets in the active project or across all projects"},
+		{"set-parent", "Set the parent of a ticket"},
 		{"attach", "Alias for set-parent"},
 		{"status", "Show server and authentication status"},
 		{"stage", "Set a ticket stage directly [design, develop, test, done]"},
 		{"state", "Set a ticket state directly [idle, active, success, fail]"},
 		{"test", "Set a ticket stage to test"},
-		{"unset-parent", "Clear the parent of a task"},
+		{"unset-parent", "Clear the parent of a ticket"},
 		{"detach", "Alias for unset-parent"},
-		{"unclaim", "Remove yourself from a task"},
+		{"unclaim", "Remove yourself from a ticket"},
 		{"unarchive", "Unarchive a ticket"},
 		{"upgrade", "Check whether a newer version is available"},
-		{"update", "Update a task"},
+		{"update", "Update a ticket"},
 		{"version", "Print the current version from VERSION"},
 	}
 	adminRows := [][2]string{
-		{"assign", "Admin-only task assignment"},
+		{"assign", "Admin-only ticket assignment"},
 		{"init", "Initialize the database, bootstrap admin, and create the default project"},
 		{"server", "Start the API server and embedded web UI"},
-		{"unassign", "Admin-only task unassignment"},
+		{"unassign", "Admin-only ticket unassignment"},
 		{"user", "Admin-only user management"},
 	}
 	commandWidth := commandUsageWidth(clientRows, adminRows)
@@ -3988,9 +3988,9 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	}
 }
 
-func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool) {
-	if len(tasks) == 0 {
-		fmt.Println("no tasks")
+func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool) {
+	if len(tickets) == 0 {
+		fmt.Println("no tickets")
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -3999,35 +3999,35 @@ func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statu
 	} else {
 		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
 	}
-	for _, task := range tasks {
-		symbol := formatTicketStatusSymbol(task.Status, statusUnicode)
-		assignee := task.Assignee
+	for _, ticket := range tickets {
+		symbol := formatTicketStatusSymbol(ticket.Status, statusUnicode)
+		assignee := ticket.Assignee
 		if strings.TrimSpace(assignee) == "" {
 			assignee = "-"
 		}
-		dependsOn := dependencies[task.ID]
+		dependsOn := dependencies[ticket.ID]
 		if dependsOn == "[]" {
 			dependsOn = ""
 		}
 		parentID := ""
-		if task.ParentID != nil {
-			parentID = strconv.FormatInt(*task.ParentID, 10)
+		if ticket.ParentID != nil {
+			parentID = strconv.FormatInt(*ticket.ParentID, 10)
 		}
-		key := task.Key
+		key := ticket.Key
 		if strings.TrimSpace(key) == "" {
-			key = strconv.FormatInt(task.ID, 10)
+			key = strconv.FormatInt(ticket.ID, 10)
 		}
 		if includeArchived {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, ticketOpenLabel(task), task.Archived, parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, ticketOpenLabel(ticket), ticket.Archived, parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
 		} else {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, ticketOpenLabel(task), parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, ticketOpenLabel(ticket), parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
 		}
 	}
 	_ = w.Flush()
 }
 
-func ticketOpenLabel(task store.Ticket) string {
-	if !task.Open {
+func ticketOpenLabel(ticket store.Ticket) string {
+	if !ticket.Open {
 		return "closed"
 	}
 	return "open"

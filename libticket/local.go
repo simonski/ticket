@@ -260,7 +260,7 @@ func (s *LocalService) ListTickets(projectID int64) ([]store.Ticket, error) {
 	return s.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
 }
 
-func (s *LocalService) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
+func (s *LocalService) ListTicketsFiltered(projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -268,7 +268,7 @@ func (s *LocalService) ListTicketsFiltered(projectID int64, taskType, stage, sta
 	defer db.Close()
 	return store.ListTickets(db, store.TicketListParams{
 		ProjectID:       projectID,
-		Type:            taskType,
+		Type:            ticketType,
 		Stage:           stage,
 		State:           state,
 		Status:          status,
@@ -525,7 +525,7 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 	if err != nil {
 		return TicketRequestResponse{}, err
 	}
-	task, status, err := store.RequestTicket(db, store.TicketRequestParams{
+	ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 		ProjectID: request.ProjectID,
 		TicketID:  request.TicketID,
 		TicketRef: request.TicketRef,
@@ -538,7 +538,7 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 	}
 	response := TicketRequestResponse{Status: status}
 	if status == "ASSIGNED" || status == "AVAILABLE" {
-		response.Ticket = &task
+		response.Ticket = &ticket
 	}
 	return response, nil
 }

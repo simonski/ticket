@@ -27,32 +27,32 @@ type Comment struct {
 	CreatedAt string `json:"date"`
 }
 
-func AddHistoryEvent(db *sql.DB, projectID, taskID int64, eventType string, payload any, createdBy int64) error {
+func AddHistoryEvent(db *sql.DB, projectID, ticketID int64, eventType string, payload any, createdBy int64) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 	_, err = db.Exec(`
-		INSERT INTO history_events (project_id, task_id, event_type, payload, created_by)
+		INSERT INTO history_events (project_id, ticket_id, event_type, payload, created_by)
 		VALUES (?, ?, ?, ?, ?)
-	`, projectID, taskID, eventType, string(data), nullableUserID(createdBy))
+	`, projectID, ticketID, eventType, string(data), nullableUserID(createdBy))
 	if err != nil {
 		return err
 	}
 	_, err = db.Exec(`
-		INSERT INTO ticket_history (project_id, task_id, event_type, payload, created_by)
+		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
 		VALUES (?, ?, ?, ?, ?)
-	`, projectID, taskID, eventType, string(data), nullableUserID(createdBy))
+	`, projectID, ticketID, eventType, string(data), nullableUserID(createdBy))
 	return err
 }
 
-func ListHistoryEvents(db *sql.DB, taskID int64) ([]HistoryEvent, error) {
+func ListHistoryEvents(db *sql.DB, ticketID int64) ([]HistoryEvent, error) {
 	rows, err := db.Query(`
-		SELECT id, project_id, task_id, event_type, payload, COALESCE(created_by, 0), created_at
+		SELECT id, project_id, ticket_id, event_type, payload, COALESCE(created_by, 0), created_at
 		FROM ticket_history
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 		ORDER BY id
-	`, taskID)
+	`, ticketID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +69,8 @@ func ListHistoryEvents(db *sql.DB, taskID int64) ([]HistoryEvent, error) {
 	return events, rows.Err()
 }
 
-func AddComment(db *sql.DB, taskID, userID int64, comment string) (Comment, error) {
-	ticket, err := GetTicket(db, taskID)
+func AddComment(db *sql.DB, ticketID, userID int64, comment string) (Comment, error) {
+	ticket, err := GetTicket(db, ticketID)
 	if err != nil {
 		return Comment{}, err
 	}
@@ -83,7 +83,7 @@ func AddComment(db *sql.DB, taskID, userID int64, comment string) (Comment, erro
 	result, err := db.Exec(`
 		INSERT INTO comments (item_id, user_id, comment)
 		VALUES (?, ?, ?)
-	`, taskID, userID, comment)
+	`, ticketID, userID, comment)
 	if err != nil {
 		return Comment{}, err
 	}
@@ -105,14 +105,14 @@ func AddComment(db *sql.DB, taskID, userID int64, comment string) (Comment, erro
 	return c, nil
 }
 
-func ListComments(db *sql.DB, taskID int64) ([]Comment, error) {
+func ListComments(db *sql.DB, ticketID int64) ([]Comment, error) {
 	rows, err := db.Query(`
 		SELECT c.id, c.item_id, c.user_id, u.username, c.comment, c.created_at
 		FROM comments c
 		JOIN users u ON u.user_id = c.user_id
 		WHERE c.item_id = ?
 		ORDER BY c.created_at DESC, c.id DESC
-	`, taskID)
+	`, ticketID)
 	if err != nil {
 		return nil, err
 	}

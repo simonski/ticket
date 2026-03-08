@@ -94,7 +94,7 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 	}
 	defer rows.Close()
 
-	var projects []Project
+	projects := make([]Project, 0)
 	for rows.Next() {
 		var project Project
 		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {

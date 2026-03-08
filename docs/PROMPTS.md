@@ -709,8 +709,20 @@ pressing ESC or clicking outside he popup shuld dismiss
 
 no save button - changes should happen as yuo type them
 
-
+the login screen should focus on the username
+the login fails: Server unavailable: project not found
+the login fails on an empty new database: "Server unavailable: Cannot read properties "of null (reading 'filter')
 ## conway
 
-make a new directory, /conway which is a fullscreen threejs javascript application which renders an 8-bit pixel conways game of life in fast-forward.  Make it accelerate over 10 seconds until the pixels slowly start to accellerate into a ring and start orbiting clockwise.  
+conway:
+
+make a new directory, /conway which is a fullscreen threejs javascript application which renders an 8-bit pixel conways game of life in fast-forward.  Make it accelerate over 10 seconds until the pixels slowly start to accellerate into a ring and start orbiting clockwise.   once the pixels are roating, make their radius vary over time using some perlin noise but keep within the bounds so it retains the shape.  make some pixesl have differing velocities, again using perlin noise for difference.
+
+make it render in the entire page, not a square.  start with a random arrangement of pixels aroud the screen and remove hte conways simulation but retian the pixels.  
+
+gradually start one, then two, then four, then eight, then more over time to start meandering in a clockwise until they start to organise to a circle as previously described.   Make them behave as if they want to avoid the mouse pointer.   Occasionally send them off in a boids simulation then come back to circling again.
+
+if the user presses the space bar, have the pixels gradually move to form the word hello, where some pixels go to the h, some to the e etc.  Where they "circle around" the shape of the letter in a clockwise manner.  once all the pixels are in their route for a given letter, stay i that animation for a half a second then start to peel off the pixels again one, two, eight, until all are back in a circle patttern.   
+
+the word should vary each time using multiligual hello
 

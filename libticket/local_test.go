@@ -151,7 +151,7 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	task, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID:          1,
 		Type:               "task",
 		Title:              "Child",
@@ -166,12 +166,12 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &task.ID})
+	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &ticket.ID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)
 	}
 
-	updated, err := svc.UpdateTicket(task.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
 		Title:              "Updated Child",
 		Description:        "new description",
 		AcceptanceCriteria: "new ac",
@@ -204,7 +204,7 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	task, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Unassigned local task",
@@ -213,11 +213,11 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	updated, err := svc.UpdateTicket(task.ID, libticket.TicketUpdateRequest{
-		Title:       task.Title,
-		Description: task.Description,
-		ParentID:    task.ParentID,
-		Assignee:    task.Assignee,
+	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		Title:       ticket.Title,
+		Description: ticket.Description,
+		ParentID:    ticket.ParentID,
+		Assignee:    ticket.Assignee,
 		Status:      "done/success",
 	})
 	if err != nil {
@@ -238,7 +238,7 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	task, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Delete me",
@@ -246,10 +246,10 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if err := svc.DeleteTicket(task.ID); err != nil {
+	if err := svc.DeleteTicket(ticket.ID); err != nil {
 		t.Fatalf("DeleteTicket() error = %v", err)
 	}
-	if _, err := svc.GetTicketByID(task.ID); !errors.Is(err, store.ErrTicketNotFound) {
+	if _, err := svc.GetTicketByID(ticket.ID); !errors.Is(err, store.ErrTicketNotFound) {
 		t.Fatalf("GetTicket(deleted) error = %v, want ErrTicketNotFound", err)
 	}
 }
