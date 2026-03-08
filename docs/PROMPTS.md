@@ -635,3 +635,82 @@ rename the `ticket initdb` command to `ticket init`
 Store the ticket DB in the repo
 Start execing using the ticket db.
 The workflow can be external for now bu tthe souce of truth shoudl be the ticketdb.
+
+
+##
+
+add a close/open commmand
+
+tk close -id tk-1
+
+A closed ticket is effectively frozen in its state/stage.
+A closed ticket is visible but cannot be modified except for deletion or re-opening.
+
+tk open -id tk-1
+
+An open ticket can be modified, have its stage/state modified.
+
+Opening or closing a ticket goes into the ticket history.
+
+Update the tk get and tk ls calls to reflect if aticket is open/closed
+
+
+##
+
+new branch feature/ticket_board
+
+ticket server (-p 9999)
+
+should run a simple website with user administration/login, a drop-down to select projects and a trello-like board to view tickets.
+
+minimal js, css html, attempt a simple single webpage application with zero 3rd party libraries.  embed the files via go:embed and serve them direct.  Use a websocket to communicate back to tehserver so that updates to tickets dispaly in realtime across all users.
+
+the board swimlanes should be the stage, the tickets shoudl be displayed as paper tickets with a horizontal coloured line indicating their state
+
+a user should be able to click ona. ticket to inspect the details
+they should be able to drag/drop tivkets between swimlanes
+
+they should be able to CRUD tickets and Projects
+
+localStorage should "remember" the selected project
+
+
+## 
+commands should permit/deny registration ability via the website
+
+## enable registrsation via/users
+ticket config registration-enable
+
+## enable registrsation via/users
+ticket config registration-disable
+
+If the server config has registration disabled, the UX shoudl not show the register feature.  If it has it enable, it shoudl show the register feature.
+
+## add user to a project as a specific role
+# roles viewer - can read tickets and see project but not make any changes
+#       owner  - can CRUD tickets and users
+#       editor - can CRUD tickets, cannot CRUD users
+ticket project add-user -user_id X -project_id X -role [viewer,editor,owner]
+
+## add user to a project as editor
+ticket project remove-user -user_id X -project_id X 
+
+## UX
+
+landing page should be a login page unless the cookie indicates the user already has a session.   landing page should show a starfield and a login banner with a register link (if registration is permitted)
+
+once logged in, whole screen should be the stages as swimlanes, top-right should be a proejct selector.  bottom let should have a + which shows a popup to create a ticket
+
+pressing N should act as a popup "new" to create a ticket
+
+clicking on an existing ticket shoudl show the same popup populated as an edit mode.
+
+pressing ESC or clicking outside he popup shuld dismiss
+
+no save button - changes should happen as yuo type them
+
+
+## conway
+
+make a new directory, /conway which is a fullscreen threejs javascript application which renders an 8-bit pixel conways game of life in fast-forward.  Make it accelerate over 10 seconds until the pixels slowly start to accellerate into a ring and start orbiting clockwise.  
+

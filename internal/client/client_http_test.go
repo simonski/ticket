@@ -66,7 +66,32 @@ func TestRemoteClientListTicketsFilteredBuildsQuery(t *testing.T) {
 	defer server.Close()
 
 	api := New(config.Config{ServerURL: server.URL})
-	if _, err := api.ListTicketsFiltered(7, "bug", "", "", "develop/idle", "needle", "alice", 25); err != nil {
+	if _, err := api.ListTicketsFiltered(7, "bug", "", "", "develop/idle", "needle", "alice", 25, false); err != nil {
+		t.Fatalf("ListTicketsFiltered() error = %v", err)
+	}
+}
+
+func TestRemoteClientListTicketsFilteredIncludesArchived(t *testing.T) {
+	t.Setenv("TICKET_MODE", "remote")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/7/tickets" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		values, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			t.Fatalf("ParseQuery() error = %v", err)
+		}
+		if values.Get("include_archived") != "1" {
+			t.Fatalf("query = %#v", values)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	api := New(config.Config{ServerURL: server.URL})
+	if _, err := api.ListTicketsFiltered(7, "", "", "", "", "", "", 0, true); err != nil {
 		t.Fatalf("ListTicketsFiltered() error = %v", err)
 	}
 }

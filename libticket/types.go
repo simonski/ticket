@@ -3,10 +3,11 @@ package libticket
 import "github.com/simonski/ticket/internal/store"
 
 type StatusResponse struct {
-	Status        string      `json:"status"`
-	Authenticated bool        `json:"authenticated"`
-	ServerVersion string      `json:"server_version,omitempty"`
-	User          *store.User `json:"user,omitempty"`
+	Status              string      `json:"status"`
+	Authenticated       bool        `json:"authenticated"`
+	RegistrationEnabled bool        `json:"registration_enabled,omitempty"`
+	ServerVersion       string      `json:"server_version,omitempty"`
+	User                *store.User `json:"user,omitempty"`
 }
 
 type CountSummary = store.CountSummary
@@ -24,6 +25,11 @@ type ProjectUpdateRequest struct {
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
 	Notes              string `json:"notes"`
+}
+
+type ProjectMemberRequest struct {
+	UserID int64  `json:"user_id"`
+	Role   string `json:"role"`
 }
 
 type TicketCreateRequest struct {

@@ -123,9 +123,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket init -f $TICKET_HOME/ticket.db --force -password secret",
 	},
 	"server": {
-		usage:   "ticket server [-f <db-path>] [-addr :8080] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses `$TICKET_HOME/ticket.db`.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
-		example: "ticket server -f $TICKET_HOME/ticket.db -addr :8080 -v",
+		usage:   "ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses `$TICKET_HOME/ticket.db`.", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		example: "ticket server -f $TICKET_HOME/ticket.db -p 9999 -v",
 	},
 	"version": {
 		usage:   "ticket version",
@@ -178,7 +178,7 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket health TK-1",
 	},
 	"project": {
-		usage:   "ticket project <create|list|get|use>|<id> <update|enable|disable>",
+		usage:   "ticket project <create|list|get|use|add-user|remove-user>|<id> <update|enable|disable>",
 		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id."},
 		example: "ticket project CUS update -title \"Customer Portal\"",
 	},
@@ -208,8 +208,22 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage:   "ticket update -id <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]",
-		details: []string{"Updates one or more task fields in a single command.", "Use `-stage` and `-state` or `-status <stage/state>` to edit the lifecycle directly on leaf tickets. `estimate_complete` must be RFC3339, for example `2026-03-31T17:00:00Z`."},
+		usage: "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]",
+		details: []string{
+			"-id <id>: required; ticket id or key",
+			"-title <title>: set title",
+			"-desc <description>: set description (alias: -description)",
+			"-description <description>: set description (alias: -desc)",
+			"-ac <acceptance-criteria>: set acceptance criteria",
+			"-priority <n>: set numeric priority",
+			"-order <n>: set numeric sort order",
+			"-stage <stage>: valid values [design, develop, test, done]",
+			"-state <state>: valid values [idle, active, success, fail]",
+			"-status <stage/state>: valid format [design|develop|test|done]/[idle|active|success|fail]",
+			"-parent_id <id>: set parent ticket id",
+			"-estimate_effort <n>: set numeric estimate effort",
+			"-estimate_complete <rfc3339>: set completion timestamp (example 2026-03-31T17:00:00Z)",
+		},
 		example: "ticket update -id 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
 	},
 	"set-parent": {
@@ -366,6 +380,11 @@ var helpIndex = map[string]commandHelp{
 		usage:   "ticket user <create|ls|list|rm|delete|enable|disable>",
 		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`."},
 		example: "ticket user create --username alice --password secret",
+	},
+	"config": {
+		usage:   "ticket config <set|get|registration-enable|registration-disable> [key] [value]",
+		details: []string{"Local config supports `set/get server`.", "Registration controls are server-backed and require admin privileges in remote mode."},
+		example: "ticket config registration-disable",
 	},
 }
 
@@ -687,10 +706,22 @@ func runServer(args []string) error {
 	}
 	dbPath := fs.String("f", defaultDBPath, "SQLite database file")
 	addr := fs.String("addr", ":8080", "HTTP listen address")
+	port := fs.Int("p", 0, "HTTP listen port (shorthand for -addr :<port>)")
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	listenAddr := strings.TrimSpace(*addr)
+	if *port > 0 {
+		if *port > 65535 {
+			return errors.New("port must be between 1 and 65535")
+		}
+		if strings.TrimSpace(*addr) != ":8080" {
+			return errors.New("use either -p or -addr, not both")
+		}
+		listenAddr = fmt.Sprintf(":%d", *port)
 	}
 
 	db, err := store.Open(*dbPath)
@@ -699,7 +730,7 @@ func runServer(args []string) error {
 	}
 	defer db.Close()
 
-	srv, err := server.New(*addr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout)
+	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -707,7 +738,7 @@ func runServer(args []string) error {
 	fmt.Print(renderBanner())
 	fmt.Printf("VERSION    %s\n", strings.TrimSpace(embeddedVersion))
 	fmt.Printf("TICKETDB   %s\n\n", *dbPath)
-	fmt.Printf("serving ticket on http://localhost%s\n", *addr)
+	fmt.Printf("serving ticket on http://localhost%s\n", listenAddr)
 	return srv.ListenAndServe()
 }
 
@@ -1149,6 +1180,10 @@ func runProject(args []string) error {
 	}
 
 	switch args[0] {
+	case "add-user":
+		return runProjectAddUser(svc, args[1:])
+	case "remove-user":
+		return runProjectRemoveUser(svc, args[1:])
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("project create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -1224,6 +1259,53 @@ func runProject(args []string) error {
 	default:
 		return fmt.Errorf("unknown project command %q", args[0])
 	}
+}
+
+func runProjectAddUser(svc libticket.Service, args []string) error {
+	fs := flag.NewFlagSet("project add-user", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	userID := fs.Int64("user_id", 0, "user id")
+	projectID := fs.Int64("project_id", 0, "project id")
+	role := fs.String("role", "", "project role [viewer,editor,owner]")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *userID == 0 || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+		return errors.New("usage: ticket project add-user -user_id <id> -project_id <id> -role <viewer|editor|owner>")
+	}
+	member, err := svc.AddProjectMember(*projectID, libticket.ProjectMemberRequest{
+		UserID: *userID,
+		Role:   strings.TrimSpace(*role),
+	})
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(member)
+	}
+	fmt.Printf("added project user: project_id=%d user_id=%d role=%s\n", member.ProjectID, member.UserID, member.Role)
+	return nil
+}
+
+func runProjectRemoveUser(svc libticket.Service, args []string) error {
+	fs := flag.NewFlagSet("project remove-user", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	userID := fs.Int64("user_id", 0, "user id")
+	projectID := fs.Int64("project_id", 0, "project id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *userID == 0 || *projectID == 0 || fs.NArg() != 0 {
+		return errors.New("usage: ticket project remove-user -user_id <id> -project_id <id>")
+	}
+	if err := svc.RemoveProjectMember(*projectID, *userID); err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(map[string]any{"status": "deleted", "project_id": *projectID, "user_id": *userID})
+	}
+	fmt.Printf("removed project user: project_id=%d user_id=%d\n", *projectID, *userID)
+	return nil
 }
 
 func runTicket(args []string) error {
@@ -1465,18 +1547,9 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
-	tasks, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit)
+	tasks, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit, *includeArchived)
 	if err != nil {
 		return err
-	}
-	if !*includeArchived {
-		filtered := make([]store.Ticket, 0, len(tasks))
-		for _, task := range tasks {
-			if !task.Archived {
-				filtered = append(filtered, task)
-			}
-		}
-		tasks = filtered
 	}
 	dependenciesByTask := make(map[int64]string, len(tasks))
 	for _, task := range tasks {
@@ -1489,7 +1562,7 @@ func runList(args []string) error {
 	if outputJSON {
 		return printJSON(tasks)
 	}
-	printTicketTable(tasks, dependenciesByTask, statusUnicode)
+	printTicketTable(tasks, dependenciesByTask, statusUnicode, *includeArchived)
 	return nil
 }
 
@@ -1586,7 +1659,7 @@ func runSearch(args []string) error {
 	}
 	var tasks []store.Ticket
 	for _, project := range projects {
-		projectTasks, err := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0)
+		projectTasks, err := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
 		if err != nil {
 			return err
 		}
@@ -1935,7 +2008,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store
 }
 
 func runUpdate(args []string) error {
-	usage := "ticket update -id <id> [-title <title>] [-desc <description>|-description <description>] [-ac <acceptance-criteria>] [-priority <n>] [-order <n>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-parent_id <id>] [-estimate_effort <n>] [-estimate_complete <rfc3339>]"
+	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "task id")
@@ -2911,7 +2984,7 @@ func runReview(args []string) error {
 	if err != nil {
 		return err
 	}
-	tasks, err := api.ListTicketsFiltered(project.ID, "requirement", "", "", *status, "", "", 0)
+	tasks, err := api.ListTicketsFiltered(project.ID, "requirement", "", "", *status, "", "", 0, false)
 	if err != nil {
 		return err
 	}
@@ -3023,7 +3096,7 @@ func runDecision(args []string) error {
 		if err != nil {
 			return err
 		}
-		tasks, err := api.ListTicketsFiltered(project.ID, "decision", "", "", "", "", "", 0)
+		tasks, err := api.ListTicketsFiltered(project.ID, "decision", "", "", "", "", "", 0, false)
 		if err != nil {
 			return err
 		}
@@ -3198,14 +3271,40 @@ func createTicket(opts ticketCreateOptions) error {
 }
 
 func runConfig(args []string) error {
-	if len(args) < 2 {
-		return errors.New("usage: ticket config <set|get> <key> [value]")
+	if len(args) < 1 {
+		return errors.New("usage: ticket config <set|get|registration-enable|registration-disable> [key] [value]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 	switch args[0] {
+	case "registration-enable":
+		if len(args) != 1 {
+			return errors.New("usage: ticket config registration-enable")
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		if err := svc.SetRegistrationEnabled(true); err != nil {
+			return err
+		}
+		fmt.Println("registration_enabled=true")
+		return nil
+	case "registration-disable":
+		if len(args) != 1 {
+			return errors.New("usage: ticket config registration-disable")
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		if err := svc.SetRegistrationEnabled(false); err != nil {
+			return err
+		}
+		fmt.Println("registration_enabled=false")
+		return nil
 	case "set":
 		if len(args) != 3 {
 			return errors.New("usage: ticket config set <key> <value>")
@@ -3222,9 +3321,23 @@ func runConfig(args []string) error {
 		fmt.Printf("%s=%s\n", args[1], args[2])
 		return nil
 	case "get":
+		if len(args) != 2 {
+			return errors.New("usage: ticket config get <key>")
+		}
 		switch args[1] {
 		case "server":
 			fmt.Println(config.ResolveServerURL(cfg))
+			return nil
+		case "registration_enabled":
+			svc, err := resolveService(cfg)
+			if err != nil {
+				return err
+			}
+			status, err := svc.Status()
+			if err != nil {
+				return err
+			}
+			fmt.Println(status.RegistrationEnabled)
 			return nil
 		default:
 			return fmt.Errorf("unknown config key %q", args[1])
@@ -3807,8 +3920,8 @@ CLIENT COMMANDS
 		{"set-parent", "Set the parent of a task"},
 		{"attach", "Alias for set-parent"},
 		{"status", "Show server and authentication status"},
-		{"stage", "Set a ticket stage directly"},
-		{"state", "Set a ticket state directly"},
+		{"stage", "Set a ticket stage directly [design, develop, test, done]"},
+		{"state", "Set a ticket state directly [idle, active, success, fail]"},
 		{"test", "Set a ticket stage to test"},
 		{"unset-parent", "Clear the parent of a task"},
 		{"detach", "Alias for unset-parent"},
@@ -3875,13 +3988,17 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	}
 }
 
-func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statusUnicode bool) {
+func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool) {
 	if len(tasks) == 0 {
 		fmt.Println("no tasks")
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+	if includeArchived {
+		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+	} else {
+		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+	}
 	for _, task := range tasks {
 		symbol := formatTicketStatusSymbol(task.Status, statusUnicode)
 		assignee := task.Assignee
@@ -3900,7 +4017,11 @@ func printTicketTable(tasks []store.Ticket, dependencies map[int64]string, statu
 		if strings.TrimSpace(key) == "" {
 			key = strconv.FormatInt(task.ID, 10)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, ticketOpenLabel(task), task.Archived, parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
+		if includeArchived {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, ticketOpenLabel(task), task.Archived, parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, task.Type, task.Status, ticketOpenLabel(task), parentID, assignee, task.Priority, dependsOn, float64(task.HealthScore)/4.0, task.Title)
+		}
 	}
 	_ = w.Flush()
 }

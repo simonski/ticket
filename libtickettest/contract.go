@@ -221,7 +221,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RequestTicket() = %#v", requested)
 		}
 
-		filtered, err := svc.ListTicketsFiltered(project.ID, "bug", "", "", "develop/active", "find", requested.Ticket.Assignee, 10)
+		filtered, err := svc.ListTicketsFiltered(project.ID, "bug", "", "", "develop/active", "find", requested.Ticket.Assignee, 10, false)
 		if err != nil {
 			t.Fatalf("ListTicketsFiltered() error = %v", err)
 		}

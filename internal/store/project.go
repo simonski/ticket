@@ -75,6 +75,11 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 	if err != nil {
 		return Project{}, err
 	}
+	if params.CreatedBy > 0 {
+		if _, err := AddProjectMember(db, id, params.CreatedBy, ProjectRoleOwner); err != nil {
+			return Project{}, err
+		}
+	}
 	return GetProjectByID(db, id)
 }
 

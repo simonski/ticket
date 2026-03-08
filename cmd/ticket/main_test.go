@@ -316,9 +316,9 @@ func TestRunOnboardAppendsEmbeddedAgentsTemplate(t *testing.T) {
 func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{
-		"ticket server [-f <db-path>] [-addr :8080]",
+		"ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
 		"If `-f` is omitted, the server uses `$TICKET_HOME/ticket.db`.",
-		"ticket server -f $TICKET_HOME/ticket.db -addr :8080",
+		"ticket server -f $TICKET_HOME/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("server help missing %q:\n%s", want, help)
@@ -1196,6 +1196,46 @@ func TestRunListShowsHealthDecimalFraction(t *testing.T) {
 	}
 	if !strings.Contains(listOutput, "0.25") {
 		t.Fatalf("list output missing health fraction value 0.25:\n%s", listOutput)
+	}
+}
+
+func TestRunListArchivedVisibilityAndColumn(t *testing.T) {
+	setupLocalCLI(t)
+
+	openID := createLocalTask(t, []string{"add", "Open Task"})
+	archivedID := createLocalTask(t, []string{"add", "Archived Task"})
+	if err := run([]string{"archive", "-id", strconv.FormatInt(archivedID, 10)}); err != nil {
+		t.Fatalf("archive error = %v", err)
+	}
+
+	openRef := ticketLabelByID(t, openID)
+	archivedRef := ticketLabelByID(t, archivedID)
+
+	defaultOutput := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if strings.Contains(defaultOutput, "ARCHIVED") {
+		t.Fatalf("list output should not show ARCHIVED column without -a:\n%s", defaultOutput)
+	}
+	if !strings.Contains(defaultOutput, openRef) {
+		t.Fatalf("list output missing open ticket %q:\n%s", openRef, defaultOutput)
+	}
+	if strings.Contains(defaultOutput, archivedRef) {
+		t.Fatalf("list output should not include archived ticket %q without -a:\n%s", archivedRef, defaultOutput)
+	}
+
+	includeArchivedOutput := captureStdout(t, func() {
+		if err := run([]string{"list", "-a"}); err != nil {
+			t.Fatalf("list -a error = %v", err)
+		}
+	})
+	if !strings.Contains(includeArchivedOutput, "ARCHIVED") {
+		t.Fatalf("list -a output missing ARCHIVED column:\n%s", includeArchivedOutput)
+	}
+	if !strings.Contains(includeArchivedOutput, archivedRef) {
+		t.Fatalf("list -a output missing archived ticket %q:\n%s", archivedRef, includeArchivedOutput)
 	}
 }
 

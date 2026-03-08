@@ -23,6 +23,10 @@ func (s *Service) Status() (libticket.StatusResponse, error) {
 	return libticket.StatusResponse(status), nil
 }
 
+func (s *Service) SetRegistrationEnabled(enabled bool) error {
+	return s.client.SetRegistrationEnabled(enabled)
+}
+
 func (s *Service) Register(username, password string) (store.User, error) {
 	return s.client.Register(username, password)
 }
@@ -79,6 +83,18 @@ func (s *Service) SetProjectEnabled(id int64, enabled bool) (store.Project, erro
 	return s.client.SetProjectEnabled(id, enabled)
 }
 
+func (s *Service) AddProjectMember(projectID int64, request libticket.ProjectMemberRequest) (store.ProjectMember, error) {
+	return s.client.AddProjectMember(projectID, client.ProjectMemberRequest(request))
+}
+
+func (s *Service) RemoveProjectMember(projectID, userID int64) error {
+	return s.client.RemoveProjectMember(projectID, userID)
+}
+
+func (s *Service) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
+	return s.client.ListProjectMembers(projectID)
+}
+
 func (s *Service) CreateTicket(request libticket.TicketCreateRequest) (store.Ticket, error) {
 	return s.client.CreateTicket(client.TicketCreateRequest(request))
 }
@@ -87,8 +103,8 @@ func (s *Service) ListTickets(projectID int64) ([]store.Ticket, error) {
 	return s.client.ListTickets(projectID)
 }
 
-func (s *Service) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error) {
-	return s.client.ListTicketsFiltered(projectID, taskType, stage, state, status, search, assignee, limit)
+func (s *Service) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
+	return s.client.ListTicketsFiltered(projectID, taskType, stage, state, status, search, assignee, limit, includeArchived)
 }
 
 func (s *Service) UpdateTicket(id int64, request libticket.TicketUpdateRequest) (store.Ticket, error) {

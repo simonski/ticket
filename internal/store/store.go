@@ -208,6 +208,21 @@ CREATE TABLE IF NOT EXISTS dependencies (
 	FOREIGN KEY(depends_on) REFERENCES tasks(task_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_members (
+	project_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(project_id, user_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -328,6 +343,17 @@ func migrateSchema(db *sql.DB) error {
 		SELECT h.id, h.project_id, h.task_id, h.event_type, h.payload, h.created_by, h.created_at
 		FROM history_events h
 		WHERE NOT EXISTS (SELECT 1 FROM ticket_history th WHERE th.id = h.id)
+	`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_enabled', '1')`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+		INSERT OR IGNORE INTO project_members (project_id, user_id, role)
+		SELECT project_id, created_by, 'owner'
+		FROM projects
+		WHERE created_by IS NOT NULL AND created_by > 0
 	`); err != nil {
 		return err
 	}

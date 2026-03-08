@@ -44,17 +44,39 @@ func (s *LocalService) Status() (StatusResponse, error) {
 	user, err := store.GetUserByUsername(db, LocalUsername())
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return StatusResponse{Status: "ok", Authenticated: false}, nil
+		enabled, regErr := store.RegistrationEnabled(db)
+		if regErr != nil {
+			return StatusResponse{}, regErr
+		}
+		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
 	case err != nil:
 		return StatusResponse{}, err
 	case !user.Enabled:
-		return StatusResponse{Status: "ok", Authenticated: false}, nil
+		enabled, regErr := store.RegistrationEnabled(db)
+		if regErr != nil {
+			return StatusResponse{}, regErr
+		}
+		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
+	}
+	enabled, err := store.RegistrationEnabled(db)
+	if err != nil {
+		return StatusResponse{}, err
 	}
 	return StatusResponse{
-		Status:        "ok",
-		Authenticated: true,
-		User:          &user,
+		Status:              "ok",
+		Authenticated:       true,
+		RegistrationEnabled: enabled,
+		User:                &user,
 	}, nil
+}
+
+func (s *LocalService) SetRegistrationEnabled(enabled bool) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.SetRegistrationEnabled(db, enabled)
 }
 
 func (s *LocalService) Register(username, password string) (store.User, error) {
@@ -175,6 +197,33 @@ func (s *LocalService) SetProjectEnabled(id int64, enabled bool) (store.Project,
 	return store.SetProjectStatus(db, id, enabled)
 }
 
+func (s *LocalService) AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.ProjectMember{}, err
+	}
+	defer db.Close()
+	return store.AddProjectMember(db, projectID, request.UserID, request.Role)
+}
+
+func (s *LocalService) RemoveProjectMember(projectID, userID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveProjectMember(db, projectID, userID)
+}
+
+func (s *LocalService) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListProjectMembers(db, projectID)
+}
+
 func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
@@ -208,24 +257,25 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 }
 
 func (s *LocalService) ListTickets(projectID int64) ([]store.Ticket, error) {
-	return s.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0)
+	return s.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
 }
 
-func (s *LocalService) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error) {
+func (s *LocalService) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 	return store.ListTickets(db, store.TicketListParams{
-		ProjectID: projectID,
-		Type:      taskType,
-		Stage:     stage,
-		State:     state,
-		Status:    status,
-		Search:    search,
-		Assignee:  assignee,
-		Limit:     limit,
+		ProjectID:       projectID,
+		Type:            taskType,
+		Stage:           stage,
+		State:           state,
+		Status:          status,
+		Search:          search,
+		Assignee:        assignee,
+		Limit:           limit,
+		IncludeArchived: includeArchived,
 	})
 }
 

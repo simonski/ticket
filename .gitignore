@@ -8,6 +8,8 @@ commands2.sh
 ./wiggum
 task.db
 ticket.db
+*db-shm
+*db-wal
 node_modules/
 playwright-report/
 test-results/

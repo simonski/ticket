@@ -4,6 +4,7 @@ import "github.com/simonski/ticket/internal/store"
 
 type Service interface {
 	Status() (StatusResponse, error)
+	SetRegistrationEnabled(enabled bool) error
 	Register(username, password string) (store.User, error)
 	Login(username, password string) (store.User, string, error)
 	Logout() error
@@ -17,9 +18,12 @@ type Service interface {
 	GetProject(id string) (store.Project, error)
 	UpdateProject(id int64, request ProjectUpdateRequest) (store.Project, error)
 	SetProjectEnabled(id int64, enabled bool) (store.Project, error)
+	AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
+	RemoveProjectMember(projectID, userID int64) error
+	ListProjectMembers(projectID int64) ([]store.ProjectMember, error)
 	CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 	ListTickets(projectID int64) ([]store.Ticket, error)
-	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error)
+	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error)
 	UpdateTicket(id int64, request TicketUpdateRequest) (store.Ticket, error)
 	CloseTicket(id int64) (store.Ticket, error)
 	OpenTicket(id int64) (store.Ticket, error)
