@@ -112,11 +112,9 @@
         border-bottom: 1px solid var(--line);
         height: 52px;
       }
-      .app-head-left { display: flex; align-items: center; gap: 0; flex-shrink: 0; padding-right: 0; }
-      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); margin-left: 0; }
-      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: var(--banner-bg); }
+      .app-head-banner { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
-      #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: auto; }
+      #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: 100%; }
 
       /* custom project dropdown */
       .proj-dropdown { position: relative; }
@@ -424,13 +422,10 @@
   </head>
   <body>
     <header class="app-head hidden">
-      <div class="app-head-left">
-        <canvas id="pixel-logo" width="320" height="48" title="ticket"></canvas>
+      <div class="app-head-banner">
+        <canvas id="pixel-logo" width="640" height="48" title="ticket"></canvas>
       </div>
       <div id="app-status" style="display:none;"></div>
-      <div class="app-head-mid">
-        <canvas id="status-canvas"></canvas>
-      </div>
       <div class="app-head-right">
         <button class="proj-btn" id="perspective-btn" type="button">swimlanes</button>
         <div class="proj-dropdown" id="proj-dropdown">
@@ -695,11 +690,6 @@
       function setTopBannerLogoMetrics(widthPx, phase) {
         bannerSync.logoWidthPx = widthPx;
         bannerSync.logoPhase = phase;
-        const logoCanvas = document.getElementById("pixel-logo");
-        if (!logoCanvas) return;
-        const snapped = Math.max(40, Math.round(widthPx) + 1);
-        const next = `${snapped}px`;
-        if (logoCanvas.style.width !== next) logoCanvas.style.width = next;
       }
 
       function makeThreeRectPainter(canvas, logicalW, logicalH) {
@@ -926,76 +916,27 @@
         requestAnimationFrame(frame);
       }
 
-      // ── Unified top-banner animator (logo + status strip) ────────────────
+      // ── Unified top-banner animator (single canvas) ───────────────────────
       function initStatusAnimator() {
-        const logoCanvas = document.getElementById("pixel-logo");
-        const statusCanvas = document.getElementById("status-canvas");
-        if (!logoCanvas || !statusCanvas) return;
+        const canvas = document.getElementById("pixel-logo");
+        if (!canvas) return;
 
         const CHAR_W = 8;
         const CHAR_H = 8;
         const GAP = 1;
         const SLOTS = 6;
-        const LOGO_W = (CHAR_W * SLOTS) + (GAP * (SLOTS - 1));
-        const LOGO_H = CHAR_H;
-        const STRIP_H = 8;
+        const LOGICAL_H = 8;
+        const MAX_LOGO_W = (CHAR_W * SLOTS) + (GAP * (SLOTS - 1));
 
-        const logoPainter = makeThreeRectPainter(logoCanvas, LOGO_W, LOGO_H);
-        const logoCtx = logoPainter.ctx;
-        const stripPainter = makeThreeRectPainter(statusCanvas, 64, STRIP_H);
-        const stripCtx = stripPainter.ctx;
+        const painter = makeThreeRectPainter(canvas, 120, LOGICAL_H);
+        const ctx = painter.ctx;
 
         const GLYPHS = {
-          t: [
-            [0, 1, 1, 1, 1, 1, 1, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-          ],
-          i: [
-            [0, 0, 1, 1, 1, 1, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 0, 0, 0],
-            [0, 1, 1, 1, 1, 1, 1, 0],
-          ],
-          c: [
-            [0, 0, 1, 1, 1, 1, 1, 0],
-            [0, 1, 1, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [0, 1, 1, 0, 0, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 1, 0],
-          ],
-          k: [
-            [1, 1, 0, 0, 0, 1, 1, 0],
-            [1, 1, 0, 0, 1, 1, 0, 0],
-            [1, 1, 0, 1, 1, 0, 0, 0],
-            [1, 1, 1, 1, 0, 0, 0, 0],
-            [1, 1, 1, 1, 0, 0, 0, 0],
-            [1, 1, 0, 1, 1, 0, 0, 0],
-            [1, 1, 0, 0, 1, 1, 0, 0],
-            [1, 1, 0, 0, 0, 1, 1, 0],
-          ],
-          e: [
-            [1, 1, 1, 1, 1, 1, 1, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 1, 0],
-          ],
+          t: [[0,1,1,1,1,1,1,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0]],
+          i: [[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,1,1,1,1,1,1,0]],
+          c: [[0,0,1,1,1,1,1,0],[0,1,1,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[0,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,0]],
+          k: [[1,1,0,0,0,1,1,0],[1,1,0,0,1,1,0,0],[1,1,0,1,1,0,0,0],[1,1,1,1,0,0,0,0],[1,1,1,1,0,0,0,0],[1,1,0,1,1,0,0,0],[1,1,0,0,1,1,0,0],[1,1,0,0,0,1,1,0]],
+          e: [[1,1,1,1,1,1,1,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,1,1,1,1,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,0,0,0,0,0,0],[1,1,1,1,1,1,1,0]],
           none: Array.from({ length: CHAR_H }, () => Array(CHAR_W).fill(0)),
         };
         const WORDS = [
@@ -1003,7 +944,6 @@
           ["t", "k", "t", null, null, null],
           ["t", "k", "e", "t", null, null],
         ];
-
         const EVENT_COLOURS = {
           edit: [[204, 71, 58], [214, 76, 60], [196, 72, 57]],
           create: [[142, 73, 54], [152, 74, 56], [132, 70, 50]],
@@ -1013,49 +953,44 @@
           default: [[201, 33, 62], [211, 34, 60], [195, 31, 58]],
         };
 
-        const logoCells = [];
-        for (let y = 0; y < LOGO_H; y++) {
-          for (let x = 0; x < LOGO_W; x++) logoCells.push({ x, y, a: 0, h: 180, l: 50 });
-        }
-        const particles = [];
-
+        let logicalW = 120;
+        let bgCSS = "rgb(236, 229, 217)";
         let wordIdx = 0;
         let nextWordAt = 0;
-        let stripLogicalW = 64;
-        let stripBG = "rgb(236, 229, 217)";
-        let seed = 0;
         let lastActivityMs = performance.now();
+        let seed = 0;
         const IDLE_AFTER_MS = 10000;
+        const logoCells = Array.from({ length: MAX_LOGO_W * LOGICAL_H }, (_, i) => ({
+          x: i % MAX_LOGO_W,
+          y: Math.floor(i / MAX_LOGO_W),
+          a: 0,
+          h: 180,
+          l: 50,
+        }));
+        const particles = [];
 
         function slotGlyph(word, slot) {
           const ch = word[slot] || "none";
           return GLYPHS[ch] || GLYPHS.none;
         }
-
         function targetAt(word, x, y) {
           const slotW = CHAR_W + GAP;
           const slot = Math.floor(x / slotW);
           const ox = x % slotW;
           if (slot < 0 || slot >= SLOTS || ox >= CHAR_W) return 0;
-          const glyph = slotGlyph(word, slot);
-          return glyph[y][ox] ? 1 : 0;
+          return slotGlyph(word, slot)[y][ox] ? 1 : 0;
         }
-
         function targetLogicalWidth(word) {
           let rightmost = -1;
           for (let slot = 0; slot < SLOTS; slot++) {
             const glyph = slotGlyph(word, slot);
             const slotStart = slot * (CHAR_W + GAP);
-            for (let y = 0; y < CHAR_H; y++) {
-              for (let x = 0; x < CHAR_W; x++) {
-                if (glyph[y][x] && (slotStart + x) > rightmost) rightmost = slotStart + x;
-              }
+            for (let y = 0; y < CHAR_H; y++) for (let x = 0; x < CHAR_W; x++) {
+              if (glyph[y][x] && (slotStart + x) > rightmost) rightmost = slotStart + x;
             }
           }
-          if (rightmost < 0) return CHAR_W * 2;
-          return rightmost + 1;
+          return rightmost < 0 ? CHAR_W * 2 : rightmost + 1;
         }
-
         function resolveClassification(raw) {
           const type = String(raw?.type || "").toLowerCase();
           const cls = String(raw?.classification || raw?.activity || "").toLowerCase();
@@ -1069,65 +1004,57 @@
           if (type === "project_created") return "create";
           return "default";
         }
-
         function actorType(raw) {
           const t = String(raw?.user_type || raw?.userType || raw?.actor_type || raw?.actorType || raw?.type_of_user || "").toLowerCase();
           return (t === "agent" || t === "ai" || t === "bot") ? "agent" : "human";
         }
-
         function colourForActor(raw, classification) {
           const pool = EVENT_COLOURS[classification] || EVENT_COLOURS.default;
           const [h, s, l] = pool[Math.floor(Math.random() * pool.length)];
-          if (actorType(raw) === "agent") {
-            const grayL = Math.max(26, Math.min(78, l + (perlin2(h * 0.03, l * 0.03) - 0.5) * 12));
-            return [0, 0, grayL];
-          }
+          if (actorType(raw) === "agent") return [0, 0, Math.max(26, Math.min(78, l + (perlin2(h * 0.03, l * 0.03) - 0.5) * 12))];
           return [h, Math.max(58, s), l];
         }
-
         function resize() {
-          const rect = statusCanvas.getBoundingClientRect();
-          const targetW = Math.max(24, Math.floor((rect.width || 1) / 6));
-          if (targetW !== stripLogicalW) {
-            stripLogicalW = targetW;
-            stripPainter.ctx.canvas.width = stripLogicalW;
+          const rect = canvas.getBoundingClientRect();
+          const targetW = Math.max(32, Math.floor((rect.width || 1) / 6));
+          if (targetW !== logicalW) {
+            logicalW = targetW;
+            painter.ctx.canvas.width = logicalW;
           }
-          stripBG = resolveVisibleBackgroundColor(logoCanvas);
-          logoPainter.resize();
-          stripPainter.resize();
+          bgCSS = resolveVisibleBackgroundColor(canvas);
+          painter.resize();
         }
-
         function spawn(raw, count = 1) {
           lastActivityMs = performance.now();
           const classification = resolveClassification(raw);
           for (let i = 0; i < count; i++) {
             seed += 1;
-            const row = Math.floor(perlin2(seed * 0.37, seed * 0.11) * STRIP_H);
+            const row = Math.floor(perlin2(seed * 0.37, seed * 0.11) * LOGICAL_H);
             const [h, s, l] = colourForActor(raw, classification);
             const speed = 0.09 + perlin2(seed * 0.17, seed * 0.77) * 0.34;
             const life = 80 + Math.floor(perlin2(seed * 0.33, seed * 0.67) * 120);
-            particles.push({ col: stripLogicalW - 1, row, dir: -1, speed, phase: 0, age: 0, life, h, s, l });
+            particles.push({ col: logicalW - 1, row, dir: -1, speed, phase: 0, age: 0, life, h, s, l });
           }
         }
-
-        function drawIdleFlow(t) {
-          const base = Math.floor((STRIP_H - 1) / 2);
-          for (let x = 0; x < stripLogicalW; x++) {
-            const phase = ((stripLogicalW - x) * 0.21) + (t * 2.8);
-            const y = Math.max(0, Math.min(STRIP_H - 1, Math.round(base + Math.sin(phase) * 1.4)));
+        function drawIdleFlow(t, edgeX) {
+          const base = Math.floor((LOGICAL_H - 1) / 2);
+          for (let x = edgeX + 1; x < logicalW; x++) {
+            const phase = ((logicalW - x) * 0.21) + (t * 2.8);
+            const y = Math.max(0, Math.min(LOGICAL_H - 1, Math.round(base + Math.sin(phase) * 1.4)));
             const alpha = 0.08 + (Math.sin(phase) + 1) * 0.08;
-            stripCtx.fillStyle = `hsla(188,70%,58%,${alpha.toFixed(3)})`;
-            stripCtx.fillRect(x, y, 1, 1);
+            ctx.fillStyle = `hsla(188,70%,58%,${alpha.toFixed(3)})`;
+            ctx.fillRect(x, y, 1, 1);
           }
         }
-
-        function drawBridge(t) {
-          const base = Math.floor((STRIP_H - 1) / 2);
-          for (let x = 0; x < Math.min(3, stripLogicalW); x++) {
-            const y = Math.max(0, Math.min(STRIP_H - 1, Math.round(base + Math.sin((t * 4.4) + x * 0.5))));
-            const hue = 178 + perlin2((bannerSync.logoPhase + t) * 0.9, x * 0.31) * 40;
-            stripCtx.fillStyle = `hsla(${hue.toFixed(1)},70%,56%,0.34)`;
-            stripCtx.fillRect(x, y, 1, 1);
+        function drawBridge(t, edgeX) {
+          const base = Math.floor((LOGICAL_H - 1) / 2);
+          for (let d = 0; d < 3; d++) {
+            const x = edgeX + d;
+            if (x < 0 || x >= logicalW) continue;
+            const y = Math.max(0, Math.min(LOGICAL_H - 1, Math.round(base + Math.sin((t * 4.4) + d * 0.5))));
+            const hue = 178 + perlin2((bannerSync.logoPhase + t) * 0.9, d * 0.31) * 40;
+            ctx.fillStyle = `hsla(${hue.toFixed(1)},70%,56%,0.34)`;
+            ctx.fillRect(x, y, 1, 1);
           }
         }
 
@@ -1138,6 +1065,8 @@
             nextWordAt = ts + 3400;
           }
           const current = WORDS[wordIdx];
+          const logoWidth = targetLogicalWidth(current);
+          const logoEdge = Math.max(0, Math.min(logicalW - 1, logoWidth - 1));
 
           for (let i = 0; i < logoCells.length; i++) {
             const c = logoCells[i];
@@ -1151,21 +1080,8 @@
             c.l += (lumTarget - c.l) * 0.08;
           }
 
-          logoCtx.clearRect(0, 0, LOGO_W, LOGO_H);
-          for (const c of logoCells) {
-            const alpha = Math.max(0, Math.min(1, c.a));
-            if (alpha < 0.02) continue;
-            logoCtx.fillStyle = `hsla(${c.h.toFixed(1)},72%,${Math.max(8, c.l).toFixed(1)}%,${alpha.toFixed(3)})`;
-            logoCtx.fillRect(c.x, c.y, 1, 1);
-          }
-          const logoRect = logoCanvas.getBoundingClientRect();
-          const pixelScale = Math.max(1, (logoRect.height || logoCanvas.height || 48) / LOGO_H);
-          const widthPx = targetLogicalWidth(current) * pixelScale;
-          setTopBannerLogoMetrics(widthPx, t);
-          logoPainter.render();
-
-          stripCtx.fillStyle = stripBG;
-          stripCtx.fillRect(0, 0, stripLogicalW, STRIP_H);
+          ctx.fillStyle = bgCSS;
+          ctx.fillRect(0, 0, logicalW, LOGICAL_H);
 
           for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
@@ -1177,29 +1093,38 @@
               p.phase -= step;
             }
             p.age += 1;
-            if (p.age > p.life || p.col < 0 || p.col >= stripLogicalW) {
+            if (p.age > p.life || p.col < 0 || p.col >= logicalW || p.col <= logoEdge) {
               particles.splice(i, 1);
               continue;
             }
-            const hitLogoEdge = p.col <= 1;
-            const fadeOut = hitLogoEdge ? 0.18 : (1 - p.age / p.life);
+            const fadeOut = 1 - p.age / p.life;
             const flicker = 0.8 + perlin2((p.col + t * 4.1) * 0.33, (p.row + i) * 0.31) * 0.2;
             const alpha = Math.max(0.04, fadeOut * flicker);
-            stripCtx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
-            stripCtx.fillRect(p.col, p.row, 1, 1);
+            ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
+            ctx.fillRect(p.col, p.row, 1, 1);
           }
 
-          drawBridge(t);
-          if ((ts - lastActivityMs) >= IDLE_AFTER_MS) drawIdleFlow(t);
+          drawBridge(t, logoEdge);
+          if ((ts - lastActivityMs) >= IDLE_AFTER_MS) drawIdleFlow(t, logoEdge);
 
-          stripPainter.render();
+          for (const c of logoCells) {
+            if (c.x >= logicalW) continue;
+            const alpha = Math.max(0, Math.min(1, c.a));
+            if (alpha < 0.02) continue;
+            ctx.fillStyle = `hsla(${c.h.toFixed(1)},72%,${Math.max(8, c.l).toFixed(1)}%,${alpha.toFixed(3)})`;
+            ctx.fillRect(c.x, c.y, 1, 1);
+          }
+
+          const rect = canvas.getBoundingClientRect();
+          const pixelScale = Math.max(1, (rect.height || canvas.height || 48) / LOGICAL_H);
+          setTopBannerLogoMetrics(logoWidth * pixelScale, t);
+          painter.render();
           requestAnimationFrame(frame);
         }
 
         window.addEventListener("resize", resize);
         resize();
         requestAnimationFrame(frame);
-
         window.statusAnimator = { spawn };
       }
 
