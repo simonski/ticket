@@ -676,6 +676,16 @@
         return lerp(lerp(n00, n10, u), lerp(n01, n11, u), v);
       }
 
+      function resolveVisibleBackgroundColor(startEl, fallback = "rgb(236, 229, 217)") {
+        let el = startEl;
+        while (el) {
+          const bg = getComputedStyle(el).backgroundColor || "";
+          if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") return bg;
+          el = el.parentElement;
+        }
+        return fallback;
+      }
+
       const bannerSync = {
         logoPhase: 0,
         logoWidthPx: 320,
@@ -981,11 +991,8 @@
             logicalW = targetW;
             painter.ctx.canvas.width = logicalW;
           }
-          const head = document.querySelector(".app-head");
-          const mid = document.querySelector(".app-head-mid");
-          const headBg = getComputedStyle(head).backgroundColor || "";
-          const midBg = mid ? getComputedStyle(mid).backgroundColor : "";
-          bgCSS = (headBg && headBg !== "rgba(0, 0, 0, 0)" ? headBg : midBg) || "rgb(236, 229, 217)";
+          const logoEl = document.getElementById("pixel-logo");
+          bgCSS = resolveVisibleBackgroundColor(logoEl);
           const nums = bgCSS.match(/\d+/g) || ["236", "229", "217"];
           const [r, g, b] = nums.slice(0, 3).map((n) => Number(n));
           const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
