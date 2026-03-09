@@ -948,7 +948,8 @@
       function showLogin(message = "") {
         loginScreen.classList.remove("hidden");
         app.classList.add("hidden");
-        loginStatus.textContent = message;
+        const cleaned = String(message || "").replace(/logged out/ig, "").replace(/please log in/ig, "").trim();
+        loginStatus.textContent = cleaned;
         const userInput = document.getElementById("login-user");
         if (userInput) {
           requestAnimationFrame(() => userInput.focus());
