@@ -925,13 +925,83 @@
         requestAnimationFrame(frame);
       }
 
-      // ── Status Animator ───────────────────────────────────────────────────
+      // ── Unified top-banner animator (logo + status strip) ────────────────
       function initStatusAnimator() {
-        const canvas = document.getElementById("status-canvas");
-        if (!canvas) return;
-        const LOGICAL_H = 8;
-        const painter = makeThreeRectPainter(canvas, 64, LOGICAL_H);
-        const ctx = painter.ctx;
+        const logoCanvas = document.getElementById("pixel-logo");
+        const statusCanvas = document.getElementById("status-canvas");
+        if (!logoCanvas || !statusCanvas) return;
+
+        const CHAR_W = 8;
+        const CHAR_H = 8;
+        const GAP = 1;
+        const SLOTS = 6;
+        const LOGO_W = (CHAR_W * SLOTS) + (GAP * (SLOTS - 1));
+        const LOGO_H = CHAR_H;
+        const STRIP_H = 8;
+
+        const logoPainter = makeThreeRectPainter(logoCanvas, LOGO_W, LOGO_H);
+        const logoCtx = logoPainter.ctx;
+        const stripPainter = makeThreeRectPainter(statusCanvas, 64, STRIP_H);
+        const stripCtx = stripPainter.ctx;
+
+        const GLYPHS = {
+          t: [
+            [0, 1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+          ],
+          i: [
+            [0, 0, 1, 1, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0],
+            [0, 1, 1, 1, 1, 1, 1, 0],
+          ],
+          c: [
+            [0, 0, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 0],
+          ],
+          k: [
+            [1, 1, 0, 0, 0, 1, 1, 0],
+            [1, 1, 0, 0, 1, 1, 0, 0],
+            [1, 1, 0, 1, 1, 0, 0, 0],
+            [1, 1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 0, 1, 1, 0, 0, 0],
+            [1, 1, 0, 0, 1, 1, 0, 0],
+            [1, 1, 0, 0, 0, 1, 1, 0],
+          ],
+          e: [
+            [1, 1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 0],
+          ],
+          none: Array.from({ length: CHAR_H }, () => Array(CHAR_W).fill(0)),
+        };
+        const WORDS = [
+          ["t", "i", "c", "k", "e", "t"],
+          ["t", "k", "t", null, null, null],
+          ["t", "k", "e", "t", null, null],
+        ];
 
         const EVENT_COLOURS = {
           edit: [[204, 71, 58], [214, 76, 60], [196, 72, 57]],
@@ -942,33 +1012,47 @@
           default: [[201, 33, 62], [211, 34, 60], [195, 31, 58]],
         };
 
-        function pickColour(classification) {
-          const pool = EVENT_COLOURS[classification] || EVENT_COLOURS.default;
-          return pool[Math.floor(Math.random() * pool.length)];
+        const logoCells = [];
+        for (let y = 0; y < LOGO_H; y++) {
+          for (let x = 0; x < LOGO_W; x++) logoCells.push({ x, y, a: 0, h: 180, l: 50 });
+        }
+        const particles = [];
+
+        let wordIdx = 0;
+        let nextWordAt = 0;
+        let stripLogicalW = 64;
+        let stripBG = "rgb(236, 229, 217)";
+        let seed = 0;
+        let lastActivityMs = performance.now();
+        const IDLE_AFTER_MS = 10000;
+
+        function slotGlyph(word, slot) {
+          const ch = word[slot] || "none";
+          return GLYPHS[ch] || GLYPHS.none;
         }
 
-        function actorType(raw) {
-          const t = String(
-            raw?.user_type ||
-            raw?.userType ||
-            raw?.actor_type ||
-            raw?.actorType ||
-            raw?.type_of_user ||
-            ""
-          ).toLowerCase();
-          if (t === "agent" || t === "ai" || t === "bot") return "agent";
-          return "human";
+        function targetAt(word, x, y) {
+          const slotW = CHAR_W + GAP;
+          const slot = Math.floor(x / slotW);
+          const ox = x % slotW;
+          if (slot < 0 || slot >= SLOTS || ox >= CHAR_W) return 0;
+          const glyph = slotGlyph(word, slot);
+          return glyph[y][ox] ? 1 : 0;
         }
 
-        function colourForActor(raw, classification) {
-          const [h, s, l] = pickColour(classification);
-          if (actorType(raw) === "agent") {
-            // Agentic activity trends grayscale.
-            const grayL = Math.max(26, Math.min(78, l + (perlin2(h * 0.03, l * 0.03) - 0.5) * 12));
-            return [0, 0, grayL];
+        function targetLogicalWidth(word) {
+          let rightmost = -1;
+          for (let slot = 0; slot < SLOTS; slot++) {
+            const glyph = slotGlyph(word, slot);
+            const slotStart = slot * (CHAR_W + GAP);
+            for (let y = 0; y < CHAR_H; y++) {
+              for (let x = 0; x < CHAR_W; x++) {
+                if (glyph[y][x] && (slotStart + x) > rightmost) rightmost = slotStart + x;
+              }
+            }
           }
-          // Human activity stays colorful.
-          return [h, Math.max(58, s), l];
+          if (rightmost < 0) return CHAR_W * 2;
+          return rightmost + 1;
         }
 
         function resolveClassification(raw) {
@@ -985,38 +1069,31 @@
           return "default";
         }
 
-        let logicalW = 64;
-        let bg = { h: 35, s: 22, l: 88 };
-        let bgCSS = "rgb(236, 229, 217)";
-        const particles = [];
-        let seed = 0;
-        let lastActivityMs = performance.now();
-        const IDLE_AFTER_MS = 10000;
+        function actorType(raw) {
+          const t = String(raw?.user_type || raw?.userType || raw?.actor_type || raw?.actorType || raw?.type_of_user || "").toLowerCase();
+          return (t === "agent" || t === "ai" || t === "bot") ? "agent" : "human";
+        }
+
+        function colourForActor(raw, classification) {
+          const pool = EVENT_COLOURS[classification] || EVENT_COLOURS.default;
+          const [h, s, l] = pool[Math.floor(Math.random() * pool.length)];
+          if (actorType(raw) === "agent") {
+            const grayL = Math.max(26, Math.min(78, l + (perlin2(h * 0.03, l * 0.03) - 0.5) * 12));
+            return [0, 0, grayL];
+          }
+          return [h, Math.max(58, s), l];
+        }
 
         function resize() {
-          const rect = canvas.getBoundingClientRect();
+          const rect = statusCanvas.getBoundingClientRect();
           const targetW = Math.max(24, Math.floor((rect.width || 1) / 6));
-          if (targetW !== logicalW) {
-            logicalW = targetW;
-            painter.ctx.canvas.width = logicalW;
+          if (targetW !== stripLogicalW) {
+            stripLogicalW = targetW;
+            stripPainter.ctx.canvas.width = stripLogicalW;
           }
-          const logoEl = document.getElementById("pixel-logo");
-          bgCSS = resolveVisibleBackgroundColor(logoEl);
-          const nums = bgCSS.match(/\d+/g) || ["236", "229", "217"];
-          const [r, g, b] = nums.slice(0, 3).map((n) => Number(n));
-          const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-          let h = 0;
-          if (d !== 0) {
-            if (max === r) h = ((g - b) / d) % 6;
-            else if (max === g) h = (b - r) / d + 2;
-            else h = (r - g) / d + 4;
-            h *= 60;
-            if (h < 0) h += 360;
-          }
-          const l = (max + min) / (2 * 255);
-          const s = d === 0 ? 0 : d / (255 * (1 - Math.abs(2 * l - 1)));
-          bg = { h, s: s * 100, l: l * 100 };
-          painter.resize();
+          stripBG = resolveVisibleBackgroundColor(logoCanvas);
+          logoPainter.resize();
+          stripPainter.resize();
         }
 
         function spawn(raw, count = 1) {
@@ -1024,58 +1101,74 @@
           const classification = resolveClassification(raw);
           for (let i = 0; i < count; i++) {
             seed += 1;
-            const right = perlin2(seed * 0.19, seed * 0.41) > 0.5;
-            const row = Math.floor(perlin2(seed * 0.37, seed * 0.11) * LOGICAL_H);
-            const startCol = right ? 0 : logicalW - 1;
+            const row = Math.floor(perlin2(seed * 0.37, seed * 0.11) * STRIP_H);
             const [h, s, l] = colourForActor(raw, classification);
-            const speed = 0.08 + perlin2(seed * 0.17, seed * 0.77) * 0.36;
-            const life = 90 + Math.floor(perlin2(seed * 0.33, seed * 0.67) * 140);
-            particles.push({ col: startCol, row, dir: right ? 1 : -1, speed, phase: 0, age: 0, life, h, s, l });
+            const speed = 0.09 + perlin2(seed * 0.17, seed * 0.77) * 0.34;
+            const life = 80 + Math.floor(perlin2(seed * 0.33, seed * 0.67) * 120);
+            particles.push({ col: stripLogicalW - 1, row, dir: -1, speed, phase: 0, age: 0, life, h, s, l });
           }
         }
 
-        function drawIdleWave(t) {
-          const baseRow = (LOGICAL_H - 1) / 2;
-          for (let x = 0; x < logicalW; x++) {
-            const wave = Math.sin((x * 0.38) + (t * 2.2));
-            const noise = (perlin2(x * 0.11, t * 0.35) - 0.5) * 1.8;
-            const y = Math.max(0, Math.min(LOGICAL_H - 1, Math.round(baseRow + wave * 1.6 + noise)));
-            const pulse = 0.35 + (Math.sin(t * 2.6) + 1) * 0.25;
-            const hue = 192 + perlin2(x * 0.07, t * 0.22) * 48;
-            const alpha = 0.18 + pulse * 0.32;
-            ctx.fillStyle = `hsla(${hue.toFixed(1)},70%,56%,${alpha.toFixed(3)})`;
-            ctx.fillRect(x, y, 1, 1);
-          }
-          const sweep = Math.floor(((Math.sin(t * 1.4) + 1) / 2) * (logicalW - 1));
-          const bounce = logicalW - 1 - sweep;
-          const bright = `hsla(188,86%,72%,0.72)`;
-          ctx.fillStyle = bright;
-          ctx.fillRect(sweep, Math.max(0, Math.floor(baseRow - 1)), 1, 3);
-          ctx.fillRect(bounce, Math.max(0, Math.floor(baseRow - 1)), 1, 3);
-        }
-
-        function drawLogoBridge(t) {
-          const base = Math.floor((LOGICAL_H - 1) / 2);
-          for (let x = 0; x < Math.min(3, logicalW); x++) {
-            const wobble = Math.sin((t * 4.2) + x * 0.7) * 1.2;
-            const y = Math.max(0, Math.min(LOGICAL_H - 1, Math.round(base + wobble)));
-            const hue = 178 + perlin2((bannerSync.logoPhase + t) * 0.9, x * 0.31) * 38;
-            const alpha = 0.2 + perlin2(t * 0.53, x * 0.17) * 0.28;
-            ctx.fillStyle = `hsla(${hue.toFixed(1)},68%,56%,${alpha.toFixed(3)})`;
-            ctx.fillRect(x, y, 1, 1);
-            if (y + 1 < LOGICAL_H && x < 2) ctx.fillRect(x, y + 1, 1, 1);
+        function drawIdleFlow(t) {
+          const base = Math.floor((STRIP_H - 1) / 2);
+          for (let x = 0; x < stripLogicalW; x++) {
+            const phase = ((stripLogicalW - x) * 0.21) + (t * 2.8);
+            const y = Math.max(0, Math.min(STRIP_H - 1, Math.round(base + Math.sin(phase) * 1.4)));
+            const alpha = 0.08 + (Math.sin(phase) + 1) * 0.08;
+            stripCtx.fillStyle = `hsla(188,70%,58%,${alpha.toFixed(3)})`;
+            stripCtx.fillRect(x, y, 1, 1);
           }
         }
 
-        function tick(ts) {
+        function drawBridge(t) {
+          const base = Math.floor((STRIP_H - 1) / 2);
+          for (let x = 0; x < Math.min(3, stripLogicalW); x++) {
+            const y = Math.max(0, Math.min(STRIP_H - 1, Math.round(base + Math.sin((t * 4.4) + x * 0.5))));
+            const hue = 178 + perlin2((bannerSync.logoPhase + t) * 0.9, x * 0.31) * 40;
+            stripCtx.fillStyle = `hsla(${hue.toFixed(1)},70%,56%,0.34)`;
+            stripCtx.fillRect(x, y, 1, 1);
+          }
+        }
+
+        function frame(ts) {
           const t = ts * 0.001;
-          const syncT = t + (bannerSync.logoPhase * 0.23);
-          ctx.fillStyle = bgCSS;
-          ctx.fillRect(0, 0, logicalW, LOGICAL_H);
+          if (ts >= nextWordAt) {
+            wordIdx = (wordIdx + 1) % WORDS.length;
+            nextWordAt = ts + 3400;
+          }
+          const current = WORDS[wordIdx];
+
+          for (let i = 0; i < logoCells.length; i++) {
+            const c = logoCells[i];
+            const target = targetAt(current, c.x, c.y);
+            const n = perlin2((c.x + t * 0.8) * 0.22, (c.y + t * 0.5) * 0.22);
+            const speed = 0.06 + n * 0.08;
+            c.a += (target - c.a) * speed;
+            const hueTarget = 178 + perlin2((c.x + wordIdx * 3.7) * 0.21, (c.y + t * 0.25) * 0.21) * 76;
+            const lumTarget = 24 + perlin2((c.x + t * 0.2) * 0.35, (c.y + wordIdx * 1.9) * 0.35) * 48;
+            c.h += (hueTarget - c.h) * 0.09;
+            c.l += (lumTarget - c.l) * 0.08;
+          }
+
+          logoCtx.clearRect(0, 0, LOGO_W, LOGO_H);
+          for (const c of logoCells) {
+            const alpha = Math.max(0, Math.min(1, c.a));
+            if (alpha < 0.02) continue;
+            logoCtx.fillStyle = `hsla(${c.h.toFixed(1)},72%,${Math.max(8, c.l).toFixed(1)}%,${alpha.toFixed(3)})`;
+            logoCtx.fillRect(c.x, c.y, 1, 1);
+          }
+          const logoRect = logoCanvas.getBoundingClientRect();
+          const pixelScale = Math.max(1, (logoRect.height || logoCanvas.height || 48) / LOGO_H);
+          const widthPx = targetLogicalWidth(current) * pixelScale;
+          setTopBannerLogoMetrics(widthPx, t);
+          logoPainter.render();
+
+          stripCtx.fillStyle = stripBG;
+          stripCtx.fillRect(0, 0, stripLogicalW, STRIP_H);
 
           for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
-            const v = p.speed + perlin2((p.row + syncT * 1.1) * 0.7, (p.age + i) * 0.09) * 0.18;
+            const v = p.speed + perlin2((p.row + t * 1.1) * 0.7, (p.age + i) * 0.09) * 0.18;
             p.phase += v;
             if (p.phase >= 1) {
               const step = Math.floor(p.phase);
@@ -1083,43 +1176,36 @@
               p.phase -= step;
             }
             p.age += 1;
-            if (p.age > p.life || p.col < 0 || p.col >= logicalW) {
+            if (p.age > p.life || p.col < 0 || p.col >= stripLogicalW) {
               particles.splice(i, 1);
               continue;
             }
-            const fadeOut = 1 - p.age / p.life;
-            const flicker = 0.8 + perlin2((p.col + syncT * 4.1) * 0.33, (p.row + i) * 0.31) * 0.2;
-            const alpha = Math.max(0.05, fadeOut * flicker);
-            ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
-            ctx.fillRect(p.col, p.row, 1, 1);
+            const hitLogoEdge = p.col <= 1;
+            const fadeOut = hitLogoEdge ? 0.18 : (1 - p.age / p.life);
+            const flicker = 0.8 + perlin2((p.col + t * 4.1) * 0.33, (p.row + i) * 0.31) * 0.2;
+            const alpha = Math.max(0.04, fadeOut * flicker);
+            stripCtx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
+            stripCtx.fillRect(p.col, p.row, 1, 1);
           }
 
-          drawLogoBridge(syncT);
+          drawBridge(t);
+          if ((ts - lastActivityMs) >= IDLE_AFTER_MS) drawIdleFlow(t);
 
-          if ((ts - lastActivityMs) >= IDLE_AFTER_MS) {
-            drawIdleWave(syncT);
-          }
-
-          painter.render();
-          requestAnimationFrame(tick);
+          stripPainter.render();
+          requestAnimationFrame(frame);
         }
 
         window.addEventListener("resize", resize);
         resize();
-        requestAnimationFrame(tick);
+        requestAnimationFrame(frame);
 
-        window.statusAnimator = {
-          spawn(raw, count = 1) {
-            spawn(raw, count);
-          },
-        };
+        window.statusAnimator = { spawn };
       }
 
       let bannerRenderersInitialized = false;
       function initBannerRenderers() {
         if (bannerRenderersInitialized) return;
         bannerRenderersInitialized = true;
-        initPixelLogo("pixel-logo", { onMetrics: setTopBannerLogoMetrics });
         initPixelLogo("login-pixel-logo");
         initStatusAnimator();
       }
