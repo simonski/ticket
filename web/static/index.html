@@ -1398,6 +1398,7 @@
       let tickets = [];
       let socket = null;
       let socketRetry = null;
+      let realtimeSyncTimer = null;
       let draft = null;
       let autosaveTimer = null;
       let token = localStorage.getItem("task-token") || "";
@@ -1410,12 +1411,20 @@
       }
 
       async function call(path, options = {}) {
-        const response = await fetch(path, options);
+        const response = await fetch(path, { cache: "no-store", ...options });
         const body = await response.text();
         let data = {};
         try { data = body ? JSON.parse(body) : {}; } catch {}
         if (!response.ok) throw new Error(data.error || `${response.status} ${response.statusText}`);
         return data;
+      }
+
+      function ensureRealtimeSync() {
+        if (realtimeSyncTimer) return;
+        realtimeSyncTimer = setInterval(async () => {
+          if (!isAppVisible()) return;
+          try { await loadTickets(); } catch {}
+        }, 8000);
       }
 
       function showLogin(message = "") {
@@ -1458,6 +1467,7 @@
             return;
           }
           showApp(status.user.username);
+          ensureRealtimeSync();
           await loadProjects();
           await loadTickets();
           connectWS();
@@ -1794,8 +1804,9 @@
         if (socket) socket.close();
         if (socketRetry) clearTimeout(socketRetry);
         const protocol = location.protocol === "https:" ? "wss" : "ws";
-        const wsURL = token
-          ? `${protocol}://${location.host}/api/ws?token=${encodeURIComponent(token)}`
+        const wsToken = token || localStorage.getItem("task-token") || "";
+        const wsURL = wsToken
+          ? `${protocol}://${location.host}/api/ws?token=${encodeURIComponent(wsToken)}`
           : `${protocol}://${location.host}/api/ws`;
         socket = new WebSocket(wsURL);
         socket.onmessage = async (evt) => {
@@ -1815,13 +1826,15 @@
               window.statusAnimator.spawn(msg, counts[msg.type] || 2);
             }
           } catch (_) { /* non-JSON ping — ignore */ }
-          await loadTickets();
+          try { await loadTickets(); } catch {}
         };
         socket.onclose = () => {
+          if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
         };
         socket.onerror = () => {
           try { socket.close(); } catch {}
+          if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
         };
       }

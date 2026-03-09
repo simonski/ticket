@@ -578,6 +578,7 @@ The web UI should make these activities easy:
   - `U`: undo the most recent ticket action initiated in the current web session
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
+- API reads for board state should bypass browser cache and include periodic sync fallback to recover from websocket delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes
 
 ## Persistence And Architecture

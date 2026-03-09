@@ -495,6 +495,7 @@ Keyboard shortcuts in the board view:
 - `U` undoes the most recent ticket action you initiated in the current browser session
 - a fixed bottom-right version overlay shows the current server version reported by `/api/status`
 - board updates are live via websocket; ticket changes from other users should appear without browser refresh
+- the web client disables HTTP cache for API reads and keeps a periodic sync fallback so board state self-heals if websocket delivery is interrupted
 - if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
 
 ## Command Reference
