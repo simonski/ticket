@@ -1399,6 +1399,9 @@
       let socket = null;
       let socketRetry = null;
       let realtimeSyncTimer = null;
+      let wsHealthy = false;
+      let lastWSMessageAt = 0;
+      let ticketLoadSeq = 0;
       let draft = null;
       let autosaveTimer = null;
       let token = localStorage.getItem("task-token") || "";
@@ -1423,8 +1426,11 @@
         if (realtimeSyncTimer) return;
         realtimeSyncTimer = setInterval(async () => {
           if (!isAppVisible()) return;
-          try { await loadTickets(); } catch {}
-        }, 8000);
+          const staleWS = (Date.now() - lastWSMessageAt) > 4000;
+          if (!wsHealthy || staleWS) {
+            try { await loadTickets(); } catch {}
+          }
+        }, 2000);
       }
 
       function showLogin(message = "") {
@@ -1488,19 +1494,25 @@
       }
 
       async function loadTickets() {
+        const seq = ++ticketLoadSeq;
         const projectID = selectedProjectID();
         if (!projectID) {
+          if (seq !== ticketLoadSeq) return;
           tickets = [];
           renderBoard();
           renderTicketVision();
           return;
         }
         try {
-          tickets = await call(`/api/projects/${projectID}/tickets`, { headers: headers() }) || [];
+          const cacheBust = Date.now();
+          const result = await call(`/api/projects/${projectID}/tickets?_=${cacheBust}`, { headers: headers() }) || [];
+          if (seq !== ticketLoadSeq) return;
+          tickets = result;
         } catch (error) {
           if (String(error.message || "").toLowerCase().includes("project not found")) {
             setSelectedProjectID("");
             await loadProjects();
+            if (seq !== ticketLoadSeq) return;
             tickets = [];
             renderBoard();
             renderTicketVision();
@@ -1508,6 +1520,7 @@
           }
           throw error;
         }
+        if (seq !== ticketLoadSeq) return;
         renderBoard();
         renderTicketVision();
       }
@@ -1809,8 +1822,14 @@
           ? `${protocol}://${location.host}/api/ws?token=${encodeURIComponent(wsToken)}`
           : `${protocol}://${location.host}/api/ws`;
         socket = new WebSocket(wsURL);
+        socket.onopen = () => {
+          wsHealthy = true;
+          lastWSMessageAt = Date.now();
+        };
         socket.onmessage = async (evt) => {
           if (!isAppVisible()) return;
+          wsHealthy = true;
+          lastWSMessageAt = Date.now();
           // Parse event and drive status animator
           try {
             const msg = JSON.parse(evt.data);
@@ -1829,10 +1848,12 @@
           try { await loadTickets(); } catch {}
         };
         socket.onclose = () => {
+          wsHealthy = false;
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
         };
         socket.onerror = () => {
+          wsHealthy = false;
           try { socket.close(); } catch {}
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
