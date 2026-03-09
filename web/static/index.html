@@ -14,6 +14,7 @@
         --muted: #677083;
         --line: #d8d2c8;
         --accent: #116466;
+        --banner-bg: #ece5d9;
         --idle: #90a4ae;
         --active: #f57c00;
         --success: #2e7d32;
@@ -107,13 +108,13 @@
         align-items: center;
         gap: 0.24rem;
         padding: 0.5rem 0.75rem;
-        background: #fffaf2;
+        background: var(--banner-bg);
         border-bottom: 1px solid var(--line);
         height: 52px;
       }
       .app-head-left { display: flex; align-items: center; gap: 0.2rem; flex-shrink: 0; }
-      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: #fffaf2; }
-      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: #fffaf2; }
+      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
+      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: auto; }
 
@@ -966,8 +967,8 @@
         }
 
         let logicalW = 64;
-        let bg = { h: 35, s: 60, l: 95 };
-        let bgCSS = "rgb(255, 250, 242)";
+        let bg = { h: 35, s: 60, l: 90 };
+        let bgCSS = "rgb(236, 229, 217)";
         const particles = [];
         let seed = 0;
         let lastActivityMs = performance.now();
@@ -984,8 +985,8 @@
           const mid = document.querySelector(".app-head-mid");
           const headBg = getComputedStyle(head).backgroundColor || "";
           const midBg = mid ? getComputedStyle(mid).backgroundColor : "";
-          bgCSS = (headBg && headBg !== "rgba(0, 0, 0, 0)" ? headBg : midBg) || "rgb(255, 250, 242)";
-          const nums = headBg.match(/\d+/g) || ["255", "250", "242"];
+          bgCSS = (headBg && headBg !== "rgba(0, 0, 0, 0)" ? headBg : midBg) || "rgb(236, 229, 217)";
+          const nums = bgCSS.match(/\d+/g) || ["236", "229", "217"];
           const [r, g, b] = nums.slice(0, 3).map((n) => Number(n));
           const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
           let h = 0;
