@@ -885,15 +885,19 @@
         let nextWordAt = 0;
 
         function targetLogicalWidth(word) {
-          let lastSlot = -1;
-          for (let i = 0; i < SLOTS; i++) {
-            if (word[i]) lastSlot = i;
+          let rightmost = -1;
+          for (let slot = 0; slot < SLOTS; slot++) {
+            const glyph = slotGlyph(word, slot);
+            const slotStart = slot * (CHAR_W + GAP);
+            for (let y = 0; y < CHAR_H; y++) {
+              for (let x = 0; x < CHAR_W; x++) {
+                if (glyph[y][x] && (slotStart + x) > rightmost) rightmost = slotStart + x;
+              }
+            }
           }
-          if (lastSlot < 0) return CHAR_W * 2;
-          return ((lastSlot + 1) * CHAR_W) + (lastSlot * GAP);
+          if (rightmost < 0) return CHAR_W * 2;
+          return rightmost + 1;
         }
-
-        let smoothedTargetWidth = targetLogicalWidth(WORDS[0]);
 
         function frame(ts) {
           const t = ts * 0.001;
@@ -927,9 +931,7 @@
           if (options.dynamicWidth || typeof options.onMetrics === "function") {
             const rect = canvas.getBoundingClientRect();
             const pixelScale = Math.max(1, (rect.height || canvas.height || 48) / LOGICAL_H);
-            const tw = targetLogicalWidth(current);
-            smoothedTargetWidth += (tw - smoothedTargetWidth) * 0.22;
-            const widthPx = smoothedTargetWidth * pixelScale;
+            const widthPx = targetLogicalWidth(current) * pixelScale;
             if (options.dynamicWidth) {
               const snapped = `${Math.max(56, Math.round(widthPx))}px`;
               if (canvas.style.width !== snapped) canvas.style.width = snapped;
