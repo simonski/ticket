@@ -460,11 +460,11 @@ func backfillTicketKeys(db *sql.DB) error {
 	defer rows.Close()
 
 	type row struct {
-		ticketID  int64
-		projectID int64
+		ticketID   int64
+		projectID  int64
 		ticketType string
-		key       string
-		prefix    string
+		key        string
+		prefix     string
 	}
 	var tickets []row
 	maxSeq := map[int64]int64{}

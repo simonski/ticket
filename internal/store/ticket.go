@@ -508,7 +508,7 @@ func ListTickets(db *sql.DB, params TicketListParams) ([]Ticket, error) {
 	if !params.IncludeArchived {
 		query += ` AND archived = 0`
 	}
-	query += ` ORDER BY created_at, ticket_id`
+	query += ` ORDER BY sort_order, created_at, ticket_id`
 	if params.Limit < 0 {
 		return nil, errors.New("limit must be zero or greater")
 	}

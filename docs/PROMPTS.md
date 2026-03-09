@@ -726,3 +726,121 @@ if the user presses the space bar, have the pixels gradually move to form the wo
 
 the word should vary each time using multiligual hello
 
+
+
+----
+
+the dialogs need work for 
+    new type
+    stage/state needs work for moving
+    ability to create porjects eneeds work
+    the time between typing and saving needs some work
+
+    config register-enable/disable
+
+    epic and then storie inside epics
+    + and - for details
+
+top banner contents
+
+the top-right should have a profile circular icon for the logged in user
+    click it to reveal dropdown containig
+    settings
+    profile
+    logout
+- remove the logotu button from the top banner
+
+## logo
+
+the left hand side should have an 8-bit 8x8 per character "ticket/tkt/tket" variations that slowly changes the hue/limunescence of the pixels.  use a threej3 rectangle and have it paint slowly over time
+
+make the logo characters 50% larger and do not "switch" visually between words - transition the pixels until they are activated fully to their target colour.  in this way the word will morph appealingly from one to the other.  use perlin noise for the time and difference in colour
+
+## status animator
+
+to the right and for hte majority of the top banner (between the logo and the project selctor, make a threejs full-width full-height that is the current colour but have 8-bit pixels move from left to rigth or right to left to indicate activity in the system.  
+
+the websocket will provide the activity
+a pixel will be created and move from left ot right wiht a given perlin variable velocity and colour, where the colour is taken from a pool based on the classification of the event
+    tickets being edited for their contents
+    new tickets created
+    tickets changing status
+    tickets moving to done
+    bug activity (more red)
+
+activity in the status animator should tend to colourful for human interaction and grayscale for agentic interaction.  This is determined by the user "type" (human or agent).
+
+
+the T character in the pixels shoudl not have pixels lit up in the bottom left-right but it does.
+
+the transition from word1 to word2 should be that - a gradual transition e.g TICKET -> TKT means the I should morph into the K, the C into the T, the KET should fade back to teh background.  
+
+make the logo banner rendering appear in the login and registration page in place of the "ticket" word.   on the login/register page dont use a websocket.
+
+login page: remove the "logged out" and "please log in" messages
+
+
+## project dropdown
+
+the dropdown should not be a native browser dropdown - it should be html/css/js
+
+project dropdown should have a new project selector in the following
+
+[Curent Project]
+[New Project]
+------- <divider ------->
+List of projects, most recently opened at top not including [Current]
+Then sorted alphabetically
+
+the new project dialog should not be native - it should be thematically similar to teh new/edit ticket dialog
+
+
+## server logging
+
+what is a common go server logging style for web services that include
+    rotation
+    http/websocket logging
+
+to enable analyics/insight/operational telemetry?
+
+server logging
+    -q means stdout is quiet
+    -l means write to file
+    -v means be verbose to STDOUT as well as file (if file specified)
+
+all errors write to 
+
+tk server -l <file> 
+    -l specifies the logfile to write to
+    it should write
+    date/time response-code duration-ms user-id url
+
+
+v. quickly get to the ticket capture now via the browser and have a simulator workflow
+
+
+## UX Review
+
+page1: landing page (login, register)
+
+page2: main page
+
+top banner: always visible, contains logo, animator, project selector, user icon selector
+
+main page: this can change depending on the "view" a user selects
+pressing V should bring up a popup similar to the double-shift which allows the user to select a different "perspective"
+    "swimlanes"
+    "tv : ticketvision"
+
+switching perspectives shob001udl fade out then fade in the other perspective.
+
+swimlanes: the existing swim lanes view of stories for current project
+
+tv: Let's create a new perspective
+
+threejs alternate view which is like a two forced layout graph representation of a given project that renders by defalt left to right
+
+project -> epics -> story
+                  -> story
+                -> Story
+

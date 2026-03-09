@@ -106,6 +106,9 @@ clean:
 	@rm -f tk
 	@rm -f parser
 
+install:
+	go install ./cmd/ticket
+
 dev:
     # prints out the env vars I need to set to go into a ticket dev mode
 	@echo ""
