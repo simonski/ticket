@@ -19,7 +19,7 @@ type Service interface {
 	UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error)
 	DeleteAgent(id int64) error
 	RegisterAgent(request AgentRegisterRequest) (store.Agent, error)
-	RequestAgentWork(request AgentRequest) (TicketRequestResponse, error)
+	RequestAgentWork(request AgentRequest) (AgentWorkResponse, error)
 	AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error)
 	CreateProject(request ProjectCreateRequest) (store.Project, error)
 	ListProjects() ([]store.Project, error)

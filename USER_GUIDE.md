@@ -519,6 +519,7 @@ Keyboard shortcuts in the board view:
 
 - `D` on a focused ticket prompts `Archive this ticket?`; choose `OK` to archive
 - `U` undoes the most recent ticket action you initiated in the current browser session
+- `P` opens project edit for the currently selected project (swimlanes view)
 - a fixed bottom-right version overlay shows the current server version reported by `/api/status`
 - board updates are live via websocket; ticket changes from other users should appear without browser refresh
 - the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
@@ -551,6 +552,7 @@ ticket agent delete -id <id>
 ticket agent enable -id <id>
 ticket agent disable -id <id>
 ticket agent run -name <name> -password <password> -url <server-url>
+ticket agent request -password <password> -url <server-url> [-id <ticket-id>] [-dryrun]
 
 ticket project create -prefix ABC "..."
 ticket project list
@@ -562,6 +564,8 @@ ticket project <prefix-or-id>
 ticket project <prefix-or-id> update -title "..."
 ticket project <prefix-or-id> update -description "..."
 ticket project <prefix-or-id> update -ac "..."
+ticket project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
+ticket project <prefix-or-id> update -git-branch "main"
 ticket project <prefix-or-id> enable
 ticket project <prefix-or-id> disable
 
@@ -608,6 +612,8 @@ ticket update <key-or-id> -stage develop -state idle
 ticket update <key-or-id> -title "new title"
 ticket update <key-or-id> -description "new description"
 ticket update <key-or-id> -ac "new acceptance criteria"
+ticket update <key-or-id> -git-repository "https://github.com/org/repo.git"
+ticket update <key-or-id> -git-branch "feature/x"
 ticket update <key-or-id> -priority 4
 ticket update <key-or-id> -order 7
 ticket update <key-or-id> -parent_id 12

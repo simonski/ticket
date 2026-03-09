@@ -209,7 +209,7 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage: "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]",
+		usage: "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]",
 		details: []string{
 			"-id <id>: required; ticket id or key",
 			"-title <title>: set title",
@@ -383,8 +383,8 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket user create --username alice --password secret",
 	},
 	"agent": {
-		usage:   "ticket agent <create|ls|list|update|rm|delete|enable|disable|run>",
-		details: []string{"Manages API agents for autonomous ticket processing.", "`run` registers an agent then continuously requests and processes work."},
+		usage:   "ticket agent <create|ls|list|update|rm|delete|enable|disable|request|run>",
+		details: []string{"Manages API agents for autonomous ticket processing.", "`request` fetches an enriched work envelope (project, ticket, parents). `run` registers an agent then continuously requests and processes work."},
 		example: "ticket agent create -name worker-1 -description \"Autonomous worker\"",
 	},
 	"config": {
@@ -1146,7 +1146,7 @@ func runUser(args []string) error {
 
 func runAgent(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ticket agent <create|ls|list|update|rm|delete|enable|disable|run>")
+		return errors.New("usage: ticket agent <create|ls|list|update|rm|delete|enable|disable|request|run>")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1390,6 +1390,73 @@ func runAgent(args []string) error {
 				fmt.Printf("completed %s -> %s\n", ticketLabel(*ticket), updated.Status)
 			}
 		}
+	case "request":
+		fs := flag.NewFlagSet("agent request", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		name := fs.String("name", "", "agent name")
+		password := fs.String("password", "", "agent password")
+		url := fs.String("url", "", "ticket server url")
+		id := fs.Int64("id", 0, "specific ticket id")
+		dryRun := fs.Bool("dryrun", false, "simulate assignment only")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		agentName := strings.TrimSpace(*name)
+		if agentName == "" {
+			agentName = envValue("AGENT_NAME")
+		}
+		agentPassword := strings.TrimSpace(*password)
+		if agentPassword == "" {
+			agentPassword = envValue("AGENT_PASSWORD")
+		}
+		serverURL := strings.TrimSpace(*url)
+		if serverURL == "" {
+			serverURL = envValue("TICKET_URL")
+		}
+		missing := make([]string, 0, 3)
+		if agentName == "" {
+			missing = append(missing, "AGENT_NAME or -name")
+		}
+		if agentPassword == "" {
+			missing = append(missing, "AGENT_PASSWORD or -password")
+		}
+		if serverURL == "" {
+			missing = append(missing, "TICKET_URL or -url")
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("missing required values: %s", strings.Join(missing, ", "))
+		}
+		if err := os.Setenv("TICKET_MODE", string(config.ModeRemote)); err != nil {
+			return err
+		}
+		if err := os.Setenv("TICKET_SERVER", serverURL); err != nil {
+			return err
+		}
+		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
+			return err
+		}
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		var requestedID *int64
+		if *id > 0 {
+			requestedID = id
+		}
+		response, err := svc.RequestAgentWork(libticket.AgentRequest{
+			Name:     agentName,
+			Password: agentPassword,
+			TicketID: requestedID,
+			DryRun:   *dryRun,
+		})
+		if err != nil {
+			return err
+		}
+		return printJSON(response)
 	default:
 		return fmt.Errorf("unknown agent command %q", args[0])
 	}
@@ -1488,6 +1555,8 @@ func runProject(args []string) error {
 		prefix := fs.String("prefix", "", "project prefix")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
+		gitRepository := fs.String("git-repository", "", "project git repository")
+		gitBranch := fs.String("git-branch", "", "project git branch")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -1502,6 +1571,8 @@ func runProject(args []string) error {
 			Title:              fs.Arg(0),
 			Description:        *description,
 			AcceptanceCriteria: *acceptanceCriteria,
+			GitRepository:      strings.TrimSpace(*gitRepository),
+			GitBranch:          strings.TrimSpace(*gitBranch),
 		})
 		if err != nil {
 			return err
@@ -1745,6 +1816,8 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		title := fs.String("title", "", "project title")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
+		gitRepository := fs.String("git-repository", "", "project git repository")
+		gitBranch := fs.String("git-branch", "", "project git branch")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -1754,16 +1827,26 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		}
 		nextDescription := current.Description
 		nextAC := current.AcceptanceCriteria
+		nextRepo := current.GitRepository
+		nextBranch := current.GitBranch
 		if fs.Lookup("description") != nil && strings.TrimSpace(*description) != "" || containsFlag(args[1:], "-description") {
 			nextDescription = *description
 		}
 		if containsFlag(args[1:], "-ac") {
 			nextAC = *acceptanceCriteria
 		}
+		if containsFlag(args[1:], "-git-repository") {
+			nextRepo = strings.TrimSpace(*gitRepository)
+		}
+		if containsFlag(args[1:], "-git-branch") {
+			nextBranch = strings.TrimSpace(*gitBranch)
+		}
 		project, err := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{
 			Title:              *title,
 			Description:        nextDescription,
 			AcceptanceCriteria: nextAC,
+			GitRepository:      nextRepo,
+			GitBranch:          nextBranch,
 		})
 		if err != nil {
 			return err
@@ -2306,7 +2389,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store
 }
 
 func runUpdate(args []string) error {
-	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
+	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -2314,6 +2397,8 @@ func runUpdate(args []string) error {
 	description := fs.String("description", "", "ticket description")
 	desc := fs.String("desc", "", "ticket description")
 	acceptanceCriteria := fs.String("ac", "", "ticket acceptance criteria")
+	gitRepository := fs.String("git-repository", "", "ticket git repository")
+	gitBranch := fs.String("git-branch", "", "ticket git branch")
 	priority := fs.Int("priority", 0, "ticket priority")
 	order := fs.Int("order", 0, "ticket order")
 	estimateEffort := fs.Int("estimate_effort", 0, "estimated effort")
@@ -2336,6 +2421,8 @@ func runUpdate(args []string) error {
 	hasDesc := containsFlag(args, "-desc")
 	hasAC := containsFlag(args, "-ac")
 	hasPriority := containsFlag(args, "-priority")
+	hasGitRepository := containsFlag(args, "-git-repository")
+	hasGitBranch := containsFlag(args, "-git-branch")
 	hasOrder := containsFlag(args, "-order")
 	hasEstimateEffort := containsFlag(args, "-estimate_effort")
 	hasEstimateComplete := containsFlag(args, "-estimate_complete")
@@ -2343,7 +2430,7 @@ func runUpdate(args []string) error {
 	hasStage := containsFlag(args, "-stage")
 	hasState := containsFlag(args, "-state")
 	hasParentID := containsFlag(args, "-parent_id")
-	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID {
+	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -2362,6 +2449,8 @@ func runUpdate(args []string) error {
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
+		GitRepository:      current.GitRepository,
+		GitBranch:          current.GitBranch,
 		ParentID:           current.ParentID,
 		Assignee:           current.Assignee,
 		Stage:              current.Stage,
@@ -2382,6 +2471,12 @@ func runUpdate(args []string) error {
 	}
 	if hasAC {
 		next.AcceptanceCriteria = *acceptanceCriteria
+	}
+	if hasGitRepository {
+		next.GitRepository = strings.TrimSpace(*gitRepository)
+	}
+	if hasGitBranch {
+		next.GitBranch = strings.TrimSpace(*gitBranch)
 	}
 	if hasPriority {
 		next.Priority = *priority
@@ -3423,6 +3518,8 @@ type ticketCreateOptions struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	GitRepository      string
+	GitBranch          string
 	Priority           int
 	EstimateEffort     int
 	EstimateComplete   string
@@ -3449,6 +3546,8 @@ func runTicketCreate(args []string) error {
 	description := fs.String("description", "", "ticket description")
 	fs.StringVar(description, "d", "", "ticket description")
 	acceptanceCriteria := fs.String("ac", "", "acceptance criteria")
+	gitRepository := fs.String("git-repository", "", "ticket git repository")
+	gitBranch := fs.String("git-branch", "", "ticket git branch")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
 	parent := fs.Int64("parent", 0, "parent ticket id")
 	project := fs.String("project", "", "project id")
@@ -3467,6 +3566,8 @@ func runTicketCreate(args []string) error {
 		Title:              title,
 		Description:        *description,
 		AcceptanceCriteria: *acceptanceCriteria,
+		GitRepository:      strings.TrimSpace(*gitRepository),
+		GitBranch:          strings.TrimSpace(*gitBranch),
 		Priority:           *priority,
 		EstimateEffort:     *estimateEffort,
 		EstimateComplete:   *estimateComplete,
@@ -3492,6 +3593,8 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		"-description":       true,
 		"-d":                 true,
 		"-ac":                true,
+		"-git-repository":    true,
+		"-git-branch":        true,
 		"-estimate_complete": true,
 		"-parent":            true,
 		"-project":           true,
@@ -3547,6 +3650,8 @@ func createTicket(opts ticketCreateOptions) error {
 		Title:              opts.Title,
 		Description:        opts.Description,
 		AcceptanceCriteria: opts.AcceptanceCriteria,
+		GitRepository:      opts.GitRepository,
+		GitBranch:          opts.GitBranch,
 		Priority:           opts.Priority,
 		EstimateEffort:     opts.EstimateEffort,
 		EstimateComplete:   opts.EstimateComplete,
@@ -3690,6 +3795,12 @@ func printProject(project store.Project) {
 	if project.AcceptanceCriteria != "" {
 		fmt.Printf("acceptance_criteria: %s\n", project.AcceptanceCriteria)
 	}
+	if project.GitRepository != "" {
+		fmt.Printf("git_repository: %s\n", project.GitRepository)
+	}
+	if project.GitBranch != "" {
+		fmt.Printf("git_branch: %s\n", project.GitBranch)
+	}
 }
 
 func printProjectTable(projects []store.Project, currentProjectID string) {
@@ -3738,6 +3849,15 @@ func printTicket(ticket store.Ticket) {
 	}
 	if ticket.Description != "" {
 		fmt.Printf("description: %s\n", ticket.Description)
+	}
+	if ticket.AcceptanceCriteria != "" {
+		fmt.Printf("acceptance_criteria: %s\n", ticket.AcceptanceCriteria)
+	}
+	if ticket.GitRepository != "" {
+		fmt.Printf("git_repository: %s\n", ticket.GitRepository)
+	}
+	if ticket.GitBranch != "" {
+		fmt.Printf("git_branch: %s\n", ticket.GitBranch)
 	}
 	if ticket.EstimateEffort != 0 {
 		fmt.Printf("estimate_effort: %d\n", ticket.EstimateEffort)

@@ -17,6 +17,8 @@ type ProjectCreateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 }
 
@@ -24,6 +26,8 @@ type ProjectUpdateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 }
 
@@ -40,6 +44,8 @@ type TicketCreateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Priority           int    `json:"priority"`
 	EstimateEffort     int    `json:"estimate_effort"`
 	EstimateComplete   string `json:"estimate_complete,omitempty"`
@@ -53,6 +59,8 @@ type TicketUpdateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	ParentID           *int64 `json:"parent_id,omitempty"`
 	Assignee           string `json:"assignee"`
 	Status             string `json:"status,omitempty"`
@@ -107,10 +115,19 @@ type AgentRequest struct {
 	Name      string `json:"name"`
 	Password  string `json:"password"`
 	ProjectID int64  `json:"project_id,omitempty"`
+	TicketID  *int64 `json:"ticket_id,omitempty"`
+	DryRun    bool   `json:"dry_run,omitempty"`
 }
 
 type AgentTicketUpdateRequest struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
 	Result   string `json:"result"`
+}
+
+type AgentWorkResponse struct {
+	Status  string         `json:"status"`
+	Project *store.Project `json:"project,omitempty"`
+	Ticket  *store.Ticket  `json:"ticket,omitempty"`
+	Parents []store.Ticket `json:"parents,omitempty"`
 }

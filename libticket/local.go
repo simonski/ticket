@@ -198,21 +198,24 @@ func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent,
 	return store.TouchAgent(db, agent.ID, "online")
 }
 
-func (s *LocalService) RequestAgentWork(request AgentRequest) (TicketRequestResponse, error) {
+func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
 	db, err := s.openDB()
 	if err != nil {
-		return TicketRequestResponse{}, err
+		return AgentWorkResponse{}, err
 	}
 	defer db.Close()
 	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
 	if err != nil {
-		return TicketRequestResponse{}, err
+		return AgentWorkResponse{}, err
 	}
 	projectID := request.ProjectID
-	if projectID == 0 {
+	if request.TicketID != nil {
+		projectID = 0
+	}
+	if request.TicketID == nil && projectID == 0 {
 		projects, err := store.ListProjects(db)
 		if err != nil {
-			return TicketRequestResponse{}, err
+			return AgentWorkResponse{}, err
 		}
 		for _, p := range projects {
 			if p.Status == "open" {
@@ -223,20 +226,30 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (TicketRequestResp
 	}
 	ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 		ProjectID: projectID,
+		TicketID:  request.TicketID,
 		Username:  agent.Name,
 		UserID:    0,
+		DryRun:    request.DryRun,
 	})
 	if err != nil {
-		return TicketRequestResponse{}, err
+		return AgentWorkResponse{}, err
 	}
 	if status == "ASSIGNED" {
 		_, _ = store.TouchAgent(db, agent.ID, "working")
 	} else {
 		_, _ = store.TouchAgent(db, agent.ID, "soliciting")
 	}
-	response := TicketRequestResponse{Status: status}
+	response := AgentWorkResponse{Status: status}
 	if status == "ASSIGNED" || status == "AVAILABLE" {
+		project, err := store.GetProjectByID(db, ticket.ProjectID)
+		if err == nil {
+			response.Project = &project
+		}
 		response.Ticket = &ticket
+		parents, err := store.ListTicketParents(db, ticket.ID)
+		if err == nil {
+			response.Parents = parents
+		}
 	}
 	return response, nil
 }
@@ -259,6 +272,8 @@ func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequ
 		Title:              current.Title,
 		Description:        request.Result,
 		AcceptanceCriteria: current.AcceptanceCriteria,
+		GitRepository:      current.GitRepository,
+		GitBranch:          current.GitBranch,
 		ParentID:           current.ParentID,
 		Assignee:           agent.Name,
 		Stage:              store.StageDone,
@@ -293,6 +308,8 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
 		CreatedBy:          user.ID,
 	})
@@ -326,6 +343,8 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
 	})
 }
@@ -388,6 +407,8 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		Priority:           request.Priority,
 		EstimateEffort:     request.EstimateEffort,
 		EstimateComplete:   request.EstimateComplete,
@@ -439,6 +460,8 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		ParentID:           request.ParentID,
 		Assignee:           request.Assignee,
 		Stage:              stage,

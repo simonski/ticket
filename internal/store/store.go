@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS projects (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	git_repository TEXT NOT NULL DEFAULT '',
+	git_branch TEXT NOT NULL DEFAULT '',
 	notes TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open',
 	created_by INTEGER,
@@ -152,6 +154,8 @@ CREATE TABLE IF NOT EXISTS tickets (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	git_repository TEXT NOT NULL DEFAULT '',
+	git_branch TEXT NOT NULL DEFAULT '',
 	stage TEXT NOT NULL DEFAULT 'design',
 	state TEXT NOT NULL DEFAULT 'idle',
 	status TEXT NOT NULL DEFAULT 'open',
@@ -281,6 +285,16 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "projects", "git_repository") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "projects", "git_branch") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	if !columnExists(db, "projects", "updated_at") {
 		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`); err != nil {
 			return err
@@ -315,6 +329,16 @@ func migrateSchema(db *sql.DB) error {
 	}
 	if !columnExists(db, "tickets", "estimate_complete") {
 		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tickets", "git_repository") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tickets", "git_branch") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}

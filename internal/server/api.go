@@ -413,7 +413,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				return
 			}
 			projectID := payload.ProjectID
-			if projectID == 0 {
+			if payload.TicketID == nil && projectID == 0 {
 				projects, err := store.ListProjects(db)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
@@ -428,8 +428,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			}
 			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 				ProjectID: projectID,
+				TicketID:  payload.TicketID,
 				Username:  agent.Name,
 				UserID:    0,
+				DryRun:    payload.DryRun,
 			})
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
@@ -444,6 +446,12 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			response := map[string]any{"status": status}
 			if status == "ASSIGNED" || status == "AVAILABLE" {
 				response["ticket"] = ticket
+				if project, err := store.GetProjectByID(db, ticket.ProjectID); err == nil {
+					response["project"] = project
+				}
+				if parents, err := store.ListTicketParents(db, ticket.ID); err == nil {
+					response["parents"] = parents
+				}
 			}
 			writeJSON(w, http.StatusOK, response)
 			return
@@ -485,6 +493,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				Title:              current.Title,
 				Description:        payload.Result,
 				AcceptanceCriteria: current.AcceptanceCriteria,
+				GitRepository:      current.GitRepository,
+				GitBranch:          current.GitBranch,
 				ParentID:           current.ParentID,
 				Assignee:           agent.Name,
 				Stage:              store.StageDone,
@@ -608,6 +618,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
 				AcceptanceCriteria: projectPayload.AcceptanceCriteria,
+				GitRepository:      projectPayload.GitRepository,
+				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
 				CreatedBy:          user.ID,
 			})
@@ -834,6 +846,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
 				AcceptanceCriteria: projectPayload.AcceptanceCriteria,
+				GitRepository:      projectPayload.GitRepository,
+				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
 			})
 			if err != nil {
@@ -887,6 +901,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			Title:              ticketPayload.Title,
 			Description:        ticketPayload.Description,
 			AcceptanceCriteria: ticketPayload.AcceptanceCriteria,
+			GitRepository:      ticketPayload.GitRepository,
+			GitBranch:          ticketPayload.GitBranch,
 			Priority:           ticketPayload.Priority,
 			EstimateEffort:     ticketPayload.EstimateEffort,
 			EstimateComplete:   ticketPayload.EstimateComplete,
@@ -1212,6 +1228,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 					Title:              ticketPayload.Title,
 					Description:        ticketPayload.Description,
 					AcceptanceCriteria: ticketPayload.AcceptanceCriteria,
+					GitRepository:      ticketPayload.GitRepository,
+					GitBranch:          ticketPayload.GitBranch,
 					ParentID:           ticketPayload.ParentID,
 					Assignee:           ticketPayload.Assignee,
 					Stage:              stage,
@@ -1352,6 +1370,8 @@ type agentRequestWork struct {
 	Name      string `json:"name"`
 	Password  string `json:"password"`
 	ProjectID int64  `json:"project_id,omitempty"`
+	TicketID  *int64 `json:"ticket_id,omitempty"`
+	DryRun    bool   `json:"dry_run,omitempty"`
 }
 
 type agentTicketUpdateRequest struct {
@@ -1365,6 +1385,8 @@ type projectRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 }
 
@@ -1375,6 +1397,8 @@ type ticketRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Status             string `json:"status"`
 	Stage              string `json:"stage"`
 	State              string `json:"state"`

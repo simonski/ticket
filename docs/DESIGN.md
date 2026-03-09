@@ -92,6 +92,9 @@ Notes:
 - `project_id`
 - `title`
 - `description`
+- `acceptance_criteria`
+- `git_repository`
+- `git_branch`
 - `created_at`
 - `created_by`
 - `status`
@@ -110,6 +113,8 @@ Projects are the top-level container for work items.
 - `title`
 - `description`
 - `acceptance_criteria`
+- `git_repository`
+- `git_branch`
 - `stage`
 - `state`
 - `priority`
@@ -604,6 +609,7 @@ The web UI should make these activities easy:
 - keyboard actions on focused tickets:
   - `D`: prompt `Archive this ticket?` and archive on confirmation
   - `U`: undo the most recent ticket action initiated in the current web session
+  - `P`: open project edit modal for the current project (swimlanes view)
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps

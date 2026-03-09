@@ -87,12 +87,12 @@ func (s *Service) RegisterAgent(request libticket.AgentRegisterRequest) (store.A
 	return s.client.RegisterAgent(client.AgentRegisterRequest(request))
 }
 
-func (s *Service) RequestAgentWork(request libticket.AgentRequest) (libticket.TicketRequestResponse, error) {
+func (s *Service) RequestAgentWork(request libticket.AgentRequest) (libticket.AgentWorkResponse, error) {
 	resp, err := s.client.RequestAgentWork(client.AgentRequest(request))
 	if err != nil {
-		return libticket.TicketRequestResponse{}, err
+		return libticket.AgentWorkResponse{}, err
 	}
-	return libticket.TicketRequestResponse(resp), nil
+	return libticket.AgentWorkResponse(resp), nil
 }
 
 func (s *Service) AgentUpdateTicket(id int64, request libticket.AgentTicketUpdateRequest) (store.Ticket, error) {

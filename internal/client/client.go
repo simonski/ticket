@@ -43,6 +43,8 @@ type ProjectCreateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 }
 
@@ -50,6 +52,8 @@ type ProjectUpdateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 }
 
@@ -66,6 +70,8 @@ type TicketCreateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Priority           int    `json:"priority"`
 	EstimateEffort     int    `json:"estimate_effort"`
 	EstimateComplete   string `json:"estimate_complete,omitempty"`
@@ -79,6 +85,8 @@ type TicketUpdateRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	ParentID           *int64 `json:"parent_id,omitempty"`
 	Assignee           string `json:"assignee"`
 	Status             string `json:"status,omitempty"`
@@ -116,6 +124,13 @@ type TicketRequestResponse struct {
 	Ticket *store.Ticket `json:"ticket,omitempty"`
 }
 
+type AgentWorkResponse struct {
+	Status  string         `json:"status"`
+	Project *store.Project `json:"project,omitempty"`
+	Ticket  *store.Ticket  `json:"ticket,omitempty"`
+	Parents []store.Ticket `json:"parents,omitempty"`
+}
+
 type AgentCreateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -137,6 +152,8 @@ type AgentRequest struct {
 	Name      string `json:"name"`
 	Password  string `json:"password"`
 	ProjectID int64  `json:"project_id,omitempty"`
+	TicketID  *int64 `json:"ticket_id,omitempty"`
+	DryRun    bool   `json:"dry_run,omitempty"`
 }
 
 type AgentTicketUpdateRequest struct {
@@ -427,22 +444,25 @@ func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error
 	return response.Agent, err
 }
 
-func (c *Client) RequestAgentWork(request AgentRequest) (TicketRequestResponse, error) {
+func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return TicketRequestResponse{}, err
+			return AgentWorkResponse{}, err
 		}
 		defer db.Close()
 		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
 		if err != nil {
-			return TicketRequestResponse{}, err
+			return AgentWorkResponse{}, err
 		}
 		projectID := request.ProjectID
+		if request.TicketID != nil {
+			projectID = 0
+		}
 		if projectID == 0 {
 			projects, err := store.ListProjects(db)
 			if err != nil {
-				return TicketRequestResponse{}, err
+				return AgentWorkResponse{}, err
 			}
 			for _, p := range projects {
 				if p.Status == "open" {
@@ -453,19 +473,29 @@ func (c *Client) RequestAgentWork(request AgentRequest) (TicketRequestResponse, 
 		}
 		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 			ProjectID: projectID,
+			TicketID:  request.TicketID,
 			Username:  agent.Name,
 			UserID:    0,
+			DryRun:    request.DryRun,
 		})
 		if err != nil {
-			return TicketRequestResponse{}, err
+			return AgentWorkResponse{}, err
 		}
-		response := TicketRequestResponse{Status: status}
+		response := AgentWorkResponse{Status: status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
+			project, err := store.GetProjectByID(db, ticket.ProjectID)
+			if err == nil {
+				response.Project = &project
+			}
 			response.Ticket = &ticket
+			parents, err := store.ListTicketParents(db, ticket.ID)
+			if err == nil {
+				response.Parents = parents
+			}
 		}
 		return response, nil
 	}
-	var response TicketRequestResponse
+	var response AgentWorkResponse
 	err := c.doJSON(http.MethodPost, "/api/agents/request", request, &response)
 	return response, err
 }
@@ -489,6 +519,8 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 			Title:              current.Title,
 			Description:        request.Result,
 			AcceptanceCriteria: current.AcceptanceCriteria,
+			GitRepository:      current.GitRepository,
+			GitBranch:          current.GitBranch,
 			ParentID:           current.ParentID,
 			Assignee:           agent.Name,
 			Stage:              store.StageDone,
@@ -523,6 +555,8 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
+			GitRepository:      request.GitRepository,
+			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
 			CreatedBy:          user.ID,
 		})
@@ -571,6 +605,8 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
+			GitRepository:      request.GitRepository,
+			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
 		})
 	}
@@ -660,6 +696,8 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
+			GitRepository:      request.GitRepository,
+			GitBranch:          request.GitBranch,
 			Priority:           request.Priority,
 			EstimateEffort:     request.EstimateEffort,
 			EstimateComplete:   request.EstimateComplete,
@@ -750,6 +788,8 @@ func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Tick
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
+			GitRepository:      request.GitRepository,
+			GitBranch:          request.GitBranch,
 			ParentID:           request.ParentID,
 			Assignee:           request.Assignee,
 			Stage:              stage,

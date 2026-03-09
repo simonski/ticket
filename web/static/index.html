@@ -524,13 +524,16 @@
     <div id="proj-modal-overlay" class="modal-overlay hidden">
       <div id="proj-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
-          <strong>New Project</strong>
+          <strong id="proj-modal-heading">New Project</strong>
           <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="8" autocomplete="off" style="text-transform:uppercase;" />
           <input id="proj-modal-title" placeholder="title" autocomplete="off" />
+          <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
+          <input id="proj-modal-git-branch" placeholder="git branch (optional)" autocomplete="off" />
           <textarea id="proj-modal-description" placeholder="description (optional)"></textarea>
+          <textarea id="proj-modal-ac" placeholder="acceptance criteria (optional)"></textarea>
           <div id="proj-modal-error" class="muted" style="color:var(--danger,#c0392b);display:none;"></div>
           <div class="row">
             <button id="proj-modal-create" class="btn" type="button">Create Project</button>
@@ -570,6 +573,11 @@
         <div class="stack" style="margin-top:0.6rem;">
           <input id="ticket-title" placeholder="title" />
           <textarea id="ticket-description" placeholder="description"></textarea>
+          <textarea id="ticket-ac" placeholder="acceptance criteria"></textarea>
+          <div class="row">
+            <input id="ticket-git-repository" placeholder="git repository" />
+            <input id="ticket-git-branch" placeholder="git branch" />
+          </div>
           <div class="row">
             <select id="ticket-type">
               <option value="task">task</option>
@@ -1979,20 +1987,52 @@
       }
 
       const projModalOverlay = document.getElementById("proj-modal-overlay");
+      const projModalHeading = document.getElementById("proj-modal-heading");
       const projModalPrefix = document.getElementById("proj-modal-prefix");
       const projModalTitle = document.getElementById("proj-modal-title");
+      const projModalGitRepository = document.getElementById("proj-modal-git-repository");
+      const projModalGitBranch = document.getElementById("proj-modal-git-branch");
       const projModalDescription = document.getElementById("proj-modal-description");
+      const projModalAC = document.getElementById("proj-modal-ac");
       const projModalError = document.getElementById("proj-modal-error");
       const projModalCreate = document.getElementById("proj-modal-create");
+      let projModalMode = "create";
+      let projModalProjectID = 0;
 
       function openProjModal() {
+        projModalMode = "create";
+        projModalProjectID = 0;
+        projModalHeading.textContent = "New Project";
+        projModalCreate.textContent = "Create Project";
+        projModalPrefix.disabled = false;
         projModalPrefix.value = "";
         projModalTitle.value = "";
+        projModalGitRepository.value = "";
+        projModalGitBranch.value = "";
         projModalDescription.value = "";
+        projModalAC.value = "";
         projModalError.style.display = "none";
         projModalError.textContent = "";
         projModalOverlay.classList.remove("hidden");
         projModalPrefix.focus();
+      }
+
+      function openProjectEditModal(project) {
+        projModalMode = "edit";
+        projModalProjectID = Number(project.project_id || 0);
+        projModalHeading.textContent = "Edit Project";
+        projModalCreate.textContent = "Save Project";
+        projModalPrefix.disabled = true;
+        projModalPrefix.value = String(project.prefix || "").toUpperCase();
+        projModalTitle.value = project.title || "";
+        projModalGitRepository.value = project.git_repository || "";
+        projModalGitBranch.value = project.git_branch || "";
+        projModalDescription.value = project.description || "";
+        projModalAC.value = project.acceptance_criteria || "";
+        projModalError.style.display = "none";
+        projModalError.textContent = "";
+        projModalOverlay.classList.remove("hidden");
+        projModalTitle.focus();
       }
 
       function closeProjModal() {
@@ -2000,13 +2040,28 @@
       }
 
       projModalCreate.addEventListener("click", async () => {
-        const prefix = projModalPrefix.value.trim().toUpperCase();
         const title = projModalTitle.value.trim();
+        const prefix = projModalPrefix.value.trim().toUpperCase();
+        const gitRepository = projModalGitRepository.value.trim();
+        const gitBranch = projModalGitBranch.value.trim();
         const description = projModalDescription.value.trim();
-        if (!prefix) { projModalError.textContent = "Prefix is required."; projModalError.style.display = ""; projModalPrefix.focus(); return; }
+        const acceptanceCriteria = projModalAC.value.trim();
+        if (projModalMode === "create" && !prefix) { projModalError.textContent = "Prefix is required."; projModalError.style.display = ""; projModalPrefix.focus(); return; }
         if (!title) { projModalError.textContent = "Title is required."; projModalError.style.display = ""; projModalTitle.focus(); return; }
-        const res = await call("/api/projects", { method: "POST", headers: headers(true), body: JSON.stringify({ prefix, title, description }) });
-        if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to create project."; projModalError.style.display = ""; return; }
+        const endpoint = projModalMode === "edit" && projModalProjectID
+          ? `/api/projects/${projModalProjectID}`
+          : "/api/projects";
+        const method = projModalMode === "edit" ? "PUT" : "POST";
+        const payload = {
+          prefix,
+          title,
+          description,
+          acceptance_criteria: acceptanceCriteria,
+          git_repository: gitRepository,
+          git_branch: gitBranch,
+        };
+        const res = await call(endpoint, { method, headers: headers(true), body: JSON.stringify(payload) });
+        if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to save project."; projModalError.style.display = ""; return; }
         closeProjModal();
         await loadProjects();
         await loadTickets();
@@ -2029,7 +2084,18 @@
         if (!selectedProjectID()) return;
         draft = { mode: "new", ticket: null };
         modalTitle.textContent = "New Ticket";
-        setModalValues({ type: "task", title: "", description: "", stage: "design", state: "idle", open: true, archived: false });
+        setModalValues({
+          type: "task",
+          title: "",
+          description: "",
+          acceptance_criteria: "",
+          git_repository: "",
+          git_branch: "",
+          stage: "design",
+          state: "idle",
+          open: true,
+          archived: false,
+        });
         modalOverlay.classList.remove("hidden");
         document.getElementById("ticket-title").focus();
       }
@@ -2047,6 +2113,9 @@
           type: document.getElementById("ticket-type").value,
           title: document.getElementById("ticket-title").value,
           description: document.getElementById("ticket-description").value,
+          acceptance_criteria: document.getElementById("ticket-ac").value,
+          git_repository: document.getElementById("ticket-git-repository").value,
+          git_branch: document.getElementById("ticket-git-branch").value,
           stage: document.getElementById("ticket-stage").value,
           state: document.getElementById("ticket-state").value,
         };
@@ -2056,6 +2125,9 @@
         document.getElementById("ticket-type").value = ticket.type || "task";
         document.getElementById("ticket-title").value = ticket.title || "";
         document.getElementById("ticket-description").value = ticket.description || "";
+        document.getElementById("ticket-ac").value = ticket.acceptance_criteria || "";
+        document.getElementById("ticket-git-repository").value = ticket.git_repository || "";
+        document.getElementById("ticket-git-branch").value = ticket.git_branch || "";
         document.getElementById("ticket-stage").value = ticket.stage || "design";
         document.getElementById("ticket-state").value = ticket.state || "idle";
         document.getElementById("ticket-close-open").textContent = ticket.open === false ? "Open" : "Close";
@@ -2087,6 +2159,9 @@
               type: values.type,
               title: values.title,
               description: values.description,
+              acceptance_criteria: values.acceptance_criteria,
+              git_repository: values.git_repository,
+              git_branch: values.git_branch,
               stage: values.stage,
               state: values.state,
             }),
@@ -2106,7 +2181,9 @@
           body: JSON.stringify({
             title: values.title,
             description: values.description,
-            acceptance_criteria: current.acceptance_criteria,
+            acceptance_criteria: values.acceptance_criteria,
+            git_repository: values.git_repository,
+            git_branch: values.git_branch,
             parent_id: current.parent_id,
             assignee: current.assignee,
             priority: current.priority,
@@ -2249,7 +2326,7 @@
         await setTicketArchivedByID(draft.ticket.ticket_id, archived, true);
       });
 
-      ["ticket-title", "ticket-description", "ticket-type", "ticket-stage", "ticket-state"].forEach((id) => {
+      ["ticket-title", "ticket-description", "ticket-ac", "ticket-git-repository", "ticket-git-branch", "ticket-type", "ticket-stage", "ticket-state"].forEach((id) => {
         document.getElementById(id).addEventListener("input", queueAutosave);
         document.getElementById(id).addEventListener("change", queueAutosave);
       });
@@ -2403,6 +2480,14 @@
           if (!isAppVisible() || inField) return;
           event.preventDefault();
           perspectiveOverlay.classList.contains("hidden") ? openPerspectivePicker() : closePerspectivePicker();
+          return;
+        }
+
+        if (event.key.toLowerCase() === "p" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (!isAppVisible() || inField || currentPerspective !== "swimlanes") return;
+          event.preventDefault();
+          const currentProject = projects.find((p) => String(p.project_id) === selectedProjectID());
+          if (currentProject) openProjectEditModal(currentProject);
           return;
         }
 

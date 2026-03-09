@@ -15,6 +15,8 @@ type Project struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	CreatedBy          int64  `json:"created_by"`
@@ -27,6 +29,8 @@ type ProjectCreateParams struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	GitRepository      string
+	GitBranch          string
 	Notes              string
 	CreatedBy          int64
 }
@@ -35,6 +39,8 @@ type ProjectUpdateParams struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	GitRepository      string
+	GitBranch          string
 	Notes              string
 }
 
@@ -65,9 +71,9 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 		return Project{}, err
 	}
 	result, err := db.Exec(`
-		INSERT INTO projects (prefix, title, description, acceptance_criteria, notes, status, created_by)
-		VALUES (?, ?, ?, ?, ?, 'open', ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.Notes), params.CreatedBy)
+		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)
+	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), params.CreatedBy)
 	if err != nil {
 		return Project{}, err
 	}
@@ -85,7 +91,7 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 
 func ListProjects(db *sql.DB) ([]Project, error) {
 	rows, err := db.Query(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, notes, status, COALESCE(created_by, 0), created_at, updated_at
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, COALESCE(created_by, 0), created_at, updated_at
 		FROM projects
 		ORDER BY created_at, project_id
 	`)
@@ -97,7 +103,7 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 	projects := make([]Project, 0)
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -115,12 +121,12 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 		return GetProjectByID(db, id)
 	}
 	row := db.QueryRow(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, notes, status, COALESCE(created_by, 0), created_at, updated_at
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, COALESCE(created_by, 0), created_at, updated_at
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
 	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -131,12 +137,12 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 
 func GetProjectByID(db *sql.DB, id int64) (Project, error) {
 	row := db.QueryRow(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, notes, status, COALESCE(created_by, 0), created_at, updated_at
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, COALESCE(created_by, 0), created_at, updated_at
 		FROM projects
 		WHERE project_id = ?
 	`, id)
 	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -162,11 +168,31 @@ func UpdateProjectWithParams(db *sql.DB, id int64, params ProjectUpdateParams) (
 	if nextTitle == "" {
 		nextTitle = current.Title
 	}
+	nextDescription := params.Description
+	if strings.TrimSpace(nextDescription) == "" {
+		nextDescription = current.Description
+	}
+	nextAC := params.AcceptanceCriteria
+	if strings.TrimSpace(nextAC) == "" {
+		nextAC = current.AcceptanceCriteria
+	}
+	nextRepo := strings.TrimSpace(params.GitRepository)
+	if nextRepo == "" {
+		nextRepo = current.GitRepository
+	}
+	nextBranch := strings.TrimSpace(params.GitBranch)
+	if nextBranch == "" {
+		nextBranch = current.GitBranch
+	}
+	nextNotes := strings.TrimSpace(params.Notes)
+	if nextNotes == "" {
+		nextNotes = current.Notes
+	}
 	_, err = db.Exec(`
 		UPDATE projects
-		SET title = ?, description = ?, acceptance_criteria = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
-	`, nextTitle, params.Description, params.AcceptanceCriteria, strings.TrimSpace(params.Notes), id)
+	`, nextTitle, nextDescription, nextAC, nextRepo, nextBranch, nextNotes, id)
 	if err != nil {
 		return Project{}, err
 	}
