@@ -26,7 +26,7 @@
       .hidden { display: none !important; }
 
       .login-screen {
-        min-height: calc(100vh - 52px);
+        min-height: 100vh;
         display: grid;
         place-items: center;
         color: #f7f9ff;
@@ -423,7 +423,7 @@
     </style>
   </head>
   <body>
-    <header class="app-head">
+    <header class="app-head hidden">
       <div class="app-head-left">
         <canvas id="pixel-logo" width="320" height="48" title="ticket"></canvas>
       </div>
@@ -582,6 +582,7 @@
       const STAGES = ["design", "develop", "test", "done"];
       const loginScreen = document.getElementById("login-screen");
       const app = document.getElementById("app");
+      const appHead = document.querySelector(".app-head");
       const mainContent = document.getElementById("main-content");
       const newTicketBtn = document.getElementById("new-ticket");
       const loginStatus = document.getElementById("login-status");
@@ -1604,6 +1605,7 @@
       }
 
       function showLogin(message = "") {
+        appHead.classList.add("hidden");
         loginScreen.classList.remove("hidden");
         mainContent.classList.add("hidden");
         newTicketBtn.classList.add("hidden");
@@ -1618,6 +1620,7 @@
         }
       }
       function showApp(username = "") {
+        appHead.classList.remove("hidden");
         currentUsername = username;
         loginScreen.classList.add("hidden");
         mainContent.classList.remove("hidden");
