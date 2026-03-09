@@ -694,6 +694,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		payload := map[string]any{"status": status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
 			payload["ticket"] = ticket
+			if status == "ASSIGNED" {
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+			}
 		}
 		writeJSON(w, http.StatusOK, payload)
 	}
@@ -754,6 +757,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
@@ -792,6 +796,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 							"key":        ticket.Key,
 							"comment_id": comment.ID,
 						}, user.ID)
+						notify("ticket_updated", ticket.ProjectID, ticket.ID)
 					}
 					writeJSON(w, http.StatusCreated, comment)
 				default:
@@ -931,6 +936,16 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
+				currentTicket, err := store.GetTicket(db, id)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username)
 				stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
@@ -1019,6 +1034,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			notify("ticket_updated", dependencyPayload.ProjectID, dependencyPayload.TicketID)
 			writeJSON(w, http.StatusCreated, dependency)
 		case http.MethodDelete:
 			var projectID, ticketID, dependsOn int64
@@ -1051,6 +1067,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			notify("ticket_updated", projectID, ticketID)
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1122,6 +1139,90 @@ func resolveLifecycleRequest(status, stage, state string) (string, string, error
 		return stage, state, nil
 	}
 	return store.ParseLifecycleStatus(status)
+}
+
+func autoProgressTicketLifecycle(payload ticketRequest, current store.Ticket, actorUsername string) ticketRequest {
+	if hasExplicitLifecycleChange(payload, current) {
+		return payload
+	}
+	if !hasMeaningfulTicketContentChange(payload, current) {
+		return payload
+	}
+	nextAssignee := strings.TrimSpace(payload.Assignee)
+	if nextAssignee == "" {
+		nextAssignee = strings.TrimSpace(current.Assignee)
+	}
+	switch current.Stage {
+	case store.StageDesign:
+		payload.Stage = store.StageDevelop
+		payload.State = store.StateActive
+		if nextAssignee == "" {
+			payload.Assignee = strings.TrimSpace(actorUsername)
+		}
+	case store.StageDevelop:
+		payload.Stage = store.StageDevelop
+		payload.State = store.StateActive
+		if nextAssignee == "" {
+			payload.Assignee = strings.TrimSpace(actorUsername)
+		}
+		if strings.TrimSpace(payload.EstimateComplete) != "" && strings.TrimSpace(payload.EstimateComplete) != strings.TrimSpace(current.EstimateComplete) {
+			payload.Stage = store.StageTest
+			payload.State = store.StateActive
+		}
+	case store.StageTest:
+		payload.Stage = store.StageTest
+		payload.State = store.StateActive
+		if nextAssignee == "" {
+			payload.Assignee = strings.TrimSpace(actorUsername)
+		}
+	}
+	return payload
+}
+
+func hasExplicitLifecycleChange(payload ticketRequest, current store.Ticket) bool {
+	if strings.TrimSpace(payload.Status) != "" {
+		return true
+	}
+	stage := strings.TrimSpace(strings.ToLower(payload.Stage))
+	state := strings.TrimSpace(strings.ToLower(payload.State))
+	if stage == "" && state == "" {
+		return false
+	}
+	return stage != current.Stage || state != current.State
+}
+
+func hasMeaningfulTicketContentChange(payload ticketRequest, current store.Ticket) bool {
+	if payload.Title != current.Title {
+		return true
+	}
+	if payload.Description != current.Description {
+		return true
+	}
+	if payload.AcceptanceCriteria != current.AcceptanceCriteria {
+		return true
+	}
+	if payload.Priority != current.Priority {
+		return true
+	}
+	if payload.Order != current.Order {
+		return true
+	}
+	if payload.EstimateEffort != current.EstimateEffort {
+		return true
+	}
+	if strings.TrimSpace(payload.EstimateComplete) != strings.TrimSpace(current.EstimateComplete) {
+		return true
+	}
+	if strings.TrimSpace(payload.Assignee) != strings.TrimSpace(current.Assignee) {
+		return true
+	}
+	if (payload.ParentID == nil) != (current.ParentID == nil) {
+		return true
+	}
+	if payload.ParentID != nil && current.ParentID != nil && *payload.ParentID != *current.ParentID {
+		return true
+	}
+	return false
 }
 
 func userFromRequest(db *sql.DB, r *http.Request) (store.User, error) {

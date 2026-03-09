@@ -1401,6 +1401,7 @@
       let realtimeSyncTimer = null;
       let wsHealthy = false;
       let lastWSMessageAt = 0;
+      let lastTicketSyncAt = 0;
       let ticketLoadSeq = 0;
       let draft = null;
       let autosaveTimer = null;
@@ -1426,8 +1427,9 @@
         if (realtimeSyncTimer) return;
         realtimeSyncTimer = setInterval(async () => {
           if (!isAppVisible()) return;
+          const staleData = (Date.now() - lastTicketSyncAt) > 10000;
           const staleWS = (Date.now() - lastWSMessageAt) > 4000;
-          if (!wsHealthy || staleWS) {
+          if (!wsHealthy || staleWS || staleData) {
             try { await loadTickets(); } catch {}
           }
         }, 2000);
@@ -1508,6 +1510,7 @@
           const result = await call(`/api/projects/${projectID}/tickets?_=${cacheBust}`, { headers: headers() }) || [];
           if (seq !== ticketLoadSeq) return;
           tickets = result;
+          lastTicketSyncAt = Date.now();
         } catch (error) {
           if (String(error.message || "").toLowerCase().includes("project not found")) {
             setSelectedProjectID("");
@@ -1838,6 +1841,7 @@
           if (!isAppVisible()) return;
           wsHealthy = true;
           lastWSMessageAt = Date.now();
+          let shouldRefreshBoard = true;
           // Parse event and drive status animator
           try {
             const msg = JSON.parse(evt.data);
@@ -1852,7 +1856,10 @@
               };
               window.statusAnimator.spawn(msg, counts[msg.type] || 2);
             }
+            if (msg.type === "connected") shouldRefreshBoard = false;
+            if (msg.project_id && String(msg.project_id) !== selectedProjectID()) shouldRefreshBoard = false;
           } catch (_) { /* non-JSON ping — ignore */ }
+          if (!shouldRefreshBoard) return;
           try { await loadTickets(); } catch {}
         };
         socket.onclose = () => {

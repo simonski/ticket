@@ -934,6 +934,66 @@ func TestAPIMissingAuth(t *testing.T) {
 	}
 }
 
+func TestAutoProgressTicketLifecycleDesignToDevelop(t *testing.T) {
+	current := store.Ticket{
+		Stage:       store.StageDesign,
+		State:       store.StateIdle,
+		Title:       "Old",
+		Description: "Desc",
+	}
+	payload := ticketRequest{
+		Title:       "New",
+		Description: "Desc",
+	}
+	next := autoProgressTicketLifecycle(payload, current, "alice")
+	if next.Stage != store.StageDevelop || next.State != store.StateActive {
+		t.Fatalf("expected develop/active, got %s/%s", next.Stage, next.State)
+	}
+	if next.Assignee != "alice" {
+		t.Fatalf("expected assignee alice, got %q", next.Assignee)
+	}
+}
+
+func TestAutoProgressTicketLifecycleDevelopToTestOnEstimateComplete(t *testing.T) {
+	current := store.Ticket{
+		Stage:            store.StageDevelop,
+		State:            store.StateActive,
+		Title:            "Task",
+		Description:      "Desc",
+		EstimateComplete: "",
+		Assignee:         "bob",
+	}
+	payload := ticketRequest{
+		Title:            "Task updated",
+		Description:      "Desc",
+		EstimateComplete: "2026-03-10T10:00:00Z",
+		Assignee:         "bob",
+	}
+	next := autoProgressTicketLifecycle(payload, current, "bob")
+	if next.Stage != store.StageTest || next.State != store.StateActive {
+		t.Fatalf("expected test/active, got %s/%s", next.Stage, next.State)
+	}
+}
+
+func TestAutoProgressTicketLifecycleRespectsExplicitLifecycle(t *testing.T) {
+	current := store.Ticket{
+		Stage:       store.StageDesign,
+		State:       store.StateIdle,
+		Title:       "Old",
+		Description: "Desc",
+	}
+	payload := ticketRequest{
+		Title:       "New",
+		Description: "Desc",
+		Stage:       store.StageDone,
+		State:       store.StateSuccess,
+	}
+	next := autoProgressTicketLifecycle(payload, current, "alice")
+	if next.Stage != store.StageDone || next.State != store.StateSuccess {
+		t.Fatalf("expected explicit done/success to be preserved, got %s/%s", next.Stage, next.State)
+	}
+}
+
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 
