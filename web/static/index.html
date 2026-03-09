@@ -113,8 +113,8 @@
         height: 52px;
       }
       .app-head-left { display: flex; align-items: center; gap: 0.2rem; flex-shrink: 0; }
-      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: #b71c1c; }
-      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: #b71c1c; }
+      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
+      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: auto; }
 
@@ -977,8 +977,8 @@
         }
 
         let logicalW = 64;
-        let bg = { h: 0, s: 72, l: 41 };
-        let bgCSS = "rgb(183, 28, 28)";
+        let bg = { h: 35, s: 22, l: 88 };
+        let bgCSS = "rgb(236, 229, 217)";
         const particles = [];
         let seed = 0;
         let lastActivityMs = performance.now();
@@ -991,8 +991,9 @@
             logicalW = targetW;
             painter.ctx.canvas.width = logicalW;
           }
-          bgCSS = "rgb(183, 28, 28)";
-          const nums = ["183", "28", "28"];
+          const logoEl = document.getElementById("pixel-logo");
+          bgCSS = resolveVisibleBackgroundColor(logoEl);
+          const nums = bgCSS.match(/\d+/g) || ["236", "229", "217"];
           const [r, g, b] = nums.slice(0, 3).map((n) => Number(n));
           const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
           let h = 0;
