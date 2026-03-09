@@ -198,6 +198,14 @@ ticket logout
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
 
+Top banner behavior in the web UI:
+
+- the left logo is rendered as animated 8x8 pixel glyphs and morphs continuously across `ticket`, `tkt`, and `tket`
+- the `t` glyph does not light bottom-left or bottom-right pixels
+- logo hue/luminance transitions use perlin-style noise and never hard-switch between words
+- the center banner area renders an animated 8-bit activity stream using websocket event activity
+- login/register pages use the same animated logo renderer in place of a static `ticket` heading and do not open websocket activity streams
+
 ## Typical Workflow
 
 Most teams use `ticket` in this order:

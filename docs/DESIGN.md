@@ -550,6 +550,12 @@ Requirements:
 - project switcher
 - status-based board view
 - item detail view with history and comments
+- animated top banner:
+  - left logo is an 8x8-per-character pixel morph between `ticket`, `tkt`, and `tket`
+  - morphing is continuous (no hard word switch) and uses perlin-style noise for hue/luminance drift
+  - renderer uses a Three.js full-rectangle pass with nearest-neighbor pixel sampling
+  - top-mid status strip uses a Three.js full-width/full-height rectangle and animated 8-bit activity pixels driven by websocket events
+  - status pixel colours come from event classifications (`edit`, `create`, `status`, `done`, `bug`) with bug-biased red tones
 
 The web UI should make these activities easy:
 
