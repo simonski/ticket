@@ -1532,6 +1532,12 @@
         return "state-idle";
       }
 
+      function ticketModifiedEpoch(ticket) {
+        const raw = ticket.updated_at || ticket.last_modified || ticket.modified_at || ticket.created_at || "";
+        const parsed = Date.parse(raw);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      }
+
       function renderBoard() {
         if (typeof setFocusedCard === "function") setFocusedCard(null);
         boardEl.innerHTML = "";
@@ -1539,7 +1545,9 @@
           const lane = document.createElement("section");
           lane.className = "lane";
           lane.dataset.stage = stage;
-          const laneTickets = tickets.filter((ticket) => ticket.stage === stage);
+          const laneTickets = tickets
+            .filter((ticket) => ticket.stage === stage)
+            .sort((a, b) => ticketModifiedEpoch(b) - ticketModifiedEpoch(a) || (b.ticket_id || 0) - (a.ticket_id || 0));
           lane.innerHTML = `<h3>${stage}</h3><div class="muted">${laneTickets.length} tickets</div>`;
           lane.addEventListener("dragover", (event) => {
             event.preventDefault();

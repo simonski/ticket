@@ -572,6 +572,7 @@ The web UI should make these activities easy:
 - inspect history and comments
 - switch perspectives with `V` via a popup selector:
   - `swimlanes`: current lane board
+    - cards are sorted by last-modified timestamp descending (newest first)
   - `tv : ticketvision`: Three.js project graph laid out left-to-right as project → epics → stories
 - keyboard actions on focused tickets:
   - `D`: prompt `Archive this ticket?` and archive on confirmation
