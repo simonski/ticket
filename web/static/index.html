@@ -112,8 +112,28 @@
         border-bottom: 1px solid var(--line);
         height: 52px;
       }
-      .app-head-left { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
-      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); margin-left: -1px; }
+      .app-head-left { position: relative; display: flex; align-items: center; gap: 0; flex-shrink: 0; padding-right: 2px; }
+      .app-head-left::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 6px;
+        bottom: 6px;
+        width: 1px;
+        background: rgba(28, 35, 51, 0.55);
+      }
+      .app-head-mid  { position: relative; flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); margin-left: 0; }
+      .app-head-mid::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 6px;
+        bottom: 6px;
+        width: 1px;
+        background: rgba(28, 35, 51, 0.55);
+        pointer-events: none;
+        z-index: 1;
+      }
       #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: auto; }
