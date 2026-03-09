@@ -483,6 +483,9 @@ Use it for:
 1. capturing work during discovery and delivery
 2. reviewing related items side by side
 3. browsing task details and dependencies without switching commands
+4. switching perspectives with `V`:
+   - `swimlanes`: stage lanes for the current project
+   - `tv : ticketvision`: a left-to-right project → epics → stories graph view
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
 

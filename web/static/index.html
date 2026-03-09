@@ -25,7 +25,7 @@
       .hidden { display: none !important; }
 
       .login-screen {
-        min-height: 100%;
+        min-height: calc(100vh - 52px);
         display: grid;
         place-items: center;
         color: #f7f9ff;
@@ -94,7 +94,7 @@
       }
 
       .app {
-        min-height: 100%;
+        min-height: 0;
         background: #ece5d9;
         color: var(--ink);
       }
@@ -192,13 +192,52 @@
       }
       .profile-menu-item:hover { background: #f0ede6; }
       .profile-menu-item.danger { color: #c62828; }
+      .main-content {
+        min-height: calc(100vh - 52px);
+        position: relative;
+      }
+      .perspective-stage {
+        position: relative;
+        min-height: calc(100vh - 52px);
+        overflow: hidden;
+      }
+      .perspective-view {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .perspective-view.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .perspective-view.fading-out {
+        opacity: 0;
+        transition: opacity 220ms ease;
+      }
+      .perspective-view.fading-in {
+        animation: perspective-fade-in 240ms ease forwards;
+      }
+      @keyframes perspective-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
       .board {
-        height: calc(100vh - 52px);
+        height: 100%;
         padding: 0.75rem;
         display: grid;
         gap: 0.7rem;
         grid-template-columns: repeat(4, minmax(240px, 1fr));
         overflow: auto;
+      }
+      #view-tv {
+        background:
+          radial-gradient(circle at 20% 18%, #ffffff 0%, rgba(255,255,255,0.86) 38%, #ece5d9 100%);
+      }
+      #tv-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
       }
       .lane {
         background: var(--lane);
@@ -282,6 +321,32 @@
       .search-result:hover, .search-result.active { background: #f0ede6; }
       .search-result-title { flex: 1; }
       .search-result-meta { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+      .perspective-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: transparent;
+      }
+      .perspective-popup {
+        position: fixed;
+        top: 3.5rem;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(360px, 92vw);
+        background: #fffef9;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.22);
+        overflow: hidden;
+      }
+      .perspective-item {
+        padding: 0.65rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid var(--line);
+      }
+      .perspective-item:last-child { border-bottom: none; }
+      .perspective-item:hover, .perspective-item.active { background: #f0ede6; }
+      .perspective-kicker { font-size: 0.82rem; color: var(--muted); }
 
       .fab {
         position: fixed;
@@ -318,6 +383,31 @@
     </style>
   </head>
   <body>
+    <header class="app-head">
+      <div class="app-head-left">
+        <canvas id="pixel-logo" width="320" height="48" title="ticket"></canvas>
+      </div>
+      <div id="app-status" style="display:none;"></div>
+      <div class="app-head-mid">
+        <canvas id="status-canvas"></canvas>
+      </div>
+      <div class="app-head-right">
+        <button class="proj-btn" id="perspective-btn" type="button">swimlanes</button>
+        <div class="proj-dropdown" id="proj-dropdown">
+          <button class="proj-btn" id="proj-btn" type="button">Project</button>
+          <div class="proj-menu hidden" id="proj-menu"></div>
+        </div>
+        <div class="profile-wrap" id="profile-wrap">
+          <div class="avatar" id="profile-avatar" title="Profile">?</div>
+          <div class="profile-menu hidden" id="profile-menu">
+            <div class="profile-menu-item" id="menu-settings">Settings</div>
+            <div class="profile-menu-item" id="menu-profile">Profile</div>
+            <div class="profile-menu-item danger" id="menu-logout">Logout</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
     <section id="login-screen" class="login-screen">
       <div class="login-card">
         <h1 class="login-banner"><canvas id="login-pixel-logo" width="320" height="48" title="ticket"></canvas></h1>
@@ -341,38 +431,36 @@
       </div>
     </section>
 
-    <section id="app" class="app hidden">
-      <header class="app-head">
-        <div class="app-head-left">
-          <canvas id="pixel-logo" width="320" height="48" title="ticket"></canvas>
-        </div>
-        <div id="app-status" style="display:none;"></div>
-        <div class="app-head-mid">
-          <canvas id="status-canvas"></canvas>
-        </div>
-        <div class="app-head-right">
-          <div class="proj-dropdown" id="proj-dropdown">
-            <button class="proj-btn" id="proj-btn" type="button">Project</button>
-            <div class="proj-menu hidden" id="proj-menu"></div>
-          </div>
-          <div class="profile-wrap" id="profile-wrap">
-            <div class="avatar" id="profile-avatar" title="Profile">?</div>
-            <div class="profile-menu hidden" id="profile-menu">
-              <div class="profile-menu-item" id="menu-settings">Settings</div>
-              <div class="profile-menu-item" id="menu-profile">Profile</div>
-              <div class="profile-menu-item danger" id="menu-logout">Logout</div>
-            </div>
-          </div>
-        </div>
-      </header>
-      <main id="board" class="board"></main>
-      <button id="new-ticket" class="fab" title="New Ticket (N)">+</button>
+    <section id="app" class="app">
+      <div id="main-content" class="main-content hidden">
+        <main id="perspective-stage" class="perspective-stage">
+          <section id="view-swimlanes" class="perspective-view active">
+            <div id="board" class="board"></div>
+          </section>
+          <section id="view-tv" class="perspective-view">
+            <canvas id="tv-canvas"></canvas>
+          </section>
+        </main>
+      </div>
+      <button id="new-ticket" class="fab hidden" title="New Ticket (N)">+</button>
     </section>
 
     <div id="search-overlay" class="search-overlay hidden">
       <div class="search-popup">
         <input id="search-input" placeholder="Search tickets…" autocomplete="off" />
         <div id="search-results" class="search-results"></div>
+      </div>
+    </div>
+    <div id="perspective-overlay" class="perspective-overlay hidden">
+      <div class="perspective-popup">
+        <div class="perspective-item active" data-perspective="swimlanes">
+          <div><strong>swimlanes</strong></div>
+          <div class="perspective-kicker">Current board lanes for this project</div>
+        </div>
+        <div class="perspective-item" data-perspective="tv">
+          <div><strong>tv : ticketvision</strong></div>
+          <div class="perspective-kicker">Project → epics → stories force graph</div>
+        </div>
       </div>
     </div>
 
@@ -444,13 +532,24 @@
       const STAGES = ["design", "develop", "test", "done"];
       const loginScreen = document.getElementById("login-screen");
       const app = document.getElementById("app");
+      const mainContent = document.getElementById("main-content");
+      const newTicketBtn = document.getElementById("new-ticket");
       const loginStatus = document.getElementById("login-status");
       const appStatus = document.getElementById("app-status");
       const boardEl = document.getElementById("board");
+      const tvCanvas = document.getElementById("tv-canvas");
+      const viewSwimlanes = document.getElementById("view-swimlanes");
+      const viewTV = document.getElementById("view-tv");
+      const perspectiveBtn = document.getElementById("perspective-btn");
+      const perspectiveOverlay = document.getElementById("perspective-overlay");
       const modalOverlay = document.getElementById("modal-overlay");
       const modalTitle = document.getElementById("modal-title");
       const showRegisterBtn = document.getElementById("show-register");
       const registerForm = document.getElementById("register-form");
+
+      function isAppVisible() {
+        return !mainContent.classList.contains("hidden");
+      }
 
       function perlinHash(x, y) {
         const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
@@ -826,6 +925,228 @@
         setTimeout(initBannerRenderers, 400);
       }
 
+      // ── Perspective selector + TicketVision (Three.js) ────────────────────
+      let currentPerspective = localStorage.getItem("task-perspective") || "swimlanes";
+      const perspectiveViews = { swimlanes: viewSwimlanes, tv: viewTV };
+      const perspectiveItems = Array.from(document.querySelectorAll(".perspective-item"));
+      let perspectiveActiveIdx = 0;
+
+      function syncPerspectiveUI() {
+        perspectiveBtn.textContent = currentPerspective === "tv" ? "tv : ticketvision" : "swimlanes";
+        perspectiveItems.forEach((el) => {
+          el.classList.toggle("active", el.dataset.perspective === currentPerspective);
+        });
+      }
+
+      function activatePerspective(next) {
+        if (!perspectiveViews[next]) return;
+        Object.entries(perspectiveViews).forEach(([name, view]) => {
+          view.classList.toggle("active", name === next);
+          view.classList.remove("fading-out", "fading-in");
+        });
+        currentPerspective = next;
+        localStorage.setItem("task-perspective", currentPerspective);
+        syncPerspectiveUI();
+        if (currentPerspective === "tv") renderTicketVision();
+      }
+
+      function openPerspectivePicker() {
+        syncPerspectiveUI();
+        perspectiveActiveIdx = Math.max(0, perspectiveItems.findIndex((el) => el.dataset.perspective === currentPerspective));
+        perspectiveOverlay.classList.remove("hidden");
+      }
+
+      function closePerspectivePicker() {
+        perspectiveOverlay.classList.add("hidden");
+      }
+
+      function switchPerspective(next) {
+        if (!perspectiveViews[next] || next === currentPerspective) {
+          closePerspectivePicker();
+          return;
+        }
+        const previous = perspectiveViews[currentPerspective];
+        const target = perspectiveViews[next];
+        previous.classList.add("fading-out");
+        setTimeout(() => {
+          previous.classList.remove("active", "fading-out");
+          target.classList.add("active", "fading-in");
+          currentPerspective = next;
+          localStorage.setItem("task-perspective", currentPerspective);
+          syncPerspectiveUI();
+          closePerspectivePicker();
+          if (currentPerspective === "tv") renderTicketVision();
+          setTimeout(() => target.classList.remove("fading-in"), 240);
+        }, 220);
+      }
+
+      perspectiveBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        perspectiveOverlay.classList.contains("hidden") ? openPerspectivePicker() : closePerspectivePicker();
+      });
+      perspectiveOverlay.addEventListener("click", (e) => { if (e.target === perspectiveOverlay) closePerspectivePicker(); });
+      perspectiveItems.forEach((el) => {
+        el.addEventListener("click", () => switchPerspective(el.dataset.perspective));
+      });
+
+      const tvGraph = {
+        initialized: false,
+        scene: null,
+        camera: null,
+        renderer: null,
+        nodes: [],
+        edges: [],
+      };
+
+      function ensureTicketVision() {
+        if (tvGraph.initialized || !window.THREE || !tvCanvas) return;
+        tvGraph.renderer = new window.THREE.WebGLRenderer({ canvas: tvCanvas, alpha: true, antialias: true });
+        tvGraph.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        tvGraph.scene = new window.THREE.Scene();
+        tvGraph.camera = new window.THREE.OrthographicCamera(0, 100, 100, 0, -1000, 1000);
+        tvGraph.initialized = true;
+      }
+
+      function resizeTicketVision() {
+        if (!tvGraph.initialized) return;
+        const rect = tvCanvas.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width));
+        const h = Math.max(1, Math.floor(rect.height));
+        tvGraph.renderer.setSize(w, h, false);
+        tvGraph.camera.left = 0;
+        tvGraph.camera.right = w;
+        tvGraph.camera.top = 0;
+        tvGraph.camera.bottom = h;
+        tvGraph.camera.updateProjectionMatrix();
+      }
+
+      function clearTicketVisionScene() {
+        if (!tvGraph.initialized) return;
+        while (tvGraph.scene.children.length) {
+          tvGraph.scene.remove(tvGraph.scene.children[0]);
+        }
+        tvGraph.nodes = [];
+        tvGraph.edges = [];
+      }
+
+      function createTVNode(id, label, level, color, x, y) {
+        const radius = level === 0 ? 11 : 8;
+        const geom = new window.THREE.CircleGeometry(radius, 16);
+        const mat = new window.THREE.MeshBasicMaterial({ color });
+        const mesh = new window.THREE.Mesh(geom, mat);
+        mesh.position.set(x, y, 0);
+        tvGraph.scene.add(mesh);
+        return { id, label, level, x, y, vx: 0, vy: 0, tx: x, ty: y, mesh };
+      }
+
+      function renderTicketVision() {
+        ensureTicketVision();
+        if (!tvGraph.initialized || currentPerspective !== "tv") return;
+        resizeTicketVision();
+        clearTicketVisionScene();
+
+        const w = Math.max(1, tvGraph.camera.right);
+        const h = Math.max(1, tvGraph.camera.bottom);
+        const currentProject = projects.find((p) => String(p.project_id) === selectedProjectID());
+        if (!currentProject) {
+          tvGraph.renderer.render(tvGraph.scene, tvGraph.camera);
+          return;
+        }
+
+        const epics = tickets.filter((t) => t.type === "epic");
+        const stories = tickets.filter((t) => t.type !== "epic");
+        const epicByID = new Map(epics.map((e) => [String(e.ticket_id), e]));
+        const root = createTVNode(`project-${currentProject.project_id}`, currentProject.title, 0, 0x116466, w * 0.14, h * 0.5);
+        tvGraph.nodes.push(root);
+
+        const epicNodes = epics.map((epic, i) => {
+          const y = ((i + 1) / (epics.length + 1 || 2)) * h;
+          const node = createTVNode(`epic-${epic.ticket_id}`, epic.title, 1, 0x0ea5e9, w * 0.46, y);
+          tvGraph.nodes.push(node);
+          tvGraph.edges.push([root.id, node.id]);
+          return node;
+        });
+        const epicNodeByID = new Map(epicNodes.map((n) => [n.id.replace("epic-", ""), n]));
+
+        stories.forEach((story, i) => {
+          const y = ((i + 1) / (stories.length + 1 || 2)) * h;
+          const node = createTVNode(`story-${story.ticket_id}`, story.title, 2, story.type === "bug" ? 0xd43b2a : 0x916b3b, w * 0.8, y);
+          tvGraph.nodes.push(node);
+          const parentEpic = story.parent_id ? epicByID.get(String(story.parent_id)) : null;
+          const parentNode = parentEpic ? epicNodeByID.get(String(parentEpic.ticket_id)) : root;
+          if (parentNode) tvGraph.edges.push([parentNode.id, node.id]);
+        });
+
+        tvGraph.edgeSegments = tvGraph.edges.map(([a, b]) => {
+          const geom = new window.THREE.BufferGeometry().setFromPoints([
+            new window.THREE.Vector3(0, 0, -1),
+            new window.THREE.Vector3(0, 0, -1),
+          ]);
+          const line = new window.THREE.Line(geom, new window.THREE.LineBasicMaterial({ color: 0x9fa8b7, transparent: true, opacity: 0.65 }));
+          tvGraph.scene.add(line);
+          return { a, b, line };
+        });
+
+        function step() {
+          if (currentPerspective !== "tv" || !isAppVisible()) return;
+          const byID = new Map(tvGraph.nodes.map((n) => [n.id, n]));
+          for (let i = 0; i < tvGraph.nodes.length; i++) {
+            const a = tvGraph.nodes[i];
+            for (let j = i + 1; j < tvGraph.nodes.length; j++) {
+              const b = tvGraph.nodes[j];
+              const dx = a.x - b.x;
+              const dy = a.y - b.y;
+              const d2 = Math.max(80, dx * dx + dy * dy);
+              const rep = 680 / d2;
+              a.vx += (dx / Math.sqrt(d2)) * rep;
+              a.vy += (dy / Math.sqrt(d2)) * rep;
+              b.vx -= (dx / Math.sqrt(d2)) * rep;
+              b.vy -= (dy / Math.sqrt(d2)) * rep;
+            }
+          }
+          for (const [aID, bID] of tvGraph.edges) {
+            const a = byID.get(aID);
+            const b = byID.get(bID);
+            if (!a || !b) continue;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            a.vx += dx * 0.0008;
+            a.vy += dy * 0.0008;
+            b.vx -= dx * 0.0008;
+            b.vy -= dy * 0.0008;
+          }
+          for (const n of tvGraph.nodes) {
+            const targetX = n.level === 0 ? w * 0.14 : n.level === 1 ? w * 0.46 : w * 0.8;
+            n.vx += (targetX - n.x) * 0.008;
+            n.vy += (n.ty - n.y) * 0.008;
+            n.vx *= 0.88;
+            n.vy *= 0.88;
+            n.x += n.vx;
+            n.y += n.vy;
+            n.mesh.position.set(n.x, n.y, 0);
+          }
+          for (const seg of tvGraph.edgeSegments) {
+            const a = byID.get(seg.a);
+            const b = byID.get(seg.b);
+            if (!a || !b) continue;
+            const pos = seg.line.geometry.attributes.position.array;
+            pos[0] = a.x; pos[1] = a.y; pos[2] = -1;
+            pos[3] = b.x; pos[4] = b.y; pos[5] = -1;
+            seg.line.geometry.attributes.position.needsUpdate = true;
+          }
+          tvGraph.renderer.render(tvGraph.scene, tvGraph.camera);
+          requestAnimationFrame(step);
+        }
+
+        requestAnimationFrame(step);
+      }
+
+      window.addEventListener("resize", () => {
+        if (currentPerspective === "tv") renderTicketVision();
+      });
+
+      activatePerspective(currentPerspective);
+
       // ── Project dropdown (custom, not native select) ──────────────────────
       let currentUsername = "";
       let recentProjects = JSON.parse(localStorage.getItem("recent-projects") || "[]");
@@ -941,7 +1262,7 @@
       });
 
       // Close dropdowns when clicking outside
-      document.addEventListener("click", () => { closeProjMenu(); closeProfileMenu(); });
+      document.addEventListener("click", () => { closeProjMenu(); closeProfileMenu(); closePerspectivePicker(); });
       document.getElementById("proj-dropdown").addEventListener("click", (e) => e.stopPropagation());
       document.getElementById("profile-wrap").addEventListener("click", (e) => e.stopPropagation());
 
@@ -971,9 +1292,13 @@
 
       function showLogin(message = "") {
         loginScreen.classList.remove("hidden");
-        app.classList.add("hidden");
+        mainContent.classList.add("hidden");
+        newTicketBtn.classList.add("hidden");
         const cleaned = String(message || "").replace(/logged out/ig, "").replace(/please log in/ig, "").trim();
         loginStatus.textContent = cleaned;
+        profileAvatar.textContent = "?";
+        profileAvatar.title = "Profile";
+        projBtn.textContent = "Project";
         const userInput = document.getElementById("login-user");
         if (userInput) {
           requestAnimationFrame(() => userInput.focus());
@@ -982,11 +1307,13 @@
       function showApp(username = "") {
         currentUsername = username;
         loginScreen.classList.add("hidden");
-        app.classList.remove("hidden");
+        mainContent.classList.remove("hidden");
+        newTicketBtn.classList.remove("hidden");
         appStatus.textContent = "";
         const initials = (username || "?").slice(0, 2).toUpperCase();
         profileAvatar.textContent = initials;
         profileAvatar.title = username || "Profile";
+        activatePerspective(currentPerspective);
       }
 
       function canRegister(enabled) {
@@ -1025,6 +1352,7 @@
         if (!projectID) {
           tickets = [];
           renderBoard();
+          renderTicketVision();
           return;
         }
         try {
@@ -1035,11 +1363,13 @@
             await loadProjects();
             tickets = [];
             renderBoard();
+            renderTicketVision();
             return;
           }
           throw error;
         }
         renderBoard();
+        renderTicketVision();
       }
 
       function stateColorClass(state) {
@@ -1336,7 +1666,7 @@
         const protocol = location.protocol === "https:" ? "wss" : "ws";
         socket = new WebSocket(`${protocol}://${location.host}/api/ws`);
         socket.onmessage = async (evt) => {
-          if (app.classList.contains("hidden")) return;
+          if (!isAppVisible()) return;
           // Parse event and drive status animator
           try {
             const msg = JSON.parse(evt.data);
@@ -1545,8 +1875,31 @@
         }
         lastShiftTime = 0;
 
+        if (!perspectiveOverlay.classList.contains("hidden")) {
+          if (event.key === "Escape") { closePerspectivePicker(); return; }
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            perspectiveActiveIdx = Math.min(perspectiveItems.length - 1, perspectiveActiveIdx + 1);
+            perspectiveItems.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
+            return;
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            perspectiveActiveIdx = Math.max(0, perspectiveActiveIdx - 1);
+            perspectiveItems.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            const item = perspectiveItems[perspectiveActiveIdx];
+            if (item) switchPerspective(item.dataset.perspective);
+            return;
+          }
+        }
+
         if (event.key === "Escape") {
           if (!searchOverlay.classList.contains("hidden")) { closeSearch(); return; }
+          if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
           if (!modalOverlay.classList.contains("hidden")) { closeModal(); return; }
         }
@@ -1557,11 +1910,19 @@
         if (event.key.toLowerCase() === "n" && !event.metaKey && !event.ctrlKey && !event.altKey) {
           if (inField) return;
           event.preventDefault();
-          if (!app.classList.contains("hidden")) openNew();
+          if (isAppVisible()) openNew();
+          return;
+        }
+
+        if (event.key.toLowerCase() === "v" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (!isAppVisible() || inField) return;
+          event.preventDefault();
+          perspectiveOverlay.classList.contains("hidden") ? openPerspectivePicker() : closePerspectivePicker();
           return;
         }
 
         if (modalOpen || inField) return;
+        if (currentPerspective !== "swimlanes") return;
 
         if (event.key === "Tab") {
           event.preventDefault();
