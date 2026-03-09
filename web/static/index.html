@@ -1099,9 +1099,10 @@
         return "idle";
       }
 
-      async function moveTicketToStage(id, stage) {
+      async function moveTicketToStage(id, stage, recordUndo = true) {
         const ticket = tickets.find((item) => String(item.ticket_id) === String(id));
         if (!ticket || ticket.stage === stage) return;
+        const previousStage = ticket.stage;
         const payload = {
           title: ticket.title,
           description: ticket.description,
@@ -1117,6 +1118,73 @@
         };
         await call(`/api/tickets/${ticket.ticket_id}`, { method: "PUT", headers: headers(true), body: JSON.stringify(payload) });
         await loadTickets();
+        if (recordUndo) {
+          pushUndoAction(`move ${ticket.key || "#" + ticket.ticket_id} to ${stage}`, async () => {
+            await moveTicketToStage(ticket.ticket_id, previousStage, false);
+          });
+        }
+      }
+
+      const undoStack = [];
+      let undoInProgress = false;
+
+      function pushUndoAction(label, run) {
+        if (undoInProgress) return;
+        undoStack.push({ label, run });
+        if (undoStack.length > 50) undoStack.shift();
+      }
+
+      async function undoLastAction() {
+        const action = undoStack.pop();
+        if (!action) {
+          appStatus.textContent = "Nothing to undo.";
+          return;
+        }
+        undoInProgress = true;
+        try {
+          await action.run();
+          appStatus.textContent = `Undid: ${action.label}`;
+        } catch (err) {
+          appStatus.textContent = `Undo failed: ${err.message}`;
+        } finally {
+          undoInProgress = false;
+        }
+      }
+
+      async function setTicketArchivedByID(id, archived, recordUndo = true) {
+        const ticket = tickets.find((item) => String(item.ticket_id) === String(id));
+        if (!ticket) return;
+        if (Boolean(ticket.archived) === Boolean(archived)) return;
+        const endpoint = archived ? "archive" : "unarchive";
+        const updated = await call(`/api/tickets/${ticket.ticket_id}/${endpoint}`, { method: "POST", headers: headers() });
+        if (draft && draft.ticket && String(draft.ticket.ticket_id) === String(ticket.ticket_id)) {
+          draft.ticket = updated;
+          setModalValues(updated);
+        }
+        await loadTickets();
+        if (recordUndo) {
+          pushUndoAction(`${archived ? "archive" : "unarchive"} ${ticket.key || "#" + ticket.ticket_id}`, async () => {
+            await setTicketArchivedByID(ticket.ticket_id, !archived, false);
+          });
+        }
+      }
+
+      async function setTicketOpenByID(id, open, recordUndo = true) {
+        const ticket = tickets.find((item) => String(item.ticket_id) === String(id));
+        if (!ticket) return;
+        if (Boolean(ticket.open) === Boolean(open)) return;
+        const endpoint = open ? "open" : "close";
+        const updated = await call(`/api/tickets/${ticket.ticket_id}/${endpoint}`, { method: "POST", headers: headers() });
+        if (draft && draft.ticket && String(draft.ticket.ticket_id) === String(ticket.ticket_id)) {
+          draft.ticket = updated;
+          setModalValues(updated);
+        }
+        await loadTickets();
+        if (recordUndo) {
+          pushUndoAction(`${open ? "open" : "close"} ${ticket.key || "#" + ticket.ticket_id}`, async () => {
+            await setTicketOpenByID(ticket.ticket_id, !open, false);
+          });
+        }
       }
 
       const projModalOverlay = document.getElementById("proj-modal-overlay");
@@ -1358,20 +1426,14 @@
 
       document.getElementById("ticket-close-open").addEventListener("click", async () => {
         if (!draft || !draft.ticket) return;
-        const next = draft.ticket.open === false ? "open" : "close";
-        const updated = await call(`/api/tickets/${draft.ticket.ticket_id}/${next}`, { method: "POST", headers: headers() });
-        draft.ticket = updated;
-        setModalValues(updated);
-        await loadTickets();
+        const open = draft.ticket.open === false;
+        await setTicketOpenByID(draft.ticket.ticket_id, open, true);
       });
 
       document.getElementById("ticket-archive").addEventListener("click", async () => {
         if (!draft || !draft.ticket) return;
-        const next = draft.ticket.archived ? "unarchive" : "archive";
-        const updated = await call(`/api/tickets/${draft.ticket.ticket_id}/${next}`, { method: "POST", headers: headers() });
-        draft.ticket = updated;
-        setModalValues(updated);
-        await loadTickets();
+        const archived = !draft.ticket.archived;
+        await setTicketArchivedByID(draft.ticket.ticket_id, archived, true);
       });
 
       ["ticket-title", "ticket-description", "ticket-type", "ticket-stage", "ticket-state"].forEach((id) => {
@@ -1515,8 +1577,23 @@
         }
 
         const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
-        if (arrowKeys.includes(event.key) || event.key.toLowerCase() === "e" || event.key === "Enter") {
+        if (arrowKeys.includes(event.key) || ["e", "d", "u"].includes(event.key.toLowerCase()) || event.key === "Enter") {
           event.preventDefault();
+        }
+
+        if (event.key.toLowerCase() === "u") {
+          undoLastAction();
+          return;
+        }
+
+        if (event.key.toLowerCase() === "d") {
+          if (!focusedCard) return;
+          const id = focusedCard.dataset.ticketId;
+          const t = tickets.find((x) => String(x.ticket_id) === id);
+          if (!t || t.archived) return;
+          if (!confirm("Archive this ticket?")) return;
+          setTicketArchivedByID(t.ticket_id, true, true);
+          return;
         }
 
         if (event.key.toLowerCase() === "e" || event.key === "Enter") {
@@ -1539,7 +1616,7 @@
             const newStageIdx = event.key === "ArrowLeft" ? stageIdx - 1 : stageIdx + 1;
             if (newStageIdx < 0 || newStageIdx >= STAGES.length) return;
             const newStage = STAGES[newStageIdx];
-            moveTicketToStage(id, newStage).then(() => {
+            moveTicketToStage(id, newStage, true).then(() => {
               const card = document.querySelector(`article.ticket[data-ticket-id="${id}"]`);
               if (card) setFocusedCard(card);
             });

@@ -570,6 +570,9 @@ The web UI should make these activities easy:
 - view hierarchy
 - manage status on a board
 - inspect history and comments
+- keyboard actions on focused tickets:
+  - `D`: prompt `Archive this ticket?` and archive on confirmation
+  - `U`: undo the most recent ticket action initiated in the current web session
 
 ## Persistence And Architecture
 

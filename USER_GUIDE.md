@@ -486,6 +486,11 @@ Use it for:
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
 
+Keyboard shortcuts in the board view:
+
+- `D` on a focused ticket prompts `Archive this ticket?`; choose `OK` to archive
+- `U` undoes the most recent ticket action you initiated in the current browser session
+
 ## Command Reference
 
 ```bash
