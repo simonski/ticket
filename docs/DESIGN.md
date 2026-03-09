@@ -299,6 +299,12 @@ The CLI must resolve credentials from `-username` and `-password` first, then `T
 
 The CLI must resolve the server URL from `-url` first, then `TICKET_SERVER`, then saved config, and finally default to `http://localhost:8080`.
 
+`ticket config` must support:
+
+- `ticket config ls|list` to print local config keys and values
+- `ticket config rm|delete <key>` to clear a local config key
+- supported removable keys: `server`, `username`, `current_project`, `current_epic_id`
+
 The CLI must expose `ticket version`, which prints the semantic version embedded into the binary at build time.
 
 `ticket init` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.

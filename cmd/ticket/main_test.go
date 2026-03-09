@@ -31,6 +31,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"USAGE",
 		"CLIENT COMMANDS",
 		"ADMIN COMMANDS",
+		"config",
 		"init",
 		"server",
 		"version",
@@ -64,6 +65,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  clone",
 		"  comment",
 		"  complete",
+		"  config",
 		"  count",
 		"  design",
 		"  dependency",
@@ -335,6 +337,19 @@ func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("user help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestRenderConfigHelpIncludesListAndDelete(t *testing.T) {
+	help := renderCommandHelp("config")
+	for _, want := range []string{
+		"ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
+		"ticket config ls",
+		"current_project",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("config help missing %q:\n%s", want, help)
 		}
 	}
 }
@@ -1916,6 +1931,37 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	})
 	if !strings.Contains(configOutput, "http://example.test") {
 		t.Fatalf("config output = %q", configOutput)
+	}
+
+	if err := run([]string{"config", "ls"}); err != nil {
+		t.Fatalf("config ls error = %v", err)
+	}
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"config", "ls"}); err != nil {
+			t.Fatalf("config ls error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"server=http://example.test",
+		"username=",
+		"current_project=",
+		"current_epic_id=",
+	} {
+		if !strings.Contains(listOutput, want) {
+			t.Fatalf("config ls output missing %q:\n%s", want, listOutput)
+		}
+	}
+
+	if err := run([]string{"config", "rm", "server"}); err != nil {
+		t.Fatalf("config rm error = %v", err)
+	}
+	clearedOutput := captureStdout(t, func() {
+		if err := run([]string{"config", "get", "server"}); err != nil {
+			t.Fatalf("config get error = %v", err)
+		}
+	})
+	if !strings.Contains(clearedOutput, "http://localhost:8080") {
+		t.Fatalf("config get output after delete = %q", clearedOutput)
 	}
 }
 

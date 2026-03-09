@@ -146,6 +146,21 @@ ticket status
 
 `ticket status` always prints the current effective configuration first, then performs a mode-appropriate connectivity check.
 
+Inspect or clear local CLI config keys:
+
+```bash
+ticket config ls
+ticket config rm server
+ticket config delete current_project
+```
+
+Supported local keys are:
+
+- `server`
+- `username`
+- `current_project`
+- `current_epic_id`
+
 In REMOTE mode it prints:
 
 - `mode: remote`
@@ -481,6 +496,8 @@ ticket version
 ticket register --username <name> --password <password>
 ticket login --username <name> --password <password>
 ticket status
+ticket config ls
+ticket config rm server
 ticket logout
 
 ticket user create --username <name> --password <password>

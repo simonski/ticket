@@ -382,9 +382,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket user create --username alice --password secret",
 	},
 	"config": {
-		usage:   "ticket config <set|get|registration-enable|registration-disable> [key] [value]",
-		details: []string{"Local config supports `set/get server`.", "Registration controls are server-backed and require admin privileges in remote mode."},
-		example: "ticket config registration-disable",
+		usage:   "ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
+		details: []string{"Local config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges in remote mode."},
+		example: "ticket config ls",
 	},
 }
 
@@ -3272,7 +3272,7 @@ func createTicket(opts ticketCreateOptions) error {
 
 func runConfig(args []string) error {
 	if len(args) < 1 {
-		return errors.New("usage: ticket config <set|get|registration-enable|registration-disable> [key] [value]")
+		return errors.New("usage: ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -3342,6 +3342,36 @@ func runConfig(args []string) error {
 		default:
 			return fmt.Errorf("unknown config key %q", args[1])
 		}
+	case "ls", "list":
+		if len(args) != 1 {
+			return errors.New("usage: ticket config ls")
+		}
+		fmt.Printf("server=%s\n", config.ResolveServerURL(cfg))
+		fmt.Printf("username=%s\n", cfg.Username)
+		fmt.Printf("current_project=%s\n", cfg.CurrentProject)
+		fmt.Printf("current_epic_id=%d\n", cfg.CurrentEpicID)
+		return nil
+	case "rm", "delete":
+		if len(args) != 2 {
+			return errors.New("usage: ticket config rm|delete <key>")
+		}
+		switch args[1] {
+		case "server":
+			cfg.ServerURL = ""
+		case "username":
+			cfg.Username = ""
+		case "current_project":
+			cfg.CurrentProject = ""
+		case "current_epic_id":
+			cfg.CurrentEpicID = 0
+		default:
+			return fmt.Errorf("unknown config key %q", args[1])
+		}
+		if err := config.Save(cfg); err != nil {
+			return err
+		}
+		fmt.Printf("deleted %s\n", args[1])
+		return nil
 	default:
 		return fmt.Errorf("unknown config action %q", args[0])
 	}
@@ -3895,6 +3925,7 @@ CLIENT COMMANDS
 		{"close", "Close a ticket and freeze modifications"},
 		{"comment", "Add comments to a ticket"},
 		{"complete", "Set a ticket state to success"},
+		{"config", "Manage local config keys and registration controls"},
 		{"count", "Count users, projects, and work by type"},
 		{"design", "Set a ticket stage to design"},
 		{"dependency", "Manage dependency links between tickets"},
