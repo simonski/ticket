@@ -105,13 +105,13 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 0.7rem;
+        gap: 0.24rem;
         padding: 0.5rem 0.75rem;
         background: #fffaf2;
         border-bottom: 1px solid var(--line);
         height: 52px;
       }
-      .app-head-left { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+      .app-head-left { display: flex; align-items: center; gap: 0.2rem; flex-shrink: 0; }
       .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; }
       #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
@@ -685,7 +685,7 @@
         bannerSync.logoPhase = phase;
         const logoCanvas = document.getElementById("pixel-logo");
         if (!logoCanvas) return;
-        const snapped = Math.max(180, Math.round(widthPx * 1.18));
+        const snapped = Math.max(120, Math.round(widthPx * 1.08));
         const next = `${snapped}px`;
         if (logoCanvas.style.width !== next) logoCanvas.style.width = next;
       }
@@ -822,16 +822,6 @@
             cells.push({ x, y, a: 0, h: 180, l: 50 });
           }
         }
-        const slotIndices = Array.from({ length: SLOTS }, () => []);
-        for (let y = 0; y < CHAR_H; y++) {
-          for (let slot = 0; slot < SLOTS; slot++) {
-            const startX = slot * (CHAR_W + GAP);
-            for (let x = 0; x < CHAR_W; x++) {
-              slotIndices[slot].push((y * LOGICAL_W) + startX + x);
-            }
-          }
-        }
-
         function slotGlyph(word, slot) {
           const ch = word[slot] || "none";
           return GLYPHS[ch] || GLYPHS.none;
@@ -850,24 +840,12 @@
         let nextWordAt = 0;
 
         function activeLogicalWidth() {
-          let width = 0;
-          let prev = 0;
-          for (let slot = 0; slot < SLOTS; slot++) {
-            const idxs = slotIndices[slot];
-            let sum = 0;
-            let peak = 0;
-            for (let i = 0; i < idxs.length; i++) {
-              const a = cells[idxs[i]].a;
-              sum += a;
-              if (a > peak) peak = a;
-            }
-            const avg = sum / idxs.length;
-            const activation = Math.max(0, Math.min(1, Math.max(peak, avg * 1.85)));
-            if (slot > 0) width += GAP * Math.max(prev, activation);
-            width += CHAR_W * activation;
-            prev = activation;
+          let rightmost = -1;
+          for (const c of cells) {
+            if (c.a > 0.08 && c.x > rightmost) rightmost = c.x;
           }
-          return Math.max(14, width);
+          if (rightmost < 0) return CHAR_W * 2;
+          return Math.max(10, rightmost + 2);
         }
 
         function frame(ts) {
