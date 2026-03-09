@@ -687,6 +687,30 @@
           return pool[Math.floor(Math.random() * pool.length)];
         }
 
+        function actorType(raw) {
+          const t = String(
+            raw?.user_type ||
+            raw?.userType ||
+            raw?.actor_type ||
+            raw?.actorType ||
+            raw?.type_of_user ||
+            ""
+          ).toLowerCase();
+          if (t === "agent" || t === "ai" || t === "bot") return "agent";
+          return "human";
+        }
+
+        function colourForActor(raw, classification) {
+          const [h, s, l] = pickColour(classification);
+          if (actorType(raw) === "agent") {
+            // Agentic activity trends grayscale.
+            const grayL = Math.max(26, Math.min(78, l + (perlin2(h * 0.03, l * 0.03) - 0.5) * 12));
+            return [0, 0, grayL];
+          }
+          // Human activity stays colorful.
+          return [h, Math.max(58, s), l];
+        }
+
         function resolveClassification(raw) {
           const type = String(raw?.type || "").toLowerCase();
           const cls = String(raw?.classification || raw?.activity || "").toLowerCase();
@@ -738,7 +762,7 @@
             const right = perlin2(seed * 0.19, seed * 0.41) > 0.5;
             const row = Math.floor(perlin2(seed * 0.37, seed * 0.11) * LOGICAL_H);
             const startCol = right ? 0 : logicalW - 1;
-            const [h, s, l] = pickColour(classification);
+            const [h, s, l] = colourForActor(raw, classification);
             const speed = 0.08 + perlin2(seed * 0.17, seed * 0.77) * 0.36;
             const life = 90 + Math.floor(perlin2(seed * 0.33, seed * 0.67) * 140);
             particles.push({ col: startCol, row, dir: right ? 1 : -1, speed, phase: 0, age: 0, life, h, s, l });
