@@ -884,25 +884,16 @@
         let wordIdx = 0;
         let nextWordAt = 0;
 
-        function activeLogicalWidth() {
-          let rightmost = -1;
-          for (let x = LOGICAL_W - 1; x >= 0; x--) {
-            let colEnergy = 0;
-            let colPeak = 0;
-            for (let y = 0; y < LOGICAL_H; y++) {
-              const a = cells[(y * LOGICAL_W) + x].a;
-              colEnergy += a;
-              if (a > colPeak) colPeak = a;
-            }
-            const avg = colEnergy / LOGICAL_H;
-            if (colPeak >= 0.72 || avg >= 0.36) {
-              rightmost = x;
-              break;
-            }
+        function targetLogicalWidth(word) {
+          let lastSlot = -1;
+          for (let i = 0; i < SLOTS; i++) {
+            if (word[i]) lastSlot = i;
           }
-          if (rightmost < 0) return CHAR_W * 2;
-          return Math.max(10, rightmost + 1);
+          if (lastSlot < 0) return CHAR_W * 2;
+          return ((lastSlot + 1) * CHAR_W) + (lastSlot * GAP);
         }
+
+        let smoothedTargetWidth = targetLogicalWidth(WORDS[0]);
 
         function frame(ts) {
           const t = ts * 0.001;
@@ -936,7 +927,9 @@
           if (options.dynamicWidth || typeof options.onMetrics === "function") {
             const rect = canvas.getBoundingClientRect();
             const pixelScale = Math.max(1, (rect.height || canvas.height || 48) / LOGICAL_H);
-            const widthPx = activeLogicalWidth() * pixelScale;
+            const tw = targetLogicalWidth(current);
+            smoothedTargetWidth += (tw - smoothedTargetWidth) * 0.22;
+            const widthPx = smoothedTargetWidth * pixelScale;
             if (options.dynamicWidth) {
               const snapped = `${Math.max(56, Math.round(widthPx))}px`;
               if (canvas.style.width !== snapped) canvas.style.width = snapped;
