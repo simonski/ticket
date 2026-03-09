@@ -380,6 +380,31 @@
       }
       .modal textarea { width: 100%; min-height: 120px; }
       .modal input, .modal select, .modal textarea { width: 100%; }
+      .dialog-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        background: rgba(0,0,0,0.4);
+        display: grid;
+        place-items: center;
+      }
+      .dialog {
+        width: min(420px, 92vw);
+        background: #fffef9;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0.85rem;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+      }
+      .dialog-message {
+        margin: 0 0 0.8rem;
+        color: var(--ink);
+      }
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+      }
     </style>
   </head>
   <body>
@@ -521,6 +546,15 @@
         </div>
       </div>
     </div>
+    <div id="dialog-overlay" class="dialog-overlay hidden">
+      <div id="dialog-box" class="dialog" role="dialog" aria-modal="true">
+        <p id="dialog-message" class="dialog-message"></p>
+        <div class="dialog-actions">
+          <button id="dialog-cancel" class="btn" type="button">Cancel</button>
+          <button id="dialog-ok" class="btn primary" type="button">OK</button>
+        </div>
+      </div>
+    </div>
 
     <script type="module">
       import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
@@ -544,12 +578,50 @@
       const perspectiveOverlay = document.getElementById("perspective-overlay");
       const modalOverlay = document.getElementById("modal-overlay");
       const modalTitle = document.getElementById("modal-title");
+      const dialogOverlay = document.getElementById("dialog-overlay");
+      const dialogMessage = document.getElementById("dialog-message");
+      const dialogCancel = document.getElementById("dialog-cancel");
+      const dialogOK = document.getElementById("dialog-ok");
       const showRegisterBtn = document.getElementById("show-register");
       const registerForm = document.getElementById("register-form");
 
       function isAppVisible() {
         return !mainContent.classList.contains("hidden");
       }
+
+      let dialogResolve = null;
+      function closeDialog(result) {
+        if (!dialogResolve) return;
+        const resolve = dialogResolve;
+        dialogResolve = null;
+        dialogOverlay.classList.add("hidden");
+        resolve(result);
+      }
+
+      function openDialog(message, options = {}) {
+        if (dialogResolve) closeDialog(false);
+        const okText = options.okText || "OK";
+        const cancelText = options.cancelText || "Cancel";
+        const confirm = options.confirm !== false;
+        dialogMessage.textContent = message;
+        dialogOK.textContent = okText;
+        dialogCancel.textContent = cancelText;
+        dialogCancel.classList.toggle("hidden", !confirm);
+        dialogOverlay.classList.remove("hidden");
+        return new Promise((resolve) => { dialogResolve = resolve; });
+      }
+
+      function uiAlert(message) {
+        return openDialog(message, { confirm: false, okText: "OK" });
+      }
+
+      function uiConfirm(message, okText = "OK") {
+        return openDialog(message, { confirm: true, okText, cancelText: "Cancel" });
+      }
+
+      dialogOK.addEventListener("click", () => closeDialog(true));
+      dialogCancel.addEventListener("click", () => closeDialog(false));
+      dialogOverlay.addEventListener("click", (e) => { if (e.target === dialogOverlay) closeDialog(false); });
 
       function perlinHash(x, y) {
         const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
@@ -1251,11 +1323,11 @@
 
       document.getElementById("menu-settings").addEventListener("click", () => {
         closeProfileMenu();
-        alert("Settings — coming soon.");
+        uiAlert("Settings — coming soon.");
       });
       document.getElementById("menu-profile").addEventListener("click", () => {
         closeProfileMenu();
-        alert("Profile — coming soon.");
+        uiAlert("Profile — coming soon.");
       });
       document.getElementById("menu-logout").addEventListener("click", async () => {
         closeProfileMenu();
@@ -1905,6 +1977,7 @@
           if (!searchOverlay.classList.contains("hidden")) { closeSearch(); return; }
           if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
+          if (!dialogOverlay.classList.contains("hidden")) { closeDialog(false); return; }
           if (!modalOverlay.classList.contains("hidden")) { closeModal(); return; }
         }
         const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
@@ -1922,6 +1995,11 @@
           if (!isAppVisible() || inField) return;
           event.preventDefault();
           perspectiveOverlay.classList.contains("hidden") ? openPerspectivePicker() : closePerspectivePicker();
+          return;
+        }
+
+        if (!dialogOverlay.classList.contains("hidden")) {
+          if (event.key === "Enter") { event.preventDefault(); closeDialog(true); }
           return;
         }
 
@@ -1956,8 +2034,10 @@
           const id = focusedCard.dataset.ticketId;
           const t = tickets.find((x) => String(x.ticket_id) === id);
           if (!t || t.archived) return;
-          if (!confirm("Archive this ticket?")) return;
-          setTicketArchivedByID(t.ticket_id, true, true);
+          uiConfirm("Archive this ticket?", "Archive").then((ok) => {
+            if (!ok) return;
+            setTicketArchivedByID(t.ticket_id, true, true);
+          });
           return;
         }
 
