@@ -611,7 +611,7 @@
           return;
         }
         const v = String(version || "").trim();
-        versionOverlay.textContent = v ? `server: v${v}` : "server: unknown";
+        versionOverlay.textContent = v ? `server: ${v}` : "server: unknown";
       }
 
       let dialogResolve = null;
