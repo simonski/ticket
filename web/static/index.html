@@ -996,6 +996,7 @@
         renderer: null,
         nodes: [],
         edges: [],
+        runToken: 0,
       };
 
       function ensureTicketVision() {
@@ -1004,6 +1005,8 @@
         tvGraph.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         tvGraph.scene = new window.THREE.Scene();
         tvGraph.camera = new window.THREE.OrthographicCamera(0, 100, 100, 0, -1000, 1000);
+        tvGraph.camera.position.set(0, 0, 10);
+        tvGraph.camera.lookAt(0, 0, 0);
         tvGraph.initialized = true;
       }
 
@@ -1032,9 +1035,9 @@
       function createTVNode(id, label, level, color, x, y) {
         const radius = level === 0 ? 11 : 8;
         const geom = new window.THREE.CircleGeometry(radius, 16);
-        const mat = new window.THREE.MeshBasicMaterial({ color });
+        const mat = new window.THREE.MeshBasicMaterial({ color, side: window.THREE.DoubleSide });
         const mesh = new window.THREE.Mesh(geom, mat);
-        mesh.position.set(x, y, 0);
+        mesh.position.set(x, y, -2);
         tvGraph.scene.add(mesh);
         return { id, label, level, x, y, vx: 0, vy: 0, tx: x, ty: y, mesh };
       }
@@ -1042,6 +1045,7 @@
       function renderTicketVision() {
         ensureTicketVision();
         if (!tvGraph.initialized || currentPerspective !== "tv") return;
+        const token = ++tvGraph.runToken;
         resizeTicketVision();
         clearTicketVisionScene();
 
@@ -1088,7 +1092,7 @@
         });
 
         function step() {
-          if (currentPerspective !== "tv" || !isAppVisible()) return;
+          if (token !== tvGraph.runToken || currentPerspective !== "tv" || !isAppVisible()) return;
           const byID = new Map(tvGraph.nodes.map((n) => [n.id, n]));
           for (let i = 0; i < tvGraph.nodes.length; i++) {
             const a = tvGraph.nodes[i];
