@@ -1767,7 +1767,10 @@
         if (socket) socket.close();
         if (socketRetry) clearTimeout(socketRetry);
         const protocol = location.protocol === "https:" ? "wss" : "ws";
-        socket = new WebSocket(`${protocol}://${location.host}/api/ws`);
+        const wsURL = token
+          ? `${protocol}://${location.host}/api/ws?token=${encodeURIComponent(token)}`
+          : `${protocol}://${location.host}/api/ws`;
+        socket = new WebSocket(wsURL);
         socket.onmessage = async (evt) => {
           if (!isAppVisible()) return;
           // Parse event and drive status animator
@@ -1788,6 +1791,10 @@
           await loadTickets();
         };
         socket.onclose = () => {
+          socketRetry = setTimeout(connectWS, 1200);
+        };
+        socket.onerror = () => {
+          try { socket.close(); } catch {}
           socketRetry = setTimeout(connectWS, 1200);
         };
       }

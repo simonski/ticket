@@ -577,6 +577,7 @@ The web UI should make these activities easy:
   - `D`: prompt `Archive this ticket?` and archive on confirmation
   - `U`: undo the most recent ticket action initiated in the current web session
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
+- board state is refreshed by websocket events and should not require manual browser reload
 
 ## Persistence And Architecture
 
