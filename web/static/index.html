@@ -925,6 +925,8 @@
         let bg = { h: 35, s: 60, l: 95 };
         const particles = [];
         let seed = 0;
+        let lastActivityMs = performance.now();
+        const IDLE_AFTER_MS = 10000;
 
         function resize() {
           const rect = canvas.getBoundingClientRect();
@@ -952,6 +954,7 @@
         }
 
         function spawn(raw, count = 1) {
+          lastActivityMs = performance.now();
           const classification = resolveClassification(raw);
           for (let i = 0; i < count; i++) {
             seed += 1;
@@ -963,6 +966,26 @@
             const life = 90 + Math.floor(perlin2(seed * 0.33, seed * 0.67) * 140);
             particles.push({ col: startCol, row, dir: right ? 1 : -1, speed, phase: 0, age: 0, life, h, s, l });
           }
+        }
+
+        function drawIdleWave(t) {
+          const baseRow = (LOGICAL_H - 1) / 2;
+          for (let x = 0; x < logicalW; x++) {
+            const wave = Math.sin((x * 0.38) + (t * 2.2));
+            const noise = (perlin2(x * 0.11, t * 0.35) - 0.5) * 1.8;
+            const y = Math.max(0, Math.min(LOGICAL_H - 1, Math.round(baseRow + wave * 1.6 + noise)));
+            const pulse = 0.35 + (Math.sin(t * 2.6) + 1) * 0.25;
+            const hue = 192 + perlin2(x * 0.07, t * 0.22) * 48;
+            const alpha = 0.18 + pulse * 0.32;
+            ctx.fillStyle = `hsla(${hue.toFixed(1)},70%,56%,${alpha.toFixed(3)})`;
+            ctx.fillRect(x, y, 1, 1);
+          }
+          const sweep = Math.floor(((Math.sin(t * 1.4) + 1) / 2) * (logicalW - 1));
+          const bounce = logicalW - 1 - sweep;
+          const bright = `hsla(188,86%,72%,0.72)`;
+          ctx.fillStyle = bright;
+          ctx.fillRect(sweep, Math.max(0, Math.floor(baseRow - 1)), 1, 3);
+          ctx.fillRect(bounce, Math.max(0, Math.floor(baseRow - 1)), 1, 3);
         }
 
         function tick(ts) {
@@ -989,6 +1012,10 @@
             const alpha = Math.max(0.05, fadeOut * flicker);
             ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
             ctx.fillRect(p.col, p.row, 1, 1);
+          }
+
+          if ((ts - lastActivityMs) >= IDLE_AFTER_MS) {
+            drawIdleWave(t);
           }
 
           painter.render();
