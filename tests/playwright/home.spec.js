@@ -3,13 +3,10 @@ const { test, expect } = require("@playwright/test");
 test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "ticket" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create Project" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create Ticket" })).toBeVisible();
-  await expect(page.locator("#project-prefix")).toBeVisible();
-  await expect(page.locator("#filter-status")).toBeVisible();
-
-  const statusOptions = await page.locator("#filter-status option").allTextContents();
-  expect(statusOptions).toContain("Develop / Active");
-  expect(statusOptions).toContain("Done / Complete");
+  await expect(page.locator("#login-screen")).toBeVisible();
+  await expect(page.locator("#login-form")).toBeVisible();
+  await expect(page.locator("#login-pixel-logo")).toBeVisible();
+  await expect(page.locator("#login-user")).toBeVisible();
+  await expect(page.locator("#login-pass")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
 });

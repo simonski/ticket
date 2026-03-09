@@ -101,6 +101,31 @@ ticket user rm|delete --username XXXX
 
 These commands are admin-only. If a logged-in non-admin user runs them, the server returns `403` and the CLI prints `user is not an admin`.
 
+Manage autonomous agents (admin-only except `agent run`):
+
+```bash
+ticket agent create -name worker-1 -description "LLM worker"
+ticket agent ls
+ticket agent update -id 1 -name worker-main -description "Primary worker"
+ticket agent disable -id 1
+ticket agent enable -id 1
+ticket agent delete -id 1
+```
+
+Run an agent worker process:
+
+```bash
+ticket agent run -name worker-1 -password <password> -url http://localhost:8080
+```
+
+`ticket agent run` resolves required settings from flags first, then env vars:
+
+- `AGENT_NAME`
+- `AGENT_PASSWORD`
+- `TICKET_URL`
+
+If any are missing, the command exits with an explicit missing-fields error.
+
 ## Accounts And Login
 
 Create an account:
@@ -498,6 +523,7 @@ Keyboard shortcuts in the board view:
 - board updates are live via websocket; ticket changes from other users should appear without browser refresh
 - the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
 - if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
+- profile menu includes an `Agents` panel to list/create/update/enable/disable/delete agents using the same API
 
 ## Command Reference
 
@@ -518,6 +544,13 @@ ticket user ls
 ticket user delete --username <name>
 ticket user enable --username <name>
 ticket user disable --username <name>
+ticket agent create -name <name> -description <description> [-password <password>]
+ticket agent list
+ticket agent update -id <id> [-name <name>] [-description <description>] [-password <password>]
+ticket agent delete -id <id>
+ticket agent enable -id <id>
+ticket agent disable -id <id>
+ticket agent run -name <name> -password <password> -url <server-url>
 
 ticket project create -prefix ABC "..."
 ticket project list

@@ -136,6 +136,148 @@ func (s *LocalService) DeleteUser(username string) error {
 	return store.DeleteUser(db, username)
 }
 
+func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, "", err
+	}
+	defer db.Close()
+	return store.CreateAgent(db, request.Name, request.Description, request.Password)
+}
+
+func (s *LocalService) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, err
+	}
+	defer db.Close()
+	return store.SetAgentEnabled(db, id, enabled)
+}
+
+func (s *LocalService) ListAgents() ([]store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListAgents(db)
+}
+
+func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, err
+	}
+	defer db.Close()
+	return store.UpdateAgent(db, id, store.AgentUpdateParams{
+		Name:        request.Name,
+		Description: request.Description,
+		Password:    request.Password,
+	})
+}
+
+func (s *LocalService) DeleteAgent(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteAgent(db, id)
+}
+
+func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	if err != nil {
+		return store.Agent{}, err
+	}
+	return store.TouchAgent(db, agent.ID, "online")
+}
+
+func (s *LocalService) RequestAgentWork(request AgentRequest) (TicketRequestResponse, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return TicketRequestResponse{}, err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	if err != nil {
+		return TicketRequestResponse{}, err
+	}
+	projectID := request.ProjectID
+	if projectID == 0 {
+		projects, err := store.ListProjects(db)
+		if err != nil {
+			return TicketRequestResponse{}, err
+		}
+		for _, p := range projects {
+			if p.Status == "open" {
+				projectID = p.ID
+				break
+			}
+		}
+	}
+	ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+		ProjectID: projectID,
+		Username:  agent.Name,
+		UserID:    0,
+	})
+	if err != nil {
+		return TicketRequestResponse{}, err
+	}
+	if status == "ASSIGNED" {
+		_, _ = store.TouchAgent(db, agent.ID, "working")
+	} else {
+		_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+	}
+	response := TicketRequestResponse{Status: status}
+	if status == "ASSIGNED" || status == "AVAILABLE" {
+		response.Ticket = &ticket
+	}
+	return response, nil
+}
+
+func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	current, err := store.GetTicket(db, id)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	updated, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
+		Title:              current.Title,
+		Description:        request.Result,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		ParentID:           current.ParentID,
+		Assignee:           agent.Name,
+		Stage:              store.StageDone,
+		State:              store.StateSuccess,
+		Priority:           current.Priority,
+		Order:              current.Order,
+		EstimateEffort:     current.EstimateEffort,
+		EstimateComplete:   current.EstimateComplete,
+		UpdatedBy:          0,
+		ActorUsername:      agent.Name,
+		ActorRole:          "admin",
+	})
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+	return updated, nil
+}
+
 func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {

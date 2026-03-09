@@ -69,6 +69,24 @@ Notes:
 - administrators can create, enable, and disable users
 - regular users can log in and manage project work according to API permissions
 
+### Agent
+
+- `agent_id`
+- `name`
+- `description`
+- `password_hash`
+- `enabled`
+- `status`
+- `last_seen`
+- `created_at`
+- `updated_at`
+
+Notes:
+
+- agents represent autonomous worker processes that authenticate to the API
+- agent credentials are stored as hashes and never persisted in plaintext
+- lifecycle status is tracked as `online`, `working`, `soliciting`, `idle`, or `disabled`
+
 ### Project
 
 - `project_id`
@@ -228,6 +246,7 @@ The first release must support:
 5. enable and disable user accounts
 6. login and logout from CLI and web
 7. user/session status inspection from the CLI
+8. admin-managed autonomous agents and agent worker lifecycle requests
 
 Representative commands:
 
@@ -239,6 +258,13 @@ ticket user ls
 ticket user delete --username alice
 ticket user enable --username alice
 ticket user disable --username alice
+ticket agent create -name worker-1 -description "LLM worker"
+ticket agent ls
+ticket agent update -id 1 -name worker-main -description "Primary worker"
+ticket agent enable -id 1
+ticket agent disable -id 1
+ticket agent delete -id 1
+ticket agent run -name worker-main -password secret -url http://localhost:8080
 
 ticket register
 ticket login
@@ -566,6 +592,7 @@ Requirements:
 The web UI should make these activities easy:
 
 - switch between projects
+- manage agents from a custom profile-menu panel (list/create/update/enable/disable/delete)
 - add and edit items
 - view hierarchy
 - manage status on a board

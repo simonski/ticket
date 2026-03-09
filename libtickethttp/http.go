@@ -63,6 +63,42 @@ func (s *Service) DeleteUser(username string) error {
 	return s.client.DeleteUser(username)
 }
 
+func (s *Service) CreateAgent(request libticket.AgentCreateRequest) (store.Agent, string, error) {
+	return s.client.CreateAgent(client.AgentCreateRequest(request))
+}
+
+func (s *Service) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+	return s.client.SetAgentEnabled(id, enabled)
+}
+
+func (s *Service) ListAgents() ([]store.Agent, error) {
+	return s.client.ListAgents()
+}
+
+func (s *Service) UpdateAgent(id int64, request libticket.AgentUpdateRequest) (store.Agent, error) {
+	return s.client.UpdateAgent(id, client.AgentUpdateRequest(request))
+}
+
+func (s *Service) DeleteAgent(id int64) error {
+	return s.client.DeleteAgent(id)
+}
+
+func (s *Service) RegisterAgent(request libticket.AgentRegisterRequest) (store.Agent, error) {
+	return s.client.RegisterAgent(client.AgentRegisterRequest(request))
+}
+
+func (s *Service) RequestAgentWork(request libticket.AgentRequest) (libticket.TicketRequestResponse, error) {
+	resp, err := s.client.RequestAgentWork(client.AgentRequest(request))
+	if err != nil {
+		return libticket.TicketRequestResponse{}, err
+	}
+	return libticket.TicketRequestResponse(resp), nil
+}
+
+func (s *Service) AgentUpdateTicket(id int64, request libticket.AgentTicketUpdateRequest) (store.Ticket, error) {
+	return s.client.AgentUpdateTicket(id, client.AgentTicketUpdateRequest(request))
+}
+
 func (s *Service) CreateProject(request libticket.ProjectCreateRequest) (store.Project, error) {
 	return s.client.CreateProject(client.ProjectCreateRequest(request))
 }

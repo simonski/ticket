@@ -116,6 +116,35 @@ type TicketRequestResponse struct {
 	Ticket *store.Ticket `json:"ticket,omitempty"`
 }
 
+type AgentCreateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Password    string `json:"password,omitempty"`
+}
+
+type AgentUpdateRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Password    *string `json:"password,omitempty"`
+}
+
+type AgentRegisterRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type AgentRequest struct {
+	Name      string `json:"name"`
+	Password  string `json:"password"`
+	ProjectID int64  `json:"project_id,omitempty"`
+}
+
+type AgentTicketUpdateRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+	Result   string `json:"result"`
+}
+
 func resolveRequestLifecycle(status, stage, state string) (string, string, error) {
 	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
 		return stage, state, nil
@@ -297,6 +326,185 @@ func (c *Client) DeleteUser(username string) error {
 		return store.DeleteUser(db, username)
 	}
 	return c.doJSON(http.MethodDelete, "/api/users/"+username, nil, nil)
+}
+
+func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Agent{}, "", err
+		}
+		defer db.Close()
+		return store.CreateAgent(db, request.Name, request.Description, request.Password)
+	}
+	var response struct {
+		Agent    store.Agent `json:"agent"`
+		Password string      `json:"password"`
+	}
+	err := c.doJSON(http.MethodPost, "/api/agents", request, &response)
+	return response.Agent, response.Password, err
+}
+
+func (c *Client) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Agent{}, err
+		}
+		defer db.Close()
+		return store.SetAgentEnabled(db, id, enabled)
+	}
+	action := "disable"
+	if enabled {
+		action = "enable"
+	}
+	var agent store.Agent
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%d/%s", id, action), nil, &agent)
+	return agent, err
+}
+
+func (c *Client) ListAgents() ([]store.Agent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListAgents(db)
+	}
+	var agents []store.Agent
+	err := c.doJSON(http.MethodGet, "/api/agents", nil, &agents)
+	return agents, err
+}
+
+func (c *Client) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Agent{}, err
+		}
+		defer db.Close()
+		return store.UpdateAgent(db, id, store.AgentUpdateParams{
+			Name:        request.Name,
+			Description: request.Description,
+			Password:    request.Password,
+		})
+	}
+	var agent store.Agent
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/agents/%d", id), request, &agent)
+	return agent, err
+}
+
+func (c *Client) DeleteAgent(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteAgent(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%d", id), nil, nil)
+}
+
+func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Agent{}, err
+		}
+		defer db.Close()
+		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+		if err != nil {
+			return store.Agent{}, err
+		}
+		return store.TouchAgent(db, agent.ID, "online")
+	}
+	var response struct {
+		Agent store.Agent `json:"agent"`
+	}
+	err := c.doJSON(http.MethodPost, "/api/agents/register", request, &response)
+	return response.Agent, err
+}
+
+func (c *Client) RequestAgentWork(request AgentRequest) (TicketRequestResponse, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return TicketRequestResponse{}, err
+		}
+		defer db.Close()
+		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+		if err != nil {
+			return TicketRequestResponse{}, err
+		}
+		projectID := request.ProjectID
+		if projectID == 0 {
+			projects, err := store.ListProjects(db)
+			if err != nil {
+				return TicketRequestResponse{}, err
+			}
+			for _, p := range projects {
+				if p.Status == "open" {
+					projectID = p.ID
+					break
+				}
+			}
+		}
+		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+			ProjectID: projectID,
+			Username:  agent.Name,
+			UserID:    0,
+		})
+		if err != nil {
+			return TicketRequestResponse{}, err
+		}
+		response := TicketRequestResponse{Status: status}
+		if status == "ASSIGNED" || status == "AVAILABLE" {
+			response.Ticket = &ticket
+		}
+		return response, nil
+	}
+	var response TicketRequestResponse
+	err := c.doJSON(http.MethodPost, "/api/agents/request", request, &response)
+	return response, err
+}
+
+func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		current, err := store.GetTicket(db, id)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.UpdateTicket(db, id, store.TicketUpdateParams{
+			Title:              current.Title,
+			Description:        request.Result,
+			AcceptanceCriteria: current.AcceptanceCriteria,
+			ParentID:           current.ParentID,
+			Assignee:           agent.Name,
+			Stage:              store.StageDone,
+			State:              store.StateSuccess,
+			Priority:           current.Priority,
+			Order:              current.Order,
+			EstimateEffort:     current.EstimateEffort,
+			EstimateComplete:   current.EstimateComplete,
+			UpdatedBy:          0,
+			ActorUsername:      agent.Name,
+			ActorRole:          "admin",
+		})
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%d/update", id), request, &ticket)
+	return ticket, err
 }
 
 func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, error) {

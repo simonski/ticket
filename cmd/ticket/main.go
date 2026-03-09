@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	osuser "os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -381,6 +382,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`."},
 		example: "ticket user create --username alice --password secret",
 	},
+	"agent": {
+		usage:   "ticket agent <create|ls|list|update|rm|delete|enable|disable|run>",
+		details: []string{"Manages API agents for autonomous ticket processing.", "`run` registers an agent then continuously requests and processes work."},
+		example: "ticket agent create -name worker-1 -description \"Autonomous worker\"",
+	},
 	"config": {
 		usage:   "ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
 		details: []string{"Local config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges in remote mode."},
@@ -470,6 +476,8 @@ func run(args []string) error {
 		return runCount(trimmedArgs[1:])
 	case "ticket":
 		return runTicket(trimmedArgs[1:])
+	case "agent":
+		return runAgent(trimmedArgs[1:])
 	case "user":
 		return runUser(trimmedArgs[1:])
 	case "project":
@@ -1134,6 +1142,296 @@ func runUser(args []string) error {
 	default:
 		return fmt.Errorf("unknown user command %q", args[0])
 	}
+}
+
+func runAgent(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: ticket agent <create|ls|list|update|rm|delete|enable|disable|run>")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	switch args[0] {
+	case "create":
+		fs := flag.NewFlagSet("agent create", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		name := fs.String("name", "", "agent name")
+		description := fs.String("description", "", "agent description")
+		password := fs.String("password", "", "agent password")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*name) == "" {
+			return errors.New("agent create requires -name")
+		}
+		if strings.TrimSpace(*description) == "" {
+			return errors.New("agent create requires -description")
+		}
+		agent, generatedPassword, err := svc.CreateAgent(libticket.AgentCreateRequest{
+			Name:        strings.TrimSpace(*name),
+			Description: strings.TrimSpace(*description),
+			Password:    strings.TrimSpace(*password),
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"agent": agent, "password": generatedPassword})
+		}
+		fmt.Printf("agent_id: %d\n", agent.ID)
+		fmt.Printf("password: %s\n", generatedPassword)
+		return nil
+	case "ls", "list":
+		agents, err := svc.ListAgents()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(agents)
+		}
+		printAgentTable(agents)
+		return nil
+	case "udpate", "update":
+		fs := flag.NewFlagSet("agent update", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "agent id")
+		var name, description, password string
+		fs.StringVar(&name, "name", "", "agent name")
+		fs.StringVar(&description, "desc", "", "agent description")
+		fs.StringVar(&description, "description", "", "agent description")
+		fs.StringVar(&password, "password", "", "agent password")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("agent update requires -id")
+		}
+		visited := map[string]bool{}
+		fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
+		nameSet := visited["name"]
+		descriptionSet := visited["desc"] || visited["description"]
+		passwordSet := visited["password"]
+		if !nameSet && !descriptionSet && !passwordSet {
+			return errors.New("agent update requires at least one of -name, -desc|-description, -password")
+		}
+		var namePtr, descPtr, passPtr *string
+		if nameSet {
+			trimmed := strings.TrimSpace(name)
+			namePtr = &trimmed
+		}
+		if descriptionSet {
+			trimmed := strings.TrimSpace(description)
+			descPtr = &trimmed
+		}
+		if passwordSet {
+			trimmed := strings.TrimSpace(password)
+			passPtr = &trimmed
+		}
+		agent, err := svc.UpdateAgent(*id, libticket.AgentUpdateRequest{
+			Name:        namePtr,
+			Description: descPtr,
+			Password:    passPtr,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(agent)
+		}
+		fmt.Printf("updated agent %d\n", agent.ID)
+		return nil
+	case "rm", "delete":
+		fs := flag.NewFlagSet("agent "+args[0], flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("agent rm/delete requires -id")
+		}
+		if err := svc.DeleteAgent(*id); err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"status": "deleted", "agent_id": *id})
+		}
+		fmt.Printf("deleted agent %d\n", *id)
+		return nil
+	case "enable", "disable":
+		fs := flag.NewFlagSet("agent "+args[0], flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("agent enable/disable requires -id")
+		}
+		agent, err := svc.SetAgentEnabled(*id, args[0] == "enable")
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(agent)
+		}
+		fmt.Printf("%sd agent %d\n", args[0], agent.ID)
+		return nil
+	case "run":
+		fs := flag.NewFlagSet("agent run", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		name := fs.String("name", "", "agent name")
+		password := fs.String("password", "", "agent password")
+		url := fs.String("url", "", "ticket server url")
+		projectID := fs.Int64("project-id", 0, "project id override")
+		pollSeconds := fs.Int("poll-seconds", 2, "idle poll interval seconds")
+		llmCommand := fs.String("llm", envValue("TICKET_AGENT_LLM"), "llm command (default codex)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		agentName := strings.TrimSpace(*name)
+		if agentName == "" {
+			agentName = envValue("AGENT_NAME")
+		}
+		agentPassword := strings.TrimSpace(*password)
+		if agentPassword == "" {
+			agentPassword = envValue("AGENT_PASSWORD")
+		}
+		serverURL := strings.TrimSpace(*url)
+		if serverURL == "" {
+			serverURL = envValue("TICKET_URL")
+		}
+		missing := make([]string, 0, 3)
+		if agentName == "" {
+			missing = append(missing, "AGENT_NAME or -name")
+		}
+		if agentPassword == "" {
+			missing = append(missing, "AGENT_PASSWORD or -password")
+		}
+		if serverURL == "" {
+			missing = append(missing, "TICKET_URL or -url")
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("missing required values: %s", strings.Join(missing, ", "))
+		}
+		if *pollSeconds < 1 {
+			return errors.New("poll-seconds must be >= 1")
+		}
+		if err := os.Setenv("TICKET_MODE", string(config.ModeRemote)); err != nil {
+			return err
+		}
+		if err := os.Setenv("TICKET_SERVER", serverURL); err != nil {
+			return err
+		}
+		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
+			return err
+		}
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		agent, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
+			Name:     agentName,
+			Password: agentPassword,
+		})
+		if err != nil {
+			return err
+		}
+		if !outputJSON {
+			fmt.Printf("agent %s registered (id=%d)\n", agent.Name, agent.ID)
+		}
+		modelCommand := strings.TrimSpace(*llmCommand)
+		if modelCommand == "" {
+			modelCommand = "codex"
+		}
+		idleDelay := time.Duration(*pollSeconds) * time.Second
+		for {
+			response, err := svc.RequestAgentWork(libticket.AgentRequest{
+				Name:      agentName,
+				Password:  agentPassword,
+				ProjectID: *projectID,
+			})
+			if err != nil {
+				return err
+			}
+			if response.Status != "ASSIGNED" || response.Ticket == nil {
+				time.Sleep(idleDelay)
+				continue
+			}
+			ticket := response.Ticket
+			prompt := buildAgentPrompt(*ticket)
+			result, err := runAgentCommand(modelCommand, prompt)
+			if err != nil {
+				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
+			}
+			updated, err := svc.AgentUpdateTicket(ticket.ID, libticket.AgentTicketUpdateRequest{
+				Name:     agentName,
+				Password: agentPassword,
+				Result:   strings.TrimSpace(result),
+			})
+			if err != nil {
+				return err
+			}
+			if outputJSON {
+				if err := printJSON(updated); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("completed %s -> %s\n", ticketLabel(*ticket), updated.Status)
+			}
+		}
+	default:
+		return fmt.Errorf("unknown agent command %q", args[0])
+	}
+}
+
+func buildAgentPrompt(ticket store.Ticket) string {
+	var b strings.Builder
+	b.WriteString("You are an autonomous software agent working a ticket.\n")
+	b.WriteString("Return only the final ticket update text.\n\n")
+	b.WriteString(fmt.Sprintf("Ticket: %s\n", ticketLabel(ticket)))
+	b.WriteString(fmt.Sprintf("Title: %s\n", strings.TrimSpace(ticket.Title)))
+	if strings.TrimSpace(ticket.Description) != "" {
+		b.WriteString("Description:\n")
+		b.WriteString(strings.TrimSpace(ticket.Description))
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(ticket.AcceptanceCriteria) != "" {
+		b.WriteString("Acceptance Criteria:\n")
+		b.WriteString(strings.TrimSpace(ticket.AcceptanceCriteria))
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func printAgentTable(agents []store.Agent) {
+	if len(agents) == 0 {
+		fmt.Println("no agents")
+		return
+	}
+	sort.SliceStable(agents, func(i, j int) bool {
+		return strings.ToLower(agents[i].Name) < strings.ToLower(agents[j].Name)
+	})
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION\tENABLED\tSTATUS\tLAST_SEEN")
+	for _, agent := range agents {
+		lastSeen := strings.TrimSpace(agent.LastSeen)
+		if lastSeen == "" {
+			lastSeen = "-"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%t\t%s\t%s\n", agent.ID, agent.Name, agent.Description, agent.Enabled, agent.Status, lastSeen)
+	}
+	_ = w.Flush()
 }
 
 func printUserTable(users []store.User) {
@@ -3932,6 +4230,7 @@ CLIENT COMMANDS
 		{"delete", "Delete a ticket permanently"},
 		{"develop", "Set a ticket stage to develop"},
 		{"done", "Set a ticket stage to done"},
+		{"agent", "Manage autonomous agents and run agent workers"},
 		{"get", "Show a ticket with history and comments"},
 		{"help", "Show command help"},
 		{"health", "Compute ticket health by project-specific heuristics"},

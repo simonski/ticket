@@ -85,3 +85,32 @@ type TicketRequestResponse struct {
 	Status string        `json:"status"`
 	Ticket *store.Ticket `json:"ticket,omitempty"`
 }
+
+type AgentCreateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Password    string `json:"password,omitempty"`
+}
+
+type AgentUpdateRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Password    *string `json:"password,omitempty"`
+}
+
+type AgentRegisterRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type AgentRequest struct {
+	Name      string `json:"name"`
+	Password  string `json:"password"`
+	ProjectID int64  `json:"project_id,omitempty"`
+}
+
+type AgentTicketUpdateRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+	Result   string `json:"result"`
+}

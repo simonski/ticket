@@ -173,6 +173,101 @@ func TestProjectAPI(t *testing.T) {
 	}
 }
 
+func TestAgentAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	if adminLogin.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d body=%s", adminLogin.Code, adminLogin.Body.String())
+	}
+	var adminAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, adminLogin, &adminAuth)
+
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "nonadmin",
+		"password": "password123",
+	}, adminAuth.Token)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create user status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	nonAdminLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "nonadmin",
+		"password": "password123",
+	}, "")
+	if nonAdminLogin.Code != http.StatusOK {
+		t.Fatalf("non-admin login status = %d body=%s", nonAdminLogin.Code, nonAdminLogin.Body.String())
+	}
+	var nonAdminAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, nonAdminLogin, &nonAdminAuth)
+
+	createAgentResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents", map[string]string{
+		"name":        "worker-1",
+		"description": "Autonomous worker",
+	}, adminAuth.Token)
+	if createAgentResp.Code != http.StatusCreated {
+		t.Fatalf("create agent status = %d body=%s", createAgentResp.Code, createAgentResp.Body.String())
+	}
+	var createPayload struct {
+		Agent    store.Agent `json:"agent"`
+		Password string      `json:"password"`
+	}
+	decodeResponse(t, createAgentResp, &createPayload)
+	if createPayload.Agent.ID == 0 {
+		t.Fatalf("created agent id = 0, want non-zero")
+	}
+	if createPayload.Password == "" {
+		t.Fatalf("create password empty, want generated password")
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/agents", nil, adminAuth.Token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list agents status = %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var agents []store.Agent
+	decodeResponse(t, listResp, &agents)
+	if len(agents) != 1 || agents[0].Name != "worker-1" {
+		t.Fatalf("agents list = %#v", agents)
+	}
+
+	forbiddenList := doJSONRequest(t, handler, http.MethodGet, "/api/agents", nil, nonAdminAuth.Token)
+	if forbiddenList.Code != http.StatusForbidden {
+		t.Fatalf("non-admin list agents status = %d, want %d", forbiddenList.Code, http.StatusForbidden)
+	}
+
+	updatedResp := doJSONRequest(t, handler, http.MethodPut, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10), map[string]string{
+		"description": "Updated worker",
+	}, adminAuth.Token)
+	if updatedResp.Code != http.StatusOK {
+		t.Fatalf("update agent status = %d body=%s", updatedResp.Code, updatedResp.Body.String())
+	}
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents/register", map[string]string{
+		"name":     "worker-1",
+		"password": createPayload.Password,
+	}, "")
+	if registerResp.Code != http.StatusOK {
+		t.Fatalf("register agent status = %d body=%s", registerResp.Code, registerResp.Body.String())
+	}
+
+	disableResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10)+"/disable", nil, adminAuth.Token)
+	if disableResp.Code != http.StatusOK {
+		t.Fatalf("disable agent status = %d body=%s", disableResp.Code, disableResp.Body.String())
+	}
+
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10), nil, adminAuth.Token)
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete agent status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+}
+
 func TestTaskAPI(t *testing.T) {
 	handler, db := testHandler(t)
 	defer db.Close()

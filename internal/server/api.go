@@ -322,6 +322,263 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		writeJSON(w, http.StatusOK, map[string]string{"status": action + "d"})
 	})
 
+	mux.HandleFunc("/api/agents", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			agents, err := store.ListAgents(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, agents)
+		case http.MethodPost:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload agentRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, generatedPassword, err := store.CreateAgent(db, payload.Name, payload.Description, payload.Password)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, map[string]any{
+				"agent":    agent,
+				"password": generatedPassword,
+			})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/agents/", func(w http.ResponseWriter, r *http.Request) {
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/agents/")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if parts[0] == "register" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			var payload agentAuthRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			agent, err = store.TouchAgent(db, agent.ID, "online")
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "agent": agent})
+			return
+		}
+		if parts[0] == "request" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			var payload agentRequestWork
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			projectID := payload.ProjectID
+			if projectID == 0 {
+				projects, err := store.ListProjects(db)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				for _, p := range projects {
+					if p.Status == "open" {
+						projectID = p.ID
+						break
+					}
+				}
+			}
+			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+				ProjectID: projectID,
+				Username:  agent.Name,
+				UserID:    0,
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if status == "ASSIGNED" {
+				_, _ = store.TouchAgent(db, agent.ID, "working")
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+			} else {
+				_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+			}
+			response := map[string]any{"status": status}
+			if status == "ASSIGNED" || status == "AVAILABLE" {
+				response["ticket"] = ticket
+			}
+			writeJSON(w, http.StatusOK, response)
+			return
+		}
+		if parts[0] == "tickets" && len(parts) == 3 && parts[2] == "update" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			var ticketID int64
+			if _, err := fmt.Sscan(parts[1], &ticketID); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid ticket id")
+				return
+			}
+			var payload agentTicketUpdateRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			current, err := store.GetTicket(db, ticketID)
+			if err != nil {
+				if errors.Is(err, store.ErrTicketNotFound) {
+					writeError(w, http.StatusNotFound, "ticket not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			updated, err := store.UpdateTicket(db, ticketID, store.TicketUpdateParams{
+				Title:              current.Title,
+				Description:        payload.Result,
+				AcceptanceCriteria: current.AcceptanceCriteria,
+				ParentID:           current.ParentID,
+				Assignee:           agent.Name,
+				Stage:              store.StageDone,
+				State:              store.StateSuccess,
+				Priority:           current.Priority,
+				Order:              current.Order,
+				EstimateEffort:     current.EstimateEffort,
+				EstimateComplete:   current.EstimateComplete,
+				UpdatedBy:          0,
+				ActorUsername:      agent.Name,
+				ActorRole:          "admin",
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+			notify("ticket_updated", updated.ProjectID, updated.ID)
+			writeJSON(w, http.StatusOK, updated)
+			return
+		}
+
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var id int64
+		if _, err := fmt.Sscan(parts[0], &id); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid agent id")
+			return
+		}
+		if len(parts) == 1 {
+			switch r.Method {
+			case http.MethodPut:
+				var payload agentRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				updated, err := store.UpdateAgent(db, id, store.AgentUpdateParams{
+					Name:        nullableTrimmed(payload.Name),
+					Description: nullableTrimmed(payload.Description),
+					Password:    nullableTrimmed(payload.Password),
+				})
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "agent not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, updated)
+			case http.MethodDelete:
+				if err := store.DeleteAgent(db, id); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "agent not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			var enabled bool
+			switch parts[1] {
+			case "enable":
+				enabled = true
+			case "disable":
+				enabled = false
+			default:
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			updated, err := store.SetAgentEnabled(db, id, enabled)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "agent not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, updated)
+			return
+		}
+		writeError(w, http.StatusNotFound, "not found")
+	})
+
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -1080,6 +1337,29 @@ type credentialsRequest struct {
 	Password string `json:"password"`
 }
 
+type agentRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Password    string `json:"password,omitempty"`
+}
+
+type agentAuthRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type agentRequestWork struct {
+	Name      string `json:"name"`
+	Password  string `json:"password"`
+	ProjectID int64  `json:"project_id,omitempty"`
+}
+
+type agentTicketUpdateRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+	Result   string `json:"result"`
+}
+
 type projectRequest struct {
 	Prefix             string `json:"prefix"`
 	Title              string `json:"title"`
@@ -1223,6 +1503,14 @@ func hasMeaningfulTicketContentChange(payload ticketRequest, current store.Ticke
 		return true
 	}
 	return false
+}
+
+func nullableTrimmed(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func userFromRequest(db *sql.DB, r *http.Request) (store.User, error) {
