@@ -112,8 +112,8 @@
         height: 52px;
       }
       .app-head-left { display: flex; align-items: center; gap: 0.2rem; flex-shrink: 0; }
-      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; }
-      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; }
+      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: #fffaf2; }
+      #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: #fffaf2; }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: auto; }
 
@@ -685,7 +685,7 @@
         bannerSync.logoPhase = phase;
         const logoCanvas = document.getElementById("pixel-logo");
         if (!logoCanvas) return;
-        const snapped = Math.max(120, Math.round(widthPx * 1.08));
+        const snapped = Math.max(96, Math.round(widthPx * 1.02));
         const next = `${snapped}px`;
         if (logoCanvas.style.width !== next) logoCanvas.style.width = next;
       }
@@ -841,8 +841,19 @@
 
         function activeLogicalWidth() {
           let rightmost = -1;
-          for (const c of cells) {
-            if (c.a > 0.08 && c.x > rightmost) rightmost = c.x;
+          for (let x = LOGICAL_W - 1; x >= 0; x--) {
+            let colEnergy = 0;
+            let colPeak = 0;
+            for (let y = 0; y < LOGICAL_H; y++) {
+              const a = cells[(y * LOGICAL_W) + x].a;
+              colEnergy += a;
+              if (a > colPeak) colPeak = a;
+            }
+            const avg = colEnergy / LOGICAL_H;
+            if (colPeak >= 0.48 || avg >= 0.2) {
+              rightmost = x;
+              break;
+            }
           }
           if (rightmost < 0) return CHAR_W * 2;
           return Math.max(10, rightmost + 2);
@@ -969,8 +980,11 @@
             logicalW = targetW;
             painter.ctx.canvas.width = logicalW;
           }
-          const headBg = getComputedStyle(document.querySelector(".app-head")).backgroundColor || "rgb(255, 250, 242)";
-          bgCSS = headBg;
+          const head = document.querySelector(".app-head");
+          const mid = document.querySelector(".app-head-mid");
+          const headBg = getComputedStyle(head).backgroundColor || "";
+          const midBg = mid ? getComputedStyle(mid).backgroundColor : "";
+          bgCSS = (headBg && headBg !== "rgba(0, 0, 0, 0)" ? headBg : midBg) || "rgb(255, 250, 242)";
           const nums = headBg.match(/\d+/g) || ["255", "250", "242"];
           const [r, g, b] = nums.slice(0, 3).map((n) => Number(n));
           const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
