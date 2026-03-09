@@ -106,14 +106,14 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 0.24rem;
+        gap: 0;
         padding: 0.5rem 0.75rem;
         background: var(--banner-bg);
         border-bottom: 1px solid var(--line);
         height: 52px;
       }
-      .app-head-left { display: flex; align-items: center; gap: 0.2rem; flex-shrink: 0; }
-      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
+      .app-head-left { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+      .app-head-mid  { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); margin-left: -1px; }
       #status-canvas { display: block; height: 100%; width: 100%; image-rendering: pixelated; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: auto; }
@@ -696,7 +696,7 @@
         bannerSync.logoPhase = phase;
         const logoCanvas = document.getElementById("pixel-logo");
         if (!logoCanvas) return;
-        const snapped = Math.max(96, Math.round(widthPx * 1.02));
+        const snapped = Math.max(88, Math.round(widthPx));
         const next = `${snapped}px`;
         if (logoCanvas.style.width !== next) logoCanvas.style.width = next;
       }
@@ -881,7 +881,7 @@
             }
           }
           if (rightmost < 0) return CHAR_W * 2;
-          return Math.max(10, rightmost + 2);
+          return Math.max(10, rightmost + 1);
         }
 
         function frame(ts) {
@@ -1059,6 +1059,19 @@
           ctx.fillRect(bounce, Math.max(0, Math.floor(baseRow - 1)), 1, 3);
         }
 
+        function drawLogoBridge(t) {
+          const base = Math.floor((LOGICAL_H - 1) / 2);
+          for (let x = 0; x < Math.min(3, logicalW); x++) {
+            const wobble = Math.sin((t * 4.2) + x * 0.7) * 1.2;
+            const y = Math.max(0, Math.min(LOGICAL_H - 1, Math.round(base + wobble)));
+            const hue = 178 + perlin2((bannerSync.logoPhase + t) * 0.9, x * 0.31) * 38;
+            const alpha = 0.2 + perlin2(t * 0.53, x * 0.17) * 0.28;
+            ctx.fillStyle = `hsla(${hue.toFixed(1)},68%,56%,${alpha.toFixed(3)})`;
+            ctx.fillRect(x, y, 1, 1);
+            if (y + 1 < LOGICAL_H && x < 2) ctx.fillRect(x, y + 1, 1, 1);
+          }
+        }
+
         function tick(ts) {
           const t = ts * 0.001;
           const syncT = t + (bannerSync.logoPhase * 0.23);
@@ -1085,6 +1098,8 @@
             ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
             ctx.fillRect(p.col, p.row, 1, 1);
           }
+
+          drawLogoBridge(syncT);
 
           if ((ts - lastActivityMs) >= IDLE_AFTER_MS) {
             drawIdleWave(syncT);
