@@ -576,6 +576,7 @@ The web UI should make these activities easy:
 - keyboard actions on focused tickets:
   - `D`: prompt `Archive this ticket?` and archive on confirmation
   - `U`: undo the most recent ticket action initiated in the current web session
+- a fixed bottom-right overlay displays `server_version` from `/api/status`
 
 ## Persistence And Architecture
 

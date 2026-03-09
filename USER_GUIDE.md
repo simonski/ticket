@@ -493,6 +493,7 @@ Keyboard shortcuts in the board view:
 
 - `D` on a focused ticket prompts `Archive this ticket?`; choose `OK` to archive
 - `U` undoes the most recent ticket action you initiated in the current browser session
+- a fixed bottom-right version overlay shows the current server version reported by `/api/status`
 
 ## Command Reference
 

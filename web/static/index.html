@@ -405,6 +405,20 @@
         justify-content: flex-end;
         gap: 0.5rem;
       }
+      .version-overlay {
+        position: fixed;
+        right: 0.7rem;
+        bottom: 0.55rem;
+        z-index: 35;
+        background: rgba(28, 35, 51, 0.9);
+        color: #f4f7ff;
+        border: 1px solid rgba(255,255,255,0.22);
+        border-radius: 999px;
+        padding: 0.24rem 0.55rem;
+        font-size: 0.76rem;
+        letter-spacing: 0.02em;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
@@ -555,6 +569,7 @@
         </div>
       </div>
     </div>
+    <div id="version-overlay" class="version-overlay">server: unknown</div>
 
     <script type="module">
       import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
@@ -578,6 +593,7 @@
       const perspectiveOverlay = document.getElementById("perspective-overlay");
       const modalOverlay = document.getElementById("modal-overlay");
       const modalTitle = document.getElementById("modal-title");
+      const versionOverlay = document.getElementById("version-overlay");
       const dialogOverlay = document.getElementById("dialog-overlay");
       const dialogMessage = document.getElementById("dialog-message");
       const dialogCancel = document.getElementById("dialog-cancel");
@@ -587,6 +603,15 @@
 
       function isAppVisible() {
         return !mainContent.classList.contains("hidden");
+      }
+
+      function setServerVersion(version, unavailable = false) {
+        if (unavailable) {
+          versionOverlay.textContent = "server: offline";
+          return;
+        }
+        const v = String(version || "").trim();
+        versionOverlay.textContent = `server: ${v || "unknown"}`;
       }
 
       let dialogResolve = null;
@@ -1399,6 +1424,7 @@
       async function init() {
         try {
           const status = await call("/api/status", { headers: headers() });
+          setServerVersion(status.server_version);
           canRegister(Boolean(status.registration_enabled));
           if (!status.authenticated) {
             showLogin();
@@ -1409,6 +1435,7 @@
           await loadTickets();
           connectWS();
         } catch (err) {
+          setServerVersion("", true);
           showLogin(`Server unavailable: ${err.message}`);
         }
       }
