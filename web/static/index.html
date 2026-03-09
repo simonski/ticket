@@ -726,12 +726,26 @@
 
         const renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
         renderer.setPixelRatio(1);
+        if (typeof renderer.outputColorSpace !== "undefined" && window.THREE.SRGBColorSpace) {
+          renderer.outputColorSpace = window.THREE.SRGBColorSpace;
+        } else if (typeof renderer.outputEncoding !== "undefined" && window.THREE.sRGBEncoding) {
+          renderer.outputEncoding = window.THREE.sRGBEncoding;
+        }
+        if (typeof renderer.toneMapping !== "undefined" && window.THREE.NoToneMapping) {
+          renderer.toneMapping = window.THREE.NoToneMapping;
+        }
+        if (typeof renderer.toneMappingExposure !== "undefined") renderer.toneMappingExposure = 1;
         const scene = new window.THREE.Scene();
         const camera = new window.THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
         const texture = new window.THREE.CanvasTexture(off);
         texture.magFilter = window.THREE.NearestFilter;
         texture.minFilter = window.THREE.NearestFilter;
         texture.generateMipmaps = false;
+        if (typeof texture.colorSpace !== "undefined" && window.THREE.SRGBColorSpace) {
+          texture.colorSpace = window.THREE.SRGBColorSpace;
+        } else if (typeof texture.encoding !== "undefined" && window.THREE.sRGBEncoding) {
+          texture.encoding = window.THREE.sRGBEncoding;
+        }
         const material = new window.THREE.MeshBasicMaterial({ map: texture, transparent: true });
         scene.add(new window.THREE.Mesh(new window.THREE.PlaneGeometry(2, 2), material));
 
