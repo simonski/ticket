@@ -517,6 +517,7 @@ Use it for:
    - `agents`
    - `roles`
    - `settings`
+   - on desktop, the panel opens by default and can be collapsed/expanded via `sections`
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
 

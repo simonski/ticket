@@ -226,6 +226,25 @@
         transition: transform 220ms ease;
         padding: 0.7rem 0.6rem;
       }
+      .left-panel-handle {
+        position: fixed;
+        top: 108px;
+        left: 0;
+        z-index: 16;
+        border: 1px solid var(--line);
+        border-left: 0;
+        border-radius: 0 10px 10px 0;
+        background: #fffef9;
+        color: #1f2a44;
+        padding: 0.4rem 0.5rem;
+        font-size: 0.78rem;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(0,0,0,0.14);
+      }
+      .left-panel-handle:hover { background: #f0ede6; }
+      .app-shell.panel-open .left-panel-handle {
+        left: 260px;
+      }
       .left-panel.open {
         transform: translateX(0);
       }
@@ -267,6 +286,7 @@
       @media (max-width: 900px) {
         .app-shell.panel-open .main-content { margin-left: 0; }
         .left-panel { width: min(82vw, 300px); }
+        .app-shell.panel-open .left-panel-handle { left: min(82vw, 300px); }
       }
       .perspective-stage {
         position: relative;
@@ -573,6 +593,7 @@
             <button type="button" class="left-panel-item" data-left-panel-action="settings">settings</button>
           </nav>
         </aside>
+        <button id="left-panel-handle" class="left-panel-handle" type="button">sections</button>
         <div id="left-panel-backdrop" class="left-panel-backdrop"></div>
         <div id="main-content" class="main-content hidden">
           <main id="perspective-stage" class="perspective-stage">
@@ -757,6 +778,7 @@
       const viewTV = document.getElementById("view-tv");
       const leftPanel = document.getElementById("left-panel");
       const leftPanelToggleBtn = document.getElementById("left-panel-toggle");
+      const leftPanelHandleBtn = document.getElementById("left-panel-handle");
       const leftPanelBackdrop = document.getElementById("left-panel-backdrop");
       const leftPanelItems = Array.from(document.querySelectorAll("[data-left-panel-action]"));
       const perspectiveBtn = document.getElementById("perspective-btn");
@@ -798,6 +820,8 @@
         leftPanel.classList.toggle("open", open);
         appShell.classList.toggle("panel-open", open);
         leftPanelToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        leftPanelHandleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        localStorage.setItem("left-panel-open", open ? "1" : "0");
       }
 
       function setLeftPanelActive(action) {
@@ -1558,6 +1582,10 @@
         e.stopPropagation();
         toggleLeftPanel();
       });
+      leftPanelHandleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleLeftPanel();
+      });
       leftPanelBackdrop.addEventListener("click", closeLeftPanel);
       leftPanelItems.forEach((item) => {
         item.addEventListener("click", () => {
@@ -1854,6 +1882,12 @@
       document.getElementById("proj-dropdown").addEventListener("click", (e) => e.stopPropagation());
       document.getElementById("profile-wrap").addEventListener("click", (e) => e.stopPropagation());
       leftPanel.addEventListener("click", (e) => e.stopPropagation());
+
+      const savedLeftPanelState = localStorage.getItem("left-panel-open");
+      const shouldOpenLeftPanel = savedLeftPanelState === null
+        ? window.matchMedia("(min-width: 901px)").matches
+        : savedLeftPanelState === "1";
+      setLeftPanelOpen(shouldOpenLeftPanel);
 
       let projects = [];
       let agents = [];
