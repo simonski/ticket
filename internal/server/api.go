@@ -821,6 +821,34 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			writeJSON(w, http.StatusOK, tasks)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "stories" && r.Method == http.MethodGet {
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			stories, err := store.ListStoriesByProject(db, project.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, stories)
+			return
+		}
 
 		if (len(parts) == 2 && parts[1] == "users") || (len(parts) == 3 && parts[1] == "users") {
 			user, err := requireUser(db, r)
@@ -1045,6 +1073,162 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		writeJSON(w, http.StatusCreated, ticket)
 	}
 	mux.HandleFunc("/api/tickets", handleTicketsCollection)
+
+	mux.HandleFunc("/api/stories", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload storyRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			role, err := projectRoleForUser(db, payload.ProjectID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			story, err := store.CreateStory(db, payload.ProjectID, payload.Title, payload.Description, user.ID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, story)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/stories/", func(w http.ResponseWriter, r *http.Request) {
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/stories/")
+		parts := strings.Split(trimmed, "/")
+		var storyID int64
+		if _, err := fmt.Sscan(parts[0], &storyID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid story id")
+			return
+		}
+		story, err := store.GetStory(db, storyID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "story not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		role, err := projectRoleForUser(db, story.ProjectID, user)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !canWriteProject(role) {
+			writeAuthError(w, store.ErrForbidden)
+			return
+		}
+		if len(parts) == 1 && r.Method == http.MethodPut {
+			var payload storyRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			updated, err := store.UpdateStory(db, story.ID, payload.Title, payload.Description)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "story not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, updated)
+			return
+		}
+		if len(parts) != 2 || parts[1] != "analyse" || r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+
+		var analysis storyAnalysisResult
+		prompt := fmt.Sprintf(
+			"Story title: %s\nStory description: %s\nGenerate JSON shape {\"epics\":[{\"title\":\"...\",\"description\":\"...\",\"tasks\":[{\"title\":\"...\",\"description\":\"...\"}]}]} with 1-4 epics and 2-5 tasks per epic.",
+			story.Title,
+			story.Description,
+		)
+		if err := runRoleJSONAnalysis(db, "StoryReview", prompt, &analysis); err != nil || len(analysis.Epics) == 0 {
+			analysis = fallbackStoryAnalysis(story)
+		}
+
+		createdEpics := 0
+		createdTasks := 0
+		for _, epicSpec := range analysis.Epics {
+			epicTitle := strings.TrimSpace(epicSpec.Title)
+			if epicTitle == "" {
+				continue
+			}
+			epic, err := store.CreateTicket(db, store.TicketCreateParams{
+				ProjectID:   story.ProjectID,
+				Type:        "epic",
+				Title:       epicTitle,
+				Description: strings.TrimSpace(epicSpec.Description),
+				CreatedBy:   user.ID,
+				Stage:       store.StageDesign,
+				State:       store.StateIdle,
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			_ = store.LinkStoryToTicket(db, story.ID, epic.ID)
+			notify("ticket_created", epic.ProjectID, epic.ID)
+			createdEpics++
+			for _, taskSpec := range epicSpec.Tasks {
+				taskTitle := strings.TrimSpace(taskSpec.Title)
+				if taskTitle == "" {
+					continue
+				}
+				parentID := epic.ID
+				task, err := store.CreateTicket(db, store.TicketCreateParams{
+					ProjectID:   story.ProjectID,
+					ParentID:    &parentID,
+					Type:        "task",
+					Title:       taskTitle,
+					Description: strings.TrimSpace(taskSpec.Description),
+					CreatedBy:   user.ID,
+					Stage:       store.StageDesign,
+					State:       store.StateIdle,
+				})
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				_ = store.LinkStoryToTicket(db, story.ID, task.ID)
+				notify("ticket_created", task.ProjectID, task.ID)
+				createdTasks++
+			}
+		}
+		updatedStory, err := store.UpdateStoryStatus(db, story.ID, "ready_for_review")
+		if err == nil {
+			story = updatedStory
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"story":         story,
+			"created_epics": createdEpics,
+			"created_tasks": createdTasks,
+		})
+	})
 
 	handleTicketClaim := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -1308,6 +1492,76 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "analyse" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				epic, err := store.GetTicket(db, id)
+				if err != nil {
+					writeError(w, http.StatusNotFound, "ticket not found")
+					return
+				}
+				if epic.Type != "epic" {
+					writeError(w, http.StatusBadRequest, "analyse is only supported for epics")
+					return
+				}
+				storyID, ok, err := store.StoryIDForTicket(db, epic.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				if !ok {
+					writeError(w, http.StatusBadRequest, "epic is not linked to a story")
+					return
+				}
+				story, err := store.GetStory(db, storyID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+
+				var analysis epicAnalysisResult
+				prompt := fmt.Sprintf(
+					"Story title: %s\nStory description: %s\nEpic title: %s\nEpic description: %s\nGenerate JSON shape {\"tickets\":[{\"title\":\"...\",\"description\":\"...\"}]} with 2-6 implementation tickets.",
+					story.Title, story.Description, epic.Title, epic.Description,
+				)
+				if err := runRoleJSONAnalysis(db, "EpicReview", prompt, &analysis); err != nil || len(analysis.Tickets) == 0 {
+					analysis = fallbackEpicAnalysis(epic)
+				}
+
+				created := 0
+				for _, taskSpec := range analysis.Tickets {
+					taskTitle := strings.TrimSpace(taskSpec.Title)
+					if taskTitle == "" {
+						continue
+					}
+					parentID := epic.ID
+					task, err := store.CreateTicket(db, store.TicketCreateParams{
+						ProjectID:   epic.ProjectID,
+						ParentID:    &parentID,
+						Type:        "task",
+						Title:       taskTitle,
+						Description: strings.TrimSpace(taskSpec.Description),
+						CreatedBy:   user.ID,
+						Stage:       store.StageDesign,
+						State:       store.StateIdle,
+					})
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					_ = store.LinkStoryToTicket(db, story.ID, task.ID)
+					notify("ticket_created", task.ProjectID, task.ID)
+					created++
+				}
+				writeJSON(w, http.StatusOK, map[string]any{
+					"epic_id":         epic.ID,
+					"story_id":        story.ID,
+					"created_tickets": created,
+				})
+				return
+			}
 
 			switch r.Method {
 			case http.MethodGet:
@@ -1520,6 +1774,12 @@ type roleRequest struct {
 	Title      string `json:"title"`
 	Motivation string `json:"motivation"`
 	Goals      string `json:"goals"`
+}
+
+type storyRequest struct {
+	ProjectID   int64  `json:"project_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type ticketRequest struct {

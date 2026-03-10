@@ -228,6 +228,92 @@ func TestRoleAPI(t *testing.T) {
 	}
 }
 
+func TestStoryAPIAndAnalyseFallback(t *testing.T) {
+	t.Setenv("TICKET_ANALYSE_CMD", "false")
+
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d, want %d", loginResp.Code, http.StatusOK)
+	}
+	var auth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &auth)
+
+	createProjectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]string{
+		"title": "Story Test Project",
+	}, auth.Token)
+	if createProjectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", createProjectResp.Code, createProjectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, createProjectResp, &project)
+
+	createStoryResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories", map[string]any{
+		"project_id":  project.ID,
+		"title":       "Checkout improvement",
+		"description": "Improve checkout conversion flow",
+	}, auth.Token)
+	if createStoryResp.Code != http.StatusCreated {
+		t.Fatalf("create story status = %d body=%s", createStoryResp.Code, createStoryResp.Body.String())
+	}
+	var story store.Story
+	decodeResponse(t, createStoryResp, &story)
+
+	listStoriesResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/stories", nil, auth.Token)
+	if listStoriesResp.Code != http.StatusOK {
+		t.Fatalf("list stories status = %d body=%s", listStoriesResp.Code, listStoriesResp.Body.String())
+	}
+	var stories []store.Story
+	decodeResponse(t, listStoriesResp, &stories)
+	if len(stories) != 1 || stories[0].ID != story.ID {
+		t.Fatalf("stories = %#v", stories)
+	}
+
+	analyseStoryResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories/"+strconv.FormatInt(story.ID, 10)+"/analyse", nil, auth.Token)
+	if analyseStoryResp.Code != http.StatusOK {
+		t.Fatalf("analyse story status = %d body=%s", analyseStoryResp.Code, analyseStoryResp.Body.String())
+	}
+	var analyseStoryPayload map[string]any
+	decodeResponse(t, analyseStoryResp, &analyseStoryPayload)
+	if createdEpics, _ := analyseStoryPayload["created_epics"].(float64); createdEpics < 1 {
+		t.Fatalf("analyse story created_epics = %v, want >= 1", analyseStoryPayload["created_epics"])
+	}
+
+	ticketsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets", nil, auth.Token)
+	if ticketsResp.Code != http.StatusOK {
+		t.Fatalf("list tickets status = %d body=%s", ticketsResp.Code, ticketsResp.Body.String())
+	}
+	var tickets []store.Ticket
+	decodeResponse(t, ticketsResp, &tickets)
+	var epicID int64
+	for _, ticket := range tickets {
+		if ticket.Type == "epic" {
+			epicID = ticket.ID
+			break
+		}
+	}
+	if epicID == 0 {
+		t.Fatalf("expected generated epic ticket, got %#v", tickets)
+	}
+
+	analyseEpicResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+strconv.FormatInt(epicID, 10)+"/analyse", nil, auth.Token)
+	if analyseEpicResp.Code != http.StatusOK {
+		t.Fatalf("analyse epic status = %d body=%s", analyseEpicResp.Code, analyseEpicResp.Body.String())
+	}
+	var analyseEpicPayload map[string]any
+	decodeResponse(t, analyseEpicResp, &analyseEpicPayload)
+	if createdTickets, _ := analyseEpicPayload["created_tickets"].(float64); createdTickets < 1 {
+		t.Fatalf("analyse epic created_tickets = %v, want >= 1", analyseEpicPayload["created_tickets"])
+	}
+}
+
 func TestAgentAPI(t *testing.T) {
 	handler, db := testHandler(t)
 	defer db.Close()

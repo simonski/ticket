@@ -185,6 +185,28 @@ CREATE TABLE IF NOT EXISTS tickets (
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS stories (
+	story_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'draft',
+	created_by INTEGER,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(created_by) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS story_ticket_links (
+	story_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(story_id, ticket_id),
+	FOREIGN KEY(story_id) REFERENCES stories(story_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id)
+);
+
 CREATE TABLE IF NOT EXISTS history_events (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
@@ -378,6 +400,38 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !tableExists(db, "stories") {
+		if _, err := db.Exec(`
+			CREATE TABLE IF NOT EXISTS stories (
+				story_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				title TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'draft',
+				created_by INTEGER,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id),
+				FOREIGN KEY(created_by) REFERENCES users(user_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(db, "story_ticket_links") {
+		if _, err := db.Exec(`
+			CREATE TABLE IF NOT EXISTS story_ticket_links (
+				story_id INTEGER NOT NULL,
+				ticket_id INTEGER NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(story_id, ticket_id),
+				FOREIGN KEY(story_id) REFERENCES stories(story_id),
+				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
 	if _, err := db.Exec(`
 		UPDATE tickets
 		SET
@@ -521,6 +575,28 @@ Classically, staff-level impact is measured in leverage: better defaults, better
 			Goals: `Lead cross-team initiatives that improve architecture consistency, platform capability, and engineering effectiveness without centralizing all decision-making.
 
 Advance long-term technical quality by identifying systemic risks, shaping roadmaps for foundational work, and mentoring engineers in high-leverage design and execution patterns.`,
+		},
+		{
+			Title:            "StoryReview",
+			LegacyMotivation: "",
+			LegacyGoals:      "",
+			Motivation: `StoryReview converts high-level requirements into a coherent implementation shape. The role ensures scope is represented as outcome-focused epics and delivery-focused tickets that can be executed incrementally.
+
+This role emphasizes completeness, clear boundaries, and actionable decomposition that engineering teams can review and implement with minimal ambiguity.`,
+			Goals: `Break each story into a small set of epics that represent major capability slices, then derive concrete implementation tickets for each epic.
+
+Ensure generated work items have clear intent, practical scope, and traceability back to the parent story for review and approval.`,
+		},
+		{
+			Title:            "EpicReview",
+			LegacyMotivation: "",
+			LegacyGoals:      "",
+			Motivation: `EpicReview translates a strategic epic into executable tickets. The role focuses on identifying practical delivery steps that preserve architectural integrity while enabling fast implementation.
+
+This role acts as the bridge between planning and coding by turning broad capability statements into clear, testable work units.`,
+			Goals: `Decompose epics into implementation tickets with well-defined titles and descriptions that support estimation and assignment.
+
+Produce tickets that are specific enough for immediate development while maintaining linkage to the parent epic and story context.`,
 		},
 	}
 	for _, role := range defaultRoles {

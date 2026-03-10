@@ -379,6 +379,30 @@
       .chat-send {
         flex: 0 0 auto;
       }
+      #view-stories {
+        padding: 0.9rem;
+        overflow: auto;
+        background:
+          radial-gradient(circle at 12% 18%, #fffdf6 0%, #f4efe3 42%, #ece5d9 100%);
+      }
+      .stories-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.7rem;
+      }
+      .stories-list {
+        display: grid;
+        gap: 0.55rem;
+      }
+      .story-row {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fffef9;
+        padding: 0.65rem 0.75rem;
+        cursor: pointer;
+      }
+      .story-row:hover { background: #f4efe6; }
       @keyframes chat-rise {
         from { transform: translateY(10px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
@@ -649,6 +673,7 @@
         <aside id="left-panel" class="left-panel" aria-label="Main sections">
           <nav class="left-panel-nav">
             <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="stories">stories</button>
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
             <button type="button" class="left-panel-item" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item" data-left-panel-action="roles">roles</button>
@@ -664,6 +689,13 @@
             </section>
             <section id="view-tv" class="perspective-view">
               <canvas id="tv-canvas"></canvas>
+            </section>
+            <section id="view-stories" class="perspective-view">
+              <div class="stories-head">
+                <strong>Stories</strong>
+                <button id="story-new" class="btn" type="button">New Story (S)</button>
+              </div>
+              <div id="stories-list" class="stories-list"></div>
             </section>
             <section id="view-chat" class="perspective-view">
               <div class="chat-shell">
@@ -691,6 +723,10 @@
         <div class="perspective-item active" data-perspective="swimlanes">
           <div><strong>kanban</strong></div>
           <div class="perspective-kicker">Current board lanes for this project</div>
+        </div>
+        <div class="perspective-item" data-perspective="stories">
+          <div><strong>stories</strong></div>
+          <div class="perspective-kicker">High-level requirements for this project</div>
         </div>
         <div class="perspective-item" data-perspective="chat">
           <div><strong>chat</strong></div>
@@ -788,6 +824,24 @@
       </div>
     </div>
 
+    <div id="story-modal-overlay" class="modal-overlay hidden">
+      <div id="story-modal" class="modal">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <strong id="story-modal-heading">Story</strong>
+          <span class="muted">ESC to close</span>
+        </div>
+        <div class="stack" style="margin-top:0.6rem;">
+          <input id="story-title" placeholder="story title" autocomplete="off" />
+          <textarea id="story-description" placeholder="high-level requirement"></textarea>
+          <div class="row">
+            <button id="story-save" class="btn" type="button">Create Story</button>
+            <button id="story-analyse" class="btn" type="button">Analyse</button>
+          </div>
+          <div id="story-status" class="muted"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-overlay" class="modal-overlay hidden">
       <div id="ticket-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
@@ -827,6 +881,7 @@
             <button id="ticket-delete" class="btn" type="button">Delete</button>
             <button id="ticket-close-open" class="btn" type="button">Close</button>
             <button id="ticket-archive" class="btn" type="button">Archive</button>
+            <button id="ticket-analyse" class="btn" type="button">Analyse</button>
           </div>
           <div class="muted">No save button. Changes are persisted as you type.</div>
         </div>
@@ -863,7 +918,17 @@
       const tvCanvas = document.getElementById("tv-canvas");
       const viewSwimlanes = document.getElementById("view-swimlanes");
       const viewTV = document.getElementById("view-tv");
+      const viewStories = document.getElementById("view-stories");
       const viewChat = document.getElementById("view-chat");
+      const storiesListEl = document.getElementById("stories-list");
+      const storyNewBtn = document.getElementById("story-new");
+      const storyModalOverlay = document.getElementById("story-modal-overlay");
+      const storyModalHeading = document.getElementById("story-modal-heading");
+      const storyTitleInput = document.getElementById("story-title");
+      const storyDescriptionInput = document.getElementById("story-description");
+      const storySaveBtn = document.getElementById("story-save");
+      const storyAnalyseBtn = document.getElementById("story-analyse");
+      const storyStatusEl = document.getElementById("story-status");
       const chatThreadEl = document.getElementById("chat-thread");
       const chatInputEl = document.getElementById("chat-input");
       const chatSendBtn = document.getElementById("chat-send");
@@ -902,6 +967,7 @@
       const roleClearBtn = document.getElementById("role-clear");
       const roleStatusEl = document.getElementById("role-status");
       const roleListEl = document.getElementById("role-list");
+      const ticketAnalyseBtn = document.getElementById("ticket-analyse");
 
       function isAppVisible() {
         return !mainContent.classList.contains("hidden");
@@ -934,6 +1000,13 @@
           switchPerspective("swimlanes");
           setLeftPanelActive("swimlanes");
           closeLeftPanel();
+          return;
+        }
+        if (action === "stories") {
+          switchPerspective("stories");
+          setLeftPanelActive("stories");
+          closeLeftPanel();
+          await loadStories();
           return;
         }
         if (action === "chat") {
@@ -1615,12 +1688,18 @@
 
       // ── Perspective selector + TicketVision (Three.js) ────────────────────
       let currentPerspective = localStorage.getItem("task-perspective") || "swimlanes";
-      const perspectiveViews = { swimlanes: viewSwimlanes, tv: viewTV, chat: viewChat };
+      const perspectiveViews = { swimlanes: viewSwimlanes, stories: viewStories, tv: viewTV, chat: viewChat };
       const perspectiveItems = Array.from(document.querySelectorAll(".perspective-item"));
       let perspectiveActiveIdx = 0;
 
       function syncPerspectiveUI() {
-        perspectiveBtn.textContent = currentPerspective === "tv" ? "tv : ticketvision" : currentPerspective === "chat" ? "chat" : "kanban";
+        perspectiveBtn.textContent = currentPerspective === "tv"
+          ? "tv : ticketvision"
+          : currentPerspective === "chat"
+            ? "chat"
+            : currentPerspective === "stories"
+              ? "stories"
+              : "kanban";
         setLeftPanelActive(currentPerspective);
         perspectiveItems.forEach((el) => {
           el.classList.toggle("active", el.dataset.perspective === currentPerspective);
@@ -1638,6 +1717,7 @@
         syncPerspectiveUI();
         if (currentPerspective === "tv") renderTicketVision();
         if (currentPerspective === "chat") connectChatWS();
+        if (currentPerspective === "stories") loadStories();
       }
 
       function openPerspectivePicker() {
@@ -1667,6 +1747,7 @@
           closePerspectivePicker();
           if (currentPerspective === "tv") renderTicketVision();
           if (currentPerspective === "chat") connectChatWS();
+          if (currentPerspective === "stories") loadStories();
           setTimeout(() => target.classList.remove("fading-in"), 240);
         }, 220);
       }
@@ -1944,6 +2025,7 @@
             setSelectedProjectID(p.project_id);
             closeProjMenu();
             renderProjMenu();
+            await loadStories();
             await loadTickets();
           });
           projMenu.appendChild(el);
@@ -2007,11 +2089,13 @@
       setLeftPanelOpen(shouldOpenLeftPanel);
 
       let projects = [];
+      let stories = [];
       let agents = [];
       let roles = [];
       let tickets = [];
       let selectedAgentID = 0;
       let selectedRoleID = 0;
+      let selectedStoryID = 0;
       let socket = null;
       let socketRetry = null;
       let chatSocket = null;
@@ -2376,6 +2460,125 @@
         if (event.target === roleModalOverlay) closeRoleModal();
       });
 
+      function setStoryStatus(message = "", isError = false) {
+        storyStatusEl.textContent = message;
+        storyStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
+      }
+
+      function clearStoryForm() {
+        selectedStoryID = 0;
+        storyModalHeading.textContent = "Story";
+        storyTitleInput.value = "";
+        storyDescriptionInput.value = "";
+        storySaveBtn.textContent = "Create Story";
+        storyAnalyseBtn.disabled = true;
+      }
+
+      function openStoryModal(story = null) {
+        if (story && story.story_id) {
+          selectedStoryID = Number(story.story_id);
+          storyModalHeading.textContent = `Story #${selectedStoryID}`;
+          storyTitleInput.value = story.title || "";
+          storyDescriptionInput.value = story.description || "";
+          storySaveBtn.textContent = "Save Story";
+          storyAnalyseBtn.disabled = false;
+        } else {
+          clearStoryForm();
+        }
+        setStoryStatus("");
+        storyModalOverlay.classList.remove("hidden");
+        storyTitleInput.focus();
+      }
+
+      function closeStoryModal() {
+        storyModalOverlay.classList.add("hidden");
+      }
+
+      function renderStoriesPanel() {
+        storiesListEl.innerHTML = "";
+        if (!stories.length) {
+          const empty = document.createElement("div");
+          empty.className = "story-row";
+          empty.textContent = "No stories";
+          storiesListEl.appendChild(empty);
+          return;
+        }
+        for (const story of stories) {
+          const row = document.createElement("div");
+          row.className = "story-row";
+          row.innerHTML = `
+            <div><strong>${escape(story.title || "")}</strong></div>
+            <div class="muted">#${escape(story.story_id)} · ${escape(story.status || "draft")}</div>
+            <div class="muted">${escape(story.description || "")}</div>
+          `;
+          row.addEventListener("click", () => openStoryModal(story));
+          storiesListEl.appendChild(row);
+        }
+      }
+
+      async function loadStories() {
+        const projectID = selectedProjectID();
+        if (!projectID) {
+          stories = [];
+          renderStoriesPanel();
+          return;
+        }
+        stories = await call(`/api/projects/${projectID}/stories`, { headers: headers() }) || [];
+        renderStoriesPanel();
+      }
+
+      storyNewBtn.addEventListener("click", () => openStoryModal());
+      storyModalOverlay.addEventListener("click", (event) => {
+        if (event.target === storyModalOverlay) closeStoryModal();
+      });
+      storySaveBtn.addEventListener("click", async () => {
+        const projectID = Number(selectedProjectID() || 0);
+        if (!projectID) {
+          setStoryStatus("Select a project first.", true);
+          return;
+        }
+        const title = storyTitleInput.value.trim();
+        const description = storyDescriptionInput.value.trim();
+        if (!title) {
+          setStoryStatus("Story title is required.", true);
+          storyTitleInput.focus();
+          return;
+        }
+        try {
+          const story = selectedStoryID
+            ? await call(`/api/stories/${selectedStoryID}`, {
+                method: "PUT",
+                headers: headers(true),
+                body: JSON.stringify({ project_id: projectID, title, description }),
+              })
+            : await call("/api/stories", {
+                method: "POST",
+                headers: headers(true),
+                body: JSON.stringify({ project_id: projectID, title, description }),
+              });
+          setStoryStatus(`Saved story #${story.story_id || "?"}.`);
+          await loadStories();
+          openStoryModal(story);
+        } catch (err) {
+          setStoryStatus(err.message, true);
+        }
+      });
+      storyAnalyseBtn.addEventListener("click", async () => {
+        if (!selectedStoryID) return;
+        try {
+          setStoryStatus("Analysing story...");
+          const response = await call(`/api/stories/${selectedStoryID}/analyse`, {
+            method: "POST",
+            headers: headers(),
+          });
+          setStoryStatus(`Created ${response.created_epics || 0} epics and ${response.created_tasks || 0} tasks.`);
+          await loadStories();
+          await loadTickets();
+        } catch (err) {
+          setStoryStatus(err.message, true);
+        }
+      });
+
       async function call(path, options = {}) {
         const response = await fetch(path, { cache: "no-store", ...options });
         const body = await response.text();
@@ -2445,6 +2648,7 @@
           showApp(status.user.username);
           ensureRealtimeSync();
           await loadProjects();
+          await loadStories();
           await syncAgentsForAnimator();
           await loadTickets();
           connectWS();
@@ -2826,6 +3030,8 @@
         document.getElementById("ticket-close-open").textContent = ticket.open === false ? "Open" : "Close";
         document.getElementById("ticket-archive").textContent = ticket.archived ? "Unarchive" : "Archive";
         document.getElementById("ticket-delete").disabled = !ticket.ticket_id;
+        ticketAnalyseBtn.style.display = ticket.type === "epic" ? "" : "none";
+        ticketAnalyseBtn.disabled = !(ticket.ticket_id && ticket.type === "epic");
       }
 
       function queueAutosave() {
@@ -3115,6 +3321,25 @@
         const archived = !draft.ticket.archived;
         await setTicketArchivedByID(draft.ticket.ticket_id, archived, true);
       });
+      ticketAnalyseBtn.addEventListener("click", async () => {
+        if (!draft || !draft.ticket || draft.ticket.type !== "epic") return;
+        try {
+          appStatus.textContent = "Analysing epic...";
+          const response = await call(`/api/tickets/${draft.ticket.ticket_id}/analyse`, {
+            method: "POST",
+            headers: headers(),
+          });
+          appStatus.textContent = `Created ${response.created_tickets || 0} tickets from epic analysis.`;
+          await loadTickets();
+          const refreshed = tickets.find((t) => Number(t.ticket_id) === Number(draft.ticket.ticket_id));
+          if (refreshed) {
+            draft.ticket = refreshed;
+            setModalValues(refreshed);
+          }
+        } catch (err) {
+          appStatus.textContent = `Epic analyse failed: ${err.message}`;
+        }
+      });
 
       ["ticket-title", "ticket-description", "ticket-ac", "ticket-git-repository", "ticket-git-branch", "ticket-type", "ticket-stage", "ticket-state"].forEach((id) => {
         document.getElementById(id).addEventListener("input", queueAutosave);
@@ -3252,6 +3477,7 @@
           if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
           if (leftPanel.classList.contains("open")) { closeLeftPanel(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
+          if (!storyModalOverlay.classList.contains("hidden")) { closeStoryModal(); return; }
           if (!agentModalOverlay.classList.contains("hidden")) { closeAgentModal(); return; }
           if (!roleModalOverlay.classList.contains("hidden")) { closeRoleModal(); return; }
           if (!dialogOverlay.classList.contains("hidden")) { closeDialog(false); return; }
@@ -3294,6 +3520,13 @@
           if (!isAppVisible() || inField || !roleModalOverlay.classList.contains("hidden")) return;
           event.preventDefault();
           openRoleModal();
+          return;
+        }
+
+        if (event.key.toLowerCase() === "s" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (!isAppVisible() || inField || !storyModalOverlay.classList.contains("hidden")) return;
+          event.preventDefault();
+          openStoryModal();
           return;
         }
 

@@ -68,6 +68,19 @@ func GetRoleByID(db *sql.DB, id int64) (Role, error) {
 	return role, nil
 }
 
+func GetRoleByTitle(db *sql.DB, title string) (Role, error) {
+	row := db.QueryRow(`
+		SELECT role_id, title, motivation, goals, created_at, updated_at
+		FROM roles
+		WHERE title = ?
+	`, strings.TrimSpace(title))
+	var role Role
+	if err := row.Scan(&role.ID, &role.Title, &role.Motivation, &role.Goals, &role.CreatedAt, &role.UpdatedAt); err != nil {
+		return Role{}, err
+	}
+	return role, nil
+}
+
 func UpdateRole(db *sql.DB, id int64, title, motivation, goals string) (Role, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {

@@ -614,6 +614,7 @@ The web UI should make these activities easy:
 - switch between projects
 - open a left-side slide panel (`sections`) to jump to:
   - `kanban`
+  - `stories`
   - `chat`
   - `agents`
   - `roles`
@@ -627,6 +628,7 @@ The web UI should make these activities easy:
 - switch perspectives with `V` via a popup selector:
   - `kanban`: current lane board
     - cards are sorted by last-modified timestamp descending (newest first)
+  - `stories`: high-level requirements panel for the active project
   - `agents`: opens agent management panel
   - `roles`: opens role management panel
   - `settings`: opens settings panel
@@ -637,9 +639,13 @@ The web UI should make these activities easy:
   - `U`: undo the most recent ticket action initiated in the current web session
   - `P`: open project edit modal for the current project (swimlanes view)
   - `R`: open role management modal
+  - `S`: open story creation modal
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
 - chat websocket (`/api/chat/ws`) executes a shell command on a PTY (default `codex`) and maps message input to process stdin and process output back to the browser
+- stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
+- story analysis uses the `StoryReview` role to generate epics/tasks and marks story status `ready_for_review`
+- epic analysis uses the `EpicReview` role to generate child implementation tickets
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes
 

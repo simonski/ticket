@@ -510,6 +510,7 @@ Use it for:
 3. browsing task details and dependencies without switching commands
 4. switching perspectives with `V`:
    - `kanban`: stage lanes for the current project
+   - `stories`: high-level requirements for the current project
    - `chat`: LLM chat panel
    - `tv : ticketvision`: a left-to-right project → epics → stories graph view
    - `agents`: opens agent management
@@ -518,6 +519,7 @@ Use it for:
 5. in `kanban`, cards are ordered by last modified timestamp (newest first)
 6. opening the `sections` left panel to jump directly to:
    - `kanban`
+   - `stories`
    - `chat`
    - `agents`
    - `roles`
@@ -532,6 +534,7 @@ Keyboard shortcuts in the board view:
 - `U` undoes the most recent ticket action you initiated in the current browser session
 - `P` opens project edit for the currently selected project (swimlanes view)
 - `R` opens the Roles dialog for role persona management
+- `S` opens the Story dialog for creating a high-level requirement
 - a fixed bottom-right version overlay shows the current server version reported by `/api/status`
 - board updates are live via websocket; ticket changes from other users should appear without browser refresh
 - the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
@@ -541,6 +544,8 @@ Keyboard shortcuts in the board view:
 - seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic is bridged to a shell-launched `codex` process on a PTY (`stdin`/`stdout` over terminal); set `TICKET_CHAT_CMD` to override the command string
+- Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
+- Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
 ## Command Reference
 
