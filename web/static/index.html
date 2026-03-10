@@ -459,6 +459,7 @@
             <div class="profile-menu-item" id="menu-settings">Settings</div>
             <div class="profile-menu-item" id="menu-profile">Profile</div>
             <div class="profile-menu-item" id="menu-agents">Agents</div>
+            <div class="profile-menu-item" id="menu-roles">Roles</div>
             <div class="profile-menu-item danger" id="menu-logout">Logout</div>
           </div>
         </div>
@@ -528,6 +529,9 @@
           <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
+          <select id="proj-modal-select">
+            <option value="">Create new project...</option>
+          </select>
           <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="8" autocomplete="off" style="text-transform:uppercase;" />
           <input id="proj-modal-title" placeholder="title" autocomplete="off" />
           <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
@@ -549,6 +553,9 @@
           <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
+          <select id="agent-select">
+            <option value="">Create new agent...</option>
+          </select>
           <div class="row">
             <input id="agent-name" placeholder="name" autocomplete="off" />
             <input id="agent-description" placeholder="description" autocomplete="off" />
@@ -560,6 +567,30 @@
           </div>
           <div id="agent-status" class="muted"></div>
           <div id="agent-list" class="agent-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="role-modal-overlay" class="modal-overlay hidden">
+      <div id="role-modal" class="modal">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <strong>Roles</strong>
+          <span class="muted">ESC to close</span>
+        </div>
+        <div class="stack" style="margin-top:0.6rem;">
+          <select id="role-select">
+            <option value="">Create new role...</option>
+          </select>
+          <input id="role-title" placeholder="title" autocomplete="off" />
+          <textarea id="role-motivation" placeholder="motivation"></textarea>
+          <textarea id="role-goals" placeholder="goals"></textarea>
+          <div class="row">
+            <button id="role-save" class="btn" type="button">Create Role</button>
+            <button id="role-delete" class="btn" type="button">Delete</button>
+            <button id="role-clear" class="btn" type="button">Clear</button>
+          </div>
+          <div id="role-status" class="muted"></div>
+          <div id="role-list" class="agent-list"></div>
         </div>
       </div>
     </div>
@@ -641,6 +672,7 @@
       const perspectiveBtn = document.getElementById("perspective-btn");
       const perspectiveOverlay = document.getElementById("perspective-overlay");
       const agentModalOverlay = document.getElementById("agent-modal-overlay");
+      const roleModalOverlay = document.getElementById("role-modal-overlay");
       const modalOverlay = document.getElementById("modal-overlay");
       const modalTitle = document.getElementById("modal-title");
       const versionOverlay = document.getElementById("version-overlay");
@@ -653,10 +685,20 @@
       const agentNameInput = document.getElementById("agent-name");
       const agentDescriptionInput = document.getElementById("agent-description");
       const agentPasswordInput = document.getElementById("agent-password");
+      const agentSelect = document.getElementById("agent-select");
       const agentSaveBtn = document.getElementById("agent-save");
       const agentClearBtn = document.getElementById("agent-clear");
       const agentListEl = document.getElementById("agent-list");
       const agentStatusEl = document.getElementById("agent-status");
+      const roleSelect = document.getElementById("role-select");
+      const roleTitleInput = document.getElementById("role-title");
+      const roleMotivationInput = document.getElementById("role-motivation");
+      const roleGoalsInput = document.getElementById("role-goals");
+      const roleSaveBtn = document.getElementById("role-save");
+      const roleDeleteBtn = document.getElementById("role-delete");
+      const roleClearBtn = document.getElementById("role-clear");
+      const roleStatusEl = document.getElementById("role-status");
+      const roleListEl = document.getElementById("role-list");
 
       function isAppVisible() {
         return !mainContent.classList.contains("hidden");
@@ -1028,6 +1070,10 @@
           l: 50,
         }));
         const particles = [];
+        const agentRobots = [];
+        const robotPixels = [];
+        const agentSnapshot = new Map();
+        let latestLogoEdge = MAX_LOGO_W - 1;
 
         function slotGlyph(word, slot) {
           const ch = word[slot] || "none";
@@ -1084,6 +1130,76 @@
           bgCSS = resolveVisibleBackgroundColor(canvas);
           painter.resize();
         }
+        function drawRobot(col, row) {
+          // 3x3 gray robot with dim cyan eyes.
+          const body = [
+            [0, 1, 0],
+            [1, 1, 1],
+            [1, 0, 1],
+          ];
+          for (let y = 0; y < body.length; y++) {
+            for (let x = 0; x < body[y].length; x++) {
+              if (!body[y][x]) continue;
+              const px = col + x;
+              const py = row + y - 1;
+              if (px < 0 || px >= logicalW || py < 0 || py >= LOGICAL_H) continue;
+              const eye = (y === 1 && (x === 0 || x === 2));
+              ctx.fillStyle = eye ? "hsla(190,45%,72%,0.95)" : "hsla(0,0%,62%,0.92)";
+              ctx.fillRect(px, py, 1, 1);
+            }
+          }
+        }
+        function emitFromRobot(robot, classification = "status") {
+          if (!robot) return;
+          const [h, s, l] = colourForActor({ actor_type: "agent" }, classification);
+          const speed = 0.22 + perlin2(robot.id * 0.17, robot.x * 0.03) * 0.24;
+          const life = 28 + Math.floor(perlin2(robot.id * 0.11, robot.row * 0.27) * 24);
+          robotPixels.push({
+            col: Math.floor(robot.x) + 2,
+            row: Math.max(0, Math.min(LOGICAL_H - 1, robot.row)),
+            dir: 1,
+            speed,
+            phase: 0,
+            age: 0,
+            life,
+            h,
+            s: Math.max(10, s),
+            l: Math.max(34, l),
+          });
+        }
+        function setAgents(list) {
+          const incoming = Array.isArray(list) ? list : [];
+          const prev = new Map(agentRobots.map((r) => [r.id, r]));
+          agentRobots.length = 0;
+          for (let i = 0; i < incoming.length; i++) {
+            const raw = incoming[i] || {};
+            const id = Number(raw.agent_id || i + 1);
+            const existing = prev.get(id);
+            const row = Math.max(1, LOGICAL_H - 2);
+            const startX = Math.max(latestLogoEdge + 3, 3);
+            const robot = existing || {
+              id,
+              x: startX + (i % 4),
+              row,
+              speed: 0.08 + perlin2((id + 1) * 0.13, (i + 1) * 0.21) * 0.11,
+              phase: Math.random(),
+              name: String(raw.name || `agent-${id}`),
+            };
+            robot.slot = i;
+            robot.row = row;
+            robot.name = String(raw.name || robot.name || `agent-${id}`);
+            agentRobots.push(robot);
+
+            const snap = `${raw.status || ""}|${raw.last_seen || ""}`;
+            const prevSnap = agentSnapshot.get(id);
+            if (prevSnap && prevSnap !== snap) emitFromRobot(robot, "status");
+            agentSnapshot.set(id, snap);
+          }
+          const keep = new Set(agentRobots.map((r) => r.id));
+          for (const key of Array.from(agentSnapshot.keys())) {
+            if (!keep.has(key)) agentSnapshot.delete(key);
+          }
+        }
         function spawn(raw, count = 1) {
           lastActivityMs = performance.now();
           const classification = resolveClassification(raw);
@@ -1094,6 +1210,12 @@
             const speed = 0.09 + perlin2(seed * 0.17, seed * 0.77) * 0.34;
             const life = 80 + Math.floor(perlin2(seed * 0.33, seed * 0.67) * 120);
             particles.push({ col: logicalW - 1, row, dir: -1, speed, phase: 0, age: 0, life, h, s, l });
+          }
+          const t = String(raw?.type || "").toLowerCase();
+          const aType = actorType(raw);
+          if ((aType === "agent" || t.includes("agent")) && agentRobots.length > 0) {
+            const idx = Math.floor(perlin2(seed * 0.23, seed * 0.71) * agentRobots.length) % agentRobots.length;
+            emitFromRobot(agentRobots[Math.max(0, idx)], classification);
           }
         }
         function drawIdleFlow(t, edgeX) {
@@ -1127,6 +1249,7 @@
           const current = WORDS[wordIdx];
           const logoWidth = targetLogicalWidth(current);
           const logoEdge = Math.max(0, Math.min(logicalW - 1, logoWidth - 1));
+          latestLogoEdge = logoEdge;
 
           for (let i = 0; i < logoCells.length; i++) {
             const c = logoCells[i];
@@ -1164,6 +1287,37 @@
             ctx.fillRect(p.col, p.row, 1, 1);
           }
 
+          const robotStart = logoEdge + 1;
+          const robotEnd = Math.max(robotStart + 2, logicalW - 1);
+          const available = Math.max(1, robotEnd - robotStart - 2);
+          const robotGap = Math.max(3, Math.floor(available / Math.max(1, agentRobots.length)));
+          for (let i = 0; i < agentRobots.length; i++) {
+            const robot = agentRobots[i];
+            const baseX = robotStart + 1 + (robot.slot || i) * robotGap;
+            robot.x = Math.max(robotStart + 1, Math.min(robotEnd - 2, baseX));
+            robot.row = Math.max(1, LOGICAL_H - 2);
+            drawRobot(Math.floor(robot.x), robot.row);
+          }
+
+          for (let i = robotPixels.length - 1; i >= 0; i--) {
+            const p = robotPixels[i];
+            p.phase += p.speed;
+            if (p.phase >= 1) {
+              const step = Math.floor(p.phase);
+              p.col += p.dir * step;
+              p.phase -= step;
+            }
+            p.age += 1;
+            if (p.age > p.life || p.col < 0 || p.col >= logicalW) {
+              robotPixels.splice(i, 1);
+              continue;
+            }
+            const fadeOut = 1 - p.age / p.life;
+            const alpha = Math.max(0.06, fadeOut * (0.82 + perlin2(p.col * 0.27, (p.row + i) * 0.31) * 0.22));
+            ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha.toFixed(3)})`;
+            ctx.fillRect(p.col, p.row, 1, 1);
+          }
+
           drawBridge(t, logoEdge);
           if ((ts - lastActivityMs) >= IDLE_AFTER_MS) drawIdleFlow(t, logoEdge);
 
@@ -1185,7 +1339,7 @@
         window.addEventListener("resize", resize);
         resize();
         requestAnimationFrame(frame);
-        window.statusAnimator = { spawn };
+        window.statusAnimator = { spawn, setAgents };
       }
 
       let bannerRenderersInitialized = false;
@@ -1539,6 +1693,10 @@
         closeProfileMenu();
         await openAgentModal();
       });
+      document.getElementById("menu-roles").addEventListener("click", async () => {
+        closeProfileMenu();
+        await openRoleModal();
+      });
       document.getElementById("menu-logout").addEventListener("click", async () => {
         closeProfileMenu();
         try { await call("/api/logout", { method: "POST", headers: headers() }); } catch {}
@@ -1554,8 +1712,10 @@
 
       let projects = [];
       let agents = [];
+      let roles = [];
       let tickets = [];
       let selectedAgentID = 0;
+      let selectedRoleID = 0;
       let socket = null;
       let socketRetry = null;
       let realtimeSyncTimer = null;
@@ -1579,7 +1739,21 @@
         agentNameInput.value = "";
         agentDescriptionInput.value = "";
         agentPasswordInput.value = "";
+        if (agentSelect) agentSelect.value = "";
         agentSaveBtn.textContent = "Create Agent";
+      }
+
+      function renderAgentSelector(selectedID = 0) {
+        if (!agentSelect) return;
+        const previous = String(selectedID || agentSelect.value || "");
+        agentSelect.innerHTML = `<option value="">Create new agent...</option>`;
+        for (const agent of agents) {
+          const option = document.createElement("option");
+          option.value = String(agent.agent_id);
+          option.textContent = `${agent.name} (#${agent.agent_id})`;
+          agentSelect.appendChild(option);
+        }
+        agentSelect.value = previous;
       }
 
       function setAgentStatus(message = "", isError = false) {
@@ -1592,6 +1766,7 @@
         agentNameInput.value = agent.name || "";
         agentDescriptionInput.value = agent.description || "";
         agentPasswordInput.value = "";
+        if (agentSelect) agentSelect.value = String(selectedAgentID || "");
         agentSaveBtn.textContent = "Update Agent";
         renderAgentList();
       }
@@ -1657,7 +1832,24 @@
       async function loadAgents() {
         const list = await call("/api/agents", { headers: headers() });
         agents = Array.isArray(list) ? list : [];
+        if (window.statusAnimator && typeof window.statusAnimator.setAgents === "function") {
+          window.statusAnimator.setAgents(agents);
+        }
+        renderAgentSelector(selectedAgentID);
         renderAgentList();
+      }
+
+      async function syncAgentsForAnimator() {
+        try {
+          const list = await call("/api/agents", { headers: headers() });
+          agents = Array.isArray(list) ? list : [];
+          if (window.statusAnimator && typeof window.statusAnimator.setAgents === "function") {
+            window.statusAnimator.setAgents(agents);
+          }
+          renderAgentSelector(selectedAgentID);
+        } catch (_) {
+          // Non-admin users may not have agent visibility; ignore in animator sync.
+        }
       }
 
       async function openAgentModal() {
@@ -1713,8 +1905,176 @@
         resetAgentForm();
         setAgentStatus("");
       });
+      if (agentSelect) {
+        agentSelect.addEventListener("change", () => {
+          const id = Number(agentSelect.value || 0);
+          if (!id) {
+            resetAgentForm();
+            setAgentStatus("");
+            return;
+          }
+          const chosen = agents.find((agent) => Number(agent.agent_id) === id);
+          if (chosen) selectAgent(chosen);
+        });
+      }
       agentModalOverlay.addEventListener("click", (event) => {
         if (event.target === agentModalOverlay) closeAgentModal();
+      });
+
+      function setRoleStatus(message = "", isError = false) {
+        roleStatusEl.textContent = message;
+        roleStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
+      }
+
+      function resetRoleForm() {
+        selectedRoleID = 0;
+        roleTitleInput.value = "";
+        roleMotivationInput.value = "";
+        roleGoalsInput.value = "";
+        roleSaveBtn.textContent = "Create Role";
+        roleDeleteBtn.disabled = true;
+        roleSelect.value = "";
+      }
+
+      function renderRoleSelector(selectedID = 0) {
+        const previous = String(selectedID || roleSelect.value || "");
+        roleSelect.innerHTML = `<option value="">Create new role...</option>`;
+        for (const role of roles) {
+          const option = document.createElement("option");
+          option.value = String(role.role_id);
+          option.textContent = `${role.title} (#${role.role_id})`;
+          roleSelect.appendChild(option);
+        }
+        roleSelect.value = previous;
+      }
+
+      function selectRole(role) {
+        selectedRoleID = Number(role.role_id || 0);
+        roleTitleInput.value = role.title || "";
+        roleMotivationInput.value = role.motivation || "";
+        roleGoalsInput.value = role.goals || "";
+        roleSaveBtn.textContent = "Update Role";
+        roleDeleteBtn.disabled = !selectedRoleID;
+        roleSelect.value = String(selectedRoleID || "");
+        renderRoleList();
+      }
+
+      function renderRoleList() {
+        roleListEl.innerHTML = "";
+        if (!roles.length) {
+          const empty = document.createElement("div");
+          empty.className = "agent-row";
+          empty.textContent = "No roles";
+          roleListEl.appendChild(empty);
+          return;
+        }
+        for (const role of roles) {
+          const row = document.createElement("div");
+          row.className = "agent-row";
+          if (Number(role.role_id) === Number(selectedRoleID)) row.classList.add("selected");
+          row.innerHTML = `
+            <div>#${escape(role.role_id)}</div>
+            <div><strong>${escape(role.title || "")}</strong><div class="muted">${escape(role.motivation || "")}</div></div>
+            <div></div>
+            <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
+          `;
+          row.addEventListener("click", () => selectRole(role));
+          row.querySelector("button").addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectRole(role);
+          });
+          roleListEl.appendChild(row);
+        }
+      }
+
+      async function loadRoles() {
+        const list = await call("/api/roles", { headers: headers() });
+        roles = Array.isArray(list) ? list : [];
+        renderRoleSelector(selectedRoleID);
+        renderRoleList();
+      }
+
+      async function openRoleModal() {
+        resetRoleForm();
+        setRoleStatus("");
+        try {
+          await loadRoles();
+          roleModalOverlay.classList.remove("hidden");
+          roleTitleInput.focus();
+        } catch (err) {
+          await uiAlert(`Unable to load roles: ${err.message}`);
+        }
+      }
+
+      function closeRoleModal() {
+        roleModalOverlay.classList.add("hidden");
+      }
+
+      roleSaveBtn.addEventListener("click", async () => {
+        const title = roleTitleInput.value.trim();
+        const motivation = roleMotivationInput.value.trim();
+        const goals = roleGoalsInput.value.trim();
+        if (!title) {
+          setRoleStatus("Title is required.", true);
+          roleTitleInput.focus();
+          return;
+        }
+        try {
+          if (selectedRoleID) {
+            await call(`/api/roles/${selectedRoleID}`, {
+              method: "PUT",
+              headers: headers(true),
+              body: JSON.stringify({ title, motivation, goals }),
+            });
+            setRoleStatus(`Updated role #${selectedRoleID}`);
+          } else {
+            const created = await call("/api/roles", {
+              method: "POST",
+              headers: headers(true),
+              body: JSON.stringify({ title, motivation, goals }),
+            });
+            setRoleStatus(`Created role #${created.role_id || "?"}`);
+          }
+          await loadRoles();
+          resetRoleForm();
+        } catch (err) {
+          setRoleStatus(err.message, true);
+        }
+      });
+
+      roleDeleteBtn.addEventListener("click", async () => {
+        if (!selectedRoleID) return;
+        const role = roles.find((item) => Number(item.role_id) === Number(selectedRoleID));
+        const ok = await uiConfirm(`Delete role ${role ? role.title : "#" + selectedRoleID}?`, "Delete");
+        if (!ok) return;
+        try {
+          await call(`/api/roles/${selectedRoleID}`, { method: "DELETE", headers: headers() });
+          setRoleStatus(`Deleted role #${selectedRoleID}`);
+          resetRoleForm();
+          await loadRoles();
+        } catch (err) {
+          setRoleStatus(err.message, true);
+        }
+      });
+
+      roleClearBtn.addEventListener("click", () => {
+        resetRoleForm();
+        setRoleStatus("");
+      });
+
+      roleSelect.addEventListener("change", () => {
+        const id = Number(roleSelect.value || 0);
+        if (!id) {
+          resetRoleForm();
+          setRoleStatus("");
+          return;
+        }
+        const chosen = roles.find((role) => Number(role.role_id) === id);
+        if (chosen) selectRole(chosen);
+      });
+
+      roleModalOverlay.addEventListener("click", (event) => {
+        if (event.target === roleModalOverlay) closeRoleModal();
       });
 
       async function call(path, options = {}) {
@@ -1782,8 +2142,10 @@
           showApp(status.user.username);
           ensureRealtimeSync();
           await loadProjects();
+          await syncAgentsForAnimator();
           await loadTickets();
           connectWS();
+          setInterval(syncAgentsForAnimator, 12000);
         } catch (err) {
           setServerVersion("", true);
           showLogin(`Server unavailable: ${err.message}`);
@@ -1797,6 +2159,7 @@
           setSelectedProjectID("");
         }
         if (!selectedProjectID() && projects.length > 0) setSelectedProjectID(projects[0].project_id);
+        renderProjectModalSelector(projModalProjectID);
         renderProjMenu();
       }
 
@@ -1988,6 +2351,7 @@
 
       const projModalOverlay = document.getElementById("proj-modal-overlay");
       const projModalHeading = document.getElementById("proj-modal-heading");
+      const projModalSelect = document.getElementById("proj-modal-select");
       const projModalPrefix = document.getElementById("proj-modal-prefix");
       const projModalTitle = document.getElementById("proj-modal-title");
       const projModalGitRepository = document.getElementById("proj-modal-git-repository");
@@ -1999,12 +2363,26 @@
       let projModalMode = "create";
       let projModalProjectID = 0;
 
+      function renderProjectModalSelector(selectedID = 0) {
+        if (!projModalSelect) return;
+        const previous = String(selectedID || projModalSelect.value || "");
+        projModalSelect.innerHTML = `<option value="">Create new project...</option>`;
+        for (const project of projects) {
+          const option = document.createElement("option");
+          option.value = String(project.project_id);
+          option.textContent = `${project.prefix} · ${project.title}`;
+          projModalSelect.appendChild(option);
+        }
+        projModalSelect.value = previous;
+      }
+
       function openProjModal() {
         projModalMode = "create";
         projModalProjectID = 0;
         projModalHeading.textContent = "New Project";
         projModalCreate.textContent = "Create Project";
         projModalPrefix.disabled = false;
+        renderProjectModalSelector(0);
         projModalPrefix.value = "";
         projModalTitle.value = "";
         projModalGitRepository.value = "";
@@ -2023,6 +2401,7 @@
         projModalHeading.textContent = "Edit Project";
         projModalCreate.textContent = "Save Project";
         projModalPrefix.disabled = true;
+        renderProjectModalSelector(projModalProjectID);
         projModalPrefix.value = String(project.prefix || "").toUpperCase();
         projModalTitle.value = project.title || "";
         projModalGitRepository.value = project.git_repository || "";
@@ -2068,6 +2447,17 @@
       });
 
       projModalOverlay.addEventListener("click", (e) => { if (e.target === projModalOverlay) closeProjModal(); });
+      if (projModalSelect) {
+        projModalSelect.addEventListener("change", () => {
+          const id = Number(projModalSelect.value || 0);
+          if (!id) {
+            openProjModal();
+            return;
+          }
+          const chosen = projects.find((project) => Number(project.project_id) === id);
+          if (chosen) openProjectEditModal(chosen);
+        });
+      }
 
       // Allow Enter on prefix/title to advance or submit
       projModalPrefix.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); projModalTitle.focus(); } });
@@ -2462,6 +2852,7 @@
           if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
           if (!agentModalOverlay.classList.contains("hidden")) { closeAgentModal(); return; }
+          if (!roleModalOverlay.classList.contains("hidden")) { closeRoleModal(); return; }
           if (!dialogOverlay.classList.contains("hidden")) { closeDialog(false); return; }
           if (!modalOverlay.classList.contains("hidden")) { closeModal(); return; }
         }
@@ -2488,6 +2879,20 @@
           event.preventDefault();
           const currentProject = projects.find((p) => String(p.project_id) === selectedProjectID());
           if (currentProject) openProjectEditModal(currentProject);
+          return;
+        }
+
+        if (event.key.toLowerCase() === "a" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (!isAppVisible() || inField) return;
+          event.preventDefault();
+          openAgentModal();
+          return;
+        }
+
+        if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (!isAppVisible() || inField || !roleModalOverlay.classList.contains("hidden")) return;
+          event.preventDefault();
+          openRoleModal();
           return;
         }
 

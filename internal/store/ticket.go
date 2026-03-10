@@ -1123,6 +1123,10 @@ func findAssignedTicketForUser(db *sql.DB, projectID int64, username, stage, sta
 	return ticket, true, nil
 }
 
+func CurrentAssignedTicketForUser(db *sql.DB, projectID int64, username string) (Ticket, bool, error) {
+	return findAssignedTicketForUser(db, projectID, strings.TrimSpace(username), StageDevelop, StateActive)
+}
+
 func findClaimCandidate(db *sql.DB, projectID int64) (Ticket, bool, error) {
 	if projectID == 0 {
 		return Ticket{}, false, errors.New("project is required")

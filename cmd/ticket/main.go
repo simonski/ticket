@@ -1364,7 +1364,7 @@ func runAgent(args []string) error {
 			if err != nil {
 				return err
 			}
-			if response.Status != "ASSIGNED" || response.Ticket == nil {
+			if (response.Status != "NEW" && response.Status != "CURRENT") || response.Ticket == nil {
 				time.Sleep(idleDelay)
 				continue
 			}
@@ -1398,6 +1398,8 @@ func runAgent(args []string) error {
 		url := fs.String("url", "", "ticket server url")
 		id := fs.Int64("id", 0, "specific ticket id")
 		dryRun := fs.Bool("dryrun", false, "simulate assignment only")
+		loop := fs.Int("loop", 1, "number of request loops")
+		sleepSeconds := fs.Int("sleep", 1, "sleep seconds between loops")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -1426,6 +1428,12 @@ func runAgent(args []string) error {
 		if len(missing) > 0 {
 			return fmt.Errorf("missing required values: %s", strings.Join(missing, ", "))
 		}
+		if *loop < 0 {
+			return errors.New("loop must be >= 0")
+		}
+		if *sleepSeconds < 0 {
+			return errors.New("sleep must be >= 0")
+		}
 		if err := os.Setenv("TICKET_MODE", string(config.ModeRemote)); err != nil {
 			return err
 		}
@@ -1447,16 +1455,24 @@ func runAgent(args []string) error {
 		if *id > 0 {
 			requestedID = id
 		}
-		response, err := svc.RequestAgentWork(libticket.AgentRequest{
-			Name:     agentName,
-			Password: agentPassword,
-			TicketID: requestedID,
-			DryRun:   *dryRun,
-		})
-		if err != nil {
-			return err
+		for i := 0; *loop == 0 || i < *loop; i++ {
+			response, err := svc.RequestAgentWork(libticket.AgentRequest{
+				Name:     agentName,
+				Password: agentPassword,
+				TicketID: requestedID,
+				DryRun:   *dryRun,
+			})
+			if err != nil {
+				return err
+			}
+			if err := printJSON(response); err != nil {
+				return err
+			}
+			if *loop == 0 || i < *loop-1 {
+				time.Sleep(time.Duration(*sleepSeconds) * time.Second)
+			}
 		}
-		return printJSON(response)
+		return nil
 	default:
 		return fmt.Errorf("unknown agent command %q", args[0])
 	}

@@ -520,11 +520,13 @@ Keyboard shortcuts in the board view:
 - `D` on a focused ticket prompts `Archive this ticket?`; choose `OK` to archive
 - `U` undoes the most recent ticket action you initiated in the current browser session
 - `P` opens project edit for the currently selected project (swimlanes view)
+- `R` opens the Roles dialog for role persona management
 - a fixed bottom-right version overlay shows the current server version reported by `/api/status`
 - board updates are live via websocket; ticket changes from other users should appear without browser refresh
 - the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
 - if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
 - profile menu includes an `Agents` panel to list/create/update/enable/disable/delete agents using the same API
+- profile menu includes a `Roles` panel to list/create/update/delete role personas (`title`, `motivation`, `goals`)
 
 ## Command Reference
 

@@ -13,6 +13,10 @@ type Service interface {
 	SetUserEnabled(username string, enabled bool) error
 	ListUsers() ([]store.User, error)
 	DeleteUser(username string) error
+	CreateRole(request RoleRequest) (store.Role, error)
+	ListRoles() ([]store.Role, error)
+	UpdateRole(id int64, request RoleRequest) (store.Role, error)
+	DeleteRole(id int64) error
 	CreateAgent(request AgentCreateRequest) (store.Agent, string, error)
 	SetAgentEnabled(id int64, enabled bool) (store.Agent, error)
 	ListAgents() ([]store.Agent, error)

@@ -87,6 +87,20 @@ Notes:
 - agent credentials are stored as hashes and never persisted in plaintext
 - lifecycle status is tracked as `online`, `working`, `soliciting`, `idle`, or `disabled`
 
+### Role
+
+- `role_id`
+- `title`
+- `motivation`
+- `goals`
+- `created_at`
+- `updated_at`
+
+Notes:
+
+- roles represent reusable agent personas for ticket work
+- default software delivery roles are seeded (for example Product Owner, Architect, DevOps, QA/Tester, BA, Lead Engineer, Staff Engineer)
+
 ### Project
 
 - `project_id`
@@ -610,6 +624,7 @@ The web UI should make these activities easy:
   - `D`: prompt `Archive this ticket?` and archive on confirmation
   - `U`: undo the most recent ticket action initiated in the current web session
   - `P`: open project edit modal for the current project (swimlanes view)
+  - `R`: open role management modal
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps

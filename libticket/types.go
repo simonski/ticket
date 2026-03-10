@@ -100,6 +100,12 @@ type AgentCreateRequest struct {
 	Password    string `json:"password,omitempty"`
 }
 
+type RoleRequest struct {
+	Title      string `json:"title"`
+	Motivation string `json:"motivation"`
+	Goals      string `json:"goals"`
+}
+
 type AgentUpdateRequest struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
@@ -127,7 +133,7 @@ type AgentTicketUpdateRequest struct {
 
 type AgentWorkResponse struct {
 	Status  string         `json:"status"`
-	Project *store.Project `json:"project,omitempty"`
-	Ticket  *store.Ticket  `json:"ticket,omitempty"`
-	Parents []store.Ticket `json:"parents,omitempty"`
+	Project *store.Project `json:"project"`
+	Ticket  *store.Ticket  `json:"ticket"`
+	Parents []store.Ticket `json:"parents"`
 }

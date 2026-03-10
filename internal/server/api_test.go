@@ -173,6 +173,61 @@ func TestProjectAPI(t *testing.T) {
 	}
 }
 
+func TestRoleAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d, want %d", loginResp.Code, http.StatusOK)
+	}
+	var auth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &auth)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/roles", map[string]string{
+		"title":      "Release Manager",
+		"motivation": "Ship reliable releases.",
+		"goals":      "Coordinate release quality and timelines.",
+	}, auth.Token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create role status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var created store.Role
+	decodeResponse(t, createResp, &created)
+	if created.ID == 0 {
+		t.Fatalf("created role id = 0")
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/roles", nil, auth.Token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list roles status = %d", listResp.Code)
+	}
+	var roles []store.Role
+	decodeResponse(t, listResp, &roles)
+	if len(roles) == 0 {
+		t.Fatalf("expected seeded and/or created roles, got 0")
+	}
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/roles/"+strconv.FormatInt(created.ID, 10), map[string]string{
+		"title":      "Release Captain",
+		"motivation": "Ship cleanly.",
+		"goals":      "Keep release velocity steady.",
+	}, auth.Token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update role status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/roles/"+strconv.FormatInt(created.ID, 10), nil, auth.Token)
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete role status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+}
+
 func TestAgentAPI(t *testing.T) {
 	handler, db := testHandler(t)
 	defer db.Close()

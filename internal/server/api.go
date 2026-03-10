@@ -426,6 +426,11 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 					}
 				}
 			}
+			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 				ProjectID: projectID,
 				TicketID:  payload.TicketID,
@@ -437,14 +442,32 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			if status == "ASSIGNED" {
+			agentStatus := "NONE"
+			switch status {
+			case "NO-WORK", "REJECTED":
+				agentStatus = "NONE"
+			case "ASSIGNED", "AVAILABLE":
+				if hadCurrent && currentAssigned.ID == ticket.ID {
+					agentStatus = "CURRENT"
+				} else {
+					agentStatus = "NEW"
+				}
+			default:
+				agentStatus = status
+			}
+			if status == "ASSIGNED" && agentStatus == "NEW" {
 				_, _ = store.TouchAgent(db, agent.ID, "working")
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 			} else {
 				_, _ = store.TouchAgent(db, agent.ID, "soliciting")
 			}
-			response := map[string]any{"status": status}
-			if status == "ASSIGNED" || status == "AVAILABLE" {
+			response := map[string]any{
+				"status":  agentStatus,
+				"project": nil,
+				"ticket":  nil,
+				"parents": []store.Ticket{},
+			}
+			if agentStatus == "NEW" || agentStatus == "CURRENT" {
 				response["ticket"] = ticket
 				if project, err := store.GetProjectByID(db, ticket.ProjectID); err == nil {
 					response["project"] = project
@@ -587,6 +610,83 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			return
 		}
 		writeError(w, http.StatusNotFound, "not found")
+	})
+
+	mux.HandleFunc("/api/roles", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			roles, err := store.ListRoles(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, roles)
+		case http.MethodPost:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload roleRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			role, err := store.CreateRole(db, payload.Title, payload.Motivation, payload.Goals)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, role)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/roles/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/roles/")
+		var id int64
+		if _, err := fmt.Sscan(strings.TrimSpace(trimmed), &id); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid role id")
+			return
+		}
+		switch r.Method {
+		case http.MethodPut:
+			var payload roleRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			role, err := store.UpdateRole(db, id, payload.Title, payload.Motivation, payload.Goals)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "role not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, role)
+		case http.MethodDelete:
+			if err := store.DeleteRole(db, id); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "role not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
 	})
 
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
@@ -1388,6 +1488,12 @@ type projectRequest struct {
 	GitRepository      string `json:"git_repository"`
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
+}
+
+type roleRequest struct {
+	Title      string `json:"title"`
+	Motivation string `json:"motivation"`
+	Goals      string `json:"goals"`
 }
 
 type ticketRequest struct {

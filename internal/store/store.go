@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS agents (
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS roles (
+	role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	title TEXT NOT NULL UNIQUE,
+	motivation TEXT NOT NULL DEFAULT '',
+	goals TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS projects (
 	project_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	prefix TEXT NOT NULL DEFAULT '',
@@ -419,6 +428,34 @@ func migrateSchema(db *sql.DB) error {
 		WHERE created_by IS NOT NULL AND created_by > 0
 	`); err != nil {
 		return err
+	}
+	if err := seedDefaultRoles(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func seedDefaultRoles(db *sql.DB) error {
+	defaultRoles := []struct {
+		Title      string
+		Motivation string
+		Goals      string
+	}{
+		{"Product Owner", "Maximize customer value and clarity.", "Prioritize backlog and validate outcomes."},
+		{"Architect", "Maintain coherent system design.", "Define architecture guardrails and reduce complexity."},
+		{"DevOps", "Improve delivery reliability and speed.", "Automate build/deploy and keep systems stable."},
+		{"QA/Tester", "Protect product quality.", "Design tests and prevent regressions."},
+		{"BA", "Turn business needs into implementable requirements.", "Clarify scope and acceptance criteria."},
+		{"Lead Engineer", "Deliver technically sound features.", "Guide implementation and unblock execution."},
+		{"Staff Engineer", "Raise cross-team technical quality.", "Drive long-term engineering improvements."},
+	}
+	for _, role := range defaultRoles {
+		if _, err := db.Exec(`
+			INSERT OR IGNORE INTO roles (title, motivation, goals, updated_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		`, role.Title, role.Motivation, role.Goals); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -126,15 +126,21 @@ type TicketRequestResponse struct {
 
 type AgentWorkResponse struct {
 	Status  string         `json:"status"`
-	Project *store.Project `json:"project,omitempty"`
-	Ticket  *store.Ticket  `json:"ticket,omitempty"`
-	Parents []store.Ticket `json:"parents,omitempty"`
+	Project *store.Project `json:"project"`
+	Ticket  *store.Ticket  `json:"ticket"`
+	Parents []store.Ticket `json:"parents"`
 }
 
 type AgentCreateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Password    string `json:"password,omitempty"`
+}
+
+type RoleRequest struct {
+	Title      string `json:"title"`
+	Motivation string `json:"motivation"`
+	Goals      string `json:"goals"`
 }
 
 type AgentUpdateRequest struct {
@@ -345,6 +351,60 @@ func (c *Client) DeleteUser(username string) error {
 	return c.doJSON(http.MethodDelete, "/api/users/"+username, nil, nil)
 }
 
+func (c *Client) CreateRole(request RoleRequest) (store.Role, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Role{}, err
+		}
+		defer db.Close()
+		return store.CreateRole(db, request.Title, request.Motivation, request.Goals)
+	}
+	var role store.Role
+	err := c.doJSON(http.MethodPost, "/api/roles", request, &role)
+	return role, err
+}
+
+func (c *Client) ListRoles() ([]store.Role, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListRoles(db)
+	}
+	var roles []store.Role
+	err := c.doJSON(http.MethodGet, "/api/roles", nil, &roles)
+	return roles, err
+}
+
+func (c *Client) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Role{}, err
+		}
+		defer db.Close()
+		return store.UpdateRole(db, id, request.Title, request.Motivation, request.Goals)
+	}
+	var role store.Role
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/roles/%d", id), request, &role)
+	return role, err
+}
+
+func (c *Client) DeleteRole(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteRole(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/roles/%d", id), nil, nil)
+}
+
 func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
@@ -471,6 +531,10 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 				}
 			}
 		}
+		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+		if err != nil {
+			return AgentWorkResponse{}, err
+		}
 		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 			ProjectID: projectID,
 			TicketID:  request.TicketID,
@@ -481,8 +545,21 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
-		response := AgentWorkResponse{Status: status}
-		if status == "ASSIGNED" || status == "AVAILABLE" {
+		agentStatus := "NONE"
+		switch status {
+		case "NO-WORK", "REJECTED":
+			agentStatus = "NONE"
+		case "ASSIGNED", "AVAILABLE":
+			if hadCurrent && currentAssigned.ID == ticket.ID {
+				agentStatus = "CURRENT"
+			} else {
+				agentStatus = "NEW"
+			}
+		default:
+			agentStatus = status
+		}
+		response := AgentWorkResponse{Status: agentStatus, Parents: []store.Ticket{}}
+		if agentStatus == "NEW" || agentStatus == "CURRENT" {
 			project, err := store.GetProjectByID(db, ticket.ProjectID)
 			if err == nil {
 				response.Project = &project

@@ -136,6 +136,42 @@ func (s *LocalService) DeleteUser(username string) error {
 	return store.DeleteUser(db, username)
 }
 
+func (s *LocalService) CreateRole(request RoleRequest) (store.Role, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Role{}, err
+	}
+	defer db.Close()
+	return store.CreateRole(db, request.Title, request.Motivation, request.Goals)
+}
+
+func (s *LocalService) ListRoles() ([]store.Role, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListRoles(db)
+}
+
+func (s *LocalService) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Role{}, err
+	}
+	defer db.Close()
+	return store.UpdateRole(db, id, request.Title, request.Motivation, request.Goals)
+}
+
+func (s *LocalService) DeleteRole(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteRole(db, id)
+}
+
 func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
 	db, err := s.openDB()
 	if err != nil {
@@ -224,6 +260,10 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 			}
 		}
 	}
+	currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+	if err != nil {
+		return AgentWorkResponse{}, err
+	}
 	ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 		ProjectID: projectID,
 		TicketID:  request.TicketID,
@@ -234,13 +274,26 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
-	if status == "ASSIGNED" {
+	agentStatus := "NONE"
+	switch status {
+	case "NO-WORK", "REJECTED":
+		agentStatus = "NONE"
+	case "ASSIGNED", "AVAILABLE":
+		if hadCurrent && currentAssigned.ID == ticket.ID {
+			agentStatus = "CURRENT"
+		} else {
+			agentStatus = "NEW"
+		}
+	default:
+		agentStatus = status
+	}
+	if status == "ASSIGNED" && agentStatus == "NEW" {
 		_, _ = store.TouchAgent(db, agent.ID, "working")
 	} else {
 		_, _ = store.TouchAgent(db, agent.ID, "soliciting")
 	}
-	response := AgentWorkResponse{Status: status}
-	if status == "ASSIGNED" || status == "AVAILABLE" {
+	response := AgentWorkResponse{Status: agentStatus, Parents: []store.Ticket{}}
+	if agentStatus == "NEW" || agentStatus == "CURRENT" {
 		project, err := store.GetProjectByID(db, ticket.ProjectID)
 		if err == nil {
 			response.Project = &project

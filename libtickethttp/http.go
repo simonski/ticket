@@ -63,6 +63,22 @@ func (s *Service) DeleteUser(username string) error {
 	return s.client.DeleteUser(username)
 }
 
+func (s *Service) CreateRole(request libticket.RoleRequest) (store.Role, error) {
+	return s.client.CreateRole(client.RoleRequest(request))
+}
+
+func (s *Service) ListRoles() ([]store.Role, error) {
+	return s.client.ListRoles()
+}
+
+func (s *Service) UpdateRole(id int64, request libticket.RoleRequest) (store.Role, error) {
+	return s.client.UpdateRole(id, client.RoleRequest(request))
+}
+
+func (s *Service) DeleteRole(id int64) error {
+	return s.client.DeleteRole(id)
+}
+
 func (s *Service) CreateAgent(request libticket.AgentCreateRequest) (store.Agent, string, error) {
 	return s.client.CreateAgent(client.AgentCreateRequest(request))
 }
