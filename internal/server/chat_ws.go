@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -33,6 +34,22 @@ type chatProcessBridge struct {
 	tty  *os.File
 	mu   sync.Mutex
 	once sync.Once
+}
+
+var ansiControlRE = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\a]*(?:\a|\x1b\\)|[@-Z\\-_])`)
+
+func sanitizeTerminalOutput(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	sanitized := ansiControlRE.ReplaceAllString(raw, "")
+	var b strings.Builder
+	for _, r := range sanitized {
+		if r == '\n' || r == '\r' || r == '\t' || (r >= 32 && r != 127) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
@@ -124,6 +141,11 @@ func startChatBridge(send func(chatOutboundMessage)) (*chatProcessBridge, error)
 	commandLine := resolveChatCommandLine()
 	shellPath := resolveShellPath()
 	cmd := exec.Command(shellPath, "-lc", commandLine)
+	cmd.Env = append(os.Environ(),
+		"TERM=dumb",
+		"NO_COLOR=1",
+		"CLICOLOR=0",
+	)
 	tty, err := pty.Start(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("unable to start chat shell %q with command %q: %w", shellPath, commandLine, err)
@@ -171,10 +193,14 @@ func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send f
 			chunk := make([]byte, 1024)
 			n, err := buffered.Read(chunk)
 			if n > 0 {
+				clean := sanitizeTerminalOutput(string(chunk[:n]))
+				if clean == "" {
+					continue
+				}
 				send(chatOutboundMessage{
 					Type:   "chat_output",
 					Stream: stream,
-					Text:   string(chunk[:n]),
+					Text:   clean,
 				})
 			}
 			if err != nil {
