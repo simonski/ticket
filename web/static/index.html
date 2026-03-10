@@ -114,6 +114,16 @@
       }
       .app-head-banner { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+      .left-panel-toggle {
+        border: 1px solid #c4cfeb;
+        border-radius: 999px;
+        padding: 0.4rem 0.85rem;
+        background: #fff;
+        color: #1f2a44;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .left-panel-toggle:hover { background: #f0ede6; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: 100%; }
 
       /* custom project dropdown */
@@ -191,9 +201,72 @@
       }
       .profile-menu-item:hover { background: #f0ede6; }
       .profile-menu-item.danger { color: #c62828; }
+      .app-shell {
+        min-height: calc(100vh - 52px);
+      }
       .main-content {
         min-height: calc(100vh - 52px);
         position: relative;
+        transition: margin-left 220ms ease;
+      }
+      .app-shell.panel-open .main-content {
+        margin-left: 260px;
+      }
+      .left-panel {
+        position: fixed;
+        top: 52px;
+        left: 0;
+        bottom: 0;
+        width: 260px;
+        z-index: 15;
+        background: #f7f3ea;
+        border-right: 1px solid var(--line);
+        box-shadow: 0 14px 34px rgba(0,0,0,0.18);
+        transform: translateX(-100%);
+        transition: transform 220ms ease;
+        padding: 0.7rem 0.6rem;
+      }
+      .left-panel.open {
+        transform: translateX(0);
+      }
+      .left-panel-nav {
+        display: grid;
+        gap: 0.45rem;
+      }
+      .left-panel-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fffef9;
+        color: var(--ink);
+        text-align: left;
+        padding: 0.6rem 0.7rem;
+        cursor: pointer;
+      }
+      .left-panel-item:hover { background: #f0ede6; }
+      .left-panel-item.active {
+        border-color: var(--accent);
+        background: rgba(17, 100, 102, 0.12);
+        color: var(--accent);
+      }
+      .left-panel-backdrop {
+        position: fixed;
+        top: 52px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 14;
+        background: rgba(11, 15, 30, 0.25);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms ease;
+      }
+      .app-shell.panel-open .left-panel-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      @media (max-width: 900px) {
+        .app-shell.panel-open .main-content { margin-left: 0; }
+        .left-panel { width: min(82vw, 300px); }
       }
       .perspective-stage {
         position: relative;
@@ -448,6 +521,7 @@
       </div>
       <div id="app-status" style="display:none;"></div>
       <div class="app-head-right">
+        <button id="left-panel-toggle" class="left-panel-toggle" type="button">sections</button>
         <button class="proj-btn" id="perspective-btn" type="button">swimlanes</button>
         <div class="proj-dropdown" id="proj-dropdown">
           <button class="proj-btn" id="proj-btn" type="button">Project</button>
@@ -490,15 +564,26 @@
     </section>
 
     <section id="app" class="app">
-      <div id="main-content" class="main-content hidden">
-        <main id="perspective-stage" class="perspective-stage">
-          <section id="view-swimlanes" class="perspective-view active">
-            <div id="board" class="board"></div>
-          </section>
-          <section id="view-tv" class="perspective-view">
-            <canvas id="tv-canvas"></canvas>
-          </section>
-        </main>
+      <div id="app-shell" class="app-shell">
+        <aside id="left-panel" class="left-panel" aria-label="Main sections">
+          <nav class="left-panel-nav">
+            <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban (swimlanes)</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="agents">agents</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="roles">roles</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="settings">settings</button>
+          </nav>
+        </aside>
+        <div id="left-panel-backdrop" class="left-panel-backdrop"></div>
+        <div id="main-content" class="main-content hidden">
+          <main id="perspective-stage" class="perspective-stage">
+            <section id="view-swimlanes" class="perspective-view active">
+              <div id="board" class="board"></div>
+            </section>
+            <section id="view-tv" class="perspective-view">
+              <canvas id="tv-canvas"></canvas>
+            </section>
+          </main>
+        </div>
       </div>
       <button id="new-ticket" class="fab hidden" title="New Ticket (N)">+</button>
     </section>
@@ -660,6 +745,7 @@
       const STAGES = ["design", "develop", "test", "done"];
       const loginScreen = document.getElementById("login-screen");
       const app = document.getElementById("app");
+      const appShell = document.getElementById("app-shell");
       const appHead = document.querySelector(".app-head");
       const mainContent = document.getElementById("main-content");
       const newTicketBtn = document.getElementById("new-ticket");
@@ -669,6 +755,10 @@
       const tvCanvas = document.getElementById("tv-canvas");
       const viewSwimlanes = document.getElementById("view-swimlanes");
       const viewTV = document.getElementById("view-tv");
+      const leftPanel = document.getElementById("left-panel");
+      const leftPanelToggleBtn = document.getElementById("left-panel-toggle");
+      const leftPanelBackdrop = document.getElementById("left-panel-backdrop");
+      const leftPanelItems = Array.from(document.querySelectorAll("[data-left-panel-action]"));
       const perspectiveBtn = document.getElementById("perspective-btn");
       const perspectiveOverlay = document.getElementById("perspective-overlay");
       const agentModalOverlay = document.getElementById("agent-modal-overlay");
@@ -702,6 +792,49 @@
 
       function isAppVisible() {
         return !mainContent.classList.contains("hidden");
+      }
+
+      function setLeftPanelOpen(open) {
+        leftPanel.classList.toggle("open", open);
+        appShell.classList.toggle("panel-open", open);
+        leftPanelToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+
+      function setLeftPanelActive(action) {
+        leftPanelItems.forEach((item) => {
+          item.classList.toggle("active", item.dataset.leftPanelAction === action);
+        });
+      }
+
+      function closeLeftPanel() {
+        setLeftPanelOpen(false);
+      }
+
+      function toggleLeftPanel() {
+        setLeftPanelOpen(!leftPanel.classList.contains("open"));
+      }
+
+      async function runLeftPanelAction(action) {
+        if (action === "swimlanes") {
+          switchPerspective("swimlanes");
+          setLeftPanelActive("swimlanes");
+          closeLeftPanel();
+          return;
+        }
+        if (action === "agents") {
+          closeLeftPanel();
+          await openAgentModal();
+          return;
+        }
+        if (action === "roles") {
+          closeLeftPanel();
+          await openRoleModal();
+          return;
+        }
+        if (action === "settings") {
+          closeLeftPanel();
+          await uiAlert("Settings — coming soon.");
+        }
       }
 
       function setServerVersion(version, unavailable = false) {
@@ -1365,6 +1498,7 @@
 
       function syncPerspectiveUI() {
         perspectiveBtn.textContent = currentPerspective === "tv" ? "tv : ticketvision" : "swimlanes";
+        setLeftPanelActive(currentPerspective === "swimlanes" ? "swimlanes" : "");
         perspectiveItems.forEach((el) => {
           el.classList.toggle("active", el.dataset.perspective === currentPerspective);
         });
@@ -1419,6 +1553,16 @@
       perspectiveOverlay.addEventListener("click", (e) => { if (e.target === perspectiveOverlay) closePerspectivePicker(); });
       perspectiveItems.forEach((el) => {
         el.addEventListener("click", () => switchPerspective(el.dataset.perspective));
+      });
+      leftPanelToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleLeftPanel();
+      });
+      leftPanelBackdrop.addEventListener("click", closeLeftPanel);
+      leftPanelItems.forEach((item) => {
+        item.addEventListener("click", () => {
+          runLeftPanelAction(item.dataset.leftPanelAction || "");
+        });
       });
 
       const tvGraph = {
@@ -1706,9 +1850,10 @@
       });
 
       // Close dropdowns when clicking outside
-      document.addEventListener("click", () => { closeProjMenu(); closeProfileMenu(); closePerspectivePicker(); });
+      document.addEventListener("click", () => { closeProjMenu(); closeProfileMenu(); closePerspectivePicker(); closeLeftPanel(); });
       document.getElementById("proj-dropdown").addEventListener("click", (e) => e.stopPropagation());
       document.getElementById("profile-wrap").addEventListener("click", (e) => e.stopPropagation());
+      leftPanel.addEventListener("click", (e) => e.stopPropagation());
 
       let projects = [];
       let agents = [];
@@ -2850,6 +2995,7 @@
         if (event.key === "Escape") {
           if (!searchOverlay.classList.contains("hidden")) { closeSearch(); return; }
           if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
+          if (leftPanel.classList.contains("open")) { closeLeftPanel(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
           if (!agentModalOverlay.classList.contains("hidden")) { closeAgentModal(); return; }
           if (!roleModalOverlay.classList.contains("hidden")) { closeRoleModal(); return; }

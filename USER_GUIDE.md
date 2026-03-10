@@ -512,6 +512,11 @@ Use it for:
    - `swimlanes`: stage lanes for the current project
    - `tv : ticketvision`: a left-to-right project → epics → stories graph view
 5. in `swimlanes`, cards are ordered by last modified timestamp (newest first)
+6. opening the `sections` left panel to jump directly to:
+   - `kanban (swimlanes)`
+   - `agents`
+   - `roles`
+   - `settings`
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
 
@@ -527,6 +532,7 @@ Keyboard shortcuts in the board view:
 - if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
 - profile menu includes an `Agents` panel to list/create/update/enable/disable/delete agents using the same API
 - profile menu includes a `Roles` panel to list/create/update/delete role personas (`title`, `motivation`, `goals`)
+- seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
 
 ## Command Reference
 

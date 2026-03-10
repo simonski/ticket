@@ -100,6 +100,7 @@ Notes:
 
 - roles represent reusable agent personas for ticket work
 - default software delivery roles are seeded (for example Product Owner, Architect, DevOps, QA/Tester, BA, Lead Engineer, Staff Engineer)
+- seeded role `motivation` and `goals` use multi-paragraph classical role descriptions to provide richer persona context out of the box
 
 ### Project
 
@@ -611,6 +612,11 @@ Requirements:
 The web UI should make these activities easy:
 
 - switch between projects
+- open a left-side slide panel (`sections`) to jump to:
+  - `kanban (swimlanes)`
+  - `agents`
+  - `roles`
+  - `settings`
 - manage agents from a custom profile-menu panel (list/create/update/enable/disable/delete)
 - add and edit items
 - view hierarchy
