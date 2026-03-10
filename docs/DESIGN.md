@@ -613,7 +613,7 @@ The web UI should make these activities easy:
 
 - switch between projects
 - open a left-side slide panel (`sections`) to jump to:
-  - `kanban (swimlanes)`
+  - `kanban`
   - `chat`
   - `agents`
   - `roles`
@@ -625,8 +625,11 @@ The web UI should make these activities easy:
 - manage status on a board
 - inspect history and comments
 - switch perspectives with `V` via a popup selector:
-  - `swimlanes`: current lane board
+  - `kanban`: current lane board
     - cards are sorted by last-modified timestamp descending (newest first)
+  - `agents`: opens agent management panel
+  - `roles`: opens role management panel
+  - `settings`: opens settings panel
   - `tv : ticketvision`: Three.js project graph laid out left-to-right as project → epics → stories
   - `chat`: websocket-backed LLM chat pane with bottom composer and upward-animated conversation history
 - keyboard actions on focused tickets:

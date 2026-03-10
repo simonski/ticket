@@ -603,7 +603,7 @@
       <div id="app-status" style="display:none;"></div>
       <div class="app-head-right">
         <button id="left-panel-toggle" class="left-panel-toggle" type="button">sections</button>
-        <button class="proj-btn" id="perspective-btn" type="button">swimlanes</button>
+        <button class="proj-btn" id="perspective-btn" type="button">kanban</button>
         <div class="proj-dropdown" id="proj-dropdown">
           <button class="proj-btn" id="proj-btn" type="button">Project</button>
           <div class="proj-menu hidden" id="proj-menu"></div>
@@ -648,7 +648,7 @@
       <div id="app-shell" class="app-shell">
         <aside id="left-panel" class="left-panel" aria-label="Main sections">
           <nav class="left-panel-nav">
-            <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban (swimlanes)</button>
+            <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban</button>
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
             <button type="button" class="left-panel-item" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item" data-left-panel-action="roles">roles</button>
@@ -689,12 +689,28 @@
     <div id="perspective-overlay" class="perspective-overlay hidden">
       <div class="perspective-popup">
         <div class="perspective-item active" data-perspective="swimlanes">
-          <div><strong>swimlanes</strong></div>
+          <div><strong>kanban</strong></div>
           <div class="perspective-kicker">Current board lanes for this project</div>
+        </div>
+        <div class="perspective-item" data-perspective="chat">
+          <div><strong>chat</strong></div>
+          <div class="perspective-kicker">Chat with Codex via backend bridge</div>
         </div>
         <div class="perspective-item" data-perspective="tv">
           <div><strong>tv : ticketvision</strong></div>
           <div class="perspective-kicker">Project → epics → stories force graph</div>
+        </div>
+        <div class="perspective-item" data-panel-action="agents">
+          <div><strong>agents</strong></div>
+          <div class="perspective-kicker">Open agent management</div>
+        </div>
+        <div class="perspective-item" data-panel-action="roles">
+          <div><strong>roles</strong></div>
+          <div class="perspective-kicker">Open role management</div>
+        </div>
+        <div class="perspective-item" data-panel-action="settings">
+          <div><strong>settings</strong></div>
+          <div class="perspective-kicker">Open settings panel</div>
         </div>
       </div>
     </div>
@@ -1604,7 +1620,7 @@
       let perspectiveActiveIdx = 0;
 
       function syncPerspectiveUI() {
-        perspectiveBtn.textContent = currentPerspective === "tv" ? "tv : ticketvision" : currentPerspective === "chat" ? "chat" : "swimlanes";
+        perspectiveBtn.textContent = currentPerspective === "tv" ? "tv : ticketvision" : currentPerspective === "chat" ? "chat" : "kanban";
         setLeftPanelActive(currentPerspective);
         perspectiveItems.forEach((el) => {
           el.classList.toggle("active", el.dataset.perspective === currentPerspective);
@@ -1655,13 +1671,29 @@
         }, 220);
       }
 
+      function runPerspectivePickerItem(item) {
+        if (!item) return;
+        const perspective = item.dataset.perspective;
+        if (perspective) {
+          switchPerspective(perspective);
+          return;
+        }
+        const panelAction = item.dataset.panelAction;
+        if (!panelAction) {
+          closePerspectivePicker();
+          return;
+        }
+        closePerspectivePicker();
+        runLeftPanelAction(panelAction);
+      }
+
       perspectiveBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         perspectiveOverlay.classList.contains("hidden") ? openPerspectivePicker() : closePerspectivePicker();
       });
       perspectiveOverlay.addEventListener("click", (e) => { if (e.target === perspectiveOverlay) closePerspectivePicker(); });
       perspectiveItems.forEach((el) => {
-        el.addEventListener("click", () => switchPerspective(el.dataset.perspective));
+        el.addEventListener("click", () => runPerspectivePickerItem(el));
       });
       leftPanelToggleBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -3210,7 +3242,7 @@
           if (event.key === "Enter") {
             event.preventDefault();
             const item = perspectiveItems[perspectiveActiveIdx];
-            if (item) switchPerspective(item.dataset.perspective);
+            if (item) runPerspectivePickerItem(item);
             return;
           }
         }
