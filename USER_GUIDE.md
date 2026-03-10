@@ -514,6 +514,7 @@ Use it for:
 5. in `swimlanes`, cards are ordered by last modified timestamp (newest first)
 6. opening the `sections` left panel to jump directly to:
    - `kanban (swimlanes)`
+   - `chat`
    - `agents`
    - `roles`
    - `settings`
@@ -534,6 +535,8 @@ Keyboard shortcuts in the board view:
 - profile menu includes an `Agents` panel to list/create/update/enable/disable/delete agents using the same API
 - profile menu includes a `Roles` panel to list/create/update/delete role personas (`title`, `motivation`, `goals`)
 - seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
+- `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
+- chat websocket traffic is bridged to an external `codex` process (`stdin`/`stdout`); set `TICKET_CHAT_CMD` to override the command
 
 ## Command Reference
 

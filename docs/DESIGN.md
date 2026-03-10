@@ -614,6 +614,7 @@ The web UI should make these activities easy:
 - switch between projects
 - open a left-side slide panel (`sections`) to jump to:
   - `kanban (swimlanes)`
+  - `chat`
   - `agents`
   - `roles`
   - `settings`
@@ -627,6 +628,7 @@ The web UI should make these activities easy:
   - `swimlanes`: current lane board
     - cards are sorted by last-modified timestamp descending (newest first)
   - `tv : ticketvision`: Three.js project graph laid out left-to-right as project → epics → stories
+  - `chat`: websocket-backed LLM chat pane with bottom composer and upward-animated conversation history
 - keyboard actions on focused tickets:
   - `D`: prompt `Archive this ticket?` and archive on confirmation
   - `U`: undo the most recent ticket action initiated in the current web session
@@ -634,6 +636,7 @@ The web UI should make these activities easy:
   - `R`: open role management modal
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
+- chat websocket (`/api/chat/ws`) executes an external process command (default `codex chat`) and maps message input to process stdin and process output back to the browser
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes
 

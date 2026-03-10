@@ -49,6 +49,32 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			return
 		}
 	})
+	mux.HandleFunc("/api/chat/ws", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		token := strings.TrimSpace(r.URL.Query().Get("token"))
+		if token == "" {
+			token = bearerToken(r)
+		}
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if _, err := store.GetUserByToken(db, token); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		if err := websocketServeChat(w, r); err != nil {
+			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	})
 	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
