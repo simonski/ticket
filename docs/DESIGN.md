@@ -636,7 +636,7 @@ The web UI should make these activities easy:
   - `R`: open role management modal
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
-- chat websocket (`/api/chat/ws`) executes an external process command (default `codex chat`) and maps message input to process stdin and process output back to the browser
+- chat websocket (`/api/chat/ws`) executes a shell command on a PTY (default `codex`) and maps message input to process stdin and process output back to the browser
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes
 

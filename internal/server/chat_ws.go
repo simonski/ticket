@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/creack/pty"
 )
 
 type chatInboundMessage struct {
@@ -27,10 +29,10 @@ type chatOutboundMessage struct {
 }
 
 type chatProcessBridge struct {
-	cmd   *exec.Cmd
-	stdin io.WriteCloser
-	done  chan struct{}
-	once  sync.Once
+	cmd  *exec.Cmd
+	tty  *os.File
+	mu   sync.Mutex
+	once sync.Once
 }
 
 func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
@@ -119,30 +121,18 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
 }
 
 func startChatBridge(send func(chatOutboundMessage)) (*chatProcessBridge, error) {
-	command, args := resolveChatCommand()
-	cmd := exec.Command(command, args...)
-	stdin, err := cmd.StdinPipe()
+	commandLine := resolveChatCommandLine()
+	shellPath := resolveShellPath()
+	cmd := exec.Command(shellPath, "-lc", commandLine)
+	tty, err := pty.Start(cmd)
 	if err != nil {
-		return nil, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("unable to start chat command %q: %w", command, err)
+		return nil, fmt.Errorf("unable to start chat shell %q with command %q: %w", shellPath, commandLine, err)
 	}
 	bridge := &chatProcessBridge{
-		cmd:   cmd,
-		stdin: stdin,
-		done:  make(chan struct{}),
+		cmd: cmd,
+		tty: tty,
 	}
-	bridge.streamOutput(stdout, "stdout", send)
-	bridge.streamOutput(stderr, "stderr", send)
+	bridge.streamOutput(tty, "pty", send)
 	go func() {
 		err := cmd.Wait()
 		if err != nil {
@@ -160,16 +150,18 @@ func startChatBridge(send func(chatOutboundMessage)) (*chatProcessBridge, error)
 	return bridge, nil
 }
 
-func resolveChatCommand() (string, []string) {
+func resolveChatCommandLine() string {
 	if raw := strings.TrimSpace(os.Getenv("TICKET_CHAT_CMD")); raw != "" {
-		parts := strings.Fields(raw)
-		if len(parts) == 1 {
-			return parts[0], nil
-		}
-		return parts[0], parts[1:]
+		return raw
 	}
-	// Default to codex in interactive chat mode.
-	return "codex", []string{"chat"}
+	return "codex"
+}
+
+func resolveShellPath() string {
+	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
+		return shell
+	}
+	return "/bin/sh"
 }
 
 func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send func(chatOutboundMessage)) {
@@ -202,16 +194,23 @@ func (b *chatProcessBridge) Send(input string) error {
 	if strings.TrimSpace(input) == "" {
 		return nil
 	}
-	_, err := io.WriteString(b.stdin, input+"\n")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.tty == nil {
+		return errors.New("chat terminal is not available")
+	}
+	_, err := io.WriteString(b.tty, input+"\n")
 	return err
 }
 
 func (b *chatProcessBridge) Close() {
 	b.once.Do(func() {
-		close(b.done)
-		if b.stdin != nil {
-			_ = b.stdin.Close()
+		b.mu.Lock()
+		if b.tty != nil {
+			_ = b.tty.Close()
+			b.tty = nil
 		}
+		b.mu.Unlock()
 		if b.cmd != nil && b.cmd.Process != nil {
 			_ = b.cmd.Process.Kill()
 		}
