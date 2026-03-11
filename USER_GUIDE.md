@@ -27,7 +27,7 @@ Write the local agent instructions template into the current repository:
 ticket onboard
 ```
 
-`ticket onboard` appends the embedded onboarding template into `${CWD}/AGENTS.md`. If the file does not exist yet, it is created.
+`ticket onboard` prints the embedded onboarding template to stdout.
 
 Initialize a task sqlite database:
 

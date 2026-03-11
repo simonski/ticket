@@ -283,7 +283,7 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 	}
 }
 
-func TestRunOnboardAppendsEmbeddedAgentsTemplate(t *testing.T) {
+func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 	tempDir := t.TempDir()
 	originalWD, err := os.Getwd()
 	if err != nil {
@@ -296,22 +296,16 @@ func TestRunOnboardAppendsEmbeddedAgentsTemplate(t *testing.T) {
 		_ = os.Chdir(originalWD)
 	}()
 
-	target := filepath.Join(tempDir, "AGENTS.md")
-	if err := os.WriteFile(target, []byte("existing"), 0o644); err != nil {
-		t.Fatalf("WriteFile(existing AGENTS.md) error = %v", err)
+	output := captureStdout(t, func() {
+		if err := runOnboard(nil); err != nil {
+			t.Fatalf("runOnboard() error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "# Agent Instructions") {
+		t.Fatalf("runOnboard() did not print embedded template:\n%s", output)
 	}
-
-	if err := runOnboard(nil); err != nil {
-		t.Fatalf("runOnboard() error = %v", err)
-	}
-
-	data, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("ReadFile(AGENTS.md) error = %v", err)
-	}
-	content := string(data)
-	if !strings.Contains(content, "existing\n# Agent Instructions") {
-		t.Fatalf("runOnboard() did not append embedded template correctly:\n%s", content)
+	if _, err := os.Stat(filepath.Join(tempDir, "AGENTS.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected AGENTS.md to not be created; stat err = %v", err)
 	}
 }
 

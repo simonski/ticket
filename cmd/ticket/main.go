@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	osuser "os/user"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -115,7 +114,7 @@ var embeddedAgents string
 var helpIndex = map[string]commandHelp{
 	"onboard": {
 		usage:   "ticket onboard",
-		details: []string{"Appends the embedded onboarding template to `${CWD}/AGENTS.md`.", "Creates `${CWD}/AGENTS.md` if it does not already exist."},
+		details: []string{"Prints the embedded onboarding template to stdout."},
 		example: "ticket onboard",
 	},
 	"init": {
@@ -609,47 +608,13 @@ func runOnboard(args []string) error {
 	if len(args) != 0 {
 		return errors.New("usage: ticket onboard")
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	target := filepath.Join(cwd, "AGENTS.md")
-	var needsLeadingNewline bool
-	if info, err := os.Stat(target); err == nil && info.Size() > 0 {
-		existing, err := os.ReadFile(target)
-		if err != nil {
-			return err
-		}
-		if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-			needsLeadingNewline = true
-		}
-	} else if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	f, err := os.OpenFile(target, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if needsLeadingNewline {
-		if _, err := f.WriteString("\n"); err != nil {
-			return err
-		}
-	}
-	if _, err := f.WriteString(embeddedAgents); err != nil {
-		return err
-	}
-	if !strings.HasSuffix(embeddedAgents, "\n") {
-		if _, err := f.WriteString("\n"); err != nil {
-			return err
-		}
-	}
 	if outputJSON {
-		return printJSON(map[string]string{"status": "ok", "path": target})
+		return printJSON(map[string]string{"status": "ok", "content": embeddedAgents})
 	}
-	fmt.Printf("appended onboarding template to %s\n", target)
+	fmt.Print(embeddedAgents)
+	if !strings.HasSuffix(embeddedAgents, "\n") {
+		fmt.Println()
+	}
 	return nil
 }
 
@@ -4706,7 +4671,7 @@ CLIENT COMMANDS
 		{"list", "List tickets in the active project"},
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
-		{"onboard", "Append the embedded AGENTS.md template in the current directory"},
+		{"onboard", "Print the embedded AGENTS.md template to stdout"},
 		{"open", "Reopen a closed ticket"},
 		{"orphans", "List tickets with no parent"},
 		{"project", "Manage projects and active project context"},
