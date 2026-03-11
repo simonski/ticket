@@ -110,7 +110,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		last = idx
 	}
 
-	adminOrder := []string{"  assign", "  init", "  server", "  unassign", "  user"}
+	adminOrder := []string{"  assign", "  export", "  import", "  init", "  server", "  unassign", "  user"}
 	last = -1
 	for _, item := range adminOrder {
 		idx := strings.Index(usage, item)
@@ -127,6 +127,50 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		if strings.Contains(usage, unwanted) {
 			t.Fatalf("root usage should not include aliases %q:\n%s", unwanted, usage)
 		}
+	}
+}
+
+func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
+	setupLocalCLI(t)
+
+	ticketID := createLocalTask(t, []string{"add", "-d", "snapshot export/import ticket", "Snapshot Ticket"})
+	snapshotFile := filepath.Join(t.TempDir(), "snapshot.json")
+
+	exportOutput := captureStdout(t, func() {
+		if err := run([]string{"export", "-o", snapshotFile}); err != nil {
+			t.Fatalf("run(export) error = %v", err)
+		}
+	})
+	if !strings.Contains(exportOutput, "exported snapshot to "+snapshotFile) {
+		t.Fatalf("export output = %q, want snapshot path", exportOutput)
+	}
+	if _, err := os.Stat(snapshotFile); err != nil {
+		t.Fatalf("snapshot file missing: %v", err)
+	}
+
+	if err := run([]string{"rm", "-id", strconv.FormatInt(ticketID, 10)}); err != nil {
+		t.Fatalf("run(rm) error = %v", err)
+	}
+	if err := run([]string{"get", "-id", strconv.FormatInt(ticketID, 10)}); err == nil || err.Error() != "ticket not found" {
+		t.Fatalf("run(get deleted) error = %v, want ticket not found", err)
+	}
+
+	importOutput := captureStdout(t, func() {
+		if err := run([]string{"import", "-i", snapshotFile}); err != nil {
+			t.Fatalf("run(import) error = %v", err)
+		}
+	})
+	if !strings.Contains(importOutput, "imported snapshot from "+snapshotFile) {
+		t.Fatalf("import output = %q, want snapshot path", importOutput)
+	}
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", strconv.FormatInt(ticketID, 10)}); err != nil {
+			t.Fatalf("run(get restored) error = %v", err)
+		}
+	})
+	if !strings.Contains(getOutput, fmt.Sprintf("ID           : %d", ticketID)) {
+		t.Fatalf("restored get output missing ticket id %d:\n%s", ticketID, getOutput)
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -122,6 +123,16 @@ var helpIndex = map[string]commandHelp{
 		usage:   "ticket init [-f <db-path>] [--force] [-password <password>] [--populate]",
 		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database is created at `$TICKET_HOME/ticket.db`.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
 		example: "ticket init -f $TICKET_HOME/ticket.db --force -password secret --populate",
+	},
+	"export": {
+		usage:   "ticket export [-o <snapshot-file>]",
+		details: []string{"LOCAL mode only. Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
+		example: "ticket export -o ./ticket-snapshot.json",
+	},
+	"import": {
+		usage:   "ticket import -i <snapshot-file>",
+		details: []string{"LOCAL mode only. Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
+		example: "ticket import -i ./ticket-snapshot.json",
 	},
 	"server": {
 		usage:   "ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
@@ -456,6 +467,16 @@ func run(args []string) error {
 		return errors.New("use `ticket init`")
 	case "server":
 		return runServer(trimmedArgs[1:])
+	case "export":
+		if mode != config.ModeLocal {
+			return errors.New("ticket export requires TICKET_MODE=local")
+		}
+		return runExportSnapshot(trimmedArgs[1:])
+	case "import":
+		if mode != config.ModeLocal {
+			return errors.New("ticket import requires TICKET_MODE=local")
+		}
+		return runImportSnapshot(trimmedArgs[1:])
 	case "version":
 		return runVersion(trimmedArgs[1:])
 	case "upgrade":
@@ -691,6 +712,84 @@ func runInitDB(args []string) error {
 	if generated {
 		fmt.Println("admin password was generated because -password was not provided")
 	}
+	return nil
+}
+
+func runExportSnapshot(args []string) error {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	outputPath := fs.String("o", "ticket-snapshot.json", "snapshot output file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return errors.New("usage: ticket export [-o <snapshot-file>]")
+	}
+	path := strings.TrimSpace(*outputPath)
+	if path == "" {
+		return errors.New("snapshot file path is required")
+	}
+	dbPath, err := config.ResolveDatabasePath()
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	snapshot, err := store.ExportSnapshot(db)
+	if err != nil {
+		return err
+	}
+	payload, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, append(payload, '\n'), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("exported snapshot to %s\n", path)
+	return nil
+}
+
+func runImportSnapshot(args []string) error {
+	fs := flag.NewFlagSet("import", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	inputPath := fs.String("i", "", "snapshot input file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return errors.New("usage: ticket import -i <snapshot-file>")
+	}
+	path := strings.TrimSpace(*inputPath)
+	if path == "" {
+		return errors.New("usage: ticket import -i <snapshot-file>")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var snapshot store.Snapshot
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&snapshot); err != nil {
+		return err
+	}
+	dbPath, err := config.ResolveDatabasePath()
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := store.ImportSnapshot(db, snapshot); err != nil {
+		return err
+	}
+	fmt.Printf("imported snapshot from %s\n", path)
 	return nil
 }
 
@@ -4894,6 +4993,8 @@ CLIENT COMMANDS
 	}
 	adminRows := [][2]string{
 		{"assign", "Admin-only ticket assignment"},
+		{"export", "Export all entities to a schema-versioned JSON snapshot"},
+		{"import", "Import entities from a schema-versioned JSON snapshot"},
 		{"init", "Initialize the database, bootstrap admin, and create the default project"},
 		{"server", "Start the API server and embedded web UI"},
 		{"unassign", "Admin-only ticket unassignment"},

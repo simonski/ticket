@@ -49,6 +49,15 @@ Bootstrap resolution works like this:
 - existing database file: overwritten only when `--force` is supplied
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 
+Create or restore database snapshots (LOCAL mode):
+
+```bash
+ticket export -o ./ticket-snapshot.json
+ticket import -i ./ticket-snapshot.json
+```
+
+Snapshot files are JSON and include a `schema_version`; imports replace existing database contents and preserve entity ids.
+
 Start the server:
 
 ```bash
@@ -562,6 +571,8 @@ Keyboard shortcuts in the board view:
 
 ```bash
 ticket initdb
+ticket export -o ./ticket-snapshot.json
+ticket import -i ./ticket-snapshot.json
 ticket server -v
 ticket version
 
@@ -577,6 +588,8 @@ ticket user ls
 ticket user delete --username <name>
 ticket user enable --username <name>
 ticket user disable --username <name>
+ticket export -o ./ticket-snapshot.json
+ticket import -i ./ticket-snapshot.json
 ticket agent create -name <name> -description <description> [-password <password>]
 ticket agent list
 ticket agent update -id <id> [-name <name>] [-description <description>] [-password <password>]

@@ -241,6 +241,14 @@ Bootstrap defaults:
   - stories in each project with associated epic/task/bug/chore tickets
   - 3 example teams with sample users assigned across those teams
 
+Snapshot portability:
+
+- CLI-only snapshot commands:
+  - `ticket export -o <file>` writes a JSON representation of persisted entities
+  - `ticket import -i <file>` replaces database contents from that JSON file
+- snapshot JSON includes a `schema_version` field and table payloads
+- import must preserve entity ids (primary keys) so relationships remain stable after restore
+
 ### Server
 
 The server is the system of record.
