@@ -5,13 +5,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/simonski/ticket/internal/store"
 )
 
-func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) {
+func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, verbose bool, output io.Writer) {
+	var chatLog func(string)
+	if verbose {
+		if output == nil {
+			output = io.Discard
+		}
+		var chatLogMu sync.Mutex
+		chatLog = func(line string) {
+			chatLogMu.Lock()
+			defer chatLogMu.Unlock()
+			fmt.Fprintf(output, "CHAT %s\n", strings.TrimRight(line, "\n"))
+		}
+	}
+
 	notify := func(eventType string, projectID, ticketID int64) {
 		if live == nil {
 			return
@@ -62,7 +77,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 			writeAuthError(w, err)
 			return
 		}
-		if err := websocketServeChat(w, r); err != nil {
+		if err := websocketServeChat(w, r, chatLog); err != nil {
 			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return

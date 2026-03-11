@@ -19,7 +19,7 @@ func TestHandleChatInputEmitsErrorWhenBridgeMissing(t *testing.T) {
 	out := make([]chatOutboundMessage, 0, 2)
 	handleChatInput(nil, "hello", func(message chatOutboundMessage) {
 		out = append(out, message)
-	})
+	}, nil)
 	if len(out) != 1 {
 		t.Fatalf("message count = %d, want 1", len(out))
 	}
@@ -34,7 +34,7 @@ func TestStartChatBridgeStreamsOutputForInput(t *testing.T) {
 	messages := make(chan chatOutboundMessage, 16)
 	bridge, err := startChatBridge(func(message chatOutboundMessage) {
 		messages <- message
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("startChatBridge() error = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestStartChatBridgeStreamsOutputForInput(t *testing.T) {
 
 	handleChatInput(bridge, "hello from test", func(message chatOutboundMessage) {
 		messages <- message
-	})
+	}, nil)
 
 	deadline := time.After(2 * time.Second)
 	seenProcessing := false
@@ -59,5 +59,18 @@ func TestStartChatBridgeStreamsOutputForInput(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("timed out waiting for chat_processing and chat_output (processing=%v output=%v)", seenProcessing, seenOutput)
 		}
+	}
+}
+
+func TestHandleChatInputLogsPrompt(t *testing.T) {
+	lines := make([]string, 0, 1)
+	handleChatInput(nil, "hello world", func(chatOutboundMessage) {}, func(line string) {
+		lines = append(lines, line)
+	})
+	if len(lines) != 1 {
+		t.Fatalf("log line count = %d, want 1", len(lines))
+	}
+	if !strings.Contains(lines[0], "prompt: hello world") {
+		t.Fatalf("log line = %q, want prompt content", lines[0])
 	}
 }

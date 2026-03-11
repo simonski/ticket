@@ -52,7 +52,7 @@ func sanitizeTerminalOutput(raw string) string {
 	return b.String()
 }
 
-func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
+func websocketServeChat(w http.ResponseWriter, r *http.Request, logf func(string)) error {
 	conn, err := upgradeWebSocket(w, r)
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
 
 	sendJSON(chatOutboundMessage{Type: "chat_connected"})
 
-	bridge, err := startChatBridge(sendJSON)
+	bridge, err := startChatBridge(sendJSON, logf)
 	if err != nil {
 		sendJSON(chatOutboundMessage{
 			Type:  "chat_error",
@@ -126,14 +126,17 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
 			if message.Type != "chat_input" {
 				continue
 			}
-			handleChatInput(bridge, message.Text, sendJSON)
+			handleChatInput(bridge, message.Text, sendJSON, logf)
 		}
 	}
 }
 
-func handleChatInput(bridge *chatProcessBridge, text string, send func(chatOutboundMessage)) {
+func handleChatInput(bridge *chatProcessBridge, text string, send func(chatOutboundMessage), logf func(string)) {
 	if strings.TrimSpace(text) == "" {
 		return
+	}
+	if logf != nil {
+		logf(fmt.Sprintf("prompt: %s", text))
 	}
 	if bridge == nil {
 		send(chatOutboundMessage{Type: "chat_error", Error: "chat backend is unavailable"})
@@ -145,7 +148,7 @@ func handleChatInput(bridge *chatProcessBridge, text string, send func(chatOutbo
 	}
 }
 
-func startChatBridge(send func(chatOutboundMessage)) (*chatProcessBridge, error) {
+func startChatBridge(send func(chatOutboundMessage), logf func(string)) (*chatProcessBridge, error) {
 	commandLine := resolveChatCommandLine()
 	shellPath := resolveShellPath()
 	cmd := exec.Command(shellPath, "-lc", commandLine)
@@ -162,7 +165,7 @@ func startChatBridge(send func(chatOutboundMessage)) (*chatProcessBridge, error)
 		cmd: cmd,
 		tty: tty,
 	}
-	bridge.streamOutput(tty, "pty", send)
+	bridge.streamOutput(tty, "pty", send, logf)
 	go func() {
 		err := cmd.Wait()
 		if err != nil {
@@ -194,7 +197,7 @@ func resolveShellPath() string {
 	return "/bin/sh"
 }
 
-func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send func(chatOutboundMessage)) {
+func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send func(chatOutboundMessage), logf func(string)) {
 	go func() {
 		buffered := bufio.NewReader(reader)
 		for {
@@ -204,6 +207,9 @@ func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send f
 				clean := sanitizeTerminalOutput(string(chunk[:n]))
 				if clean == "" {
 					continue
+				}
+				if logf != nil {
+					logf(fmt.Sprintf("output[%s]: %s", stream, clean))
 				}
 				send(chatOutboundMessage{
 					Type:   "chat_output",

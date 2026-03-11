@@ -39,7 +39,7 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer) (http.H
 
 	mux := http.NewServeMux()
 	live := newLiveHub()
-	registerAPI(mux, db, version, live)
+	registerAPI(mux, db, version, live, verbose, output)
 
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/", spaHandler(fileServer, staticFS))
