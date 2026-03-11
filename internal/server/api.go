@@ -1585,51 +1585,41 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			return
 		}
 
-		var analysis storyAnalysisResult
-		prompt := fmt.Sprintf(
-			"Story title: %s\nStory description: %s\nGenerate JSON shape {\"epics\":[{\"title\":\"...\",\"description\":\"...\",\"tasks\":[{\"title\":\"...\",\"description\":\"...\"}]}]} with 1-4 epics and 2-5 tasks per epic.",
-			story.Title,
-			story.Description,
-		)
-		if err := runRoleJSONAnalysis(db, "StoryReview", prompt, &analysis); err != nil || len(analysis.Epics) == 0 {
-			analysis = fallbackStoryAnalysis(story)
+		project, err := store.GetProjectByID(db, story.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		beforeTickets, err := store.ListTicketsByProject(db, story.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		beforeIDs := make(map[int64]struct{}, len(beforeTickets))
+		for _, ticket := range beforeTickets {
+			beforeIDs[ticket.ID] = struct{}{}
 		}
 
-		createdEpics := 0
-		createdTasks := 0
-		for _, epicSpec := range analysis.Epics {
-			epicTitle := strings.TrimSpace(epicSpec.Title)
-			if epicTitle == "" {
-				continue
+		if err := runStoryBreakdownViaTicketCLI(db, project, story); err != nil {
+			var analysis storyAnalysisResult
+			prompt := fmt.Sprintf(
+				"Story title: %s\nStory description: %s\nGenerate JSON shape {\"epics\":[{\"title\":\"...\",\"description\":\"...\",\"tasks\":[{\"title\":\"...\",\"description\":\"...\"}]}]} with 1-4 epics and 2-5 tasks per epic.",
+				story.Title,
+				story.Description,
+			)
+			if err := runRoleJSONAnalysis(db, "StoryReview", prompt, &analysis); err != nil || len(analysis.Epics) == 0 {
+				analysis = fallbackStoryAnalysis(story)
 			}
-			epic, err := store.CreateTicket(db, store.TicketCreateParams{
-				ProjectID:   story.ProjectID,
-				Type:        "epic",
-				Title:       epicTitle,
-				Description: strings.TrimSpace(epicSpec.Description),
-				CreatedBy:   user.ID,
-				Stage:       store.StageDesign,
-				State:       store.StateIdle,
-			})
-			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			_ = store.LinkStoryToTicket(db, story.ID, epic.ID)
-			notify("ticket_created", epic.ProjectID, epic.ID)
-			createdEpics++
-			for _, taskSpec := range epicSpec.Tasks {
-				taskTitle := strings.TrimSpace(taskSpec.Title)
-				if taskTitle == "" {
+			for _, epicSpec := range analysis.Epics {
+				epicTitle := strings.TrimSpace(epicSpec.Title)
+				if epicTitle == "" {
 					continue
 				}
-				parentID := epic.ID
-				task, err := store.CreateTicket(db, store.TicketCreateParams{
+				epic, err := store.CreateTicket(db, store.TicketCreateParams{
 					ProjectID:   story.ProjectID,
-					ParentID:    &parentID,
-					Type:        "task",
-					Title:       taskTitle,
-					Description: strings.TrimSpace(taskSpec.Description),
+					Type:        "epic",
+					Title:       epicTitle,
+					Description: strings.TrimSpace(epicSpec.Description),
 					CreatedBy:   user.ID,
 					Stage:       store.StageDesign,
 					State:       store.StateIdle,
@@ -1638,8 +1628,47 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
-				_ = store.LinkStoryToTicket(db, story.ID, task.ID)
-				notify("ticket_created", task.ProjectID, task.ID)
+				for _, taskSpec := range epicSpec.Tasks {
+					taskTitle := strings.TrimSpace(taskSpec.Title)
+					if taskTitle == "" {
+						continue
+					}
+					parentID := epic.ID
+					_, err := store.CreateTicket(db, store.TicketCreateParams{
+						ProjectID:   story.ProjectID,
+						ParentID:    &parentID,
+						Type:        "task",
+						Title:       taskTitle,
+						Description: strings.TrimSpace(taskSpec.Description),
+						CreatedBy:   user.ID,
+						Stage:       store.StageDesign,
+						State:       store.StateIdle,
+					})
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+				}
+			}
+		}
+
+		afterTickets, err := store.ListTicketsByProject(db, story.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		createdEpics := 0
+		createdTasks := 0
+		for _, ticket := range afterTickets {
+			if _, existed := beforeIDs[ticket.ID]; existed {
+				continue
+			}
+			_ = store.LinkStoryToTicket(db, story.ID, ticket.ID)
+			notify("ticket_created", ticket.ProjectID, ticket.ID)
+			switch strings.ToLower(strings.TrimSpace(ticket.Type)) {
+			case "epic":
+				createdEpics++
+			case "task":
 				createdTasks++
 			}
 		}

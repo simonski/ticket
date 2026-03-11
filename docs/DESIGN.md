@@ -667,7 +667,7 @@ The web UI should make these activities easy:
 - `/api/status` returns `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - admins update chat limits through `POST /api/config/chat_limits`
 - stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
-- story analysis uses the `StoryReview` role to generate epics/tasks and marks story status `ready_for_review`
+- story analysis uses the `StoryReview` role and an external Codex process with remote-mode `ticket` environment (`TICKET_MODE`, `TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) to run `ticket login` + `ticket create` breakdown commands for epics/tasks; story is marked `ready_for_review`
 - epic analysis uses the `EpicReview` role to generate child implementation tickets
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes
