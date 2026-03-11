@@ -1649,14 +1649,35 @@
           if (effectiveType === "project_created") return "create";
           return "default";
         }
-        function wsEventType(msg) {
-          const legacy = String(msg?.type || "").trim();
-          if (legacy) return legacy.toLowerCase();
-          const entity = String(msg?.entity_type || "").trim().toLowerCase();
-          const change = String(msg?.change_type || "").trim().toLowerCase();
-          if (entity && change) return `${entity}_${change}`;
-          return "";
+      function wsEventType(msg) {
+        const legacy = String(msg?.type || "").trim();
+        if (legacy) return legacy.toLowerCase();
+        const entity = String(msg?.entity_type || "").trim().toLowerCase();
+        const change = String(msg?.change_type || "").trim().toLowerCase();
+        if (entity && change) return `${entity}_${change}`;
+        return "";
+      }
+      function wsShouldRefreshBoard(msg, eventType) {
+        const normalizedType = String(eventType || "").trim().toLowerCase();
+        if (normalizedType === "ticket_created"
+          || normalizedType === "ticket_updated"
+          || normalizedType === "ticket_deleted"
+          || normalizedType === "ticket_changed"
+          || normalizedType === "project_updated"
+          || normalizedType === "project_users_updated"
+          || normalizedType === "project_changed") {
+          return true;
         }
+        const entity = String(msg?.entity_type || "").trim().toLowerCase();
+        const change = String(msg?.change_type || "").trim().toLowerCase();
+        if (entity === "ticket") {
+          return true;
+        }
+        if (entity === "project") {
+          return change === "updated" || change === "users_updated" || change === "changed";
+        }
+        return false;
+      }
         function actorType(raw) {
           const t = String(raw?.user_type || raw?.userType || raw?.actor_type || raw?.actorType || raw?.type_of_user || "").toLowerCase();
           return (t === "agent" || t === "ai" || t === "bot") ? "agent" : "human";
@@ -3837,9 +3858,11 @@
                 ticket_created: 5,
                 ticket_deleted: 3,
                 ticket_updated: 2,
+                ticket_changed: 2,
                 project_created: 4,
                 project_updated: 2,
                 project_users_updated: 2,
+                project_changed: 2,
               };
               window.statusAnimator.spawn(msg, counts[eventType] || 2);
             }
@@ -3847,11 +3870,7 @@
             const selected = selectedProjectID();
             const eventProjectID = msg.project_id ? String(msg.project_id) : "";
             if (eventProjectID && selected && eventProjectID !== selected) return;
-            shouldRefreshBoard = eventType === "ticket_created"
-              || eventType === "ticket_updated"
-              || eventType === "ticket_deleted"
-              || eventType === "project_updated"
-              || eventType === "project_users_updated";
+            shouldRefreshBoard = wsShouldRefreshBoard(msg, eventType);
           } catch (_) { /* non-JSON ping — ignore */ }
           if (!shouldRefreshBoard) return;
           scheduleTicketReload("ws", { delayMs: 140 });
