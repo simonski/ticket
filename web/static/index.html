@@ -2317,7 +2317,11 @@
       let lastWSMessageAt = 0;
       let lastTicketSyncAt = 0;
       let lastFallbackTicketPollAt = 0;
+      let firstWSUnhealthyAt = 0;
       let ticketLoadSeq = 0;
+      let ticketLoadPromise = null;
+      let ticketRefreshTimer = null;
+      let ticketRefreshPending = false;
       let draft = null;
       let autosaveTimer = null;
       var token = localStorage.getItem("task-token") || "";
@@ -3135,11 +3139,17 @@
         if (realtimeSyncTimer) return;
         realtimeSyncTimer = setInterval(async () => {
           if (!isAppVisible()) return;
-          if (wsHealthy) return;
+          if (wsHealthy || (socket && socket.readyState === WebSocket.OPEN)) {
+            firstWSUnhealthyAt = 0;
+            return;
+          }
+          if (!firstWSUnhealthyAt) firstWSUnhealthyAt = Date.now();
+          const unhealthyForMs = Date.now() - firstWSUnhealthyAt;
+          if (unhealthyForMs < 45000) return;
           const now = Date.now();
-          if ((now - lastFallbackTicketPollAt) < 30000) return;
+          if ((now - lastFallbackTicketPollAt) < 60000) return;
           lastFallbackTicketPollAt = now;
-          try { await loadTickets(); } catch {}
+          scheduleTicketReload("fallback", { delayMs: 80, minIntervalMs: 60000 });
         }, 5000);
       }
 
@@ -3219,37 +3229,79 @@
         renderProjMenu();
       }
 
-      async function loadTickets() {
-        const seq = ++ticketLoadSeq;
-        const projectID = selectedProjectID();
-        if (!projectID) {
-          if (seq !== ticketLoadSeq) return;
-          tickets = [];
-          renderBoard();
-          renderTicketVision();
+      function upsertTicketLocal(updatedTicket) {
+        if (!updatedTicket || !updatedTicket.ticket_id) return;
+        const idx = tickets.findIndex((item) => String(item.ticket_id) === String(updatedTicket.ticket_id));
+        if (idx >= 0) {
+          tickets[idx] = updatedTicket;
           return;
         }
-        try {
-          const cacheBust = Date.now();
-          const result = await call(`/api/projects/${projectID}/tickets?_=${cacheBust}`, { headers: headers() }) || [];
-          if (seq !== ticketLoadSeq) return;
-          tickets = result;
-          lastTicketSyncAt = Date.now();
-        } catch (error) {
-          if (String(error.message || "").toLowerCase().includes("project not found")) {
-            setSelectedProjectID("");
-            await loadProjects();
-            if (seq !== ticketLoadSeq) return;
-            tickets = [];
-            renderBoard();
-            renderTicketVision();
-            return;
-          }
-          throw error;
-        }
-        if (seq !== ticketLoadSeq) return;
+        tickets.push(updatedTicket);
+      }
+
+      function refreshTicketViews() {
         renderBoard();
         renderTicketVision();
+      }
+
+      function scheduleTicketReload(reason = "event", options = {}) {
+        if (!isAppVisible()) return;
+        const delayMs = Number(options.delayMs || 0);
+        const minIntervalMs = Number(options.minIntervalMs || 0);
+        if (!options.force && minIntervalMs > 0 && (Date.now() - lastTicketSyncAt) < minIntervalMs) return;
+        if (ticketLoadPromise) {
+          ticketRefreshPending = true;
+          return;
+        }
+        if (ticketRefreshTimer) clearTimeout(ticketRefreshTimer);
+        ticketRefreshTimer = setTimeout(async () => {
+          ticketRefreshTimer = null;
+          try {
+            await loadTickets();
+          } catch {}
+          if (ticketRefreshPending) {
+            ticketRefreshPending = false;
+            scheduleTicketReload(reason, { delayMs: 120 });
+          }
+        }, Math.max(0, delayMs));
+      }
+
+      async function loadTickets() {
+        if (ticketLoadPromise) return ticketLoadPromise;
+        const load = (async () => {
+          const seq = ++ticketLoadSeq;
+          const projectID = selectedProjectID();
+          if (!projectID) {
+            if (seq !== ticketLoadSeq) return;
+            tickets = [];
+            refreshTicketViews();
+            return;
+          }
+          try {
+            const result = await call(`/api/projects/${projectID}/tickets`, { headers: headers() }) || [];
+            if (seq !== ticketLoadSeq) return;
+            tickets = result;
+            lastTicketSyncAt = Date.now();
+          } catch (error) {
+            if (String(error.message || "").toLowerCase().includes("project not found")) {
+              setSelectedProjectID("");
+              await loadProjects();
+              if (seq !== ticketLoadSeq) return;
+              tickets = [];
+              refreshTicketViews();
+              return;
+            }
+            throw error;
+          }
+          if (seq !== ticketLoadSeq) return;
+          refreshTicketViews();
+        })();
+        ticketLoadPromise = load;
+        try {
+          await load;
+        } finally {
+          if (ticketLoadPromise === load) ticketLoadPromise = null;
+        }
       }
 
       function stateColorClass(state) {
@@ -3379,7 +3431,8 @@
           draft.ticket = updated;
           setModalValues(updated);
         }
-        await loadTickets();
+        upsertTicketLocal(updated);
+        refreshTicketViews();
         if (recordUndo) {
           pushUndoAction(`${archived ? "archive" : "unarchive"} ${ticket.key || "#" + ticket.ticket_id}`, async () => {
             await setTicketArchivedByID(ticket.ticket_id, !archived, false);
@@ -3397,7 +3450,8 @@
           draft.ticket = updated;
           setModalValues(updated);
         }
-        await loadTickets();
+        upsertTicketLocal(updated);
+        refreshTicketViews();
         if (recordUndo) {
           pushUndoAction(`${open ? "open" : "close"} ${ticket.key || "#" + ticket.ticket_id}`, async () => {
             await setTicketOpenByID(ticket.ticket_id, !open, false);
@@ -3626,15 +3680,27 @@
           draft.ticket = created;
           modalTitle.textContent = created.key || `Ticket #${created.ticket_id}`;
           setModalValues(created);
-          await loadTickets();
+          upsertTicketLocal(created);
+          refreshTicketViews();
           return;
         }
         if (!draft.ticket) return;
         const current = draft.ticket;
+        const hasChanges =
+          String(current.type || "task") !== String(values.type || "task")
+          || String(current.title || "") !== String(values.title || "")
+          || String(current.description || "") !== String(values.description || "")
+          || String(current.acceptance_criteria || "") !== String(values.acceptance_criteria || "")
+          || String(current.git_repository || "") !== String(values.git_repository || "")
+          || String(current.git_branch || "") !== String(values.git_branch || "")
+          || String(current.stage || "design") !== String(values.stage || "design")
+          || String(current.state || "idle") !== String(values.state || "idle");
+        if (!hasChanges) return;
         const updated = await call(`/api/tickets/${current.ticket_id}`, {
           method: "PUT",
           headers: headers(true),
           body: JSON.stringify({
+            type: values.type,
             title: values.title,
             description: values.description,
             acceptance_criteria: values.acceptance_criteria,
@@ -3651,7 +3717,8 @@
           }),
         });
         draft.ticket = updated;
-        await loadTickets();
+        upsertTicketLocal(updated);
+        refreshTicketViews();
       }
 
       function connectWS() {
@@ -3666,6 +3733,7 @@
         socket = new WebSocket(wsURL);
         socket.onopen = () => {
           wsHealthy = true;
+          firstWSUnhealthyAt = 0;
           lastWSMessageAt = Date.now();
         };
         socket.onmessage = async (evt) => {
@@ -3699,15 +3767,17 @@
               || eventType === "project_users_updated";
           } catch (_) { /* non-JSON ping — ignore */ }
           if (!shouldRefreshBoard) return;
-          try { await loadTickets(); } catch {}
+          scheduleTicketReload("ws", { delayMs: 140 });
         };
         socket.onclose = () => {
           wsHealthy = false;
+          if (!firstWSUnhealthyAt) firstWSUnhealthyAt = Date.now();
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
         };
         socket.onerror = () => {
           wsHealthy = false;
+          if (!firstWSUnhealthyAt) firstWSUnhealthyAt = Date.now();
           try { socket.close(); } catch {}
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
