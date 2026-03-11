@@ -2108,7 +2108,7 @@
       let ticketLoadSeq = 0;
       let draft = null;
       let autosaveTimer = null;
-      let token = localStorage.getItem("task-token") || "";
+      var token = localStorage.getItem("task-token") || "";
 
       function headers(json = false) {
         const h = {};
