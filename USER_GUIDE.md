@@ -47,6 +47,7 @@ Bootstrap resolution works like this:
 - admin username: always `admin`
 - admin password: `-password` if provided, otherwise a generated random password printed to stdout
 - existing database file: overwritten only when `--force` is supplied
+- optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 
 Start the server:
 

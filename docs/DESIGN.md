@@ -220,11 +220,12 @@ The bootstrap command is `ticket init`.
 1. create the schema in a new SQLite database
 2. create an `admin` account
 3. create a default project
+4. optionally seed example data when `--populate` is supplied
 
 Representative flow:
 
 ```bash
-ticket init -f ticket.db --force -password secret
+ticket init -f ticket.db --force -password secret --populate
 ```
 
 Bootstrap defaults:
@@ -235,6 +236,10 @@ Bootstrap defaults:
 - if `-password` is omitted, the CLI generates a random password and prints it to stdout
 - if `--force` is supplied, any existing SQLite database file is overwritten
 - the default project is created automatically during initialization with prefix `TK`
+- if `--populate` is supplied, the CLI seeds:
+  - 3 example projects
+  - stories in each project with associated epic/task/bug/chore tickets
+  - 3 example teams with sample users assigned across those teams
 
 ### Server
 

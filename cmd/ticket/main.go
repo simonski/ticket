@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -118,9 +119,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket onboard",
 	},
 	"init": {
-		usage:   "ticket init [-f <db-path>] [--force] [-password <password>]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database is created at `$TICKET_HOME/ticket.db`.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten."},
-		example: "ticket init -f $TICKET_HOME/ticket.db --force -password secret",
+		usage:   "ticket init [-f <db-path>] [--force] [-password <password>] [--populate]",
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database is created at `$TICKET_HOME/ticket.db`.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
+		example: "ticket init -f $TICKET_HOME/ticket.db --force -password secret --populate",
 	},
 	"server": {
 		usage:   "ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
@@ -629,6 +630,7 @@ func runInitDB(args []string) error {
 	dbPath := fs.String("f", defaultDBPath, "SQLite database file")
 	passwordFlag := fs.String("password", "", "bootstrap password")
 	force := fs.Bool("force", false, "overwrite the database file if it exists")
+	populate := fs.Bool("populate", false, "seed example projects, stories, tickets, users, and teams")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -654,6 +656,19 @@ func runInitDB(args []string) error {
 	if err := store.Init(*dbPath, "admin", password); err != nil {
 		return err
 	}
+	if *populate {
+		db, err := store.Open(*dbPath)
+		if err != nil {
+			return err
+		}
+		if err := seedExampleData(db); err != nil {
+			_ = db.Close()
+			return err
+		}
+		if err := db.Close(); err != nil {
+			return err
+		}
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -670,8 +685,190 @@ func runInitDB(args []string) error {
 	fmt.Printf("admin user: admin\n")
 	fmt.Printf("admin password: %s\n", password)
 	fmt.Printf("default project: 1\n")
+	if *populate {
+		fmt.Println("example data: seeded")
+	}
 	if generated {
 		fmt.Println("admin password was generated because -password was not provided")
+	}
+	return nil
+}
+
+func seedExampleData(db *sql.DB) error {
+	type seedStory struct {
+		title       string
+		description string
+		epicTitle   string
+		taskTitle   string
+		bugTitle    string
+		choreTitle  string
+	}
+	type seedProject struct {
+		prefix      string
+		title       string
+		description string
+		stories     []seedStory
+	}
+	projects := []seedProject{
+		{
+			prefix:      "CRM",
+			title:       "Customer Relationship Portal",
+			description: "Sample CRM modernization project with customer workflows.",
+			stories: []seedStory{
+				{
+					title:       "Customer onboarding lifecycle",
+					description: "As operations, we need guided onboarding states and notifications.",
+					epicTitle:   "Onboarding workflow foundation",
+					taskTitle:   "Implement onboarding timeline UI",
+					bugTitle:    "Fix duplicate welcome email trigger",
+					choreTitle:  "Refactor onboarding API response contract",
+				},
+				{
+					title:       "Account health insights",
+					description: "As account managers, we need a view of customer risk signals.",
+					epicTitle:   "Account health scoring",
+					taskTitle:   "Build account health dashboard widgets",
+					bugTitle:    "Correct stale account-score cache invalidation",
+					choreTitle:  "Rotate integration API keys and update docs",
+				},
+			},
+		},
+		{
+			prefix:      "BIL",
+			title:       "Billing Reliability Program",
+			description: "Sample billing platform stabilization project.",
+			stories: []seedStory{
+				{
+					title:       "Invoice generation resilience",
+					description: "As finance, invoice runs should recover gracefully from partial failures.",
+					epicTitle:   "Invoice pipeline hardening",
+					taskTitle:   "Add idempotent retry for invoice batches",
+					bugTitle:    "Resolve timezone offset in invoice due-date generation",
+					choreTitle:  "Archive legacy invoice templates",
+				},
+				{
+					title:       "Payment reconciliation transparency",
+					description: "As support, we need clear reconciliation states for customer payments.",
+					epicTitle:   "Reconciliation visibility",
+					taskTitle:   "Implement reconciliation state timeline",
+					bugTitle:    "Fix missing failure reason in reconciliation events",
+					choreTitle:  "Backfill historical payment metadata",
+				},
+			},
+		},
+		{
+			prefix:      "OPS",
+			title:       "Operations Automation Suite",
+			description: "Sample ops automation project with runbooks and alerts.",
+			stories: []seedStory{
+				{
+					title:       "Incident triage acceleration",
+					description: "As SRE, we need faster incident signal correlation.",
+					epicTitle:   "Incident triage workbench",
+					taskTitle:   "Build correlated alert feed view",
+					bugTitle:    "Fix noisy alert dedupe rule for repeated events",
+					choreTitle:  "Retire unused pager escalation policies",
+				},
+				{
+					title:       "Runbook execution consistency",
+					description: "As platform engineers, runbook runs should be reproducible and auditable.",
+					epicTitle:   "Runbook orchestration controls",
+					taskTitle:   "Add preflight checks to runbook executor",
+					bugTitle:    "Fix race in parallel runbook step logging",
+					choreTitle:  "Normalize runbook naming conventions",
+				},
+			},
+		},
+	}
+
+	for _, projectSeed := range projects {
+		project, err := store.CreateProjectWithParams(db, store.ProjectCreateParams{
+			Prefix:      projectSeed.prefix,
+			Title:       projectSeed.title,
+			Description: projectSeed.description,
+			CreatedBy:   1,
+			Visibility:  store.ProjectVisibilityPublic,
+		})
+		if err != nil {
+			return err
+		}
+		for _, storySeed := range projectSeed.stories {
+			story, err := store.CreateStory(db, project.ID, storySeed.title, storySeed.description, 1)
+			if err != nil {
+				return err
+			}
+			epic, err := store.CreateTicket(db, store.TicketCreateParams{
+				ProjectID: project.ID,
+				Type:      "epic",
+				Title:     storySeed.epicTitle,
+				CreatedBy: 1,
+			})
+			if err != nil {
+				return err
+			}
+			if err := store.LinkStoryToTicket(db, story.ID, epic.ID); err != nil {
+				return err
+			}
+			for _, child := range []struct {
+				ticketType string
+				title      string
+			}{
+				{ticketType: "task", title: storySeed.taskTitle},
+				{ticketType: "bug", title: storySeed.bugTitle},
+				{ticketType: "chore", title: storySeed.choreTitle},
+			} {
+				parentID := epic.ID
+				childTicket, err := store.CreateTicket(db, store.TicketCreateParams{
+					ProjectID: project.ID,
+					ParentID:  &parentID,
+					Type:      child.ticketType,
+					Title:     child.title,
+					CreatedBy: 1,
+				})
+				if err != nil {
+					return err
+				}
+				if err := store.LinkStoryToTicket(db, story.ID, childTicket.ID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	seedUsers := []struct {
+		username string
+		team     string
+		role     string
+		title    string
+	}{
+		{username: "alice", team: "Platform Engineering", role: store.TeamRoleOwner, title: "Platform Lead"},
+		{username: "bob", team: "Platform Engineering", role: store.TeamRoleMember, title: "Senior Software Engineer"},
+		{username: "carol", team: "Product Delivery", role: store.TeamRoleOwner, title: "Product Manager"},
+		{username: "dave", team: "Product Delivery", role: store.TeamRoleMember, title: "Delivery Engineer"},
+		{username: "erin", team: "Quality Engineering", role: store.TeamRoleOwner, title: "QA Lead"},
+		{username: "frank", team: "Quality Engineering", role: store.TeamRoleMember, title: "Test Automation Engineer"},
+	}
+
+	teamsByName := map[string]int64{}
+	for _, item := range seedUsers {
+		if _, ok := teamsByName[item.team]; ok {
+			continue
+		}
+		team, err := store.CreateTeam(db, item.team, nil)
+		if err != nil {
+			return err
+		}
+		teamsByName[item.team] = team.ID
+	}
+	for _, item := range seedUsers {
+		user, err := store.CreateUser(db, item.username, "password", "user")
+		if err != nil {
+			return err
+		}
+		teamID := teamsByName[item.team]
+		if _, err := store.AddTeamMember(db, teamID, user.ID, item.role, item.title); err != nil {
+			return err
+		}
 	}
 	return nil
 }

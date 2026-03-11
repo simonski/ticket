@@ -275,7 +275,7 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 		"ticket init",
 		"DETAILS",
 		"EXAMPLE",
-		"ticket init -f $TICKET_HOME/ticket.db --force -password secret",
+		"ticket init -f $TICKET_HOME/ticket.db --force -password secret --populate",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("command help missing %q:\n%s", want, help)
@@ -726,6 +726,79 @@ func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 	}
 	if err := runInitDB([]string{"-f", dbPath, "--force", "-password", "second-pass"}); err != nil {
 		t.Fatalf("forced runInitDB() error = %v", err)
+	}
+}
+
+func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	dbPath := filepath.Join(tempDir, "ticket.db")
+
+	if err := runInitDB([]string{"-f", dbPath, "-password", "secret", "--populate"}); err != nil {
+		t.Fatalf("runInitDB(--populate) error = %v", err)
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	projects, err := store.ListProjects(db)
+	if err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+	if len(projects) < 4 {
+		t.Fatalf("project count = %d, want at least 4 (default + 3 examples)", len(projects))
+	}
+
+	for _, prefix := range []string{"CRM", "BIL", "OPS"} {
+		var projectID int64
+		if err := db.QueryRow(`SELECT project_id FROM projects WHERE prefix = ?`, prefix).Scan(&projectID); err != nil {
+			t.Fatalf("project %s not found: %v", prefix, err)
+		}
+		var storyCount int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM stories WHERE project_id = ?`, projectID).Scan(&storyCount); err != nil {
+			t.Fatalf("stories count query for %s failed: %v", prefix, err)
+		}
+		if storyCount == 0 {
+			t.Fatalf("project %s story count = 0, want > 0", prefix)
+		}
+		for _, ticketType := range []string{"epic", "task", "bug", "chore"} {
+			var typeCount int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE project_id = ? AND type = ?`, projectID, ticketType).Scan(&typeCount); err != nil {
+				t.Fatalf("ticket count query for %s/%s failed: %v", prefix, ticketType, err)
+			}
+			if typeCount == 0 {
+				t.Fatalf("project %s type %s count = 0, want > 0", prefix, ticketType)
+			}
+		}
+	}
+
+	var teamCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM teams`).Scan(&teamCount); err != nil {
+		t.Fatalf("team count query failed: %v", err)
+	}
+	if teamCount < 3 {
+		t.Fatalf("team count = %d, want at least 3", teamCount)
+	}
+
+	for _, username := range []string{"alice", "bob", "carol", "dave", "erin", "frank"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = ?`, username).Scan(&count); err != nil {
+			t.Fatalf("user lookup for %s failed: %v", username, err)
+		}
+		if count != 1 {
+			t.Fatalf("user %s count = %d, want 1", username, count)
+		}
+	}
+
+	var teamMemberCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM team_members`).Scan(&teamMemberCount); err != nil {
+		t.Fatalf("team_members count query failed: %v", err)
+	}
+	if teamMemberCount < 6 {
+		t.Fatalf("team member count = %d, want at least 6", teamMemberCount)
 	}
 }
 
