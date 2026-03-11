@@ -1188,20 +1188,17 @@
         if (action === "swimlanes") {
           switchPerspective("swimlanes");
           setLeftPanelActive("swimlanes");
-          closeLeftPanel();
           return;
         }
         if (action === "stories") {
           switchPerspective("stories");
           setLeftPanelActive("stories");
-          closeLeftPanel();
           await loadStories();
           return;
         }
         if (action === "chat") {
           switchPerspective("chat");
           setLeftPanelActive("chat");
-          closeLeftPanel();
           connectChatWS();
           chatInputEl.focus();
           return;
@@ -1211,7 +1208,6 @@
             await uiAlert("Admin access required.");
             return;
           }
-          closeLeftPanel();
           await openAgentModal();
           return;
         }
@@ -1220,7 +1216,6 @@
             await uiAlert("Admin access required.");
             return;
           }
-          closeLeftPanel();
           await openRoleModal();
           return;
         }
@@ -1229,12 +1224,10 @@
             await uiAlert("Admin access required.");
             return;
           }
-          closeLeftPanel();
           await openTeamModal();
           return;
         }
         if (action === "settings") {
-          closeLeftPanel();
           await openSettingsModal();
         }
       }
