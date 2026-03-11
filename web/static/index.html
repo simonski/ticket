@@ -357,10 +357,23 @@
         margin-right: auto;
         background: #fffdf7;
       }
+      .chat-bubble.assistant.pending {
+        color: #5d6677;
+        font-style: italic;
+        opacity: 0.9;
+      }
+      .chat-bubble.assistant.pending::after {
+        content: " …";
+        animation: chat-pulse 1.2s ease-in-out infinite;
+      }
       .chat-bubble.system {
         margin: 0 auto;
         background: #f3efe6;
         color: #4c5568;
+      }
+      @keyframes chat-pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
       }
       .chat-composer {
         border-top: 1px solid var(--line);
@@ -2343,6 +2356,7 @@
       var chatSocket = null;
       var chatSocketRetry = null;
       var activeAssistantBubble = null;
+      var chatPendingTimer = null;
       let realtimeSyncTimer = null;
       let wsHealthy = false;
       let lastWSMessageAt = 0;
@@ -3829,7 +3843,41 @@
         return bubble;
       }
 
+      function clearChatPendingTimer() {
+        if (!chatPendingTimer) return;
+        clearTimeout(chatPendingTimer);
+        chatPendingTimer = null;
+      }
+
+      function ensureAssistantPendingBubble(message = "Thinking") {
+        clearChatPendingTimer();
+        if (!activeAssistantBubble || !chatThreadEl.contains(activeAssistantBubble)) {
+          activeAssistantBubble = appendChatBubble("assistant", message);
+        }
+        activeAssistantBubble.classList.add("pending");
+        activeAssistantBubble.textContent = message;
+        chatPendingTimer = setTimeout(() => {
+          if (!activeAssistantBubble || !chatThreadEl.contains(activeAssistantBubble)) return;
+          if (!activeAssistantBubble.classList.contains("pending")) return;
+          activeAssistantBubble.textContent = "Still working on your prompt";
+        }, 12000);
+      }
+
+      function finalizeAssistantBubbleOnOutput(chunkText) {
+        if (!activeAssistantBubble || !chatThreadEl.contains(activeAssistantBubble)) {
+          activeAssistantBubble = appendChatBubble("assistant", "");
+        }
+        if (activeAssistantBubble.classList.contains("pending")) {
+          activeAssistantBubble.classList.remove("pending");
+          clearChatPendingTimer();
+          activeAssistantBubble.textContent = String(chunkText || "");
+          return;
+        }
+        activeAssistantBubble.textContent += String(chunkText || "");
+      }
+
       function closeChatWS() {
+        clearChatPendingTimer();
         if (chatSocketRetry) clearTimeout(chatSocketRetry);
         chatSocketRetry = null;
         if (chatSocket) {
@@ -3855,23 +3903,41 @@
             appendChatBubble("system", "Chat backend ready.");
             return;
           }
+          if (msg.type === "chat_processing") {
+            ensureAssistantPendingBubble("Thinking");
+            return;
+          }
           if (msg.type === "chat_error") {
             appendChatBubble("system", `Error: ${msg.error || "unknown error"}`);
+            clearChatPendingTimer();
+            if (activeAssistantBubble && activeAssistantBubble.classList.contains("pending")) {
+              activeAssistantBubble.classList.remove("pending");
+              activeAssistantBubble.textContent = "No response produced.";
+            }
             activeAssistantBubble = null;
             return;
           }
           if (msg.type === "chat_exit") {
             appendChatBubble("system", `Chat process exited (${msg.code ?? "?"}).`);
+            clearChatPendingTimer();
+            if (activeAssistantBubble && activeAssistantBubble.classList.contains("pending")) {
+              activeAssistantBubble.classList.remove("pending");
+              activeAssistantBubble.textContent = "The chat process exited before responding.";
+            }
             activeAssistantBubble = null;
             return;
           }
           if (msg.type === "chat_output") {
-            if (!activeAssistantBubble) activeAssistantBubble = appendChatBubble("assistant", "");
-            activeAssistantBubble.textContent += String(msg.text || "");
+            finalizeAssistantBubbleOnOutput(String(msg.text || ""));
             chatThreadEl.scrollTop = chatThreadEl.scrollHeight;
           }
         };
         chatSocket.onclose = () => {
+          clearChatPendingTimer();
+          if (activeAssistantBubble && activeAssistantBubble.classList.contains("pending")) {
+            activeAssistantBubble.classList.remove("pending");
+            activeAssistantBubble.textContent = "Connection closed while waiting for a response.";
+          }
           activeAssistantBubble = null;
           if (!token && !localStorage.getItem("task-token")) return;
           if (chatSocketRetry) clearTimeout(chatSocketRetry);
@@ -3888,6 +3954,7 @@
         appendChatBubble("user", text);
         chatInputEl.value = "";
         activeAssistantBubble = null;
+        ensureAssistantPendingBubble("Thinking");
         connectChatWS();
         if (!chatSocket) {
           appendChatBubble("system", "Connecting to chat backend...");

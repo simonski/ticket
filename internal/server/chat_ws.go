@@ -126,14 +126,22 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request) error {
 			if message.Type != "chat_input" {
 				continue
 			}
-			if bridge == nil {
-				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "chat backend is unavailable"})
-				continue
-			}
-			if err := bridge.Send(message.Text); err != nil {
-				sendJSON(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
-			}
+			handleChatInput(bridge, message.Text, sendJSON)
 		}
+	}
+}
+
+func handleChatInput(bridge *chatProcessBridge, text string, send func(chatOutboundMessage)) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if bridge == nil {
+		send(chatOutboundMessage{Type: "chat_error", Error: "chat backend is unavailable"})
+		return
+	}
+	send(chatOutboundMessage{Type: "chat_processing"})
+	if err := bridge.Send(text); err != nil {
+		send(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
 	}
 }
 
