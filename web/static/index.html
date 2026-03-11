@@ -716,7 +716,7 @@
       </div>
     </section>
 
-    <section id="app" class="app">
+    <section id="app" class="app hidden">
       <div id="app-shell" class="app-shell">
         <aside id="left-panel" class="left-panel" aria-label="Main sections">
           <nav class="left-panel-nav">
@@ -3283,6 +3283,7 @@
       function showLogin(message = "") {
         closeChatWS();
         closeSettingsModal();
+        app.classList.add("hidden");
         appHead.classList.add("hidden");
         loginScreen.classList.remove("hidden");
         mainContent.classList.add("hidden");
@@ -3297,6 +3298,7 @@
         focusLoginUsername();
       }
       function showApp(username = "", role = "") {
+        app.classList.remove("hidden");
         appHead.classList.remove("hidden");
         currentUsername = username;
         currentUserRole = String(role || "").toLowerCase();
