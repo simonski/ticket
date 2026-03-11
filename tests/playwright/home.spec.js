@@ -79,6 +79,33 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
     return allStillVisible;
   });
   expect(escapeDoesNotClosePanels).toBe(true);
+  const focusRetention = await page.evaluate(() => {
+    if (typeof renderBoard !== "function" || typeof setFocusedCard !== "function") return null;
+    tickets = [{
+      ticket_id: 101,
+      title: "Focus Me",
+      key: "TK-101",
+      type: "task",
+      state: "idle",
+      stage: "design",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    }];
+    renderBoard();
+    const first = document.querySelector('article.ticket[data-ticket-id="101"]');
+    if (!first) return null;
+    setFocusedCard(first);
+    const before = first.classList.contains("focused");
+    renderBoard();
+    const after = document.querySelector('article.ticket[data-ticket-id="101"]');
+    return {
+      before,
+      afterFocused: Boolean(after && after.classList.contains("focused")),
+    };
+  });
+  expect(focusRetention).not.toBeNull();
+  expect(focusRetention.before).toBe(true);
+  expect(focusRetention.afterFocused).toBe(true);
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
 

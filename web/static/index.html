@@ -3535,7 +3535,6 @@
       }
 
       function renderBoard() {
-        if (typeof setFocusedCard === "function") setFocusedCard(null);
         boardEl.innerHTML = "";
         for (const stage of STAGES) {
           const lane = document.createElement("section");
@@ -3583,6 +3582,15 @@
           }
           boardEl.appendChild(lane);
         }
+        // Preserve focused ticket across rerenders caused by keyboard moves and reload sync.
+        if (focusedTicketID) {
+          const focused = document.querySelector(`article.ticket[data-ticket-id="${focusedTicketID}"]`);
+          if (focused) {
+            setFocusedCard(focused);
+            return;
+          }
+        }
+        setFocusedCard(null);
       }
 
       function normalizeStateForStage(stage, current) {
@@ -4427,10 +4435,14 @@
       });
 
       let focusedCard = null;
+      let focusedTicketID = "";
 
       function setFocusedCard(card) {
         if (focusedCard) focusedCard.classList.remove("focused");
         focusedCard = card || null;
+        focusedTicketID = focusedCard && focusedCard.dataset
+          ? String(focusedCard.dataset.ticketId || "")
+          : "";
         if (focusedCard) focusedCard.classList.add("focused");
       }
 
