@@ -8,6 +8,8 @@
       :root {
         --bg: #0b0f1e;
         --panel: #11182b;
+        --left-panel-width: 260px;
+        --left-panel-handle-width: 24px;
         --lane: #f7f3ea;
         --ticket: #fffef9;
         --ink: #1c2333;
@@ -200,14 +202,14 @@
         transition: margin-left 220ms ease;
       }
       .app-shell.panel-open .main-content {
-        margin-left: 260px;
+        margin-left: calc(var(--left-panel-width) + var(--left-panel-handle-width));
       }
       .left-panel {
         position: fixed;
         top: 52px;
         left: 0;
         bottom: 0;
-        width: 260px;
+        width: var(--left-panel-width);
         z-index: 15;
         background: #f7f3ea;
         border-right: 1px solid var(--line);
@@ -228,7 +230,7 @@
         background: #eee5d6;
         color: #1f2a44;
         padding: 0.5rem 0.1rem;
-        width: 24px;
+        width: var(--left-panel-handle-width);
         font-size: 0.74rem;
         letter-spacing: 0.05em;
         writing-mode: vertical-rl;
@@ -238,7 +240,7 @@
       }
       .left-panel-handle:hover { background: #e7dccb; }
       .app-shell.panel-open .left-panel-handle {
-        left: 260px;
+        left: var(--left-panel-width);
       }
       .left-panel.open {
         transform: translateX(0);
