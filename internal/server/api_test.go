@@ -42,6 +42,15 @@ func TestAuthAndAdminAPI(t *testing.T) {
 	if authenticated, _ := statusPayload["authenticated"].(bool); authenticated {
 		t.Fatalf("register should not authenticate the user, payload = %#v", statusPayload)
 	}
+	if got, ok := statusPayload["chat_max_connections"].(float64); !ok || int(got) != store.DefaultChatMaxConnections {
+		t.Fatalf("status chat_max_connections = %#v", statusPayload["chat_max_connections"])
+	}
+	if got, ok := statusPayload["chat_max_duration_minutes"].(float64); !ok || int(got) != store.DefaultChatMaxDurationMinutes {
+		t.Fatalf("status chat_max_duration_minutes = %#v", statusPayload["chat_max_duration_minutes"])
+	}
+	if got, ok := statusPayload["chat_running_processes"].(float64); !ok || int(got) != 0 {
+		t.Fatalf("status chat_running_processes = %#v", statusPayload["chat_running_processes"])
+	}
 
 	loginCarolResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
 		"username": "carol",
@@ -116,6 +125,90 @@ func TestAuthAndAdminAPI(t *testing.T) {
 	logoutResp := doJSONRequest(t, handler, http.MethodPost, "/api/logout", nil, carolLoginPayload.Token)
 	if logoutResp.Code != http.StatusOK {
 		t.Fatalf("logout status = %d, want %d", logoutResp.Code, http.StatusOK)
+	}
+}
+
+func TestChatLimitsConfigAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d, want %d", loginResp.Code, http.StatusOK)
+	}
+	var adminAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &adminAuth)
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerResp.Code, http.StatusCreated)
+	}
+	nonAdminLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if nonAdminLoginResp.Code != http.StatusOK {
+		t.Fatalf("alice login status = %d, want %d", nonAdminLoginResp.Code, http.StatusOK)
+	}
+	var userAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, nonAdminLoginResp, &userAuth)
+
+	unauthorized := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_limits", map[string]int{
+		"max_connections":      4,
+		"max_duration_minutes": 9,
+	}, "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status = %d, want %d", unauthorized.Code, http.StatusUnauthorized)
+	}
+
+	forbidden := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_limits", map[string]int{
+		"max_connections":      4,
+		"max_duration_minutes": 9,
+	}, userAuth.Token)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("forbidden status = %d, want %d", forbidden.Code, http.StatusForbidden)
+	}
+
+	adminUpdate := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_limits", map[string]int{
+		"max_connections":      4,
+		"max_duration_minutes": 9,
+	}, adminAuth.Token)
+	if adminUpdate.Code != http.StatusOK {
+		t.Fatalf("admin update status = %d, want %d body=%s", adminUpdate.Code, http.StatusOK, adminUpdate.Body.String())
+	}
+	var updated map[string]any
+	decodeResponse(t, adminUpdate, &updated)
+	if got := int(updated["chat_max_connections"].(float64)); got != 4 {
+		t.Fatalf("chat_max_connections = %d, want 4", got)
+	}
+	if got := int(updated["chat_max_duration_minutes"].(float64)); got != 9 {
+		t.Fatalf("chat_max_duration_minutes = %d, want 9", got)
+	}
+
+	statusResp := doJSONRequest(t, handler, http.MethodGet, "/api/status", nil, adminAuth.Token)
+	if statusResp.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusResp.Code, http.StatusOK)
+	}
+	var status map[string]any
+	decodeResponse(t, statusResp, &status)
+	if got := int(status["chat_max_connections"].(float64)); got != 4 {
+		t.Fatalf("status chat_max_connections = %d, want 4", got)
+	}
+	if got := int(status["chat_max_duration_minutes"].(float64)); got != 9 {
+		t.Fatalf("status chat_max_duration_minutes = %d, want 9", got)
+	}
+	if got := int(status["chat_running_processes"].(float64)); got != 0 {
+		t.Fatalf("status chat_running_processes = %d, want 0", got)
 	}
 }
 

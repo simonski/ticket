@@ -547,6 +547,11 @@ Keyboard shortcuts in the board view:
 - seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic is bridged to a shell-launched `codex` process on a PTY (`stdin`/`stdout` over terminal); set `TICKET_CHAT_CMD` to override the command string
+- admin `settings` includes global chat limits:
+  - max concurrent chat agents (default `2`)
+  - max chat duration in minutes (default `3`)
+- when chat capacity is full, new chat input is disabled until the server reports a free slot
+- `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
 - Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 

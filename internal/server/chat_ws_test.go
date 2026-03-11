@@ -35,7 +35,7 @@ func TestStartChatBridgeStreamsOutputForInput(t *testing.T) {
 	messages := make(chan chatOutboundMessage, 16)
 	bridge, err := startChatBridge(func(message chatOutboundMessage) {
 		messages <- message
-	}, nil)
+	}, nil, 3)
 	if err != nil {
 		t.Fatalf("startChatBridge() error = %v", err)
 	}
@@ -137,6 +137,61 @@ func TestChatRuntimeHeartbeatLineIncludesConnectionAndRunningCounts(t *testing.T
 	} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("runtime heartbeat line missing %q: %s", want, line)
+		}
+	}
+}
+
+func TestChatRuntimeRunningProcessCount(t *testing.T) {
+	runtime := newChatRuntime()
+	runtime.processes[1] = &chatProcessBridge{}
+	runtime.processes[2] = &chatProcessBridge{completed: true}
+	runtime.processes[3] = &chatProcessBridge{}
+	if got := runtime.runningProcessCount(); got != 2 {
+		t.Fatalf("runningProcessCount() = %d, want 2", got)
+	}
+}
+
+func TestChatRuntimeHasCapacity(t *testing.T) {
+	runtime := newChatRuntime()
+	runtime.processes[1] = &chatProcessBridge{}
+	runtime.processes[2] = &chatProcessBridge{completed: true}
+	if !runtime.hasCapacity(2) {
+		t.Fatalf("hasCapacity(2) = false, want true")
+	}
+	if runtime.hasCapacity(1) {
+		t.Fatalf("hasCapacity(1) = true, want false")
+	}
+}
+
+func TestStartChatBridgeWithDurationEnforcesTimeout(t *testing.T) {
+	t.Setenv("TICKET_CHAT_CMD", "cat")
+	messages := make(chan chatOutboundMessage, 32)
+	bridge, err := startChatBridgeWithDuration(func(message chatOutboundMessage) {
+		messages <- message
+	}, nil, 120*time.Millisecond, 0)
+	if err != nil {
+		t.Fatalf("startChatBridgeWithDuration() error = %v", err)
+	}
+	defer bridge.Close()
+
+	handleChatInput(bridge, "hello timeout", func(message chatOutboundMessage) {
+		messages <- message
+	}, nil)
+
+	deadline := time.After(3 * time.Second)
+	seenTimeoutError := false
+	seenExit124 := false
+	for !(seenTimeoutError && seenExit124) {
+		select {
+		case msg := <-messages:
+			if msg.Type == "chat_error" && strings.Contains(strings.ToLower(msg.Error), "conversation limit reached") {
+				seenTimeoutError = true
+			}
+			if msg.Type == "chat_exit" && msg.Code == 124 {
+				seenExit124 = true
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for timeout signal and exit (timeoutError=%v exit124=%v)", seenTimeoutError, seenExit124)
 		}
 	}
 }

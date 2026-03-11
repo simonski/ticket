@@ -659,6 +659,13 @@ The web UI should make these activities easy:
   - `change_type` (for example `created`, `updated`, `deleted`, `users_updated`)
   - legacy `type` is still emitted for backward compatibility
 - chat websocket (`/api/chat/ws`) executes a shell command on a PTY (default `codex`) and maps message input to process stdin and process output back to the browser
+- chat runtime limits are configurable in `app_settings`:
+  - `chat_max_connections` (default `2`)
+  - `chat_max_duration_minutes` (default `3`)
+- chat process spawn is denied when `running_processes >= chat_max_connections`; client chat input is disabled until capacity is available again
+- chat processes are force-stopped once `chat_max_duration_minutes` is exceeded
+- `/api/status` returns `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
+- admins update chat limits through `POST /api/config/chat_limits`
 - stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
 - story analysis uses the `StoryReview` role to generate epics/tasks and marks story status `ready_for_review`
 - epic analysis uses the `EpicReview` role to generate child implementation tickets

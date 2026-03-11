@@ -1005,6 +1005,14 @@
             <span>Allow new user registration</span>
             <input id="settings-registration-enabled" type="checkbox" />
           </label>
+          <label class="row" style="justify-content:space-between; align-items:center;">
+            <span>Max concurrent chat agents</span>
+            <input id="settings-chat-max-connections" type="number" min="1" step="1" style="width:7rem;" />
+          </label>
+          <label class="row" style="justify-content:space-between; align-items:center;">
+            <span>Max chat duration (minutes)</span>
+            <input id="settings-chat-max-duration" type="number" min="1" step="1" style="width:7rem;" />
+          </label>
           <div class="muted">This affects all users and the login screen registration flow.</div>
           <div class="row">
             <button id="settings-save" class="btn primary" type="button">Save Settings</button>
@@ -1070,6 +1078,8 @@
       const teamModalOverlay = document.getElementById("team-modal-overlay");
       const settingsModalOverlay = document.getElementById("settings-modal-overlay");
       const settingsRegistrationEnabled = document.getElementById("settings-registration-enabled");
+      const settingsChatMaxConnections = document.getElementById("settings-chat-max-connections");
+      const settingsChatMaxDuration = document.getElementById("settings-chat-max-duration");
       const settingsSaveBtn = document.getElementById("settings-save");
       const settingsStatusEl = document.getElementById("settings-status");
       const modalOverlay = document.getElementById("modal-overlay");
@@ -1162,6 +1172,8 @@
           return;
         }
         settingsRegistrationEnabled.checked = Boolean(registrationEnabled);
+        settingsChatMaxConnections.value = String(chatMaxConnections || 2);
+        settingsChatMaxDuration.value = String(chatMaxDurationMinutes || 3);
         settingsStatusEl.textContent = "";
         settingsModalOverlay.classList.remove("hidden");
       }
@@ -2168,6 +2180,11 @@
       let currentUsername = "";
       var currentUserRole = "";
       var registrationEnabled = true;
+      var chatMaxConnections = 2;
+      var chatMaxDurationMinutes = 3;
+      var chatCapacityBlocked = false;
+      var chatRunningProcesses = 0;
+      var chatCapacityPollTimer = null;
       let recentProjects = JSON.parse(localStorage.getItem("recent-projects") || "[]");
 
       function touchRecent(id) {
@@ -2313,12 +2330,26 @@
         settingsStatusEl.textContent = "";
         try {
           const enabled = Boolean(settingsRegistrationEnabled.checked);
-          const res = await call("/api/config/registration", {
+          const maxConnections = parsePositiveInt(settingsChatMaxConnections.value, 2);
+          const maxDuration = parsePositiveInt(settingsChatMaxDuration.value, 3);
+          const registrationRes = await call("/api/config/registration", {
             method: "POST",
             headers: headers(true),
             body: JSON.stringify({ enabled }),
           });
-          registrationEnabled = Boolean(res.registration_enabled);
+          const limitsRes = await call("/api/config/chat_limits", {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({
+              max_connections: maxConnections,
+              max_duration_minutes: maxDuration,
+            }),
+          });
+          registrationEnabled = Boolean(registrationRes.registration_enabled);
+          chatMaxConnections = parsePositiveInt(limitsRes.chat_max_connections, 2);
+          chatMaxDurationMinutes = parsePositiveInt(limitsRes.chat_max_duration_minutes, 3);
+          settingsChatMaxConnections.value = String(chatMaxConnections);
+          settingsChatMaxDuration.value = String(chatMaxDurationMinutes);
           canRegister(registrationEnabled);
           settingsStatusEl.textContent = "Settings saved.";
         } catch (err) {
@@ -3252,6 +3283,10 @@
           const status = await call("/api/status", { headers: headers() });
           setServerVersion(status.server_version);
           registrationEnabled = Boolean(status.registration_enabled);
+          chatMaxConnections = parsePositiveInt(status.chat_max_connections, 2);
+          chatMaxDurationMinutes = parsePositiveInt(status.chat_max_duration_minutes, 3);
+          chatRunningProcesses = parsePositiveInt(status.chat_running_processes, 0);
+          updateChatInputAvailability();
           canRegister(registrationEnabled);
           if (!status.authenticated) {
             showLogin();
@@ -3849,6 +3884,52 @@
         chatPendingTimer = null;
       }
 
+      function parsePositiveInt(raw, fallbackValue) {
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return fallbackValue;
+        const rounded = Math.trunc(n);
+        return rounded > 0 ? rounded : fallbackValue;
+      }
+
+      function updateChatInputAvailability() {
+        const disabled = Boolean(chatCapacityBlocked);
+        chatInputEl.disabled = disabled;
+        chatSendBtn.disabled = disabled;
+        if (disabled) {
+          chatInputEl.placeholder = "Chat capacity reached. Wait for a slot to open.";
+          return;
+        }
+        chatInputEl.placeholder = "Ask Codex…";
+      }
+
+      function stopChatCapacityPolling() {
+        if (!chatCapacityPollTimer) return;
+        clearInterval(chatCapacityPollTimer);
+        chatCapacityPollTimer = null;
+      }
+
+      function startChatCapacityPolling() {
+        if (chatCapacityPollTimer) return;
+        chatCapacityPollTimer = setInterval(async () => {
+          if (!chatCapacityBlocked) {
+            stopChatCapacityPolling();
+            return;
+          }
+          if (!token) return;
+          try {
+            const status = await call("/api/status", { headers: headers() });
+            chatRunningProcesses = parsePositiveInt(status.chat_running_processes, 0);
+            chatMaxConnections = parsePositiveInt(status.chat_max_connections, chatMaxConnections || 2);
+            if (chatRunningProcesses < chatMaxConnections) {
+              chatCapacityBlocked = false;
+              updateChatInputAvailability();
+              stopChatCapacityPolling();
+              appendChatBubble("system", "Chat capacity available again.");
+            }
+          } catch (_) {}
+        }, 3000);
+      }
+
       function ensureAssistantPendingBubble(message = "Thinking") {
         clearChatPendingTimer();
         if (!activeAssistantBubble || !chatThreadEl.contains(activeAssistantBubble)) {
@@ -3878,6 +3959,7 @@
 
       function closeChatWS() {
         clearChatPendingTimer();
+        stopChatCapacityPolling();
         if (chatSocketRetry) clearTimeout(chatSocketRetry);
         chatSocketRetry = null;
         if (chatSocket) {
@@ -3885,6 +3967,8 @@
           chatSocket = null;
         }
         activeAssistantBubble = null;
+        chatCapacityBlocked = false;
+        updateChatInputAvailability();
       }
 
       function connectChatWS() {
@@ -3900,6 +3984,9 @@
           let msg = {};
           try { msg = JSON.parse(evt.data || "{}"); } catch { return; }
           if (msg.type === "chat_ready") {
+            chatCapacityBlocked = false;
+            updateChatInputAvailability();
+            stopChatCapacityPolling();
             appendChatBubble("system", "Chat backend ready.");
             return;
           }
@@ -3908,7 +3995,13 @@
             return;
           }
           if (msg.type === "chat_error") {
-            appendChatBubble("system", `Error: ${msg.error || "unknown error"}`);
+            const errorText = String(msg.error || "unknown error");
+            appendChatBubble("system", `Error: ${errorText}`);
+            if (errorText.toLowerCase().includes("chat capacity reached")) {
+              chatCapacityBlocked = true;
+              updateChatInputAvailability();
+              startChatCapacityPolling();
+            }
             clearChatPendingTimer();
             if (activeAssistantBubble && activeAssistantBubble.classList.contains("pending")) {
               activeAssistantBubble.classList.remove("pending");
@@ -3918,6 +4011,9 @@
             return;
           }
           if (msg.type === "chat_exit") {
+            chatCapacityBlocked = false;
+            updateChatInputAvailability();
+            stopChatCapacityPolling();
             appendChatBubble("system", `Chat process exited (${msg.code ?? "?"}).`);
             clearChatPendingTimer();
             if (activeAssistantBubble && activeAssistantBubble.classList.contains("pending")) {
@@ -3949,6 +4045,10 @@
       }
 
       function sendChatInput() {
+        if (chatCapacityBlocked) {
+          appendChatBubble("system", "Chat is at capacity. Wait for a running conversation to finish.");
+          return;
+        }
         const text = (chatInputEl.value || "").trim();
         if (!text) return;
         appendChatBubble("user", text);
@@ -3983,6 +4083,7 @@
           sendChatInput();
         }
       });
+      updateChatInputAvailability();
 
       function escape(value) {
         return String(value ?? "")
