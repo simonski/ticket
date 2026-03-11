@@ -2221,6 +2221,7 @@
       let wsHealthy = false;
       let lastWSMessageAt = 0;
       let lastTicketSyncAt = 0;
+      let lastFallbackTicketPollAt = 0;
       let ticketLoadSeq = 0;
       let draft = null;
       let autosaveTimer = null;
@@ -2714,12 +2715,12 @@
         if (realtimeSyncTimer) return;
         realtimeSyncTimer = setInterval(async () => {
           if (!isAppVisible()) return;
-          const staleData = (Date.now() - lastTicketSyncAt) > 10000;
-          const staleWS = (Date.now() - lastWSMessageAt) > 4000;
-          if (!wsHealthy || staleWS || staleData) {
-            try { await loadTickets(); } catch {}
-          }
-        }, 2000);
+          if (wsHealthy) return;
+          const now = Date.now();
+          if ((now - lastFallbackTicketPollAt) < 30000) return;
+          lastFallbackTicketPollAt = now;
+          try { await loadTickets(); } catch {}
+        }, 5000);
       }
 
       function showLogin(message = "") {
@@ -3236,6 +3237,7 @@
       function connectWS() {
         if (socket) socket.close();
         if (socketRetry) clearTimeout(socketRetry);
+        wsHealthy = false;
         const protocol = location.protocol === "https:" ? "wss" : "ws";
         const wsToken = token || localStorage.getItem("task-token") || "";
         const wsURL = wsToken
@@ -3250,7 +3252,7 @@
           if (!isAppVisible()) return;
           wsHealthy = true;
           lastWSMessageAt = Date.now();
-          let shouldRefreshBoard = true;
+          let shouldRefreshBoard = false;
           // Parse event and drive status animator
           try {
             const msg = JSON.parse(evt.data);
@@ -3265,8 +3267,16 @@
               };
               window.statusAnimator.spawn(msg, counts[msg.type] || 2);
             }
-            if (msg.type === "connected") shouldRefreshBoard = false;
-            if (msg.project_id && String(msg.project_id) !== selectedProjectID()) shouldRefreshBoard = false;
+            if (msg.type === "connected") return;
+            const eventType = String(msg.type || "");
+            const selected = selectedProjectID();
+            const eventProjectID = msg.project_id ? String(msg.project_id) : "";
+            if (eventProjectID && selected && eventProjectID !== selected) return;
+            shouldRefreshBoard = eventType === "ticket_created"
+              || eventType === "ticket_updated"
+              || eventType === "ticket_deleted"
+              || eventType === "project_updated"
+              || eventType === "project_users_updated";
           } catch (_) { /* non-JSON ping — ignore */ }
           if (!shouldRefreshBoard) return;
           try { await loadTickets(); } catch {}
