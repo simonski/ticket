@@ -6,6 +6,7 @@ type StatusResponse struct {
 	Status              string      `json:"status"`
 	Authenticated       bool        `json:"authenticated"`
 	RegistrationEnabled bool        `json:"registration_enabled,omitempty"`
+	ChatEnabled         bool        `json:"chat_enabled,omitempty"`
 	ServerVersion       string      `json:"server_version,omitempty"`
 	User                *store.User `json:"user,omitempty"`
 }

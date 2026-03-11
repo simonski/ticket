@@ -45,6 +45,9 @@ func TestAuthAndAdminAPI(t *testing.T) {
 	if got, ok := statusPayload["chat_max_connections"].(float64); !ok || int(got) != store.DefaultChatMaxConnections {
 		t.Fatalf("status chat_max_connections = %#v", statusPayload["chat_max_connections"])
 	}
+	if got, ok := statusPayload["chat_enabled"].(bool); !ok || !got {
+		t.Fatalf("status chat_enabled = %#v", statusPayload["chat_enabled"])
+	}
 	if got, ok := statusPayload["chat_max_duration_minutes"].(float64); !ok || int(got) != store.DefaultChatMaxDurationMinutes {
 		t.Fatalf("status chat_max_duration_minutes = %#v", statusPayload["chat_max_duration_minutes"])
 	}
@@ -209,6 +212,83 @@ func TestChatLimitsConfigAPI(t *testing.T) {
 	}
 	if got := int(status["chat_running_processes"].(float64)); got != 0 {
 		t.Fatalf("status chat_running_processes = %d, want 0", got)
+	}
+}
+
+func TestChatEnabledConfigAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	if adminLoginResp.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d, want %d", adminLoginResp.Code, http.StatusOK)
+	}
+	var adminAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, adminLoginResp, &adminAuth)
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerResp.Code, http.StatusCreated)
+	}
+	userLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if userLoginResp.Code != http.StatusOK {
+		t.Fatalf("alice login status = %d, want %d", userLoginResp.Code, http.StatusOK)
+	}
+	var userAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, userLoginResp, &userAuth)
+
+	unauthorized := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_enabled", map[string]bool{
+		"enabled": false,
+	}, "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status = %d, want %d", unauthorized.Code, http.StatusUnauthorized)
+	}
+
+	forbidden := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_enabled", map[string]bool{
+		"enabled": false,
+	}, userAuth.Token)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("forbidden status = %d, want %d", forbidden.Code, http.StatusForbidden)
+	}
+
+	adminUpdate := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_enabled", map[string]bool{
+		"enabled": false,
+	}, adminAuth.Token)
+	if adminUpdate.Code != http.StatusOK {
+		t.Fatalf("admin update status = %d, want %d body=%s", adminUpdate.Code, http.StatusOK, adminUpdate.Body.String())
+	}
+	var updated map[string]any
+	decodeResponse(t, adminUpdate, &updated)
+	if got, ok := updated["chat_enabled"].(bool); !ok || got {
+		t.Fatalf("chat_enabled update = %#v, want false", updated["chat_enabled"])
+	}
+
+	statusResp := doJSONRequest(t, handler, http.MethodGet, "/api/status", nil, adminAuth.Token)
+	if statusResp.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", statusResp.Code, http.StatusOK)
+	}
+	var status map[string]any
+	decodeResponse(t, statusResp, &status)
+	if got, ok := status["chat_enabled"].(bool); !ok || got {
+		t.Fatalf("status chat_enabled = %#v, want false", status["chat_enabled"])
+	}
+
+	chatWSResp := doJSONRequest(t, handler, http.MethodGet, "/api/chat/ws", nil, adminAuth.Token)
+	if chatWSResp.Code != http.StatusForbidden {
+		t.Fatalf("chat ws status = %d, want %d body=%s", chatWSResp.Code, http.StatusForbidden, chatWSResp.Body.String())
 	}
 }
 

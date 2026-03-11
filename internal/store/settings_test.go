@@ -79,3 +79,57 @@ func TestSetChatLimitsConfigFallsBackToDefaults(t *testing.T) {
 		t.Fatalf("MaxDurationMin = %d, want %d", limits.MaxDurationMin, DefaultChatMaxDurationMinutes)
 	}
 }
+
+func TestChatEnabledDefaultsToTrue(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := Init(dbPath, "admin", "password"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	enabled, err := ChatEnabled(db)
+	if err != nil {
+		t.Fatalf("ChatEnabled() error = %v", err)
+	}
+	if !enabled {
+		t.Fatalf("ChatEnabled() = false, want true")
+	}
+}
+
+func TestSetChatEnabledPersistsValues(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := Init(dbPath, "admin", "password"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	if err := SetChatEnabled(db, false); err != nil {
+		t.Fatalf("SetChatEnabled(false) error = %v", err)
+	}
+	enabled, err := ChatEnabled(db)
+	if err != nil {
+		t.Fatalf("ChatEnabled() error = %v", err)
+	}
+	if enabled {
+		t.Fatalf("ChatEnabled() = true, want false")
+	}
+
+	if err := SetChatEnabled(db, true); err != nil {
+		t.Fatalf("SetChatEnabled(true) error = %v", err)
+	}
+	enabled, err = ChatEnabled(db)
+	if err != nil {
+		t.Fatalf("ChatEnabled() error = %v", err)
+	}
+	if !enabled {
+		t.Fatalf("ChatEnabled() = false, want true")
+	}
+}

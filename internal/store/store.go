@@ -530,6 +530,9 @@ func migrateSchema(db *sql.DB) error {
 	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_duration_minutes', '3')`); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_enabled', '1')`); err != nil {
+		return err
+	}
 	if _, err := db.Exec(`
 		INSERT OR IGNORE INTO project_members (project_id, user_id, role)
 		SELECT project_id, created_by, 'owner'

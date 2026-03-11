@@ -77,6 +77,15 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeAuthError(w, err)
 			return
 		}
+		chatEnabled, err := store.ChatEnabled(db)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !chatEnabled {
+			writeError(w, http.StatusForbidden, "chat is disabled")
+			return
+		}
 		if err := websocketServeChat(w, r, db, chatLog); err != nil {
 			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
 				writeError(w, http.StatusBadRequest, err.Error())
@@ -201,6 +210,11 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeError(w, http.StatusInternalServerError, chatErr.Error())
 			return
 		}
+		chatEnabled, chatEnabledErr := store.ChatEnabled(db)
+		if chatEnabledErr != nil {
+			writeError(w, http.StatusInternalServerError, chatEnabledErr.Error())
+			return
+		}
 		runningChats := sharedChatRuntime.runningProcessCount()
 		user, err := userFromRequest(db, r)
 		if err != nil {
@@ -209,6 +223,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					"status":                    "ok",
 					"authenticated":             false,
 					"registration_enabled":      registrationEnabled,
+					"chat_enabled":              chatEnabled,
 					"chat_max_connections":      chatLimits.MaxConnections,
 					"chat_max_duration_minutes": chatLimits.MaxDurationMin,
 					"chat_running_processes":    runningChats,
@@ -223,6 +238,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			"status":                    "ok",
 			"authenticated":             true,
 			"registration_enabled":      registrationEnabled,
+			"chat_enabled":              chatEnabled,
 			"chat_max_connections":      chatLimits.MaxConnections,
 			"chat_max_duration_minutes": chatLimits.MaxDurationMin,
 			"chat_running_processes":    runningChats,
@@ -285,6 +301,30 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"chat_max_connections":      payload.MaxConnections,
 			"chat_max_duration_minutes": payload.MaxDurationMin,
+		})
+	})
+	mux.HandleFunc("/api/config/chat_enabled", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var payload struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		if err := store.SetChatEnabled(db, payload.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"chat_enabled": payload.Enabled,
 		})
 	})
 

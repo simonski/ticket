@@ -1005,6 +1005,10 @@
             <span>Allow new user registration</span>
             <input id="settings-registration-enabled" type="checkbox" />
           </label>
+          <label class="row" style="justify-content:space-between;">
+            <span>Enable chat</span>
+            <input id="settings-chat-enabled" type="checkbox" />
+          </label>
           <label class="row" style="justify-content:space-between; align-items:center;">
             <span>Max concurrent chat agents</span>
             <input id="settings-chat-max-connections" type="number" min="1" step="1" style="width:7rem;" />
@@ -1071,13 +1075,16 @@
       const leftPanelHandleBtn = document.getElementById("left-panel-handle");
       const leftPanelBackdrop = document.getElementById("left-panel-backdrop");
       const leftPanelItems = Array.from(document.querySelectorAll("[data-left-panel-action]"));
+      const leftPanelChatItem = document.querySelector('[data-left-panel-action="chat"]');
       const perspectiveBtn = document.getElementById("perspective-btn");
       const perspectiveOverlay = document.getElementById("perspective-overlay");
+      const perspectiveChatItem = document.querySelector('.perspective-item[data-perspective="chat"]');
       const agentModalOverlay = document.getElementById("agent-modal-overlay");
       const roleModalOverlay = document.getElementById("role-modal-overlay");
       const teamModalOverlay = document.getElementById("team-modal-overlay");
       const settingsModalOverlay = document.getElementById("settings-modal-overlay");
       const settingsRegistrationEnabled = document.getElementById("settings-registration-enabled");
+      const settingsChatEnabled = document.getElementById("settings-chat-enabled");
       const settingsChatMaxConnections = document.getElementById("settings-chat-max-connections");
       const settingsChatMaxDuration = document.getElementById("settings-chat-max-duration");
       const settingsSaveBtn = document.getElementById("settings-save");
@@ -1174,6 +1181,7 @@
           return;
         }
         settingsRegistrationEnabled.checked = Boolean(registrationEnabled);
+        settingsChatEnabled.checked = Boolean(chatEnabled);
         settingsChatMaxConnections.value = String(chatMaxConnections || 2);
         settingsChatMaxDuration.value = String(chatMaxDurationMinutes || 3);
         settingsStatusEl.textContent = "";
@@ -1197,6 +1205,10 @@
           return;
         }
         if (action === "chat") {
+          if (!chatEnabled) {
+            await uiAlert("Chat is disabled by an administrator.");
+            return;
+          }
           switchPerspective("chat");
           setLeftPanelActive("chat");
           connectChatWS();
@@ -2198,6 +2210,7 @@
       let currentUsername = "";
       var currentUserRole = "";
       var registrationEnabled = true;
+      var chatEnabled = true;
       var chatMaxConnections = 2;
       var chatMaxDurationMinutes = 3;
       var chatCapacityBlocked = false;
@@ -2348,12 +2361,18 @@
         settingsStatusEl.textContent = "";
         try {
           const enabled = Boolean(settingsRegistrationEnabled.checked);
+          const chatFeatureEnabled = Boolean(settingsChatEnabled.checked);
           const maxConnections = parsePositiveInt(settingsChatMaxConnections.value, 2);
           const maxDuration = parsePositiveInt(settingsChatMaxDuration.value, 3);
           const registrationRes = await call("/api/config/registration", {
             method: "POST",
             headers: headers(true),
             body: JSON.stringify({ enabled }),
+          });
+          const chatEnabledRes = await call("/api/config/chat_enabled", {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ enabled: chatFeatureEnabled }),
           });
           const limitsRes = await call("/api/config/chat_limits", {
             method: "POST",
@@ -2364,11 +2383,14 @@
             }),
           });
           registrationEnabled = Boolean(registrationRes.registration_enabled);
+          chatEnabled = Boolean(chatEnabledRes.chat_enabled);
           chatMaxConnections = parsePositiveInt(limitsRes.chat_max_connections, 2);
           chatMaxDurationMinutes = parsePositiveInt(limitsRes.chat_max_duration_minutes, 3);
+          settingsChatEnabled.checked = chatEnabled;
           settingsChatMaxConnections.value = String(chatMaxConnections);
           settingsChatMaxDuration.value = String(chatMaxDurationMinutes);
           canRegister(registrationEnabled);
+          applyChatFeatureAvailability();
           settingsStatusEl.textContent = "Settings saved.";
         } catch (err) {
           settingsStatusEl.textContent = `Save failed: ${err.message}`;
@@ -3301,10 +3323,11 @@
           const status = await call("/api/status", { headers: headers() });
           setServerVersion(status.server_version);
           registrationEnabled = Boolean(status.registration_enabled);
+          chatEnabled = status.chat_enabled !== false;
           chatMaxConnections = parsePositiveInt(status.chat_max_connections, 2);
           chatMaxDurationMinutes = parsePositiveInt(status.chat_max_duration_minutes, 3);
           chatRunningProcesses = parsePositiveInt(status.chat_running_processes, 0);
-          updateChatInputAvailability();
+          applyChatFeatureAvailability();
           canRegister(registrationEnabled);
           if (!status.authenticated) {
             showLogin();
@@ -3915,14 +3938,32 @@
       }
 
       function updateChatInputAvailability() {
-        const disabled = Boolean(chatCapacityBlocked);
+        const disabled = !chatEnabled || Boolean(chatCapacityBlocked);
         chatInputEl.disabled = disabled;
         chatSendBtn.disabled = disabled;
+        if (!chatEnabled) {
+          chatInputEl.placeholder = "Chat is disabled by an administrator.";
+          return;
+        }
         if (disabled) {
           chatInputEl.placeholder = "Chat capacity reached. Wait for a slot to open.";
           return;
         }
         chatInputEl.placeholder = "Ask Codex…";
+      }
+
+      function applyChatFeatureAvailability() {
+        if (leftPanelChatItem) leftPanelChatItem.classList.toggle("hidden", !chatEnabled);
+        if (perspectiveChatItem) perspectiveChatItem.classList.toggle("hidden", !chatEnabled);
+        if (!chatEnabled) {
+          closeChatWS();
+          if (currentPerspective === "chat") {
+            activatePerspective("swimlanes");
+            setLeftPanelActive("swimlanes");
+          }
+        }
+        syncPerspectiveUI();
+        updateChatInputAvailability();
       }
 
       function stopChatCapacityPolling() {
@@ -3941,8 +3982,16 @@
           if (!token) return;
           try {
             const status = await call("/api/status", { headers: headers() });
+            chatEnabled = status.chat_enabled !== false;
             chatRunningProcesses = parsePositiveInt(status.chat_running_processes, 0);
             chatMaxConnections = parsePositiveInt(status.chat_max_connections, chatMaxConnections || 2);
+            if (!chatEnabled) {
+              chatCapacityBlocked = false;
+              applyChatFeatureAvailability();
+              stopChatCapacityPolling();
+              appendChatBubble("system", "Chat was disabled by an administrator.");
+              return;
+            }
             if (chatRunningProcesses < chatMaxConnections) {
               chatCapacityBlocked = false;
               updateChatInputAvailability();
@@ -3995,6 +4044,7 @@
       }
 
       function connectChatWS() {
+        if (!chatEnabled) return;
         if (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING)) return;
         if (chatSocketRetry) clearTimeout(chatSocketRetry);
         const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -4058,6 +4108,7 @@
             activeAssistantBubble.textContent = "Connection closed while waiting for a response.";
           }
           activeAssistantBubble = null;
+          if (!chatEnabled) return;
           if (!token && !localStorage.getItem("task-token")) return;
           if (chatSocketRetry) clearTimeout(chatSocketRetry);
           chatSocketRetry = setTimeout(connectChatWS, 1200);
@@ -4068,6 +4119,10 @@
       }
 
       function sendChatInput() {
+        if (!chatEnabled) {
+          appendChatBubble("system", "Chat is disabled by an administrator.");
+          return;
+        }
         if (chatCapacityBlocked) {
           appendChatBubble("system", "Chat is at capacity. Wait for a running conversation to finish.");
           return;

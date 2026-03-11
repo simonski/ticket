@@ -164,6 +164,15 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request, db *sql.DB, logf
 				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "chat request already running"})
 				continue
 			}
+			enabled, err := store.ChatEnabled(db)
+			if err != nil {
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "failed to load chat settings"})
+				continue
+			}
+			if !enabled {
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "chat is disabled"})
+				continue
+			}
 			limits, err := store.ChatLimitsConfig(db)
 			if err != nil {
 				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "failed to load chat settings"})
