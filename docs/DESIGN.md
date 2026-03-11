@@ -643,6 +643,7 @@ The web UI should make these activities easy:
   - defaults to open and remains open unless the user explicitly toggles `sections` minimise/grow
   - the selector panel must support vertical scrolling when viewport height is constrained
 - the main content area should support vertical scrolling while preserving the sticky top banner and fixed section selector controls
+- the settings panel should not advertise or bind `Escape` for close behavior
 - manage agents from a custom profile-menu panel (list/create/update/enable/disable/delete)
 - add and edit items
 - view hierarchy

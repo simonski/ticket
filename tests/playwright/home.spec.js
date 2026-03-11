@@ -16,6 +16,7 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   await expect(page.locator("#login-user")).toBeFocused();
   await expect(page.locator("#perspective-btn")).toHaveCount(0);
+  await expect(page.locator("#settings-modal")).not.toContainText("ESC to close");
   const layout = await page.evaluate(() => {
     const mainContent = document.getElementById("main-content");
     const leftPanel = document.getElementById("left-panel");
