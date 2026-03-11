@@ -3444,7 +3444,12 @@
             lane.classList.remove("drag-over");
             const id = event.dataTransfer.getData("text/ticket-id");
             if (!id) return;
-            await moveTicketToStage(id, stage);
+            try {
+              await moveTicketToStage(id, stage);
+              appStatus.textContent = "";
+            } catch (err) {
+              appStatus.textContent = `Move failed: ${err.message}`;
+            }
           });
           for (const ticket of laneTickets) {
             const card = document.createElement("article");
@@ -3492,8 +3497,10 @@
           stage,
           state: normalizeStateForStage(stage, ticket.state),
         };
-        await call(`/api/tickets/${ticket.ticket_id}`, { method: "PUT", headers: headers(true), body: JSON.stringify(payload) });
-        await loadTickets();
+        const updated = await call(`/api/tickets/${ticket.ticket_id}`, { method: "PUT", headers: headers(true), body: JSON.stringify(payload) });
+        upsertTicketLocal(updated);
+        refreshTicketViews();
+        scheduleTicketReload("move-confirm", { delayMs: 250, minIntervalMs: 250 });
         if (recordUndo) {
           pushUndoAction(`move ${ticket.key || "#" + ticket.ticket_id} to ${stage}`, async () => {
             await moveTicketToStage(ticket.ticket_id, previousStage, false);
