@@ -684,7 +684,7 @@
       <div class="login-card">
         <h1 class="login-banner"><canvas id="login-pixel-logo" width="320" height="48" title="ticket"></canvas></h1>
         <form id="login-form" class="stack">
-          <input id="login-user" placeholder="username" required />
+          <input id="login-user" placeholder="username" autocomplete="username" autofocus required />
           <input id="login-pass" type="password" placeholder="password" required />
           <div class="row">
             <button class="btn primary" type="submit">Login</button>
@@ -3184,6 +3184,17 @@
         }, 5000);
       }
 
+      function focusLoginUsername() {
+        const userInput = document.getElementById("login-user");
+        if (!userInput) return;
+        const focusOnce = () => {
+          try { userInput.focus({ preventScroll: true }); } catch { userInput.focus(); }
+        };
+        focusOnce();
+        requestAnimationFrame(focusOnce);
+        setTimeout(focusOnce, 50);
+      }
+
       function showLogin(message = "") {
         closeChatWS();
         closeSettingsModal();
@@ -3198,10 +3209,7 @@
         currentUserRole = "";
         syncAdminVisibility();
         projBtn.textContent = "Project";
-        const userInput = document.getElementById("login-user");
-        if (userInput) {
-          requestAnimationFrame(() => userInput.focus());
-        }
+        focusLoginUsername();
       }
       function showApp(username = "", role = "") {
         appHead.classList.remove("hidden");

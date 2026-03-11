@@ -14,5 +14,6 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await expect(page.locator("#login-user")).toBeVisible();
   await expect(page.locator("#login-pass")).toBeVisible();
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
+  await expect(page.locator("#login-user")).toBeFocused();
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
