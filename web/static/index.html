@@ -2700,6 +2700,12 @@
         const body = await response.text();
         let data = {};
         try { data = body ? JSON.parse(body) : {}; } catch {}
+        if (response.status === 401) {
+          token = "";
+          localStorage.removeItem("task-token");
+          showLogin("Session expired. Please log in.");
+          throw new Error(data.error || "unauthorized");
+        }
         if (!response.ok) throw new Error(data.error || `${response.status} ${response.statusText}`);
         return data;
       }
