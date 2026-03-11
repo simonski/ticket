@@ -114,16 +114,6 @@
       }
       .app-head-banner { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
-      .left-panel-toggle {
-        border: 1px solid #c4cfeb;
-        border-radius: 999px;
-        padding: 0.4rem 0.85rem;
-        background: #fff;
-        color: #1f2a44;
-        cursor: pointer;
-        white-space: nowrap;
-      }
-      .left-panel-toggle:hover { background: #f0ede6; }
       #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: 100%; }
 
       /* custom project dropdown */
@@ -228,20 +218,25 @@
       }
       .left-panel-handle {
         position: fixed;
-        top: 108px;
+        top: 52px;
+        bottom: 0;
         left: 0;
         z-index: 16;
         border: 1px solid var(--line);
         border-left: 0;
-        border-radius: 0 10px 10px 0;
-        background: #fffef9;
+        border-radius: 0;
+        background: #eee5d6;
         color: #1f2a44;
-        padding: 0.4rem 0.5rem;
-        font-size: 0.78rem;
+        padding: 0.5rem 0.1rem;
+        width: 24px;
+        font-size: 0.74rem;
+        letter-spacing: 0.05em;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
         cursor: pointer;
         box-shadow: 0 8px 18px rgba(0,0,0,0.14);
       }
-      .left-panel-handle:hover { background: #f0ede6; }
+      .left-panel-handle:hover { background: #e7dccb; }
       .app-shell.panel-open .left-panel-handle {
         left: 260px;
       }
@@ -673,7 +668,6 @@
       </div>
       <div id="app-status" style="display:none;"></div>
       <div class="app-head-right">
-        <button id="left-panel-toggle" class="left-panel-toggle" type="button">sections</button>
         <button class="proj-btn" id="perspective-btn" type="button">kanban</button>
         <div class="proj-dropdown" id="proj-dropdown">
           <button class="proj-btn" id="proj-btn" type="button">Project</button>
@@ -1071,7 +1065,6 @@
       const chatInputEl = document.getElementById("chat-input");
       const chatSendBtn = document.getElementById("chat-send");
       const leftPanel = document.getElementById("left-panel");
-      const leftPanelToggleBtn = document.getElementById("left-panel-toggle");
       const leftPanelHandleBtn = document.getElementById("left-panel-handle");
       const leftPanelBackdrop = document.getElementById("left-panel-backdrop");
       const leftPanelItems = Array.from(document.querySelectorAll("[data-left-panel-action]"));
@@ -1144,9 +1137,7 @@
       function setLeftPanelOpen(open) {
         leftPanel.classList.toggle("open", open);
         appShell.classList.toggle("panel-open", open);
-        leftPanelToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
         leftPanelHandleBtn.setAttribute("aria-expanded", open ? "true" : "false");
-        leftPanelToggleBtn.textContent = open ? "minimise" : "grow";
         leftPanelHandleBtn.textContent = open ? "minimise" : "grow";
         localStorage.setItem("left-panel-open", open ? "1" : "0");
       }
@@ -1192,7 +1183,23 @@
         settingsModalOverlay.classList.add("hidden");
       }
 
+      function dismissPanelPopups() {
+        closePerspectivePicker();
+        closeSearch();
+        closeProjMenu();
+        closeProfileMenu();
+        closeDialog(false);
+        closeModal();
+        closeProjModal();
+        closeStoryModal();
+        closeSettingsModal();
+        closeAgentModal();
+        closeTeamModal();
+        closeRoleModal();
+      }
+
       async function runLeftPanelAction(action) {
+        dismissPanelPopups();
         if (action === "swimlanes") {
           switchPerspective("swimlanes");
           setLeftPanelActive("swimlanes");
@@ -2028,10 +2035,6 @@
       perspectiveOverlay.addEventListener("click", (e) => { if (e.target === perspectiveOverlay) closePerspectivePicker(); });
       perspectiveItems.forEach((el) => {
         el.addEventListener("click", () => runPerspectivePickerItem(el));
-      });
-      leftPanelToggleBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        toggleLeftPanel();
       });
       leftPanelHandleBtn.addEventListener("click", (e) => {
         e.stopPropagation();
