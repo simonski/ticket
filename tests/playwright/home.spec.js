@@ -34,6 +34,24 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   expect(layout.mainOverflowY).toBe("auto");
   expect(layout.leftPanelOverflowY).toBe("auto");
   expect(layout.appHeadPosition).toBe("sticky");
+  const selectorPersistence = await page.evaluate(() => {
+    const leftPanel = document.getElementById("left-panel");
+    const appShell = document.getElementById("app-shell");
+    const backdrop = document.getElementById("left-panel-backdrop");
+    if (!leftPanel || !appShell || !backdrop) return null;
+    leftPanel.classList.add("open");
+    appShell.classList.add("panel-open");
+    backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const openAfterBackdropClick = leftPanel.classList.contains("open");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    const openAfterEscape = leftPanel.classList.contains("open");
+    leftPanel.classList.remove("open");
+    appShell.classList.remove("panel-open");
+    return { openAfterBackdropClick, openAfterEscape };
+  });
+  expect(selectorPersistence).not.toBeNull();
+  expect(selectorPersistence.openAfterBackdropClick).toBe(true);
+  expect(selectorPersistence.openAfterEscape).toBe(true);
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
 

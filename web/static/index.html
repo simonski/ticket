@@ -282,7 +282,7 @@
       }
       .app-shell.panel-open .left-panel-backdrop {
         opacity: 1;
-        pointer-events: auto;
+        pointer-events: none;
       }
       @media (max-width: 900px) {
         .app-shell.panel-open .main-content { margin-left: 0; }
@@ -2126,7 +2126,6 @@
         e.stopPropagation();
         toggleLeftPanel();
       });
-      leftPanelBackdrop.addEventListener("click", closeLeftPanel);
       leftPanelItems.forEach((item) => {
         item.addEventListener("click", () => {
           runLeftPanelAction(item.dataset.leftPanelAction || "");
@@ -4490,7 +4489,6 @@
         if (event.key === "Escape") {
           if (!searchOverlay.classList.contains("hidden")) { closeSearch(); return; }
           if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
-          if (leftPanel.classList.contains("open")) { closeLeftPanel(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
           if (!storyModalOverlay.classList.contains("hidden")) { closeStoryModal(); return; }
           if (!settingsModalOverlay.classList.contains("hidden")) { closeSettingsModal(); return; }
