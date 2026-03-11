@@ -720,13 +720,13 @@
       <div id="app-shell" class="app-shell">
         <aside id="left-panel" class="left-panel" aria-label="Main sections">
           <nav class="left-panel-nav">
-            <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban</button>
             <button type="button" class="left-panel-item" data-left-panel-action="stories">stories</button>
-            <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
+            <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="teams">teams</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="settings">settings</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
           </nav>
         </aside>
         <button id="left-panel-handle" class="left-panel-handle" type="button">sections</button>
@@ -769,21 +769,13 @@
     </div>
     <div id="perspective-overlay" class="perspective-overlay hidden">
       <div class="perspective-popup">
-        <div class="perspective-item active" data-perspective="swimlanes">
-          <div><strong>kanban</strong></div>
-          <div class="perspective-kicker">Current board lanes for this project</div>
-        </div>
         <div class="perspective-item" data-perspective="stories">
           <div><strong>stories</strong></div>
           <div class="perspective-kicker">High-level requirements for this project</div>
         </div>
-        <div class="perspective-item" data-perspective="chat">
-          <div><strong>chat</strong></div>
-          <div class="perspective-kicker">Chat with Codex via backend bridge</div>
-        </div>
-        <div class="perspective-item" data-perspective="tv">
-          <div><strong>tv : ticketvision</strong></div>
-          <div class="perspective-kicker">Project → epics → stories force graph</div>
+        <div class="perspective-item active" data-perspective="swimlanes">
+          <div><strong>kanban</strong></div>
+          <div class="perspective-kicker">Current board lanes for this project</div>
         </div>
         <div class="perspective-item admin-only hidden" data-panel-action="agents">
           <div><strong>agents</strong></div>
@@ -800,6 +792,14 @@
         <div class="perspective-item admin-only hidden" data-panel-action="settings">
           <div><strong>settings</strong></div>
           <div class="perspective-kicker">Open settings panel</div>
+        </div>
+        <div class="perspective-item" data-perspective="chat">
+          <div><strong>chat</strong></div>
+          <div class="perspective-kicker">Chat with Codex via backend bridge</div>
+        </div>
+        <div class="perspective-item" data-perspective="tv">
+          <div><strong>tv : ticketvision</strong></div>
+          <div class="perspective-kicker">Project → epics → stories force graph</div>
         </div>
       </div>
     </div>

@@ -511,21 +511,23 @@ Use it for:
 2. reviewing related items side by side
 3. browsing task details and dependencies without switching commands
 4. switching perspectives with `V`:
-   - `kanban`: stage lanes for the current project
    - `stories`: high-level requirements for the current project
-   - `chat`: LLM chat panel
-   - `tv : ticketvision`: a left-to-right project → epics → stories graph view
+   - `kanban`: stage lanes for the current project
    - `agents`: opens agent management
    - `roles`: opens role management
+   - `teams`: opens team management
    - `settings`: opens settings
+   - `chat`: LLM chat panel
+   - `tv : ticketvision`: a left-to-right project → epics → stories graph view
 5. in `kanban`, cards are ordered by last modified timestamp (newest first)
 6. opening the `sections` left panel to jump directly to:
-   - `kanban`
    - `stories`
-   - `chat`
+   - `kanban`
    - `agents`
    - `roles`
+   - `teams`
    - `settings`
+   - `chat`
    - panel is visible by default and can be collapsed/expanded only via the `sections` minimise/grow control
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
