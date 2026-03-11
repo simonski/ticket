@@ -16,6 +16,24 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   await expect(page.locator("#login-user")).toBeFocused();
   await expect(page.locator("#perspective-btn")).toHaveCount(0);
+  const layout = await page.evaluate(() => {
+    const mainContent = document.getElementById("main-content");
+    const leftPanel = document.getElementById("left-panel");
+    const appHead = document.querySelector(".app-head");
+    if (!mainContent || !leftPanel || !appHead) return null;
+    const mainStyle = window.getComputedStyle(mainContent);
+    const panelStyle = window.getComputedStyle(leftPanel);
+    const headStyle = window.getComputedStyle(appHead);
+    return {
+      mainOverflowY: mainStyle.overflowY,
+      leftPanelOverflowY: panelStyle.overflowY,
+      appHeadPosition: headStyle.position,
+    };
+  });
+  expect(layout).not.toBeNull();
+  expect(layout.mainOverflowY).toBe("auto");
+  expect(layout.leftPanelOverflowY).toBe("auto");
+  expect(layout.appHeadPosition).toBe("sticky");
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
 

@@ -198,6 +198,9 @@
       }
       .main-content {
         min-height: calc(100vh - 52px);
+        height: calc(100vh - 52px);
+        overflow-y: auto;
+        overflow-x: hidden;
         position: relative;
         transition: margin-left 220ms ease;
       }
@@ -217,6 +220,7 @@
         transform: translateX(-100%);
         transition: transform 220ms ease;
         padding: 0.7rem 0.6rem;
+        overflow-y: auto;
       }
       .left-panel-handle {
         position: fixed;
@@ -287,8 +291,7 @@
       }
       .perspective-stage {
         position: relative;
-        min-height: calc(100vh - 52px);
-        overflow: hidden;
+        min-height: 100%;
       }
       .perspective-view {
         position: absolute;
