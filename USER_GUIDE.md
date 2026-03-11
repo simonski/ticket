@@ -546,7 +546,7 @@ Keyboard shortcuts in the board view:
 - profile menu includes a `Roles` panel to list/create/update/delete role personas (`title`, `motivation`, `goals`)
 - seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
-- chat websocket traffic is bridged to a shell-launched `codex` process on a PTY (`stdin`/`stdout` over terminal); set `TICKET_CHAT_CMD` to override the command string
+- chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
 - admin `settings` includes global chat limits:
   - max concurrent chat agents (default `2`)
   - max chat duration in minutes (default `3`)

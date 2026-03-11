@@ -658,7 +658,7 @@ The web UI should make these activities easy:
   - `entity_id` (the changed entity id)
   - `change_type` (for example `created`, `updated`, `deleted`, `users_updated`)
   - legacy `type` is still emitted for backward compatibility
-- chat websocket (`/api/chat/ws`) executes a shell command on a PTY (default `codex`) and maps message input to process stdin and process output back to the browser
+- chat websocket (`/api/chat/ws`) executes prompt-scoped external commands (default `codex exec`) and maps prompt input to process stdin with streamed stdout/stderr output back to the browser
 - chat runtime limits are configurable in `app_settings`:
   - `chat_max_connections` (default `2`)
   - `chat_max_duration_minutes` (default `3`)

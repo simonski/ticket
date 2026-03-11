@@ -16,63 +16,36 @@ func TestSanitizeTerminalOutputRemovesAnsiSequences(t *testing.T) {
 	}
 }
 
-func TestHandleChatInputEmitsErrorWhenBridgeMissing(t *testing.T) {
-	out := make([]chatOutboundMessage, 0, 2)
-	handleChatInput(nil, "hello", func(message chatOutboundMessage) {
-		out = append(out, message)
-	}, nil)
-	if len(out) != 1 {
-		t.Fatalf("message count = %d, want 1", len(out))
-	}
-	if out[0].Type != "chat_error" {
-		t.Fatalf("first type = %q, want chat_error", out[0].Type)
-	}
-}
-
 func TestStartChatBridgeStreamsOutputForInput(t *testing.T) {
 	t.Setenv("TICKET_CHAT_CMD", "cat")
 
 	messages := make(chan chatOutboundMessage, 16)
 	bridge, err := startChatBridge(func(message chatOutboundMessage) {
 		messages <- message
-	}, nil, 3)
+	}, nil, 3*time.Second)
 	if err != nil {
 		t.Fatalf("startChatBridge() error = %v", err)
 	}
 	defer bridge.Close()
 
-	handleChatInput(bridge, "hello from test", func(message chatOutboundMessage) {
-		messages <- message
-	}, nil)
+	if err := bridge.Send("hello from test"); err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	if err := bridge.CloseInput(); err != nil {
+		t.Fatalf("CloseInput() error = %v", err)
+	}
 
 	deadline := time.After(2 * time.Second)
-	seenProcessing := false
 	seenOutput := false
-	for !(seenProcessing && seenOutput) {
+	for !seenOutput {
 		select {
 		case msg := <-messages:
-			if msg.Type == "chat_processing" {
-				seenProcessing = true
-			}
 			if msg.Type == "chat_output" && strings.Contains(msg.Text, "hello from test") {
 				seenOutput = true
 			}
 		case <-deadline:
-			t.Fatalf("timed out waiting for chat_processing and chat_output (processing=%v output=%v)", seenProcessing, seenOutput)
+			t.Fatalf("timed out waiting for chat_output (output=%v)", seenOutput)
 		}
-	}
-}
-
-func TestHandleChatInputLogsPrompt(t *testing.T) {
-	lines := make([]string, 0, 1)
-	handleChatInput(nil, "hello world", func(chatOutboundMessage) {}, func(line string) {
-		lines = append(lines, line)
-	})
-	if len(lines) != 1 {
-		t.Fatalf("log line count = %d, want 1", len(lines))
-	}
-	if !strings.Contains(lines[0], "prompt: hello world") {
-		t.Fatalf("log line = %q, want prompt content", lines[0])
 	}
 }
 
@@ -164,19 +137,15 @@ func TestChatRuntimeHasCapacity(t *testing.T) {
 }
 
 func TestStartChatBridgeWithDurationEnforcesTimeout(t *testing.T) {
-	t.Setenv("TICKET_CHAT_CMD", "cat")
+	t.Setenv("TICKET_CHAT_CMD", "sleep 5")
 	messages := make(chan chatOutboundMessage, 32)
 	bridge, err := startChatBridgeWithDuration(func(message chatOutboundMessage) {
 		messages <- message
-	}, nil, 120*time.Millisecond, 0)
+	}, nil, 120*time.Millisecond)
 	if err != nil {
 		t.Fatalf("startChatBridgeWithDuration() error = %v", err)
 	}
 	defer bridge.Close()
-
-	handleChatInput(bridge, "hello timeout", func(message chatOutboundMessage) {
-		messages <- message
-	}, nil)
 
 	deadline := time.After(3 * time.Second)
 	seenTimeoutError := false
@@ -192,6 +161,34 @@ func TestStartChatBridgeWithDurationEnforcesTimeout(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatalf("timed out waiting for timeout signal and exit (timeoutError=%v exit124=%v)", seenTimeoutError, seenExit124)
+		}
+	}
+}
+
+func TestResolveChatCommandArgsDefaultsToCodexExec(t *testing.T) {
+	t.Setenv("TICKET_CHAT_CMD", "")
+	got := resolveChatCommandArgs()
+	want := []string{"codex", "exec"}
+	if len(got) != len(want) {
+		t.Fatalf("resolveChatCommandArgs() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("resolveChatCommandArgs()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestResolveChatCommandArgsInjectsExecForCodexFlags(t *testing.T) {
+	t.Setenv("TICKET_CHAT_CMD", "codex --model gpt-5.3-codex")
+	got := resolveChatCommandArgs()
+	want := []string{"codex", "exec", "--model", "gpt-5.3-codex"}
+	if len(got) != len(want) {
+		t.Fatalf("resolveChatCommandArgs() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("resolveChatCommandArgs()[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
 }

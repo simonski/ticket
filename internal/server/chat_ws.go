@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/simonski/ticket/internal/store"
 )
 
@@ -34,7 +33,7 @@ type chatOutboundMessage struct {
 
 type chatProcessBridge struct {
 	cmd          *exec.Cmd
-	tty          *os.File
+	stdin        io.WriteCloser
 	mu           sync.Mutex
 	once         sync.Once
 	stateMu      sync.Mutex
@@ -124,6 +123,7 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request, db *sql.DB, logf
 	sendJSON(chatOutboundMessage{Type: "chat_connected"})
 	sendJSON(chatOutboundMessage{Type: "chat_ready"})
 	var bridge *chatProcessBridge
+	sessionStartedAt := time.Now().UTC()
 
 	defer func() {
 		if bridge != nil {
@@ -153,72 +153,91 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request, db *sql.DB, logf
 			if message.Type != "chat_input" {
 				continue
 			}
-			if bridge == nil {
-				limits, err := store.ChatLimitsConfig(db)
-				if err != nil {
-					sendJSON(chatOutboundMessage{Type: "chat_error", Error: "failed to load chat settings"})
-					continue
-				}
-				running := sharedChatRuntime.runningProcessCount()
-				if !sharedChatRuntime.hasCapacity(limits.MaxConnections) {
-					sendJSON(chatOutboundMessage{
-						Type:  "chat_error",
-						Error: fmt.Sprintf("chat capacity reached (%d/%d). wait for an active chat to finish", running, limits.MaxConnections),
-					})
-					continue
-				}
-				newBridge, err := startChatBridge(sendJSON, logf, limits.MaxDurationMin)
-				if err != nil {
-					sendJSON(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
-					continue
-				}
-				bridge = newBridge
+			text := strings.TrimSpace(message.Text)
+			if text == "" {
+				continue
 			}
-			handleChatInput(bridge, message.Text, sendJSON, logf)
+			if logf != nil {
+				logf(fmt.Sprintf("prompt: %s", text))
+			}
+			if bridge != nil && !bridge.isCompleted() {
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "chat request already running"})
+				continue
+			}
+			limits, err := store.ChatLimitsConfig(db)
+			if err != nil {
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "failed to load chat settings"})
+				continue
+			}
+			maxSessionDuration := time.Duration(limits.MaxDurationMin) * time.Minute
+			remaining := maxSessionDuration - time.Since(sessionStartedAt)
+			if maxSessionDuration > 0 && remaining <= 0 {
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: fmt.Sprintf("conversation limit reached (%d minutes)", limits.MaxDurationMin)})
+				sendJSON(chatOutboundMessage{Type: "chat_exit", Code: 124})
+				continue
+			}
+			running := sharedChatRuntime.runningProcessCount()
+			if !sharedChatRuntime.hasCapacity(limits.MaxConnections) {
+				sendJSON(chatOutboundMessage{
+					Type:  "chat_error",
+					Error: fmt.Sprintf("chat capacity reached (%d/%d). wait for an active chat to finish", running, limits.MaxConnections),
+				})
+				continue
+			}
+			sendJSON(chatOutboundMessage{Type: "chat_processing"})
+			newBridge, err := startChatBridge(sendJSON, logf, remaining)
+			if err != nil {
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
+				continue
+			}
+			bridge = newBridge
+			bridge.markPrompt()
+			if err := bridge.Send(text); err != nil {
+				bridge.markError(err.Error())
+				sendJSON(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
+				bridge.Close()
+				continue
+			}
+			if err := bridge.CloseInput(); err != nil && logf != nil {
+				logf(fmt.Sprintf("stdin close error: %s", err.Error()))
+			}
 		}
 	}
 }
 
-func handleChatInput(bridge *chatProcessBridge, text string, send func(chatOutboundMessage), logf func(string)) {
-	if strings.TrimSpace(text) == "" {
-		return
-	}
-	if logf != nil {
-		logf(fmt.Sprintf("prompt: %s", text))
-	}
-	if bridge == nil {
-		send(chatOutboundMessage{Type: "chat_error", Error: "chat backend is unavailable"})
-		return
-	}
-	bridge.markPrompt()
-	send(chatOutboundMessage{Type: "chat_processing"})
-	if err := bridge.Send(text); err != nil {
-		bridge.markError(err.Error())
-		send(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
-	}
+func startChatBridge(send func(chatOutboundMessage), logf func(string), maxDuration time.Duration) (*chatProcessBridge, error) {
+	return startChatBridgeWithDuration(send, logf, maxDuration)
 }
 
-func startChatBridge(send func(chatOutboundMessage), logf func(string), maxDurationMin int) (*chatProcessBridge, error) {
-	maxDuration := time.Duration(maxDurationMin) * time.Minute
-	return startChatBridgeWithDuration(send, logf, maxDuration, maxDurationMin)
-}
-
-func startChatBridgeWithDuration(send func(chatOutboundMessage), logf func(string), maxDuration time.Duration, durationLabelMinutes int) (*chatProcessBridge, error) {
-	commandLine := resolveChatCommandLine()
-	shellPath := resolveShellPath()
-	cmd := exec.Command(shellPath, "-lc", commandLine)
+func startChatBridgeWithDuration(send func(chatOutboundMessage), logf func(string), maxDuration time.Duration) (*chatProcessBridge, error) {
+	commandArgs := resolveChatCommandArgs()
+	if len(commandArgs) == 0 {
+		return nil, errors.New("chat command is empty")
+	}
+	cmd := exec.Command(commandArgs[0], commandArgs[1:]...)
 	cmd.Env = append(os.Environ(),
 		"TERM=dumb",
 		"NO_COLOR=1",
 		"CLICOLOR=0",
 	)
-	tty, err := pty.Start(cmd)
+	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, fmt.Errorf("unable to start chat shell %q with command %q: %w", shellPath, commandLine, err)
+		return nil, fmt.Errorf("unable to create chat stdin pipe: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("unable to create chat stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("unable to create chat stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("unable to start chat command %q: %w", strings.Join(commandArgs, " "), err)
 	}
 	bridge := &chatProcessBridge{
 		cmd:          cmd,
-		tty:          tty,
+		stdin:        stdin,
 		runtime:      sharedChatRuntime,
 		startedAt:    time.Now().UTC(),
 		lastActivity: time.Now().UTC(),
@@ -230,9 +249,10 @@ func startChatBridgeWithDuration(send func(chatOutboundMessage), logf func(strin
 		if cmd.Process != nil {
 			pid = int64(cmd.Process.Pid)
 		}
-		logf(fmt.Sprintf("process spawned id=%d pid=%d command=%q shell=%q", bridge.processID, pid, commandLine, shellPath))
+		logf(fmt.Sprintf("process spawned id=%d pid=%d command=%q", bridge.processID, pid, strings.Join(commandArgs, " ")))
 	}
-	bridge.streamOutput(tty, "pty", send, logf)
+	bridge.streamOutput(stdout, "stdout", send, logf)
+	bridge.streamOutput(stderr, "stderr", send, logf)
 	go func() {
 		err := cmd.Wait()
 		if err != nil {
@@ -269,38 +289,35 @@ func startChatBridgeWithDuration(send func(chatOutboundMessage), logf func(strin
 		bridge.Close()
 	}()
 	if bridge.maxDuration > 0 {
-		go func(limitMin int, maxDuration time.Duration) {
+		go func(maxDuration time.Duration) {
 			timer := time.NewTimer(maxDuration)
 			defer timer.Stop()
 			<-timer.C
 			if bridge.isCompleted() {
 				return
 			}
-			label := fmt.Sprintf("%d minutes", limitMin)
-			if limitMin <= 0 {
-				label = maxDuration.Round(time.Millisecond).String()
-			}
+			label := maxDuration.Round(time.Second).String()
 			errText := fmt.Sprintf("conversation limit reached (%s)", label)
 			bridge.markTimedOut(errText)
 			send(chatOutboundMessage{Type: "chat_error", Error: errText})
 			bridge.Close()
-		}(durationLabelMinutes, bridge.maxDuration)
+		}(bridge.maxDuration)
 	}
 	return bridge, nil
 }
 
-func resolveChatCommandLine() string {
+func resolveChatCommandArgs() []string {
 	if raw := strings.TrimSpace(os.Getenv("TICKET_CHAT_CMD")); raw != "" {
-		return raw
+		parts := strings.Fields(raw)
+		if len(parts) == 0 {
+			return []string{"codex", "exec"}
+		}
+		if strings.EqualFold(parts[0], "codex") && (len(parts) == 1 || strings.HasPrefix(parts[1], "-")) {
+			return append([]string{parts[0], "exec"}, parts[1:]...)
+		}
+		return parts
 	}
-	return "codex"
-}
-
-func resolveShellPath() string {
-	if shell := strings.TrimSpace(os.Getenv("SHELL")); shell != "" {
-		return shell
-	}
-	return "/bin/sh"
+	return []string{"codex", "exec"}
 }
 
 func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send func(chatOutboundMessage), logf func(string)) {
@@ -597,10 +614,24 @@ func (b *chatProcessBridge) Send(input string) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.tty == nil {
-		return errors.New("chat terminal is not available")
+	if b.stdin == nil {
+		return errors.New("chat stdin is not available")
 	}
-	_, err := io.WriteString(b.tty, input+"\n")
+	_, err := io.WriteString(b.stdin, input+"\n")
+	return err
+}
+
+func (b *chatProcessBridge) CloseInput() error {
+	if b == nil {
+		return nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stdin == nil {
+		return nil
+	}
+	err := b.stdin.Close()
+	b.stdin = nil
 	return err
 }
 
@@ -610,9 +641,9 @@ func (b *chatProcessBridge) Close() {
 			b.runtime.unregisterProcess(b.processID)
 		}
 		b.mu.Lock()
-		if b.tty != nil {
-			_ = b.tty.Close()
-			b.tty = nil
+		if b.stdin != nil {
+			_ = b.stdin.Close()
+			b.stdin = nil
 		}
 		b.mu.Unlock()
 		if b.cmd != nil && b.cmd.Process != nil {
