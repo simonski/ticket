@@ -1678,6 +1678,8 @@
         }
         return false;
       }
+      window.__wsEventType = wsEventType;
+      window.__wsShouldRefreshBoard = wsShouldRefreshBoard;
         function actorType(raw) {
           const t = String(raw?.user_type || raw?.userType || raw?.actor_type || raw?.actorType || raw?.type_of_user || "").toLowerCase();
           return (t === "agent" || t === "ai" || t === "bot") ? "agent" : "human";
