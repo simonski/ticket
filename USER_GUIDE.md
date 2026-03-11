@@ -519,7 +519,8 @@ Use it for:
 1. capturing work during discovery and delivery
 2. reviewing related items side by side
 3. browsing task details and dependencies without switching commands
-4. switching perspectives with `V`:
+4. using the top-right header for project selection and profile actions only (there is no panel-dependent perspective button)
+5. switching perspectives with `V`:
    - `stories`: high-level requirements for the current project
    - `kanban`: stage lanes for the current project
    - `agents`: opens agent management
@@ -528,8 +529,8 @@ Use it for:
    - `settings`: opens settings
    - `chat`: LLM chat panel
    - `tv : ticketvision`: a left-to-right project → epics → stories graph view
-5. in `kanban`, cards are ordered by last modified timestamp (newest first)
-6. opening the `sections` left panel to jump directly to:
+6. in `kanban`, cards are ordered by last modified timestamp (newest first)
+7. opening the `sections` left panel to jump directly to:
    - `stories`
    - `kanban`
    - `agents`

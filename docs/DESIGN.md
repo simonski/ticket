@@ -631,6 +631,7 @@ Requirements:
 The web UI should make these activities easy:
 
 - switch between projects
+- use the top-right header for project selection and profile actions only (no panel-dependent perspective button)
 - open a left-side slide panel (`sections`) to jump to:
   - `stories`
   - `kanban`

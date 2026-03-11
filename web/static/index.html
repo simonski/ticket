@@ -683,7 +683,6 @@
       </div>
       <div id="app-status" style="display:none;"></div>
       <div class="app-head-right">
-        <button class="proj-btn" id="perspective-btn" type="button">kanban</button>
         <div class="proj-dropdown" id="proj-dropdown">
           <button class="proj-btn" id="proj-btn" type="button">Project</button>
           <div class="proj-menu hidden" id="proj-menu"></div>
@@ -1116,7 +1115,6 @@
       const leftPanelBackdrop = document.getElementById("left-panel-backdrop");
       const leftPanelItems = Array.from(document.querySelectorAll("[data-left-panel-action]"));
       const leftPanelChatItem = document.querySelector('[data-left-panel-action="chat"]');
-      const perspectiveBtn = document.getElementById("perspective-btn");
       const perspectiveOverlay = document.getElementById("perspective-overlay");
       const perspectiveChatItem = document.querySelector('.perspective-item[data-perspective="chat"]');
       const agentModalOverlay = document.getElementById("agent-modal-overlay");
@@ -2048,21 +2046,6 @@
       }
 
       function syncPerspectiveUI() {
-        perspectiveBtn.textContent = currentPerspective === "tv"
-          ? "tv : ticketvision"
-          : currentPerspective === "chat"
-            ? "chat"
-            : currentPerspective === "agents"
-              ? "agents"
-              : currentPerspective === "roles"
-                ? "roles"
-                : currentPerspective === "teams"
-                  ? "teams"
-                  : currentPerspective === "settings"
-                    ? "settings"
-            : currentPerspective === "stories"
-              ? "stories"
-              : "kanban";
         setLeftPanelActive(currentPerspective);
         perspectiveItems.forEach((el) => {
           el.classList.toggle("active", el.dataset.perspective === currentPerspective);
@@ -2132,10 +2115,6 @@
         runLeftPanelAction(panelAction);
       }
 
-      perspectiveBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        perspectiveOverlay.classList.contains("hidden") ? openPerspectivePicker() : closePerspectivePicker();
-      });
       perspectiveOverlay.addEventListener("click", (e) => { if (e.target === perspectiveOverlay) closePerspectivePicker(); });
       perspectiveItems.forEach((el) => {
         el.addEventListener("click", () => runPerspectivePickerItem(el));
