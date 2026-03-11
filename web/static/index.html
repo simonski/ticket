@@ -617,23 +617,39 @@
         letter-spacing: 0.02em;
         pointer-events: none;
       }
-      .admin-danger::before {
+      .admin-danger::before,
+      .admin-danger::after {
         content: "";
         position: fixed;
-        inset: 8px;
-        border-radius: 18px;
-        border: 2px solid hsl(0 100% 62%);
-        box-shadow:
-          0 0 10px hsl(0 100% 62% / 0.8),
-          0 0 20px hsl(45 100% 55% / 0.6),
-          inset 0 0 10px hsl(180 100% 58% / 0.35);
-        animation: admin-chroma 16s linear infinite;
+        inset: 7px;
+        border-radius: 20px;
         pointer-events: none;
         z-index: 70;
+      }
+      .admin-danger::before {
+        border: 2px solid hsl(0 100% 62% / 0.9);
+        box-shadow:
+          0 0 12px hsl(0 100% 62% / 0.72),
+          0 0 28px hsl(65 100% 58% / 0.52),
+          0 0 42px hsl(210 100% 62% / 0.36),
+          inset 0 0 12px hsl(180 100% 58% / 0.3);
+        animation: admin-chroma 24s linear infinite;
+      }
+      .admin-danger::after {
+        inset: 5px;
+        border-radius: 22px;
+        border: 1px solid hsl(0 100% 70% / 0.25);
+        filter: blur(5px);
+        opacity: 0.75;
+        animation: admin-chroma-blur 30s linear infinite reverse;
       }
       @keyframes admin-chroma {
         0% { filter: hue-rotate(0deg); }
         100% { filter: hue-rotate(360deg); }
+      }
+      @keyframes admin-chroma-blur {
+        0% { filter: blur(5px) hue-rotate(0deg); }
+        100% { filter: blur(5px) hue-rotate(360deg); }
       }
     </style>
   </head>
