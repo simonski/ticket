@@ -76,8 +76,9 @@ func TestHandleChatInputLogsPrompt(t *testing.T) {
 	}
 }
 
-func TestChatProcessBridgeHeartbeatLineIncludesStatusAndActivity(t *testing.T) {
+func TestChatProcessBridgeStatusLineIncludesStatusAndActivity(t *testing.T) {
 	bridge := &chatProcessBridge{
+		processID:    3,
 		cmd:          &exec.Cmd{},
 		startedAt:    time.Now().UTC().Add(-2 * time.Second),
 		lastPromptAt: time.Now().UTC().Add(-4 * time.Second),
@@ -85,9 +86,10 @@ func TestChatProcessBridgeHeartbeatLineIncludesStatusAndActivity(t *testing.T) {
 		lastActivity: time.Now().UTC().Add(-2 * time.Second),
 		exitCode:     0,
 	}
-	line := bridge.heartbeatLine()
+	line := bridge.statusLine(time.Now().UTC())
 	for _, want := range []string{
-		"heartbeat",
+		"process_status",
+		"id=3",
 		"running=true",
 		"completed=false",
 		"error=\"none\"",
@@ -101,14 +103,16 @@ func TestChatProcessBridgeHeartbeatLineIncludesStatusAndActivity(t *testing.T) {
 	}
 }
 
-func TestChatProcessBridgeHeartbeatLineShowsCompletedAndError(t *testing.T) {
+func TestChatProcessBridgeStatusLineShowsCompletedAndError(t *testing.T) {
 	bridge := &chatProcessBridge{
+		processID: 9,
 		completed: true,
 		exitCode:  7,
 		lastError: "boom",
 	}
-	line := bridge.heartbeatLine()
+	line := bridge.statusLine(time.Now().UTC())
 	for _, want := range []string{
+		"id=9",
 		"running=false",
 		"completed=true",
 		"exit_code=7",
@@ -116,6 +120,23 @@ func TestChatProcessBridgeHeartbeatLineShowsCompletedAndError(t *testing.T) {
 	} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("completed heartbeat line missing %q: %s", want, line)
+		}
+	}
+}
+
+func TestChatRuntimeHeartbeatLineIncludesConnectionAndRunningCounts(t *testing.T) {
+	runtime := newChatRuntime()
+	runtime.activeConnections = 4
+	runtime.processes[1] = &chatProcessBridge{}
+	runtime.processes[2] = &chatProcessBridge{completed: true}
+	line := runtime.heartbeatLine()
+	for _, want := range []string{
+		"connections=4",
+		"processes_running=1",
+		"processes_total=2",
+	} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("runtime heartbeat line missing %q: %s", want, line)
 		}
 	}
 }

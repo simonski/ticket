@@ -262,7 +262,9 @@ If `ticket server` is run with `-v`, it must print verbose request and response 
 When chat is active, `-v` must also print chat process telemetry, including:
 - inbound client prompts
 - outbound LLM process output chunks
-- periodic heartbeat lines with running/error/completed status and recent activity ages
+- periodic heartbeat lines with active websocket connection count and running process count
+- per-process status lines with running/error/completed state and recent prompt/output activity ages
+- chat processes are spawned lazily on first prompt, not immediately on websocket connect
 
 ### Authentication And User Management
 

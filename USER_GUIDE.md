@@ -58,7 +58,7 @@ ticket server
 If `-f` is omitted, `ticket server` uses `$TICKET_HOME/ticket.db`.
 
 If `-v` is supplied, `ticket server` prints verbose request and response logs to stdout.
-In `-v` mode, chat sessions also print prompt/output activity and heartbeat status for the spawned LLM process.
+In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
 
 On startup, `ticket server` also prints a colored ASCII-art `TICKET` banner before the listen message.
 
