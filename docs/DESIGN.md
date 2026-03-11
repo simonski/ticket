@@ -634,7 +634,7 @@ The web UI should make these activities easy:
 - use the top-right header for project selection and profile actions only (no panel-dependent perspective button)
 - open a left-side slide panel (`sections`) to jump to:
   - `stories`
-  - `kanban`
+  - `board`
   - `agents`
   - `roles`
   - `teams`
@@ -651,7 +651,7 @@ The web UI should make these activities easy:
 - inspect history and comments
 - switch perspectives with `V` via a popup selector:
   - `stories`: high-level requirements panel for the active project
-  - `kanban`: current lane board
+  - `board`: current lane board
     - cards are sorted by last-modified timestamp descending (newest first)
   - `agents`: opens agent management panel
   - `roles`: opens role management panel

@@ -522,17 +522,17 @@ Use it for:
 4. using the top-right header for project selection and profile actions only (there is no panel-dependent perspective button)
 5. switching perspectives with `V`:
    - `stories`: high-level requirements for the current project
-   - `kanban`: stage lanes for the current project
+   - `board`: stage lanes for the current project
    - `agents`: opens agent management
    - `roles`: opens role management
    - `teams`: opens team management
    - `settings`: opens settings
    - `chat`: LLM chat panel
    - `tv : ticketvision`: a left-to-right project → epics → stories graph view
-6. in `kanban`, cards are ordered by last modified timestamp (newest first)
+6. in `board`, cards are ordered by last modified timestamp (newest first)
 7. opening the `sections` left panel to jump directly to:
    - `stories`
-   - `kanban`
+   - `board`
    - `agents`
    - `roles`
    - `teams`
