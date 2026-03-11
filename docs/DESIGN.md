@@ -642,6 +642,11 @@ The web UI should make these activities easy:
   - `S`: open story creation modal
 - a fixed bottom-right overlay displays `server_version` from `/api/status`
 - board state is refreshed by websocket events and should not require manual browser reload
+- websocket change indicators on `/api/ws` carry:
+  - `entity_type` (for example `ticket`, `project`)
+  - `entity_id` (the changed entity id)
+  - `change_type` (for example `created`, `updated`, `deleted`, `users_updated`)
+  - legacy `type` is still emitted for backward compatibility
 - chat websocket (`/api/chat/ws`) executes a shell command on a PTY (default `codex`) and maps message input to process stdin and process output back to the browser
 - stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
 - story analysis uses the `StoryReview` role to generate epics/tasks and marks story status `ready_for_review`

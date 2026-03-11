@@ -537,6 +537,7 @@ Keyboard shortcuts in the board view:
 - `S` opens the Story dialog for creating a high-level requirement
 - a fixed bottom-right version overlay shows the current server version reported by `/api/status`
 - board updates are live via websocket; ticket changes from other users should appear without browser refresh
+- websocket change messages include `entity_type`, `entity_id`, and `change_type` indicators (legacy `type` remains present for compatibility)
 - the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
 - if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
 - profile menu includes an `Agents` panel to list/create/update/enable/disable/delete agents using the same API

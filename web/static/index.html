@@ -1604,16 +1604,28 @@
         }
         function resolveClassification(raw) {
           const type = String(raw?.type || "").toLowerCase();
+          const entityType = String(raw?.entity_type || "").toLowerCase();
+          const changeType = String(raw?.change_type || "").toLowerCase();
+          const derivedType = (entityType && changeType) ? `${entityType}_${changeType}` : "";
+          const effectiveType = (type || derivedType).toLowerCase();
           const cls = String(raw?.classification || raw?.activity || "").toLowerCase();
           const ticketType = String(raw?.ticket_type || raw?.ticketType || "").toLowerCase();
-          if (ticketType === "bug" || cls === "bug" || type.includes("bug")) return "bug";
+          if (ticketType === "bug" || cls === "bug" || effectiveType.includes("bug")) return "bug";
           if (cls === "done" || cls === "move_to_done" || cls === "moved_to_done") return "done";
           if (cls === "status" || cls === "status_change" || cls === "status_changed") return "status";
           if (cls === "edit" || cls === "edited" || cls === "content" || cls === "content_edit") return "edit";
-          if (cls === "create" || type === "ticket_created") return "create";
-          if (type === "ticket_updated") return "edit";
-          if (type === "project_created") return "create";
+          if (cls === "create" || effectiveType === "ticket_created") return "create";
+          if (effectiveType === "ticket_updated") return "edit";
+          if (effectiveType === "project_created") return "create";
           return "default";
+        }
+        function wsEventType(msg) {
+          const legacy = String(msg?.type || "").trim();
+          if (legacy) return legacy.toLowerCase();
+          const entity = String(msg?.entity_type || "").trim().toLowerCase();
+          const change = String(msg?.change_type || "").trim().toLowerCase();
+          if (entity && change) return `${entity}_${change}`;
+          return "";
         }
         function actorType(raw) {
           const t = String(raw?.user_type || raw?.userType || raw?.actor_type || raw?.actorType || raw?.type_of_user || "").toLowerCase();
@@ -3760,7 +3772,8 @@
           // Parse event and drive status animator
           try {
             const msg = JSON.parse(evt.data);
-            if (msg.type && msg.type !== "connected" && window.statusAnimator) {
+            const eventType = wsEventType(msg);
+            if (eventType && eventType !== "connected" && window.statusAnimator) {
               const counts = {
                 ticket_created: 5,
                 ticket_deleted: 3,
@@ -3769,10 +3782,9 @@
                 project_updated: 2,
                 project_users_updated: 2,
               };
-              window.statusAnimator.spawn(msg, counts[msg.type] || 2);
+              window.statusAnimator.spawn(msg, counts[eventType] || 2);
             }
-            if (msg.type === "connected") return;
-            const eventType = String(msg.type || "");
+            if (eventType === "connected") return;
             const selected = selectedProjectID();
             const eventProjectID = msg.project_id ? String(msg.project_id) : "";
             if (eventProjectID && selected && eventProjectID !== selected) return;

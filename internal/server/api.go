@@ -16,11 +16,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		if live == nil {
 			return
 		}
-		live.broadcast(liveEvent{
-			Type:      eventType,
-			ProjectID: projectID,
-			TicketID:  ticketID,
-		})
+		live.broadcast(buildLiveChangeEvent(eventType, projectID, ticketID))
 	}
 
 	mux.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {

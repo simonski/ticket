@@ -17,10 +17,13 @@ import (
 )
 
 type liveEvent struct {
-	Type      string `json:"type"`
-	ProjectID int64  `json:"project_id,omitempty"`
-	TicketID  int64  `json:"ticket_id,omitempty"`
-	At        string `json:"at"`
+	Type       string `json:"type"`
+	EntityType string `json:"entity_type,omitempty"`
+	EntityID   int64  `json:"entity_id,omitempty"`
+	ChangeType string `json:"change_type,omitempty"`
+	ProjectID  int64  `json:"project_id,omitempty"`
+	TicketID   int64  `json:"ticket_id,omitempty"`
+	At         string `json:"at"`
 }
 
 type liveHub struct {
