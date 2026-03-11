@@ -843,7 +843,6 @@
       <div id="proj-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="proj-modal-heading">New Project</strong>
-          <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <select id="proj-modal-select">
@@ -871,7 +870,6 @@
       <div id="agent-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong>Agents</strong>
-          <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <select id="agent-select">
@@ -896,7 +894,6 @@
       <div id="role-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong>Roles</strong>
-          <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <select id="role-select">
@@ -919,7 +916,6 @@
       <div id="team-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong>Teams</strong>
-          <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <select id="team-select">
@@ -970,7 +966,6 @@
       <div id="story-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="story-modal-heading">Story</strong>
-          <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <input id="story-title" placeholder="story title" autocomplete="off" />
@@ -988,7 +983,6 @@
       <div id="ticket-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="modal-title">Ticket</strong>
-          <span class="muted">ESC to close</span>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <input id="ticket-title" placeholder="title" />
@@ -4412,7 +4406,6 @@
         else if (e.key === "Enter") {
           if (searchActiveIdx >= 0 && rows[searchActiveIdx]) rows[searchActiveIdx].click();
         }
-        else if (e.key === "Escape") { closeSearch(); }
       });
       searchOverlay.addEventListener("click", (e) => { if (e.target === searchOverlay) closeSearch(); });
 
@@ -4464,7 +4457,6 @@
 
         if (!perspectiveOverlay.classList.contains("hidden")) {
           const visible = visiblePerspectiveItems();
-          if (event.key === "Escape") { closePerspectivePicker(); return; }
           if (event.key === "ArrowDown") {
             event.preventDefault();
             perspectiveActiveIdx = Math.min(Math.max(visible.length - 1, 0), perspectiveActiveIdx + 1);
@@ -4485,17 +4477,6 @@
           }
         }
 
-        if (event.key === "Escape") {
-          if (!searchOverlay.classList.contains("hidden")) { closeSearch(); return; }
-          if (!perspectiveOverlay.classList.contains("hidden")) { closePerspectivePicker(); return; }
-          if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
-          if (!storyModalOverlay.classList.contains("hidden")) { closeStoryModal(); return; }
-          if (!agentModalOverlay.classList.contains("hidden")) { closeAgentModal(); return; }
-          if (!teamModalOverlay.classList.contains("hidden")) { closeTeamModal(); return; }
-          if (!roleModalOverlay.classList.contains("hidden")) { closeRoleModal(); return; }
-          if (!dialogOverlay.classList.contains("hidden")) { closeDialog(false); return; }
-          if (!modalOverlay.classList.contains("hidden")) { closeModal(); return; }
-        }
         const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
         const inField = tag === "input" || tag === "textarea" || tag === "select";
         const modalOpen = !modalOverlay.classList.contains("hidden");

@@ -16,6 +16,7 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   await expect(page.locator("#login-user")).toBeFocused();
   await expect(page.locator("#perspective-btn")).toHaveCount(0);
+  await expect(page.getByText("ESC to close")).toHaveCount(0);
   await expect(page.locator("#settings-modal")).not.toContainText("ESC to close");
   const layout = await page.evaluate(() => {
     const mainContent = document.getElementById("main-content");
@@ -53,6 +54,29 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   expect(selectorPersistence).not.toBeNull();
   expect(selectorPersistence.openAfterBackdropClick).toBe(true);
   expect(selectorPersistence.openAfterEscape).toBe(true);
+  const escapeDoesNotClosePanels = await page.evaluate(() => {
+    const overlayIds = [
+      "search-overlay",
+      "perspective-overlay",
+      "proj-modal-overlay",
+      "story-modal-overlay",
+      "agent-modal-overlay",
+      "role-modal-overlay",
+      "team-modal-overlay",
+      "settings-modal-overlay",
+      "modal-overlay",
+      "dialog-overlay",
+    ];
+    const overlays = overlayIds
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+    overlays.forEach((node) => node.classList.remove("hidden"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    const allStillVisible = overlays.every((node) => !node.classList.contains("hidden"));
+    overlays.forEach((node) => node.classList.add("hidden"));
+    return allStillVisible;
+  });
+  expect(escapeDoesNotClosePanels).toBe(true);
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
 

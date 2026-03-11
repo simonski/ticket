@@ -541,7 +541,7 @@ Use it for:
    - panel is visible by default and can be collapsed/expanded only via the `sections` minimise/grow control
    - when the viewport is short, the `sections` panel can scroll vertically so all selector items remain reachable
 8. scrolling project content vertically in the main panel while the top banner and section selector controls stay visible
-9. `settings` does not use an `Esc` close hint/binding; close behavior is controlled by in-panel navigation/actions
+9. panels do not use an `Esc` close hint/binding; close behavior is controlled by in-panel navigation/actions
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
 
