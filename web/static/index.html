@@ -387,7 +387,11 @@
       .chat-send {
         flex: 0 0 auto;
       }
-      #view-stories {
+      #view-stories,
+      #view-agents,
+      #view-roles,
+      #view-teams,
+      #view-settings {
         padding: 0.9rem;
         overflow: auto;
         background:
@@ -402,6 +406,15 @@
       .stories-list {
         display: grid;
         gap: 0.55rem;
+      }
+      .management-host .modal {
+        width: 100%;
+        max-width: none;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0;
       }
       .story-row {
         border: 1px solid var(--line);
@@ -740,6 +753,30 @@
               </div>
               <div id="stories-list" class="stories-list"></div>
             </section>
+            <section id="view-agents" class="perspective-view">
+              <div class="stories-head">
+                <strong>Agents</strong>
+              </div>
+              <div id="agents-panel-host" class="management-host"></div>
+            </section>
+            <section id="view-roles" class="perspective-view">
+              <div class="stories-head">
+                <strong>Roles</strong>
+              </div>
+              <div id="roles-panel-host" class="management-host"></div>
+            </section>
+            <section id="view-teams" class="perspective-view">
+              <div class="stories-head">
+                <strong>Teams</strong>
+              </div>
+              <div id="teams-panel-host" class="management-host"></div>
+            </section>
+            <section id="view-settings" class="perspective-view">
+              <div class="stories-head">
+                <strong>Settings</strong>
+              </div>
+              <div id="settings-panel-host" class="management-host"></div>
+            </section>
             <section id="view-chat" class="perspective-view">
               <div class="chat-shell">
                 <div id="chat-thread" class="chat-thread"></div>
@@ -1051,7 +1088,15 @@
       const viewSwimlanes = document.getElementById("view-swimlanes");
       const viewTV = document.getElementById("view-tv");
       const viewStories = document.getElementById("view-stories");
+      const viewAgents = document.getElementById("view-agents");
+      const viewRoles = document.getElementById("view-roles");
+      const viewTeams = document.getElementById("view-teams");
+      const viewSettings = document.getElementById("view-settings");
       const viewChat = document.getElementById("view-chat");
+      const agentsPanelHost = document.getElementById("agents-panel-host");
+      const rolesPanelHost = document.getElementById("roles-panel-host");
+      const teamsPanelHost = document.getElementById("teams-panel-host");
+      const settingsPanelHost = document.getElementById("settings-panel-host");
       const storiesListEl = document.getElementById("stories-list");
       const storyNewBtn = document.getElementById("story-new");
       const storyModalOverlay = document.getElementById("story-modal-overlay");
@@ -1142,6 +1187,28 @@
         localStorage.setItem("left-panel-open", open ? "1" : "0");
       }
 
+      function mountPanelContentViews() {
+        const placements = [
+          { modalID: "agent-modal", host: agentsPanelHost },
+          { modalID: "role-modal", host: rolesPanelHost },
+          { modalID: "team-modal", host: teamsPanelHost },
+          { modalID: "settings-modal", host: settingsPanelHost },
+        ];
+        for (const { modalID, host } of placements) {
+          const modal = document.getElementById(modalID);
+          if (!modal || !host || modal.parentElement === host) continue;
+          host.appendChild(modal);
+        }
+      }
+
+      function populateSettingsPanel() {
+        settingsRegistrationEnabled.checked = Boolean(registrationEnabled);
+        settingsChatEnabled.checked = Boolean(chatEnabled);
+        settingsChatMaxConnections.value = String(chatMaxConnections || 2);
+        settingsChatMaxDuration.value = String(chatMaxDurationMinutes || 3);
+        settingsStatusEl.textContent = "";
+      }
+
       function setLeftPanelActive(action) {
         leftPanelItems.forEach((item) => {
           item.classList.toggle("active", item.dataset.leftPanelAction === action);
@@ -1171,12 +1238,9 @@
           await uiAlert("Admin access required.");
           return;
         }
-        settingsRegistrationEnabled.checked = Boolean(registrationEnabled);
-        settingsChatEnabled.checked = Boolean(chatEnabled);
-        settingsChatMaxConnections.value = String(chatMaxConnections || 2);
-        settingsChatMaxDuration.value = String(chatMaxDurationMinutes || 3);
-        settingsStatusEl.textContent = "";
-        settingsModalOverlay.classList.remove("hidden");
+        populateSettingsPanel();
+        switchPerspective("settings");
+        setLeftPanelActive("settings");
       }
 
       function closeSettingsModal() {
@@ -1227,7 +1291,10 @@
             await uiAlert("Admin access required.");
             return;
           }
-          await openAgentModal();
+          switchPerspective("agents");
+          setLeftPanelActive("agents");
+          await loadAgents();
+          agentNameInput.focus();
           return;
         }
         if (action === "roles") {
@@ -1235,7 +1302,10 @@
             await uiAlert("Admin access required.");
             return;
           }
-          await openRoleModal();
+          switchPerspective("roles");
+          setLeftPanelActive("roles");
+          await loadRoles();
+          roleTitleInput.focus();
           return;
         }
         if (action === "teams") {
@@ -1243,7 +1313,11 @@
             await uiAlert("Admin access required.");
             return;
           }
-          await openTeamModal();
+          switchPerspective("teams");
+          setLeftPanelActive("teams");
+          await loadTeams();
+          await refreshSelectedTeamDetails();
+          teamNameInput.focus();
           return;
         }
         if (action === "settings") {
@@ -1941,9 +2015,31 @@
 
       // ── Perspective selector + TicketVision (Three.js) ────────────────────
       let currentPerspective = localStorage.getItem("task-perspective") || "swimlanes";
-      const perspectiveViews = { swimlanes: viewSwimlanes, stories: viewStories, tv: viewTV, chat: viewChat };
+      const perspectiveViews = {
+        swimlanes: viewSwimlanes,
+        stories: viewStories,
+        agents: viewAgents,
+        roles: viewRoles,
+        teams: viewTeams,
+        settings: viewSettings,
+        tv: viewTV,
+        chat: viewChat,
+      };
       const perspectiveItems = Array.from(document.querySelectorAll(".perspective-item"));
       let perspectiveActiveIdx = 0;
+      const adminPerspectives = new Set(["agents", "roles", "teams", "settings"]);
+
+      function syncPerspectiveDataLoads() {
+        if (currentPerspective === "tv") renderTicketVision();
+        if (currentPerspective === "chat") connectChatWS();
+        if (currentPerspective === "stories") loadStories();
+        if (currentPerspective === "agents") loadAgents();
+        if (currentPerspective === "roles") loadRoles();
+        if (currentPerspective === "teams") {
+          loadTeams().then(refreshSelectedTeamDetails).catch(() => {});
+        }
+        if (currentPerspective === "settings") populateSettingsPanel();
+      }
 
       function visiblePerspectiveItems() {
         return perspectiveItems.filter((el) => !el.classList.contains("hidden"));
@@ -1954,6 +2050,14 @@
           ? "tv : ticketvision"
           : currentPerspective === "chat"
             ? "chat"
+            : currentPerspective === "agents"
+              ? "agents"
+              : currentPerspective === "roles"
+                ? "roles"
+                : currentPerspective === "teams"
+                  ? "teams"
+                  : currentPerspective === "settings"
+                    ? "settings"
             : currentPerspective === "stories"
               ? "stories"
               : "kanban";
@@ -1964,6 +2068,7 @@
       }
 
       function activatePerspective(next) {
+        if (adminPerspectives.has(next) && !isAdminUser()) next = "swimlanes";
         if (!perspectiveViews[next]) return;
         Object.entries(perspectiveViews).forEach(([name, view]) => {
           view.classList.toggle("active", name === next);
@@ -1972,9 +2077,7 @@
         currentPerspective = next;
         localStorage.setItem("task-perspective", currentPerspective);
         syncPerspectiveUI();
-        if (currentPerspective === "tv") renderTicketVision();
-        if (currentPerspective === "chat") connectChatWS();
-        if (currentPerspective === "stories") loadStories();
+        syncPerspectiveDataLoads();
       }
 
       function openPerspectivePicker() {
@@ -1991,6 +2094,7 @@
       }
 
       function switchPerspective(next) {
+        if (adminPerspectives.has(next) && !isAdminUser()) next = "swimlanes";
         if (!perspectiveViews[next] || next === currentPerspective) {
           closePerspectivePicker();
           return;
@@ -2005,9 +2109,7 @@
           localStorage.setItem("task-perspective", currentPerspective);
           syncPerspectiveUI();
           closePerspectivePicker();
-          if (currentPerspective === "tv") renderTicketVision();
-          if (currentPerspective === "chat") connectChatWS();
-          if (currentPerspective === "stories") loadStories();
+          syncPerspectiveDataLoads();
           setTimeout(() => target.classList.remove("fading-in"), 240);
         }, 220);
       }
@@ -2414,6 +2516,7 @@
         ? true
         : savedLeftPanelState === "1";
       setLeftPanelOpen(shouldOpenLeftPanel);
+      mountPanelContentViews();
 
       let projects = [];
       let stories = [];
@@ -2575,7 +2678,8 @@
         setAgentStatus("");
         try {
           await loadAgents();
-          agentModalOverlay.classList.remove("hidden");
+          switchPerspective("agents");
+          setLeftPanelActive("agents");
           agentNameInput.focus();
         } catch (err) {
           await uiAlert(`Unable to load agents: ${err.message}`);
@@ -2717,7 +2821,8 @@
         setRoleStatus("");
         try {
           await loadRoles();
-          roleModalOverlay.classList.remove("hidden");
+          switchPerspective("roles");
+          setLeftPanelActive("roles");
           roleTitleInput.focus();
         } catch (err) {
           await uiAlert(`Unable to load roles: ${err.message}`);
@@ -2981,7 +3086,9 @@
         resetTeamForm();
         try {
           await loadTeams();
-          teamModalOverlay.classList.remove("hidden");
+          await refreshSelectedTeamDetails();
+          switchPerspective("teams");
+          setLeftPanelActive("teams");
           teamNameInput.focus();
         } catch (err) {
           await uiAlert(`Unable to load teams: ${err.message}`);
