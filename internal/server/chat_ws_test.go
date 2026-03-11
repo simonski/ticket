@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -72,5 +73,49 @@ func TestHandleChatInputLogsPrompt(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], "prompt: hello world") {
 		t.Fatalf("log line = %q, want prompt content", lines[0])
+	}
+}
+
+func TestChatProcessBridgeHeartbeatLineIncludesStatusAndActivity(t *testing.T) {
+	bridge := &chatProcessBridge{
+		cmd:          &exec.Cmd{},
+		startedAt:    time.Now().UTC().Add(-2 * time.Second),
+		lastPromptAt: time.Now().UTC().Add(-4 * time.Second),
+		lastOutputAt: time.Now().UTC().Add(-3 * time.Second),
+		lastActivity: time.Now().UTC().Add(-2 * time.Second),
+		exitCode:     0,
+	}
+	line := bridge.heartbeatLine()
+	for _, want := range []string{
+		"heartbeat",
+		"running=true",
+		"completed=false",
+		"error=\"none\"",
+		"last_prompt=",
+		"last_output=",
+		"last_activity=",
+	} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("heartbeat line missing %q: %s", want, line)
+		}
+	}
+}
+
+func TestChatProcessBridgeHeartbeatLineShowsCompletedAndError(t *testing.T) {
+	bridge := &chatProcessBridge{
+		completed: true,
+		exitCode:  7,
+		lastError: "boom",
+	}
+	line := bridge.heartbeatLine()
+	for _, want := range []string{
+		"running=false",
+		"completed=true",
+		"exit_code=7",
+		"error=\"boom\"",
+	} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("completed heartbeat line missing %q: %s", want, line)
+		}
 	}
 }

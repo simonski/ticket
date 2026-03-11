@@ -259,6 +259,10 @@ The default local server should listen on `http://localhost:8080`.
 If `ticket server` is run without `-f`, it must open the SQLite database at `$TICKET_HOME/ticket.db`.
 
 If `ticket server` is run with `-v`, it must print verbose request and response details to stdout.
+When chat is active, `-v` must also print chat process telemetry, including:
+- inbound client prompts
+- outbound LLM process output chunks
+- periodic heartbeat lines with running/error/completed status and recent activity ages
 
 ### Authentication And User Management
 

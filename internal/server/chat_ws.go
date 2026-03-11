@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/creack/pty"
 )
@@ -30,10 +31,19 @@ type chatOutboundMessage struct {
 }
 
 type chatProcessBridge struct {
-	cmd  *exec.Cmd
-	tty  *os.File
-	mu   sync.Mutex
-	once sync.Once
+	cmd          *exec.Cmd
+	tty          *os.File
+	mu           sync.Mutex
+	once         sync.Once
+	stateMu      sync.Mutex
+	startedAt    time.Time
+	lastPromptAt time.Time
+	lastOutputAt time.Time
+	lastActivity time.Time
+	completed    bool
+	exitCode     int
+	lastError    string
+	heartbeatCh  chan struct{}
 }
 
 var ansiControlRE = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\a]*(?:\a|\x1b\\)|[@-Z\\-_])`)
@@ -142,8 +152,10 @@ func handleChatInput(bridge *chatProcessBridge, text string, send func(chatOutbo
 		send(chatOutboundMessage{Type: "chat_error", Error: "chat backend is unavailable"})
 		return
 	}
+	bridge.markPrompt()
 	send(chatOutboundMessage{Type: "chat_processing"})
 	if err := bridge.Send(text); err != nil {
+		bridge.markError(err.Error())
 		send(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
 	}
 }
@@ -162,20 +174,43 @@ func startChatBridge(send func(chatOutboundMessage), logf func(string)) (*chatPr
 		return nil, fmt.Errorf("unable to start chat shell %q with command %q: %w", shellPath, commandLine, err)
 	}
 	bridge := &chatProcessBridge{
-		cmd: cmd,
-		tty: tty,
+		cmd:          cmd,
+		tty:          tty,
+		startedAt:    time.Now().UTC(),
+		lastActivity: time.Now().UTC(),
+		heartbeatCh:  make(chan struct{}),
 	}
+	if logf != nil {
+		pid := int64(0)
+		if cmd.Process != nil {
+			pid = int64(cmd.Process.Pid)
+		}
+		logf(fmt.Sprintf("process spawned pid=%d command=%q shell=%q", pid, commandLine, shellPath))
+	}
+	bridge.startHeartbeat(logf)
 	bridge.streamOutput(tty, "pty", send, logf)
 	go func() {
 		err := cmd.Wait()
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
+				bridge.markCompleted(exitErr.ExitCode(), err.Error())
+				if logf != nil {
+					logf(fmt.Sprintf("process completed running=false completed=true error=%q exit_code=%d", err.Error(), exitErr.ExitCode()))
+				}
 				send(chatOutboundMessage{Type: "chat_exit", Code: exitErr.ExitCode()})
 			} else {
+				bridge.markCompleted(-1, err.Error())
+				if logf != nil {
+					logf(fmt.Sprintf("process completed running=false completed=true error=%q exit_code=%d", err.Error(), -1))
+				}
 				send(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
 			}
 		} else {
+			bridge.markCompleted(0, "")
+			if logf != nil {
+				logf("process completed running=false completed=true error=none exit_code=0")
+			}
 			send(chatOutboundMessage{Type: "chat_exit", Code: 0})
 		}
 		bridge.Close()
@@ -208,6 +243,7 @@ func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send f
 				if clean == "" {
 					continue
 				}
+				b.markOutput()
 				if logf != nil {
 					logf(fmt.Sprintf("output[%s]: %s", stream, clean))
 				}
@@ -219,12 +255,105 @@ func (b *chatProcessBridge) streamOutput(reader io.Reader, stream string, send f
 			}
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
+					b.markError(err.Error())
 					send(chatOutboundMessage{Type: "chat_error", Error: err.Error()})
 				}
 				return
 			}
 		}
 	}()
+}
+
+func (b *chatProcessBridge) startHeartbeat(logf func(string)) {
+	if b == nil || logf == nil {
+		return
+	}
+	logf(b.heartbeatLine())
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				logf(b.heartbeatLine())
+			case <-b.heartbeatCh:
+				return
+			}
+		}
+	}()
+}
+
+func (b *chatProcessBridge) markPrompt() {
+	if b == nil {
+		return
+	}
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	now := time.Now().UTC()
+	b.lastPromptAt = now
+	b.lastActivity = now
+}
+
+func (b *chatProcessBridge) markOutput() {
+	if b == nil {
+		return
+	}
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	now := time.Now().UTC()
+	b.lastOutputAt = now
+	b.lastActivity = now
+}
+
+func (b *chatProcessBridge) markError(err string) {
+	if b == nil {
+		return
+	}
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	b.lastError = strings.TrimSpace(err)
+}
+
+func (b *chatProcessBridge) markCompleted(code int, err string) {
+	if b == nil {
+		return
+	}
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	b.completed = true
+	b.exitCode = code
+	b.lastError = strings.TrimSpace(err)
+}
+
+func (b *chatProcessBridge) heartbeatLine() string {
+	if b == nil {
+		return "heartbeat running=false completed=true error=\"chat bridge unavailable\""
+	}
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	now := time.Now().UTC()
+	running := !b.completed
+	errorLabel := "none"
+	if strings.TrimSpace(b.lastError) != "" {
+		errorLabel = b.lastError
+	}
+	lastPrompt := "never"
+	if !b.lastPromptAt.IsZero() {
+		lastPrompt = now.Sub(b.lastPromptAt).Round(time.Second).String() + " ago"
+	}
+	lastOutput := "never"
+	if !b.lastOutputAt.IsZero() {
+		lastOutput = now.Sub(b.lastOutputAt).Round(time.Second).String() + " ago"
+	}
+	lastActivity := "never"
+	if !b.lastActivity.IsZero() {
+		lastActivity = now.Sub(b.lastActivity).Round(time.Second).String() + " ago"
+	}
+	pid := 0
+	if b.cmd != nil && b.cmd.Process != nil {
+		pid = b.cmd.Process.Pid
+	}
+	return fmt.Sprintf("heartbeat pid=%d running=%t completed=%t exit_code=%d error=%q last_prompt=%s last_output=%s last_activity=%s", pid, running, b.completed, b.exitCode, errorLabel, lastPrompt, lastOutput, lastActivity)
 }
 
 func (b *chatProcessBridge) Send(input string) error {
@@ -245,6 +374,9 @@ func (b *chatProcessBridge) Send(input string) error {
 
 func (b *chatProcessBridge) Close() {
 	b.once.Do(func() {
+		if b.heartbeatCh != nil {
+			close(b.heartbeatCh)
+		}
 		b.mu.Lock()
 		if b.tty != nil {
 			_ = b.tty.Close()
