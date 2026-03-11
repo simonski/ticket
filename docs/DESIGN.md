@@ -630,7 +630,7 @@ The web UI should make these activities easy:
   - `agents`
   - `roles`
   - `settings`
-  - desktop defaults to open; mobile uses a visible edge-handle toggle
+  - defaults to open and remains open unless the user explicitly toggles `sections` minimise/grow
 - manage agents from a custom profile-menu panel (list/create/update/enable/disable/delete)
 - add and edit items
 - view hierarchy

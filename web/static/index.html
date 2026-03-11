@@ -1139,6 +1139,8 @@
         appShell.classList.toggle("panel-open", open);
         leftPanelToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
         leftPanelHandleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        leftPanelToggleBtn.textContent = open ? "minimise" : "grow";
+        leftPanelHandleBtn.textContent = open ? "minimise" : "grow";
         localStorage.setItem("left-panel-open", open ? "1" : "0");
       }
 
@@ -2361,14 +2363,14 @@
       });
 
       // Close dropdowns when clicking outside
-      document.addEventListener("click", () => { closeProjMenu(); closeProfileMenu(); closePerspectivePicker(); closeLeftPanel(); });
+      document.addEventListener("click", () => { closeProjMenu(); closeProfileMenu(); closePerspectivePicker(); });
       document.getElementById("proj-dropdown").addEventListener("click", (e) => e.stopPropagation());
       document.getElementById("profile-wrap").addEventListener("click", (e) => e.stopPropagation());
       leftPanel.addEventListener("click", (e) => e.stopPropagation());
 
       const savedLeftPanelState = localStorage.getItem("left-panel-open");
       const shouldOpenLeftPanel = savedLeftPanelState === null
-        ? window.matchMedia("(min-width: 901px)").matches
+        ? true
         : savedLeftPanelState === "1";
       setLeftPanelOpen(shouldOpenLeftPanel);
 
