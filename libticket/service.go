@@ -33,6 +33,19 @@ type Service interface {
 	AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
 	RemoveProjectMember(projectID, userID int64) error
 	ListProjectMembers(projectID int64) ([]store.ProjectMember, error)
+	AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error)
+	RemoveProjectTeamMember(projectID, teamID int64) error
+	ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error)
+	CreateTeam(request TeamRequest) (store.Team, error)
+	ListTeams() ([]store.Team, error)
+	UpdateTeam(id int64, request TeamRequest) (store.Team, error)
+	DeleteTeam(id int64) error
+	AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error)
+	RemoveTeamMember(teamID, userID int64) error
+	ListTeamMembers(teamID int64) ([]store.TeamMember, error)
+	AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error)
+	RemoveTeamAgent(teamID, agentID int64) error
+	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
 	CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 	ListTickets(projectID int64) ([]store.Ticket, error)
 	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error)

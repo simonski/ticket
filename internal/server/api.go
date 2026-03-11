@@ -715,6 +715,257 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		}
 	})
 
+	mux.HandleFunc("/api/teams", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			teams, err := store.ListTeams(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, teams)
+		case http.MethodPost:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			if user.Role != "admin" {
+				writeAuthError(w, store.ErrAdminRequired)
+				return
+			}
+			var payload teamRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			team, err := store.CreateTeam(db, payload.Name, payload.ParentTeamID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			// The creator is always an owner of the new team.
+			if _, err := store.AddTeamMember(db, team.ID, user.ID, store.TeamRoleOwner, ""); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, team)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/teams/", func(w http.ResponseWriter, r *http.Request) {
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/teams/")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		var teamID int64
+		if _, err := fmt.Sscan(parts[0], &teamID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid team id")
+			return
+		}
+		team, err := store.GetTeamByID(db, teamID)
+		if err != nil {
+			if errors.Is(err, store.ErrTeamNotFound) {
+				writeError(w, http.StatusNotFound, "team not found")
+				return
+			}
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		canManageTeam := user.Role == "admin"
+		if !canManageTeam {
+			role, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			canManageTeam = ok && role == store.TeamRoleOwner
+		}
+
+		if len(parts) == 1 {
+			switch r.Method {
+			case http.MethodPut:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload teamRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				updated, err := store.UpdateTeam(db, team.ID, payload.Name, payload.ParentTeamID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, updated)
+			case http.MethodDelete:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				if err := store.DeleteTeam(db, team.ID); err != nil {
+					if errors.Is(err, store.ErrTeamNotFound) {
+						writeError(w, http.StatusNotFound, "team not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
+		if len(parts) == 2 && parts[1] == "users" {
+			switch r.Method {
+			case http.MethodGet:
+				if !canManageTeam {
+					_, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					if !ok {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+				}
+				members, err := store.ListTeamMembers(db, team.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, members)
+			case http.MethodPost:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload teamMemberRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				member, err := store.AddTeamMember(db, team.ID, payload.UserID, payload.Role, payload.JobTitle)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, member)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
+		if len(parts) == 3 && parts[1] == "users" && r.Method == http.MethodDelete {
+			if !canManageTeam {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var userID int64
+			if _, err := fmt.Sscan(parts[2], &userID); err != nil {
+				writeError(w, http.StatusBadRequest, "user_id must be numeric")
+				return
+			}
+			if err := store.RemoveTeamMember(db, team.ID, userID); err != nil {
+				if errors.Is(err, store.ErrTeamMemberNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			return
+		}
+
+		if len(parts) == 2 && parts[1] == "agents" {
+			switch r.Method {
+			case http.MethodGet:
+				if !canManageTeam {
+					_, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					if !ok {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+				}
+				items, err := store.ListTeamAgents(db, team.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+			case http.MethodPost:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload struct {
+					AgentID int64 `json:"agent_id"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				item, err := store.AddTeamAgent(db, team.ID, payload.AgentID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, item)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
+		if len(parts) == 3 && parts[1] == "agents" && r.Method == http.MethodDelete {
+			if !canManageTeam {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var agentID int64
+			if _, err := fmt.Sscan(parts[2], &agentID); err != nil {
+				writeError(w, http.StatusBadRequest, "agent_id must be numeric")
+				return
+			}
+			if err := store.RemoveTeamAgent(db, team.ID, agentID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "team agent assignment not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			return
+		}
+
+		writeError(w, http.StatusNotFound, "not found")
+	})
+
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -921,6 +1172,87 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 					return
 				}
 				members, err := store.ListProjectMembers(db, project.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, members)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+		}
+
+		if (len(parts) == 2 && parts[1] == "teams") || (len(parts) == 3 && parts[1] == "teams") {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canManageProjectUsers(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			switch r.Method {
+			case http.MethodDelete:
+				if len(parts) != 3 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams/{team_id}")
+					return
+				}
+				var teamID int64
+				if _, err := fmt.Sscan(parts[2], &teamID); err != nil {
+					writeError(w, http.StatusBadRequest, "team_id must be numeric")
+					return
+				}
+				if err := store.RemoveProjectTeamMember(db, project.ID, teamID); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "project team membership not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("project_users_updated", project.ID, 0)
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+				return
+			case http.MethodPost:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams")
+					return
+				}
+				var payload struct {
+					TeamID int64  `json:"team_id"`
+					Role   string `json:"role"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				member, err := store.AddProjectTeamMember(db, project.ID, payload.TeamID, payload.Role)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("project_users_updated", project.ID, 0)
+				writeJSON(w, http.StatusOK, member)
+				return
+			case http.MethodGet:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams")
+					return
+				}
+				members, err := store.ListProjectTeamMembers(db, project.ID)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -1814,6 +2146,17 @@ type roleRequest struct {
 	Goals      string `json:"goals"`
 }
 
+type teamRequest struct {
+	Name         string `json:"name"`
+	ParentTeamID *int64 `json:"parent_team_id"`
+}
+
+type teamMemberRequest struct {
+	UserID   int64  `json:"user_id"`
+	Role     string `json:"role"`
+	JobTitle string `json:"job_title"`
+}
+
 type storyRequest struct {
 	ProjectID   int64  `json:"project_id"`
 	Title       string `json:"title"`
@@ -2012,6 +2355,17 @@ func projectRoleForUser(db *sql.DB, projectID int64, user store.User) (string, e
 	}
 	if ok {
 		return role, nil
+	}
+	teamIDs, err := store.TeamIDsForUserWithAncestors(db, user.ID)
+	if err != nil {
+		return "", err
+	}
+	teamRole, teamOK, err := store.HighestProjectRoleForTeams(db, projectID, teamIDs)
+	if err != nil {
+		return "", err
+	}
+	if teamOK {
+		return teamRole, nil
 	}
 	if project.Visibility == store.ProjectVisibilityPublic {
 		return store.ProjectRoleViewer, nil

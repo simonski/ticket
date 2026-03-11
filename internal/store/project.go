@@ -131,12 +131,24 @@ func ListProjectsVisibleToUser(db *sql.DB, user User) ([]Project, error) {
 		return ListProjects(db)
 	}
 	rows, err := db.Query(`
+		WITH RECURSIVE team_scope(team_id, parent_team_id) AS (
+			SELECT t.team_id, t.parent_team_id
+			FROM teams t
+			JOIN team_members tm ON tm.team_id = t.team_id
+			WHERE tm.user_id = ?
+			UNION
+			SELECT parent.team_id, parent.parent_team_id
+			FROM teams parent
+			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
+		)
 		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, COALESCE(p.created_by, 0), p.created_at, p.updated_at
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
-		WHERE p.visibility = ? OR pm.user_id IS NOT NULL
+		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
+		LEFT JOIN team_scope ts ON ts.team_id = pt.team_id
+		WHERE p.visibility = ? OR pm.user_id IS NOT NULL OR ts.team_id IS NOT NULL
 		ORDER BY p.created_at, p.project_id
-	`, user.ID, ProjectVisibilityPublic)
+	`, user.ID, user.ID, ProjectVisibilityPublic)
 	if err != nil {
 		return nil, err
 	}

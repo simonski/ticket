@@ -1449,6 +1449,95 @@ func TestProjectVisibilityAndRolePermissions(t *testing.T) {
 	}
 }
 
+func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	var adminAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, adminLogin, &adminAuth)
+
+	createAlice := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, adminAuth.Token)
+	if createAlice.Code != http.StatusCreated {
+		t.Fatalf("create alice status=%d body=%s", createAlice.Code, createAlice.Body.String())
+	}
+	aliceLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, aliceLogin, &aliceAuth)
+
+	createTeam := doJSONRequest(t, handler, http.MethodPost, "/api/teams", map[string]any{
+		"name": "Platform",
+	}, adminAuth.Token)
+	if createTeam.Code != http.StatusCreated {
+		t.Fatalf("create team status=%d body=%s", createTeam.Code, createTeam.Body.String())
+	}
+	var team store.Team
+	decodeResponse(t, createTeam, &team)
+
+	teamsResp := doJSONRequest(t, handler, http.MethodGet, "/api/teams", nil, adminAuth.Token)
+	if teamsResp.Code != http.StatusOK {
+		t.Fatalf("list teams status=%d body=%s", teamsResp.Code, teamsResp.Body.String())
+	}
+
+	aliceUser, err := store.GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(alice) error=%v", err)
+	}
+	addAliceTeam := doJSONRequest(t, handler, http.MethodPost, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/users", map[string]any{
+		"user_id":   aliceUser.ID,
+		"role":      store.TeamRoleMember,
+		"job_title": "Engineer",
+	}, adminAuth.Token)
+	if addAliceTeam.Code != http.StatusOK {
+		t.Fatalf("add team member status=%d body=%s", addAliceTeam.Code, addAliceTeam.Body.String())
+	}
+
+	createProject := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Private Team Project",
+		"visibility": "private",
+	}, adminAuth.Token)
+	if createProject.Code != http.StatusCreated {
+		t.Fatalf("create project status=%d body=%s", createProject.Code, createProject.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, createProject, &project)
+
+	addTeamToProject := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/teams", map[string]any{
+		"team_id": team.ID,
+		"role":    store.ProjectRoleEditor,
+	}, adminAuth.Token)
+	if addTeamToProject.Code != http.StatusOK {
+		t.Fatalf("add team to project status=%d body=%s", addTeamToProject.Code, addTeamToProject.Body.String())
+	}
+
+	aliceGetProject := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10), nil, aliceAuth.Token)
+	if aliceGetProject.Code != http.StatusOK {
+		t.Fatalf("alice get project via team status=%d body=%s", aliceGetProject.Code, aliceGetProject.Body.String())
+	}
+
+	aliceCreateTicket := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Team-backed write",
+	}, aliceAuth.Token)
+	if aliceCreateTicket.Code != http.StatusCreated {
+		t.Fatalf("alice create ticket via team role status=%d body=%s", aliceCreateTicket.Code, aliceCreateTicket.Body.String())
+	}
+}
+
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 

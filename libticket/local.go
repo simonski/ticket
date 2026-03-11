@@ -364,6 +364,7 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
+		Visibility:         request.Visibility,
 		CreatedBy:          user.ID,
 	})
 }
@@ -399,6 +400,7 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
+		Visibility:         request.Visibility,
 	})
 }
 
@@ -436,6 +438,123 @@ func (s *LocalService) ListProjectMembers(projectID int64) ([]store.ProjectMembe
 	}
 	defer db.Close()
 	return store.ListProjectMembers(db, projectID)
+}
+
+func (s *LocalService) AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.ProjectTeamMember{}, err
+	}
+	defer db.Close()
+	return store.AddProjectTeamMember(db, projectID, request.TeamID, request.Role)
+}
+
+func (s *LocalService) RemoveProjectTeamMember(projectID, teamID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveProjectTeamMember(db, projectID, teamID)
+}
+
+func (s *LocalService) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListProjectTeamMembers(db, projectID)
+}
+
+func (s *LocalService) CreateTeam(request TeamRequest) (store.Team, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Team{}, err
+	}
+	defer db.Close()
+	return store.CreateTeam(db, request.Name, request.ParentTeamID)
+}
+
+func (s *LocalService) ListTeams() ([]store.Team, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTeams(db)
+}
+
+func (s *LocalService) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Team{}, err
+	}
+	defer db.Close()
+	return store.UpdateTeam(db, id, request.Name, request.ParentTeamID)
+}
+
+func (s *LocalService) DeleteTeam(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteTeam(db, id)
+}
+
+func (s *LocalService) AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.TeamMember{}, err
+	}
+	defer db.Close()
+	return store.AddTeamMember(db, teamID, request.UserID, request.Role, request.JobTitle)
+}
+
+func (s *LocalService) RemoveTeamMember(teamID, userID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveTeamMember(db, teamID, userID)
+}
+
+func (s *LocalService) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTeamMembers(db, teamID)
+}
+
+func (s *LocalService) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.TeamAgent{}, err
+	}
+	defer db.Close()
+	return store.AddTeamAgent(db, teamID, agentID)
+}
+
+func (s *LocalService) RemoveTeamAgent(teamID, agentID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveTeamAgent(db, teamID, agentID)
+}
+
+func (s *LocalService) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTeamAgents(db, teamID)
 }
 
 func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, error) {

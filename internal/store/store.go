@@ -271,6 +271,46 @@ CREATE TABLE IF NOT EXISTS project_members (
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS teams (
+	team_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE,
+	parent_team_id INTEGER,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(parent_team_id) REFERENCES teams(team_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+	team_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	job_title TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(team_id, user_id),
+	FOREIGN KEY(team_id) REFERENCES teams(team_id),
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_agents (
+	team_id INTEGER NOT NULL,
+	agent_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(team_id, agent_id),
+	FOREIGN KEY(team_id) REFERENCES teams(team_id),
+	FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS project_teams (
+	project_id INTEGER NOT NULL,
+	team_id INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(project_id, team_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(team_id) REFERENCES teams(team_id)
+);
 `
 
 	if _, err := db.Exec(schema); err != nil {

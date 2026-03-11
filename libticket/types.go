@@ -38,6 +38,22 @@ type ProjectMemberRequest struct {
 	Role   string `json:"role"`
 }
 
+type ProjectTeamMemberRequest struct {
+	TeamID int64  `json:"team_id"`
+	Role   string `json:"role"`
+}
+
+type TeamRequest struct {
+	Name         string `json:"name"`
+	ParentTeamID *int64 `json:"parent_team_id,omitempty"`
+}
+
+type TeamMemberRequest struct {
+	UserID   int64  `json:"user_id"`
+	Role     string `json:"role"`
+	JobTitle string `json:"job_title"`
+}
+
 type TicketCreateRequest struct {
 	ProjectID          int64  `json:"project_id"`
 	ParentID           *int64 `json:"parent_id,omitempty"`

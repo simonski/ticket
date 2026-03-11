@@ -64,6 +64,22 @@ type ProjectMemberRequest struct {
 	Role   string `json:"role"`
 }
 
+type ProjectTeamMemberRequest struct {
+	TeamID int64  `json:"team_id"`
+	Role   string `json:"role"`
+}
+
+type TeamRequest struct {
+	Name         string `json:"name"`
+	ParentTeamID *int64 `json:"parent_team_id,omitempty"`
+}
+
+type TeamMemberRequest struct {
+	UserID   int64  `json:"user_id"`
+	Role     string `json:"role"`
+	JobTitle string `json:"job_title"`
+}
+
 type TicketCreateRequest struct {
 	ProjectID          int64  `json:"project_id"`
 	ParentID           *int64 `json:"parent_id,omitempty"`
@@ -637,6 +653,7 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 			GitRepository:      request.GitRepository,
 			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
+			Visibility:         request.Visibility,
 			CreatedBy:          user.ID,
 		})
 	}
@@ -687,6 +704,7 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 			GitRepository:      request.GitRepository,
 			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
+			Visibility:         request.Visibility,
 		})
 	}
 	var project store.Project
@@ -750,6 +768,180 @@ func (c *Client) ListProjectMembers(projectID int64) ([]store.ProjectMember, err
 	var members []store.ProjectMember
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/users", projectID), nil, &members)
 	return members, err
+}
+
+func (c *Client) AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.ProjectTeamMember{}, err
+		}
+		defer db.Close()
+		return store.AddProjectTeamMember(db, projectID, request.TeamID, request.Role)
+	}
+	var member store.ProjectTeamMember
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/teams", projectID), request, &member)
+	return member, err
+}
+
+func (c *Client) RemoveProjectTeamMember(projectID, teamID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.RemoveProjectTeamMember(db, projectID, teamID)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/teams/%d", projectID, teamID), nil, nil)
+}
+
+func (c *Client) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListProjectTeamMembers(db, projectID)
+	}
+	var members []store.ProjectTeamMember
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/teams", projectID), nil, &members)
+	return members, err
+}
+
+func (c *Client) CreateTeam(request TeamRequest) (store.Team, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Team{}, err
+		}
+		defer db.Close()
+		return store.CreateTeam(db, request.Name, request.ParentTeamID)
+	}
+	var team store.Team
+	err := c.doJSON(http.MethodPost, "/api/teams", request, &team)
+	return team, err
+}
+
+func (c *Client) ListTeams() ([]store.Team, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListTeams(db)
+	}
+	var teams []store.Team
+	err := c.doJSON(http.MethodGet, "/api/teams", nil, &teams)
+	return teams, err
+}
+
+func (c *Client) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Team{}, err
+		}
+		defer db.Close()
+		return store.UpdateTeam(db, id, request.Name, request.ParentTeamID)
+	}
+	var team store.Team
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/teams/%d", id), request, &team)
+	return team, err
+}
+
+func (c *Client) DeleteTeam(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteTeam(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d", id), nil, nil)
+}
+
+func (c *Client) AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.TeamMember{}, err
+		}
+		defer db.Close()
+		return store.AddTeamMember(db, teamID, request.UserID, request.Role, request.JobTitle)
+	}
+	var member store.TeamMember
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/users", teamID), request, &member)
+	return member, err
+}
+
+func (c *Client) RemoveTeamMember(teamID, userID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.RemoveTeamMember(db, teamID, userID)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/users/%d", teamID, userID), nil, nil)
+}
+
+func (c *Client) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListTeamMembers(db, teamID)
+	}
+	var members []store.TeamMember
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/teams/%d/users", teamID), nil, &members)
+	return members, err
+}
+
+func (c *Client) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.TeamAgent{}, err
+		}
+		defer db.Close()
+		return store.AddTeamAgent(db, teamID, agentID)
+	}
+	var item store.TeamAgent
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/agents", teamID), map[string]int64{"agent_id": agentID}, &item)
+	return item, err
+}
+
+func (c *Client) RemoveTeamAgent(teamID, agentID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.RemoveTeamAgent(db, teamID, agentID)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/agents/%d", teamID, agentID), nil, nil)
+}
+
+func (c *Client) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListTeamAgents(db, teamID)
+	}
+	var items []store.TeamAgent
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/teams/%d/agents", teamID), nil, &items)
+	return items, err
 }
 
 func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error) {

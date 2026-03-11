@@ -147,6 +147,58 @@ func (s *Service) ListProjectMembers(projectID int64) ([]store.ProjectMember, er
 	return s.client.ListProjectMembers(projectID)
 }
 
+func (s *Service) AddProjectTeamMember(projectID int64, request libticket.ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+	return s.client.AddProjectTeamMember(projectID, client.ProjectTeamMemberRequest(request))
+}
+
+func (s *Service) RemoveProjectTeamMember(projectID, teamID int64) error {
+	return s.client.RemoveProjectTeamMember(projectID, teamID)
+}
+
+func (s *Service) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+	return s.client.ListProjectTeamMembers(projectID)
+}
+
+func (s *Service) CreateTeam(request libticket.TeamRequest) (store.Team, error) {
+	return s.client.CreateTeam(client.TeamRequest(request))
+}
+
+func (s *Service) ListTeams() ([]store.Team, error) {
+	return s.client.ListTeams()
+}
+
+func (s *Service) UpdateTeam(id int64, request libticket.TeamRequest) (store.Team, error) {
+	return s.client.UpdateTeam(id, client.TeamRequest(request))
+}
+
+func (s *Service) DeleteTeam(id int64) error {
+	return s.client.DeleteTeam(id)
+}
+
+func (s *Service) AddTeamMember(teamID int64, request libticket.TeamMemberRequest) (store.TeamMember, error) {
+	return s.client.AddTeamMember(teamID, client.TeamMemberRequest(request))
+}
+
+func (s *Service) RemoveTeamMember(teamID, userID int64) error {
+	return s.client.RemoveTeamMember(teamID, userID)
+}
+
+func (s *Service) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+	return s.client.ListTeamMembers(teamID)
+}
+
+func (s *Service) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+	return s.client.AddTeamAgent(teamID, agentID)
+}
+
+func (s *Service) RemoveTeamAgent(teamID, agentID int64) error {
+	return s.client.RemoveTeamAgent(teamID, agentID)
+}
+
+func (s *Service) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+	return s.client.ListTeamAgents(teamID)
+}
+
 func (s *Service) CreateTicket(request libticket.TicketCreateRequest) (store.Ticket, error) {
 	return s.client.CreateTicket(client.TicketCreateRequest(request))
 }

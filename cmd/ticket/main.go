@@ -179,9 +179,14 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket health TK-1",
 	},
 	"project": {
-		usage:   "ticket project <create|list|get|use|add-user|remove-user>|<id> <update|enable|disable>",
-		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id."},
+		usage:   "ticket project <create|list|get|use|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
+		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams."},
 		example: "ticket project CUS update -title \"Customer Portal\"",
+	},
+	"team": {
+		usage:   "ticket team <list|create|update|delete|add-user|remove-user|users|add-agent|remove-agent|agents>",
+		details: []string{"Manages team hierarchy, team users (member/owner + job title), and team agent assignments.", "Teams can be assigned to projects with `ticket project add-team`."},
+		example: "ticket team create -name \"Platform\"",
 	},
 	"list": {
 		usage:   "ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a] [--unicode] [--plain]",
@@ -482,6 +487,8 @@ func run(args []string) error {
 		return runUser(trimmedArgs[1:])
 	case "project":
 		return runProject(trimmedArgs[1:])
+	case "team":
+		return runTeam(trimmedArgs[1:])
 	case "ls":
 		return runList(trimmedArgs[1:])
 	case "list":
@@ -1565,6 +1572,10 @@ func runProject(args []string) error {
 		return runProjectAddUser(svc, args[1:])
 	case "remove-user":
 		return runProjectRemoveUser(svc, args[1:])
+	case "add-team":
+		return runProjectAddTeam(svc, args[1:])
+	case "remove-team":
+		return runProjectRemoveTeam(svc, args[1:])
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("project create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -1691,6 +1702,327 @@ func runProjectRemoveUser(svc libticket.Service, args []string) error {
 	}
 	fmt.Printf("removed project user: project_id=%d user_id=%d\n", *projectID, *userID)
 	return nil
+}
+
+func runProjectAddTeam(svc libticket.Service, args []string) error {
+	fs := flag.NewFlagSet("project add-team", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	teamID := fs.Int64("team_id", 0, "team id")
+	projectID := fs.Int64("project_id", 0, "project id")
+	role := fs.String("role", "", "project role [viewer,editor,owner]")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *teamID == 0 || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+		return errors.New("usage: ticket project add-team -team_id <id> -project_id <id> -role <viewer|editor|owner>")
+	}
+	member, err := svc.AddProjectTeamMember(*projectID, libticket.ProjectTeamMemberRequest{
+		TeamID: *teamID,
+		Role:   strings.TrimSpace(*role),
+	})
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(member)
+	}
+	fmt.Printf("added project team: project_id=%d team_id=%d role=%s\n", member.ProjectID, member.TeamID, member.Role)
+	return nil
+}
+
+func runProjectRemoveTeam(svc libticket.Service, args []string) error {
+	fs := flag.NewFlagSet("project remove-team", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	teamID := fs.Int64("team_id", 0, "team id")
+	projectID := fs.Int64("project_id", 0, "project id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *teamID == 0 || *projectID == 0 || fs.NArg() != 0 {
+		return errors.New("usage: ticket project remove-team -team_id <id> -project_id <id>")
+	}
+	if err := svc.RemoveProjectTeamMember(*projectID, *teamID); err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(map[string]any{"status": "deleted", "project_id": *projectID, "team_id": *teamID})
+	}
+	fmt.Printf("removed project team: project_id=%d team_id=%d\n", *projectID, *teamID)
+	return nil
+}
+
+func runTeam(args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		teams, err := svc.ListTeams()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(teams)
+		}
+		printTeamTable(teams)
+		return nil
+	}
+	switch args[0] {
+	case "list", "ls":
+		teams, err := svc.ListTeams()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(teams)
+		}
+		printTeamTable(teams)
+		return nil
+	case "create", "add", "new":
+		fs := flag.NewFlagSet("team create", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		name := fs.String("name", "", "team name")
+		parentID := fs.Int64("parent_id", 0, "optional parent team id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*name) == "" || fs.NArg() != 0 {
+			return errors.New("usage: ticket team create -name <name> [-parent_id <id>]")
+		}
+		var parent *int64
+		if *parentID > 0 {
+			parent = parentID
+		}
+		team, err := svc.CreateTeam(libticket.TeamRequest{
+			Name:         strings.TrimSpace(*name),
+			ParentTeamID: parent,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(team)
+		}
+		fmt.Printf("created team #%d %s\n", team.ID, team.Name)
+		return nil
+	case "update":
+		fs := flag.NewFlagSet("team update", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "team id")
+		name := fs.String("name", "", "team name")
+		parentID := fs.Int64("parent_id", -1, "parent team id (0 clears)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team update -id <id> [-name <name>] [-parent_id <id|0>]")
+		}
+		var parent *int64
+		if *parentID > 0 {
+			parent = parentID
+		}
+		team, err := svc.UpdateTeam(*id, libticket.TeamRequest{
+			Name:         strings.TrimSpace(*name),
+			ParentTeamID: parent,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(team)
+		}
+		fmt.Printf("updated team #%d %s\n", team.ID, team.Name)
+		return nil
+	case "delete", "rm":
+		fs := flag.NewFlagSet("team delete", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "team id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team delete -id <id>")
+		}
+		if err := svc.DeleteTeam(*id); err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"status": "deleted", "team_id": *id})
+		}
+		fmt.Printf("deleted team #%d\n", *id)
+		return nil
+	case "add-user":
+		fs := flag.NewFlagSet("team add-user", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		teamID := fs.Int64("team_id", 0, "team id")
+		userID := fs.Int64("user_id", 0, "user id")
+		role := fs.String("role", "", "team role [member,owner]")
+		jobTitle := fs.String("job_title", "", "job title")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *teamID == 0 || *userID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+			return errors.New("usage: ticket team add-user -team_id <id> -user_id <id> -role <member|owner> [-job_title <title>]")
+		}
+		member, err := svc.AddTeamMember(*teamID, libticket.TeamMemberRequest{
+			UserID:   *userID,
+			Role:     strings.TrimSpace(*role),
+			JobTitle: strings.TrimSpace(*jobTitle),
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(member)
+		}
+		fmt.Printf("added team user: team_id=%d user_id=%d role=%s job_title=%s\n", member.TeamID, member.UserID, member.Role, member.JobTitle)
+		return nil
+	case "remove-user":
+		fs := flag.NewFlagSet("team remove-user", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		teamID := fs.Int64("team_id", 0, "team id")
+		userID := fs.Int64("user_id", 0, "user id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *teamID == 0 || *userID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team remove-user -team_id <id> -user_id <id>")
+		}
+		if err := svc.RemoveTeamMember(*teamID, *userID); err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"status": "deleted", "team_id": *teamID, "user_id": *userID})
+		}
+		fmt.Printf("removed team user: team_id=%d user_id=%d\n", *teamID, *userID)
+		return nil
+	case "users":
+		fs := flag.NewFlagSet("team users", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		teamID := fs.Int64("team_id", 0, "team id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *teamID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team users -team_id <id>")
+		}
+		members, err := svc.ListTeamMembers(*teamID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(members)
+		}
+		printTeamMemberTable(members)
+		return nil
+	case "add-agent":
+		fs := flag.NewFlagSet("team add-agent", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		teamID := fs.Int64("team_id", 0, "team id")
+		agentID := fs.Int64("agent_id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *teamID == 0 || *agentID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team add-agent -team_id <id> -agent_id <id>")
+		}
+		item, err := svc.AddTeamAgent(*teamID, *agentID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(item)
+		}
+		fmt.Printf("added team agent: team_id=%d agent_id=%d\n", item.TeamID, item.AgentID)
+		return nil
+	case "remove-agent":
+		fs := flag.NewFlagSet("team remove-agent", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		teamID := fs.Int64("team_id", 0, "team id")
+		agentID := fs.Int64("agent_id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *teamID == 0 || *agentID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team remove-agent -team_id <id> -agent_id <id>")
+		}
+		if err := svc.RemoveTeamAgent(*teamID, *agentID); err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"status": "deleted", "team_id": *teamID, "agent_id": *agentID})
+		}
+		fmt.Printf("removed team agent: team_id=%d agent_id=%d\n", *teamID, *agentID)
+		return nil
+	case "agents":
+		fs := flag.NewFlagSet("team agents", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		teamID := fs.Int64("team_id", 0, "team id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *teamID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket team agents -team_id <id>")
+		}
+		items, err := svc.ListTeamAgents(*teamID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(items)
+		}
+		printTeamAgentTable(items)
+		return nil
+	default:
+		return fmt.Errorf("unknown team command %q", args[0])
+	}
+}
+
+func printTeamTable(teams []store.Team) {
+	if len(teams) == 0 {
+		fmt.Println("no teams")
+		return
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tNAME\tPARENT_TEAM_ID")
+	for _, team := range teams {
+		parent := "-"
+		if team.ParentTeamID != nil {
+			parent = fmt.Sprintf("%d", *team.ParentTeamID)
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\n", team.ID, team.Name, parent)
+	}
+	_ = w.Flush()
+}
+
+func printTeamMemberTable(members []store.TeamMember) {
+	if len(members) == 0 {
+		fmt.Println("no team members")
+		return
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "TEAM_ID\tUSER_ID\tUSERNAME\tROLE\tJOB_TITLE")
+	for _, m := range members {
+		fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", m.TeamID, m.UserID, m.Username, m.Role, m.JobTitle)
+	}
+	_ = w.Flush()
+}
+
+func printTeamAgentTable(items []store.TeamAgent) {
+	if len(items) == 0 {
+		fmt.Println("no team agents")
+		return
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tNAME\tENABLED\tSTATUS")
+	for _, item := range items {
+		fmt.Fprintf(w, "%d\t%d\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentName, item.Enabled, item.Status)
+	}
+	_ = w.Flush()
 }
 
 func runTicket(args []string) error {
@@ -4378,6 +4710,7 @@ CLIENT COMMANDS
 		{"open", "Reopen a closed ticket"},
 		{"orphans", "List tickets with no parent"},
 		{"project", "Manage projects and active project context"},
+		{"team", "Manage teams, hierarchy, and team membership"},
 		{"register", "Create a user account on the server"},
 		{"ticket", "Generate requirements via an external agent"},
 		{"request", "Request work for the current user"},
