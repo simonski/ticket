@@ -443,6 +443,13 @@ func TestTaskAPI(t *testing.T) {
 	}, auth.Token)
 	var project store.Project
 	decodeResponse(t, createProjectResp, &project)
+	aliceUser, err := store.GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("get alice user error = %v", err)
+	}
+	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+		t.Fatalf("add alice editor membership error = %v", err)
+	}
 
 	createEpicResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": project.ID,
@@ -624,6 +631,13 @@ func TestTicketRouteAliasesAPI(t *testing.T) {
 	}
 	var project store.Project
 	decodeResponse(t, createProjectResp, &project)
+	aliceUser, err := store.GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("get alice user error = %v", err)
+	}
+	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+		t.Fatalf("add alice editor membership error = %v", err)
+	}
 
 	createTicketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": project.ID,
@@ -716,6 +730,13 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 	}, adminAuth.Token)
 	var project store.Project
 	decodeResponse(t, createProjectResp, &project)
+	aliceUser, err := store.GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("get alice user error = %v", err)
+	}
+	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+		t.Fatalf("add alice editor membership error = %v", err)
+	}
 
 	createTaskResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": project.ID,
@@ -766,6 +787,13 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 		Token string `json:"token"`
 	}
 	decodeResponse(t, bobLogin, &bobAuth)
+	bobUser, err := store.GetUserByUsername(db, "bob")
+	if err != nil {
+		t.Fatalf("get bob user error = %v", err)
+	}
+	if _, err := store.AddProjectMember(db, project.ID, bobUser.ID, store.ProjectRoleEditor); err != nil {
+		t.Fatalf("add bob editor membership error = %v", err)
+	}
 
 	claimConflictResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10), map[string]any{
 		"title":       ticket.Title,
@@ -876,6 +904,13 @@ func TestTicketRequestAPI(t *testing.T) {
 	}, adminAuth.Token)
 	var project store.Project
 	decodeResponse(t, projectResp, &project)
+	aliceUser, err := store.GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("get alice user error = %v", err)
+	}
+	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+		t.Fatalf("add alice editor membership error = %v", err)
+	}
 
 	notReadyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": project.ID,
@@ -951,6 +986,13 @@ func TestTicketRequestAPI(t *testing.T) {
 		Token string `json:"token"`
 	}
 	decodeResponse(t, bobLogin, &bobAuth)
+	bobUser, err := store.GetUserByUsername(db, "bob")
+	if err != nil {
+		t.Fatalf("get bob user error = %v", err)
+	}
+	if _, err := store.AddProjectMember(db, project.ID, bobUser.ID, store.ProjectRoleEditor); err != nil {
+		t.Fatalf("add bob editor membership error = %v", err)
+	}
 
 	rejectedResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
 		"project_id": project.ID,
@@ -1227,6 +1269,183 @@ func TestAutoProgressTicketLifecycleRespectsExplicitLifecycle(t *testing.T) {
 	next := autoProgressTicketLifecycle(payload, current, "alice")
 	if next.Stage != store.StageDone || next.State != store.StateSuccess {
 		t.Fatalf("expected explicit done/success to be preserved, got %s/%s", next.Stage, next.State)
+	}
+}
+
+func TestProjectVisibilityAndRolePermissions(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	var adminAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, adminLogin, &adminAuth)
+
+	aliceCreate := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, adminAuth.Token)
+	if aliceCreate.Code != http.StatusCreated {
+		t.Fatalf("create alice status=%d body=%s", aliceCreate.Code, aliceCreate.Body.String())
+	}
+	bobCreate := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "bob",
+		"password": "password123",
+	}, adminAuth.Token)
+	if bobCreate.Code != http.StatusCreated {
+		t.Fatalf("create bob status=%d body=%s", bobCreate.Code, bobCreate.Body.String())
+	}
+
+	aliceLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, aliceLogin, &aliceAuth)
+
+	bobLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "bob",
+		"password": "password123",
+	}, "")
+	var bobAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, bobLogin, &bobAuth)
+
+	privateProjectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Private Program",
+		"visibility": "private",
+	}, adminAuth.Token)
+	if privateProjectResp.Code != http.StatusCreated {
+		t.Fatalf("create private project status=%d body=%s", privateProjectResp.Code, privateProjectResp.Body.String())
+	}
+	var privateProject store.Project
+	decodeResponse(t, privateProjectResp, &privateProject)
+	if privateProject.Visibility != store.ProjectVisibilityPrivate {
+		t.Fatalf("private project visibility=%q", privateProject.Visibility)
+	}
+
+	aliceProjectsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects", nil, aliceAuth.Token)
+	if aliceProjectsResp.Code != http.StatusOK {
+		t.Fatalf("alice list projects status=%d body=%s", aliceProjectsResp.Code, aliceProjectsResp.Body.String())
+	}
+	var aliceProjects []store.Project
+	decodeResponse(t, aliceProjectsResp, &aliceProjects)
+	for _, p := range aliceProjects {
+		if p.ID == privateProject.ID {
+			t.Fatalf("private project should not be visible to non-member")
+		}
+	}
+
+	aliceGetPrivate := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), nil, aliceAuth.Token)
+	if aliceGetPrivate.Code != http.StatusForbidden {
+		t.Fatalf("alice get private project status=%d want=%d body=%s", aliceGetPrivate.Code, http.StatusForbidden, aliceGetPrivate.Body.String())
+	}
+
+	aliceUser, err := store.GetUserByUsername(db, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(alice) error=%v", err)
+	}
+	setViewerResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10)+"/users", map[string]any{
+		"user_id": aliceUser.ID,
+		"role":    store.ProjectRoleViewer,
+	}, adminAuth.Token)
+	if setViewerResp.Code != http.StatusOK {
+		t.Fatalf("set viewer status=%d body=%s", setViewerResp.Code, setViewerResp.Body.String())
+	}
+
+	aliceGetPrivate = doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), nil, aliceAuth.Token)
+	if aliceGetPrivate.Code != http.StatusOK {
+		t.Fatalf("alice get private as viewer status=%d body=%s", aliceGetPrivate.Code, aliceGetPrivate.Body.String())
+	}
+
+	aliceWriteAsViewer := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": privateProject.ID,
+		"type":       "task",
+		"title":      "viewer should not write",
+	}, aliceAuth.Token)
+	if aliceWriteAsViewer.Code != http.StatusForbidden {
+		t.Fatalf("viewer create ticket status=%d want=%d body=%s", aliceWriteAsViewer.Code, http.StatusForbidden, aliceWriteAsViewer.Body.String())
+	}
+	aliceProjectUpdateAsViewer := doJSONRequest(t, handler, http.MethodPut, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), map[string]any{
+		"title": "Viewer update blocked",
+	}, aliceAuth.Token)
+	if aliceProjectUpdateAsViewer.Code != http.StatusForbidden {
+		t.Fatalf("viewer update project status=%d want=%d body=%s", aliceProjectUpdateAsViewer.Code, http.StatusForbidden, aliceProjectUpdateAsViewer.Body.String())
+	}
+
+	setEditorResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10)+"/users", map[string]any{
+		"user_id": aliceUser.ID,
+		"role":    store.ProjectRoleEditor,
+	}, adminAuth.Token)
+	if setEditorResp.Code != http.StatusOK {
+		t.Fatalf("set editor status=%d body=%s", setEditorResp.Code, setEditorResp.Body.String())
+	}
+
+	aliceWriteAsEditor := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": privateProject.ID,
+		"type":       "task",
+		"title":      "editor can write",
+	}, aliceAuth.Token)
+	if aliceWriteAsEditor.Code != http.StatusCreated {
+		t.Fatalf("editor create ticket status=%d body=%s", aliceWriteAsEditor.Code, aliceWriteAsEditor.Body.String())
+	}
+	aliceProjectUpdateAsEditor := doJSONRequest(t, handler, http.MethodPut, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), map[string]any{
+		"title": "Private Program Updated",
+	}, aliceAuth.Token)
+	if aliceProjectUpdateAsEditor.Code != http.StatusOK {
+		t.Fatalf("editor update project status=%d body=%s", aliceProjectUpdateAsEditor.Code, aliceProjectUpdateAsEditor.Body.String())
+	}
+
+	bobGetPrivate := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), nil, bobAuth.Token)
+	if bobGetPrivate.Code != http.StatusForbidden {
+		t.Fatalf("bob get private project status=%d want=%d body=%s", bobGetPrivate.Code, http.StatusForbidden, bobGetPrivate.Body.String())
+	}
+
+	publicProjectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Public Program",
+		"visibility": "public",
+	}, adminAuth.Token)
+	if publicProjectResp.Code != http.StatusCreated {
+		t.Fatalf("create public project status=%d body=%s", publicProjectResp.Code, publicProjectResp.Body.String())
+	}
+	var publicProject store.Project
+	decodeResponse(t, publicProjectResp, &publicProject)
+
+	bobProjectsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects", nil, bobAuth.Token)
+	if bobProjectsResp.Code != http.StatusOK {
+		t.Fatalf("bob list projects status=%d body=%s", bobProjectsResp.Code, bobProjectsResp.Body.String())
+	}
+	var bobProjects []store.Project
+	decodeResponse(t, bobProjectsResp, &bobProjects)
+	foundPublic := false
+	for _, p := range bobProjects {
+		if p.ID == publicProject.ID {
+			foundPublic = true
+			break
+		}
+	}
+	if !foundPublic {
+		t.Fatalf("public project should be visible to non-member")
+	}
+
+	bobReadPublic := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(publicProject.ID, 10)+"/tickets", nil, bobAuth.Token)
+	if bobReadPublic.Code != http.StatusOK {
+		t.Fatalf("bob read public project tickets status=%d body=%s", bobReadPublic.Code, bobReadPublic.Body.String())
+	}
+	bobWritePublic := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": publicProject.ID,
+		"type":       "task",
+		"title":      "public non-member write blocked",
+	}, bobAuth.Token)
+	if bobWritePublic.Code != http.StatusForbidden {
+		t.Fatalf("bob write public project status=%d want=%d body=%s", bobWritePublic.Code, http.StatusForbidden, bobWritePublic.Body.String())
 	}
 }
 

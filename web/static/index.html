@@ -617,6 +617,24 @@
         letter-spacing: 0.02em;
         pointer-events: none;
       }
+      .admin-danger::before {
+        content: "";
+        position: fixed;
+        inset: 8px;
+        border-radius: 18px;
+        border: 2px solid hsl(0 100% 62%);
+        box-shadow:
+          0 0 10px hsl(0 100% 62% / 0.8),
+          0 0 20px hsl(45 100% 55% / 0.6),
+          inset 0 0 10px hsl(180 100% 58% / 0.35);
+        animation: admin-chroma 16s linear infinite;
+        pointer-events: none;
+        z-index: 70;
+      }
+      @keyframes admin-chroma {
+        0% { filter: hue-rotate(0deg); }
+        100% { filter: hue-rotate(360deg); }
+      }
     </style>
   </head>
   <body>
@@ -635,10 +653,10 @@
         <div class="profile-wrap" id="profile-wrap">
           <div class="avatar" id="profile-avatar" title="Profile">?</div>
           <div class="profile-menu hidden" id="profile-menu">
-            <div class="profile-menu-item" id="menu-settings">Settings</div>
+            <div class="profile-menu-item admin-only hidden" id="menu-settings">Settings</div>
             <div class="profile-menu-item" id="menu-profile">Profile</div>
-            <div class="profile-menu-item" id="menu-agents">Agents</div>
-            <div class="profile-menu-item" id="menu-roles">Roles</div>
+            <div class="profile-menu-item admin-only hidden" id="menu-agents">Agents</div>
+            <div class="profile-menu-item admin-only hidden" id="menu-roles">Roles</div>
             <div class="profile-menu-item danger" id="menu-logout">Logout</div>
           </div>
         </div>
@@ -675,9 +693,9 @@
             <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">kanban</button>
             <button type="button" class="left-panel-item" data-left-panel-action="stories">stories</button>
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
-            <button type="button" class="left-panel-item" data-left-panel-action="agents">agents</button>
-            <button type="button" class="left-panel-item" data-left-panel-action="roles">roles</button>
-            <button type="button" class="left-panel-item" data-left-panel-action="settings">settings</button>
+            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="agents">agents</button>
+            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
+            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="settings">settings</button>
           </nav>
         </aside>
         <button id="left-panel-handle" class="left-panel-handle" type="button">sections</button>
@@ -736,15 +754,15 @@
           <div><strong>tv : ticketvision</strong></div>
           <div class="perspective-kicker">Project → epics → stories force graph</div>
         </div>
-        <div class="perspective-item" data-panel-action="agents">
+        <div class="perspective-item admin-only hidden" data-panel-action="agents">
           <div><strong>agents</strong></div>
           <div class="perspective-kicker">Open agent management</div>
         </div>
-        <div class="perspective-item" data-panel-action="roles">
+        <div class="perspective-item admin-only hidden" data-panel-action="roles">
           <div><strong>roles</strong></div>
           <div class="perspective-kicker">Open role management</div>
         </div>
-        <div class="perspective-item" data-panel-action="settings">
+        <div class="perspective-item admin-only hidden" data-panel-action="settings">
           <div><strong>settings</strong></div>
           <div class="perspective-kicker">Open settings panel</div>
         </div>
@@ -763,6 +781,10 @@
           </select>
           <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="8" autocomplete="off" style="text-transform:uppercase;" />
           <input id="proj-modal-title" placeholder="title" autocomplete="off" />
+          <select id="proj-modal-visibility">
+            <option value="private">private</option>
+            <option value="public">public</option>
+          </select>
           <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
           <input id="proj-modal-git-branch" placeholder="git branch (optional)" autocomplete="off" />
           <textarea id="proj-modal-description" placeholder="description (optional)"></textarea>
@@ -887,6 +909,25 @@
         </div>
       </div>
     </div>
+    <div id="settings-modal-overlay" class="modal-overlay hidden">
+      <div id="settings-modal" class="modal">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <strong>Settings</strong>
+          <span class="muted">ESC to close</span>
+        </div>
+        <div class="stack" style="margin-top:0.6rem;">
+          <label class="row" style="justify-content:space-between;">
+            <span>Allow new user registration</span>
+            <input id="settings-registration-enabled" type="checkbox" />
+          </label>
+          <div class="muted">This affects all users and the login screen registration flow.</div>
+          <div class="row">
+            <button id="settings-save" class="btn primary" type="button">Save Settings</button>
+          </div>
+          <div id="settings-status" class="muted"></div>
+        </div>
+      </div>
+    </div>
     <div id="dialog-overlay" class="dialog-overlay hidden">
       <div id="dialog-box" class="dialog" role="dialog" aria-modal="true">
         <p id="dialog-message" class="dialog-message"></p>
@@ -941,6 +982,7 @@
       const perspectiveOverlay = document.getElementById("perspective-overlay");
       const agentModalOverlay = document.getElementById("agent-modal-overlay");
       const roleModalOverlay = document.getElementById("role-modal-overlay");
+      const settingsModalOverlay = document.getElementById("settings-modal-overlay");
       const modalOverlay = document.getElementById("modal-overlay");
       const modalTitle = document.getElementById("modal-title");
       const versionOverlay = document.getElementById("version-overlay");
@@ -948,6 +990,7 @@
       const dialogMessage = document.getElementById("dialog-message");
       const dialogCancel = document.getElementById("dialog-cancel");
       const dialogOK = document.getElementById("dialog-ok");
+      const adminOnlyNodes = Array.from(document.querySelectorAll(".admin-only"));
       const showRegisterBtn = document.getElementById("show-register");
       const registerForm = document.getElementById("register-form");
       const agentNameInput = document.getElementById("agent-name");
@@ -995,6 +1038,30 @@
         setLeftPanelOpen(!leftPanel.classList.contains("open"));
       }
 
+      function isAdminUser() {
+        return String(currentUserRole || "").toLowerCase() === "admin";
+      }
+
+      function syncAdminVisibility() {
+        const showAdmin = isAdminUser() && isAppVisible();
+        adminOnlyNodes.forEach((node) => node.classList.toggle("hidden", !showAdmin));
+        document.body.classList.toggle("admin-danger", showAdmin);
+      }
+
+      async function openSettingsModal() {
+        if (!isAdminUser()) {
+          await uiAlert("Admin access required.");
+          return;
+        }
+        settingsRegistrationEnabled.checked = Boolean(registrationEnabled);
+        settingsStatusEl.textContent = "";
+        settingsModalOverlay.classList.remove("hidden");
+      }
+
+      function closeSettingsModal() {
+        settingsModalOverlay.classList.add("hidden");
+      }
+
       async function runLeftPanelAction(action) {
         if (action === "swimlanes") {
           switchPerspective("swimlanes");
@@ -1018,18 +1085,26 @@
           return;
         }
         if (action === "agents") {
+          if (!isAdminUser()) {
+            await uiAlert("Admin access required.");
+            return;
+          }
           closeLeftPanel();
           await openAgentModal();
           return;
         }
         if (action === "roles") {
+          if (!isAdminUser()) {
+            await uiAlert("Admin access required.");
+            return;
+          }
           closeLeftPanel();
           await openRoleModal();
           return;
         }
         if (action === "settings") {
           closeLeftPanel();
-          await uiAlert("Settings — coming soon.");
+          await openSettingsModal();
         }
       }
 
@@ -1692,6 +1767,10 @@
       const perspectiveItems = Array.from(document.querySelectorAll(".perspective-item"));
       let perspectiveActiveIdx = 0;
 
+      function visiblePerspectiveItems() {
+        return perspectiveItems.filter((el) => !el.classList.contains("hidden"));
+      }
+
       function syncPerspectiveUI() {
         perspectiveBtn.textContent = currentPerspective === "tv"
           ? "tv : ticketvision"
@@ -1722,7 +1801,10 @@
 
       function openPerspectivePicker() {
         syncPerspectiveUI();
-        perspectiveActiveIdx = Math.max(0, perspectiveItems.findIndex((el) => el.dataset.perspective === currentPerspective));
+        const visible = visiblePerspectiveItems();
+        perspectiveActiveIdx = Math.max(0, visible.findIndex((el) => el.dataset.perspective === currentPerspective));
+        if (perspectiveActiveIdx < 0) perspectiveActiveIdx = 0;
+        visible.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
         perspectiveOverlay.classList.remove("hidden");
       }
 
@@ -1955,6 +2037,8 @@
 
       // ── Project dropdown (custom, not native select) ──────────────────────
       let currentUsername = "";
+      var currentUserRole = "";
+      var registrationEnabled = true;
       let recentProjects = JSON.parse(localStorage.getItem("recent-projects") || "[]");
 
       function touchRecent(id) {
@@ -2054,7 +2138,7 @@
 
       document.getElementById("menu-settings").addEventListener("click", () => {
         closeProfileMenu();
-        uiAlert("Settings — coming soon.");
+        openSettingsModal();
       });
       document.getElementById("menu-profile").addEventListener("click", () => {
         closeProfileMenu();
@@ -2062,18 +2146,50 @@
       });
       document.getElementById("menu-agents").addEventListener("click", async () => {
         closeProfileMenu();
+        if (!isAdminUser()) {
+          await uiAlert("Admin access required.");
+          return;
+        }
         await openAgentModal();
       });
       document.getElementById("menu-roles").addEventListener("click", async () => {
         closeProfileMenu();
+        if (!isAdminUser()) {
+          await uiAlert("Admin access required.");
+          return;
+        }
         await openRoleModal();
       });
       document.getElementById("menu-logout").addEventListener("click", async () => {
         closeProfileMenu();
         try { await call("/api/logout", { method: "POST", headers: headers() }); } catch {}
         token = "";
+        currentUserRole = "";
         localStorage.removeItem("task-token");
         showLogin();
+      });
+      settingsSaveBtn.addEventListener("click", async () => {
+        if (!isAdminUser()) {
+          await uiAlert("Admin access required.");
+          return;
+        }
+        settingsStatusEl.textContent = "";
+        try {
+          const enabled = Boolean(settingsRegistrationEnabled.checked);
+          const res = await call("/api/config/registration", {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ enabled }),
+          });
+          registrationEnabled = Boolean(res.registration_enabled);
+          canRegister(registrationEnabled);
+          settingsStatusEl.textContent = "Settings saved.";
+        } catch (err) {
+          settingsStatusEl.textContent = `Save failed: ${err.message}`;
+        }
+      });
+      settingsModalOverlay.addEventListener("click", (event) => {
+        if (event.target === settingsModalOverlay) closeSettingsModal();
       });
 
       // Close dropdowns when clicking outside
@@ -2602,6 +2718,7 @@
 
       function showLogin(message = "") {
         closeChatWS();
+        closeSettingsModal();
         appHead.classList.add("hidden");
         loginScreen.classList.remove("hidden");
         mainContent.classList.add("hidden");
@@ -2610,15 +2727,18 @@
         loginStatus.textContent = cleaned;
         profileAvatar.textContent = "?";
         profileAvatar.title = "Profile";
+        currentUserRole = "";
+        syncAdminVisibility();
         projBtn.textContent = "Project";
         const userInput = document.getElementById("login-user");
         if (userInput) {
           requestAnimationFrame(() => userInput.focus());
         }
       }
-      function showApp(username = "") {
+      function showApp(username = "", role = "") {
         appHead.classList.remove("hidden");
         currentUsername = username;
+        currentUserRole = String(role || "").toLowerCase();
         loginScreen.classList.add("hidden");
         mainContent.classList.remove("hidden");
         newTicketBtn.classList.remove("hidden");
@@ -2629,6 +2749,7 @@
         if (!chatThreadEl.childElementCount) {
           appendChatBubble("system", "Chat is connected to a backend Codex process over websocket.");
         }
+        syncAdminVisibility();
         activatePerspective(currentPerspective);
       }
 
@@ -2640,12 +2761,13 @@
         try {
           const status = await call("/api/status", { headers: headers() });
           setServerVersion(status.server_version);
-          canRegister(Boolean(status.registration_enabled));
+          registrationEnabled = Boolean(status.registration_enabled);
+          canRegister(registrationEnabled);
           if (!status.authenticated) {
             showLogin();
             return;
           }
-          showApp(status.user.username);
+          showApp(status.user.username, status.user.role);
           ensureRealtimeSync();
           await loadProjects();
           await loadStories();
@@ -2861,12 +2983,16 @@
       const projModalSelect = document.getElementById("proj-modal-select");
       const projModalPrefix = document.getElementById("proj-modal-prefix");
       const projModalTitle = document.getElementById("proj-modal-title");
+      const projModalVisibility = document.getElementById("proj-modal-visibility");
       const projModalGitRepository = document.getElementById("proj-modal-git-repository");
       const projModalGitBranch = document.getElementById("proj-modal-git-branch");
       const projModalDescription = document.getElementById("proj-modal-description");
       const projModalAC = document.getElementById("proj-modal-ac");
       const projModalError = document.getElementById("proj-modal-error");
       const projModalCreate = document.getElementById("proj-modal-create");
+      const settingsRegistrationEnabled = document.getElementById("settings-registration-enabled");
+      const settingsSaveBtn = document.getElementById("settings-save");
+      const settingsStatusEl = document.getElementById("settings-status");
       let projModalMode = "create";
       let projModalProjectID = 0;
 
@@ -2892,6 +3018,7 @@
         renderProjectModalSelector(0);
         projModalPrefix.value = "";
         projModalTitle.value = "";
+        projModalVisibility.value = "private";
         projModalGitRepository.value = "";
         projModalGitBranch.value = "";
         projModalDescription.value = "";
@@ -2911,6 +3038,7 @@
         renderProjectModalSelector(projModalProjectID);
         projModalPrefix.value = String(project.prefix || "").toUpperCase();
         projModalTitle.value = project.title || "";
+        projModalVisibility.value = (project.visibility || "public").toLowerCase() === "private" ? "private" : "public";
         projModalGitRepository.value = project.git_repository || "";
         projModalGitBranch.value = project.git_branch || "";
         projModalDescription.value = project.description || "";
@@ -2928,6 +3056,7 @@
       projModalCreate.addEventListener("click", async () => {
         const title = projModalTitle.value.trim();
         const prefix = projModalPrefix.value.trim().toUpperCase();
+        const visibility = (projModalVisibility.value || "private").toLowerCase();
         const gitRepository = projModalGitRepository.value.trim();
         const gitBranch = projModalGitBranch.value.trim();
         const description = projModalDescription.value.trim();
@@ -2945,6 +3074,7 @@
           acceptance_criteria: acceptanceCriteria,
           git_repository: gitRepository,
           git_branch: gitBranch,
+          visibility,
         };
         const res = await call(endpoint, { method, headers: headers(true), body: JSON.stringify(payload) });
         if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to save project."; projModalError.style.display = ""; return; }
@@ -3451,22 +3581,23 @@
         lastShiftTime = 0;
 
         if (!perspectiveOverlay.classList.contains("hidden")) {
+          const visible = visiblePerspectiveItems();
           if (event.key === "Escape") { closePerspectivePicker(); return; }
           if (event.key === "ArrowDown") {
             event.preventDefault();
-            perspectiveActiveIdx = Math.min(perspectiveItems.length - 1, perspectiveActiveIdx + 1);
-            perspectiveItems.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
+            perspectiveActiveIdx = Math.min(Math.max(visible.length - 1, 0), perspectiveActiveIdx + 1);
+            visible.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
             return;
           }
           if (event.key === "ArrowUp") {
             event.preventDefault();
             perspectiveActiveIdx = Math.max(0, perspectiveActiveIdx - 1);
-            perspectiveItems.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
+            visible.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
             return;
           }
           if (event.key === "Enter") {
             event.preventDefault();
-            const item = perspectiveItems[perspectiveActiveIdx];
+            const item = visible[perspectiveActiveIdx];
             if (item) runPerspectivePickerItem(item);
             return;
           }
@@ -3478,6 +3609,7 @@
           if (leftPanel.classList.contains("open")) { closeLeftPanel(); return; }
           if (!projModalOverlay.classList.contains("hidden")) { closeProjModal(); return; }
           if (!storyModalOverlay.classList.contains("hidden")) { closeStoryModal(); return; }
+          if (!settingsModalOverlay.classList.contains("hidden")) { closeSettingsModal(); return; }
           if (!agentModalOverlay.classList.contains("hidden")) { closeAgentModal(); return; }
           if (!roleModalOverlay.classList.contains("hidden")) { closeRoleModal(); return; }
           if (!dialogOverlay.classList.contains("hidden")) { closeDialog(false); return; }
@@ -3510,14 +3642,14 @@
         }
 
         if (event.key.toLowerCase() === "a" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-          if (!isAppVisible() || inField) return;
+          if (!isAppVisible() || inField || !isAdminUser()) return;
           event.preventDefault();
           openAgentModal();
           return;
         }
 
         if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-          if (!isAppVisible() || inField || !roleModalOverlay.classList.contains("hidden")) return;
+          if (!isAppVisible() || inField || !isAdminUser() || !roleModalOverlay.classList.contains("hidden")) return;
           event.preventDefault();
           openRoleModal();
           return;

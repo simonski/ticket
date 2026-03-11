@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS projects (
 	git_branch TEXT NOT NULL DEFAULT '',
 	notes TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open',
+	visibility TEXT NOT NULL DEFAULT 'public',
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -336,7 +337,15 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "projects", "visibility") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`); err != nil {
+			return err
+		}
+	}
 	if _, err := db.Exec(`UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`UPDATE projects SET visibility = 'public' WHERE TRIM(COALESCE(visibility,'')) = ''`); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`UPDATE projects SET status = 'closed' WHERE status = 'disabled'`); err != nil {

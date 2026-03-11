@@ -718,11 +718,12 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			if _, err := requireUser(db, r); err != nil {
+			user, err := requireUser(db, r)
+			if err != nil {
 				writeAuthError(w, err)
 				return
 			}
-			projects, err := store.ListProjects(db)
+			projects, err := store.ListProjectsVisibleToUser(db, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -747,6 +748,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				GitRepository:      projectPayload.GitRepository,
 				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
+				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
 			})
 			if err != nil {
@@ -932,13 +934,23 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		}
 
 		if len(parts) == 2 && r.Method == http.MethodPost {
-			if _, err := requireAdmin(db, r); err != nil {
+			user, err := requireUser(db, r)
+			if err != nil {
 				writeAuthError(w, err)
 				return
 			}
 			project, err := store.GetProject(db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canManageProjectUsers(role) {
+				writeAuthError(w, store.ErrForbidden)
 				return
 			}
 			var enabled bool
@@ -971,6 +983,11 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 		}
 		switch r.Method {
 		case http.MethodGet:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
 			project, err := store.GetProject(db, parts[0])
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
@@ -980,9 +997,19 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			writeJSON(w, http.StatusOK, project)
 		case http.MethodPut:
-			if _, err := requireAdmin(db, r); err != nil {
+			user, err := requireUser(db, r)
+			if err != nil {
 				writeAuthError(w, err)
 				return
 			}
@@ -996,6 +1023,15 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
+			role, err := projectRoleForUser(db, currentProject.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			project, err := store.UpdateProjectWithParams(db, currentProject.ID, store.ProjectUpdateParams{
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
@@ -1003,6 +1039,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub) 
 				GitRepository:      projectPayload.GitRepository,
 				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
+				Visibility:         projectPayload.Visibility,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
@@ -1768,6 +1805,7 @@ type projectRequest struct {
 	GitRepository      string `json:"git_repository"`
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
+	Visibility         string `json:"visibility"`
 }
 
 type roleRequest struct {
@@ -1964,6 +2002,10 @@ func projectRoleForUser(db *sql.DB, projectID int64, user store.User) (string, e
 	if user.Role == "admin" {
 		return store.ProjectRoleOwner, nil
 	}
+	project, err := store.GetProjectByID(db, projectID)
+	if err != nil {
+		return "", err
+	}
 	role, ok, err := store.ProjectRoleForUser(db, projectID, user.ID)
 	if err != nil {
 		return "", err
@@ -1971,8 +2013,10 @@ func projectRoleForUser(db *sql.DB, projectID int64, user store.User) (string, e
 	if ok {
 		return role, nil
 	}
-	// Legacy behavior: authenticated users can edit if no explicit project role exists.
-	return store.ProjectRoleEditor, nil
+	if project.Visibility == store.ProjectVisibilityPublic {
+		return store.ProjectRoleViewer, nil
+	}
+	return "", nil
 }
 
 func canReadProject(role string) bool {

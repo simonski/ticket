@@ -66,3 +66,72 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 		t.Fatalf("SetProjectStatus(enable).Status = %q", enabled.Status)
 	}
 }
+
+func TestProjectVisibilityAndVisibleListing(t *testing.T) {
+	db := testDB(t)
+
+	admin, err := GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	alice, err := CreateUser(db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+
+	privateProject, err := CreateProjectWithParams(db, ProjectCreateParams{
+		Prefix:     "PRV",
+		Title:      "Private Project",
+		Visibility: ProjectVisibilityPrivate,
+		CreatedBy:  admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams(private) error = %v", err)
+	}
+	publicProject, err := CreateProjectWithParams(db, ProjectCreateParams{
+		Prefix:     "PUB",
+		Title:      "Public Project",
+		Visibility: ProjectVisibilityPublic,
+		CreatedBy:  admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams(public) error = %v", err)
+	}
+	if privateProject.Visibility != ProjectVisibilityPrivate {
+		t.Fatalf("privateProject.Visibility = %q, want %q", privateProject.Visibility, ProjectVisibilityPrivate)
+	}
+	if publicProject.Visibility != ProjectVisibilityPublic {
+		t.Fatalf("publicProject.Visibility = %q, want %q", publicProject.Visibility, ProjectVisibilityPublic)
+	}
+
+	visible, err := ListProjectsVisibleToUser(db, alice)
+	if err != nil {
+		t.Fatalf("ListProjectsVisibleToUser(alice) error = %v", err)
+	}
+	if len(visible) != 2 {
+		t.Fatalf("ListProjectsVisibleToUser(alice) len = %d, want 2 (default + public)", len(visible))
+	}
+	for _, project := range visible {
+		if project.ID == privateProject.ID {
+			t.Fatalf("private project should not be visible without membership")
+		}
+	}
+
+	if _, err := AddProjectMember(db, privateProject.ID, alice.ID, ProjectRoleViewer); err != nil {
+		t.Fatalf("AddProjectMember(viewer) error = %v", err)
+	}
+	visible, err = ListProjectsVisibleToUser(db, alice)
+	if err != nil {
+		t.Fatalf("ListProjectsVisibleToUser(alice, member) error = %v", err)
+	}
+	foundPrivate := false
+	for _, project := range visible {
+		if project.ID == privateProject.ID {
+			foundPrivate = true
+			break
+		}
+	}
+	if !foundPrivate {
+		t.Fatalf("private project should be visible once membership exists")
+	}
+}

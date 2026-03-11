@@ -46,6 +46,7 @@ type ProjectCreateRequest struct {
 	GitRepository      string `json:"git_repository"`
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
+	Visibility         string `json:"visibility"`
 }
 
 type ProjectUpdateRequest struct {
@@ -55,6 +56,7 @@ type ProjectUpdateRequest struct {
 	GitRepository      string `json:"git_repository"`
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
+	Visibility         string `json:"visibility"`
 }
 
 type ProjectMemberRequest struct {
