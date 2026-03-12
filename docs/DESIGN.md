@@ -646,6 +646,7 @@ The web UI should make these activities easy:
 - panels should not advertise or bind `Escape` for close behavior
 - manage agents from a custom profile-menu panel (list/create/update/enable/disable/delete)
 - add and edit items
+- ticket dialog presents a labeled form table with explicit `Field` and `Value` headers
 - view hierarchy
 - manage status on a board
 - inspect history and comments

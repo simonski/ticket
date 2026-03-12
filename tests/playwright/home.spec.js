@@ -15,6 +15,12 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await expect(page.locator("#login-pass")).toBeVisible();
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   await expect(page.locator("#login-user")).toBeFocused();
+  const ticketFormHeaders = await page.evaluate(() => {
+    const ths = Array.from(document.querySelectorAll("#ticket-modal thead th"));
+    return ths.map((th) => String(th.textContent || "").trim());
+  });
+  expect(ticketFormHeaders).toEqual(["Field", "Value"]);
+  await expect(page.locator("#ticket-modal")).toContainText("Ticket Form");
   await expect(page.locator('[data-left-panel-action="swimlanes"]')).toHaveText("board");
   await expect(page.getByText("kanban")).toHaveCount(0);
   await expect(page.locator("#perspective-btn")).toHaveCount(0);

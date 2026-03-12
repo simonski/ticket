@@ -583,6 +583,39 @@
       }
       .modal textarea { width: 100%; min-height: 120px; }
       .modal input, .modal select, .modal textarea { width: 100%; }
+      .form-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fffef9;
+      }
+      .form-table thead th {
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--line);
+        background: #f3eee3;
+      }
+      .form-table td {
+        vertical-align: top;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .form-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .form-table .field-label {
+        width: 32%;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .form-table .field-value {
+        width: 68%;
+      }
+      .ticket-form-actions {
+        margin-top: 0.65rem;
+      }
       .agent-list {
         margin-top: 0.7rem;
         max-height: 260px;
@@ -984,36 +1017,73 @@
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="modal-title">Ticket</strong>
         </div>
+        <div class="muted" style="margin-top:0.25rem;">Ticket Form</div>
         <div class="stack" style="margin-top:0.6rem;">
-          <input id="ticket-title" placeholder="title" />
-          <textarea id="ticket-description" placeholder="description"></textarea>
-          <textarea id="ticket-ac" placeholder="acceptance criteria"></textarea>
-          <div class="row">
-            <input id="ticket-git-repository" placeholder="git repository" />
-            <input id="ticket-git-branch" placeholder="git branch" />
-          </div>
-          <div class="row">
-            <select id="ticket-type">
-              <option value="task">task</option>
-              <option value="bug">bug</option>
-              <option value="chore">chore</option>
-              <option value="spike">spike</option>
-              <option value="epic">epic</option>
-            </select>
-            <select id="ticket-stage">
-              <option value="design">design</option>
-              <option value="develop">develop</option>
-              <option value="test">test</option>
-              <option value="done">done</option>
-            </select>
-            <select id="ticket-state">
-              <option value="idle">idle</option>
-              <option value="active">active</option>
-              <option value="success">success</option>
-              <option value="fail">fail</option>
-            </select>
-          </div>
-          <div class="row">
+          <table class="form-table" aria-label="Ticket fields">
+            <thead>
+              <tr>
+                <th scope="col">Field</th>
+                <th scope="col">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="field-label">Title</td>
+                <td class="field-value"><input id="ticket-title" placeholder="title" /></td>
+              </tr>
+              <tr>
+                <td class="field-label">Description</td>
+                <td class="field-value"><textarea id="ticket-description" placeholder="description"></textarea></td>
+              </tr>
+              <tr>
+                <td class="field-label">Acceptance Criteria</td>
+                <td class="field-value"><textarea id="ticket-ac" placeholder="acceptance criteria"></textarea></td>
+              </tr>
+              <tr>
+                <td class="field-label">Git Repository</td>
+                <td class="field-value"><input id="ticket-git-repository" placeholder="git repository" /></td>
+              </tr>
+              <tr>
+                <td class="field-label">Git Branch</td>
+                <td class="field-value"><input id="ticket-git-branch" placeholder="git branch" /></td>
+              </tr>
+              <tr>
+                <td class="field-label">Type</td>
+                <td class="field-value">
+                  <select id="ticket-type">
+                    <option value="task">task</option>
+                    <option value="bug">bug</option>
+                    <option value="chore">chore</option>
+                    <option value="spike">spike</option>
+                    <option value="epic">epic</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td class="field-label">Stage</td>
+                <td class="field-value">
+                  <select id="ticket-stage">
+                    <option value="design">design</option>
+                    <option value="develop">develop</option>
+                    <option value="test">test</option>
+                    <option value="done">done</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td class="field-label">State</td>
+                <td class="field-value">
+                  <select id="ticket-state">
+                    <option value="idle">idle</option>
+                    <option value="active">active</option>
+                    <option value="success">success</option>
+                    <option value="fail">fail</option>
+                  </select>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="row ticket-form-actions">
             <button id="ticket-delete" class="btn" type="button">Delete</button>
             <button id="ticket-close-open" class="btn" type="button">Close</button>
             <button id="ticket-archive" class="btn" type="button">Archive</button>
