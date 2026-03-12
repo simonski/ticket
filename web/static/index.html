@@ -101,6 +101,16 @@
         background: #ece5d9;
         color: var(--ink);
       }
+      .app.hidden .left-panel,
+      .app.hidden .left-panel-handle,
+      .app.hidden .left-panel-backdrop {
+        display: none !important;
+      }
+      .login-screen:not(.hidden) + .app .left-panel,
+      .login-screen:not(.hidden) + .app .left-panel-handle,
+      .login-screen:not(.hidden) + .app .left-panel-backdrop {
+        display: none !important;
+      }
       .app-head {
         position: sticky;
         top: 0;
