@@ -623,6 +623,7 @@ Requirements:
 - item detail view with history and comments
 - animated top banner:
   - left logo is an 8x8-per-character pixel morph between `ticket`, `tkt`, and `tket`
+  - logged-in header logo is capped to the section-selector width instead of stretching full-banner
   - morphing is continuous (no hard word switch) and uses perlin-style noise for hue/luminance drift
   - renderer uses a Three.js full-rectangle pass with nearest-neighbor pixel sampling
   - top-mid status strip uses a Three.js full-width/full-height rectangle and animated 8-bit activity pixels driven by websocket events
@@ -645,7 +646,8 @@ The web UI should make these activities easy:
   - the selector panel must support vertical scrolling when viewport height is constrained
 - the main content area should support vertical scrolling while preserving the sticky top banner and fixed section selector controls
 - panels should not advertise or bind `Escape` for close behavior
-- manage agents from a custom profile-menu panel (list/create/update/enable/disable/delete)
+- manage agents, roles, and teams from dedicated browser panels with selectable `card` or `list` layouts
+- clicking an agent/role/team browser item opens a popup editor for create/update actions
 - add and edit items
 - ticket dialog presents a labeled form table with explicit `Field` and `Value` headers
 - view hierarchy

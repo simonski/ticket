@@ -147,6 +147,46 @@ test("authenticated app opens the channel selector by default", async ({ page })
   expect(state.logoMaxWidth).toBe(state.selectorWidth);
 });
 
+test("management panels support card mode with popup editing", async ({ page }) => {
+  await page.goto("/");
+
+  const seeded = await page.evaluate(() => {
+    if (typeof showApp !== "function" || typeof switchPerspective !== "function") return false;
+    showApp("admin", "admin");
+    agents = [{ agent_id: 7, name: "Atlas", description: "Build agent", enabled: true, status: "idle" }];
+    roles = [{ role_id: 9, title: "Architect", motivation: "Shape systems", goals: "Reduce risk" }];
+    teams = [{ team_id: 5, name: "Platform", parent_team_id: null }];
+    setManagementMode("agents", "card");
+    setManagementMode("roles", "card");
+    setManagementMode("teams", "card");
+    renderAgentSelector();
+    renderRoleSelector();
+    renderTeamSelector();
+    renderAgentList();
+    renderRoleList();
+    renderTeamList();
+    return true;
+  });
+  expect(seeded).toBe(true);
+
+  await page.evaluate(() => switchPerspective("agents"));
+  await page.locator("#agent-list .management-card").first().click();
+  await expect(page.locator("#agent-modal-overlay")).toBeVisible();
+  await expect(page.locator("#agent-name")).toHaveValue("Atlas");
+
+  await page.evaluate(() => closeAgentModal());
+  await page.evaluate(() => switchPerspective("roles"));
+  await page.locator("#role-list .management-card").first().click();
+  await expect(page.locator("#role-modal-overlay")).toBeVisible();
+  await expect(page.locator("#role-title")).toHaveValue("Architect");
+
+  await page.evaluate(() => closeRoleModal());
+  await page.evaluate(() => switchPerspective("teams"));
+  await page.locator("#team-list .management-card").first().click();
+  await expect(page.locator("#team-modal-overlay")).toBeVisible();
+  await expect(page.locator("#team-name")).toHaveValue("Platform");
+});
+
 test("ticket modal scroll stays inside the popup", async ({ page }) => {
   await page.goto("/");
 

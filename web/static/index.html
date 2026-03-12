@@ -433,14 +433,126 @@
         display: grid;
         gap: 0.55rem;
       }
-      .management-host .modal {
-        width: 100%;
-        max-width: none;
-        background: transparent;
+      .management-host {
+        display: grid;
+        gap: 0.8rem;
+      }
+      .management-browser {
+        display: grid;
+        gap: 0.8rem;
+      }
+      .management-browser-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .management-browser-actions {
+        display: flex;
+        gap: 0.45rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .management-mode {
+        display: inline-flex;
+        padding: 0.2rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.78);
+      }
+      .management-mode .btn {
         border: 0;
-        border-radius: 0;
-        box-shadow: none;
-        padding: 0;
+        background: transparent;
+        padding: 0.3rem 0.7rem;
+      }
+      .management-mode .btn.active {
+        background: #1f2a44;
+        color: #fffef9;
+      }
+      .management-grid {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .management-grid.cards {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .management-grid.list {
+        grid-template-columns: 1fr;
+      }
+      .management-card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,240,229,0.96));
+        padding: 0.9rem;
+        cursor: pointer;
+        display: grid;
+        gap: 0.55rem;
+        box-shadow: 0 8px 22px rgba(28, 35, 51, 0.08);
+      }
+      .management-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 28px rgba(28, 35, 51, 0.12);
+      }
+      .management-card.selected {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(17, 100, 102, 0.16);
+      }
+      .management-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.7rem;
+      }
+      .management-card-title {
+        font-weight: 700;
+        font-size: 1rem;
+      }
+      .management-card-kicker {
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .management-card-meta {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+      }
+      .management-chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.18rem 0.55rem;
+        background: rgba(255,255,255,0.88);
+        color: var(--muted);
+        font-size: 0.76rem;
+      }
+      .management-card-body {
+        color: var(--ink);
+        font-size: 0.9rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+      .management-card-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .management-card-footer .muted {
+        font-size: 0.82rem;
+      }
+      .management-detail {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255,255,255,0.72);
+        padding: 0.8rem;
+        display: grid;
+        gap: 0.7rem;
+      }
+      .management-detail .stories-head {
+        margin-bottom: 0;
       }
       .story-row {
         border: 1px solid var(--line);
@@ -819,19 +931,72 @@
               <div class="stories-head">
                 <strong>Agents</strong>
               </div>
-              <div id="agents-panel-host" class="management-host"></div>
+              <div id="agents-panel-host" class="management-host">
+                <section class="management-browser">
+                  <div class="management-browser-head">
+                    <div class="muted">Browse agents as cards or rows. Click an item to edit it in a popup.</div>
+                    <div class="management-browser-actions">
+                      <div id="agents-mode" class="management-mode" aria-label="Agent layout">
+                        <button class="btn active" type="button" data-management-mode="card">cards</button>
+                        <button class="btn" type="button" data-management-mode="list">list</button>
+                      </div>
+                      <button id="agents-create" class="btn" type="button">New Agent</button>
+                    </div>
+                  </div>
+                  <div id="agent-list" class="management-grid cards"></div>
+                  <div id="agents-browser-status" class="muted"></div>
+                </section>
+              </div>
             </section>
             <section id="view-roles" class="perspective-view">
               <div class="stories-head">
                 <strong>Roles</strong>
               </div>
-              <div id="roles-panel-host" class="management-host"></div>
+              <div id="roles-panel-host" class="management-host">
+                <section class="management-browser">
+                  <div class="management-browser-head">
+                    <div class="muted">Browse role cards or a compact list. Click an item to edit it in a popup.</div>
+                    <div class="management-browser-actions">
+                      <div id="roles-mode" class="management-mode" aria-label="Role layout">
+                        <button class="btn active" type="button" data-management-mode="card">cards</button>
+                        <button class="btn" type="button" data-management-mode="list">list</button>
+                      </div>
+                      <button id="roles-create" class="btn" type="button">New Role</button>
+                    </div>
+                  </div>
+                  <div id="role-list" class="management-grid cards"></div>
+                  <div id="roles-browser-status" class="muted"></div>
+                </section>
+              </div>
             </section>
             <section id="view-teams" class="perspective-view">
               <div class="stories-head">
                 <strong>Teams</strong>
               </div>
-              <div id="teams-panel-host" class="management-host"></div>
+              <div id="teams-panel-host" class="management-host">
+                <section class="management-browser">
+                  <div class="management-browser-head">
+                    <div class="muted">Browse team cards or rows. Click a team to open its editor popup and refresh linked details below.</div>
+                    <div class="management-browser-actions">
+                      <div id="teams-mode" class="management-mode" aria-label="Team layout">
+                        <button class="btn active" type="button" data-management-mode="card">cards</button>
+                        <button class="btn" type="button" data-management-mode="list">list</button>
+                      </div>
+                      <button id="teams-create" class="btn" type="button">New Team</button>
+                    </div>
+                  </div>
+                  <div id="team-list" class="management-grid cards"></div>
+                  <div id="teams-browser-status" class="muted"></div>
+                </section>
+                <section class="management-detail">
+                  <div class="stories-head">
+                    <strong>Selected Team Details</strong>
+                  </div>
+                  <div id="team-members" class="agent-list"></div>
+                  <div id="team-agents" class="agent-list"></div>
+                  <div id="team-projects" class="agent-list"></div>
+                </section>
+              </div>
             </section>
             <section id="view-settings" class="perspective-view">
               <div class="stories-head">
@@ -943,7 +1108,6 @@
             <button id="agent-clear" class="btn" type="button">Clear</button>
           </div>
           <div id="agent-status" class="muted"></div>
-          <div id="agent-list" class="agent-list"></div>
         </div>
       </div>
     </div>
@@ -966,7 +1130,6 @@
             <button id="role-clear" class="btn" type="button">Clear</button>
           </div>
           <div id="role-status" class="muted"></div>
-          <div id="role-list" class="agent-list"></div>
         </div>
       </div>
     </div>
@@ -1012,10 +1175,6 @@
             <button id="team-project-add" class="btn" type="button">Add Project</button>
           </div>
           <div id="team-status" class="muted"></div>
-          <div id="team-list" class="agent-list"></div>
-          <div id="team-members" class="agent-list"></div>
-          <div id="team-agents" class="agent-list"></div>
-          <div id="team-projects" class="agent-list"></div>
         </div>
       </div>
     </div>
@@ -1236,6 +1395,9 @@
       const agentClearBtn = document.getElementById("agent-clear");
       const agentListEl = document.getElementById("agent-list");
       const agentStatusEl = document.getElementById("agent-status");
+      const agentCreateBtn = document.getElementById("agents-create");
+      const agentModeEl = document.getElementById("agents-mode");
+      const agentBrowserStatusEl = document.getElementById("agents-browser-status");
       const roleSelect = document.getElementById("role-select");
       const roleTitleInput = document.getElementById("role-title");
       const roleMotivationInput = document.getElementById("role-motivation");
@@ -1245,6 +1407,9 @@
       const roleClearBtn = document.getElementById("role-clear");
       const roleStatusEl = document.getElementById("role-status");
       const roleListEl = document.getElementById("role-list");
+      const roleCreateBtn = document.getElementById("roles-create");
+      const roleModeEl = document.getElementById("roles-mode");
+      const roleBrowserStatusEl = document.getElementById("roles-browser-status");
       const teamSelect = document.getElementById("team-select");
       const teamNameInput = document.getElementById("team-name");
       const teamParentSelect = document.getElementById("team-parent");
@@ -1264,7 +1429,17 @@
       const teamMembersEl = document.getElementById("team-members");
       const teamAgentsEl = document.getElementById("team-agents");
       const teamProjectsEl = document.getElementById("team-projects");
+      const teamCreateBtn = document.getElementById("teams-create");
+      const teamModeEl = document.getElementById("teams-mode");
+      const teamBrowserStatusEl = document.getElementById("teams-browser-status");
       const ticketAnalyseBtn = document.getElementById("ticket-analyse");
+      const MANAGEMENT_CARD = "card";
+      const MANAGEMENT_LIST = "list";
+      const managementViewMode = {
+        agents: localStorage.getItem("ticket-management-mode-agents") || MANAGEMENT_CARD,
+        roles: localStorage.getItem("ticket-management-mode-roles") || MANAGEMENT_CARD,
+        teams: localStorage.getItem("ticket-management-mode-teams") || MANAGEMENT_CARD,
+      };
 
       function isAppVisible() {
         return !mainContent.classList.contains("hidden");
@@ -1279,9 +1454,6 @@
 
       function mountPanelContentViews() {
         const placements = [
-          { modalID: "agent-modal", host: agentsPanelHost },
-          { modalID: "role-modal", host: rolesPanelHost },
-          { modalID: "team-modal", host: teamsPanelHost },
           { modalID: "settings-modal", host: settingsPanelHost },
         ];
         for (const { modalID, host } of placements) {
@@ -1289,6 +1461,21 @@
           if (!modal || !host || modal.parentElement === host) continue;
           host.appendChild(modal);
         }
+      }
+
+      function setManagementMode(kind, mode) {
+        managementViewMode[kind] = mode === MANAGEMENT_LIST ? MANAGEMENT_LIST : MANAGEMENT_CARD;
+        localStorage.setItem(`ticket-management-mode-${kind}`, managementViewMode[kind]);
+      }
+
+      function syncManagementModeButtons(kind, root, listEl) {
+        if (!root || !listEl) return;
+        const mode = managementViewMode[kind] === MANAGEMENT_LIST ? MANAGEMENT_LIST : MANAGEMENT_CARD;
+        listEl.classList.toggle("cards", mode === MANAGEMENT_CARD);
+        listEl.classList.toggle("list", mode === MANAGEMENT_LIST);
+        root.querySelectorAll("[data-management-mode]").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.managementMode === mode);
+        });
       }
 
       function populateSettingsPanel() {
@@ -1384,7 +1571,6 @@
           switchPerspective("agents");
           setLeftPanelActive("agents");
           await loadAgents();
-          agentNameInput.focus();
           return;
         }
         if (action === "roles") {
@@ -1395,7 +1581,6 @@
           switchPerspective("roles");
           setLeftPanelActive("roles");
           await loadRoles();
-          roleTitleInput.focus();
           return;
         }
         if (action === "teams") {
@@ -1407,7 +1592,6 @@
           setLeftPanelActive("teams");
           await loadTeams();
           await refreshSelectedTeamDetails();
-          teamNameInput.focus();
           return;
         }
         if (action === "settings") {
@@ -2628,6 +2812,7 @@
         agentPasswordInput.value = "";
         if (agentSelect) agentSelect.value = "";
         agentSaveBtn.textContent = "Create Agent";
+        if (agentListEl) renderAgentList();
       }
 
       function renderAgentSelector(selectedID = 0) {
@@ -2648,6 +2833,10 @@
         agentStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
       }
 
+      function setAgentBrowserStatus(message = "") {
+        if (agentBrowserStatusEl) agentBrowserStatusEl.textContent = message;
+      }
+
       function selectAgent(agent) {
         selectedAgentID = Number(agent.agent_id || 0);
         agentNameInput.value = agent.name || "";
@@ -2658,27 +2847,58 @@
         renderAgentList();
       }
 
+      function openAgentEditor(agent = null) {
+        if (agent) {
+          selectAgent(agent);
+        } else {
+          resetAgentForm();
+        }
+        setAgentStatus("");
+        agentModalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        agentNameInput.focus();
+      }
+
       function renderAgentList() {
         agentListEl.innerHTML = "";
+        syncManagementModeButtons("agents", agentModeEl, agentListEl);
         if (!agents.length) {
           const empty = document.createElement("div");
-          empty.className = "agent-row";
+          empty.className = "management-card";
           empty.textContent = "No agents";
           agentListEl.appendChild(empty);
           return;
         }
+        const mode = managementViewMode.agents === MANAGEMENT_LIST ? MANAGEMENT_LIST : MANAGEMENT_CARD;
         for (const agent of agents) {
-          const row = document.createElement("div");
-          row.className = "agent-row";
-          if (Number(agent.agent_id) === Number(selectedAgentID)) row.classList.add("selected");
-          row.innerHTML = `
-            <div>#${escape(agent.agent_id)}</div>
-            <div><strong>${escape(agent.name || "")}</strong><div class="muted">${escape(agent.description || "")}</div></div>
-            <div>${escape(agent.enabled ? (agent.status || "idle") : "disabled")}</div>
-            <div class="agent-actions"></div>
-          `;
-          row.addEventListener("click", () => selectAgent(agent));
-          const actionWrap = row.querySelector(".agent-actions");
+          const item = document.createElement("div");
+          item.className = mode === MANAGEMENT_LIST ? "agent-row" : "management-card";
+          if (Number(agent.agent_id) === Number(selectedAgentID)) item.classList.add("selected");
+          if (mode === MANAGEMENT_LIST) {
+            item.innerHTML = `
+              <div>#${escape(agent.agent_id)}</div>
+              <div><strong>${escape(agent.name || "")}</strong><div class="muted">${escape(agent.description || "")}</div></div>
+              <div>${escape(agent.enabled ? (agent.status || "idle") : "disabled")}</div>
+              <div class="agent-actions"></div>
+            `;
+          } else {
+            item.innerHTML = `
+              <div class="management-card-head">
+                <div>
+                  <div class="management-card-kicker">Agent #${escape(agent.agent_id)}</div>
+                  <div class="management-card-title">${escape(agent.name || "")}</div>
+                </div>
+                <div class="management-chip">${escape(agent.enabled ? (agent.status || "idle") : "disabled")}</div>
+              </div>
+              <div class="management-card-body">${escape(agent.description || "No description")}</div>
+              <div class="management-card-footer">
+                <div class="muted">${escape(agent.enabled ? "click to edit" : "disabled")}</div>
+                <div class="agent-actions"></div>
+              </div>
+            `;
+          }
+          item.addEventListener("click", () => openAgentEditor(agent));
+          const actionWrap = item.querySelector(".agent-actions");
 
           const toggle = document.createElement("button");
           toggle.className = "btn";
@@ -2712,7 +2932,7 @@
             }
           });
           actionWrap.appendChild(remove);
-          agentListEl.appendChild(row);
+          agentListEl.appendChild(item);
         }
       }
 
@@ -2724,6 +2944,7 @@
         }
         renderAgentSelector(selectedAgentID);
         renderAgentList();
+        setAgentBrowserStatus(agents.length ? `${agents.length} agent${agents.length === 1 ? "" : "s"}` : "No agents yet.");
       }
 
       async function syncAgentsForAnimator() {
@@ -2740,13 +2961,10 @@
       }
 
       async function openAgentModal() {
-        resetAgentForm();
-        setAgentStatus("");
         try {
           await loadAgents();
           switchPerspective("agents");
           setLeftPanelActive("agents");
-          agentNameInput.focus();
         } catch (err) {
           await uiAlert(`Unable to load agents: ${err.message}`);
         }
@@ -2754,6 +2972,7 @@
 
       function closeAgentModal() {
         agentModalOverlay.classList.add("hidden");
+        document.body.classList.remove("modal-open");
       }
 
       agentSaveBtn.addEventListener("click", async () => {
@@ -2793,6 +3012,13 @@
         resetAgentForm();
         setAgentStatus("");
       });
+      agentCreateBtn.addEventListener("click", () => openAgentEditor());
+      agentModeEl.querySelectorAll("[data-management-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setManagementMode("agents", btn.dataset.managementMode || MANAGEMENT_CARD);
+          renderAgentList();
+        });
+      });
       if (agentSelect) {
         agentSelect.addEventListener("change", () => {
           const id = Number(agentSelect.value || 0);
@@ -2802,7 +3028,7 @@
             return;
           }
           const chosen = agents.find((agent) => Number(agent.agent_id) === id);
-          if (chosen) selectAgent(chosen);
+          if (chosen) openAgentEditor(chosen);
         });
       }
       agentModalOverlay.addEventListener("click", (event) => {
@@ -2814,6 +3040,10 @@
         roleStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
       }
 
+      function setRoleBrowserStatus(message = "") {
+        if (roleBrowserStatusEl) roleBrowserStatusEl.textContent = message;
+      }
+
       function resetRoleForm() {
         selectedRoleID = 0;
         roleTitleInput.value = "";
@@ -2822,6 +3052,7 @@
         roleSaveBtn.textContent = "Create Role";
         roleDeleteBtn.disabled = true;
         roleSelect.value = "";
+        if (roleListEl) renderRoleList();
       }
 
       function renderRoleSelector(selectedID = 0) {
@@ -2847,31 +3078,62 @@
         renderRoleList();
       }
 
+      function openRoleEditor(role = null) {
+        if (role) {
+          selectRole(role);
+        } else {
+          resetRoleForm();
+        }
+        setRoleStatus("");
+        roleModalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        roleTitleInput.focus();
+      }
+
       function renderRoleList() {
         roleListEl.innerHTML = "";
+        syncManagementModeButtons("roles", roleModeEl, roleListEl);
         if (!roles.length) {
           const empty = document.createElement("div");
-          empty.className = "agent-row";
+          empty.className = "management-card";
           empty.textContent = "No roles";
           roleListEl.appendChild(empty);
           return;
         }
+        const mode = managementViewMode.roles === MANAGEMENT_LIST ? MANAGEMENT_LIST : MANAGEMENT_CARD;
         for (const role of roles) {
-          const row = document.createElement("div");
-          row.className = "agent-row";
-          if (Number(role.role_id) === Number(selectedRoleID)) row.classList.add("selected");
-          row.innerHTML = `
-            <div>#${escape(role.role_id)}</div>
-            <div><strong>${escape(role.title || "")}</strong><div class="muted">${escape(role.motivation || "")}</div></div>
-            <div></div>
-            <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
-          `;
-          row.addEventListener("click", () => selectRole(role));
-          row.querySelector("button").addEventListener("click", (event) => {
+          const item = document.createElement("div");
+          item.className = mode === MANAGEMENT_LIST ? "agent-row" : "management-card";
+          if (Number(role.role_id) === Number(selectedRoleID)) item.classList.add("selected");
+          if (mode === MANAGEMENT_LIST) {
+            item.innerHTML = `
+              <div>#${escape(role.role_id)}</div>
+              <div><strong>${escape(role.title || "")}</strong><div class="muted">${escape(role.motivation || "")}</div></div>
+              <div></div>
+              <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
+            `;
+          } else {
+            item.innerHTML = `
+              <div class="management-card-head">
+                <div>
+                  <div class="management-card-kicker">Role #${escape(role.role_id)}</div>
+                  <div class="management-card-title">${escape(role.title || "")}</div>
+                </div>
+                <div class="management-chip">persona</div>
+              </div>
+              <div class="management-card-body">${escape(role.motivation || "No motivation set")}</div>
+              <div class="management-card-footer">
+                <div class="muted">${escape(role.goals || "Click to edit goals")}</div>
+                <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
+              </div>
+            `;
+          }
+          item.addEventListener("click", () => openRoleEditor(role));
+          item.querySelector("button").addEventListener("click", (event) => {
             event.stopPropagation();
-            selectRole(role);
+            openRoleEditor(role);
           });
-          roleListEl.appendChild(row);
+          roleListEl.appendChild(item);
         }
       }
 
@@ -2880,16 +3142,14 @@
         roles = Array.isArray(list) ? list : [];
         renderRoleSelector(selectedRoleID);
         renderRoleList();
+        setRoleBrowserStatus(roles.length ? `${roles.length} role${roles.length === 1 ? "" : "s"}` : "No roles yet.");
       }
 
       async function openRoleModal() {
-        resetRoleForm();
-        setRoleStatus("");
         try {
           await loadRoles();
           switchPerspective("roles");
           setLeftPanelActive("roles");
-          roleTitleInput.focus();
         } catch (err) {
           await uiAlert(`Unable to load roles: ${err.message}`);
         }
@@ -2897,6 +3157,7 @@
 
       function closeRoleModal() {
         roleModalOverlay.classList.add("hidden");
+        document.body.classList.remove("modal-open");
       }
 
       roleSaveBtn.addEventListener("click", async () => {
@@ -2950,6 +3211,13 @@
         resetRoleForm();
         setRoleStatus("");
       });
+      roleCreateBtn.addEventListener("click", () => openRoleEditor());
+      roleModeEl.querySelectorAll("[data-management-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setManagementMode("roles", btn.dataset.managementMode || MANAGEMENT_CARD);
+          renderRoleList();
+        });
+      });
 
       roleSelect.addEventListener("change", () => {
         const id = Number(roleSelect.value || 0);
@@ -2959,7 +3227,7 @@
           return;
         }
         const chosen = roles.find((role) => Number(role.role_id) === id);
-        if (chosen) selectRole(chosen);
+        if (chosen) openRoleEditor(chosen);
       });
 
       roleModalOverlay.addEventListener("click", (event) => {
@@ -2978,6 +3246,11 @@
         teamSaveBtn.textContent = "Create Team";
         teamDeleteBtn.disabled = true;
         teamSelect.value = "";
+        if (teamListEl) renderTeamList();
+      }
+
+      function setTeamBrowserStatus(message = "") {
+        if (teamBrowserStatusEl) teamBrowserStatusEl.textContent = message;
       }
 
       function renderTeamSelector() {
@@ -3010,33 +3283,68 @@
         teamSaveBtn.textContent = "Update Team";
         teamDeleteBtn.disabled = !selectedTeamID;
         teamSelect.value = String(selectedTeamID || "");
+        renderTeamList();
+      }
+
+      async function openTeamEditor(team = null) {
+        if (team) {
+          selectTeam(team);
+          await refreshSelectedTeamDetails();
+        } else {
+          resetTeamForm();
+        }
+        setTeamStatus("");
+        teamModalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        teamNameInput.focus();
       }
 
       function renderTeamList() {
         teamListEl.innerHTML = "";
+        syncManagementModeButtons("teams", teamModeEl, teamListEl);
         if (!teams.length) {
           const empty = document.createElement("div");
-          empty.className = "agent-row";
+          empty.className = "management-card";
           empty.textContent = "No teams";
           teamListEl.appendChild(empty);
           return;
         }
+        const mode = managementViewMode.teams === MANAGEMENT_LIST ? MANAGEMENT_LIST : MANAGEMENT_CARD;
         for (const team of teams) {
-          const row = document.createElement("div");
-          row.className = "agent-row";
-          if (Number(team.team_id) === Number(selectedTeamID)) row.classList.add("selected");
-          row.innerHTML = `
-            <div>#${escape(team.team_id)}</div>
-            <div><strong>${escape(team.name || "")}</strong><div class="muted">parent: ${escape(team.parent_team_id || "-")}</div></div>
-            <div>team</div>
-            <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
-          `;
-          row.addEventListener("click", () => selectTeam(team));
-          row.querySelector("button").addEventListener("click", (event) => {
+          const item = document.createElement("div");
+          item.className = mode === MANAGEMENT_LIST ? "agent-row" : "management-card";
+          if (Number(team.team_id) === Number(selectedTeamID)) item.classList.add("selected");
+          if (mode === MANAGEMENT_LIST) {
+            item.innerHTML = `
+              <div>#${escape(team.team_id)}</div>
+              <div><strong>${escape(team.name || "")}</strong><div class="muted">parent: ${escape(team.parent_team_id || "-")}</div></div>
+              <div>team</div>
+              <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
+            `;
+          } else {
+            item.innerHTML = `
+              <div class="management-card-head">
+                <div>
+                  <div class="management-card-kicker">Team #${escape(team.team_id)}</div>
+                  <div class="management-card-title">${escape(team.name || "")}</div>
+                </div>
+                <div class="management-chip">team</div>
+              </div>
+              <div class="management-card-meta">
+                <div class="management-chip">parent: ${escape(team.parent_team_id || "-")}</div>
+              </div>
+              <div class="management-card-footer">
+                <div class="muted">Click to edit and inspect members, agents, and projects.</div>
+                <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
+              </div>
+            `;
+          }
+          item.addEventListener("click", () => { void openTeamEditor(team); });
+          item.querySelector("button").addEventListener("click", (event) => {
             event.stopPropagation();
-            selectTeam(team);
+            void openTeamEditor(team);
           });
-          teamListEl.appendChild(row);
+          teamListEl.appendChild(item);
         }
       }
 
@@ -3045,13 +3353,26 @@
         teams = Array.isArray(list) ? list : [];
         renderTeamSelector();
         renderTeamList();
+        setTeamBrowserStatus(teams.length ? `${teams.length} team${teams.length === 1 ? "" : "s"}` : "No teams yet.");
       }
 
       async function refreshSelectedTeamDetails() {
         teamMembersEl.innerHTML = "";
         teamAgentsEl.innerHTML = "";
         teamProjectsEl.innerHTML = "";
-        if (!selectedTeamID) return;
+        if (!selectedTeamID) {
+          for (const [el, message] of [
+            [teamMembersEl, "Select a team to view users"],
+            [teamAgentsEl, "Select a team to view linked agents"],
+            [teamProjectsEl, "Select a team to view project assignments"],
+          ]) {
+            const empty = document.createElement("div");
+            empty.className = "agent-row";
+            empty.textContent = message;
+            el.appendChild(empty);
+          }
+          return;
+        }
 
         try {
           const members = await call(`/api/teams/${selectedTeamID}/users`, { headers: headers() });
@@ -3149,13 +3470,11 @@
 
       async function openTeamModal() {
         setTeamStatus("");
-        resetTeamForm();
         try {
           await loadTeams();
           await refreshSelectedTeamDetails();
           switchPerspective("teams");
           setLeftPanelActive("teams");
-          teamNameInput.focus();
         } catch (err) {
           await uiAlert(`Unable to load teams: ${err.message}`);
         }
@@ -3163,6 +3482,7 @@
 
       function closeTeamModal() {
         teamModalOverlay.classList.add("hidden");
+        document.body.classList.remove("modal-open");
       }
 
       teamSaveBtn.addEventListener("click", async () => {
@@ -3221,8 +3541,14 @@
         }
         const team = teams.find((item) => Number(item.team_id) === id);
         if (!team) return;
-        selectTeam(team);
-        await refreshSelectedTeamDetails();
+        await openTeamEditor(team);
+      });
+      teamCreateBtn.addEventListener("click", () => { void openTeamEditor(); });
+      teamModeEl.querySelectorAll("[data-management-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setManagementMode("teams", btn.dataset.managementMode || MANAGEMENT_CARD);
+          renderTeamList();
+        });
       });
 
       teamMemberAddBtn.addEventListener("click", async () => {

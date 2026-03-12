@@ -559,8 +559,11 @@ Keyboard shortcuts in the board view:
 - websocket change messages include `entity_type`, `entity_id`, and `change_type` indicators (legacy `type` remains present for compatibility)
 - the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
 - if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
-- profile menu includes an `Agents` panel to list/create/update/enable/disable/delete agents using the same API
-- profile menu includes a `Roles` panel to list/create/update/delete role personas (`title`, `motivation`, `goals`)
+- profile menu includes `Agents`, `Roles`, and `Teams` browser panels
+- each management panel can switch between `card` and `list` layouts
+- clicking an agent, role, or team item opens a popup editor for create/update work
+- agents support create/update/enable/disable/delete using the same API
+- roles support create/update/delete role personas (`title`, `motivation`, `goals`)
 - seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
