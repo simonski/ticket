@@ -147,6 +147,67 @@ test("authenticated app opens the channel selector by default", async ({ page })
   expect(state.logoMaxWidth).toBe(state.selectorWidth);
 });
 
+test("ticket modal scroll stays inside the popup", async ({ page }) => {
+  await page.goto("/");
+
+  const scrollState = await page.evaluate(() => {
+    if (typeof showApp !== "function" || typeof openEdit !== "function") return null;
+    showApp("alice", "user");
+    const mainContent = document.getElementById("main-content");
+    const modal = document.getElementById("ticket-modal");
+    if (!mainContent || !modal) return null;
+    const mainFiller = document.createElement("div");
+    mainFiller.id = "main-scroll-filler";
+    mainFiller.style.height = "2000px";
+    mainContent.appendChild(mainFiller);
+    mainContent.scrollTop = 180;
+    openEdit({
+      ticket_id: 101,
+      key: "TK-101",
+      type: "task",
+      title: "Scroll Test",
+      description: "",
+      acceptance_criteria: "",
+      git_repository: "",
+      git_branch: "",
+      stage: "design",
+      state: "idle",
+      open: true,
+      archived: false,
+    });
+    const formTable = modal.querySelector(".form-table");
+    if (!formTable) return null;
+    const filler = document.createElement("div");
+    filler.id = "modal-scroll-filler";
+    filler.style.height = "1600px";
+    filler.setAttribute("data-testid", "modal-scroll-filler");
+    formTable.after(filler);
+    const modalStyle = window.getComputedStyle(modal);
+    const mainStyle = window.getComputedStyle(mainContent);
+    modal.scrollTop = 320;
+    const result = {
+      mainOverflowY: mainStyle.overflowY,
+      mainScrollTop: mainContent.scrollTop,
+      modalOverflowY: modalStyle.overflowY,
+      modalScrollTop: modal.scrollTop,
+      modalScrollHeight: modal.scrollHeight,
+      modalClientHeight: modal.clientHeight,
+    };
+    const fillerNode = document.getElementById("modal-scroll-filler");
+    if (fillerNode) fillerNode.remove();
+    const mainFillerNode = document.getElementById("main-scroll-filler");
+    if (mainFillerNode) mainFillerNode.remove();
+    return result;
+  });
+
+  expect(scrollState).not.toBeNull();
+  expect(scrollState.mainOverflowY).toBe("hidden");
+  expect(scrollState.mainScrollTop).toBe(180);
+  expect(scrollState.modalOverflowY).toBe("auto");
+  expect(scrollState.modalScrollHeight).toBeGreaterThan(scrollState.modalClientHeight);
+  expect(scrollState.modalScrollTop).toBeGreaterThan(0);
+});
+
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
   await page.goto("/");
 

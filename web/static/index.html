@@ -26,6 +26,7 @@
       html, body { margin: 0; height: 100%; font-family: Georgia, "Times New Roman", serif; }
       button, input, textarea, select { font: inherit; }
       .hidden { display: none !important; }
+      body.modal-open { overflow: hidden; }
 
       .login-screen {
         min-height: 100vh;
@@ -220,6 +221,9 @@
         overflow-x: hidden;
         position: relative;
         transition: margin-left 220ms ease;
+      }
+      .main-content.modal-open {
+        overflow: hidden;
       }
       .app-shell.panel-open .main-content {
         margin-left: calc(var(--left-panel-width) + var(--left-panel-handle-width));
@@ -590,6 +594,7 @@
         display: grid;
         place-items: center;
         z-index: 10;
+        padding: 1rem;
       }
       .modal {
         width: min(640px, 92vw);
@@ -597,6 +602,9 @@
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 0.8rem;
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       .modal textarea { width: 100%; min-height: 120px; }
       .modal input, .modal select, .modal textarea { width: 100%; }
@@ -3901,6 +3909,8 @@
 
       function closeModal() {
         modalOverlay.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+        mainContent.classList.remove("modal-open");
         draft = null;
         clearTimeout(autosaveTimer);
         autosaveTimer = null;
@@ -3923,6 +3933,8 @@
           archived: false,
         });
         modalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        mainContent.classList.add("modal-open");
         document.getElementById("ticket-title").focus();
       }
 
@@ -3931,6 +3943,8 @@
         modalTitle.textContent = ticket.key || `Ticket #${ticket.ticket_id}`;
         setModalValues(ticket);
         modalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        mainContent.classList.add("modal-open");
         document.getElementById("ticket-title").focus();
       }
 
