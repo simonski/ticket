@@ -116,6 +116,37 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
 
+test("authenticated app opens the channel selector by default", async ({ page }) => {
+  await page.goto("/");
+
+  const state = await page.evaluate(() => {
+    localStorage.setItem("left-panel-open", "0");
+    if (typeof showApp !== "function") return null;
+    showApp("alice", "user");
+    const leftPanel = document.getElementById("left-panel");
+    const appShell = document.getElementById("app-shell");
+    const handle = document.getElementById("left-panel-handle");
+    const logo = document.getElementById("pixel-logo");
+    if (!leftPanel || !appShell || !handle || !logo) return null;
+    const rootStyle = window.getComputedStyle(document.documentElement);
+    const selectorWidth = parseFloat(rootStyle.getPropertyValue("--left-panel-width")) || 0;
+    const logoStyle = window.getComputedStyle(logo);
+    return {
+      leftPanelOpen: leftPanel.classList.contains("open"),
+      shellOpen: appShell.classList.contains("panel-open"),
+      handleLabel: String(handle.textContent || "").trim(),
+      logoMaxWidth: parseFloat(logoStyle.maxWidth) || 0,
+      selectorWidth,
+    };
+  });
+
+  expect(state).not.toBeNull();
+  expect(state.leftPanelOpen).toBe(true);
+  expect(state.shellOpen).toBe(true);
+  expect(state.handleLabel).toBe("minimise");
+  expect(state.logoMaxWidth).toBe(state.selectorWidth);
+});
+
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
   await page.goto("/");
 

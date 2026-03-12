@@ -126,7 +126,14 @@
       }
       .app-head-banner { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; overflow: hidden; background: var(--banner-bg); }
       .app-head-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
-      #pixel-logo { display: block; image-rendering: pixelated; cursor: default; height: 46px; width: 100%; }
+      #pixel-logo {
+        display: block;
+        image-rendering: pixelated;
+        cursor: default;
+        height: 46px;
+        width: 100%;
+        max-width: var(--left-panel-width);
+      }
 
       /* custom project dropdown */
       .proj-dropdown { position: relative; }
@@ -1260,7 +1267,6 @@
         appShell.classList.toggle("panel-open", open);
         leftPanelHandleBtn.setAttribute("aria-expanded", open ? "true" : "false");
         leftPanelHandleBtn.textContent = open ? "minimise" : "grow";
-        localStorage.setItem("left-panel-open", open ? "1" : "0");
       }
 
       function mountPanelContentViews() {
@@ -2567,11 +2573,7 @@
       document.getElementById("profile-wrap").addEventListener("click", (e) => e.stopPropagation());
       leftPanel.addEventListener("click", (e) => e.stopPropagation());
 
-      const savedLeftPanelState = localStorage.getItem("left-panel-open");
-      const shouldOpenLeftPanel = savedLeftPanelState === null
-        ? true
-        : savedLeftPanelState === "1";
-      setLeftPanelOpen(shouldOpenLeftPanel);
+      setLeftPanelOpen(true);
       mountPanelContentViews();
 
       let projects = [];
@@ -3476,6 +3478,7 @@
         leftPanel.classList.remove("hidden");
         leftPanelHandleBtn.classList.remove("hidden");
         leftPanelBackdrop.classList.remove("hidden");
+        setLeftPanelOpen(true);
         newTicketBtn.classList.remove("hidden");
         appStatus.textContent = "";
         const initials = (username || "?").slice(0, 2).toUpperCase();
