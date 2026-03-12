@@ -15,6 +15,7 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   await expect(page.locator("#login-pass")).toBeVisible();
   await expect(page.getByRole("button", { name: "Login" })).toBeVisible();
   await expect(page.locator("#login-user")).toBeFocused();
+  await expect(page.locator("#left-panel-handle")).toBeHidden();
   const ticketFormHeaders = await page.evaluate(() => {
     const ths = Array.from(document.querySelectorAll("#ticket-modal thead th"));
     return ths.map((th) => String(th.textContent || "").trim());

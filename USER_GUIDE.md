@@ -538,6 +538,7 @@ Use it for:
    - `teams`
    - `settings`
    - `chat`
+   - unavailable on the login page; it appears only after authentication
    - panel is visible by default and can be collapsed/expanded only via the `sections` minimise/grow control
    - when the viewport is short, the `sections` panel can scroll vertically so all selector items remain reachable
 8. scrolling project content vertically in the main panel while the top banner and section selector controls stay visible

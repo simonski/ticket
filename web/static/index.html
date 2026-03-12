@@ -762,7 +762,7 @@
 
     <section id="app" class="app hidden">
       <div id="app-shell" class="app-shell">
-        <aside id="left-panel" class="left-panel" aria-label="Main sections">
+        <aside id="left-panel" class="left-panel hidden" aria-label="Main sections">
           <nav class="left-panel-nav">
             <button type="button" class="left-panel-item" data-left-panel-action="stories">stories</button>
             <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">board</button>
@@ -773,8 +773,8 @@
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
           </nav>
         </aside>
-        <button id="left-panel-handle" class="left-panel-handle" type="button">sections</button>
-        <div id="left-panel-backdrop" class="left-panel-backdrop"></div>
+        <button id="left-panel-handle" class="left-panel-handle hidden" type="button">sections</button>
+        <div id="left-panel-backdrop" class="left-panel-backdrop hidden"></div>
         <div id="main-content" class="main-content hidden">
           <main id="perspective-stage" class="perspective-stage">
             <section id="view-swimlanes" class="perspective-view active">
@@ -3443,6 +3443,9 @@
         appHead.classList.add("hidden");
         loginScreen.classList.remove("hidden");
         mainContent.classList.add("hidden");
+        leftPanel.classList.add("hidden");
+        leftPanelHandleBtn.classList.add("hidden");
+        leftPanelBackdrop.classList.add("hidden");
         newTicketBtn.classList.add("hidden");
         const cleaned = String(message || "").replace(/logged out/ig, "").replace(/please log in/ig, "").trim();
         loginStatus.textContent = cleaned;
@@ -3460,6 +3463,9 @@
         currentUserRole = String(role || "").toLowerCase();
         loginScreen.classList.add("hidden");
         mainContent.classList.remove("hidden");
+        leftPanel.classList.remove("hidden");
+        leftPanelHandleBtn.classList.remove("hidden");
+        leftPanelBackdrop.classList.remove("hidden");
         newTicketBtn.classList.remove("hidden");
         appStatus.textContent = "";
         const initials = (username || "?").slice(0, 2).toUpperCase();

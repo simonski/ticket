@@ -640,6 +640,7 @@ The web UI should make these activities easy:
   - `teams`
   - `settings`
   - `chat`
+  - hidden on the login screen and shown only after authentication
   - defaults to open and remains open unless the user explicitly toggles `sections` minimise/grow
   - the selector panel must support vertical scrolling when viewport height is constrained
 - the main content area should support vertical scrolling while preserving the sticky top banner and fixed section selector controls
