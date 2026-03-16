@@ -4,7 +4,7 @@ commands.sh
 commands2.sh
 ./tk
 ./task
-ticket
+/ticket
 backup.json
 ./parser
 ./wiggum
