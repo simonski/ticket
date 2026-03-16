@@ -198,21 +198,25 @@ func resolveRequestLifecycle(status, stage, state string) (string, string, error
 }
 
 func New(cfg config.Config) *Client {
-	mode, err := config.ResolveMode()
+	resolved, err := config.ResolveURL()
 	if err != nil {
-		mode = config.ModeLocal
+		resolved = config.Resolved{Mode: config.ModeLocal}
+	}
+	baseURL := strings.TrimRight(resolved.ServerURL, "/")
+	if baseURL == "" && cfg.ServerURL != "" {
+		baseURL = strings.TrimRight(cfg.ServerURL, "/")
 	}
 	return &Client{
-		baseURL: strings.TrimRight(config.ResolveServerURL(cfg), "/"),
+		baseURL: baseURL,
 		token:   cfg.Token,
 		http:    http.DefaultClient,
-		mode:    mode,
+		mode:    resolved.Mode,
 	}
 }
 
 func (c *Client) Register(username, password string) (store.User, error) {
 	if c.mode == config.ModeLocal {
-		return store.User{}, errors.New("ticket register requires TICKET_MODE=remote")
+		return store.User{}, errors.New("ticket register requires TICKET_URL=http(s)://...")
 	}
 	var user store.User
 	err := c.doJSON(http.MethodPost, "/api/register", map[string]string{
@@ -224,7 +228,7 @@ func (c *Client) Register(username, password string) (store.User, error) {
 
 func (c *Client) Login(username, password string) (AuthResponse, error) {
 	if c.mode == config.ModeLocal {
-		return AuthResponse{}, errors.New("ticket login requires TICKET_MODE=remote")
+		return AuthResponse{}, errors.New("ticket login requires TICKET_URL=http(s)://...")
 	}
 	var response AuthResponse
 	err := c.doJSON(http.MethodPost, "/api/login", map[string]string{
@@ -236,21 +240,21 @@ func (c *Client) Login(username, password string) (AuthResponse, error) {
 
 func (c *Client) Logout() error {
 	if c.mode == config.ModeLocal {
-		return errors.New("ticket logout requires TICKET_MODE=remote")
+		return errors.New("ticket logout requires TICKET_URL=http(s)://...")
 	}
 	return c.doJSON(http.MethodPost, "/api/logout", nil, nil)
 }
 
 func (c *Client) Status() (StatusResponse, error) {
 	if c.mode == config.ModeLocal {
-		dbPath, err := config.ResolveDatabasePath()
+		resolved, err := config.ResolveURL()
 		if err != nil {
 			return StatusResponse{}, err
 		}
-		if _, err := os.Stat(dbPath); err != nil {
+		if _, err := os.Stat(resolved.DBPath); err != nil {
 			return StatusResponse{}, err
 		}
-		db, err := store.Open(dbPath)
+		db, err := store.Open(resolved.DBPath)
 		if err != nil {
 			return StatusResponse{}, err
 		}
@@ -1427,11 +1431,11 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 }
 
 func (c *Client) openLocalDB() (*sql.DB, error) {
-	path, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return nil, err
 	}
-	return store.Open(path)
+	return store.Open(resolved.DBPath)
 }
 
 func (c *Client) localUser(db *sql.DB) (store.User, error) {

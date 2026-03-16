@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	osuser "os/user"
 	"sort"
 	"strconv"
@@ -121,23 +122,23 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "ticket init [-f <db-path>] [--force] [-password <password>] [--populate]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database is created at `$TICKET_HOME/ticket.db`.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
-		example: "ticket init -f $TICKET_HOME/ticket.db --force -password secret --populate",
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_URL (default: ~/.config/ticket/ticket.db).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
+		example: "ticket init -f /path/to/ticket.db --force -password secret --populate",
 	},
 	"export": {
 		usage:   "ticket export [-o <snapshot-file>]",
-		details: []string{"LOCAL mode only. Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
+		details: []string{"Local mode only (TICKET_URL=file://...). Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
 		example: "ticket export -o ./ticket-snapshot.json",
 	},
 	"import": {
 		usage:   "ticket import -i <snapshot-file>",
-		details: []string{"LOCAL mode only. Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
+		details: []string{"Local mode only (TICKET_URL=file://...). Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
 		example: "ticket import -i ./ticket-snapshot.json",
 	},
 	"server": {
 		usage:   "ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses `$TICKET_HOME/ticket.db`.", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
-		example: "ticket server -f $TICKET_HOME/ticket.db -p 9999 -v",
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_URL (default: ~/.config/ticket/ticket.db).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		example: "ticket server -f /path/to/ticket.db -p 9999 -v",
 	},
 	"version": {
 		usage:   "ticket version",
@@ -151,22 +152,22 @@ var helpIndex = map[string]commandHelp{
 	},
 	"login": {
 		usage:   "ticket login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"REMOTE mode only. Logs into the configured server and stores the session token in `$TICKET_HOME/credentials.json`.", "Login resolution order: valid `$TICKET_HOME/credentials.json`, then `username` in `$TICKET_HOME/config.json`, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults.", "Server resolution: `-url`, then `TICKET_SERVER`, then `TICKET_URL`, then configured URL, then `http://localhost:8080`."},
+		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs into the server and stores the session token in ~/.config/ticket/credentials.json.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults.", "Server resolution: `-url`, then `TICKET_URL`, then configured URL, then `http://localhost:8080`."},
 		example: "ticket login -username simon -password secret -url http://localhost:8080",
 	},
 	"register": {
 		usage:   "ticket register [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"REMOTE mode only. Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then `TICKET_USERNAME`, then OS `whoami`; `-password`, then `TICKET_PASSWORD`, then `password`."},
+		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then `TICKET_USERNAME`, then OS `whoami`; `-password`, then `TICKET_PASSWORD`, then `password`."},
 		example: "ticket register -username simon -password secret",
 	},
 	"logout": {
 		usage:   "ticket logout [-url <server-url>]",
-		details: []string{"REMOTE mode only. Logs out from the configured server and removes `$TICKET_HOME/credentials.json`."},
+		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs out from the configured server and removes ~/.config/ticket/credentials.json."},
 		example: "ticket logout",
 	},
 	"status": {
 		usage:   "ticket status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration first, then performs a mode-specific connectivity check.", "REMOTE mode prints `mode`, `server`, `username`, `authenticated`, then calls the remote status endpoint.", "LOCAL mode prints `mode`, `db_path`, `db_exists`, then opens the database and verifies the schema is usable."},
+		details: []string{"Prints the current effective configuration, then performs a connectivity check.", "Remote mode prints `mode`, `server`, `username`, `authenticated`, then calls the remote status endpoint.", "Local mode prints `mode`, `db_path`, `db_exists`, then opens the database and verifies the schema is usable."},
 		example: "ticket status",
 	},
 	"help": {
@@ -422,10 +423,6 @@ func main() {
 }
 
 func run(args []string) error {
-	mode, err := config.ResolveMode()
-	if err != nil {
-		return err
-	}
 	trimmedArgs, urlOverride, err := extractURLOverride(args)
 	if err != nil {
 		return err
@@ -438,18 +435,22 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	if urlOverride != "" {
-		if err := os.Setenv("TICKET_SERVER", urlOverride); err != nil {
-			return err
+	// -f /path/to/db is shorthand for -url file:///path/to/db
+	if dbOverride != "" {
+		absPath, pathErr := filepath.Abs(dbOverride)
+		if pathErr != nil {
+			return pathErr
 		}
+		urlOverride = "file://" + absPath
+	}
+	if urlOverride != "" {
 		if err := os.Setenv("TICKET_URL", urlOverride); err != nil {
 			return err
 		}
 	}
-	if dbOverride != "" {
-		if err := os.Setenv("TICKET_DB_OVERRIDE", dbOverride); err != nil {
-			return err
-		}
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return err
 	}
 	if len(trimmedArgs) == 0 {
 		fmt.Print(renderRootUsage())
@@ -468,13 +469,13 @@ func run(args []string) error {
 	case "server":
 		return runServer(trimmedArgs[1:])
 	case "export":
-		if mode != config.ModeLocal {
-			return errors.New("ticket export requires TICKET_MODE=local")
+		if resolved.Mode != config.ModeLocal {
+			return errors.New("ticket export requires TICKET_URL=file://...")
 		}
 		return runExportSnapshot(trimmedArgs[1:])
 	case "import":
-		if mode != config.ModeLocal {
-			return errors.New("ticket import requires TICKET_MODE=local")
+		if resolved.Mode != config.ModeLocal {
+			return errors.New("ticket import requires TICKET_URL=file://...")
 		}
 		return runImportSnapshot(trimmedArgs[1:])
 	case "version":
@@ -482,18 +483,18 @@ func run(args []string) error {
 	case "upgrade":
 		return runUpgrade(trimmedArgs[1:])
 	case "register":
-		if mode != config.ModeRemote {
-			return errors.New("ticket register requires TICKET_MODE=remote")
+		if resolved.Mode != config.ModeRemote {
+			return errors.New("ticket register requires TICKET_URL=http(s)://...")
 		}
 		return runRegister(trimmedArgs[1:])
 	case "login":
-		if mode != config.ModeRemote {
-			return errors.New("ticket login requires TICKET_MODE=remote")
+		if resolved.Mode != config.ModeRemote {
+			return errors.New("ticket login requires TICKET_URL=http(s)://...")
 		}
 		return runLogin(trimmedArgs[1:])
 	case "logout":
-		if mode != config.ModeRemote {
-			return errors.New("ticket logout requires TICKET_MODE=remote")
+		if resolved.Mode != config.ModeRemote {
+			return errors.New("ticket logout requires TICKET_URL=http(s)://...")
 		}
 		return runLogout(trimmedArgs[1:])
 	case "status":
@@ -697,7 +698,9 @@ func runInitDB(args []string) error {
 	}
 	cfg.CurrentProject = "1"
 	cfg.Username = "admin"
-	cfg.ServerURL = config.ResolveServerURL(cfg)
+	if r, rErr := config.ResolveURL(); rErr == nil {
+		cfg.ServerURL = r.ServerURL
+	}
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
@@ -729,11 +732,11 @@ func runExportSnapshot(args []string) error {
 	if path == "" {
 		return errors.New("snapshot file path is required")
 	}
-	dbPath, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return err
 	}
-	db, err := store.Open(dbPath)
+	db, err := store.Open(resolved.DBPath)
 	if err != nil {
 		return err
 	}
@@ -777,11 +780,11 @@ func runImportSnapshot(args []string) error {
 	if err := decoder.Decode(&snapshot); err != nil {
 		return err
 	}
-	dbPath, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return err
 	}
-	db, err := store.Open(dbPath)
+	db, err := store.Open(resolved.DBPath)
 	if err != nil {
 		return err
 	}
@@ -1183,7 +1186,9 @@ func runLogin(args []string) error {
 		status, err := svc.Status()
 		if err == nil && status.Authenticated && status.User != nil {
 			cfg.Username = status.User.Username
-			cfg.ServerURL = config.ResolveServerURL(cfg)
+			if r, rErr := config.ResolveURL(); rErr == nil {
+				cfg.ServerURL = r.ServerURL
+			}
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
@@ -1222,7 +1227,9 @@ func runLogin(args []string) error {
 
 func finishLogin(cfg config.Config, user store.User, token string) error {
 	cfg.Username = user.Username
-	cfg.ServerURL = config.ResolveServerURL(cfg)
+	if r, rErr := config.ResolveURL(); rErr == nil {
+		cfg.ServerURL = r.ServerURL
+	}
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
@@ -1272,7 +1279,7 @@ func runStatus(args []string) error {
 	if len(args) != 0 {
 		return errors.New("usage: ticket status")
 	}
-	mode, err := config.ResolveMode()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return err
 	}
@@ -1280,13 +1287,13 @@ func runStatus(args []string) error {
 	if err != nil {
 		return err
 	}
-	switch mode {
+	switch resolved.Mode {
 	case config.ModeRemote:
 		return runRemoteStatus(cfg)
 	case config.ModeLocal:
 		return runLocalStatus()
 	default:
-		return fmt.Errorf("unsupported TICKET_MODE %q", mode)
+		return fmt.Errorf("unsupported mode %q", resolved.Mode)
 	}
 }
 
@@ -1591,12 +1598,6 @@ func runAgent(args []string) error {
 		if *pollSeconds < 1 {
 			return errors.New("poll-seconds must be >= 1")
 		}
-		if err := os.Setenv("TICKET_MODE", string(config.ModeRemote)); err != nil {
-			return err
-		}
-		if err := os.Setenv("TICKET_SERVER", serverURL); err != nil {
-			return err
-		}
 		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
 			return err
 		}
@@ -1702,12 +1703,6 @@ func runAgent(args []string) error {
 		if *sleepSeconds < 0 {
 			return errors.New("sleep must be >= 0")
 		}
-		if err := os.Setenv("TICKET_MODE", string(config.ModeRemote)); err != nil {
-			return err
-		}
-		if err := os.Setenv("TICKET_SERVER", serverURL); err != nil {
-			return err
-		}
 		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
 			return err
 		}
@@ -1809,18 +1804,21 @@ func runProject(args []string) error {
 	}
 
 	if len(args) == 0 {
-		if cfg.CurrentProject == "" {
-			fmt.Println("no active project")
-			return nil
-		}
-		project, err := svc.GetProject(cfg.CurrentProject)
-		if err != nil {
-			return err
-		}
-		if outputJSON {
-			return printJSON(project)
-		}
-		printProject(project)
+		fmt.Fprintln(os.Stderr, `Usage: ticket project <command>
+
+Commands:
+  init                              Init project in current directory
+  list, ls                          List all projects
+  create, add, new                  Create a new project
+  get <id>                          Show project details
+  use <id>                          Switch active project
+  <id> update                       Update a project
+  <id> enable                       Enable a project
+  <id> disable                      Disable a project
+  add-user                          Add a user to a project
+  remove-user                       Remove a user from a project
+  add-team                          Add a team to a project
+  remove-team                       Remove a team from a project`)
 		return nil
 	}
 
@@ -1841,6 +1839,7 @@ func runProject(args []string) error {
 		fs := flag.NewFlagSet("project create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		prefix := fs.String("prefix", "", "project prefix")
+		title := fs.String("title", "", "project title")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		gitRepository := fs.String("git-repository", "", "project git repository")
@@ -1848,15 +1847,18 @@ func runProject(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if fs.NArg() != 1 {
-			return errors.New("usage: ticket project create -prefix <prefix> [-description text] [-ac text] \"Project Title\"")
+		if fs.NArg() != 0 {
+			return errors.New("usage: ticket project create -title <title> -prefix <prefix> [-description text] [-ac text]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
 		}
+		if strings.TrimSpace(*title) == "" {
+			return errors.New("project title is required")
+		}
 		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
 			Prefix:             *prefix,
-			Title:              fs.Arg(0),
+			Title:              *title,
 			Description:        *description,
 			AcceptanceCriteria: *acceptanceCriteria,
 			GitRepository:      strings.TrimSpace(*gitRepository),
@@ -1913,9 +1915,66 @@ func runProject(args []string) error {
 		}
 		fmt.Printf("using project %s\n", project.Prefix)
 		return nil
+	case "init":
+		return runProjectInit(cfg, svc, args[1:])
 	default:
 		return fmt.Errorf("unknown project command %q", args[0])
 	}
+}
+
+func runProjectInit(cfg config.Config, svc libticket.Service, args []string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	dirName := filepath.Base(cwd)
+
+	fs := flag.NewFlagSet("project init", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	prefix := fs.String("prefix", strings.ToUpper(dirName[:min(3, len(dirName))]), "project prefix (default: first 3 chars of dir name)")
+	title := fs.String("title", dirName, "project title (default: directory name)")
+	description := fs.String("description", dirName, "project description (default: directory name)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Check if a .ticket.json already exists in cwd
+	if lc, ok := config.FindLocalConfig(cwd); ok && filepath.Dir(lc.Path) == cwd {
+		return fmt.Errorf(".ticket.json already exists in %s (project: %s)", cwd, lc.CurrentProject)
+	}
+
+	// Try to find existing project by prefix
+	project, err := svc.GetProject(*prefix)
+	if err != nil {
+		// Project doesn't exist — create it
+		project, err = svc.CreateProject(libticket.ProjectCreateRequest{
+			Prefix:      *prefix,
+			Title:       *title,
+			Description: *description,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("created project %s (%s)\n", project.Prefix, project.Title)
+	} else {
+		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
+	}
+
+	// Write .ticket.json in cwd
+	if err := config.SaveLocalConfig(cwd, config.LocalConfig{
+		CurrentProject: project.Prefix,
+	}); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s in %s\n", config.LocalConfigFile, cwd)
+
+	// Also update global config
+	cfg.CurrentProject = project.Prefix
+	cfg.CurrentEpicID = 0
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	return nil
 }
 
 func runProjectAddUser(svc libticket.Service, args []string) error {
@@ -3183,7 +3242,7 @@ func runUnclaim(args []string) error {
 		return err
 	}
 	username := strings.TrimSpace(cfg.Username)
-	if mode, err := config.ResolveMode(); err == nil && mode == config.ModeLocal {
+	if resolved, rErr := config.ResolveURL(); rErr == nil && resolved.Mode == config.ModeLocal {
 		username = localModeUsername()
 	}
 	if strings.TrimSpace(username) == "" {
@@ -4338,7 +4397,11 @@ func runConfig(args []string) error {
 		}
 		switch args[1] {
 		case "server":
-			fmt.Println(config.ResolveServerURL(cfg))
+			if r, rErr := config.ResolveURL(); rErr == nil && r.ServerURL != "" {
+				fmt.Println(r.ServerURL)
+			} else if cfg.ServerURL != "" {
+				fmt.Println(cfg.ServerURL)
+			}
 			return nil
 		case "registration_enabled":
 			svc, err := resolveService(cfg)
@@ -4358,7 +4421,14 @@ func runConfig(args []string) error {
 		if len(args) != 1 {
 			return errors.New("usage: ticket config ls")
 		}
-		fmt.Printf("server=%s\n", config.ResolveServerURL(cfg))
+		r, _ := config.ResolveURL()
+		serverURL := r.ServerURL
+		if serverURL == "" {
+			serverURL = cfg.ServerURL
+		}
+		fmt.Printf("url=%s\n", envValue("TICKET_URL"))
+		fmt.Printf("mode=%s\n", r.Mode)
+		fmt.Printf("server=%s\n", serverURL)
 		fmt.Printf("username=%s\n", cfg.Username)
 		fmt.Printf("current_project=%s\n", cfg.CurrentProject)
 		fmt.Printf("current_epic_id=%d\n", cfg.CurrentEpicID)
@@ -4418,14 +4488,14 @@ func printProjectTable(projects []store.Project, currentProjectID string) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tPREFIX\tTITLE\tSTATUS\tCURRENT")
+	fmt.Fprintln(w, " \tID\tPREFIX\tTITLE\tSTATUS")
 	currentID := strings.TrimSpace(currentProjectID)
 	for _, project := range projects {
-		current := ""
+		marker := " "
 		if strconv.FormatInt(project.ID, 10) == currentID || strings.EqualFold(project.Prefix, currentID) {
-			current = "(current)"
+			marker = "*"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", project.ID, project.Prefix, project.Title, project.Status, current)
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", marker, project.ID, project.Prefix, project.Title, project.Status)
 	}
 	_ = w.Flush()
 }
@@ -4582,29 +4652,28 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 }
 
 func resolveService(cfg config.Config) (libticket.Service, error) {
-	mode, err := config.ResolveMode()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return nil, err
 	}
-	switch mode {
+	switch resolved.Mode {
 	case config.ModeLocal:
 		return libticket.NewLocal(cfg), nil
 	case config.ModeRemote:
-		serverURL := strings.TrimSpace(config.ResolveServerURL(cfg))
-		if serverURL == "" {
-			return nil, errors.New("TICKET_SERVER is required in remote mode")
+		if resolved.ServerURL == "" {
+			return nil, errors.New("TICKET_URL is required for remote mode")
 		}
 		return libtickethttp.New(cfg), nil
 	default:
-		return nil, fmt.Errorf("unsupported TICKET_MODE %q", mode)
+		return nil, fmt.Errorf("unsupported mode %q", resolved.Mode)
 	}
 }
 
 func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (string, string, error) {
 	username := strings.TrimSpace(usernameFlag)
 	password := strings.TrimSpace(passwordFlag)
-	mode, err := config.ResolveMode()
-	if err == nil && mode == config.ModeLocal {
+	resolved, err := config.ResolveURL()
+	if err == nil && resolved.Mode == config.ModeLocal {
 		if username == "" {
 			username = localModeUsername()
 		}
@@ -4651,7 +4720,7 @@ func localModeUsername() string {
 }
 
 func fallbackCommandUsername() string {
-	if mode, err := config.ResolveMode(); err == nil && mode == config.ModeLocal {
+	if resolved, err := config.ResolveURL(); err == nil && resolved.Mode == config.ModeLocal {
 		return localModeUsername()
 	}
 	return currentOSUser()
@@ -4750,13 +4819,21 @@ func removeDBFiles(path string) error {
 }
 
 func defaultDatabasePath() (string, error) {
-	return config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return "", err
+	}
+	return resolved.DBPath, nil
 }
 
 func runRemoteStatus(cfg config.Config) error {
-	serverURL := strings.TrimSpace(config.ResolveServerURL(cfg))
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return err
+	}
+	serverURL := strings.TrimSpace(resolved.ServerURL)
 	if serverURL == "" {
-		return errors.New("TICKET_SERVER is required in remote mode")
+		return errors.New("TICKET_URL is required for remote mode")
 	}
 	svc, err := resolveService(cfg)
 	if err != nil {
@@ -4786,7 +4863,11 @@ func runRemoteStatus(cfg config.Config) error {
 }
 
 func runLocalStatus() error {
-	dbPath, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return err
+	}
+	dbPath := resolved.DBPath
 	if err != nil {
 		return err
 	}
@@ -5215,12 +5296,8 @@ func renderCommandHelp(command string) string {
 
 func printTicketEnvironment() {
 	variableNames := []string{
-		"TICKET_MODE",
-		"TICKET_HOME",
-		"TICKET_CONFIG_DIR",
-		"TICKET_DB_OVERRIDE",
-		"TICKET_SERVER",
 		"TICKET_URL",
+		"TICKET_CONFIG_DIR",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
 	}

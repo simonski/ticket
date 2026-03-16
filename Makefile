@@ -113,6 +113,6 @@ dev:
     # prints out the env vars I need to set to go into a ticket dev mode
 	@echo ""
 	@echo "Run the following:\n"
-	@echo "export TICKET_MODE=local"
-	@echo "export TICKET_HOME=`pwd`"
+	@echo "export TICKET_URL=file://`pwd`/ticket.db"
+	@echo "export TICKET_CONFIG_DIR=`pwd`"
 	@echo "\nAnd you are now in a position to extend ticket itself.\n"

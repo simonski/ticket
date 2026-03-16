@@ -319,7 +319,7 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 		"ticket init",
 		"DETAILS",
 		"EXAMPLE",
-		"ticket init -f $TICKET_HOME/ticket.db --force -password secret --populate",
+		"ticket init -f /path/to/ticket.db --force -password secret --populate",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("command help missing %q:\n%s", want, help)
@@ -357,8 +357,8 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{
 		"ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		"If `-f` is omitted, the server uses `$TICKET_HOME/ticket.db`.",
-		"ticket server -f $TICKET_HOME/ticket.db -p 9999 -v",
+		"the server uses the database path from TICKET_URL",
+		"ticket server -f /path/to/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("server help missing %q:\n%s", want, help)
@@ -416,19 +416,14 @@ func TestRunHelpRejectsInvalidCommand(t *testing.T) {
 
 func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
 	for _, name := range []string{
-		"TICKET_MODE",
-		"TICKET_HOME",
-		"TICKET_CONFIG_DIR",
-		"TICKET_DB_OVERRIDE",
-		"TICKET_SERVER",
 		"TICKET_URL",
+		"TICKET_CONFIG_DIR",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
 	} {
 		t.Setenv(name, "")
 	}
-	t.Setenv("TICKET_HOME", "/tmp/ticket-home")
-	t.Setenv("TICKET_MODE", "local")
+	t.Setenv("TICKET_URL", "file:///tmp/test.db")
 
 	output := captureStdout(t, func() {
 		if err := runHelp([]string{}); err != nil {
@@ -438,12 +433,8 @@ func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
 
 	for _, want := range []string{
 		"ENVIRONMENT",
-		"  TICKET_HOME: /tmp/ticket-home",
-		"  TICKET_MODE: local",
+		"  TICKET_URL: file:///tmp/test.db",
 		"  TICKET_CONFIG_DIR: <unset>",
-		"  TICKET_DB_OVERRIDE: <unset>",
-		"  TICKET_SERVER: <unset>",
-		"  TICKET_URL: <unset>",
 		"  TICKET_USERNAME: <unset>",
 		"  TICKET_PASSWORD: <unset>",
 	} {
@@ -550,7 +541,7 @@ func TestRunTicketUsesConfiguredAgent(t *testing.T) {
 }
 
 func TestResolveCredentialsUsesFlagsEnvAndDefaults(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
+	t.Setenv("TICKET_URL", "http://localhost:8080")
 
 	t.Setenv("TICKET_USERNAME", "env-user")
 	t.Setenv("TICKET_PASSWORD", "env-pass")
@@ -584,7 +575,7 @@ func TestResolveCredentialsUsesFlagsEnvAndDefaults(t *testing.T) {
 		t.Fatal("resolveCredentials(default username) returned empty username")
 	}
 
-	t.Setenv("TICKET_MODE", "local")
+	t.Setenv("TICKET_URL", "")
 	username, password, err = resolveCredentials("", "", true)
 	if err != nil {
 		t.Fatalf("resolveCredentials(local) error = %v", err)
@@ -724,7 +715,8 @@ func TestCompareVersions(t *testing.T) {
 
 func TestRunInitDBGeneratesPasswordWhenMissing(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
 	output := captureStdout(t, func() {
@@ -744,22 +736,24 @@ func TestRunInitDBGeneratesPasswordWhenMissing(t *testing.T) {
 	}
 }
 
-func TestRunInitDBUsesTaskHomeWhenFIsOmitted(t *testing.T) {
+func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 
 	if err := runInitDB([]string{"-password", "secret"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(tempDir, "ticket.db")); err != nil {
-		t.Fatalf("expected default db at TICKET_HOME/ticket.db: %v", err)
+		t.Fatalf("expected default db at config dir/ticket.db: %v", err)
 	}
 }
 
 func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
 	if err := runInitDB([]string{"-f", dbPath, "-password", "first-pass"}); err != nil {
@@ -775,7 +769,8 @@ func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 
 func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
 	if err := runInitDB([]string{"-f", dbPath, "-password", "secret", "--populate"}); err != nil {
@@ -868,11 +863,9 @@ func TestPromptForCredentialsUsesDefaultsWhenInputIsEmpty(t *testing.T) {
 
 func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 	credsPath := filepath.Join(tempDir, "credentials.json")
-	t.Setenv("TICKET_MODE", "remote")
-	t.Setenv("TICKET_SERVER", "")
-	t.Setenv("TICKET_SERVER", "")
+	t.Setenv("TICKET_URL", "")
 
 	var loginAttempts int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -902,8 +895,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_SERVER", server.URL)
-	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_URL", server.URL)
 
 	oldIn := loginPromptInput
 	oldOut := loginPromptOutput
@@ -957,9 +949,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 
 func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_MODE", "remote")
-	t.Setenv("TICKET_SERVER", "")
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 	t.Setenv("TICKET_URL", "")
 
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"username":"alice"}`), 0o600); err != nil {
@@ -986,8 +976,7 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_SERVER", server.URL)
-	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_URL", server.URL)
 
 	output := captureStdout(t, func() {
 		if err := runLogin(nil); err != nil {
@@ -1010,9 +999,7 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 }
 
 func TestRunStatusRemoteSuccess(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-	t.Setenv("TICKET_HOME", t.TempDir())
-	t.Setenv("TICKET_SERVER", "")
+	t.Setenv("TICKET_CONFIG_DIR", t.TempDir())
 	t.Setenv("TICKET_URL", "")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1024,7 +1011,7 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"user":{"username":"alice","role":"user"}}`))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_SERVER", server.URL)
+	t.Setenv("TICKET_URL", server.URL)
 
 	output := captureStdout(t, func() {
 		if err := runStatus(nil); err != nil {
@@ -1047,8 +1034,8 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 
 func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_MODE", "local")
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 
 	var runErr error
 	output := captureStdout(t, func() {
@@ -1075,8 +1062,8 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 
 func TestRunStatusLocalSuccess(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_MODE", "local")
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 	if err := runInitDB([]string{"-password", "secret"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
@@ -1196,7 +1183,7 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 
 	createOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "create", "-prefix", "PRA", "-description", "Desc", "-ac", "AC", "Project A"}); err != nil {
+		if err := run([]string{"project", "create", "-prefix", "PRA", "-title", "Project A", "-description", "Desc", "-ac", "AC"}); err != nil {
 			t.Fatalf("project create error = %v", err)
 		}
 	})
@@ -1211,7 +1198,7 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("project list error = %v", err)
 		}
 	})
-	if !strings.Contains(listOutput, "Project A") || !strings.Contains(listOutput, "(current)") {
+	if !strings.Contains(listOutput, "Project A") || !strings.Contains(listOutput, "*") {
 		t.Fatalf("project list output = %q", listOutput)
 	}
 
@@ -1242,6 +1229,43 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	})
 	if !strings.Contains(useOutput, "using project") {
 		t.Fatalf("project use output = %q", useOutput)
+	}
+}
+
+func TestRunProjectInit(t *testing.T) {
+	setupLocalCLI(t)
+
+	projDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	initOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "init", "-prefix", "INI", "-title", "Init Test"}); err != nil {
+			t.Fatalf("project init error = %v", err)
+		}
+	})
+	if !strings.Contains(initOutput, "created project INI") {
+		t.Fatalf("project init output missing created: %s", initOutput)
+	}
+	if !strings.Contains(initOutput, ".ticket.json") {
+		t.Fatalf("project init output missing .ticket.json: %s", initOutput)
+	}
+
+	// Verify .ticket.json was created
+	data, err := os.ReadFile(filepath.Join(projDir, ".ticket.json"))
+	if err != nil {
+		t.Fatalf("reading .ticket.json: %v", err)
+	}
+	if !strings.Contains(string(data), "INI") {
+		t.Fatalf(".ticket.json does not contain INI: %s", data)
+	}
+
+	// Running init again should fail (already exists)
+	if err := run([]string{"project", "init", "-prefix", "INI"}); err == nil {
+		t.Fatal("expected error on second init, got nil")
 	}
 }
 
@@ -1531,7 +1555,7 @@ func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
 func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	setupLocalCLI(t)
 
-	if err := run([]string{"project", "create", "-prefix", "SEP", "Second Project"}); err != nil {
+	if err := run([]string{"project", "create", "-prefix", "SEP", "-title", "Second Project"}); err != nil {
 		t.Fatalf("project create error = %v", err)
 	}
 	if err := run([]string{"project", "use", "1"}); err != nil {
@@ -1943,7 +1967,7 @@ func TestRunRejectsInvalidCommand(t *testing.T) {
 }
 
 func TestRunRemoteOnlyCommandsFailInLocalMode(t *testing.T) {
-	t.Setenv("TICKET_MODE", "local")
+	t.Setenv("TICKET_URL", "")
 
 	for _, args := range [][]string{
 		{"login"},
@@ -1957,10 +1981,8 @@ func TestRunRemoteOnlyCommandsFailInLocalMode(t *testing.T) {
 }
 
 func TestRunRemoteModeStatusFailure(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-	t.Setenv("TICKET_SERVER", "http://127.0.0.1:1")
-	t.Setenv("TICKET_URL", "")
-	t.Setenv("TICKET_HOME", t.TempDir())
+	t.Setenv("TICKET_URL", "http://127.0.0.1:1")
+	t.Setenv("TICKET_CONFIG_DIR", t.TempDir())
 
 	var runErr error
 	output := captureStdout(t, func() {
@@ -2071,8 +2093,8 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 			t.Fatalf("config get error = %v", err)
 		}
 	})
-	if !strings.Contains(clearedOutput, "http://localhost:8080") {
-		t.Fatalf("config get output after delete = %q", clearedOutput)
+	if strings.Contains(clearedOutput, "http://example.test") {
+		t.Fatalf("config get output after delete still contains old server: %q", clearedOutput)
 	}
 }
 
@@ -2169,11 +2191,8 @@ func normalizeTestPath(path string) string {
 func setupLocalCLI(t *testing.T) {
 	t.Helper()
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_MODE", "local")
-	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_SERVER", "")
-	t.Setenv("TICKET_SERVER", "")
-	t.Setenv("TICKET_DB_OVERRIDE", "")
+	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 	if err := runInitDB([]string{"-password", "secret"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}

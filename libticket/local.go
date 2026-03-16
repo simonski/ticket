@@ -29,10 +29,11 @@ func NewLocal(cfg config.Config) *LocalService {
 }
 
 func (s *LocalService) Status() (StatusResponse, error) {
-	path, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return StatusResponse{}, err
 	}
+	path := resolved.DBPath
 	if _, err := os.Stat(path); err != nil {
 		return StatusResponse{}, err
 	}
@@ -80,15 +81,15 @@ func (s *LocalService) SetRegistrationEnabled(enabled bool) error {
 }
 
 func (s *LocalService) Register(username, password string) (store.User, error) {
-	return store.User{}, errors.New("ticket register requires TICKET_MODE=remote")
+	return store.User{}, errors.New("ticket register requires TICKET_URL=http(s)://...")
 }
 
 func (s *LocalService) Login(username, password string) (store.User, string, error) {
-	return store.User{}, "", errors.New("ticket login requires TICKET_MODE=remote")
+	return store.User{}, "", errors.New("ticket login requires TICKET_URL=http(s)://...")
 }
 
 func (s *LocalService) Logout() error {
-	return errors.New("ticket logout requires TICKET_MODE=remote")
+	return errors.New("ticket logout requires TICKET_URL=http(s)://...")
 }
 
 func (s *LocalService) Count(projectID *int64) (CountSummary, error) {
@@ -881,11 +882,11 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 }
 
 func (s *LocalService) openDB() (*sql.DB, error) {
-	path, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return nil, err
 	}
-	return store.Open(path)
+	return store.Open(resolved.DBPath)
 }
 
 func (s *LocalService) localUser(db *sql.DB) (store.User, error) {

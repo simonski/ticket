@@ -59,9 +59,6 @@ func resolveAnalyseCommandArgs() []string {
 func storyAnalyseProcessEnv() []string {
 	url := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	if url == "" {
-		url = strings.TrimSpace(os.Getenv("TICKET_SERVER"))
-	}
-	if url == "" {
 		url = "http://localhost:8080"
 	}
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
@@ -74,8 +71,6 @@ func storyAnalyseProcessEnv() []string {
 	}
 	env := append([]string{}, os.Environ()...)
 	env = append(env,
-		"TICKET_MODE=remote",
-		"TICKET_SERVER="+url,
 		"TICKET_URL="+url,
 		"TICKET_USERNAME="+username,
 		"TICKET_PASSWORD="+password,
@@ -108,7 +103,6 @@ Project:
 Requirements:
 1) Run non-interactively.
 2) Use environment variables already provided:
-   TICKET_MODE=remote
    TICKET_URL
    TICKET_USERNAME
    TICKET_PASSWORD
