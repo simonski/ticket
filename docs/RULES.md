@@ -7,6 +7,7 @@
 - externalise strings to constants.go where possible
 - assess the drift between code and design and explain where you believe you are
 
+- `next` means pickup the next ticket or keep working on the currently assigned ticket
 - `review` means re-read TODO, DESIGN and USER_GUIDE against the code and and propose the next steps
 - `continue` means re-read TODO, DESIGN and USER_GUIDE against the continue the implementation
 - `linear` or `walkthrough` means Read the source and then plan a linear walkthrough of the code that explains how it all works in detail.  Then run “uvx showboat –help” to learn showboat - use showboat to create a walkthrough.md file in the repo and build the walkthrough in there, using showboat note for commentary and showboat exec plus sed or grep or cat or whatever you need to include snippets of code you are talking about

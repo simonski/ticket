@@ -95,6 +95,46 @@ func Init(path, adminUsername, adminPassword string) error {
 }
 
 func createSchema(db *sql.DB) error {
+	// Pre-schema migration: rename tasks→tickets BEFORE the CREATE TABLE IF
+	// NOT EXISTS block runs, so we don't end up with both tables.
+	if tableExists(db, "tasks") && !tableExists(db, "tickets") {
+		if _, err := db.Exec(`ALTER TABLE tasks RENAME TO tickets`); err != nil {
+			return err
+		}
+	}
+	// If both tables exist (e.g. a previous run created an empty tickets table
+	// while tasks still held data), merge tasks data into tickets and drop tasks.
+	if tableExists(db, "tasks") && tableExists(db, "tickets") {
+		// Map old column names to new ones for the tasks→tickets transfer.
+		renames := map[string]string{"task_id": "ticket_id"}
+		taskCols, _ := tableColumnNames(db, "tasks")
+		ticketCols, _ := tableColumnNames(db, "tickets")
+		ticketSet := make(map[string]bool, len(ticketCols))
+		for _, c := range ticketCols {
+			ticketSet[c] = true
+		}
+		var dstCols, srcCols []string
+		for _, src := range taskCols {
+			dst := src
+			if mapped, ok := renames[src]; ok {
+				dst = mapped
+			}
+			if ticketSet[dst] {
+				dstCols = append(dstCols, dst)
+				srcCols = append(srcCols, src)
+			}
+		}
+		if len(dstCols) > 0 {
+			if _, err := db.Exec(fmt.Sprintf(`INSERT OR IGNORE INTO tickets (%s) SELECT %s FROM tasks`,
+				strings.Join(dstCols, ", "), strings.Join(srcCols, ", "))); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec(`DROP TABLE tasks`); err != nil {
+			return err
+		}
+	}
+
 	schema := `
 CREATE TABLE IF NOT EXISTS users (
 	user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -320,12 +360,7 @@ CREATE TABLE IF NOT EXISTS project_teams (
 }
 
 func migrateSchema(db *sql.DB) error {
-	// Rename tasks table and task_id column to use ticket terminology.
-	if tableExists(db, "tasks") && !tableExists(db, "tickets") {
-		if _, err := db.Exec(`ALTER TABLE tasks RENAME TO tickets`); err != nil {
-			return err
-		}
-	}
+	// Rename task_id columns to use ticket terminology.
 	if columnExists(db, "tickets", "task_id") {
 		if _, err := db.Exec(`ALTER TABLE tickets RENAME COLUMN task_id TO ticket_id`); err != nil {
 			return err
@@ -345,6 +380,12 @@ func migrateSchema(db *sql.DB) error {
 		if _, err := db.Exec(`ALTER TABLE dependencies RENAME COLUMN task_id TO ticket_id`); err != nil {
 			return err
 		}
+	}
+
+	// Fix FK references that still point at the old "tasks" table after the rename.
+	// Must run before any DML that would trigger FK checks on the affected tables.
+	if err := fixStaleForeignKeys(db); err != nil {
+		return err
 	}
 
 	if !columnExists(db, "projects", "prefix") {
@@ -811,6 +852,130 @@ func parseTicketSequence(key string) int64 {
 	default:
 		return 0
 	}
+}
+
+// fixStaleForeignKeys recreates tables whose FOREIGN KEY references still
+// point at the old "tasks" table after the tasks→tickets rename. SQLite does
+// not support ALTER TABLE to change FK constraints, so we must recreate.
+func fixStaleForeignKeys(db *sql.DB) error {
+	if !tableHsFKTo(db, "history_events", "tasks") {
+		return nil // already migrated
+	}
+
+	// Temporarily disable FK checks so we can drop/recreate without cascading errors.
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer db.Exec(`PRAGMA foreign_keys = ON`) //nolint:errcheck
+
+	type tableMigration struct {
+		name   string
+		create string
+	}
+	migrations := []tableMigration{
+		{
+			name: "history_events",
+			create: `CREATE TABLE history_events (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				ticket_id INTEGER NOT NULL,
+				event_type TEXT NOT NULL,
+				payload TEXT NOT NULL DEFAULT '{}',
+				created_by INTEGER,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id),
+				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+				FOREIGN KEY(created_by) REFERENCES users(user_id)
+			)`,
+		},
+		{
+			name: "ticket_history",
+			create: `CREATE TABLE ticket_history (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				ticket_id INTEGER NOT NULL,
+				event_type TEXT NOT NULL,
+				payload TEXT NOT NULL DEFAULT '{}',
+				created_by INTEGER,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id),
+				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+				FOREIGN KEY(created_by) REFERENCES users(user_id)
+			)`,
+		},
+		{
+			name: "comments",
+			create: `CREATE TABLE comments (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				item_id INTEGER NOT NULL,
+				user_id INTEGER NOT NULL,
+				comment TEXT NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(item_id) REFERENCES tickets(ticket_id),
+				FOREIGN KEY(user_id) REFERENCES users(user_id)
+			)`,
+		},
+		{
+			name: "dependencies",
+			create: `CREATE TABLE dependencies (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				ticket_id INTEGER NOT NULL,
+				depends_on INTEGER NOT NULL,
+				created_by INTEGER,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id),
+				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+				FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id),
+				FOREIGN KEY(created_by) REFERENCES users(user_id)
+			)`,
+		},
+	}
+
+	for _, m := range migrations {
+		if !tableHsFKTo(db, m.name, "tasks") {
+			continue
+		}
+		tmpName := m.name + "_migrate_tmp"
+		if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmpName)); err != nil {
+			return fmt.Errorf("rename %s: %w", m.name, err)
+		}
+		if _, err := db.Exec(m.create); err != nil {
+			return fmt.Errorf("create %s: %w", m.name, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmpName)); err != nil {
+			return fmt.Errorf("copy %s: %w", m.name, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`DROP TABLE %s`, tmpName)); err != nil {
+			return fmt.Errorf("drop %s: %w", tmpName, err)
+		}
+	}
+	return nil
+}
+
+// tableHsFKTo returns true if the table has a foreign key referencing the given table.
+func tableHsFKTo(db *sql.DB, tableName, refTable string) bool {
+	rows, err := db.Query(fmt.Sprintf(`PRAGMA foreign_key_list(%s)`, tableName))
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return false
+		}
+		// Column index 2 is the referenced table name.
+		if ref, ok := vals[2].(string); ok && ref == refTable {
+			return true
+		}
+	}
+	return false
 }
 
 func tableExists(db *sql.DB, tableName string) bool {
