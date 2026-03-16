@@ -4854,15 +4854,13 @@ func runRemoteStatus(cfg config.Config) error {
 	}
 	if outputJSON {
 		return printJSON(map[string]any{
-			"mode":          config.ModeRemote,
-			"server":        serverURL,
+			"TICKET_URL":    serverURL,
 			"username":      username,
 			"authenticated": authenticated,
 			"connection":    map[bool]string{true: "success", false: "failure"}[err == nil],
 		})
 	}
-	fmt.Printf("mode: %s\n", config.ModeRemote)
-	fmt.Printf("server: %s\n", serverURL)
+	fmt.Printf("TICKET_URL: %s\n", serverURL)
 	fmt.Printf("username: %s\n", username)
 	fmt.Printf("authenticated: %t\n", authenticated)
 	printConnectionLine(err == nil)
@@ -4882,14 +4880,12 @@ func runLocalStatus() error {
 	dbExists := statErr == nil
 	if outputJSON {
 		return printJSON(map[string]any{
-			"mode":       config.ModeLocal,
-			"db_path":    dbPath,
-			"db_exists":  dbExists,
-			"connection": map[bool]string{true: "success", false: "failure"}[localStatusCheck(dbPath) == nil],
+			"TICKET_URL":  "file://" + dbPath,
+			"db_exists":   dbExists,
+			"connection":  map[bool]string{true: "success", false: "failure"}[localStatusCheck(dbPath) == nil],
 		})
 	}
-	fmt.Printf("mode: %s\n", config.ModeLocal)
-	fmt.Printf("db_path: %s\n", dbPath)
+	fmt.Printf("TICKET_URL: file://%s\n", dbPath)
 	fmt.Printf("db_exists: %t\n", dbExists)
 	err = localStatusCheck(dbPath)
 	printConnectionLine(err == nil)

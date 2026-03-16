@@ -1018,8 +1018,7 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"mode: remote",
-		"server: " + server.URL,
+		"TICKET_URL: " + server.URL,
 		"username: alice",
 		"authenticated: true",
 		"connection: ",
@@ -1043,9 +1042,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	if !errors.Is(runErr, os.ErrNotExist) {
 		t.Fatalf("runStatus(local missing) error = %v, want os.ErrNotExist", runErr)
 	}
-	expectedPath := normalizeTestPath(filepath.Join(tempDir, "ticket.db"))
 	for _, want := range []string{
-		"mode: local",
 		"db_exists: false",
 		"failure",
 		"hint: run ticket init",
@@ -1054,8 +1051,8 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(normalizeTestPath(output), "db_path: "+expectedPath) {
-		t.Fatalf("runStatus(local missing) output missing db_path %q:\n%s", expectedPath, output)
+	if !strings.Contains(output, "TICKET_URL: file://"+filepath.Join(tempDir, "ticket.db")) {
+		t.Fatalf("runStatus(local missing) output missing TICKET_URL:\n%s", output)
 	}
 }
 
@@ -1072,9 +1069,7 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 			t.Fatalf("runStatus(local) error = %v", err)
 		}
 	})
-	expectedPath := normalizeTestPath(filepath.Join(tempDir, "ticket.db"))
 	for _, want := range []string{
-		"mode: local",
 		"db_exists: true",
 		"connection: success",
 	} {
@@ -1082,8 +1077,8 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(normalizeTestPath(output), "db_path: "+expectedPath) {
-		t.Fatalf("runStatus(local) output missing db_path %q:\n%s", expectedPath, output)
+	if !strings.Contains(output, "TICKET_URL: file://"+filepath.Join(tempDir, "ticket.db")) {
+		t.Fatalf("runStatus(local) output missing TICKET_URL:\n%s", output)
 	}
 }
 
@@ -1991,8 +1986,7 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
-		"mode: remote",
-		"server: http://127.0.0.1:1",
+		"TICKET_URL: http://127.0.0.1:1",
 		"authenticated: false",
 		"failure",
 	} {
