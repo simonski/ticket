@@ -4,7 +4,7 @@ DESCRIPTION: Build the single-binary application foundation, including SQLite in
 AC:
 - `task initdb -f <db> -password <password>` creates a new SQLite database and bootstraps the initial administrator account.
 - `task server -f <db>` starts the API server and serves the embedded frontend from the same binary on `http://localhost:8000` by default.
-- The application supports configuration for remote CLI usage, including `TICKET_SERVER`.
+- The application supports configuration for remote CLI usage, including `TICKET_URL`.
 - Passwords are stored securely using Argon2id hashes in SQLite.
 - The frontend assets are embedded in the Go binary and served by the backend.
 - `make build`, `make test`, `make test-go`, and `make test-playwright` exist and run successfully.
@@ -46,7 +46,7 @@ DEPENDS-ON: NONE
     ID: E1-S3
     DESCRIPTION: Implement configuration loading for database path, server URL, and other shared runtime settings used by CLI and server commands.
     AC:
-    - The CLI can target a remote server using `TICKET_SERVER`.
+    - The CLI can target a remote server using `TICKET_URL`.
     - Local defaults are stored and reused between commands where appropriate.
     - Configuration behavior is documented through tests.
     - All tests pass.

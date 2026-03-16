@@ -58,7 +58,7 @@ The web UI is then available at `http://localhost:8080`.
 Create a project:
 
 ```bash
-ticket project create -prefix CUS "Customer Portal"
+ticket project create -prefix CUS -title "Customer Portal"
 ticket project use CUS
 ```
 

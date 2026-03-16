@@ -2,6 +2,8 @@
 
 This project uses **ticket** for issue tracking. Run `ticket onboard` to get started.
 
+- read docs/RULES.md
+
 ## Quick Reference
 
 ```bash
@@ -12,17 +14,19 @@ ticket get <id>           # View issue details
 ticket done <id>          # Complete work
 ```
 
-You MUST use remote mode - that is, the `ticket` client needs to talk to the ticket server - NOT the database directly.  
+You MUST use remote mode - that is, the `ticket` client needs to talk to the ticket server - NOT the database directly.
 
-Default to 
+Default to
 
+```bash
 TICKET_URL=http://localhost:8080
 TICKET_USERNAME=admin
 TICKET_PASSWORD=password
+```
 
 ## Workflow
 
-Always create a ticket using `ticket create`, then track that through usign `ticket udpate` and close the ticket once complete.
+Always create a ticket using `ticket create`, then track that through using `ticket update` and close the ticket once complete.
 
 ## Landing the Plane (Session Completion)
 
@@ -48,4 +52,3 @@ Always create a ticket using `ticket create`, then track that through usign `tic
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-- read docs/RULES.md

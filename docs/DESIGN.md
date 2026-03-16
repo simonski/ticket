@@ -19,7 +19,7 @@ The system has three interfaces:
 
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `ticket version`.
 
-Client-side files are stored under `$TICKET_HOME`, which defaults to `~/.config/ticket`.
+Client-side files are stored under `$TICKET_CONFIG_DIR`, which defaults to `~/.config/ticket`.
 
 ## Product Principles
 
@@ -231,7 +231,7 @@ ticket init -f ticket.db --force -password secret --populate
 Bootstrap defaults:
 
 - admin username is always `admin`
-- if `-f` is omitted, the SQLite database is created at `$TICKET_HOME/ticket.db`
+- if `-f` is omitted, the SQLite database is created at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`)
 - admin password comes from `-password` when supplied
 - if `-password` is omitted, the CLI generates a random password and prints it to stdout
 - if `--force` is supplied, any existing SQLite database file is overwritten
@@ -264,7 +264,7 @@ Responsibilities:
 
 The default local server should listen on `http://localhost:8080`.
 
-If `ticket server` is run without `-f`, it must open the SQLite database at `$TICKET_HOME/ticket.db`.
+If `ticket server` is run without `-f`, it must open the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
 If `ticket server` is run with `-v`, it must print verbose request and response details to stdout.
 When chat is active, `-v` must also print chat process telemetry, including:
@@ -318,7 +318,7 @@ ticket logout
 In REMOTE mode it must print at least:
 
 - `mode: remote`
-- `server: <TICKET_SERVER>`
+- `server: <TICKET_URL>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
@@ -362,7 +362,7 @@ If `-nocolor` is set, the same output must be printed without ANSI colors.
 
 The CLI must resolve credentials from `-username` and `-password` first, then `TICKET_USERNAME` and `TICKET_PASSWORD`, and finally default to OS `whoami` and `password`.
 
-The CLI must resolve the server URL from `-url` first, then `TICKET_SERVER`, then saved config, and finally default to `http://localhost:8080`.
+The CLI must resolve the server URL from `-url` first, then `TICKET_URL`, then saved config, and finally default to `http://localhost:8080`.
 
 `ticket config` must support:
 
@@ -382,23 +382,23 @@ When `ticket server` starts, it should print the same colored ASCII-art `TICKET`
 
 Below that banner, `ticket server` must print the embedded version and the resolved task database path.
 
-The CLI stores non-sensitive client defaults in `$TICKET_HOME/config.json` and session credentials in `$TICKET_HOME/credentials.json`.
+The CLI stores non-sensitive client defaults in `$TICKET_CONFIG_DIR/config.json` and session credentials in `$TICKET_CONFIG_DIR/credentials.json`.
 
 `ticket login` must:
 
-1. check `$TICKET_HOME/credentials.json` first and reuse that session if it is still valid
-2. check the `username` in `$TICKET_HOME/config.json`
+1. check `$TICKET_CONFIG_DIR/credentials.json` first and reuse that session if it is still valid
+2. check the `username` in `$TICKET_CONFIG_DIR/config.json`
 3. check `-username` and `-password`, then `TICKET_USERNAME` and `TICKET_PASSWORD`
 4. prompt for any missing values
 5. when prompting, use the discovered values as editable defaults
 6. print `invalid credentials` on an invalid-login response before prompting for a retry
 7. when prompting for a password in an interactive terminal, echo `*` characters instead of the raw password
-8. on success, write the session token to `$TICKET_HOME/credentials.json`
-9. on success, update the `username` and `server_url` keys in `$TICKET_HOME/config.json`
+8. on success, write the session token to `$TICKET_CONFIG_DIR/credentials.json`
+9. on success, update the `username` and `server_url` keys in `$TICKET_CONFIG_DIR/config.json`
 
 `ticket register` must create the account but must not create or persist a logged-in session.
 
-`ticket logout` must remove `$TICKET_HOME/credentials.json`.
+`ticket logout` must remove `$TICKET_CONFIG_DIR/credentials.json`.
 
 ### Project Management
 
@@ -412,7 +412,8 @@ Users must be able to:
 Representative commands:
 
 ```bash
-ticket project create -prefix CUS -description "Portal backlog" -ac "Launch criteria" "Customer Portal"
+ticket project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Launch criteria"
+ticket project init                          # create/associate project from current directory
 ticket project list
 ticket project ls
 ticket project use CUS
@@ -594,7 +595,7 @@ Requirements:
 Representative command set:
 
 ```bash
-ticket project create -prefix CUS "Customer Portal"
+ticket project create -prefix CUS -title "Customer Portal"
 ticket project use CUS
 
 ticket epic "Authentication"
@@ -685,7 +686,7 @@ The web UI should make these activities easy:
 - `/api/status` returns `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - admins update chat limits through `POST /api/config/chat_limits`
 - stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
-- story analysis uses the `StoryReview` role and an external Codex process with remote-mode `ticket` environment (`TICKET_MODE`, `TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) to run `ticket login` + `ticket create` breakdown commands for epics/tasks; story is marked `ready_for_review`
+- story analysis uses the `StoryReview` role and an external Codex process with remote-mode `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) to run `ticket login` + `ticket create` breakdown commands for epics/tasks; story is marked `ready_for_review`
 - epic analysis uses the `EpicReview` role to generate child implementation tickets
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes

@@ -247,25 +247,26 @@ test and implement as server side checks
 
 MODE: REMOTE or LOCAL
 
-The ticket process can work in REMOTE (TICKET_MODE=remote) or LOCAL (TICKET_MODE=local).  This is set using 
+The mode is inferred from the `TICKET_URL` scheme:
 
 ```bash
-# either
-export TICKET_MODE=local
-# or
-export TICKET_MODE=remote
+# local mode (file scheme or default)
+export TICKET_URL=file:///path/to/ticket.db
+# remote mode (http/https scheme)
+export TICKET_URL=http://localhost:8080
+export TICKET_URL=https://your-server
 ```
 
-If unspecified TICKET_MODE will default to local.
+If unspecified, `TICKET_URL` defaults to local mode with `~/.config/ticket/ticket.db`.
 
 REMOTE-mode
 
-Uses TICKET_HOME for local files (~/.config/ticket/)
+Uses TICKET_CONFIG_DIR for local files (~/.config/ticket/)
 
-- Requires TICKET_SERVER to be set to the address of the remote server.  If it is not present, fail.
+- Requires `TICKET_URL` to be set to an `http(s)://` address.  If it is not present, fail.
 - Requires a valid session token for all comms (except login/register)
-- `ticket login` will store the session token in $TICKET_HOME/credentials.json
-- If the user supplied the username via the login prompt directly, the username will be stored in `$TICKET_HOME/config.json` to be used on next login as the default.
+- `ticket login` will store the session token in $TICKET_CONFIG_DIR/credentials.json
+- If the user supplied the username via the login prompt directly, the username will be stored in `$TICKET_CONFIG_DIR/config.json` to be used on next login as the default.
 
 TICKET_USERNAME/TICKET_PASSWORD are only used in REMOTE mode when logging in; If present they are used to authenticate via login and then a session token is used after that.  If they are not present the user is prompted for their username/password.
 
@@ -277,7 +278,7 @@ If a user is not authenticated
     - prints the current effective configuration first
     - prints:
          mode: remote
-         server: <TICKET_SERVER>
+         server: <TICKET_URL>
          username: <configured username or blank>
          authenticated: true|false
     - attempts a remote connection by calling the remote status endpoint
@@ -288,13 +289,13 @@ If a user is not authenticated
 
 LOCAL-mode
 
-In Local mode TICKET_SERVER, TICKET_USERNAME, TICKET_PASSWORD are ignored.
+In Local mode TICKET_USERNAME, TICKET_PASSWORD are ignored.
 
 It will then select a database file using the following logic
 
-    1. if -f <task_db_file> is specified in any command, chooose this
-    2. if TICKET_HOME is specified, choose this and assume `$TICKET_HOME/ticket.db`
-    3. fallback to a `$CWD/ticket.db` file
+    1. if -f <task_db_file> is specified in any command, choose this
+    2. if TICKET_URL is set with a `file:///` scheme, use that path
+    3. fallback to `~/.config/ticket/ticket.db`
 
 TICKET_USERNAME and TICKET_PASSWORD are NOT used in local mode.  The username is $USERNAME of the computer.
 
@@ -333,7 +334,7 @@ Create two libraries with the same task-domain service contract:
 
 Dependency direction:
 
-    cmd/ticket      -> chooses libticket or libtickethttp based on TICKET_MODE
+    cmd/ticket      -> chooses libticket or libtickethttp based on TICKET_URL scheme
     libtickethttp   -> calls HTTP endpoints only
     internal/server -> uses libticket service implementation internally
     libticket       -> uses store/database
@@ -372,7 +373,7 @@ CONFIGURATION
 
 Configuration key/pairs can be set using a config file.  
     - local `.ticket-config.toml` file 
-    - user-wide $TICKET_HOME/ticket-config.toml
+    - user-wide $TICKET_CONFIG_DIR/ticket-config.toml
     
 Configuration can be set
 
@@ -381,7 +382,7 @@ ticket config rm key value -scope local,global
 ticket config ls,list [-scope local,global]
 
 local = $CWD/ticket-config.json
-global = $TICKET_HOME/ticket-config.json
+global = $TICKET_CONFIG_DIR/ticket-config.json
 
 Configuration keys
 
@@ -392,7 +393,7 @@ output.format=json,markdown (markdown)
 output.format=json,markdown (markdown)
 
 # the default CLI output mode if not specified (default)
-ticket.file=$TICKET_HOME/ticket.db
+ticket.file=$TICKET_CONFIG_DIR/ticket.db
 
 ----
 
@@ -843,4 +844,304 @@ threejs alternate view which is like a two forced layout graph representation of
 project -> epics -> story
                   -> story
                 -> Story
+
+
+
+------
+
+New branch, "feature/agent"
+
+Create a new entity in the database, "agent" which represents a process which in turn will invoke an LLM to perform a task.
+
+Create crud tools over API with CLI calls comparable to user registration but for agents.
+
+# Example commands
+```bash
+ticket agent create -name X -description Y (-password PASSWORD)
+# (password set to random on server-side if not supplied
+>return ID, password 
+
+ticket agent ls,list
+> return ID, name, description, status
+
+ticket agent udpate -id ID (-name <name> -desc[ription] <description> -password <password>)
+
+ticket agent rm,delete -id ID
+
+ticket agent enable -id ID
+ticket agent disable -id ID
+```
+
+Create a new panel in the GUI to manage agents similar in theme to tickets.  Name, description, enable/disable.
+
+
+------
+
+Agent lifecyle
+
+An agent is run with the command
+
+```bash
+ticket agent run -name <name> -password PASSWORD -url TICKET_URL
+```
+
+If the options are provided, they are used, else
+
+AGENT_NAME=
+AGENT_PASSWORD=
+TICKET_URL=
+
+If any are missing, the process will fail exit 1 explaining what is missing.
+
+If all are present, the agnet will attempt to REGISTER - meaning declare that it is alive.  A success response from the server will move the agent into solitication mode where it asks for work to be assigned via a REQUEST call.
+
+The REQUEST call ask the server to return and/or assign and return a ticket to be worked on.  It is up to the server to decide to assign or refuse to assign.  
+
+If a ticket is assigned to the agent, the server will return the ticket details.  Agent will then delegate the ticket to an LLM via processing.   At the same tiem AGENT will then move the ticket to an active state.
+
+Once the LLM completes, AGENT will call UPDATE on the ticket and pass back the results of the LLM.
+
+------
+
+UX enhancements
+
+in the swimlane view, pressing P should bring up the edit project dialog
+add git repository and branch to the project 
+
+in the edit ticket view add git repository and branch to the edit dialog, store them on the ticket
+
+add acceptance criteria to the edit dialogs for projects and tickets
+
+-----
+
+fetching tickets for work as an agent
+
+The ticket an agent recieves will contain more than just the ticket details in the format:
+
+```bash
+ticket agent request (-name XXX -password YYY -url XXXX)
+{
+    status: "NEW,NONE,CURRENT",
+    # return the prject details
+    project: {}
+    # the actual ticekt details
+    ticket: {}
+    # and parents, in order until it gets to the root
+    parents: []
+}
+
+The response "status" NEW,NONE,CURRENT indicates
+    NEW: a new ticket has been assigned based on this request
+    NONE: there is no work for this agent
+    CURRENT: the following work is the currently assigned ticket
+
+normally when a ticket is returned via the `request` call, it will be assigned to the agent.  If the `-dryrun` option is specified, a ticket will be returned (randomly or -id) that simulates the response without assigning.  This is NOT to be worked on, only to demonstrate the JSON.
+
+-----
+
+roles
+
+Create a new entity, "Role" which is a persona that an agent will be given when working on a ticket.
+A role for example is one of the classical software engineering roles
+    Product Owner
+    Architect
+    DevOps
+    QA/Tester
+    BA
+    Lead Engineer
+    Staff Engineer
+
+They have a title, motivation and goals.
+
+Create 
+    - the API to CRUD-manage these entities
+    - the UX in the website to manage them (via the R keypress for roles)
+    - populate some classic roles by default such as the above
+
+
+----
+
+create a panel that can slide in/out on the left hand side to allow selection of
+    board (swimlanes)
+    agents
+    roles
+    settings
+
+
+----
+
+add a new section in the panel "chat" which is a chatbot experience 
+    the user can engage in a conversation with an LLM which will on the backend invoke copilot via 
+    a process exec running codex via an external process, mapping STDIN/STDOUT back via the websocket
+    to the frontend.
+
+    the chant experience requires a text area at the bottom and then the chat animates upwards as the
+    conversaton contonues
+
+embellish the role descriptioisn and motivation with classical descriptions of each role.  I want to see a number of paragraphs that are reasonable description, goals and motivations of each role.
+
+----
+
+Story
+
+A new entity.  Many stories associated with one project.   A story can have multiple epics.
+
+Stories should get their own panel entry and be associated with a single project.
+
+'S' shoudl bring up a dialog to create a new Story type.  The Story is a high level requirement that is not a ticket itself rather it is the entitiy that represents an overall Requirement.  Once ready, the story will then be broken down into epics and tasks -which will all link to the story_id.
+
+The breakdown of a story to epics and tasks needs to happen using an LLM using a role - these epics and tickets are then stored in the ticket database itself.  At that point the story will be marked as ready for review.  
+
+Ensure the stories paenl is on the V popup.
+
+When a story popup is visible, show an "analytse" button which will breakdown the story using the StoryReview role (make a StoryReview role) into epics and tasks.
+
+When an epic dialog is present, add an "analyse" button which willbreakdown the epic into tickets using the EpicReview role (make an EpicReview role).
+
+----
+
+Settings Panel
+An "admin" role user should have visibility in the UX to a settings panel.  
+The settings shoudl contain all teh switchable settings and config that affect all users.
+
+Teams
+-----
+A team is a set of users which can be treated like a user itself.  So a team can be a member
+of a project.
+
+A team can have child teams so that you can compose a hierarchy.
+
+A user has a role in a team
+    member 
+    owner
+    A user in a team can then have a job title
+    An agent can be assigned to a team.
+
+Create the backend, API, CLI and website UX to support this.
+
+
+User Roles
+-----------------
+A user has a role
+    admin - can perform all tasks
+    user  - user cannot administer agents or other users
+
+A user may have a role in a project
+    owner of a project - can perform all activities on a project
+        can manage membership and roles in projects
+    editor of aproject - can crud contents a project
+        can manage tickets in a project
+    viewer of a project - can view aspects of te project
+
+A project can be
+    private - a membership list is required to view/edit
+    public  - all users in the system can view it
+
+If a user does not have a role in a project and the project is private then the project is not visible
+to the user.
+
+An admin can see and manage all entities - but should not be logging in all the time -as it is risky.  When an admin logs ino the system, a soft glowing rounbd-rect border should disaply on the website.  The colour scheme should rotate slowly throught he rainbow ina neon like/chroma effect to indicate "danger mode"
+
+If a 401 occurs, go back to the login page.
+
+Website optimisation: The website is making lots of calls to the selected card.  Why? the websocket should transmit that something changed and that shoudl force the lookup to the card details.  But nothing has changed, yet there is traffic continually.  This can be optimised, so optimise it.
+------------
+
+read agents; review for drift, design, documentation, testing and implementation.
+
+
+`ticket init`
+    Add an optional `--populate` which 
+        - creates three example projects each with Storis and associated epics, tasks, bugs, chores.
+        - creates example users across 3 teams
+
+
+websocket
+---------
+
+the purpose of the websocket is to send indicators that "something changed" - that means it shoudl contain the entiy type, id, and change type.  
+
+Agent Roles
+------------
+
+projects and git
+
+A project has a git repository associated
+An epic has a git repository associated and a branch
+A ticket has a git repository associated and a branch
+
+A project has branching rules.
+
+A ticket fetched by an agent should contain project details and all parents.
+
+
+REVIEW
+------
+read agents; review for drift, design, documentation, testing and implementation.
+
+
+
+The analyse button on a story.
+
+When clicked, the server shoudl take the text description of the story and pass to codex.
+The prompt should include the instrutions on using `ticket` as a binary to create tickets representing the breakdown to epics and tasks associated with the project.
+
+the process should be spawned using environment variables for the TICKET_URL, TICKET_USERNAME, TICKET_PASSWORD etc.
+
+tk project should print the project usage
+
+tk project ls
+    should print all projects wiht a * indicating current
+
+
+
+-----
+
+## Config file
+
+How to determine the configuration of the tk client:
+
+1. Look for $CWD/.ticket.json, walking up to $HOME/.ticket.json
+2. Look in $TICKET_CONFIG_DIR/ticket.json
+
+A project in the database and config for the user file can be initialised with:
+
+```bash
+tk project init
+prefix      : (3-letters from the $CWD)
+title       : ($CWD dirname)
+description : ($CWD dirname)
+```
+
+If the project already exists AND the config.json does not exist, the user would be prompted to associate this folder with the project.
+    
+This should allow a user to run ticket across multiple folders:
+
+```bash
+cd $CODE/project-1/
+tk create "A new ticket"
+
+cd $CODE/project-2/
+tk create "A new ticket"
+```
+
+The above would then create two tickets in different projects.
+
+When using tk from the terminal as a client<->server,  The user location in the filesystem should assist in determining the project.   tk should walk "up" the current directoy until $HOME, looking for a ticket.json which 
+
+---
+
+Let's discuss refactoring the concept of TICKET_CONFIG_DIR
+
+TICKET_URL=file:///path/to/ticket.db
+TICKET_URL=https://hostname
+TICKET_URL=http://hostname
+
+All provide implied location and style of access.  
+
+A file:/// does not require an explicit user - the user is implicitly the admin.  This would be local mode.
+
+An https:// or http:// is remote mode and demands a username/password and/or jwt/session token.
+
+
 

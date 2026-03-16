@@ -14,10 +14,10 @@ This guide describes a single Go binary that provides a server, a CLI, and an em
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
-Client-side files live under `$TICKET_HOME`, which defaults to `~/.config/ticket`.
+Client-side files live under `$TICKET_CONFIG_DIR`, which defaults to `~/.config/ticket`.
 
-- `$TICKET_HOME/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
-- `$TICKET_HOME/credentials.json` stores the current session token
+- `$TICKET_CONFIG_DIR/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
+- `$TICKET_CONFIG_DIR/credentials.json` stores the current session token
 
 ## Getting Started
 
@@ -35,7 +35,7 @@ Initialize a task sqlite database:
 ticket initdb
 ```
 
-If `-f` is omitted, `ticket initdb` creates the SQLite database at `$TICKET_HOME/ticket.db`.
+If `-f` is omitted, `ticket initdb` creates the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
 `ticket initdb` creates:
 
@@ -64,7 +64,7 @@ Start the server:
 ticket server
 ```
 
-If `-f` is omitted, `ticket server` uses `$TICKET_HOME/ticket.db`.
+If `-f` is omitted, `ticket server` uses the default local database path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
 If `-v` is supplied, `ticket server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
@@ -88,10 +88,10 @@ ticket version
 
 Running `ticket` with no arguments prints a colored ASCII-art `TICKET` banner above the main usage output.
 
-If you are using the CLI against a running server on another host, configure TICKET_SERVER first:
+If you are using the CLI against a running server on another host, configure TICKET_URL first:
 
 ```bash
-export TICKET_SERVER=http://your-server:8080
+export TICKET_URL=http://your-server:8080
 ```
 
 As an admin create users:
@@ -155,8 +155,8 @@ For `ticket register`, you can omit the flags and let the CLI resolve them from 
 
 `ticket login` resolves values in this order:
 
-1. a valid session already stored in `$TICKET_HOME/credentials.json`
-2. the `username` already stored in `$TICKET_HOME/config.json`
+1. a valid session already stored in `$TICKET_CONFIG_DIR/credentials.json`
+2. the `username` already stored in `$TICKET_CONFIG_DIR/config.json`
 3. `-username` and `-password`
 4. `TICKET_USERNAME` and `TICKET_PASSWORD`
 5. interactive prompts for anything still missing
@@ -169,8 +169,8 @@ When `ticket login` prompts for a password in an interactive terminal, typed cha
 
 On successful login:
 
-- the session token is stored in `$TICKET_HOME/credentials.json`
-- the `username` and `server_url` fields in `$TICKET_HOME/config.json` are updated
+- the session token is stored in `$TICKET_CONFIG_DIR/credentials.json`
+- the `username` and `server_url` fields in `$TICKET_CONFIG_DIR/config.json` are updated
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -200,7 +200,7 @@ Supported local keys are:
 In REMOTE mode it prints:
 
 - `mode: remote`
-- `server: <TICKET_SERVER>`
+- `server: <TICKET_URL>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
@@ -245,7 +245,7 @@ Log out:
 ticket logout
 ```
 
-`ticket logout` removes `$TICKET_HOME/credentials.json`.
+`ticket logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
 
@@ -272,7 +272,7 @@ Most teams use `ticket` in this order:
 Create a project:
 
 ```bash
-ticket project create -prefix CUS -description "Portal backlog" -ac "Portal launch criteria" "Customer Portal"
+ticket project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Portal launch criteria"
 ```
 
 The project is now the default project.
@@ -284,7 +284,7 @@ ticket project list
 ticket project ls
 ```
 
-`ticket project list` prints the project id, prefix, title, and status, and marks the active project as `(current)`.
+`ticket project list` prints the project id, prefix, title, and status, and marks the active project with `*`.
 
 Select the active project for subsequent commands:
 
@@ -292,7 +292,30 @@ Select the active project for subsequent commands:
 ticket project use CUS
 ```
 
-Show the current project:
+### Per-directory project binding
+
+You can bind a directory tree to a project using `ticket project init`. This creates a `.ticket.json` file in the current directory:
+
+```bash
+cd ~/code/my-project
+ticket project init -prefix MYP -title "My Project"
+```
+
+When `tk` is run from any subdirectory, it walks up the filesystem looking for `.ticket.json` and uses that project automatically. This allows working on multiple projects without `ticket project use`:
+
+```bash
+cd ~/code/project-1/
+tk create "A new ticket"    # creates in project-1's project
+
+cd ~/code/project-2/
+tk create "A new ticket"    # creates in project-2's project
+```
+
+The lookup order is:
+1. `.ticket.json` in the current directory or any parent up to `$HOME`
+2. `$TICKET_CONFIG_DIR/config.json` (global config)
+
+Show project usage:
 
 ```bash
 ticket project
@@ -573,7 +596,7 @@ Keyboard shortcuts in the board view:
 - when chat capacity is full, new chat input is disabled until the server reports a free slot
 - `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
-- story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_MODE=remote`, `TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `ticket login` plus `ticket create` commands for epics/tasks in the selected project
+- story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `ticket login` plus `ticket create` commands for epics/tasks in the selected project
 - Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
 ## Command Reference
@@ -608,7 +631,8 @@ ticket agent disable -id <id>
 ticket agent run -name <name> -password <password> -url <server-url>
 ticket agent request -password <password> -url <server-url> [-id <ticket-id>] [-dryrun]
 
-ticket project create -prefix ABC "..."
+ticket project create -prefix ABC -title "..."
+ticket project init
 ticket project list
 ticket project ls
 ticket project use <prefix-or-id>
