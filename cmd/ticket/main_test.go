@@ -63,34 +63,38 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	clientOrder := []string{
-		"  add",
-		"  claim",
-		"  clone",
-		"  comment",
-		"  config",
-		"  count",
-		"  dependency",
-		"  delete",
-		"  get",
-		"  help",
-		"  health",
-		"  list",
 		"  login",
-		"  logout",
-		"  onboard",
-		"  orphans",
-		"  project",
 		"  register",
-		"\n  ticket          ",
+		"  logout",
+		"  status",
+		"  config",
+		"  project",
+		"  team",
+		"  agent",
+		"  add",
+		"  get",
+		"  list",
+		"  search",
+		"  update",
+		"  delete",
+		"  clone",
+		"  claim",
+		"  unclaim",
 		"  request",
 		"  request-dryrun",
-		"  search",
 		"  set-parent",
-		"  status",
+		"  attach",
 		"  unset-parent",
-		"  unclaim",
+		"  detach",
+		"  comment",
+		"  dependency",
+		"  health",
+		"  count",
+		"  orphans",
+		"\n  ticket          ",
+		"  onboard",
+		"  help",
 		"  upgrade",
-		"  update",
 		"  version",
 	}
 	last := -1
@@ -100,7 +104,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 			t.Fatalf("root usage missing ordered client command %q:\n%s", item, usage)
 		}
 		if idx <= last {
-			t.Fatalf("root usage client commands not alphabetical around %q:\n%s", item, usage)
+			t.Fatalf("root usage client commands not in expected order around %q:\n%s", item, usage)
 		}
 		last = idx
 	}
