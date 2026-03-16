@@ -111,14 +111,14 @@ var bannerColors = []string{
 //go:embed VERSION
 var embeddedVersion string
 
-//go:embed AGENTS.md
+//go:embed TICKETS.md
 var embeddedAgents string
 
 var helpIndex = map[string]commandHelp{
 	"onboard": {
 		usage:   "ticket onboard",
-		details: []string{"Prints the embedded onboarding template to stdout."},
-		example: "ticket onboard",
+		details: []string{"Prints ticket CLI instructions to stdout for use by agents.", "Usage: ticket onboard > TICKET.md"},
+		example: "ticket onboard > TICKET.md",
 	},
 	"init": {
 		usage:   "ticket init [-f <db-path>] [--force] [-password <password>] [--populate]",
@@ -2600,6 +2600,13 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(tickets) == 0 {
+		if outputJSON {
+			return printJSON(tickets)
+		}
+		fmt.Printf("no tickets for project %s\n", project.Prefix)
+		return nil
+	}
 	dependenciesByTicket := make(map[int64]string, len(tickets))
 	for _, ticket := range tickets {
 		dependencies, err := api.ListDependencies(ticket.ID)
@@ -5018,38 +5025,28 @@ func resolveLoginPassword(passwordFlag string) string {
 func renderRootUsage() string {
 	var b strings.Builder
 	b.WriteString(renderBanner())
-	b.WriteString(`
-USAGE
-  ticket <command> [options]
-
-CLIENT COMMANDS
-`)
+	h := "\x1b[38;5;117m" // pastel blue
+	r := "\x1b[0m"
+	b.WriteString("\n" + h + "USAGE" + r + "\n")
+	b.WriteString("  ticket <command> [options]\n\n")
+	b.WriteString(h + "CLIENT COMMANDS" + r + "\n")
 	clientRows := [][2]string{
 		{"add", "Create a ticket in the active project"},
-		{"active", "Set a ticket state to active"},
-		{"archive", "Archive a ticket"},
 		{"claim", "Assign yourself to a ticket"},
 		{"clone", "Clone a ticket or epic"},
-		{"close", "Close a ticket and freeze modifications"},
 		{"comment", "Add comments to a ticket"},
-		{"complete", "Set a ticket state to success"},
 		{"config", "Manage local config keys and registration controls"},
 		{"count", "Count users, projects, and work by type"},
-		{"design", "Set a ticket stage to design"},
 		{"dependency", "Manage dependency links between tickets"},
 		{"delete", "Delete a ticket permanently"},
-		{"develop", "Set a ticket stage to develop"},
-		{"done", "Set a ticket stage to done"},
 		{"agent", "Manage autonomous agents and run agent workers"},
 		{"get", "Show a ticket with history and comments"},
 		{"help", "Show command help"},
 		{"health", "Compute ticket health by project-specific heuristics"},
-		{"idle", "Set a ticket state to idle"},
 		{"list", "List tickets in the active project"},
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
-		{"onboard", "Print the embedded AGENTS.md template to stdout"},
-		{"open", "Reopen a closed ticket"},
+		{"onboard", "Print ticket CLI instructions for agents to stdout"},
 		{"orphans", "List tickets with no parent"},
 		{"project", "Manage projects and active project context"},
 		{"team", "Manage teams, hierarchy, and team membership"},
@@ -5061,16 +5058,31 @@ CLIENT COMMANDS
 		{"set-parent", "Set the parent of a ticket"},
 		{"attach", "Alias for set-parent"},
 		{"status", "Show server and authentication status"},
-		{"stage", "Set a ticket stage directly [design, develop, test, done]"},
-		{"state", "Set a ticket state directly [idle, active, success, fail]"},
-		{"test", "Set a ticket stage to test"},
 		{"unset-parent", "Clear the parent of a ticket"},
 		{"detach", "Alias for unset-parent"},
 		{"unclaim", "Remove yourself from a ticket"},
-		{"unarchive", "Unarchive a ticket"},
 		{"upgrade", "Check whether a newer version is available"},
 		{"update", "Update a ticket"},
 		{"version", "Print the current version from VERSION"},
+	}
+	lifecycleRows := [][2]string{
+		{"archive", "Archive a ticket"},
+		{"unarchive", "Unarchive a ticket"},
+		{"close", "Close a ticket and freeze modifications"},
+		{"open", "Reopen a closed ticket"},
+	}
+	stageRows := [][2]string{
+		{"design", "Set a ticket stage to design"},
+		{"develop", "Set a ticket stage to develop"},
+		{"test", "Set a ticket stage to test"},
+		{"done", "Set a ticket stage to done"},
+		{"stage", "Set a ticket stage directly [design, develop, test, done]"},
+	}
+	stateRows := [][2]string{
+		{"idle", "Set a ticket state to idle"},
+		{"active", "Set a ticket state to active"},
+		{"complete", "Set a ticket state to success"},
+		{"state", "Set a ticket state directly [idle, active, success, fail]"},
 	}
 	adminRows := [][2]string{
 		{"assign", "Admin-only ticket assignment"},
@@ -5081,16 +5093,18 @@ CLIENT COMMANDS
 		{"unassign", "Admin-only ticket unassignment"},
 		{"user", "Admin-only user management"},
 	}
-	commandWidth := commandUsageWidth(clientRows, adminRows)
+	commandWidth := commandUsageWidth(clientRows, lifecycleRows, stageRows, stateRows, adminRows)
 	printCommandUsageRows(&b, clientRows, commandWidth)
-	b.WriteString(`
-`)
-	b.WriteString("ADMIN COMMANDS\n")
+	b.WriteString("\n" + h + "LIFECYCLE COMMANDS" + r + "\n")
+	printCommandUsageRows(&b, lifecycleRows, commandWidth)
+	b.WriteString("\n" + h + "STAGE COMMANDS" + r + "\n")
+	printCommandUsageRows(&b, stageRows, commandWidth)
+	b.WriteString("\n" + h + "STATE COMMANDS" + r + "\n")
+	printCommandUsageRows(&b, stateRows, commandWidth)
+	b.WriteString("\n" + h + "ADMIN COMMANDS" + r + "\n")
 	printCommandUsageRows(&b, adminRows, commandWidth)
-	b.WriteString(`
-HELP
-  ticket help <command>
-`)
+	b.WriteString("\n" + h + "HELP" + r + "\n")
+	b.WriteString("  ticket help <command>\n")
 	return strings.TrimSpace(b.String()) + "\n"
 }
 

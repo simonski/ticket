@@ -30,7 +30,11 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"TTTTTTT",
 		"USAGE",
 		"CLIENT COMMANDS",
+		"LIFECYCLE COMMANDS",
+		"STAGE COMMANDS",
+		"STATE COMMANDS",
 		"ADMIN COMMANDS",
+		"\x1b[38;5;117m",
 		"config",
 		"init",
 		"server",
@@ -60,22 +64,16 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 
 	clientOrder := []string{
 		"  add",
-		"  active",
 		"  claim",
 		"  clone",
 		"  comment",
-		"  complete",
 		"  config",
 		"  count",
-		"  design",
 		"  dependency",
 		"  delete",
-		"  develop",
-		"  done",
 		"  get",
 		"  help",
 		"  health",
-		"  idle",
 		"  list",
 		"  login",
 		"  logout",
@@ -89,9 +87,6 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  search",
 		"  set-parent",
 		"  status",
-		"  stage",
-		"  state",
-		"  test",
 		"  unset-parent",
 		"  unclaim",
 		"  upgrade",
@@ -345,7 +340,7 @@ func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 			t.Fatalf("runOnboard() error = %v", err)
 		}
 	})
-	if !strings.Contains(output, "# Agent Instructions") {
+	if !strings.Contains(output, "# Ticket — Issue Tracking for Agents") {
 		t.Fatalf("runOnboard() did not print embedded template:\n%s", output)
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "AGENTS.md")); !errors.Is(err, os.ErrNotExist) {
