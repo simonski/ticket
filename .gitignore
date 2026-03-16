@@ -4,6 +4,8 @@ commands.sh
 commands2.sh
 ./tk
 ./task
+ticket
+backup.json
 ./parser
 ./wiggum
 task.db
