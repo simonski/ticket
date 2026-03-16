@@ -29,20 +29,20 @@ func TestCountEverything(t *testing.T) {
 		Type:      "task",
 		Title:     "Task B",
 		Stage:     StageDone,
-		State:     StateComplete,
+		State:     StateSuccess,
 		CreatedBy: 1,
 	}); err != nil {
-		t.Fatalf("CreateTicket(task done/complete) error = %v", err)
+		t.Fatalf("CreateTicket(task done/success) error = %v", err)
 	}
 	if _, err := CreateTicket(db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Epic A",
 		Stage:     StageDone,
-		State:     StateComplete,
+		State:     StateSuccess,
 		CreatedBy: 1,
 	}); err != nil {
-		t.Fatalf("CreateTicket(epic done/complete) error = %v", err)
+		t.Fatalf("CreateTicket(epic done/success) error = %v", err)
 	}
 	if _, err := CreateTicket(db, TicketCreateParams{
 		ProjectID: otherProject.ID,
@@ -86,7 +86,7 @@ func TestCountEverything(t *testing.T) {
 	if projectOnly.Types[1].Type != "task" || projectOnly.Types[1].Total != 2 {
 		t.Fatalf("CountEverything(project).Types[1] = %#v", projectOnly.Types[1])
 	}
-	if projectOnly.Types[1].Statuses["done/complete"] != 1 || projectOnly.Types[1].Statuses["design/idle"] != 1 {
+	if projectOnly.Types[1].Statuses["done/success"] != 1 || projectOnly.Types[1].Statuses["design/idle"] != 1 {
 		t.Fatalf("CountEverything(project).Types[1].Statuses = %#v", projectOnly.Types[1].Statuses)
 	}
 }

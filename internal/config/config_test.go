@@ -7,9 +7,10 @@ import (
 	"testing"
 )
 
-func TestSaveLoadAndResolveServerURL(t *testing.T) {
+func TestSaveLoadRoundTrip(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 
 	cfg := Config{ServerURL: "http://example.test:9000"}
 	if err := Save(cfg); err != nil {
@@ -29,9 +30,6 @@ func TestSaveLoadAndResolveServerURL(t *testing.T) {
 		t.Fatalf("expected config file at %s: %v", path, err)
 	}
 
-	if resolved := ResolveServerURL(got); resolved != cfg.ServerURL {
-		t.Fatalf("ResolveServerURL() = %q, want %q", resolved, cfg.ServerURL)
-	}
 	if got.Token != "" {
 		t.Fatalf("Load().Token = %q, want empty because credentials are stored separately", got.Token)
 	}
@@ -47,77 +45,75 @@ func TestSaveLoadAndResolveServerURL(t *testing.T) {
 	if reloaded.CurrentProject != "2" {
 		t.Fatalf("Load().CurrentProject = %q, want 2", reloaded.CurrentProject)
 	}
-
-	t.Setenv("TICKET_SERVER", "http://env.test:7000")
-	if resolved := ResolveServerURL(got); resolved != "http://env.test:7000" {
-		t.Fatalf("ResolveServerURL() with env = %q", resolved)
-	}
 }
 
-func TestResolveServerURLDefault(t *testing.T) {
-	t.Setenv("TICKET_SERVER", "")
-	t.Setenv("TICKET_URL", "")
-	if resolved := ResolveServerURL(Config{}); resolved != "http://localhost:8080" {
-		t.Fatalf("ResolveServerURL(default) = %q", resolved)
-	}
-}
-
-func TestResolveModeDefaultsToLocal(t *testing.T) {
-	t.Setenv("TICKET_MODE", "")
-	mode, err := ResolveMode()
-	if err != nil {
-		t.Fatalf("ResolveMode() error = %v", err)
-	}
-	if mode != ModeLocal {
-		t.Fatalf("ResolveMode() = %q, want %q", mode, ModeLocal)
-	}
-}
-
-func TestResolveModeRejectsInvalidValue(t *testing.T) {
-	t.Setenv("TICKET_MODE", "bogus")
-	if _, err := ResolveMode(); err == nil {
-		t.Fatal("ResolveMode() error = nil, want invalid mode error")
-	}
-}
-
-func TestResolveDatabasePathUsesOverrideAndHomeDefaults(t *testing.T) {
+func TestResolveURLDefaultsToLocal(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_DB_OVERRIDE", filepath.Join(tempDir, "override.db"))
-	path, err := ResolveDatabasePath()
-	if err != nil {
-		t.Fatalf("ResolveDatabasePath(override) error = %v", err)
-	}
-	if path != filepath.Join(tempDir, "override.db") {
-		t.Fatalf("ResolveDatabasePath(override) = %q", path)
-	}
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 
-	t.Setenv("TICKET_DB_OVERRIDE", "")
-	t.Setenv("TICKET_HOME", tempDir)
-	path, err = ResolveDatabasePath()
+	resolved, err := ResolveURL()
 	if err != nil {
-		t.Fatalf("ResolveDatabasePath(TICKET_HOME) error = %v", err)
+		t.Fatalf("ResolveURL() error = %v", err)
 	}
-	if path != filepath.Join(tempDir, "ticket.db") {
-		t.Fatalf("ResolveDatabasePath(TICKET_HOME) = %q", path)
+	if resolved.Mode != ModeLocal {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeLocal)
 	}
+	if resolved.DBPath != filepath.Join(tempDir, "ticket.db") {
+		t.Fatalf("DBPath = %q, want %q", resolved.DBPath, filepath.Join(tempDir, "ticket.db"))
+	}
+}
 
-	t.Setenv("TICKET_HOME", "")
-	path, err = ResolveDatabasePath()
+func TestResolveURLFileScheme(t *testing.T) {
+	t.Setenv("TICKET_URL", "file:///tmp/test.db")
+	resolved, err := ResolveURL()
 	if err != nil {
-		t.Fatalf("ResolveDatabasePath(default home) error = %v", err)
+		t.Fatalf("ResolveURL() error = %v", err)
 	}
-	userHome, err := os.UserHomeDir()
+	if resolved.Mode != ModeLocal {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeLocal)
+	}
+	if resolved.DBPath != "/tmp/test.db" {
+		t.Fatalf("DBPath = %q, want /tmp/test.db", resolved.DBPath)
+	}
+}
+
+func TestResolveURLHTTPScheme(t *testing.T) {
+	t.Setenv("TICKET_URL", "http://localhost:8080")
+	resolved, err := ResolveURL()
 	if err != nil {
-		t.Fatalf("UserHomeDir() error = %v", err)
+		t.Fatalf("ResolveURL() error = %v", err)
 	}
-	wantPath := filepath.Join(userHome, ".config", "ticket", "ticket.db")
-	if strings.TrimPrefix(filepath.Clean(path), "/private") != strings.TrimPrefix(filepath.Clean(wantPath), "/private") {
-		t.Fatalf("ResolveDatabasePath(default home) = %q, want %q", path, wantPath)
+	if resolved.Mode != ModeRemote {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeRemote)
+	}
+	if resolved.ServerURL != "http://localhost:8080" {
+		t.Fatalf("ServerURL = %q", resolved.ServerURL)
+	}
+}
+
+func TestResolveURLHTTPSScheme(t *testing.T) {
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
+	resolved, err := ResolveURL()
+	if err != nil {
+		t.Fatalf("ResolveURL() error = %v", err)
+	}
+	if resolved.Mode != ModeRemote {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeRemote)
+	}
+	if resolved.ServerURL != "https://tickets.example.com" {
+		t.Fatalf("ServerURL = %q", resolved.ServerURL)
+	}
+}
+
+func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
+	t.Setenv("TICKET_URL", "ftp://example.com")
+	if _, err := ResolveURL(); err == nil {
+		t.Fatal("ResolveURL() error = nil, want unsupported scheme error")
 	}
 }
 
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
-	t.Setenv("TICKET_HOME", "")
 	t.Setenv("TICKET_CONFIG_DIR", "")
 
 	userHome, err := os.UserHomeDir()
@@ -134,9 +130,23 @@ func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	}
 }
 
+func TestHomeUsesConfigDir(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+
+	got, err := Home()
+	if err != nil {
+		t.Fatalf("Home() error = %v", err)
+	}
+	if got != tempDir {
+		t.Fatalf("Home() = %q, want %q", got, tempDir)
+	}
+}
+
 func TestCredentialsStoredSeparately(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
 
 	cfg := Config{ServerURL: "http://example.test:9000", Username: "alice", Token: "sensitive"}
 	if err := Save(cfg); err != nil {
@@ -167,5 +177,86 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "credentials.json")); !os.IsNotExist(err) {
 		t.Fatalf("credentials.json should be removed, err = %v", err)
+	}
+}
+
+func TestFindLocalConfigWalksUp(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "a", "b", "c")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Place .ticket.json in root/a
+	if err := SaveLocalConfig(filepath.Join(root, "a"), LocalConfig{CurrentProject: "FOO"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should find it from root/a/b/c
+	lc, ok := FindLocalConfig(child)
+	if !ok {
+		t.Fatal("FindLocalConfig() returned false, want true")
+	}
+	if lc.CurrentProject != "FOO" {
+		t.Fatalf("CurrentProject = %q, want FOO", lc.CurrentProject)
+	}
+	wantPath := filepath.Join(root, "a", LocalConfigFile)
+	if lc.Path != wantPath {
+		t.Fatalf("Path = %q, want %q", lc.Path, wantPath)
+	}
+
+	// Should not find it from root (sibling of a)
+	_, ok = FindLocalConfig(root)
+	if ok {
+		t.Fatal("FindLocalConfig(root) returned true, want false")
+	}
+}
+
+func TestLocalConfigOverridesGlobalProject(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("TICKET_CONFIG_DIR", tempHome)
+	t.Setenv("TICKET_URL", "")
+
+	// Save global config with project BAR
+	cfg := Config{CurrentProject: "BAR"}
+	if err := Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a dir with .ticket.json pointing to FOO
+	projDir := t.TempDir()
+	if err := SaveLocalConfig(projDir, LocalConfig{CurrentProject: "FOO"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Change to that dir and load
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.CurrentProject != "FOO" {
+		t.Fatalf("CurrentProject = %q, want FOO (local override)", loaded.CurrentProject)
+	}
+}
+
+func TestSaveLocalConfig(t *testing.T) {
+	dir := t.TempDir()
+	lc := LocalConfig{CurrentProject: "ABC"}
+	if err := SaveLocalConfig(dir, lc); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, LocalConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "ABC") {
+		t.Fatalf("saved file does not contain ABC: %s", data)
 	}
 }

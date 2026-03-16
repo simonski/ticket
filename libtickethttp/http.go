@@ -23,6 +23,10 @@ func (s *Service) Status() (libticket.StatusResponse, error) {
 	return libticket.StatusResponse(status), nil
 }
 
+func (s *Service) SetRegistrationEnabled(enabled bool) error {
+	return s.client.SetRegistrationEnabled(enabled)
+}
+
 func (s *Service) Register(username, password string) (store.User, error) {
 	return s.client.Register(username, password)
 }
@@ -59,6 +63,58 @@ func (s *Service) DeleteUser(username string) error {
 	return s.client.DeleteUser(username)
 }
 
+func (s *Service) CreateRole(request libticket.RoleRequest) (store.Role, error) {
+	return s.client.CreateRole(client.RoleRequest(request))
+}
+
+func (s *Service) ListRoles() ([]store.Role, error) {
+	return s.client.ListRoles()
+}
+
+func (s *Service) UpdateRole(id int64, request libticket.RoleRequest) (store.Role, error) {
+	return s.client.UpdateRole(id, client.RoleRequest(request))
+}
+
+func (s *Service) DeleteRole(id int64) error {
+	return s.client.DeleteRole(id)
+}
+
+func (s *Service) CreateAgent(request libticket.AgentCreateRequest) (store.Agent, string, error) {
+	return s.client.CreateAgent(client.AgentCreateRequest(request))
+}
+
+func (s *Service) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+	return s.client.SetAgentEnabled(id, enabled)
+}
+
+func (s *Service) ListAgents() ([]store.Agent, error) {
+	return s.client.ListAgents()
+}
+
+func (s *Service) UpdateAgent(id int64, request libticket.AgentUpdateRequest) (store.Agent, error) {
+	return s.client.UpdateAgent(id, client.AgentUpdateRequest(request))
+}
+
+func (s *Service) DeleteAgent(id int64) error {
+	return s.client.DeleteAgent(id)
+}
+
+func (s *Service) RegisterAgent(request libticket.AgentRegisterRequest) (store.Agent, error) {
+	return s.client.RegisterAgent(client.AgentRegisterRequest(request))
+}
+
+func (s *Service) RequestAgentWork(request libticket.AgentRequest) (libticket.AgentWorkResponse, error) {
+	resp, err := s.client.RequestAgentWork(client.AgentRequest(request))
+	if err != nil {
+		return libticket.AgentWorkResponse{}, err
+	}
+	return libticket.AgentWorkResponse(resp), nil
+}
+
+func (s *Service) AgentUpdateTicket(id int64, request libticket.AgentTicketUpdateRequest) (store.Ticket, error) {
+	return s.client.AgentUpdateTicket(id, client.AgentTicketUpdateRequest(request))
+}
+
 func (s *Service) CreateProject(request libticket.ProjectCreateRequest) (store.Project, error) {
 	return s.client.CreateProject(client.ProjectCreateRequest(request))
 }
@@ -79,6 +135,70 @@ func (s *Service) SetProjectEnabled(id int64, enabled bool) (store.Project, erro
 	return s.client.SetProjectEnabled(id, enabled)
 }
 
+func (s *Service) AddProjectMember(projectID int64, request libticket.ProjectMemberRequest) (store.ProjectMember, error) {
+	return s.client.AddProjectMember(projectID, client.ProjectMemberRequest(request))
+}
+
+func (s *Service) RemoveProjectMember(projectID, userID int64) error {
+	return s.client.RemoveProjectMember(projectID, userID)
+}
+
+func (s *Service) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
+	return s.client.ListProjectMembers(projectID)
+}
+
+func (s *Service) AddProjectTeamMember(projectID int64, request libticket.ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+	return s.client.AddProjectTeamMember(projectID, client.ProjectTeamMemberRequest(request))
+}
+
+func (s *Service) RemoveProjectTeamMember(projectID, teamID int64) error {
+	return s.client.RemoveProjectTeamMember(projectID, teamID)
+}
+
+func (s *Service) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+	return s.client.ListProjectTeamMembers(projectID)
+}
+
+func (s *Service) CreateTeam(request libticket.TeamRequest) (store.Team, error) {
+	return s.client.CreateTeam(client.TeamRequest(request))
+}
+
+func (s *Service) ListTeams() ([]store.Team, error) {
+	return s.client.ListTeams()
+}
+
+func (s *Service) UpdateTeam(id int64, request libticket.TeamRequest) (store.Team, error) {
+	return s.client.UpdateTeam(id, client.TeamRequest(request))
+}
+
+func (s *Service) DeleteTeam(id int64) error {
+	return s.client.DeleteTeam(id)
+}
+
+func (s *Service) AddTeamMember(teamID int64, request libticket.TeamMemberRequest) (store.TeamMember, error) {
+	return s.client.AddTeamMember(teamID, client.TeamMemberRequest(request))
+}
+
+func (s *Service) RemoveTeamMember(teamID, userID int64) error {
+	return s.client.RemoveTeamMember(teamID, userID)
+}
+
+func (s *Service) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+	return s.client.ListTeamMembers(teamID)
+}
+
+func (s *Service) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+	return s.client.AddTeamAgent(teamID, agentID)
+}
+
+func (s *Service) RemoveTeamAgent(teamID, agentID int64) error {
+	return s.client.RemoveTeamAgent(teamID, agentID)
+}
+
+func (s *Service) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+	return s.client.ListTeamAgents(teamID)
+}
+
 func (s *Service) CreateTicket(request libticket.TicketCreateRequest) (store.Ticket, error) {
 	return s.client.CreateTicket(client.TicketCreateRequest(request))
 }
@@ -87,12 +207,28 @@ func (s *Service) ListTickets(projectID int64) ([]store.Ticket, error) {
 	return s.client.ListTickets(projectID)
 }
 
-func (s *Service) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error) {
-	return s.client.ListTicketsFiltered(projectID, taskType, stage, state, status, search, assignee, limit)
+func (s *Service) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
+	return s.client.ListTicketsFiltered(projectID, taskType, stage, state, status, search, assignee, limit, includeArchived)
 }
 
 func (s *Service) UpdateTicket(id int64, request libticket.TicketUpdateRequest) (store.Ticket, error) {
 	return s.client.UpdateTicket(id, client.TicketUpdateRequest(request))
+}
+
+func (s *Service) CloseTicket(id int64) (store.Ticket, error) {
+	return s.client.CloseTicket(id)
+}
+
+func (s *Service) OpenTicket(id int64) (store.Ticket, error) {
+	return s.client.OpenTicket(id)
+}
+
+func (s *Service) ArchiveTicket(id int64) (store.Ticket, error) {
+	return s.client.ArchiveTicket(id)
+}
+
+func (s *Service) UnarchiveTicket(id int64) (store.Ticket, error) {
+	return s.client.UnarchiveTicket(id)
 }
 
 func (s *Service) DeleteTicket(id int64) error {

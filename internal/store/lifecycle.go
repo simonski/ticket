@@ -15,6 +15,8 @@ const (
 const (
 	StateIdle     = "idle"
 	StateActive   = "active"
+	StateSuccess  = "success"
+	StateFail     = "fail"
 	StateComplete = "complete"
 )
 
@@ -26,9 +28,14 @@ var validStages = map[string]bool{
 }
 
 var validStates = map[string]bool{
-	StateIdle:     true,
-	StateActive:   true,
-	StateComplete: true,
+	StateIdle:    true,
+	StateActive:  true,
+	StateSuccess: true,
+	StateFail:    true,
+}
+
+var legacyStateAliases = map[string]string{
+	StateComplete: StateSuccess,
 }
 
 var stageOrder = map[string]int{
@@ -43,15 +50,25 @@ func ValidStage(stage string) bool {
 }
 
 func ValidState(state string) bool {
+	state = normalizeState(state)
 	return validStates[state]
 }
 
+func normalizeState(state string) string {
+	state = strings.TrimSpace(strings.ToLower(state))
+	if normalized, ok := legacyStateAliases[state]; ok {
+		return normalized
+	}
+	return state
+}
+
 func ValidLifecycle(stage, state string) bool {
+	state = normalizeState(state)
 	if !ValidStage(stage) || !ValidState(state) {
 		return false
 	}
 	if stage == StageDone {
-		return state == StateComplete
+		return state == StateSuccess || state == StateFail
 	}
 	return true
 }
@@ -82,8 +99,9 @@ func ParseLifecycleStatus(raw string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid status %q", raw)
 	}
 	parts := strings.SplitN(trimmed, "/", 2)
-	if len(parts) == 2 && ValidLifecycle(parts[0], parts[1]) {
-		return parts[0], parts[1], nil
+	state := normalizeState(parts[1])
+	if len(parts) == 2 && ValidLifecycle(parts[0], state) {
+		return parts[0], state, nil
 	}
 	return "", "", fmt.Errorf("invalid status %q", raw)
 }

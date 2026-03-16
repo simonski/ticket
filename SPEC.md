@@ -409,7 +409,7 @@ Derived lifecycle updates for parent tickets must also emit history entries.
 
 `project` commands:
 
-- `ticket project create -prefix <PREFIX> "TITLE"`
+- `ticket project create -prefix <PREFIX> -title <TITLE>`
 - `ticket project list`
 - `ticket project get <PREFIX|PROJECT_ID>`
 - `ticket project <PREFIX|PROJECT_ID> update`

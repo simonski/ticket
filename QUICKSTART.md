@@ -1,8 +1,15 @@
-QUICKSTARt.md
+QUICKSTART.md
 
 1. Write a DESIGN.md document
 
 2. Either
+ticket breakdown DESIGN.md DOC1.md DOC3.md 
+
+Gives you a prompt
+
+execute the prompt.
+
+
 Prompt your agent to create REQUIREMENTS.md
 OR
 parser -f REQUIREMENTS.md > commands.sh

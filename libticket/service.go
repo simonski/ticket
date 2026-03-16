@@ -4,6 +4,7 @@ import "github.com/simonski/ticket/internal/store"
 
 type Service interface {
 	Status() (StatusResponse, error)
+	SetRegistrationEnabled(enabled bool) error
 	Register(username, password string) (store.User, error)
 	Login(username, password string) (store.User, string, error)
 	Logout() error
@@ -12,15 +13,47 @@ type Service interface {
 	SetUserEnabled(username string, enabled bool) error
 	ListUsers() ([]store.User, error)
 	DeleteUser(username string) error
+	CreateRole(request RoleRequest) (store.Role, error)
+	ListRoles() ([]store.Role, error)
+	UpdateRole(id int64, request RoleRequest) (store.Role, error)
+	DeleteRole(id int64) error
+	CreateAgent(request AgentCreateRequest) (store.Agent, string, error)
+	SetAgentEnabled(id int64, enabled bool) (store.Agent, error)
+	ListAgents() ([]store.Agent, error)
+	UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error)
+	DeleteAgent(id int64) error
+	RegisterAgent(request AgentRegisterRequest) (store.Agent, error)
+	RequestAgentWork(request AgentRequest) (AgentWorkResponse, error)
+	AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error)
 	CreateProject(request ProjectCreateRequest) (store.Project, error)
 	ListProjects() ([]store.Project, error)
 	GetProject(id string) (store.Project, error)
 	UpdateProject(id int64, request ProjectUpdateRequest) (store.Project, error)
 	SetProjectEnabled(id int64, enabled bool) (store.Project, error)
+	AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
+	RemoveProjectMember(projectID, userID int64) error
+	ListProjectMembers(projectID int64) ([]store.ProjectMember, error)
+	AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error)
+	RemoveProjectTeamMember(projectID, teamID int64) error
+	ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error)
+	CreateTeam(request TeamRequest) (store.Team, error)
+	ListTeams() ([]store.Team, error)
+	UpdateTeam(id int64, request TeamRequest) (store.Team, error)
+	DeleteTeam(id int64) error
+	AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error)
+	RemoveTeamMember(teamID, userID int64) error
+	ListTeamMembers(teamID int64) ([]store.TeamMember, error)
+	AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error)
+	RemoveTeamAgent(teamID, agentID int64) error
+	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
 	CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 	ListTickets(projectID int64) ([]store.Ticket, error)
-	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error)
+	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error)
 	UpdateTicket(id int64, request TicketUpdateRequest) (store.Ticket, error)
+	CloseTicket(id int64) (store.Ticket, error)
+	OpenTicket(id int64) (store.Ticket, error)
+	ArchiveTicket(id int64) (store.Ticket, error)
+	UnarchiveTicket(id int64) (store.Ticket, error)
 	DeleteTicket(id int64) error
 	SetTicketParent(id, parentID int64) (store.Ticket, error)
 	UnsetTicketParent(id int64) (store.Ticket, error)

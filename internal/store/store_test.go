@@ -40,7 +40,7 @@ func TestInitCreatesDatabaseAndAdminUser(t *testing.T) {
 	}
 
 	assertTableExists(t, db, "projects")
-	assertTableExists(t, db, "tasks")
+	assertTableExists(t, db, "tickets")
 	assertTableExists(t, db, "history_events")
 	assertTableExists(t, db, "comments")
 	assertTableExists(t, db, "dependencies")

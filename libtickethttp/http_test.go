@@ -25,7 +25,6 @@ func TestHTTPServiceContract(t *testing.T) {
 }
 
 func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
 	fixture, _ := newRemoteFixture(t)
 
 	svc := New(config.Config{ServerURL: fixture.server.URL})
@@ -39,7 +38,6 @@ func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
 }
 
 func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
 	fixture, _ := newRemoteFixture(t)
 
 	svc := New(config.Config{ServerURL: fixture.server.URL})
@@ -113,7 +111,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 func TestHTTPServiceDeleteTicket(t *testing.T) {
 	_, svc := newRemoteFixture(t)
 
-	task, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Delete me",
@@ -121,10 +119,10 @@ func TestHTTPServiceDeleteTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if err := svc.DeleteTicket(task.ID); err != nil {
+	if err := svc.DeleteTicket(ticket.ID); err != nil {
 		t.Fatalf("DeleteTicket() error = %v", err)
 	}
-	if _, err := svc.GetTicketByID(task.ID); !errors.Is(err, store.ErrTicketNotFound) && (err == nil || err.Error() != "ticket not found") {
+	if _, err := svc.GetTicketByID(ticket.ID); !errors.Is(err, store.ErrTicketNotFound) && (err == nil || err.Error() != "ticket not found") {
 		t.Fatalf("GetTicket(deleted) error = %v, want ticket not found", err)
 	}
 }
@@ -140,7 +138,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	task, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
 		ProjectID:          1,
 		Type:               "task",
 		Title:              "Child",
@@ -155,12 +153,12 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &task.ID})
+	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &ticket.ID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)
 	}
 
-	updated, err := svc.UpdateTicket(task.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
 		Title:              "Updated Child",
 		Description:        "new description",
 		AcceptanceCriteria: "new ac",
@@ -184,7 +182,6 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 }
 
 func TestHTTPServiceCountRequiresAuth(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
 	fixture, _ := newRemoteFixture(t)
 
 	svc := New(config.Config{ServerURL: fixture.server.URL})
@@ -194,12 +191,12 @@ func TestHTTPServiceCountRequiresAuth(t *testing.T) {
 }
 
 func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{not-json"))
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	svc := New(config.Config{ServerURL: server.URL})
 	if _, err := svc.Status(); err == nil {
@@ -208,11 +205,11 @@ func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
 }
 
 func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "plain failure", http.StatusForbidden)
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	svc := New(config.Config{ServerURL: server.URL})
 	if _, err := svc.Count(nil); err == nil {
@@ -221,13 +218,13 @@ func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
 }
 
 func TestHTTPServiceHandlesNetworkFailure(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen() error = %v", err)
 	}
 	addr := listener.Addr().String()
 	_ = listener.Close()
+	t.Setenv("TICKET_URL", "http://"+addr)
 
 	svc := New(config.Config{ServerURL: "http://" + addr})
 	if _, err := svc.Status(); err == nil {
@@ -242,9 +239,8 @@ type remoteFixture struct {
 
 func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	t.Helper()
-	t.Setenv("TICKET_MODE", "remote")
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -264,6 +260,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	httpServer := httptest.NewServer(handler)
 	t.Cleanup(httpServer.Close)
 
+	t.Setenv("TICKET_URL", httpServer.URL)
 	raw := client.New(config.Config{ServerURL: httpServer.URL})
 	auth, err := raw.Login("admin", "secret")
 	if err != nil {

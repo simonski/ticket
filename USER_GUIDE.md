@@ -14,10 +14,10 @@ This guide describes a single Go binary that provides a server, a CLI, and an em
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
-Client-side files live under `$TICKET_HOME`, which defaults to `~/.config/ticket`.
+Client-side files live under `$TICKET_CONFIG_DIR`, which defaults to `~/.config/ticket`.
 
-- `$TICKET_HOME/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
-- `$TICKET_HOME/credentials.json` stores the current session token
+- `$TICKET_CONFIG_DIR/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
+- `$TICKET_CONFIG_DIR/credentials.json` stores the current session token
 
 ## Getting Started
 
@@ -27,7 +27,7 @@ Write the local agent instructions template into the current repository:
 ticket onboard
 ```
 
-`ticket onboard` appends the embedded onboarding template into `${CWD}/AGENTS.md`. If the file does not exist yet, it is created.
+`ticket onboard` prints the embedded onboarding template to stdout.
 
 Initialize a task sqlite database:
 
@@ -35,7 +35,7 @@ Initialize a task sqlite database:
 ticket initdb
 ```
 
-If `-f` is omitted, `ticket initdb` creates the SQLite database at `$TICKET_HOME/ticket.db`.
+If `-f` is omitted, `ticket initdb` creates the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
 `ticket initdb` creates:
 
@@ -47,6 +47,16 @@ Bootstrap resolution works like this:
 - admin username: always `admin`
 - admin password: `-password` if provided, otherwise a generated random password printed to stdout
 - existing database file: overwritten only when `--force` is supplied
+- optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
+
+Create or restore database snapshots (LOCAL mode):
+
+```bash
+ticket export -o ./ticket-snapshot.json
+ticket import -i ./ticket-snapshot.json
+```
+
+Snapshot files are JSON and include a `schema_version`; imports replace existing database contents and preserve entity ids.
 
 Start the server:
 
@@ -54,9 +64,10 @@ Start the server:
 ticket server
 ```
 
-If `-f` is omitted, `ticket server` uses `$TICKET_HOME/ticket.db`.
+If `-f` is omitted, `ticket server` uses the default local database path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
 If `-v` is supplied, `ticket server` prints verbose request and response logs to stdout.
+In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
 
 On startup, `ticket server` also prints a colored ASCII-art `TICKET` banner before the listen message.
 
@@ -77,10 +88,10 @@ ticket version
 
 Running `ticket` with no arguments prints a colored ASCII-art `TICKET` banner above the main usage output.
 
-If you are using the CLI against a running server on another host, configure TICKET_SERVER first:
+If you are using the CLI against a running server on another host, configure TICKET_URL first:
 
 ```bash
-export TICKET_SERVER=http://your-server:8080
+export TICKET_URL=http://your-server:8080
 ```
 
 As an admin create users:
@@ -101,6 +112,31 @@ ticket user rm|delete --username XXXX
 
 These commands are admin-only. If a logged-in non-admin user runs them, the server returns `403` and the CLI prints `user is not an admin`.
 
+Manage autonomous agents (admin-only except `agent run`):
+
+```bash
+ticket agent create -name worker-1 -description "LLM worker"
+ticket agent ls
+ticket agent update -id 1 -name worker-main -description "Primary worker"
+ticket agent disable -id 1
+ticket agent enable -id 1
+ticket agent delete -id 1
+```
+
+Run an agent worker process:
+
+```bash
+ticket agent run -name worker-1 -password <password> -url http://localhost:8080
+```
+
+`ticket agent run` resolves required settings from flags first, then env vars:
+
+- `AGENT_NAME`
+- `AGENT_PASSWORD`
+- `TICKET_URL`
+
+If any are missing, the command exits with an explicit missing-fields error.
+
 ## Accounts And Login
 
 Create an account:
@@ -119,8 +155,8 @@ For `ticket register`, you can omit the flags and let the CLI resolve them from 
 
 `ticket login` resolves values in this order:
 
-1. a valid session already stored in `$TICKET_HOME/credentials.json`
-2. the `username` already stored in `$TICKET_HOME/config.json`
+1. a valid session already stored in `$TICKET_CONFIG_DIR/credentials.json`
+2. the `username` already stored in `$TICKET_CONFIG_DIR/config.json`
 3. `-username` and `-password`
 4. `TICKET_USERNAME` and `TICKET_PASSWORD`
 5. interactive prompts for anything still missing
@@ -133,8 +169,8 @@ When `ticket login` prompts for a password in an interactive terminal, typed cha
 
 On successful login:
 
-- the session token is stored in `$TICKET_HOME/credentials.json`
-- the `username` and `server_url` fields in `$TICKET_HOME/config.json` are updated
+- the session token is stored in `$TICKET_CONFIG_DIR/credentials.json`
+- the `username` and `server_url` fields in `$TICKET_CONFIG_DIR/config.json` are updated
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -146,10 +182,25 @@ ticket status
 
 `ticket status` always prints the current effective configuration first, then performs a mode-appropriate connectivity check.
 
+Inspect or clear local CLI config keys:
+
+```bash
+ticket config ls
+ticket config rm server
+ticket config delete current_project
+```
+
+Supported local keys are:
+
+- `server`
+- `username`
+- `current_project`
+- `current_epic_id`
+
 In REMOTE mode it prints:
 
 - `mode: remote`
-- `server: <TICKET_SERVER>`
+- `server: <TICKET_URL>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
@@ -194,9 +245,17 @@ Log out:
 ticket logout
 ```
 
-`ticket logout` removes `$TICKET_HOME/credentials.json`.
+`ticket logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
+
+Top banner behavior in the web UI:
+
+- the left logo is rendered as animated 8x8 pixel glyphs and morphs continuously across `ticket`, `tkt`, and `tket`
+- the `t` glyph does not light bottom-left or bottom-right pixels
+- logo hue/luminance transitions use perlin-style noise and never hard-switch between words
+- the center banner area renders an animated 8-bit activity stream using websocket event activity
+- login/register pages use the same animated logo renderer in place of a static `ticket` heading and do not open websocket activity streams
 
 ## Typical Workflow
 
@@ -213,7 +272,7 @@ Most teams use `ticket` in this order:
 Create a project:
 
 ```bash
-ticket project create -prefix CUS -description "Portal backlog" -ac "Portal launch criteria" "Customer Portal"
+ticket project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Portal launch criteria"
 ```
 
 The project is now the default project.
@@ -225,7 +284,7 @@ ticket project list
 ticket project ls
 ```
 
-`ticket project list` prints the project id, prefix, title, and status, and marks the active project as `(current)`.
+`ticket project list` prints the project id, prefix, title, and status, and marks the active project with `*`.
 
 Select the active project for subsequent commands:
 
@@ -233,7 +292,30 @@ Select the active project for subsequent commands:
 ticket project use CUS
 ```
 
-Show the current project:
+### Per-directory project binding
+
+You can bind a directory tree to a project using `ticket project init`. This creates a `.ticket.json` file in the current directory:
+
+```bash
+cd ~/code/my-project
+ticket project init -prefix MYP -title "My Project"
+```
+
+When `tk` is run from any subdirectory, it walks up the filesystem looking for `.ticket.json` and uses that project automatically. This allows working on multiple projects without `ticket project use`:
+
+```bash
+cd ~/code/project-1/
+tk create "A new ticket"    # creates in project-1's project
+
+cd ~/code/project-2/
+tk create "A new ticket"    # creates in project-2's project
+```
+
+The lookup order is:
+1. `.ticket.json` in the current directory or any parent up to `$HOME`
+2. `$TICKET_CONFIG_DIR/config.json` (global config)
+
+Show project usage:
 
 ```bash
 ticket project
@@ -460,19 +542,77 @@ Use it for:
 1. capturing work during discovery and delivery
 2. reviewing related items side by side
 3. browsing task details and dependencies without switching commands
+4. using the top-right header for project selection and profile actions only (there is no panel-dependent perspective button)
+5. switching perspectives with `V`:
+   - `stories`: high-level requirements for the current project
+   - `board`: stage lanes for the current project
+   - `agents`: opens agent management
+   - `roles`: opens role management
+   - `teams`: opens team management
+   - `settings`: opens settings
+   - `chat`: LLM chat panel
+   - `tv : ticketvision`: a left-to-right project → epics → stories graph view
+6. in `board`, cards are ordered by last modified timestamp (newest first)
+7. opening the `sections` left panel to jump directly to:
+   - `stories`
+   - `board`
+   - `agents`
+   - `roles`
+   - `teams`
+   - `settings`
+   - `chat`
+   - unavailable on the login page; it appears only after authentication
+   - panel is visible by default and can be collapsed/expanded only via the `sections` minimise/grow control
+   - when the viewport is short, the `sections` panel can scroll vertically so all selector items remain reachable
+8. scrolling project content vertically in the main panel while the top banner and section selector controls stay visible
+9. panels do not use an `Esc` close hint/binding; close behavior is controlled by in-panel navigation/actions
+10. editing tickets in a dialog that shows a `Ticket Form` section with `Field` and `Value` table headers for all ticket inputs
 
 Because the CLI and web app use the same server API, edits made in one interface appear in the other without any import or sync step.
+
+Keyboard shortcuts in the board view:
+
+- `D` on a focused ticket prompts `Archive this ticket?`; choose `OK` to archive
+- `U` undoes the most recent ticket action you initiated in the current browser session
+- `P` opens project edit for the currently selected project (swimlanes view)
+- `R` opens the Roles dialog for role persona management
+- `S` opens the Story dialog for creating a high-level requirement
+- a fixed bottom-right version overlay shows the current server version reported by `/api/status`
+- board updates are live via websocket; ticket changes from other users should appear without browser refresh
+- websocket change messages include `entity_type`, `entity_id`, and `change_type` indicators (legacy `type` remains present for compatibility)
+- the web client disables HTTP cache for API reads and keeps websocket health checks with frequent fallback sync so board state self-heals if websocket delivery is interrupted
+- if websocket activity is quiet for 10+ seconds, the banner animator shows an idle waveform/pixel sweep until new events arrive
+- profile menu includes `Agents`, `Roles`, and `Teams` browser panels
+- each management panel can switch between `card` and `list` layouts
+- clicking an agent, role, or team item opens a popup editor for create/update work
+- agents support create/update/enable/disable/delete using the same API
+- roles support create/update/delete role personas (`title`, `motivation`, `goals`)
+- seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
+- `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
+- chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
+- admin `settings` includes global chat limits:
+  - max concurrent chat agents (default `2`)
+  - max chat duration in minutes (default `3`)
+- when chat capacity is full, new chat input is disabled until the server reports a free slot
+- `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
+- Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
+- story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `ticket login` plus `ticket create` commands for epics/tasks in the selected project
+- Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
 ## Command Reference
 
 ```bash
 ticket initdb
+ticket export -o ./ticket-snapshot.json
+ticket import -i ./ticket-snapshot.json
 ticket server -v
 ticket version
 
 ticket register --username <name> --password <password>
 ticket login --username <name> --password <password>
 ticket status
+ticket config ls
+ticket config rm server
 ticket logout
 
 ticket user create --username <name> --password <password>
@@ -480,8 +620,19 @@ ticket user ls
 ticket user delete --username <name>
 ticket user enable --username <name>
 ticket user disable --username <name>
+ticket export -o ./ticket-snapshot.json
+ticket import -i ./ticket-snapshot.json
+ticket agent create -name <name> -description <description> [-password <password>]
+ticket agent list
+ticket agent update -id <id> [-name <name>] [-description <description>] [-password <password>]
+ticket agent delete -id <id>
+ticket agent enable -id <id>
+ticket agent disable -id <id>
+ticket agent run -name <name> -password <password> -url <server-url>
+ticket agent request -password <password> -url <server-url> [-id <ticket-id>] [-dryrun]
 
-ticket project create -prefix ABC "..."
+ticket project create -prefix ABC -title "..."
+ticket project init
 ticket project list
 ticket project ls
 ticket project use <prefix-or-id>
@@ -491,6 +642,8 @@ ticket project <prefix-or-id>
 ticket project <prefix-or-id> update -title "..."
 ticket project <prefix-or-id> update -description "..."
 ticket project <prefix-or-id> update -ac "..."
+ticket project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
+ticket project <prefix-or-id> update -git-branch "main"
 ticket project <prefix-or-id> enable
 ticket project <prefix-or-id> disable
 
@@ -537,6 +690,8 @@ ticket update <key-or-id> -stage develop -state idle
 ticket update <key-or-id> -title "new title"
 ticket update <key-or-id> -description "new description"
 ticket update <key-or-id> -ac "new acceptance criteria"
+ticket update <key-or-id> -git-repository "https://github.com/org/repo.git"
+ticket update <key-or-id> -git-branch "feature/x"
 ticket update <key-or-id> -priority 4
 ticket update <key-or-id> -order 7
 ticket update <key-or-id> -parent_id 12

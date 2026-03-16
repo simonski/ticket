@@ -14,11 +14,21 @@ type Dependency struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func AddDependency(db *sql.DB, projectID, taskID, dependsOn, createdBy int64) (Dependency, error) {
+func AddDependency(db *sql.DB, projectID, ticketID, dependsOn, createdBy int64) (Dependency, error) {
+	ticket, err := GetTicket(db, ticketID)
+	if err != nil {
+		return Dependency{}, err
+	}
+	if !ticket.Open {
+		return Dependency{}, ErrTicketClosed
+	}
+	if ticket.Archived {
+		return Dependency{}, ErrTicketClosed
+	}
 	result, err := db.Exec(`
-		INSERT INTO dependencies (project_id, task_id, depends_on, created_by)
+		INSERT INTO dependencies (project_id, ticket_id, depends_on, created_by)
 		VALUES (?, ?, ?, ?)
-	`, projectID, taskID, dependsOn, nullableUserID(createdBy))
+	`, projectID, ticketID, dependsOn, nullableUserID(createdBy))
 	if err != nil {
 		return Dependency{}, err
 	}
@@ -27,7 +37,7 @@ func AddDependency(db *sql.DB, projectID, taskID, dependsOn, createdBy int64) (D
 		return Dependency{}, err
 	}
 	row := db.QueryRow(`
-		SELECT id, project_id, task_id, depends_on, COALESCE(created_by, 0), created_at
+		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, 0), created_at
 		FROM dependencies
 		WHERE id = ?
 	`, id)
@@ -38,13 +48,13 @@ func AddDependency(db *sql.DB, projectID, taskID, dependsOn, createdBy int64) (D
 	return dependency, nil
 }
 
-func ListDependencies(db *sql.DB, taskID int64) ([]Dependency, error) {
+func ListDependencies(db *sql.DB, ticketID int64) ([]Dependency, error) {
 	rows, err := db.Query(`
-		SELECT id, project_id, task_id, depends_on, COALESCE(created_by, 0), created_at
+		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, 0), created_at
 		FROM dependencies
-		WHERE task_id = ?
+		WHERE ticket_id = ?
 		ORDER BY id
-	`, taskID)
+	`, ticketID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,11 +71,21 @@ func ListDependencies(db *sql.DB, taskID int64) ([]Dependency, error) {
 	return dependencies, rows.Err()
 }
 
-func DeleteDependency(db *sql.DB, projectID, taskID, dependsOn int64) error {
+func DeleteDependency(db *sql.DB, projectID, ticketID, dependsOn int64) error {
+	ticket, err := GetTicket(db, ticketID)
+	if err != nil {
+		return err
+	}
+	if !ticket.Open {
+		return ErrTicketClosed
+	}
+	if ticket.Archived {
+		return ErrTicketClosed
+	}
 	result, err := db.Exec(`
 		DELETE FROM dependencies
-		WHERE project_id = ? AND task_id = ? AND depends_on = ?
-	`, projectID, taskID, dependsOn)
+		WHERE project_id = ? AND ticket_id = ? AND depends_on = ?
+	`, projectID, ticketID, dependsOn)
 	if err != nil {
 		return err
 	}

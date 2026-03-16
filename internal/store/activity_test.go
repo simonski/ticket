@@ -8,7 +8,7 @@ func TestHistoryAndComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	task, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Add login",
@@ -18,7 +18,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	events, err := ListHistoryEvents(db, task.ID)
+	events, err := ListHistoryEvents(db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -26,17 +26,17 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("history after create = %#v", events)
 	}
 
-	_, err = UpdateTicket(db, task.ID, TicketUpdateParams{
-		Title:       task.Title,
+	_, err = UpdateTicket(db, ticket.ID, TicketUpdateParams{
+		Title:       ticket.Title,
 		Description: "Updated description",
-		ParentID:    task.ParentID,
+		ParentID:    ticket.ParentID,
 		UpdatedBy:   1,
 	})
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
 
-	events, err = ListHistoryEvents(db, task.ID)
+	events, err = ListHistoryEvents(db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents(after update) error = %v", err)
 	}
@@ -44,7 +44,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("history length = %d, want at least 2", len(events))
 	}
 
-	comment, err := AddComment(db, task.ID, 1, "Waiting on API changes.")
+	comment, err := AddComment(db, ticket.ID, 1, "Waiting on API changes.")
 	if err != nil {
 		t.Fatalf("AddComment() error = %v", err)
 	}
@@ -52,7 +52,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("AddComment().Comment = %q", comment.Comment)
 	}
 
-	comments, err := ListComments(db, task.ID)
+	comments, err := ListComments(db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListComments() error = %v", err)
 	}
@@ -63,7 +63,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("ListComments() = %#v", comments)
 	}
 
-	taskWithComments, err := GetTicket(db, task.ID)
+	taskWithComments, err := GetTicket(db, ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}

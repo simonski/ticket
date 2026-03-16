@@ -1,12 +1,15 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"strings"
 
 	web "github.com/simonski/ticket/web"
 )
@@ -35,7 +38,8 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer) (http.H
 	}
 
 	mux := http.NewServeMux()
-	registerAPI(mux, db, version)
+	live := newLiveHub()
+	registerAPI(mux, db, version, live, verbose, output)
 
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/", spaHandler(fileServer, staticFS))
@@ -86,11 +90,22 @@ func (w *loggingResponseWriter) Write(p []byte) (int, error) {
 	return w.ResponseWriter.Write(p)
 }
 
+func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, fmt.Errorf("response writer does not support hijacking")
+}
+
 func loggingHandler(next http.Handler, output io.Writer) http.Handler {
 	if output == nil {
 		output = io.Discard
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		var requestBody []byte
 		if r.Body != nil {
 			requestBody, _ = io.ReadAll(r.Body)

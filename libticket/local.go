@@ -29,10 +29,11 @@ func NewLocal(cfg config.Config) *LocalService {
 }
 
 func (s *LocalService) Status() (StatusResponse, error) {
-	path, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return StatusResponse{}, err
 	}
+	path := resolved.DBPath
 	if _, err := os.Stat(path); err != nil {
 		return StatusResponse{}, err
 	}
@@ -44,29 +45,51 @@ func (s *LocalService) Status() (StatusResponse, error) {
 	user, err := store.GetUserByUsername(db, LocalUsername())
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return StatusResponse{Status: "ok", Authenticated: false}, nil
+		enabled, regErr := store.RegistrationEnabled(db)
+		if regErr != nil {
+			return StatusResponse{}, regErr
+		}
+		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
 	case err != nil:
 		return StatusResponse{}, err
 	case !user.Enabled:
-		return StatusResponse{Status: "ok", Authenticated: false}, nil
+		enabled, regErr := store.RegistrationEnabled(db)
+		if regErr != nil {
+			return StatusResponse{}, regErr
+		}
+		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
+	}
+	enabled, err := store.RegistrationEnabled(db)
+	if err != nil {
+		return StatusResponse{}, err
 	}
 	return StatusResponse{
-		Status:        "ok",
-		Authenticated: true,
-		User:          &user,
+		Status:              "ok",
+		Authenticated:       true,
+		RegistrationEnabled: enabled,
+		User:                &user,
 	}, nil
 }
 
+func (s *LocalService) SetRegistrationEnabled(enabled bool) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.SetRegistrationEnabled(db, enabled)
+}
+
 func (s *LocalService) Register(username, password string) (store.User, error) {
-	return store.User{}, errors.New("ticket register requires TICKET_MODE=remote")
+	return store.User{}, errors.New("ticket register requires TICKET_URL=http(s)://...")
 }
 
 func (s *LocalService) Login(username, password string) (store.User, string, error) {
-	return store.User{}, "", errors.New("ticket login requires TICKET_MODE=remote")
+	return store.User{}, "", errors.New("ticket login requires TICKET_URL=http(s)://...")
 }
 
 func (s *LocalService) Logout() error {
-	return errors.New("ticket logout requires TICKET_MODE=remote")
+	return errors.New("ticket logout requires TICKET_URL=http(s)://...")
 }
 
 func (s *LocalService) Count(projectID *int64) (CountSummary, error) {
@@ -114,6 +137,216 @@ func (s *LocalService) DeleteUser(username string) error {
 	return store.DeleteUser(db, username)
 }
 
+func (s *LocalService) CreateRole(request RoleRequest) (store.Role, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Role{}, err
+	}
+	defer db.Close()
+	return store.CreateRole(db, request.Title, request.Motivation, request.Goals)
+}
+
+func (s *LocalService) ListRoles() ([]store.Role, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListRoles(db)
+}
+
+func (s *LocalService) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Role{}, err
+	}
+	defer db.Close()
+	return store.UpdateRole(db, id, request.Title, request.Motivation, request.Goals)
+}
+
+func (s *LocalService) DeleteRole(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteRole(db, id)
+}
+
+func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, "", err
+	}
+	defer db.Close()
+	return store.CreateAgent(db, request.Name, request.Description, request.Password)
+}
+
+func (s *LocalService) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, err
+	}
+	defer db.Close()
+	return store.SetAgentEnabled(db, id, enabled)
+}
+
+func (s *LocalService) ListAgents() ([]store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListAgents(db)
+}
+
+func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, err
+	}
+	defer db.Close()
+	return store.UpdateAgent(db, id, store.AgentUpdateParams{
+		Name:        request.Name,
+		Description: request.Description,
+		Password:    request.Password,
+	})
+}
+
+func (s *LocalService) DeleteAgent(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteAgent(db, id)
+}
+
+func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Agent{}, err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	if err != nil {
+		return store.Agent{}, err
+	}
+	return store.TouchAgent(db, agent.ID, "online")
+}
+
+func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return AgentWorkResponse{}, err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	if err != nil {
+		return AgentWorkResponse{}, err
+	}
+	projectID := request.ProjectID
+	if request.TicketID != nil {
+		projectID = 0
+	}
+	if request.TicketID == nil && projectID == 0 {
+		projects, err := store.ListProjects(db)
+		if err != nil {
+			return AgentWorkResponse{}, err
+		}
+		for _, p := range projects {
+			if p.Status == "open" {
+				projectID = p.ID
+				break
+			}
+		}
+	}
+	currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+	if err != nil {
+		return AgentWorkResponse{}, err
+	}
+	ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+		ProjectID: projectID,
+		TicketID:  request.TicketID,
+		Username:  agent.Name,
+		UserID:    0,
+		DryRun:    request.DryRun,
+	})
+	if err != nil {
+		return AgentWorkResponse{}, err
+	}
+	agentStatus := "NONE"
+	switch status {
+	case "NO-WORK", "REJECTED":
+		agentStatus = "NONE"
+	case "ASSIGNED", "AVAILABLE":
+		if hadCurrent && currentAssigned.ID == ticket.ID {
+			agentStatus = "CURRENT"
+		} else {
+			agentStatus = "NEW"
+		}
+	default:
+		agentStatus = status
+	}
+	if status == "ASSIGNED" && agentStatus == "NEW" {
+		_, _ = store.TouchAgent(db, agent.ID, "working")
+	} else {
+		_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+	}
+	response := AgentWorkResponse{Status: agentStatus, Parents: []store.Ticket{}}
+	if agentStatus == "NEW" || agentStatus == "CURRENT" {
+		project, err := store.GetProjectByID(db, ticket.ProjectID)
+		if err == nil {
+			response.Project = &project
+		}
+		response.Ticket = &ticket
+		parents, err := store.ListTicketParents(db, ticket.ID)
+		if err == nil {
+			response.Parents = parents
+		}
+	}
+	return response, nil
+}
+
+func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	current, err := store.GetTicket(db, id)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	updated, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
+		Title:              current.Title,
+		Description:        request.Result,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		GitRepository:      current.GitRepository,
+		GitBranch:          current.GitBranch,
+		ParentID:           current.ParentID,
+		Assignee:           agent.Name,
+		Stage:              store.StageDone,
+		State:              store.StateSuccess,
+		Priority:           current.Priority,
+		Order:              current.Order,
+		EstimateEffort:     current.EstimateEffort,
+		EstimateComplete:   current.EstimateComplete,
+		UpdatedBy:          0,
+		ActorUsername:      agent.Name,
+		ActorRole:          "admin",
+	})
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+	return updated, nil
+}
+
 func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
@@ -129,7 +362,10 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
+		Visibility:         request.Visibility,
 		CreatedBy:          user.ID,
 	})
 }
@@ -162,7 +398,10 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
+		Visibility:         request.Visibility,
 	})
 }
 
@@ -173,6 +412,150 @@ func (s *LocalService) SetProjectEnabled(id int64, enabled bool) (store.Project,
 	}
 	defer db.Close()
 	return store.SetProjectStatus(db, id, enabled)
+}
+
+func (s *LocalService) AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.ProjectMember{}, err
+	}
+	defer db.Close()
+	return store.AddProjectMember(db, projectID, request.UserID, request.Role)
+}
+
+func (s *LocalService) RemoveProjectMember(projectID, userID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveProjectMember(db, projectID, userID)
+}
+
+func (s *LocalService) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListProjectMembers(db, projectID)
+}
+
+func (s *LocalService) AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.ProjectTeamMember{}, err
+	}
+	defer db.Close()
+	return store.AddProjectTeamMember(db, projectID, request.TeamID, request.Role)
+}
+
+func (s *LocalService) RemoveProjectTeamMember(projectID, teamID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveProjectTeamMember(db, projectID, teamID)
+}
+
+func (s *LocalService) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListProjectTeamMembers(db, projectID)
+}
+
+func (s *LocalService) CreateTeam(request TeamRequest) (store.Team, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Team{}, err
+	}
+	defer db.Close()
+	return store.CreateTeam(db, request.Name, request.ParentTeamID)
+}
+
+func (s *LocalService) ListTeams() ([]store.Team, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTeams(db)
+}
+
+func (s *LocalService) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Team{}, err
+	}
+	defer db.Close()
+	return store.UpdateTeam(db, id, request.Name, request.ParentTeamID)
+}
+
+func (s *LocalService) DeleteTeam(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteTeam(db, id)
+}
+
+func (s *LocalService) AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.TeamMember{}, err
+	}
+	defer db.Close()
+	return store.AddTeamMember(db, teamID, request.UserID, request.Role, request.JobTitle)
+}
+
+func (s *LocalService) RemoveTeamMember(teamID, userID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveTeamMember(db, teamID, userID)
+}
+
+func (s *LocalService) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTeamMembers(db, teamID)
+}
+
+func (s *LocalService) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.TeamAgent{}, err
+	}
+	defer db.Close()
+	return store.AddTeamAgent(db, teamID, agentID)
+}
+
+func (s *LocalService) RemoveTeamAgent(teamID, agentID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveTeamAgent(db, teamID, agentID)
+}
+
+func (s *LocalService) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTeamAgents(db, teamID)
 }
 
 func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, error) {
@@ -197,6 +580,8 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		Priority:           request.Priority,
 		EstimateEffort:     request.EstimateEffort,
 		EstimateComplete:   request.EstimateComplete,
@@ -208,24 +593,25 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 }
 
 func (s *LocalService) ListTickets(projectID int64) ([]store.Ticket, error) {
-	return s.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0)
+	return s.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
 }
 
-func (s *LocalService) ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int) ([]store.Ticket, error) {
+func (s *LocalService) ListTicketsFiltered(projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 	return store.ListTickets(db, store.TicketListParams{
-		ProjectID: projectID,
-		Type:      taskType,
-		Stage:     stage,
-		State:     state,
-		Status:    status,
-		Search:    search,
-		Assignee:  assignee,
-		Limit:     limit,
+		ProjectID:       projectID,
+		Type:            ticketType,
+		Stage:           stage,
+		State:           state,
+		Status:          status,
+		Search:          search,
+		Assignee:        assignee,
+		Limit:           limit,
+		IncludeArchived: includeArchived,
 	})
 }
 
@@ -247,6 +633,8 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		GitRepository:      request.GitRepository,
+		GitBranch:          request.GitBranch,
 		ParentID:           request.ParentID,
 		Assignee:           request.Assignee,
 		Stage:              stage,
@@ -260,6 +648,58 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 		// Local mode bypasses server-side ownership restrictions.
 		ActorRole: "admin",
 	})
+}
+
+func (s *LocalService) CloseTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketOpen(db, id, false, user.Username, user.ID)
+}
+
+func (s *LocalService) OpenTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketOpen(db, id, true, user.Username, user.ID)
+}
+
+func (s *LocalService) ArchiveTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketArchived(db, id, true, user.Username, user.ID)
+}
+
+func (s *LocalService) UnarchiveTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketArchived(db, id, false, user.Username, user.ID)
 }
 
 func (s *LocalService) DeleteTicket(id int64) error {
@@ -423,7 +863,7 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 	if err != nil {
 		return TicketRequestResponse{}, err
 	}
-	task, status, err := store.RequestTicket(db, store.TicketRequestParams{
+	ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 		ProjectID: request.ProjectID,
 		TicketID:  request.TicketID,
 		TicketRef: request.TicketRef,
@@ -436,17 +876,17 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 	}
 	response := TicketRequestResponse{Status: status}
 	if status == "ASSIGNED" || status == "AVAILABLE" {
-		response.Ticket = &task
+		response.Ticket = &ticket
 	}
 	return response, nil
 }
 
 func (s *LocalService) openDB() (*sql.DB, error) {
-	path, err := config.ResolveDatabasePath()
+	resolved, err := config.ResolveURL()
 	if err != nil {
 		return nil, err
 	}
-	return store.Open(path)
+	return store.Open(resolved.DBPath)
 }
 
 func (s *LocalService) localUser(db *sql.DB) (store.User, error) {

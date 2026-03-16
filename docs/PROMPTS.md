@@ -247,25 +247,26 @@ test and implement as server side checks
 
 MODE: REMOTE or LOCAL
 
-The ticket process can work in REMOTE (TICKET_MODE=remote) or LOCAL (TICKET_MODE=local).  This is set using 
+The mode is inferred from the `TICKET_URL` scheme:
 
 ```bash
-# either
-export TICKET_MODE=local
-# or
-export TICKET_MODE=remote
+# local mode (file scheme or default)
+export TICKET_URL=file:///path/to/ticket.db
+# remote mode (http/https scheme)
+export TICKET_URL=http://localhost:8080
+export TICKET_URL=https://your-server
 ```
 
-If unspecified TICKET_MODE will default to local.
+If unspecified, `TICKET_URL` defaults to local mode with `~/.config/ticket/ticket.db`.
 
 REMOTE-mode
 
-Uses TICKET_HOME for local files (~/.config/ticket/)
+Uses TICKET_CONFIG_DIR for local files (~/.config/ticket/)
 
-- Requires TICKET_SERVER to be set to the address of the remote server.  If it is not present, fail.
+- Requires `TICKET_URL` to be set to an `http(s)://` address.  If it is not present, fail.
 - Requires a valid session token for all comms (except login/register)
-- `ticket login` will store the session token in $TICKET_HOME/credentials.json
-- If the user supplied the username via the login prompt directly, the username will be stored in `$TICKET_HOME/config.json` to be used on next login as the default.
+- `ticket login` will store the session token in $TICKET_CONFIG_DIR/credentials.json
+- If the user supplied the username via the login prompt directly, the username will be stored in `$TICKET_CONFIG_DIR/config.json` to be used on next login as the default.
 
 TICKET_USERNAME/TICKET_PASSWORD are only used in REMOTE mode when logging in; If present they are used to authenticate via login and then a session token is used after that.  If they are not present the user is prompted for their username/password.
 
@@ -277,7 +278,7 @@ If a user is not authenticated
     - prints the current effective configuration first
     - prints:
          mode: remote
-         server: <TICKET_SERVER>
+         server: <TICKET_URL>
          username: <configured username or blank>
          authenticated: true|false
     - attempts a remote connection by calling the remote status endpoint
@@ -288,13 +289,13 @@ If a user is not authenticated
 
 LOCAL-mode
 
-In Local mode TICKET_SERVER, TICKET_USERNAME, TICKET_PASSWORD are ignored.
+In Local mode TICKET_USERNAME, TICKET_PASSWORD are ignored.
 
 It will then select a database file using the following logic
 
-    1. if -f <task_db_file> is specified in any command, chooose this
-    2. if TICKET_HOME is specified, choose this and assume `$TICKET_HOME/ticket.db`
-    3. fallback to a `$CWD/ticket.db` file
+    1. if -f <task_db_file> is specified in any command, choose this
+    2. if TICKET_URL is set with a `file:///` scheme, use that path
+    3. fallback to `~/.config/ticket/ticket.db`
 
 TICKET_USERNAME and TICKET_PASSWORD are NOT used in local mode.  The username is $USERNAME of the computer.
 
@@ -310,7 +311,7 @@ TICKET_USERNAME and TICKET_PASSWORD are NOT used in local mode.  The username is
          connection: success   (green)
          connection: failure   (red)
     - if the database does not exist, print:
-         hint: run ticket initdb
+         hint: run ticket init
     - if `-nocolor` is set, print the same output without ANSI colors
 
 ------------------------------------------------------------------
@@ -333,7 +334,7 @@ Create two libraries with the same task-domain service contract:
 
 Dependency direction:
 
-    cmd/ticket      -> chooses libticket or libtickethttp based on TICKET_MODE
+    cmd/ticket      -> chooses libticket or libtickethttp based on TICKET_URL scheme
     libtickethttp   -> calls HTTP endpoints only
     internal/server -> uses libticket service implementation internally
     libticket       -> uses store/database
@@ -372,7 +373,7 @@ CONFIGURATION
 
 Configuration key/pairs can be set using a config file.  
     - local `.ticket-config.toml` file 
-    - user-wide $TICKET_HOME/ticket-config.toml
+    - user-wide $TICKET_CONFIG_DIR/ticket-config.toml
     
 Configuration can be set
 
@@ -381,7 +382,7 @@ ticket config rm key value -scope local,global
 ticket config ls,list [-scope local,global]
 
 local = $CWD/ticket-config.json
-global = $TICKET_HOME/ticket-config.json
+global = $TICKET_CONFIG_DIR/ticket-config.json
 
 Configuration keys
 
@@ -392,7 +393,7 @@ output.format=json,markdown (markdown)
 output.format=json,markdown (markdown)
 
 # the default CLI output mode if not specified (default)
-ticket.file=$TICKET_HOME/ticket.db
+ticket.file=$TICKET_CONFIG_DIR/ticket.db
 
 ----
 
@@ -598,6 +599,7 @@ ticket claim
 ticket claim -dryrun
 
 
+## COMMENT SYSTEM
 
 all entities can have comments
     (id, user, date, comment)
@@ -624,4 +626,522 @@ ticket comment update -id N -comment_id X -comment "blah blah"
 
 # delete comment for an entity (cannot delete other users comments)
 ticket comment update -id N -comment_id X
+
+## 
+
+rename the `ticket initdb` command to `ticket init`
+
+## Start using ticket as the method of work
+
+Store the ticket DB in the repo
+Start execing using the ticket db.
+The workflow can be external for now bu tthe souce of truth shoudl be the ticketdb.
+
+
+##
+
+add a close/open commmand
+
+tk close -id tk-1
+
+A closed ticket is effectively frozen in its state/stage.
+A closed ticket is visible but cannot be modified except for deletion or re-opening.
+
+tk open -id tk-1
+
+An open ticket can be modified, have its stage/state modified.
+
+Opening or closing a ticket goes into the ticket history.
+
+Update the tk get and tk ls calls to reflect if aticket is open/closed
+
+
+##
+
+new branch feature/ticket_board
+
+ticket server (-p 9999)
+
+should run a simple website with user administration/login, a drop-down to select projects and a trello-like board to view tickets.
+
+minimal js, css html, attempt a simple single webpage application with zero 3rd party libraries.  embed the files via go:embed and serve them direct.  Use a websocket to communicate back to tehserver so that updates to tickets dispaly in realtime across all users.
+
+the board swimlanes should be the stage, the tickets shoudl be displayed as paper tickets with a horizontal coloured line indicating their state
+
+a user should be able to click ona. ticket to inspect the details
+they should be able to drag/drop tivkets between swimlanes
+
+they should be able to CRUD tickets and Projects
+
+localStorage should "remember" the selected project
+
+
+## 
+commands should permit/deny registration ability via the website
+
+## enable registrsation via/users
+ticket config registration-enable
+
+## enable registrsation via/users
+ticket config registration-disable
+
+If the server config has registration disabled, the UX shoudl not show the register feature.  If it has it enable, it shoudl show the register feature.
+
+## add user to a project as a specific role
+# roles viewer - can read tickets and see project but not make any changes
+#       owner  - can CRUD tickets and users
+#       editor - can CRUD tickets, cannot CRUD users
+ticket project add-user -user_id X -project_id X -role [viewer,editor,owner]
+
+## add user to a project as editor
+ticket project remove-user -user_id X -project_id X 
+
+## UX
+
+landing page should be a login page unless the cookie indicates the user already has a session.   landing page should show a starfield and a login banner with a register link (if registration is permitted)
+
+once logged in, whole screen should be the stages as swimlanes, top-right should be a proejct selector.  bottom let should have a + which shows a popup to create a ticket
+
+pressing N should act as a popup "new" to create a ticket
+
+clicking on an existing ticket shoudl show the same popup populated as an edit mode.
+
+pressing ESC or clicking outside he popup shuld dismiss
+
+no save button - changes should happen as yuo type them
+
+the login screen should focus on the username
+the login fails: Server unavailable: project not found
+the login fails on an empty new database: "Server unavailable: Cannot read properties "of null (reading 'filter')
+## conway
+
+conway:
+
+make a new directory, /conway which is a fullscreen threejs javascript application which renders an 8-bit pixel conways game of life in fast-forward.  Make it accelerate over 10 seconds until the pixels slowly start to accellerate into a ring and start orbiting clockwise.   once the pixels are roating, make their radius vary over time using some perlin noise but keep within the bounds so it retains the shape.  make some pixesl have differing velocities, again using perlin noise for difference.
+
+make it render in the entire page, not a square.  start with a random arrangement of pixels aroud the screen and remove hte conways simulation but retian the pixels.  
+
+gradually start one, then two, then four, then eight, then more over time to start meandering in a clockwise until they start to organise to a circle as previously described.   Make them behave as if they want to avoid the mouse pointer.   Occasionally send them off in a boids simulation then come back to circling again.
+
+if the user presses the space bar, have the pixels gradually move to form the word hello, where some pixels go to the h, some to the e etc.  Where they "circle around" the shape of the letter in a clockwise manner.  once all the pixels are in their route for a given letter, stay i that animation for a half a second then start to peel off the pixels again one, two, eight, until all are back in a circle patttern.   
+
+the word should vary each time using multiligual hello
+
+
+
+----
+
+the dialogs need work for 
+    new type
+    stage/state needs work for moving
+    ability to create porjects eneeds work
+    the time between typing and saving needs some work
+
+    config register-enable/disable
+
+    epic and then storie inside epics
+    + and - for details
+
+top banner contents
+
+the top-right should have a profile circular icon for the logged in user
+    click it to reveal dropdown containig
+    settings
+    profile
+    logout
+- remove the logotu button from the top banner
+
+## logo
+
+the left hand side should have an 8-bit 8x8 per character "ticket/tkt/tket" variations that slowly changes the hue/limunescence of the pixels.  use a threej3 rectangle and have it paint slowly over time
+
+make the logo characters 50% larger and do not "switch" visually between words - transition the pixels until they are activated fully to their target colour.  in this way the word will morph appealingly from one to the other.  use perlin noise for the time and difference in colour
+
+## status animator
+
+to the right and for hte majority of the top banner (between the logo and the project selctor, make a threejs full-width full-height that is the current colour but have 8-bit pixels move from left to rigth or right to left to indicate activity in the system.  
+
+the websocket will provide the activity
+a pixel will be created and move from left ot right wiht a given perlin variable velocity and colour, where the colour is taken from a pool based on the classification of the event
+    tickets being edited for their contents
+    new tickets created
+    tickets changing status
+    tickets moving to done
+    bug activity (more red)
+
+activity in the status animator should tend to colourful for human interaction and grayscale for agentic interaction.  This is determined by the user "type" (human or agent).
+
+
+the T character in the pixels shoudl not have pixels lit up in the bottom left-right but it does.
+
+the transition from word1 to word2 should be that - a gradual transition e.g TICKET -> TKT means the I should morph into the K, the C into the T, the KET should fade back to teh background.  
+
+make the logo banner rendering appear in the login and registration page in place of the "ticket" word.   on the login/register page dont use a websocket.
+
+login page: remove the "logged out" and "please log in" messages
+
+
+## project dropdown
+
+the dropdown should not be a native browser dropdown - it should be html/css/js
+
+project dropdown should have a new project selector in the following
+
+[Curent Project]
+[New Project]
+------- <divider ------->
+List of projects, most recently opened at top not including [Current]
+Then sorted alphabetically
+
+the new project dialog should not be native - it should be thematically similar to teh new/edit ticket dialog
+
+
+## server logging
+
+what is a common go server logging style for web services that include
+    rotation
+    http/websocket logging
+
+to enable analyics/insight/operational telemetry?
+
+server logging
+    -q means stdout is quiet
+    -l means write to file
+    -v means be verbose to STDOUT as well as file (if file specified)
+
+all errors write to 
+
+tk server -l <file> 
+    -l specifies the logfile to write to
+    it should write
+    date/time response-code duration-ms user-id url
+
+
+v. quickly get to the ticket capture now via the browser and have a simulator workflow
+
+
+## UX Review
+
+page1: landing page (login, register)
+
+page2: main page
+
+top banner: always visible, contains logo, animator, project selector, user icon selector
+
+main page: this can change depending on the "view" a user selects
+pressing V should bring up a popup similar to the double-shift which allows the user to select a different "perspective"
+    "swimlanes"
+    "tv : ticketvision"
+
+switching perspectives shob001udl fade out then fade in the other perspective.
+
+swimlanes: the existing swim lanes view of stories for current project
+
+tv: Let's create a new perspective
+
+threejs alternate view which is like a two forced layout graph representation of a given project that renders by defalt left to right
+
+project -> epics -> story
+                  -> story
+                -> Story
+
+
+
+------
+
+New branch, "feature/agent"
+
+Create a new entity in the database, "agent" which represents a process which in turn will invoke an LLM to perform a task.
+
+Create crud tools over API with CLI calls comparable to user registration but for agents.
+
+# Example commands
+```bash
+ticket agent create -name X -description Y (-password PASSWORD)
+# (password set to random on server-side if not supplied
+>return ID, password 
+
+ticket agent ls,list
+> return ID, name, description, status
+
+ticket agent udpate -id ID (-name <name> -desc[ription] <description> -password <password>)
+
+ticket agent rm,delete -id ID
+
+ticket agent enable -id ID
+ticket agent disable -id ID
+```
+
+Create a new panel in the GUI to manage agents similar in theme to tickets.  Name, description, enable/disable.
+
+
+------
+
+Agent lifecyle
+
+An agent is run with the command
+
+```bash
+ticket agent run -name <name> -password PASSWORD -url TICKET_URL
+```
+
+If the options are provided, they are used, else
+
+AGENT_NAME=
+AGENT_PASSWORD=
+TICKET_URL=
+
+If any are missing, the process will fail exit 1 explaining what is missing.
+
+If all are present, the agnet will attempt to REGISTER - meaning declare that it is alive.  A success response from the server will move the agent into solitication mode where it asks for work to be assigned via a REQUEST call.
+
+The REQUEST call ask the server to return and/or assign and return a ticket to be worked on.  It is up to the server to decide to assign or refuse to assign.  
+
+If a ticket is assigned to the agent, the server will return the ticket details.  Agent will then delegate the ticket to an LLM via processing.   At the same tiem AGENT will then move the ticket to an active state.
+
+Once the LLM completes, AGENT will call UPDATE on the ticket and pass back the results of the LLM.
+
+------
+
+UX enhancements
+
+in the swimlane view, pressing P should bring up the edit project dialog
+add git repository and branch to the project 
+
+in the edit ticket view add git repository and branch to the edit dialog, store them on the ticket
+
+add acceptance criteria to the edit dialogs for projects and tickets
+
+-----
+
+fetching tickets for work as an agent
+
+The ticket an agent recieves will contain more than just the ticket details in the format:
+
+```bash
+ticket agent request (-name XXX -password YYY -url XXXX)
+{
+    status: "NEW,NONE,CURRENT",
+    # return the prject details
+    project: {}
+    # the actual ticekt details
+    ticket: {}
+    # and parents, in order until it gets to the root
+    parents: []
+}
+
+The response "status" NEW,NONE,CURRENT indicates
+    NEW: a new ticket has been assigned based on this request
+    NONE: there is no work for this agent
+    CURRENT: the following work is the currently assigned ticket
+
+normally when a ticket is returned via the `request` call, it will be assigned to the agent.  If the `-dryrun` option is specified, a ticket will be returned (randomly or -id) that simulates the response without assigning.  This is NOT to be worked on, only to demonstrate the JSON.
+
+-----
+
+roles
+
+Create a new entity, "Role" which is a persona that an agent will be given when working on a ticket.
+A role for example is one of the classical software engineering roles
+    Product Owner
+    Architect
+    DevOps
+    QA/Tester
+    BA
+    Lead Engineer
+    Staff Engineer
+
+They have a title, motivation and goals.
+
+Create 
+    - the API to CRUD-manage these entities
+    - the UX in the website to manage them (via the R keypress for roles)
+    - populate some classic roles by default such as the above
+
+
+----
+
+create a panel that can slide in/out on the left hand side to allow selection of
+    board (swimlanes)
+    agents
+    roles
+    settings
+
+
+----
+
+add a new section in the panel "chat" which is a chatbot experience 
+    the user can engage in a conversation with an LLM which will on the backend invoke copilot via 
+    a process exec running codex via an external process, mapping STDIN/STDOUT back via the websocket
+    to the frontend.
+
+    the chant experience requires a text area at the bottom and then the chat animates upwards as the
+    conversaton contonues
+
+embellish the role descriptioisn and motivation with classical descriptions of each role.  I want to see a number of paragraphs that are reasonable description, goals and motivations of each role.
+
+----
+
+Story
+
+A new entity.  Many stories associated with one project.   A story can have multiple epics.
+
+Stories should get their own panel entry and be associated with a single project.
+
+'S' shoudl bring up a dialog to create a new Story type.  The Story is a high level requirement that is not a ticket itself rather it is the entitiy that represents an overall Requirement.  Once ready, the story will then be broken down into epics and tasks -which will all link to the story_id.
+
+The breakdown of a story to epics and tasks needs to happen using an LLM using a role - these epics and tickets are then stored in the ticket database itself.  At that point the story will be marked as ready for review.  
+
+Ensure the stories paenl is on the V popup.
+
+When a story popup is visible, show an "analytse" button which will breakdown the story using the StoryReview role (make a StoryReview role) into epics and tasks.
+
+When an epic dialog is present, add an "analyse" button which willbreakdown the epic into tickets using the EpicReview role (make an EpicReview role).
+
+----
+
+Settings Panel
+An "admin" role user should have visibility in the UX to a settings panel.  
+The settings shoudl contain all teh switchable settings and config that affect all users.
+
+Teams
+-----
+A team is a set of users which can be treated like a user itself.  So a team can be a member
+of a project.
+
+A team can have child teams so that you can compose a hierarchy.
+
+A user has a role in a team
+    member 
+    owner
+    A user in a team can then have a job title
+    An agent can be assigned to a team.
+
+Create the backend, API, CLI and website UX to support this.
+
+
+User Roles
+-----------------
+A user has a role
+    admin - can perform all tasks
+    user  - user cannot administer agents or other users
+
+A user may have a role in a project
+    owner of a project - can perform all activities on a project
+        can manage membership and roles in projects
+    editor of aproject - can crud contents a project
+        can manage tickets in a project
+    viewer of a project - can view aspects of te project
+
+A project can be
+    private - a membership list is required to view/edit
+    public  - all users in the system can view it
+
+If a user does not have a role in a project and the project is private then the project is not visible
+to the user.
+
+An admin can see and manage all entities - but should not be logging in all the time -as it is risky.  When an admin logs ino the system, a soft glowing rounbd-rect border should disaply on the website.  The colour scheme should rotate slowly throught he rainbow ina neon like/chroma effect to indicate "danger mode"
+
+If a 401 occurs, go back to the login page.
+
+Website optimisation: The website is making lots of calls to the selected card.  Why? the websocket should transmit that something changed and that shoudl force the lookup to the card details.  But nothing has changed, yet there is traffic continually.  This can be optimised, so optimise it.
+------------
+
+read agents; review for drift, design, documentation, testing and implementation.
+
+
+`ticket init`
+    Add an optional `--populate` which 
+        - creates three example projects each with Storis and associated epics, tasks, bugs, chores.
+        - creates example users across 3 teams
+
+
+websocket
+---------
+
+the purpose of the websocket is to send indicators that "something changed" - that means it shoudl contain the entiy type, id, and change type.  
+
+Agent Roles
+------------
+
+projects and git
+
+A project has a git repository associated
+An epic has a git repository associated and a branch
+A ticket has a git repository associated and a branch
+
+A project has branching rules.
+
+A ticket fetched by an agent should contain project details and all parents.
+
+
+REVIEW
+------
+read agents; review for drift, design, documentation, testing and implementation.
+
+
+
+The analyse button on a story.
+
+When clicked, the server shoudl take the text description of the story and pass to codex.
+The prompt should include the instrutions on using `ticket` as a binary to create tickets representing the breakdown to epics and tasks associated with the project.
+
+the process should be spawned using environment variables for the TICKET_URL, TICKET_USERNAME, TICKET_PASSWORD etc.
+
+tk project should print the project usage
+
+tk project ls
+    should print all projects wiht a * indicating current
+
+
+
+-----
+
+## Config file
+
+How to determine the configuration of the tk client:
+
+1. Look for $CWD/.ticket.json, walking up to $HOME/.ticket.json
+2. Look in $TICKET_CONFIG_DIR/ticket.json
+
+A project in the database and config for the user file can be initialised with:
+
+```bash
+tk project init
+prefix      : (3-letters from the $CWD)
+title       : ($CWD dirname)
+description : ($CWD dirname)
+```
+
+If the project already exists AND the config.json does not exist, the user would be prompted to associate this folder with the project.
+    
+This should allow a user to run ticket across multiple folders:
+
+```bash
+cd $CODE/project-1/
+tk create "A new ticket"
+
+cd $CODE/project-2/
+tk create "A new ticket"
+```
+
+The above would then create two tickets in different projects.
+
+When using tk from the terminal as a client<->server,  The user location in the filesystem should assist in determining the project.   tk should walk "up" the current directoy until $HOME, looking for a ticket.json which 
+
+---
+
+Let's discuss refactoring the concept of TICKET_CONFIG_DIR
+
+TICKET_URL=file:///path/to/ticket.db
+TICKET_URL=https://hostname
+TICKET_URL=http://hostname
+
+All provide implied location and style of access.  
+
+A file:/// does not require an explicit user - the user is implicitly the admin.  This would be local mode.
+
+An https:// or http:// is remote mode and demands a username/password and/or jwt/session token.
+
+
 

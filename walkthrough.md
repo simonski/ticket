@@ -69,7 +69,7 @@ func run(args []string) error {
 		return err
 	}
 	if urlOverride != "" {
-		if err := os.Setenv("TICKET_SERVER", urlOverride); err != nil {
+		if err := os.Setenv("TICKET_URL", urlOverride); err != nil {
 			return err
 		}
 		if err := os.Setenv("TICKET_URL", urlOverride); err != nil {
@@ -77,7 +77,7 @@ func run(args []string) error {
 		}
 	}
 	if dbOverride != "" {
-		if err := os.Setenv("TICKET_DB_OVERRIDE", dbOverride); err != nil {
+		if err := os.Setenv("TICKET_URL", "file://"+dbOverride); err != nil {
 			return err
 		}
 	}
@@ -101,17 +101,17 @@ func run(args []string) error {
 		return runVersion(trimmedArgs[1:])
 	case "register":
 		if mode != config.ModeRemote {
-			return errors.New("ticket register requires TICKET_MODE=remote")
+			return errors.New("ticket register requires TICKET_URL=http(s)://host")
 		}
 		return runRegister(trimmedArgs[1:])
 	case "login":
 		if mode != config.ModeRemote {
-			return errors.New("ticket login requires TICKET_MODE=remote")
+			return errors.New("ticket login requires TICKET_URL=http(s)://host")
 		}
 		return runLogin(trimmedArgs[1:])
 	case "logout":
 		if mode != config.ModeRemote {
-			return errors.New("ticket logout requires TICKET_MODE=remote")
+			return errors.New("ticket logout requires TICKET_URL=http(s)://host")
 		}
 		return runLogout(trimmedArgs[1:])
 	case "status":
@@ -179,7 +179,7 @@ func run(args []string) error {
 
 ## 2) Configuration defaults and local paths
 
-`internal/config/config.go` resolves mode, server URL, and local state paths. Current defaults place client config and DB under `$TICKET_HOME` (default `~/.config/ticket`).
+`internal/config/config.go` resolves mode, server URL, and local state paths. Mode is inferred from the `TICKET_URL` scheme. Client config and credentials live under `$TICKET_CONFIG_DIR` (default `~/.config/ticket`).
 
 ```bash
 sed -n '120,220p' internal/config/config.go
@@ -193,7 +193,7 @@ sed -n '120,220p' internal/config/config.go
 }
 
 func ResolveServerURL(cfg Config) string {
-	if env := envValue("TICKET_SERVER"); env != "" {
+	if env := envValue("TICKET_URL"); env != "" {
 		return env
 	}
 	if env := envValue("TICKET_URL"); env != "" {
@@ -206,7 +206,7 @@ func ResolveServerURL(cfg Config) string {
 }
 
 func ResolveMode() (string, error) {
-	mode := strings.ToLower(envValue("TICKET_MODE"))
+	// Mode is inferred from the TICKET_URL scheme (file:// = local, http(s):// = remote)
 	if mode == "" {
 		return ModeLocal, nil
 	}
@@ -214,12 +214,12 @@ func ResolveMode() (string, error) {
 	case ModeLocal, ModeRemote:
 		return mode, nil
 	default:
-		return "", errors.New("TICKET_MODE must be local or remote")
+		return "", errors.New("TICKET_URL scheme must be file://, http://, or https://")
 	}
 }
 
 func ResolveDatabasePath() (string, error) {
-	if override := envValue("TICKET_DB_OVERRIDE"); override != "" {
+	// Database path is resolved from TICKET_URL file:// scheme or -f flag
 		return override, nil
 	}
 	home, err := Home()
@@ -246,7 +246,7 @@ func CredentialsPath() (string, error) {
 }
 
 func Home() (string, error) {
-	if dir := envValue("TICKET_HOME"); dir != "" {
+	if dir := envValue("TICKET_CONFIG_DIR"); dir != "" {
 		return dir, nil
 	}
 	if dir := envValue("TICKET_CONFIG_DIR"); dir != "" {
@@ -263,7 +263,7 @@ func Home() (string, error) {
 
 ## 3) Local vs remote service selection
 
-The CLI chooses between in-process local service (`libticket.NewLocal`) and HTTP-backed remote service (`libtickethttp.New`) based on `TICKET_MODE`.
+The CLI chooses between in-process local service (`libticket.NewLocal`) and HTTP-backed remote service (`libtickethttp.New`) based on the `TICKET_URL` scheme.
 
 ```bash
 sed -n '2770,2865p' cmd/ticket/main.go
@@ -348,11 +348,11 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	case config.ModeRemote:
 		serverURL := strings.TrimSpace(config.ResolveServerURL(cfg))
 		if serverURL == "" {
-			return nil, errors.New("TICKET_SERVER is required in remote mode")
+			return nil, errors.New("TICKET_URL with http(s):// scheme is required in remote mode")
 		}
 		return libtickethttp.New(cfg), nil
 	default:
-		return nil, fmt.Errorf("unsupported TICKET_MODE %q", mode)
+		return nil, fmt.Errorf("unsupported TICKET_URL scheme %q", mode)
 	}
 }
 
@@ -453,11 +453,11 @@ func LocalUsername() string {
 	case config.ModeRemote:
 		serverURL := strings.TrimSpace(config.ResolveServerURL(cfg))
 		if serverURL == "" {
-			return nil, errors.New("TICKET_SERVER is required in remote mode")
+			return nil, errors.New("TICKET_URL with http(s):// scheme is required in remote mode")
 		}
 		return libtickethttp.New(cfg), nil
 	default:
-		return nil, fmt.Errorf("unsupported TICKET_MODE %q", mode)
+		return nil, fmt.Errorf("unsupported TICKET_URL scheme %q", mode)
 	}
 }
 

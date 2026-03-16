@@ -14,8 +14,6 @@ import (
 )
 
 func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/status" {
 			t.Fatalf("path = %q, want /api/status", r.URL.Path)
@@ -35,6 +33,7 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 		})
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	api := New(config.Config{ServerURL: server.URL, Token: "token-123"})
 	status, err := api.Status()
@@ -47,8 +46,6 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 }
 
 func TestRemoteClientListTicketsFilteredBuildsQuery(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/projects/7/tickets" {
 			t.Fatalf("path = %q", r.URL.Path)
@@ -64,16 +61,39 @@ func TestRemoteClientListTicketsFilteredBuildsQuery(t *testing.T) {
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	api := New(config.Config{ServerURL: server.URL})
-	if _, err := api.ListTicketsFiltered(7, "bug", "", "", "develop/idle", "needle", "alice", 25); err != nil {
+	if _, err := api.ListTicketsFiltered(7, "bug", "", "", "develop/idle", "needle", "alice", 25, false); err != nil {
+		t.Fatalf("ListTicketsFiltered() error = %v", err)
+	}
+}
+
+func TestRemoteClientListTicketsFilteredIncludesArchived(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/7/tickets" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		values, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			t.Fatalf("ParseQuery() error = %v", err)
+		}
+		if values.Get("include_archived") != "1" {
+			t.Fatalf("query = %#v", values)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+	if _, err := api.ListTicketsFiltered(7, "", "", "", "", "", "", 0, true); err != nil {
 		t.Fatalf("ListTicketsFiltered() error = %v", err)
 	}
 }
 
 func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/tickets/claim" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
@@ -92,6 +112,7 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":"REJECTED"}`))
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	taskID := int64(9)
 	api := New(config.Config{ServerURL: server.URL, Token: "token-123"})
@@ -105,14 +126,13 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 }
 
 func TestRemoteClientReturnsAPIErrorMessage(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":"denied"}`))
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	api := New(config.Config{ServerURL: server.URL})
 	if _, err := api.Count(nil); err == nil || err.Error() != "denied" {
@@ -121,12 +141,11 @@ func TestRemoteClientReturnsAPIErrorMessage(t *testing.T) {
 }
 
 func TestRemoteClientReturnsStatusErrorForNonJSONFailures(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "plain failure", http.StatusBadGateway)
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	api := New(config.Config{ServerURL: server.URL})
 	if _, err := api.Count(nil); err == nil || !strings.Contains(err.Error(), "502") {
@@ -135,13 +154,12 @@ func TestRemoteClientReturnsStatusErrorForNonJSONFailures(t *testing.T) {
 }
 
 func TestRemoteClientReturnsDecodeErrorOnMalformedJSON(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":`))
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	api := New(config.Config{ServerURL: server.URL})
 	if _, err := api.Status(); err == nil {
@@ -150,14 +168,13 @@ func TestRemoteClientReturnsDecodeErrorOnMalformedJSON(t *testing.T) {
 }
 
 func TestRemoteClientHandlesNetworkFailure(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen() error = %v", err)
 	}
 	addr := listener.Addr().String()
 	_ = listener.Close()
+	t.Setenv("TICKET_URL", "http://"+addr)
 
 	api := New(config.Config{ServerURL: "http://" + addr})
 	if _, err := api.Status(); err == nil {
@@ -166,7 +183,7 @@ func TestRemoteClientHandlesNetworkFailure(t *testing.T) {
 }
 
 func TestLocalModeClientRejectsRemoteOnlyAuthCalls(t *testing.T) {
-	t.Setenv("TICKET_MODE", "local")
+	t.Setenv("TICKET_URL", "")
 
 	api := New(config.Config{})
 	if _, err := api.Register("alice", "secret"); err == nil {
@@ -181,8 +198,6 @@ func TestLocalModeClientRejectsRemoteOnlyAuthCalls(t *testing.T) {
 }
 
 func TestRemoteClientCRUDRoutes(t *testing.T) {
-	t.Setenv("TICKET_MODE", "remote")
-
 	projectID := int64(7)
 	taskID := int64(11)
 	dependsOn := int64(12)
@@ -246,6 +261,7 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 
 	api := New(config.Config{ServerURL: server.URL})
 

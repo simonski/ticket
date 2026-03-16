@@ -5,13 +5,96 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/simonski/ticket/internal/store"
 )
 
-func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
+func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, verbose bool, output io.Writer) {
+	var chatLog func(string)
+	if verbose {
+		if output == nil {
+			output = io.Discard
+		}
+		var chatLogMu sync.Mutex
+		chatLog = func(line string) {
+			chatLogMu.Lock()
+			defer chatLogMu.Unlock()
+			fmt.Fprintf(output, "CHAT %s\n", strings.TrimRight(line, "\n"))
+		}
+	}
+
+	notify := func(eventType string, projectID, ticketID int64) {
+		if live == nil {
+			return
+		}
+		live.broadcast(buildLiveChangeEvent(eventType, projectID, ticketID))
+	}
+
+	mux.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		token := strings.TrimSpace(r.URL.Query().Get("token"))
+		if token == "" {
+			token = bearerToken(r)
+		}
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if _, err := store.GetUserByToken(db, token); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		if err := websocketServe(live, w, r); err != nil {
+			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	})
+	mux.HandleFunc("/api/chat/ws", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		token := strings.TrimSpace(r.URL.Query().Get("token"))
+		if token == "" {
+			token = bearerToken(r)
+		}
+		if token == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if _, err := store.GetUserByToken(db, token); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		chatEnabled, err := store.ChatEnabled(db)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !chatEnabled {
+			writeError(w, http.StatusForbidden, "chat is disabled")
+			return
+		}
+		if err := websocketServeChat(w, r, db, chatLog); err != nil {
+			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	})
 	mux.HandleFunc("/api/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -29,6 +112,15 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 	mux.HandleFunc("/api/register", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		enabled, err := store.RegistrationEnabled(db)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !enabled {
+			writeError(w, http.StatusForbidden, "registration is disabled")
 			return
 		}
 		var credentials credentialsRequest
@@ -71,6 +163,14 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "ticket_token",
+			Value:    token,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   60 * 60 * 24 * 30,
+		})
 		writeJSON(w, http.StatusOK, authResponse{Token: token, User: user})
 	})
 
@@ -84,6 +184,14 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "ticket_token",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   -1,
+		})
 		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 	})
 
@@ -92,13 +200,34 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		registrationEnabled, regErr := store.RegistrationEnabled(db)
+		if regErr != nil {
+			writeError(w, http.StatusInternalServerError, regErr.Error())
+			return
+		}
+		chatLimits, chatErr := store.ChatLimitsConfig(db)
+		if chatErr != nil {
+			writeError(w, http.StatusInternalServerError, chatErr.Error())
+			return
+		}
+		chatEnabled, chatEnabledErr := store.ChatEnabled(db)
+		if chatEnabledErr != nil {
+			writeError(w, http.StatusInternalServerError, chatEnabledErr.Error())
+			return
+		}
+		runningChats := sharedChatRuntime.runningProcessCount()
 		user, err := userFromRequest(db, r)
 		if err != nil {
 			if errors.Is(err, store.ErrUnauthorized) {
 				writeJSON(w, http.StatusOK, map[string]any{
-					"status":         "ok",
-					"authenticated":  false,
-					"server_version": version,
+					"status":                    "ok",
+					"authenticated":             false,
+					"registration_enabled":      registrationEnabled,
+					"chat_enabled":              chatEnabled,
+					"chat_max_connections":      chatLimits.MaxConnections,
+					"chat_max_duration_minutes": chatLimits.MaxDurationMin,
+					"chat_running_processes":    runningChats,
+					"server_version":            version,
 				})
 				return
 			}
@@ -106,10 +235,96 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"status":         "ok",
-			"authenticated":  true,
-			"server_version": version,
-			"user":           user,
+			"status":                    "ok",
+			"authenticated":             true,
+			"registration_enabled":      registrationEnabled,
+			"chat_enabled":              chatEnabled,
+			"chat_max_connections":      chatLimits.MaxConnections,
+			"chat_max_duration_minutes": chatLimits.MaxDurationMin,
+			"chat_running_processes":    runningChats,
+			"server_version":            version,
+			"user":                      user,
+		})
+	})
+
+	mux.HandleFunc("/api/config/registration", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var payload struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		if err := store.SetRegistrationEnabled(db, payload.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"registration_enabled": payload.Enabled,
+		})
+	})
+	mux.HandleFunc("/api/config/chat_limits", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var payload struct {
+			MaxConnections int `json:"max_connections"`
+			MaxDurationMin int `json:"max_duration_minutes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		if payload.MaxConnections <= 0 {
+			payload.MaxConnections = store.DefaultChatMaxConnections
+		}
+		if payload.MaxDurationMin <= 0 {
+			payload.MaxDurationMin = store.DefaultChatMaxDurationMinutes
+		}
+		if err := store.SetChatLimitsConfig(db, payload.MaxConnections, payload.MaxDurationMin); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"chat_max_connections":      payload.MaxConnections,
+			"chat_max_duration_minutes": payload.MaxDurationMin,
+		})
+	})
+	mux.HandleFunc("/api/config/chat_enabled", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var payload struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		if err := store.SetChatEnabled(db, payload.Enabled); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"chat_enabled": payload.Enabled,
 		})
 	})
 
@@ -228,14 +443,633 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": action + "d"})
 	})
 
-	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/agents", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			agents, err := store.ListAgents(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, agents)
+		case http.MethodPost:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload agentRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, generatedPassword, err := store.CreateAgent(db, payload.Name, payload.Description, payload.Password)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, map[string]any{
+				"agent":    agent,
+				"password": generatedPassword,
+			})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/agents/", func(w http.ResponseWriter, r *http.Request) {
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/agents/")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		if parts[0] == "register" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			var payload agentAuthRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			agent, err = store.TouchAgent(db, agent.ID, "online")
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "agent": agent})
+			return
+		}
+		if parts[0] == "request" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			var payload agentRequestWork
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			projectID := payload.ProjectID
+			if payload.TicketID == nil && projectID == 0 {
+				projects, err := store.ListProjects(db)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				for _, p := range projects {
+					if p.Status == "open" {
+						projectID = p.ID
+						break
+					}
+				}
+			}
+			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+				ProjectID: projectID,
+				TicketID:  payload.TicketID,
+				Username:  agent.Name,
+				UserID:    0,
+				DryRun:    payload.DryRun,
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			agentStatus := "NONE"
+			switch status {
+			case "NO-WORK", "REJECTED":
+				agentStatus = "NONE"
+			case "ASSIGNED", "AVAILABLE":
+				if hadCurrent && currentAssigned.ID == ticket.ID {
+					agentStatus = "CURRENT"
+				} else {
+					agentStatus = "NEW"
+				}
+			default:
+				agentStatus = status
+			}
+			if status == "ASSIGNED" && agentStatus == "NEW" {
+				_, _ = store.TouchAgent(db, agent.ID, "working")
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+			} else {
+				_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+			}
+			response := map[string]any{
+				"status":  agentStatus,
+				"project": nil,
+				"ticket":  nil,
+				"parents": []store.Ticket{},
+			}
+			if agentStatus == "NEW" || agentStatus == "CURRENT" {
+				response["ticket"] = ticket
+				if project, err := store.GetProjectByID(db, ticket.ProjectID); err == nil {
+					response["project"] = project
+				}
+				if parents, err := store.ListTicketParents(db, ticket.ID); err == nil {
+					response["parents"] = parents
+				}
+			}
+			writeJSON(w, http.StatusOK, response)
+			return
+		}
+		if parts[0] == "tickets" && len(parts) == 3 && parts[2] == "update" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			var ticketID int64
+			if _, err := fmt.Sscan(parts[1], &ticketID); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid ticket id")
+				return
+			}
+			var payload agentTicketUpdateRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			current, err := store.GetTicket(db, ticketID)
+			if err != nil {
+				if errors.Is(err, store.ErrTicketNotFound) {
+					writeError(w, http.StatusNotFound, "ticket not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			updated, err := store.UpdateTicket(db, ticketID, store.TicketUpdateParams{
+				Title:              current.Title,
+				Description:        payload.Result,
+				AcceptanceCriteria: current.AcceptanceCriteria,
+				GitRepository:      current.GitRepository,
+				GitBranch:          current.GitBranch,
+				ParentID:           current.ParentID,
+				Assignee:           agent.Name,
+				Stage:              store.StageDone,
+				State:              store.StateSuccess,
+				Priority:           current.Priority,
+				Order:              current.Order,
+				EstimateEffort:     current.EstimateEffort,
+				EstimateComplete:   current.EstimateComplete,
+				UpdatedBy:          0,
+				ActorUsername:      agent.Name,
+				ActorRole:          "admin",
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+			notify("ticket_updated", updated.ProjectID, updated.ID)
+			writeJSON(w, http.StatusOK, updated)
+			return
+		}
+
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var id int64
+		if _, err := fmt.Sscan(parts[0], &id); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid agent id")
+			return
+		}
+		if len(parts) == 1 {
+			switch r.Method {
+			case http.MethodPut:
+				var payload agentRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				updated, err := store.UpdateAgent(db, id, store.AgentUpdateParams{
+					Name:        nullableTrimmed(payload.Name),
+					Description: nullableTrimmed(payload.Description),
+					Password:    nullableTrimmed(payload.Password),
+				})
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "agent not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, updated)
+			case http.MethodDelete:
+				if err := store.DeleteAgent(db, id); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "agent not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			var enabled bool
+			switch parts[1] {
+			case "enable":
+				enabled = true
+			case "disable":
+				enabled = false
+			default:
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			updated, err := store.SetAgentEnabled(db, id, enabled)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "agent not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, updated)
+			return
+		}
+		writeError(w, http.StatusNotFound, "not found")
+	})
+
+	mux.HandleFunc("/api/roles", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			roles, err := store.ListRoles(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, roles)
+		case http.MethodPost:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload roleRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			role, err := store.CreateRole(db, payload.Title, payload.Motivation, payload.Goals)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, role)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/roles/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/roles/")
+		var id int64
+		if _, err := fmt.Sscan(strings.TrimSpace(trimmed), &id); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid role id")
+			return
+		}
+		switch r.Method {
+		case http.MethodPut:
+			var payload roleRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			role, err := store.UpdateRole(db, id, payload.Title, payload.Motivation, payload.Goals)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "role not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, role)
+		case http.MethodDelete:
+			if err := store.DeleteRole(db, id); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "role not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/teams", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if _, err := requireUser(db, r); err != nil {
 				writeAuthError(w, err)
 				return
 			}
-			projects, err := store.ListProjects(db)
+			teams, err := store.ListTeams(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, teams)
+		case http.MethodPost:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			if user.Role != "admin" {
+				writeAuthError(w, store.ErrAdminRequired)
+				return
+			}
+			var payload teamRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			team, err := store.CreateTeam(db, payload.Name, payload.ParentTeamID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			// The creator is always an owner of the new team.
+			if _, err := store.AddTeamMember(db, team.ID, user.ID, store.TeamRoleOwner, ""); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, team)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/teams/", func(w http.ResponseWriter, r *http.Request) {
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/teams/")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		var teamID int64
+		if _, err := fmt.Sscan(parts[0], &teamID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid team id")
+			return
+		}
+		team, err := store.GetTeamByID(db, teamID)
+		if err != nil {
+			if errors.Is(err, store.ErrTeamNotFound) {
+				writeError(w, http.StatusNotFound, "team not found")
+				return
+			}
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		canManageTeam := user.Role == "admin"
+		if !canManageTeam {
+			role, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			canManageTeam = ok && role == store.TeamRoleOwner
+		}
+
+		if len(parts) == 1 {
+			switch r.Method {
+			case http.MethodPut:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload teamRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				updated, err := store.UpdateTeam(db, team.ID, payload.Name, payload.ParentTeamID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, updated)
+			case http.MethodDelete:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				if err := store.DeleteTeam(db, team.ID); err != nil {
+					if errors.Is(err, store.ErrTeamNotFound) {
+						writeError(w, http.StatusNotFound, "team not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
+		if len(parts) == 2 && parts[1] == "users" {
+			switch r.Method {
+			case http.MethodGet:
+				if !canManageTeam {
+					_, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					if !ok {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+				}
+				members, err := store.ListTeamMembers(db, team.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, members)
+			case http.MethodPost:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload teamMemberRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				member, err := store.AddTeamMember(db, team.ID, payload.UserID, payload.Role, payload.JobTitle)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, member)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
+		if len(parts) == 3 && parts[1] == "users" && r.Method == http.MethodDelete {
+			if !canManageTeam {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var userID int64
+			if _, err := fmt.Sscan(parts[2], &userID); err != nil {
+				writeError(w, http.StatusBadRequest, "user_id must be numeric")
+				return
+			}
+			if err := store.RemoveTeamMember(db, team.ID, userID); err != nil {
+				if errors.Is(err, store.ErrTeamMemberNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			return
+		}
+
+		if len(parts) == 2 && parts[1] == "agents" {
+			switch r.Method {
+			case http.MethodGet:
+				if !canManageTeam {
+					_, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					if !ok {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+				}
+				items, err := store.ListTeamAgents(db, team.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+			case http.MethodPost:
+				if !canManageTeam {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload struct {
+					AgentID int64 `json:"agent_id"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				item, err := store.AddTeamAgent(db, team.ID, payload.AgentID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, item)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
+		if len(parts) == 3 && parts[1] == "agents" && r.Method == http.MethodDelete {
+			if !canManageTeam {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var agentID int64
+			if _, err := fmt.Sscan(parts[2], &agentID); err != nil {
+				writeError(w, http.StatusBadRequest, "agent_id must be numeric")
+				return
+			}
+			if err := store.RemoveTeamAgent(db, team.ID, agentID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "team agent assignment not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			return
+		}
+
+		writeError(w, http.StatusNotFound, "not found")
+	})
+
+	mux.HandleFunc("/api/projects", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			projects, err := store.ListProjectsVisibleToUser(db, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -257,13 +1091,17 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
 				AcceptanceCriteria: projectPayload.AcceptanceCriteria,
+				GitRepository:      projectPayload.GitRepository,
+				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
+				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
 			})
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			notify("project_created", project.ID, 0)
 			writeJSON(w, http.StatusCreated, project)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -288,6 +1126,20 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			limit := 0
 			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 				if _, err := fmt.Sscan(raw, &limit); err != nil {
@@ -295,15 +1147,20 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					return
 				}
 			}
+			includeArchived := false
+			if raw := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("include_archived"))); raw == "1" || raw == "true" || raw == "yes" {
+				includeArchived = true
+			}
 			tasks, err := store.ListTickets(db, store.TicketListParams{
-				ProjectID: project.ID,
-				Type:      r.URL.Query().Get("type"),
-				Stage:     r.URL.Query().Get("stage"),
-				State:     r.URL.Query().Get("state"),
-				Status:    r.URL.Query().Get("status"),
-				Search:    r.URL.Query().Get("q"),
-				Assignee:  r.URL.Query().Get("assignee"),
-				Limit:     limit,
+				ProjectID:       project.ID,
+				Type:            r.URL.Query().Get("type"),
+				Stage:           r.URL.Query().Get("stage"),
+				State:           r.URL.Query().Get("state"),
+				Status:          r.URL.Query().Get("status"),
+				Search:          r.URL.Query().Get("q"),
+				Assignee:        r.URL.Query().Get("assignee"),
+				Limit:           limit,
+				IncludeArchived: includeArchived,
 			})
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
@@ -312,15 +1169,215 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			writeJSON(w, http.StatusOK, tasks)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "stories" && r.Method == http.MethodGet {
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			stories, err := store.ListStoriesByProject(db, project.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, stories)
+			return
+		}
 
-		if len(parts) == 2 && r.Method == http.MethodPost {
-			if _, err := requireAdmin(db, r); err != nil {
+		if (len(parts) == 2 && parts[1] == "users") || (len(parts) == 3 && parts[1] == "users") {
+			user, err := requireUser(db, r)
+			if err != nil {
 				writeAuthError(w, err)
 				return
 			}
 			project, err := store.GetProject(db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canManageProjectUsers(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			switch r.Method {
+			case http.MethodDelete:
+				if len(parts) != 3 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/users/{user_id}")
+					return
+				}
+				var userID int64
+				if _, err := fmt.Sscan(parts[2], &userID); err != nil {
+					writeError(w, http.StatusBadRequest, "user_id must be numeric")
+					return
+				}
+				if err := store.RemoveProjectMember(db, project.ID, userID); err != nil {
+					if errors.Is(err, store.ErrProjectMembershipNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("project_users_updated", project.ID, 0)
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+				return
+			case http.MethodPost:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/users")
+					return
+				}
+				var payload struct {
+					UserID int64  `json:"user_id"`
+					Role   string `json:"role"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				member, err := store.AddProjectMember(db, project.ID, payload.UserID, payload.Role)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("project_users_updated", project.ID, 0)
+				writeJSON(w, http.StatusOK, member)
+				return
+			case http.MethodGet:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/users")
+					return
+				}
+				members, err := store.ListProjectMembers(db, project.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, members)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+		}
+
+		if (len(parts) == 2 && parts[1] == "teams") || (len(parts) == 3 && parts[1] == "teams") {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canManageProjectUsers(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			switch r.Method {
+			case http.MethodDelete:
+				if len(parts) != 3 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams/{team_id}")
+					return
+				}
+				var teamID int64
+				if _, err := fmt.Sscan(parts[2], &teamID); err != nil {
+					writeError(w, http.StatusBadRequest, "team_id must be numeric")
+					return
+				}
+				if err := store.RemoveProjectTeamMember(db, project.ID, teamID); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "project team membership not found")
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("project_users_updated", project.ID, 0)
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+				return
+			case http.MethodPost:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams")
+					return
+				}
+				var payload struct {
+					TeamID int64  `json:"team_id"`
+					Role   string `json:"role"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				member, err := store.AddProjectTeamMember(db, project.ID, payload.TeamID, payload.Role)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("project_users_updated", project.ID, 0)
+				writeJSON(w, http.StatusOK, member)
+				return
+			case http.MethodGet:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams")
+					return
+				}
+				members, err := store.ListProjectTeamMembers(db, project.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, members)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+		}
+
+		if len(parts) == 2 && r.Method == http.MethodPost {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canManageProjectUsers(role) {
+				writeAuthError(w, store.ErrForbidden)
 				return
 			}
 			var enabled bool
@@ -342,6 +1399,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			notify("project_updated", project.ID, 0)
 			writeJSON(w, http.StatusOK, project)
 			return
 		}
@@ -352,6 +1410,11 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 		}
 		switch r.Method {
 		case http.MethodGet:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
 			project, err := store.GetProject(db, parts[0])
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
@@ -361,9 +1424,19 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			writeJSON(w, http.StatusOK, project)
 		case http.MethodPut:
-			if _, err := requireAdmin(db, r); err != nil {
+			user, err := requireUser(db, r)
+			if err != nil {
 				writeAuthError(w, err)
 				return
 			}
@@ -377,11 +1450,23 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
+			role, err := projectRoleForUser(db, currentProject.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			project, err := store.UpdateProjectWithParams(db, currentProject.ID, store.ProjectUpdateParams{
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
 				AcceptanceCriteria: projectPayload.AcceptanceCriteria,
+				GitRepository:      projectPayload.GitRepository,
+				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
+				Visibility:         projectPayload.Visibility,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
@@ -391,6 +1476,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			notify("project_updated", project.ID, 0)
 			writeJSON(w, http.StatusOK, project)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -417,6 +1503,15 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		role, err := projectRoleForUser(db, ticketPayload.ProjectID, user)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !canWriteProject(role) {
+			writeAuthError(w, store.ErrForbidden)
+			return
+		}
 		ticket, err := store.CreateTicket(db, store.TicketCreateParams{
 			ProjectID:          ticketPayload.ProjectID,
 			ParentID:           ticketPayload.ParentID,
@@ -424,6 +1519,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			Title:              ticketPayload.Title,
 			Description:        ticketPayload.Description,
 			AcceptanceCriteria: ticketPayload.AcceptanceCriteria,
+			GitRepository:      ticketPayload.GitRepository,
+			GitBranch:          ticketPayload.GitBranch,
 			Priority:           ticketPayload.Priority,
 			EstimateEffort:     ticketPayload.EstimateEffort,
 			EstimateComplete:   ticketPayload.EstimateComplete,
@@ -436,9 +1533,195 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		notify("ticket_created", ticket.ProjectID, ticket.ID)
 		writeJSON(w, http.StatusCreated, ticket)
 	}
 	mux.HandleFunc("/api/tickets", handleTicketsCollection)
+
+	mux.HandleFunc("/api/stories", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload storyRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			role, err := projectRoleForUser(db, payload.ProjectID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			story, err := store.CreateStory(db, payload.ProjectID, payload.Title, payload.Description, user.ID)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, story)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	mux.HandleFunc("/api/stories/", func(w http.ResponseWriter, r *http.Request) {
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/stories/")
+		parts := strings.Split(trimmed, "/")
+		var storyID int64
+		if _, err := fmt.Sscan(parts[0], &storyID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid story id")
+			return
+		}
+		story, err := store.GetStory(db, storyID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "story not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		role, err := projectRoleForUser(db, story.ProjectID, user)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !canWriteProject(role) {
+			writeAuthError(w, store.ErrForbidden)
+			return
+		}
+		if len(parts) == 1 && r.Method == http.MethodPut {
+			var payload storyRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			updated, err := store.UpdateStory(db, story.ID, payload.Title, payload.Description)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "story not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, updated)
+			return
+		}
+		if len(parts) != 2 || parts[1] != "analyse" || r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+
+		project, err := store.GetProjectByID(db, story.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		beforeTickets, err := store.ListTicketsByProject(db, story.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		beforeIDs := make(map[int64]struct{}, len(beforeTickets))
+		for _, ticket := range beforeTickets {
+			beforeIDs[ticket.ID] = struct{}{}
+		}
+
+		if err := runStoryBreakdownViaTicketCLI(db, project, story); err != nil {
+			var analysis storyAnalysisResult
+			prompt := fmt.Sprintf(
+				"Story title: %s\nStory description: %s\nGenerate JSON shape {\"epics\":[{\"title\":\"...\",\"description\":\"...\",\"tasks\":[{\"title\":\"...\",\"description\":\"...\"}]}]} with 1-4 epics and 2-5 tasks per epic.",
+				story.Title,
+				story.Description,
+			)
+			if err := runRoleJSONAnalysis(db, "StoryReview", prompt, &analysis); err != nil || len(analysis.Epics) == 0 {
+				analysis = fallbackStoryAnalysis(story)
+			}
+			for _, epicSpec := range analysis.Epics {
+				epicTitle := strings.TrimSpace(epicSpec.Title)
+				if epicTitle == "" {
+					continue
+				}
+				epic, err := store.CreateTicket(db, store.TicketCreateParams{
+					ProjectID:   story.ProjectID,
+					Type:        "epic",
+					Title:       epicTitle,
+					Description: strings.TrimSpace(epicSpec.Description),
+					CreatedBy:   user.ID,
+					Stage:       store.StageDesign,
+					State:       store.StateIdle,
+				})
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				for _, taskSpec := range epicSpec.Tasks {
+					taskTitle := strings.TrimSpace(taskSpec.Title)
+					if taskTitle == "" {
+						continue
+					}
+					parentID := epic.ID
+					_, err := store.CreateTicket(db, store.TicketCreateParams{
+						ProjectID:   story.ProjectID,
+						ParentID:    &parentID,
+						Type:        "task",
+						Title:       taskTitle,
+						Description: strings.TrimSpace(taskSpec.Description),
+						CreatedBy:   user.ID,
+						Stage:       store.StageDesign,
+						State:       store.StateIdle,
+					})
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+				}
+			}
+		}
+
+		afterTickets, err := store.ListTicketsByProject(db, story.ProjectID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		createdEpics := 0
+		createdTasks := 0
+		for _, ticket := range afterTickets {
+			if _, existed := beforeIDs[ticket.ID]; existed {
+				continue
+			}
+			_ = store.LinkStoryToTicket(db, story.ID, ticket.ID)
+			notify("ticket_created", ticket.ProjectID, ticket.ID)
+			switch strings.ToLower(strings.TrimSpace(ticket.Type)) {
+			case "epic":
+				createdEpics++
+			case "task":
+				createdTasks++
+			}
+		}
+		updatedStory, err := store.UpdateStoryStatus(db, story.ID, "ready_for_review")
+		if err == nil {
+			story = updatedStory
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"story":         story,
+			"created_epics": createdEpics,
+			"created_tasks": createdTasks,
+		})
+	})
 
 	handleTicketClaim := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -457,6 +1740,17 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 		}
 		ticketID := claimRequest.TicketID
 		ticketRef := strings.TrimSpace(claimRequest.TicketRef)
+		if claimRequest.ProjectID != 0 {
+			role, err := projectRoleForUser(db, claimRequest.ProjectID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+		}
 		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 			ProjectID: claimRequest.ProjectID,
 			TicketID:  ticketID,
@@ -476,6 +1770,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 		payload := map[string]any{"status": status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
 			payload["ticket"] = ticket
+			if status == "ASSIGNED" {
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+			}
 		}
 		writeJSON(w, http.StatusOK, payload)
 	}
@@ -497,8 +1794,17 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				return
 			}
 			id := ticketRef.ID
+			role, err := projectRoleForUser(db, ticketRef.ProjectID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 
 			if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				events, err := store.ListHistoryEvents(db, id)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
@@ -509,6 +1815,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			}
 
 			if len(parts) == 2 && parts[1] == "health" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				var healthPayload ticketHealthRequest
 				if err := json.NewDecoder(r.Body).Decode(&healthPayload); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
@@ -523,6 +1833,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
@@ -530,6 +1841,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			if len(parts) == 2 && parts[1] == "comments" {
 				switch r.Method {
 				case http.MethodGet:
+					if !canReadProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
 					comments, err := store.ListComments(db, id)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, err.Error())
@@ -537,6 +1852,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					}
 					writeJSON(w, http.StatusOK, comments)
 				case http.MethodPost:
+					if !canWriteProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
 					var commentPayload commentRequest
 					if err := json.NewDecoder(r.Body).Decode(&commentPayload); err != nil {
 						writeError(w, http.StatusBadRequest, "invalid json body")
@@ -553,6 +1872,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 							"key":        ticket.Key,
 							"comment_id": comment.ID,
 						}, user.ID)
+						notify("ticket_updated", ticket.ProjectID, ticket.ID)
 					}
 					writeJSON(w, http.StatusCreated, comment)
 				default:
@@ -562,6 +1882,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			}
 
 			if len(parts) == 2 && parts[1] == "dependencies" && r.Method == http.MethodGet {
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				dependencies, err := store.ListDependencies(db, id)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
@@ -572,6 +1896,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 			}
 
 			if len(parts) == 2 && parts[1] == "clone" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				cloned, err := store.CloneTicket(db, id, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -581,12 +1909,159 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				notify("ticket_created", cloned.ProjectID, cloned.ID)
 				writeJSON(w, http.StatusCreated, cloned)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "close" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				ticket, err := store.SetTicketOpen(db, id, false, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "open" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				ticket, err := store.SetTicketOpen(db, id, true, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "archive" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				ticket, err := store.SetTicketArchived(db, id, true, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "unarchive" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				ticket, err := store.SetTicketArchived(db, id, false, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "analyse" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				epic, err := store.GetTicket(db, id)
+				if err != nil {
+					writeError(w, http.StatusNotFound, "ticket not found")
+					return
+				}
+				if epic.Type != "epic" {
+					writeError(w, http.StatusBadRequest, "analyse is only supported for epics")
+					return
+				}
+				storyID, ok, err := store.StoryIDForTicket(db, epic.ID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				if !ok {
+					writeError(w, http.StatusBadRequest, "epic is not linked to a story")
+					return
+				}
+				story, err := store.GetStory(db, storyID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+
+				var analysis epicAnalysisResult
+				prompt := fmt.Sprintf(
+					"Story title: %s\nStory description: %s\nEpic title: %s\nEpic description: %s\nGenerate JSON shape {\"tickets\":[{\"title\":\"...\",\"description\":\"...\"}]} with 2-6 implementation tickets.",
+					story.Title, story.Description, epic.Title, epic.Description,
+				)
+				if err := runRoleJSONAnalysis(db, "EpicReview", prompt, &analysis); err != nil || len(analysis.Tickets) == 0 {
+					analysis = fallbackEpicAnalysis(epic)
+				}
+
+				created := 0
+				for _, taskSpec := range analysis.Tickets {
+					taskTitle := strings.TrimSpace(taskSpec.Title)
+					if taskTitle == "" {
+						continue
+					}
+					parentID := epic.ID
+					task, err := store.CreateTicket(db, store.TicketCreateParams{
+						ProjectID:   epic.ProjectID,
+						ParentID:    &parentID,
+						Type:        "task",
+						Title:       taskTitle,
+						Description: strings.TrimSpace(taskSpec.Description),
+						CreatedBy:   user.ID,
+						Stage:       store.StageDesign,
+						State:       store.StateIdle,
+					})
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					_ = store.LinkStoryToTicket(db, story.ID, task.ID)
+					notify("ticket_created", task.ProjectID, task.ID)
+					created++
+				}
+				writeJSON(w, http.StatusOK, map[string]any{
+					"epic_id":         epic.ID,
+					"story_id":        story.ID,
+					"created_tickets": created,
+				})
 				return
 			}
 
 			switch r.Method {
 			case http.MethodGet:
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				ticket, err := store.GetTicket(db, id)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -598,11 +2073,25 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				}
 				writeJSON(w, http.StatusOK, ticket)
 			case http.MethodPut:
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				var ticketPayload ticketRequest
 				if err := json.NewDecoder(r.Body).Decode(&ticketPayload); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
+				currentTicket, err := store.GetTicket(db, id)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username)
 				stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
@@ -612,6 +2101,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					Title:              ticketPayload.Title,
 					Description:        ticketPayload.Description,
 					AcceptanceCriteria: ticketPayload.AcceptanceCriteria,
+					GitRepository:      ticketPayload.GitRepository,
+					GitBranch:          ticketPayload.GitBranch,
 					ParentID:           ticketPayload.ParentID,
 					Assignee:           ticketPayload.Assignee,
 					Stage:              stage,
@@ -636,8 +2127,13 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
 			case http.MethodDelete:
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
 				if err := store.DeleteTicket(db, id); err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
@@ -650,6 +2146,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
 				}
+				notify("ticket_deleted", ticketRef.ProjectID, id)
 				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 			default:
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -671,11 +2168,21 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
+			role, err := projectRoleForUser(db, dependencyPayload.ProjectID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			dependency, err := store.AddDependency(db, dependencyPayload.ProjectID, dependencyPayload.TicketID, dependencyPayload.DependsOn, user.ID)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			notify("ticket_updated", dependencyPayload.ProjectID, dependencyPayload.TicketID)
 			writeJSON(w, http.StatusCreated, dependency)
 		case http.MethodDelete:
 			var projectID, ticketID, dependsOn int64
@@ -691,6 +2198,15 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusBadRequest, "depends_on must be numeric")
 				return
 			}
+			role, err := projectRoleForUser(db, projectID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
 			if err := store.DeleteDependency(db, projectID, ticketID, dependsOn); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "dependency not found")
@@ -699,6 +2215,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			notify("ticket_updated", projectID, ticketID)
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -711,12 +2228,63 @@ type credentialsRequest struct {
 	Password string `json:"password"`
 }
 
+type agentRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Password    string `json:"password,omitempty"`
+}
+
+type agentAuthRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+}
+
+type agentRequestWork struct {
+	Name      string `json:"name"`
+	Password  string `json:"password"`
+	ProjectID int64  `json:"project_id,omitempty"`
+	TicketID  *int64 `json:"ticket_id,omitempty"`
+	DryRun    bool   `json:"dry_run,omitempty"`
+}
+
+type agentTicketUpdateRequest struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
+	Result   string `json:"result"`
+}
+
 type projectRequest struct {
 	Prefix             string `json:"prefix"`
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
+	Visibility         string `json:"visibility"`
+}
+
+type roleRequest struct {
+	Title      string `json:"title"`
+	Motivation string `json:"motivation"`
+	Goals      string `json:"goals"`
+}
+
+type teamRequest struct {
+	Name         string `json:"name"`
+	ParentTeamID *int64 `json:"parent_team_id"`
+}
+
+type teamMemberRequest struct {
+	UserID   int64  `json:"user_id"`
+	Role     string `json:"role"`
+	JobTitle string `json:"job_title"`
+}
+
+type storyRequest struct {
+	ProjectID   int64  `json:"project_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type ticketRequest struct {
@@ -726,6 +2294,8 @@ type ticketRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	GitRepository      string `json:"git_repository"`
+	GitBranch          string `json:"git_branch"`
 	Status             string `json:"status"`
 	Stage              string `json:"stage"`
 	State              string `json:"state"`
@@ -772,6 +2342,98 @@ func resolveLifecycleRequest(status, stage, state string) (string, string, error
 	return store.ParseLifecycleStatus(status)
 }
 
+func autoProgressTicketLifecycle(payload ticketRequest, current store.Ticket, actorUsername string) ticketRequest {
+	if hasExplicitLifecycleChange(payload, current) {
+		return payload
+	}
+	if !hasMeaningfulTicketContentChange(payload, current) {
+		return payload
+	}
+	nextAssignee := strings.TrimSpace(payload.Assignee)
+	if nextAssignee == "" {
+		nextAssignee = strings.TrimSpace(current.Assignee)
+	}
+	switch current.Stage {
+	case store.StageDesign:
+		payload.Stage = store.StageDevelop
+		payload.State = store.StateActive
+		if nextAssignee == "" {
+			payload.Assignee = strings.TrimSpace(actorUsername)
+		}
+	case store.StageDevelop:
+		payload.Stage = store.StageDevelop
+		payload.State = store.StateActive
+		if nextAssignee == "" {
+			payload.Assignee = strings.TrimSpace(actorUsername)
+		}
+		if strings.TrimSpace(payload.EstimateComplete) != "" && strings.TrimSpace(payload.EstimateComplete) != strings.TrimSpace(current.EstimateComplete) {
+			payload.Stage = store.StageTest
+			payload.State = store.StateActive
+		}
+	case store.StageTest:
+		payload.Stage = store.StageTest
+		payload.State = store.StateActive
+		if nextAssignee == "" {
+			payload.Assignee = strings.TrimSpace(actorUsername)
+		}
+	}
+	return payload
+}
+
+func hasExplicitLifecycleChange(payload ticketRequest, current store.Ticket) bool {
+	if strings.TrimSpace(payload.Status) != "" {
+		return true
+	}
+	stage := strings.TrimSpace(strings.ToLower(payload.Stage))
+	state := strings.TrimSpace(strings.ToLower(payload.State))
+	if stage == "" && state == "" {
+		return false
+	}
+	return stage != current.Stage || state != current.State
+}
+
+func hasMeaningfulTicketContentChange(payload ticketRequest, current store.Ticket) bool {
+	if payload.Title != current.Title {
+		return true
+	}
+	if payload.Description != current.Description {
+		return true
+	}
+	if payload.AcceptanceCriteria != current.AcceptanceCriteria {
+		return true
+	}
+	if payload.Priority != current.Priority {
+		return true
+	}
+	if payload.Order != current.Order {
+		return true
+	}
+	if payload.EstimateEffort != current.EstimateEffort {
+		return true
+	}
+	if strings.TrimSpace(payload.EstimateComplete) != strings.TrimSpace(current.EstimateComplete) {
+		return true
+	}
+	if strings.TrimSpace(payload.Assignee) != strings.TrimSpace(current.Assignee) {
+		return true
+	}
+	if (payload.ParentID == nil) != (current.ParentID == nil) {
+		return true
+	}
+	if payload.ParentID != nil && current.ParentID != nil && *payload.ParentID != *current.ParentID {
+		return true
+	}
+	return false
+}
+
+func nullableTrimmed(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func userFromRequest(db *sql.DB, r *http.Request) (store.User, error) {
 	return store.GetUserByToken(db, bearerToken(r))
 }
@@ -793,10 +2455,68 @@ func requireAdmin(db *sql.DB, r *http.Request) (store.User, error) {
 
 func bearerToken(r *http.Request) string {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	if !strings.HasPrefix(header, "Bearer ") {
-		return ""
+	if strings.HasPrefix(header, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
 	}
-	return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+	cookie, err := r.Cookie("ticket_token")
+	if err == nil && strings.TrimSpace(cookie.Value) != "" {
+		return strings.TrimSpace(cookie.Value)
+	}
+	return ""
+}
+
+func projectRoleForUser(db *sql.DB, projectID int64, user store.User) (string, error) {
+	if user.Role == "admin" {
+		return store.ProjectRoleOwner, nil
+	}
+	project, err := store.GetProjectByID(db, projectID)
+	if err != nil {
+		return "", err
+	}
+	role, ok, err := store.ProjectRoleForUser(db, projectID, user.ID)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return role, nil
+	}
+	teamIDs, err := store.TeamIDsForUserWithAncestors(db, user.ID)
+	if err != nil {
+		return "", err
+	}
+	teamRole, teamOK, err := store.HighestProjectRoleForTeams(db, projectID, teamIDs)
+	if err != nil {
+		return "", err
+	}
+	if teamOK {
+		return teamRole, nil
+	}
+	if project.Visibility == store.ProjectVisibilityPublic {
+		return store.ProjectRoleViewer, nil
+	}
+	return "", nil
+}
+
+func canReadProject(role string) bool {
+	switch role {
+	case store.ProjectRoleViewer, store.ProjectRoleEditor, store.ProjectRoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
+func canWriteProject(role string) bool {
+	switch role {
+	case store.ProjectRoleEditor, store.ProjectRoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
+func canManageProjectUsers(role string) bool {
+	return role == store.ProjectRoleOwner
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, payload any) {

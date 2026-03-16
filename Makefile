@@ -1,4 +1,4 @@
-.PHONY: help default build tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean
+.PHONY: help default build setup setup-go setup-node setup-playwright tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean
 
 VERSION_FILE := cmd/ticket/VERSION
 
@@ -9,6 +9,10 @@ help:
 	@printf "  make build           Build ticket into ./bin/ticket and symlink ./tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
 	@printf "  make tools           Build helper binaries in the repo root.\n"
+	@printf "  make setup           Install development dependencies (Go + Node).\n"
+	@printf "  make setup-go        Download and cache Go module dependencies.\n"
+	@printf "  make setup-node      Install Node dependencies.\n"
+	@printf "  make setup-playwright Install Chromium for Playwright.\n"
 	@printf "  make test            Run all tests.\n"
 	@printf "  make test-go         Run Go tests.\n"
 	@printf "  make test-unit       Run unit-oriented Go test packages.\n"
@@ -24,14 +28,21 @@ build:
 	go build -o ./bin/ticket ./cmd/ticket
 	@ln -sf ./bin/ticket ./tk
 
+setup: setup-go setup-node setup-playwright
+
+setup-go:
+	go mod download
+
+setup-node:
+	npm install
+
+setup-playwright:
+	npx playwright install chromium
+
 tools:
 	@mkdir -p bin
-	@set -e; \
-	for tool in $$(find tools -mindepth 2 -maxdepth 2 -type f -name '*.go' ! -name '*_test.go' | sort); do \
-		name=$$(basename $$(dirname $$tool)); \
-		printf "Building %s -> bin/%s\n" "$$tool" "$$name"; \
-		go build -o "bin/$$name" "$$tool"; \
-	done
+	go build -o bin/parser ./tools/parser
+	go build -o bin/wiggum ./tools/wiggum
 
 bump-version:
 	@if [ ! -f "$(VERSION_FILE)" ]; then \
@@ -94,3 +105,14 @@ clean:
 	@rm -rf bin
 	@rm -f tk
 	@rm -f parser
+
+install:
+	go install ./cmd/ticket
+
+dev:
+    # prints out the env vars I need to set to go into a ticket dev mode
+	@echo ""
+	@echo "Run the following:\n"
+	@echo "export TICKET_URL=file://`pwd`/ticket.db"
+	@echo "export TICKET_CONFIG_DIR=`pwd`"
+	@echo "\nAnd you are now in a position to extend ticket itself.\n"

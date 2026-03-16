@@ -32,7 +32,7 @@ DEPENDS-ON: NONE
     ID: E1-S2
     DESCRIPTION: Provide CLI-driven database initialization with safe overwrite behavior and generated admin credentials when needed.
     AC:
-    - `task initdb` creates a database at `$TICKET_HOME/task.db` when `-f` is omitted.
+    - `task initdb` creates a database at `$TICKET_CONFIG_DIR/task.db` when `-f` is omitted.
     - `task initdb -f task.db --force -password secret` overwrites an existing database and uses the supplied password.
     - `task initdb` without `-password` generates a random admin password and prints it to stdout.
     - The initialized database contains the `admin` user and the default project with project id `1`.
@@ -48,7 +48,7 @@ DEPENDS-ON: NONE
     ID: E1-S3
     DESCRIPTION: Start the HTTP server, serve the embedded frontend, and print the startup banner, version, and database path.
     AC:
-    - `task server` opens `$TICKET_HOME/task.db` when `-f` is omitted.
+    - `task server` opens `$TICKET_CONFIG_DIR/task.db` when `-f` is omitted.
     - `task server -f filename.db` serves the API and embedded frontend against the selected database.
     - `task server` prints the banner, the embedded version, and the resolved task database path before the listen message.
     - `task server -v` logs request and response details to stdout.
@@ -80,7 +80,7 @@ AC:
 - The system supports `admin` and `user` roles.
 - Admins can create, list, delete, enable, and disable users.
 - `task register`, `task login`, `task logout`, and `task status` behave as documented.
-- Client-side state is split between `$TICKET_HOME/config.json` and `$TICKET_HOME/credentials.json`.
+- Client-side state is split between `$TICKET_CONFIG_DIR/config.json` and `$TICKET_CONFIG_DIR/credentials.json`.
 - The web app uses the same authentication and session model as the CLI.
 - Admin-only calls made by non-admin users return HTTP 403 with `user is not an admin`.
 - use red/green testing
@@ -125,10 +125,10 @@ DEPENDS-ON: E1
     AC:
     - `task register --username name --password secret` creates an account and does not log the user in.
     - `task register` resolves missing values from `TICKET_USERNAME`, `TICKET_PASSWORD`, then `whoami` and `password`.
-    - `task login` checks `$TICKET_HOME/credentials.json`, then `$TICKET_HOME/config.json`, then flags, then env vars, then prompts.
+    - `task login` checks `$TICKET_CONFIG_DIR/credentials.json`, then `$TICKET_CONFIG_DIR/config.json`, then flags, then env vars, then prompts.
     - `task login` prompts with editable defaults and masks password input with `*` on interactive terminals.
-    - `task login` stores the session token in `$TICKET_HOME/credentials.json` and stores `username` and `server_url` in `$TICKET_HOME/config.json`.
-    - `task logout` removes `$TICKET_HOME/credentials.json`.
+    - `task login` stores the session token in `$TICKET_CONFIG_DIR/credentials.json` and stores `username` and `server_url` in `$TICKET_CONFIG_DIR/config.json`.
+    - `task logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
     - Automated tests cover registration, login success, invalid credentials retry, and logout.
     - use red/green testing
     - use make to verify all tests pass

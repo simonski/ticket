@@ -85,7 +85,7 @@ func Init(path, adminUsername, adminPassword string) error {
 	if _, err := CreateProjectWithParams(db, ProjectCreateParams{
 		Prefix:             defaultProjectPrefix,
 		Title:              "Default Project",
-		Description:        "Bootstrap project created during initdb.",
+		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
 		CreatedBy:          1,
 	}); err != nil {
@@ -115,14 +115,38 @@ CREATE TABLE IF NOT EXISTS sessions (
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS agents (
+	agent_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE,
+	description TEXT NOT NULL DEFAULT '',
+	password_hash TEXT NOT NULL,
+	enabled INTEGER NOT NULL DEFAULT 1,
+	status TEXT NOT NULL DEFAULT 'idle',
+	last_seen TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+	role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	title TEXT NOT NULL UNIQUE,
+	motivation TEXT NOT NULL DEFAULT '',
+	goals TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS projects (
 	project_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	prefix TEXT NOT NULL DEFAULT '',
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	git_repository TEXT NOT NULL DEFAULT '',
+	git_branch TEXT NOT NULL DEFAULT '',
 	notes TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open',
+	visibility TEXT NOT NULL DEFAULT 'public',
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -130,8 +154,8 @@ CREATE TABLE IF NOT EXISTS projects (
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
-CREATE TABLE IF NOT EXISTS tasks (
-	task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS tickets (
+	ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	key TEXT NOT NULL DEFAULT '',
 	project_id INTEGER NOT NULL,
 	parent_id INTEGER,
@@ -140,6 +164,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	git_repository TEXT NOT NULL DEFAULT '',
+	git_branch TEXT NOT NULL DEFAULT '',
 	stage TEXT NOT NULL DEFAULT 'design',
 	state TEXT NOT NULL DEFAULT 'idle',
 	status TEXT NOT NULL DEFAULT 'open',
@@ -149,39 +175,62 @@ CREATE TABLE IF NOT EXISTS tasks (
 	estimate_complete TEXT NOT NULL DEFAULT '',
 	health_score INTEGER NOT NULL DEFAULT 0,
 	assignee TEXT NOT NULL DEFAULT '',
+	open INTEGER NOT NULL DEFAULT 1,
 	archived INTEGER NOT NULL DEFAULT 0,
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(parent_id) REFERENCES tasks(task_id),
-	FOREIGN KEY(clone_of) REFERENCES tasks(task_id),
+	FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS stories (
+	story_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'draft',
+	created_by INTEGER,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(created_by) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS story_ticket_links (
+	story_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(story_id, ticket_id),
+	FOREIGN KEY(story_id) REFERENCES stories(story_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id)
 );
 
 CREATE TABLE IF NOT EXISTS history_events (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	task_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS ticket_history (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	task_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(task_id) REFERENCES tasks(task_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
@@ -191,21 +240,76 @@ CREATE TABLE IF NOT EXISTS comments (
 	user_id INTEGER NOT NULL,
 	comment TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(item_id) REFERENCES tasks(task_id),
+	FOREIGN KEY(item_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS dependencies (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	task_id INTEGER NOT NULL,
+	ticket_id INTEGER NOT NULL,
 	depends_on INTEGER NOT NULL,
 	created_by INTEGER,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(task_id) REFERENCES tasks(task_id),
-	FOREIGN KEY(depends_on) REFERENCES tasks(task_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_members (
+	project_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(project_id, user_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+	team_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE,
+	parent_team_id INTEGER,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(parent_team_id) REFERENCES teams(team_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+	team_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	job_title TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(team_id, user_id),
+	FOREIGN KEY(team_id) REFERENCES teams(team_id),
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS team_agents (
+	team_id INTEGER NOT NULL,
+	agent_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(team_id, agent_id),
+	FOREIGN KEY(team_id) REFERENCES teams(team_id),
+	FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS project_teams (
+	project_id INTEGER NOT NULL,
+	team_id INTEGER NOT NULL,
+	role TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(project_id, team_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	FOREIGN KEY(team_id) REFERENCES teams(team_id)
 );
 `
 
@@ -216,6 +320,33 @@ CREATE TABLE IF NOT EXISTS dependencies (
 }
 
 func migrateSchema(db *sql.DB) error {
+	// Rename tasks table and task_id column to use ticket terminology.
+	if tableExists(db, "tasks") && !tableExists(db, "tickets") {
+		if _, err := db.Exec(`ALTER TABLE tasks RENAME TO tickets`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "tickets", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE tickets RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "history_events", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE history_events RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "ticket_history", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE ticket_history RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+	if columnExists(db, "dependencies", "task_id") {
+		if _, err := db.Exec(`ALTER TABLE dependencies RENAME COLUMN task_id TO ticket_id`); err != nil {
+			return err
+		}
+	}
+
 	if !columnExists(db, "projects", "prefix") {
 		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN prefix TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
@@ -223,6 +354,16 @@ func migrateSchema(db *sql.DB) error {
 	}
 	if !columnExists(db, "projects", "notes") {
 		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN notes TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "projects", "git_repository") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "projects", "git_branch") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
@@ -236,50 +377,112 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "projects", "visibility") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`); err != nil {
+			return err
+		}
+	}
 	if _, err := db.Exec(`UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`UPDATE projects SET visibility = 'public' WHERE TRIM(COALESCE(visibility,'')) = ''`); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`UPDATE projects SET status = 'closed' WHERE status = 'disabled'`); err != nil {
 		return err
 	}
 
-	if !columnExists(db, "tasks", "key") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN key TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(db, "tickets", "key") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN key TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "sort_order") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(db, "tickets", "sort_order") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "estimate_effort") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN estimate_effort INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(db, "tickets", "estimate_effort") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_effort INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "estimate_complete") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(db, "tickets", "estimate_complete") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "health_score") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(db, "tickets", "git_repository") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "stage") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
+	if !columnExists(db, "tickets", "git_branch") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tasks", "state") {
-		if _, err := db.Exec(`ALTER TABLE tasks ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'`); err != nil {
+	if !columnExists(db, "tickets", "health_score") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tickets", "open") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
+			return err
+		}
+		// Legacy behavior used archived for close/open. Preserve closed state and reset archived.
+		if _, err := db.Exec(`UPDATE tickets SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`UPDATE tickets SET archived = 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tickets", "stage") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "tickets", "state") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(db, "stories") {
+		if _, err := db.Exec(`
+			CREATE TABLE IF NOT EXISTS stories (
+				story_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				title TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'draft',
+				created_by INTEGER,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id),
+				FOREIGN KEY(created_by) REFERENCES users(user_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(db, "story_ticket_links") {
+		if _, err := db.Exec(`
+			CREATE TABLE IF NOT EXISTS story_ticket_links (
+				story_id INTEGER NOT NULL,
+				ticket_id INTEGER NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(story_id, ticket_id),
+				FOREIGN KEY(story_id) REFERENCES stories(story_id),
+				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id)
+			)
+		`); err != nil {
 			return err
 		}
 	}
 	if _, err := db.Exec(`
-		UPDATE tasks
+		UPDATE tickets
 		SET
 			stage = CASE
 				WHEN status = 'notready' THEN 'design'
@@ -290,14 +493,17 @@ func migrateSchema(db *sql.DB) error {
 				ELSE COALESCE(NULLIF(TRIM(stage), ''), 'design')
 			END,
 			state = CASE
+				WHEN LOWER(TRIM(state)) = 'complete' THEN 'success'
+				WHEN LOWER(TRIM(state)) = 'fail' THEN 'fail'
 				WHEN status IN ('notready', 'open') THEN 'idle'
 				WHEN status = 'inprogress' THEN 'active'
-				WHEN status IN ('complete', 'fail') THEN 'complete'
+				WHEN status = 'complete' THEN 'success'
+				WHEN status = 'fail' THEN 'fail'
 				ELSE COALESCE(NULLIF(TRIM(state), ''), 'idle')
 			END
 		WHERE COALESCE(NULLIF(TRIM(stage), ''), '') = '' OR COALESCE(NULLIF(TRIM(state), ''), '') = ''
 		   OR stage NOT IN ('design', 'develop', 'test', 'done')
-		   OR state NOT IN ('idle', 'active', 'complete')
+		   OR state NOT IN ('idle', 'active', 'success', 'fail')
 	`); err != nil {
 		return err
 	}
@@ -308,12 +514,167 @@ func migrateSchema(db *sql.DB) error {
 		return err
 	}
 	if _, err := db.Exec(`
-		INSERT INTO ticket_history (id, project_id, task_id, event_type, payload, created_by, created_at)
-		SELECT h.id, h.project_id, h.task_id, h.event_type, h.payload, h.created_by, h.created_at
+		INSERT INTO ticket_history (id, project_id, ticket_id, event_type, payload, created_by, created_at)
+		SELECT h.id, h.project_id, h.ticket_id, h.event_type, h.payload, h.created_by, h.created_at
 		FROM history_events h
 		WHERE NOT EXISTS (SELECT 1 FROM ticket_history th WHERE th.id = h.id)
 	`); err != nil {
 		return err
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_enabled', '1')`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_connections', '2')`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_duration_minutes', '3')`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_enabled', '1')`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+		INSERT OR IGNORE INTO project_members (project_id, user_id, role)
+		SELECT project_id, created_by, 'owner'
+		FROM projects
+		WHERE created_by IS NOT NULL AND created_by > 0
+	`); err != nil {
+		return err
+	}
+	if err := seedDefaultRoles(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func seedDefaultRoles(db *sql.DB) error {
+	type defaultRole struct {
+		Title            string
+		LegacyMotivation string
+		LegacyGoals      string
+		Motivation       string
+		Goals            string
+	}
+
+	defaultRoles := []defaultRole{
+		{
+			Title:            "Product Owner",
+			LegacyMotivation: "Maximize customer value and clarity.",
+			LegacyGoals:      "Prioritize backlog and validate outcomes.",
+			Motivation: `The Product Owner is the steward of value. This role gathers the many voices around a product and turns them into one accountable direction that the team can execute without ambiguity.
+
+In classical delivery practice, the Product Owner protects both customer outcomes and engineering focus by deciding what matters now, what can wait, and what should never be built.`,
+			Goals: `Shape and maintain a prioritized backlog whose ordering reflects business value, risk reduction, and delivery reality.
+
+Define acceptance criteria that make success testable, and continuously validate delivered work with users and stakeholders so the team learns quickly and adjusts course deliberately.`,
+		},
+		{
+			Title:            "Architect",
+			LegacyMotivation: "Maintain coherent system design.",
+			LegacyGoals:      "Define architecture guardrails and reduce complexity.",
+			Motivation: `The Architect preserves structural integrity while change is constant. This role balances immediate delivery pressure against the long-term fitness of the system so that each release does not mortgage the next.
+
+Classically, the Architect translates strategy into technical boundaries: where variation is welcome, where standards are required, and where simplification must be enforced.`,
+			Goals: `Set architecture principles, interfaces, and constraints that allow teams to move independently without creating fragmentation.
+
+Drive intentional reduction of complexity through clear decomposition, dependable integration points, and regular review of hotspots where cost, risk, and coupling are rising.`,
+		},
+		{
+			Title:            "DevOps",
+			LegacyMotivation: "Improve delivery reliability and speed.",
+			LegacyGoals:      "Automate build/deploy and keep systems stable.",
+			Motivation: `DevOps exists to eliminate the false trade-off between speed and stability. The role champions delivery systems that are repeatable, observable, and safe under real operational load.
+
+In the classical sense, DevOps is a reliability discipline as much as a tooling discipline: remove toil, shorten feedback loops, and make production behavior visible to everyone.`,
+			Goals: `Build and maintain automated pipelines for build, test, release, and rollback so deployment becomes routine rather than exceptional.
+
+Improve operational excellence through monitoring, alerting, incident learning, and capacity planning, keeping service health and change lead time in continuous balance.`,
+		},
+		{
+			Title:            "QA/Tester",
+			LegacyMotivation: "Protect product quality.",
+			LegacyGoals:      "Design tests and prevent regressions.",
+			Motivation: `QA/Tester represents disciplined skepticism in the delivery process. This role asks how a feature can fail in practice and ensures quality is demonstrated, not merely asserted.
+
+Classical testing practice positions QA as a partner in design and risk management, helping teams discover defects early and prevent classes of failure before release.`,
+			Goals: `Create layered test strategies across functional, integration, and exploratory testing that reflect product risk and user impact.
+
+Strengthen regression safety by improving test automation, test data quality, and defect feedback loops so each release increases confidence instead of uncertainty.`,
+		},
+		{
+			Title:            "BA",
+			LegacyMotivation: "Turn business needs into implementable requirements.",
+			LegacyGoals:      "Clarify scope and acceptance criteria.",
+			Motivation: `The Business Analyst translates intent into precision. This role turns broad business goals into clear problem statements, measurable outcomes, and decisions that teams can implement without rework.
+
+Classically, BA work reduces waste by exposing assumptions early, surfacing dependencies, and creating shared understanding before expensive development begins.`,
+			Goals: `Elicit and document requirements in language that is concrete for engineering and meaningful for stakeholders, including explicit boundaries and constraints.
+
+Maintain alignment between scope, process, and outcomes by refining acceptance criteria, tracking requirement changes, and resolving ambiguity before it reaches implementation.`,
+		},
+		{
+			Title:            "Lead Engineer",
+			LegacyMotivation: "Deliver technically sound features.",
+			LegacyGoals:      "Guide implementation and unblock execution.",
+			Motivation: `The Lead Engineer is accountable for turning plans into high-quality software under real timeline pressure. This role keeps the team moving while preserving technical standards and delivery discipline.
+
+In classical engineering leadership, the lead is both builder and coordinator: clarifying trade-offs, sequencing work, and intervening quickly when execution drifts.`,
+			Goals: `Guide implementation across design, coding, and review practices so feature delivery remains coherent, testable, and maintainable.
+
+Actively unblock execution by resolving technical uncertainty, coordinating cross-role decisions, and maintaining a predictable cadence from development through handoff.`,
+		},
+		{
+			Title:            "Staff Engineer",
+			LegacyMotivation: "Raise cross-team technical quality.",
+			LegacyGoals:      "Drive long-term engineering improvements.",
+			Motivation: `The Staff Engineer operates at system and organization scale. This role focuses on problems that exceed a single team boundary and improves how engineering works across the whole product surface.
+
+Classically, staff-level impact is measured in leverage: better defaults, better standards, and better technical decisions that make many teams more effective over time.`,
+			Goals: `Lead cross-team initiatives that improve architecture consistency, platform capability, and engineering effectiveness without centralizing all decision-making.
+
+Advance long-term technical quality by identifying systemic risks, shaping roadmaps for foundational work, and mentoring engineers in high-leverage design and execution patterns.`,
+		},
+		{
+			Title:            "StoryReview",
+			LegacyMotivation: "",
+			LegacyGoals:      "",
+			Motivation: `StoryReview converts high-level requirements into a coherent implementation shape. The role ensures scope is represented as outcome-focused epics and delivery-focused tickets that can be executed incrementally.
+
+This role emphasizes completeness, clear boundaries, and actionable decomposition that engineering teams can review and implement with minimal ambiguity.`,
+			Goals: `Break each story into a small set of epics that represent major capability slices, then derive concrete implementation tickets for each epic.
+
+Ensure generated work items have clear intent, practical scope, and traceability back to the parent story for review and approval.`,
+		},
+		{
+			Title:            "EpicReview",
+			LegacyMotivation: "",
+			LegacyGoals:      "",
+			Motivation: `EpicReview translates a strategic epic into executable tickets. The role focuses on identifying practical delivery steps that preserve architectural integrity while enabling fast implementation.
+
+This role acts as the bridge between planning and coding by turning broad capability statements into clear, testable work units.`,
+			Goals: `Decompose epics into implementation tickets with well-defined titles and descriptions that support estimation and assignment.
+
+Produce tickets that are specific enough for immediate development while maintaining linkage to the parent epic and story context.`,
+		},
+	}
+	for _, role := range defaultRoles {
+		if _, err := db.Exec(`
+			INSERT OR IGNORE INTO roles (title, motivation, goals, updated_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		`, role.Title, role.Motivation, role.Goals); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`
+			UPDATE roles
+			SET motivation = ?, goals = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE title = ?
+			  AND (
+			    (motivation = ? AND goals = ?)
+			    OR (TRIM(motivation) = '' AND TRIM(goals) = '')
+			  )
+		`, role.Motivation, role.Goals, role.Title, role.LegacyMotivation, role.LegacyGoals); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -344,11 +705,11 @@ func backfillProjectPrefixes(db *sql.DB) error {
 	for _, project := range projects {
 		if strings.TrimSpace(project.prefix) != "" {
 			if project.id == 1 && strings.TrimSpace(project.title) == "Default Project" {
-				var taskCount int
-				if err := db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE project_id = ?`, project.id).Scan(&taskCount); err != nil {
+				var ticketCount int
+				if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE project_id = ?`, project.id).Scan(&ticketCount); err != nil {
 					return err
 				}
-				if taskCount == 0 {
+				if ticketCount == 0 {
 					prefix := defaultProjectPrefix
 					if prefix != strings.TrimSpace(project.prefix) {
 						prefix, err := nextUniqueProjectPrefix(db, prefix)
@@ -380,10 +741,10 @@ func backfillProjectPrefixes(db *sql.DB) error {
 
 func backfillTicketKeys(db *sql.DB) error {
 	rows, err := db.Query(`
-		SELECT t.task_id, t.project_id, t.type, t.key, p.prefix
-		FROM tasks t
+		SELECT t.ticket_id, t.project_id, t.type, t.key, p.prefix
+		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
-		ORDER BY t.project_id, t.task_id
+		ORDER BY t.project_id, t.ticket_id
 	`)
 	if err != nil {
 		return err
@@ -391,20 +752,20 @@ func backfillTicketKeys(db *sql.DB) error {
 	defer rows.Close()
 
 	type row struct {
-		taskID    int64
-		projectID int64
-		taskType  string
-		key       string
-		prefix    string
+		ticketID   int64
+		projectID  int64
+		ticketType string
+		key        string
+		prefix     string
 	}
-	var tasks []row
+	var tickets []row
 	maxSeq := map[int64]int64{}
 	for rows.Next() {
 		var item row
-		if err := rows.Scan(&item.taskID, &item.projectID, &item.taskType, &item.key, &item.prefix); err != nil {
+		if err := rows.Scan(&item.ticketID, &item.projectID, &item.ticketType, &item.key, &item.prefix); err != nil {
 			return err
 		}
-		tasks = append(tasks, item)
+		tickets = append(tickets, item)
 		if seq := parseTicketSequence(item.key); seq > maxSeq[item.projectID] {
 			maxSeq[item.projectID] = seq
 		}
@@ -412,14 +773,14 @@ func backfillTicketKeys(db *sql.DB) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	for _, task := range tasks {
-		if strings.TrimSpace(task.key) == "" {
-			maxSeq[task.projectID]++
-			key, err := generateTicketKey(task.prefix, task.taskType, maxSeq[task.projectID])
+	for _, ticket := range tickets {
+		if strings.TrimSpace(ticket.key) == "" {
+			maxSeq[ticket.projectID]++
+			key, err := generateTicketKey(ticket.prefix, ticket.ticketType, maxSeq[ticket.projectID])
 			if err != nil {
 				return err
 			}
-			if _, err := db.Exec(`UPDATE tasks SET key = ? WHERE task_id = ?`, key, task.taskID); err != nil {
+			if _, err := db.Exec(`UPDATE tickets SET key = ? WHERE ticket_id = ?`, key, ticket.ticketID); err != nil {
 				return err
 			}
 		}
@@ -450,6 +811,12 @@ func parseTicketSequence(key string) int64 {
 	default:
 		return 0
 	}
+}
+
+func tableExists(db *sql.DB, tableName string) bool {
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tableName).Scan(&count)
+	return err == nil && count > 0
 }
 
 func columnExists(db *sql.DB, tableName, columnName string) bool {

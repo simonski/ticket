@@ -59,7 +59,7 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFrom() error = %v", err)
 	}
-	if !strings.Contains(string(body), "<title>task</title>") {
+	if !strings.Contains(string(body), "<title>ticket board</title>") {
 		t.Fatalf("root response missing embedded frontend")
 	}
 }
