@@ -160,12 +160,20 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 		Priority:           1,
 		EstimateEffort:     2,
 		EstimateComplete:   "2026-04-01T09:00:00Z",
-		Stage:              "develop",
-		State:              "idle",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
+	// Advance from design/idle to develop/idle so ticket is claimable via specific ID
+	if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		Title:       ticket.Title,
+		Description: ticket.Description,
+		ParentID:    ticket.ParentID,
+		State:       "success",
+	}); err != nil {
+		t.Fatalf("UpdateTicket(advance to develop) error = %v", err)
+	}
+
 	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &ticket.ID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)
@@ -213,18 +221,26 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
-		Title:       ticket.Title,
-		Description: ticket.Description,
-		ParentID:    ticket.ParentID,
-		Assignee:    ticket.Assignee,
-		Status:      "done/success",
-	})
-	if err != nil {
-		t.Fatalf("UpdateTicket() error = %v", err)
-	}
-	if updated.Status != "done/success" {
-		t.Fatalf("UpdateTicket().Status = %q, want done/success", updated.Status)
+	// Advance through all stages: design -> develop -> test -> done
+	// Each state=success on a non-final stage auto-advances to next stage with state=idle
+	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
+		ticket, err = svc.GetTicketByID(ticket.ID)
+		if err != nil {
+			t.Fatalf("GetTicketByID() error = %v", err)
+		}
+		updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    ticket.Assignee,
+			State:       "success",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket() error = %v", err)
+		}
+		if updated.Status != wantStatus {
+			t.Fatalf("UpdateTicket().Status = %q, want %s", updated.Status, wantStatus)
+		}
 	}
 }
 

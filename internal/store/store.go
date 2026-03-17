@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
 	git_repository TEXT NOT NULL DEFAULT '',
 	git_branch TEXT NOT NULL DEFAULT '',
+	workflow_stage_id INTEGER,
 	stage TEXT NOT NULL DEFAULT 'design',
 	state TEXT NOT NULL DEFAULT 'idle',
 	status TEXT NOT NULL DEFAULT 'open',
@@ -231,7 +232,8 @@ CREATE TABLE IF NOT EXISTS tickets (
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
-	FOREIGN KEY(created_by) REFERENCES users(user_id)
+	FOREIGN KEY(created_by) REFERENCES users(user_id),
+	FOREIGN KEY(workflow_stage_id) REFERENCES workflow_stages(workflow_stage_id)
 );
 
 CREATE TABLE IF NOT EXISTS stories (
@@ -525,6 +527,11 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "tickets", "workflow_stage_id") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN workflow_stage_id INTEGER REFERENCES workflow_stages(workflow_stage_id)`); err != nil {
+			return err
+		}
+	}
 	if !tableExists(db, "stories") {
 		if _, err := db.Exec(`
 			CREATE TABLE IF NOT EXISTS stories (
@@ -623,7 +630,31 @@ func migrateSchema(db *sql.DB) error {
 	if err := seedDefaultWorkflow(db); err != nil {
 		return err
 	}
+	if err := backfillTicketWorkflowStages(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+func backfillTicketWorkflowStages(db *sql.DB) error {
+	// For tickets that have a stage name but no workflow_stage_id,
+	// resolve the stage from the project's workflow.
+	_, err := db.Exec(`
+		UPDATE tickets
+		SET workflow_stage_id = (
+			SELECT ws.workflow_stage_id
+			FROM projects p
+			JOIN workflow_stages ws ON ws.workflow_id = p.workflow_id AND ws.stage_name = tickets.stage
+			WHERE p.project_id = tickets.project_id
+		)
+		WHERE workflow_stage_id IS NULL
+		  AND EXISTS (
+			SELECT 1 FROM projects p
+			JOIN workflow_stages ws ON ws.workflow_id = p.workflow_id AND ws.stage_name = tickets.stage
+			WHERE p.project_id = tickets.project_id
+		)
+	`)
+	return err
 }
 
 func seedDefaultWorkflow(db *sql.DB) error {

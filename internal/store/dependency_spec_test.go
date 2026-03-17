@@ -21,7 +21,6 @@ func TestDependencies(t *testing.T) {
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Password Reset",
-		Stage:     StageDesign,
 		State:     StateIdle,
 		CreatedBy: 1,
 	})

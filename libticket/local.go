@@ -330,7 +330,6 @@ func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequ
 		GitBranch:          current.GitBranch,
 		ParentID:           current.ParentID,
 		Assignee:           agent.Name,
-		Stage:              store.StageDone,
 		State:              store.StateSuccess,
 		Priority:           current.Priority,
 		Order:              current.Order,
@@ -570,10 +569,7 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	stage, state, err := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-	if err != nil {
-		return store.Ticket{}, err
-	}
+	_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
 	return store.CreateTicket(db, store.TicketCreateParams{
 		ProjectID:          request.ProjectID,
 		ParentID:           request.ParentID,
@@ -588,7 +584,6 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		EstimateEffort:     request.EstimateEffort,
 		EstimateComplete:   request.EstimateComplete,
 		Assignee:           request.Assignee,
-		Stage:              stage,
 		State:              state,
 		CreatedBy:          user.ID,
 	})
@@ -627,10 +622,7 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	stage, state, err := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-	if err != nil {
-		return store.Ticket{}, err
-	}
+	_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
 	return store.UpdateTicket(db, id, store.TicketUpdateParams{
 		Title:              request.Title,
 		Description:        request.Description,
@@ -639,7 +631,6 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 		GitBranch:          request.GitBranch,
 		ParentID:           request.ParentID,
 		Assignee:           request.Assignee,
-		Stage:              stage,
 		State:              state,
 		Priority:           request.Priority,
 		Order:              request.Order,

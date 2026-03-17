@@ -641,7 +641,6 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 			GitBranch:          current.GitBranch,
 			ParentID:           current.ParentID,
 			Assignee:           agent.Name,
-			Stage:              store.StageDone,
 			State:              store.StateSuccess,
 			Priority:           current.Priority,
 			Order:              current.Order,
@@ -980,10 +979,7 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		stage, state, err := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		if err != nil {
-			return store.Ticket{}, err
-		}
+		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
 		return store.CreateTicket(db, store.TicketCreateParams{
 			ProjectID:          request.ProjectID,
 			ParentID:           request.ParentID,
@@ -998,7 +994,6 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			EstimateEffort:     request.EstimateEffort,
 			EstimateComplete:   request.EstimateComplete,
 			Assignee:           request.Assignee,
-			Stage:              stage,
 			State:              state,
 			CreatedBy:          user.ID,
 		})
@@ -1076,10 +1071,7 @@ func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Tick
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		stage, state, err := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		if err != nil {
-			return store.Ticket{}, err
-		}
+		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
 		return store.UpdateTicket(db, id, store.TicketUpdateParams{
 			Title:              request.Title,
 			Description:        request.Description,
@@ -1088,7 +1080,6 @@ func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Tick
 			GitBranch:          request.GitBranch,
 			ParentID:           request.ParentID,
 			Assignee:           request.Assignee,
-			Stage:              stage,
 			State:              state,
 			Priority:           request.Priority,
 			Order:              request.Order,

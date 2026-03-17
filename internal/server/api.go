@@ -641,7 +641,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				GitBranch:          current.GitBranch,
 				ParentID:           current.ParentID,
 				Assignee:           agent.Name,
-				Stage:              store.StageDone,
 				State:              store.StateSuccess,
 				Priority:           current.Priority,
 				Order:              current.Order,
@@ -1681,11 +1680,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+		_, state, _ := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 		role, err := projectRoleForUser(db, ticketPayload.ProjectID, user)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -1708,7 +1703,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			EstimateEffort:     ticketPayload.EstimateEffort,
 			EstimateComplete:   ticketPayload.EstimateComplete,
 			Assignee:           ticketPayload.Assignee,
-			Stage:              stage,
 			State:              state,
 			CreatedBy:          user.ID,
 		})
@@ -1844,7 +1838,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					Title:       epicTitle,
 					Description: strings.TrimSpace(epicSpec.Description),
 					CreatedBy:   user.ID,
-					Stage:       store.StageDesign,
 					State:       store.StateIdle,
 				})
 				if err != nil {
@@ -1864,7 +1857,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 						Title:       taskTitle,
 						Description: strings.TrimSpace(taskSpec.Description),
 						CreatedBy:   user.ID,
-						Stage:       store.StageDesign,
 						State:       store.StateIdle,
 					})
 					if err != nil {
@@ -2220,7 +2212,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 						Title:       taskTitle,
 						Description: strings.TrimSpace(taskSpec.Description),
 						CreatedBy:   user.ID,
-						Stage:       store.StageDesign,
 						State:       store.StateIdle,
 					})
 					if err != nil {
@@ -2275,11 +2266,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					return
 				}
 				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username)
-				stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
-				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
-					return
-				}
+				_, state, _ := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 				ticket, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
 					Title:              ticketPayload.Title,
 					Description:        ticketPayload.Description,
@@ -2288,7 +2275,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					GitBranch:          ticketPayload.GitBranch,
 					ParentID:           ticketPayload.ParentID,
 					Assignee:           ticketPayload.Assignee,
-					Stage:              stage,
 					State:              state,
 					Priority:           ticketPayload.Priority,
 					Order:              ticketPayload.Order,

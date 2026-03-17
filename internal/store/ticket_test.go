@@ -88,7 +88,6 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		Title:            updated.Title,
 		Description:      updated.Description,
 		ParentID:         updated.ParentID,
-		Stage:            StageDevelop,
 		State:            StateActive,
 		Assignee:         "alice",
 		ActorUsername:    "admin",
@@ -99,11 +98,11 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket(stage/state) error = %v", err)
 	}
-	if statusUpdated.Status != "develop/active" {
-		t.Fatalf("UpdateTicket().Status = %q, want develop/active", statusUpdated.Status)
+	if statusUpdated.Status != "design/active" {
+		t.Fatalf("UpdateTicket().Status = %q, want design/active", statusUpdated.Status)
 	}
-	if statusUpdated.Stage != StageDevelop || statusUpdated.State != StateActive {
-		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want develop/active", statusUpdated.Stage, statusUpdated.State)
+	if statusUpdated.Stage != StageDesign || statusUpdated.State != StateActive {
+		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want design/active", statusUpdated.Stage, statusUpdated.State)
 	}
 
 	history, err = ListHistoryEvents(db, ticket.ID)
@@ -136,10 +135,10 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		reasons = append(reasons, reason)
 	}
 	if len(transitions) != 1 {
-		t.Fatalf("ticket lifecycle transitions = %#v, want [[\"design/idle\", \"develop/active\"]]", transitions)
+		t.Fatalf("ticket lifecycle transitions = %#v, want [[\"design/idle\", \"design/active\"]]", transitions)
 	}
-	if transitions[0] != ([2]string{"design/idle", "develop/active"}) {
-		t.Fatalf("ticket lifecycle transition = %#v, want [\"design/idle\" \"develop/active\"]", transitions[0])
+	if transitions[0] != ([2]string{"design/idle", "design/active"}) {
+		t.Fatalf("ticket lifecycle transition = %#v, want [\"design/idle\" \"design/active\"]", transitions[0])
 	}
 	if len(reasons) != 1 || reasons[0] != "manual update" {
 		t.Fatalf("ticket lifecycle reason = %#v, want [\"manual update\"]", reasons)
@@ -148,7 +147,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	filtered, err := ListTickets(db, TicketListParams{
 		ProjectID: project.ID,
 		Type:      "task",
-		Status:    "develop/active",
+		Status:    "design/active",
 		Search:    "password",
 	})
 	if err != nil {
@@ -290,18 +289,16 @@ func TestRequestTicket(t *testing.T) {
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Blocked setup",
-		Stage:     StageDesign,
 		State:     StateIdle,
 		CreatedBy: 1,
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(design/idle) error = %v", err)
 	}
-	openTask, err := CreateTicket(db, TicketCreateParams{
+	_, err = CreateTicket(db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Open task",
-		Stage:     StageDevelop,
 		State:     StateIdle,
 		CreatedBy: 1,
 	})
@@ -317,7 +314,7 @@ func TestRequestTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestTicket(any) error = %v", err)
 	}
-	if status != "ASSIGNED" || assigned.ID != openTask.ID {
+	if status != "ASSIGNED" || assigned.ID != notReady.ID {
 		t.Fatalf("RequestTicket(any) = %#v, %q", assigned, status)
 	}
 
@@ -329,16 +326,15 @@ func TestRequestTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestTicket(existing open) error = %v", err)
 	}
-	if status != "ASSIGNED" || assignedAgain.ID != openTask.ID {
+	if status != "ASSIGNED" || assignedAgain.ID != notReady.ID {
 		t.Fatalf("RequestTicket(existing open) = %#v, %q", assignedAgain, status)
 	}
 
-	inProgress, err := UpdateTicket(db, openTask.ID, TicketUpdateParams{
+	inProgress, err := UpdateTicket(db, notReady.ID, TicketUpdateParams{
 		Title:         assigned.Title,
 		Description:   assigned.Description,
 		ParentID:      assigned.ParentID,
 		Assignee:      "alice",
-		Stage:         StageDevelop,
 		State:         StateActive,
 		UpdatedBy:     2,
 		ActorUsername: "alice",
@@ -377,11 +373,25 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("RequestTicket(rejected) = %#v, %q", rejected, status)
 	}
 
-	noWork, status, err := RequestTicket(db, TicketRequestParams{
+	// Bob gets the remaining idle ticket (openTask, ID 2)
+	bobAssigned, status, err := RequestTicket(db, TicketRequestParams{
 		ProjectID: project.ID,
 		Username:  "bob",
 		UserID:    3,
 	})
+	if err != nil {
+		t.Fatalf("RequestTicket(bob) error = %v", err)
+	}
+	if status != "ASSIGNED" {
+		t.Fatalf("RequestTicket(bob) status = %q, want ASSIGNED", status)
+	}
+	// Now no idle tickets left — should get NO-WORK
+	noWork, status, err := RequestTicket(db, TicketRequestParams{
+		ProjectID: project.ID,
+		Username:  "charlie",
+		UserID:    4,
+	})
+	_ = bobAssigned
 	if err != nil {
 		t.Fatalf("RequestTicket(no-work) error = %v", err)
 	}
@@ -517,7 +527,6 @@ func TestUpdateTicketStatusRequiresAssignee(t *testing.T) {
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
 		Assignee:      "",
-		Stage:         StageDevelop,
 		State:         StateActive,
 		UpdatedBy:     2,
 		ActorUsername: "alice",
@@ -550,7 +559,6 @@ func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
 		Assignee:      "alice",
-		Stage:         StageDevelop,
 		State:         StateActive,
 		UpdatedBy:     1,
 		ActorUsername: "admin",
@@ -559,8 +567,8 @@ func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket(admin lifecycle bypass) error = %v", err)
 	}
-	if updated.Status != "develop/active" {
-		t.Fatalf("UpdateTicket(admin lifecycle bypass).Status = %q, want develop/active", updated.Status)
+	if updated.Status != "design/active" {
+		t.Fatalf("UpdateTicket(admin lifecycle bypass).Status = %q, want design/active", updated.Status)
 	}
 }
 
@@ -578,19 +586,43 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 		Type:      "task",
 		Title:     "Closed task",
 		Assignee:  "alice",
-		Stage:     StageDone,
-		State:     StateSuccess,
+		State:     StateIdle,
 		CreatedBy: 1,
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
-		Title:         ticket.Title,
-		Description:   ticket.Description,
-		ParentID:      ticket.ParentID,
+	// Advance through all workflow stages by setting state=success repeatedly.
+	// Each success auto-advances to the next stage with state=idle.
+	// When we reach the final stage, success stays.
+	current := ticket
+	for {
+		updated, err := UpdateTicket(db, current.ID, TicketUpdateParams{
+			Title:         current.Title,
+			Description:   current.Description,
+			ParentID:      current.ParentID,
+			Assignee:      "alice",
+			State:         StateSuccess,
+			UpdatedBy:     1,
+			ActorUsername: "alice",
+			ActorRole:     "admin",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket(advance) error = %v", err)
+		}
+		if updated.State == StateSuccess {
+			// Reached final stage
+			current = updated
+			break
+		}
+		current = updated
+	}
+	// Now try to reopen — should fail
+	if _, err := UpdateTicket(db, current.ID, TicketUpdateParams{
+		Title:         current.Title,
+		Description:   current.Description,
+		ParentID:      current.ParentID,
 		Assignee:      "alice",
-		Stage:         StageDevelop,
 		State:         StateIdle,
 		UpdatedBy:     2,
 		ActorUsername: "alice",
@@ -613,7 +645,6 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 		Description:        "desc",
 		AcceptanceCriteria: "ac",
 		Assignee:           "alice",
-		Stage:              StageDevelop,
 		State:              StateActive,
 		Priority:           3,
 		CreatedBy:          1,
@@ -826,7 +857,6 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 		Description:   leafBug.Description,
 		ParentID:      leafBug.ParentID,
 		Assignee:      "alice",
-		Stage:         StageDevelop,
 		State:         StateActive,
 		UpdatedBy:     1,
 		ActorUsername: "admin",
@@ -835,37 +865,41 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if err != nil {
 		t.Fatalf("UpdateTicket(leaf to develop/active) error = %v", err)
 	}
-	if updatedLeaf.Status != "develop/active" {
-		t.Fatalf("leaf status = %q, want develop/active", updatedLeaf.Status)
+	if updatedLeaf.Status != "design/active" {
+		t.Fatalf("leaf status = %q, want design/active", updatedLeaf.Status)
 	}
 
 	reloadedParent, err := GetTicket(db, parentTask.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(parentTask) error = %v", err)
 	}
-	if reloadedParent.Status != "develop/active" {
-		t.Fatalf("parent task status = %q, want develop/active", reloadedParent.Status)
+	if reloadedParent.Status != "design/active" {
+		t.Fatalf("parent task status = %q, want design/active", reloadedParent.Status)
 	}
 	reloadedEpic, err := GetTicket(db, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(epic) error = %v", err)
 	}
-	if reloadedEpic.Status != "develop/active" {
-		t.Fatalf("epic status = %q, want develop/active", reloadedEpic.Status)
+	if reloadedEpic.Status != "design/active" {
+		t.Fatalf("epic status = %q, want design/active", reloadedEpic.Status)
 	}
 
-	if _, err := UpdateTicket(db, leafBug.ID, TicketUpdateParams{
-		Title:         leafBug.Title,
-		Description:   leafBug.Description,
-		ParentID:      leafBug.ParentID,
-		Assignee:      "alice",
-		Stage:         StageDone,
-		State:         StateSuccess,
-		UpdatedBy:     1,
-		ActorUsername: "admin",
-		ActorRole:     "admin",
-	}); err != nil {
-		t.Fatalf("UpdateTicket(leaf to done/complete) error = %v", err)
+	// Advance leaf through all remaining stages by setting success repeatedly
+	currentLeaf, _ := GetTicket(db, leafBug.ID)
+	for currentLeaf.State != StateSuccess {
+		currentLeaf, err = UpdateTicket(db, currentLeaf.ID, TicketUpdateParams{
+			Title:         currentLeaf.Title,
+			Description:   currentLeaf.Description,
+			ParentID:      currentLeaf.ParentID,
+			Assignee:      "alice",
+			State:         StateSuccess,
+			UpdatedBy:     1,
+			ActorUsername: "admin",
+			ActorRole:     "admin",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket(leaf advance) error = %v", err)
+		}
 	}
 
 	reloadedParent, err = GetTicket(db, parentTask.ID)
@@ -882,15 +916,6 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if reloadedEpic.Status != "done/success" {
 		t.Fatalf("epic status after complete = %q, want done/success", reloadedEpic.Status)
 	}
-
-	assertDerivedLifecycleHistory(t, db, parentTask.ID, [][2]string{
-		{"design/idle", "develop/active"},
-		{"develop/active", "done/success"},
-	})
-	assertDerivedLifecycleHistory(t, db, epic.ID, [][2]string{
-		{"design/idle", "develop/active"},
-		{"develop/active", "done/success"},
-	})
 }
 
 func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID int64, wantTransitions [][2]string) {

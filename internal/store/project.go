@@ -88,10 +88,18 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 	if err != nil {
 		return Project{}, err
 	}
+	// Default to the "default" workflow if none specified
+	workflowID := params.WorkflowID
+	if workflowID == nil {
+		var wfID int64
+		if err := db.QueryRow(`SELECT workflow_id FROM workflows WHERE name = 'default'`).Scan(&wfID); err == nil {
+			workflowID = &wfID
+		}
+	}
 	result, err := db.Exec(`
 		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, created_by, workflow_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, params.CreatedBy, params.WorkflowID)
+	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, params.CreatedBy, workflowID)
 	if err != nil {
 		return Project{}, err
 	}

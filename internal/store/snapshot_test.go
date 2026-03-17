@@ -40,7 +40,6 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		Title:       "Export Epic",
 		Description: "Epic for snapshot",
 		CreatedBy:   1,
-		Stage:       StageDesign,
 		State:       StateIdle,
 	})
 	if err != nil {
@@ -55,7 +54,6 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		Description: "Task for snapshot",
 		Assignee:    "admin",
 		CreatedBy:   1,
-		Stage:       StageDevelop,
 		State:       StateActive,
 	})
 	if err != nil {

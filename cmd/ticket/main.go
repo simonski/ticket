@@ -226,7 +226,7 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage: "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]",
+		usage: "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]",
 		details: []string{
 			"-id <id>: required; ticket id or key",
 			"-title <title>: set title",
@@ -235,9 +235,8 @@ var helpIndex = map[string]commandHelp{
 			"-ac <acceptance-criteria>: set acceptance criteria",
 			"-priority <n>: set numeric priority",
 			"-order <n>: set numeric sort order",
-			"-stage <stage>: valid values [design, develop, test, done]",
-			"-state <state>: valid values [idle, active, success, fail]",
-			"-status <stage/state>: valid format [design|develop|test|done]/[idle|active|success|fail]",
+			"-state <state>: valid values [idle, active, success, fail]; setting success auto-advances to next workflow stage",
+			"-status <stage/state>: set state from rendered status format",
 			"-parent_id <id>: set parent ticket id",
 			"-estimate_effort <n>: set numeric estimate effort",
 			"-estimate_complete <rfc3339>: set completion timestamp (example 2026-03-31T17:00:00Z)",
@@ -3183,16 +3182,7 @@ func runUnsetParent(args []string, command string) error {
 }
 
 func runTicketStageAlias(args []string, stage, command string) error {
-	fs := flag.NewFlagSet("ticket "+command, flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	id := fs.String("id", "", "ticket id")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
-		return fmt.Errorf("usage: ticket %s -id <id>", command)
-	}
-	return updateTicketStage(strings.TrimSpace(*id), stage)
+	return fmt.Errorf("stage is now workflow-driven; use 'ticket state -id <id> success' to advance, or 'ticket state -id <id> <idle|active|success|fail>'")
 }
 
 func runTicketStateAlias(args []string, state, command string) error {
@@ -3209,22 +3199,7 @@ func runTicketStateAlias(args []string, state, command string) error {
 }
 
 func runTicketStage(args []string) error {
-	usage := "ticket stage -id <id> <design|develop|test|done>"
-	fs := flag.NewFlagSet("ticket stage", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	id := fs.String("id", "", "ticket id")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
-		return errors.New("usage: " + usage)
-	}
-	switch strings.ToLower(strings.TrimSpace(fs.Args()[0])) {
-	case store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone:
-		return updateTicketStage(strings.TrimSpace(*id), strings.ToLower(strings.TrimSpace(fs.Args()[0])))
-	default:
-		return errors.New("usage: " + usage)
-	}
+	return fmt.Errorf("stage is now workflow-driven; use 'ticket state -id <id> success' to advance, or 'ticket state -id <id> <idle|active|success|fail>'")
 }
 
 func runTicketState(args []string) error {
@@ -3246,26 +3221,6 @@ func runTicketState(args []string) error {
 	}
 }
 
-func updateTicketStage(idArg, stage string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		return err
-	}
-	current, err := svc.GetTicket(idArg)
-	if err != nil {
-		return err
-	}
-	nextState := store.StateIdle
-	if stage == store.StageDone {
-		nextState = store.StateSuccess
-	}
-	return updateTicketLifecycleRequest(svc, current.ID, current, stage, nextState)
-}
-
 func updateTicketState(idArg, state string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -3279,10 +3234,10 @@ func updateTicketState(idArg, state string) error {
 	if err != nil {
 		return err
 	}
-	return updateTicketLifecycleRequest(svc, current.ID, current, current.Stage, state)
+	return updateTicketLifecycleRequest(svc, current.ID, current, state)
 }
 
-func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store.Ticket, stage, state string) error {
+func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store.Ticket, state string) error {
 	assignee := current.Assignee
 	if state == store.StateActive && strings.TrimSpace(assignee) == "" {
 		status, err := svc.Status()
@@ -3298,7 +3253,6 @@ func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		ParentID:           current.ParentID,
 		Assignee:           assignee,
-		Stage:              stage,
 		State:              state,
 		Priority:           current.Priority,
 		Order:              current.Order,
@@ -3316,7 +3270,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store
 }
 
 func runUpdate(args []string) error {
-	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
+	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -3331,7 +3285,6 @@ func runUpdate(args []string) error {
 	estimateEffort := fs.Int("estimate_effort", 0, "estimated effort")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
 	status := fs.String("status", "", "rendered ticket status (<stage>/<state>)")
-	stage := fs.String("stage", "", "ticket stage")
 	state := fs.String("state", "", "ticket state")
 	parentIDRaw := fs.String("parent_id", "", "ticket parent id")
 	if err := fs.Parse(args); err != nil {
@@ -3354,10 +3307,9 @@ func runUpdate(args []string) error {
 	hasEstimateEffort := containsFlag(args, "-estimate_effort")
 	hasEstimateComplete := containsFlag(args, "-estimate_complete")
 	hasStatus := containsFlag(args, "-status")
-	hasStage := containsFlag(args, "-stage")
 	hasState := containsFlag(args, "-state")
 	hasParentID := containsFlag(args, "-parent_id")
-	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID {
+	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasState && !hasParentID {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -3380,7 +3332,6 @@ func runUpdate(args []string) error {
 		GitBranch:          current.GitBranch,
 		ParentID:           current.ParentID,
 		Assignee:           current.Assignee,
-		Stage:              current.Stage,
 		State:              current.State,
 		Priority:           current.Priority,
 		Order:              current.Order,
@@ -3418,15 +3369,11 @@ func runUpdate(args []string) error {
 		next.EstimateComplete = *estimateComplete
 	}
 	if hasStatus {
-		resolvedStage, resolvedState, err := resolveLifecycleInput(*status, "", "")
+		_, resolvedState, err := resolveLifecycleInput(*status, "", "")
 		if err != nil {
 			return err
 		}
-		next.Stage = resolvedStage
 		next.State = resolvedState
-	}
-	if hasStage {
-		next.Stage = *stage
 	}
 	if hasState {
 		next.State = *state
@@ -3544,7 +3491,6 @@ func assignTicket(idArg, assignee string, requireAdmin bool) error {
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		ParentID:           current.ParentID,
 		Assignee:           assignee,
-		Stage:              current.Stage,
 		State:              current.State,
 		Priority:           current.Priority,
 		Order:              current.Order,
@@ -4337,7 +4283,6 @@ func runRequirementStatus(status string, args []string) error {
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		ParentID:           current.ParentID,
 		Assignee:           current.Assignee,
-		Stage:              current.Stage,
 		State:              current.State,
 		Priority:           current.Priority,
 		Order:              current.Order,
@@ -4373,7 +4318,6 @@ func runRevise(args []string) error {
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		ParentID:           current.ParentID,
 		Assignee:           current.Assignee,
-		Stage:              current.Stage,
 		State:              current.State,
 		Priority:           current.Priority,
 		Order:              current.Order,

@@ -1146,3 +1146,103 @@ An https:// or http:// is remote mode and demands a username/password and/or jwt
 ----
 
 ticket onboard 
+-----
+
+the entire agent mode needs to be tested
+agent mode
+
+Review the command, `tk agent`
+
+export AGENT_NAME=fred
+export TICKET_URL=....
+tk agent (-name $AGENT_NAME) -max_tickets N -workflow workflow.md
+
+Should periodically query for tickets, requesting for work to be assigned.
+
+
+---------------------------------------------
+TICKET/PROJECT WORKFLOW REFACTOR
+
+I want to refactor major parts of the ticket system to simply and introduce a workflow but I am not certain what I want to do.  
+
+Workflow
+    A workflow is a method of describing the journey of tickets through an engineering lifecycle.   For example
+
+    Workflow: "default"
+        A WORKFLOW has STAGE(s): Design -> Develop -> Test -> Complete
+
+        A STAGE has a title "Develop", a description, and a ROLE attached to it
+
+        A ROLE is an entity that describes the motivation of the agent, e.g. "You are a software engineer, you will write software according to the SDLC."
+
+    A Project has a WORKFLOW associated with it.
+
+    In this way a ticket can have a STAGE and a STATUS
+        STAGE  = any of the workflow stages
+        STATUS = idle,inprogress,complete
+        
+
+    The CLI should not permit the user to exlicitly set a STAGE; this is decided by the ORCHESTRATOR in the server which looks at the current stage of a ticket and progresses it to the next stage in the workflow the project has.
+
+    In this way when a human or agent requests a ticket, they are given a ticket in a specific stage, with the role associated with the ticket.   This allows the agent all the context necessary to perform the work of the ticket.
+
+
+I want to divide the work into phases where we will stop and test with me in the loop:
+
+1. Create Workflow Entity, Backend, CLI tools.  Include an import/export function within the workflow.
+
+2. Extend the project commands to associate workflows 
+    
+3. Update the ticket entities to use these new areas, removing old columns as necessary.
+
+I don't want to create migration scripts for databases, we will just overwrite any existing databases and accept in-dev data loss 
+in those .db files.
+
+Please review above and make recommendations/ask clarifying questions until we have a coherent plan, at which point I will ask that you implement it.
+
+
+Ticket
+
+
+
+    Is in a STAGE eg "design"
+    this means it either needs some "design"
+    or it is currently doing "design"
+    or it has completed "design"
+
+    STATUS="idle/inprogress/complete"
+
+    Once it completes, the WORKFLOW decides what 
+    the next ACTION is
+
+    A WORKFLOW is currently a file that a project adheres to which is the actions to follow.
+
+    An ACTION is performed by a ROLE "tester", "Designer"
+
+    so an AGENT only calls "NEXT" and the WORKFLOW decides what the "next" is
+
+    e.g.
+
+    WORKFLOW "A"
+        CAN THEN BE ATTACHED TO A PROJECT
+        API CALL IS "NEXT"
+
+    THIS IS A WORKFLOW WHICH CAN BE ENTERED AT RUNTIME
+    OR PRESUPPLIED AS A YAML/JSON
+    AND CAN BE UPDATED/UPLOADED ETC.
+
+    DESIGN, ROLE=A, NEXT=DESIGN_REVIEW
+    DESIGN_REVIEW, ROLE=B, NEXT=DEVELOP
+        DEVELOP, ROLE=C, NEXT=TEST
+        DEVELOP, ROLE=E, NEXT=DRIFT_VERIFY
+    TEST, ROLE=D, NEXT=MERGE
+    
+1. Create the workflow, action, role entities, CRUD management calls, CLI commands.  
+
+Once this exists we will then refactor the appliation itself to use the workflow.
+
+Create a workflow file
+
+    DESIGN, role=DESIGNER 
+    DEVELOP, role=DEVELOPER
+    REVIEW, role=REVIEWER

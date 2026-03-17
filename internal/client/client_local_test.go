@@ -34,13 +34,11 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Local task",
-		Stage:     "develop",
-		State:     "idle",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if strings.TrimSpace(ticket.Assignee) != "" || ticket.Status != "develop/idle" {
+	if strings.TrimSpace(ticket.Assignee) != "" || ticket.Status != "design/idle" {
 		t.Fatalf("CreateTicket() = %#v", ticket)
 	}
 
@@ -57,14 +55,13 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		Description: ticket.Description,
 		ParentID:    ticket.ParentID,
 		Assignee:    requested.Ticket.Assignee,
-		Stage:       "develop",
 		State:       "active",
 	})
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
-	if updated.Status != "develop/active" {
-		t.Fatalf("UpdateTicket().Status = %q, want develop/active", updated.Status)
+	if updated.Status != "design/active" {
+		t.Fatalf("UpdateTicket().Status = %q, want design/active", updated.Status)
 	}
 
 	parent, err := api.CreateTicket(TicketCreateRequest{
@@ -123,19 +120,25 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket().Assignee = %q, want unassigned", ticket.Assignee)
 	}
 
-	updated, err := api.UpdateTicket(ticket.ID, TicketUpdateRequest{
-		Title:       ticket.Title,
-		Description: ticket.Description,
-		ParentID:    ticket.ParentID,
-		Assignee:    ticket.Assignee,
-		Stage:       "done",
-		State:       "success",
-	})
-	if err != nil {
-		t.Fatalf("UpdateTicket() error = %v", err)
-	}
-	if updated.Status != "done/success" {
-		t.Fatalf("UpdateTicket().Status = %q, want done/success", updated.Status)
+	// Advance through all stages to reach done/success
+	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
+		ticket, err = api.GetTicketByID(ticket.ID)
+		if err != nil {
+			t.Fatalf("GetTicketByID() error = %v", err)
+		}
+		updated, err := api.UpdateTicket(ticket.ID, TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    ticket.Assignee,
+			State:       "success",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket() error = %v", err)
+		}
+		if updated.Status != wantStatus {
+			t.Fatalf("UpdateTicket().Status = %q, want %s", updated.Status, wantStatus)
+		}
 	}
 }
 

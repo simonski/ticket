@@ -43,8 +43,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Contract Task",
-			Stage:     "develop",
-			State:     "idle",
 		})
 		if err != nil {
 			t.Fatalf("CreateTicket() error = %v", err)
@@ -66,14 +64,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
 			Assignee:    response.Ticket.Assignee,
-			Stage:       "develop",
 			State:       "active",
 		})
 		if err != nil {
 			t.Fatalf("UpdateTicket() error = %v", err)
 		}
-		if updated.Status != "develop/active" {
-			t.Fatalf("UpdateTicket().Status = %q, want develop/active", updated.Status)
+		if updated.Status != "design/active" {
+			t.Fatalf("UpdateTicket().Status = %q, want design/active", updated.Status)
 		}
 
 		comment, err := svc.AddComment(ticket.ID, "contract comment")
@@ -206,11 +203,19 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Type:        "bug",
 			Title:       "Bug task",
 			Description: "find me",
-			Stage:       "develop",
-			State:       "idle",
 		})
 		if err != nil {
 			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		// Advance from design/idle to develop/idle so ticket is claimable
+		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			State:       "success",
+		}); err != nil {
+			t.Fatalf("UpdateTicket(advance to develop) error = %v", err)
 		}
 
 		requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID, TicketID: &ticket.ID})
@@ -229,19 +234,50 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListTicketsFiltered() = %#v", filtered)
 		}
 
+		// Advance through remaining stages to reach done/success
+		// develop/active -> state=success -> test/idle
+		advancedToTest, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    requested.Ticket.Assignee,
+			State:       "success",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket(develop->test) error = %v", err)
+		}
+		if advancedToTest.Status != "test/idle" {
+			t.Fatalf("UpdateTicket(develop->test).Status = %q, want test/idle", advancedToTest.Status)
+		}
+
+		// test -> state=success -> done/idle (auto-advance to final stage)
+		advancedToDone, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    requested.Ticket.Assignee,
+			State:       "success",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket(test->done) error = %v", err)
+		}
+		if advancedToDone.Status != "done/idle" {
+			t.Fatalf("UpdateTicket(test->done).Status = %q, want done/idle", advancedToDone.Status)
+		}
+
+		// done -> state=success -> done/success (final stage, no further advance)
 		completed, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
 			Assignee:    requested.Ticket.Assignee,
-			Stage:       "done",
-			State:       "complete",
+			State:       "success",
 		})
 		if err != nil {
-			t.Fatalf("UpdateTicket(complete) error = %v", err)
+			t.Fatalf("UpdateTicket(done->success) error = %v", err)
 		}
 		if completed.Status != "done/success" {
-			t.Fatalf("UpdateTicket(complete).Status = %q", completed.Status)
+			t.Fatalf("UpdateTicket(done->success).Status = %q, want done/success", completed.Status)
 		}
 
 		history, err := svc.ListHistory(ticket.ID)
@@ -257,7 +293,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
 			Assignee:    requested.Ticket.Assignee,
-			Stage:       "develop",
 			State:       "idle",
 		}); err == nil {
 			t.Fatal("UpdateTicket(reopen) error = nil, want closed ticket error")
@@ -292,10 +327,9 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
 			Assignee:    ticket.Assignee,
-			Stage:       "bogus",
-			State:       "idle",
+			State:       "bogus",
 		}); err == nil {
-			t.Fatal("UpdateTicket(invalid lifecycle) error = nil")
+			t.Fatal("UpdateTicket(invalid state) error = nil")
 		}
 
 		if err := svc.RemoveDependency(libticket.DependencyRequest{
@@ -315,8 +349,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Type:      "task",
 			Title:     "Assigned Elsewhere",
 			Assignee:  "someone-else",
-			Stage:     "develop",
-			State:     "idle",
 		})
 		if err != nil {
 			t.Fatalf("CreateTicket(assigned) error = %v", err)
@@ -349,8 +381,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Type:      "task",
 			Title:     "Assigned to bob",
 			Assignee:  "bob",
-			Stage:     "develop",
-			State:     "idle",
 		})
 		if err != nil {
 			t.Fatalf("CreateTicket() error = %v", err)
@@ -360,7 +390,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
 			Assignee:    ticket.Assignee,
-			Stage:       "develop",
 			State:       "active",
 		}); err == nil {
 			t.Fatal("UpdateTicket(lifecycle by non-assignee) error = nil")

@@ -683,7 +683,7 @@ func TestTaskAPI(t *testing.T) {
 		"description": "Email reset support",
 		"parent_id":   epic.ID,
 		"assignee":    "alice",
-		"status":      "develop/active",
+		"status":      "design/active",
 	}, aliceAuth.Token)
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("update task status = %d body=%s", updateResp.Code, updateResp.Body.String())
@@ -695,11 +695,11 @@ func TestTaskAPI(t *testing.T) {
 	}
 	var updated store.Ticket
 	decodeResponse(t, getResp, &updated)
-	if updated.Status != "develop/active" {
-		t.Fatalf("updated status = %q, want develop/active", updated.Status)
+	if updated.Status != "design/active" {
+		t.Fatalf("updated status = %q, want design/active", updated.Status)
 	}
 
-	filteredResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets?type=task&status=develop/active&q=password", nil, auth.Token)
+	filteredResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets?type=task&status=design/active&q=password", nil, auth.Token)
 	if filteredResp.Code != http.StatusOK {
 		t.Fatalf("filtered list status = %d body=%s", filteredResp.Code, filteredResp.Body.String())
 	}
@@ -759,7 +759,6 @@ func TestTaskAPI(t *testing.T) {
 		"project_id": project.ID,
 		"type":       "bug",
 		"title":      "Password reset email is not sent",
-		"status":     "develop/idle",
 	}, auth.Token)
 	if bugResp.Code != http.StatusCreated {
 		t.Fatalf("bug create status = %d body=%s", bugResp.Code, bugResp.Body.String())
@@ -837,8 +836,6 @@ func TestTicketRouteAliasesAPI(t *testing.T) {
 		"title":       ticket.Title,
 		"description": ticket.Description,
 		"assignee":    "",
-		"stage":       "develop",
-		"state":       "idle",
 		"priority":    ticket.Priority,
 		"order":       ticket.Order,
 	}, adminAuth.Token)
@@ -1085,23 +1082,21 @@ func TestTicketRequestAPI(t *testing.T) {
 		t.Fatalf("add alice editor membership error = %v", err)
 	}
 
-	notReadyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
-		"project_id": project.ID,
-		"type":       "task",
-		"title":      "Not ready task",
-		"status":     "design/idle",
-	}, adminAuth.Token)
-	var notReady store.Ticket
-	decodeResponse(t, notReadyResp, &notReady)
-
 	openResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": project.ID,
 		"type":       "task",
 		"title":      "Open task",
-		"status":     "develop/idle",
 	}, adminAuth.Token)
 	var openTask store.Ticket
 	decodeResponse(t, openResp, &openTask)
+
+	otherResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Other task",
+	}, adminAuth.Token)
+	var otherTask store.Ticket
+	decodeResponse(t, otherResp, &otherTask)
 
 	requestAnyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
 		"project_id": project.ID,
@@ -1120,7 +1115,7 @@ func TestTicketRequestAPI(t *testing.T) {
 
 	requestSpecificResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
 		"project_id": project.ID,
-		"ticket_id":  notReady.ID,
+		"ticket_id":  otherTask.ID,
 	}, aliceAuth.Token)
 	if requestSpecificResp.Code != http.StatusOK {
 		t.Fatalf("request specific status = %d body=%s", requestSpecificResp.Code, requestSpecificResp.Body.String())
@@ -1138,7 +1133,7 @@ func TestTicketRequestAPI(t *testing.T) {
 		"title":       openTask.Title,
 		"description": openTask.Description,
 		"assignee":    "alice",
-		"status":      "develop/active",
+		"status":      "design/active",
 	}, aliceAuth.Token)
 	if inProgressResp.Code != http.StatusOK {
 		t.Fatalf("set inprogress status = %d body=%s", inProgressResp.Code, inProgressResp.Body.String())
@@ -1169,7 +1164,7 @@ func TestTicketRequestAPI(t *testing.T) {
 
 	rejectedResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
 		"project_id": project.ID,
-		"ticket_id":  notReady.ID,
+		"ticket_id":  otherTask.ID,
 	}, bobAuth.Token)
 	if rejectedResp.Code != http.StatusOK {
 		t.Fatalf("request rejected status = %d body=%s", rejectedResp.Code, rejectedResp.Body.String())
@@ -1178,6 +1173,17 @@ func TestTicketRequestAPI(t *testing.T) {
 	decodeResponse(t, rejectedResp, &rejectedPayload)
 	if rejectedPayload["status"] != "REJECTED" {
 		t.Fatalf("request rejected payload = %#v", rejectedPayload)
+	}
+
+	// Assign otherTask so no idle unassigned tickets remain for the NO-WORK test
+	assignOtherResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+strconv.FormatInt(otherTask.ID, 10), map[string]any{
+		"title":       otherTask.Title,
+		"description": otherTask.Description,
+		"assignee":    "alice",
+		"state":       "active",
+	}, adminAuth.Token)
+	if assignOtherResp.Code != http.StatusOK {
+		t.Fatalf("assign otherTask status = %d body=%s", assignOtherResp.Code, assignOtherResp.Body.String())
 	}
 
 	noWorkResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
@@ -1225,7 +1231,6 @@ func TestCloneTicketAPI(t *testing.T) {
 		"parent_id":  epic.ID,
 		"type":       "task",
 		"title":      "Child",
-		"status":     "develop/idle",
 		"assignee":   "admin",
 	}, auth.Token)
 	var child store.Ticket
