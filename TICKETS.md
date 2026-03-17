@@ -19,7 +19,8 @@ tk project use <id>
 
 ```bash
 # List tickets in the active project
-tk list,ls
+tk list
+tk ls
 
 # Filter by type, status, or assignee
 tk list --type task
@@ -32,8 +33,8 @@ tk list -u alice
 tk search "password reset"
 
 # View ticket detail with history and comments
-tk get <id>
-tk get -json <id>
+tk get -id <id>
+tk get -id <id> -json
 
 # List tickets with no parent
 tk orphans
@@ -54,7 +55,7 @@ tk epic "Authentication overhaul"
 tk create -t task -title "Fix signup" -d "Description here" -ac "Acceptance criteria" -p <project-id> -parent <epic-id>
 
 # Create and specify priority/estimates
-tk add -title "Urgent fix" -priority 1 -effort 3
+tk add -title "Urgent fix" -priority 1 -estimate_effort 3
 
 # Shorthand typed creation
 tk note "Meeting notes from standup"
@@ -65,12 +66,12 @@ tk question "Should we migrate to Postgres?"
 
 ```bash
 # Update fields
-tk update <id> -title "New title" -d "New description" -ac "New criteria"
-tk update <id> -priority 2 -effort 5
+tk update -id <id> -title "New title" -d "New description" -ac "New criteria"
+tk update -id <id> -priority 2 -estimate_effort 5
 
 # Set parent/hierarchy
-tk set-parent <child-id> <parent-id>
-tk unset-parent <child-id>
+tk set-parent -id <child-id> <parent-id>
+tk unset-parent -id <child-id>
 ```
 
 ## Status Lifecycle
@@ -95,18 +96,18 @@ tk workflow get -id <workflow-id>
 States: `idle`, `active`, `success`, `fail`
 
 ```bash
-tk idle <id>            # Pause work
-tk complete <id>        # Mark success (auto-advances stage)
-tk state <id> active    # Set state directly
-tk state <id> success   # Completes current stage, advances to next
-tk state <id> fail
+tk idle -id <id>            # Pause work
+tk complete -id <id>        # Mark success (auto-advances stage)
+tk state -id <id> active    # Set state directly
+tk state -id <id> success   # Completes current stage, advances to next
+tk state -id <id> fail
 ```
 
 ## Assignment
 
 ```bash
 # Self-assign / unassign
-tk claim <id>
+tk claim -id <id>
 tk unclaim <id>
 
 # Request next available ticket
@@ -123,7 +124,7 @@ tk unassign <id> <username>
 # Manage project labels
 tk label create -name "bug" -color "red"
 tk label ls
-tk label delete -id <label-id>
+tk label delete <label-id>
 
 # Tag tickets
 tk label add <ticket-id> <label-id>
@@ -138,10 +139,10 @@ tk list --label "bug"
 
 ```bash
 # Log time against a ticket (minutes)
-tk time log <ticket-id> -m 30 -note "Morning session"
+tk time log -id <ticket-id> -m 30 -note "Morning session"
 tk time list <ticket-id>
 tk time total <ticket-id>
-tk time delete -id <entry-id>
+tk time delete <entry-id>
 ```
 
 ## Board View
@@ -180,7 +181,7 @@ tk conversation show <id>
 ## Comments and History
 
 ```bash
-tk comment add <id> "Blocked on API changes"
+tk comment add -id <id> "Blocked on API changes"
 tk history <id>
 ```
 
@@ -188,19 +189,19 @@ tk history <id>
 
 ```bash
 # Archive / restore
-tk archive <id>
-tk unarchive <id>
+tk archive -id <id>
+tk unarchive -id <id>
 
 # Close / reopen
-tk close <id>
-tk open <id>
+tk close -id <id>
+tk open -id <id>
 
 # Delete permanently
-tk delete <id>
+tk delete -id <id>
 
 # Dependencies
-tk dependency add <id> <depends-on-id>
-tk dependency remove <id> <depends-on-id>
+tk dependency add -id <id> <depends-on-id>
+tk dependency remove -id <id> <depends-on-id>
 
 # Clone a ticket or epic
 tk clone <id>
@@ -218,8 +219,8 @@ tk project init                    # Write .ticket.json in current dir
 
 ## Workflow Guidelines
 
-1. **Pick up work**: `tk list --status design/idle`, then `tk claim <id>` and `tk state <id> active`
-2. **Track progress**: `tk complete <id>` when stage work is done — auto-advances to next stage
+1. **Pick up work**: `tk list --status design/idle`, then `tk claim -id <id>` and `tk state -id <id> active`
+2. **Track progress**: `tk complete -id <id>` when stage work is done — auto-advances to next stage
 3. **File new issues**: create tickets for anything discovered during work
 4. **Comment**: leave context on tickets for future sessions
 5. **Complete work**: keep completing stages until the ticket reaches the final stage with `success`

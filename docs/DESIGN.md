@@ -158,13 +158,15 @@ States: `idle`, `active`, `success`, `fail`
 - fail: completed this stage and deemed a failure
 
 
-Supported `type` values in the first release:
+Supported `type` values:
 
 - `epic`
 - `task`
 - `bug`
 - `spike`
 - `chore`
+- `note`
+- `question`
 
 Model notes:
 
@@ -765,23 +767,31 @@ The web UI should make these activities easy:
 - SQLite is the only database in the first release.
 - SQLite remains the persistence layer behind the server data model; local mode uses the same data model and validation rules as the server-backed flow.
 
-Suggested storage areas:
+Storage areas (23 tables):
 
 1. users
 2. sessions
 3. projects
-4. tickets
-5. ticket_history
-6. comments
-7. workflows
-8. workflow_stages
-9. labels
-10. ticket_labels
-11. time_entries
-12. roles
-13. agents
-14. teams
-15. dependencies
+4. project_members
+5. tickets
+6. ticket_history
+7. comments
+8. workflows
+9. workflow_stages
+10. labels
+11. ticket_labels
+12. time_entries
+13. roles
+14. agents
+15. teams
+16. team_members
+17. team_agents
+18. project_teams
+19. dependencies
+20. stories
+21. story_ticket_links
+22. history_events
+23. app_settings
 
 ### Application Shape
 
