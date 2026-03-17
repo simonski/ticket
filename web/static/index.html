@@ -417,6 +417,7 @@
       #view-agents,
       #view-roles,
       #view-teams,
+      #view-workflows,
       #view-settings {
         padding: 0.9rem;
         overflow: auto;
@@ -909,6 +910,7 @@
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="teams">teams</button>
+            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="workflows">workflows</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="settings">settings</button>
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
           </nav>
@@ -1001,6 +1003,23 @@
                 </section>
               </div>
             </section>
+            <section id="view-workflows" class="perspective-view">
+              <div class="stories-head">
+                <strong>Workflows</strong>
+              </div>
+              <div id="workflows-panel-host" class="management-host">
+                <section class="management-browser">
+                  <div class="management-browser-head">
+                    <div class="muted">Manage workflow definitions and their stages.</div>
+                    <div class="management-browser-actions">
+                      <button id="workflows-create" class="btn" type="button">New Workflow</button>
+                    </div>
+                  </div>
+                  <div id="workflow-list" class="management-grid cards"></div>
+                  <div id="workflows-browser-status" class="muted"></div>
+                </section>
+              </div>
+            </section>
             <section id="view-settings" class="perspective-view">
               <div class="stories-head">
                 <strong>Settings</strong>
@@ -1049,6 +1068,10 @@
         <div class="perspective-item admin-only hidden" data-panel-action="teams">
           <div><strong>teams</strong></div>
           <div class="perspective-kicker">Open team management</div>
+        </div>
+        <div class="perspective-item admin-only hidden" data-panel-action="workflows">
+          <div><strong>workflows</strong></div>
+          <div class="perspective-kicker">Manage workflow definitions and stages</div>
         </div>
         <div class="perspective-item admin-only hidden" data-panel-action="settings">
           <div><strong>settings</strong></div>
@@ -1268,6 +1291,37 @@
                   </select>
                 </td>
               </tr>
+              <tr>
+                <td class="field-label">Assignee</td>
+                <td class="field-value"><input id="ticket-assignee" type="text" placeholder="username"></td>
+              </tr>
+              <tr>
+                <td class="field-label">Parent ID</td>
+                <td class="field-value">
+                  <div class="row" style="gap:0.3rem; align-items:center;">
+                    <input id="ticket-parent-id" type="number" placeholder="parent ticket id" style="flex:1;">
+                    <span id="ticket-parent-link" class="muted" style="font-size:0.85rem;cursor:pointer;"></span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="field-label">Health</td>
+                <td class="field-value">
+                  <select id="ticket-health">
+                    <option value="0">0 - Unknown</option>
+                    <option value="1">1 - Critical</option>
+                    <option value="2">2 - At Risk</option>
+                    <option value="3">3 - On Track</option>
+                    <option value="4">4 - Excellent</option>
+                  </select>
+                </td>
+              </tr>
+              <tr id="ticket-deps-row">
+                <td class="field-label">Dependencies</td>
+                <td class="field-value">
+                  <div id="ticket-deps-list" class="muted" style="font-size:0.85rem;"></div>
+                </td>
+              </tr>
             </tbody>
           </table>
           <div id="ticket-labels-section" class="stack" style="margin-top:0.6rem; display:none;">
@@ -1300,6 +1354,32 @@
             <button id="ticket-analyse" class="btn" type="button">Analyse</button>
           </div>
           <div class="muted">No save button. Changes are persisted as you type.</div>
+        </div>
+      </div>
+    </div>
+    <div id="workflow-modal-overlay" class="modal-overlay hidden">
+      <div id="workflow-modal" class="modal">
+        <div class="row" style="justify-content:space-between; align-items:center;">
+          <strong id="workflow-modal-title">New Workflow</strong>
+        </div>
+        <div class="stack" style="margin-top:0.6rem;">
+          <input id="workflow-name" placeholder="workflow name" autocomplete="off" />
+          <input id="workflow-description" placeholder="description (optional)" autocomplete="off" />
+          <div class="row">
+            <button id="workflow-save" class="btn" type="button">Create</button>
+            <button id="workflow-delete" class="btn" type="button">Delete</button>
+            <button id="workflow-modal-close" class="btn" type="button">Close</button>
+          </div>
+          <div id="workflow-status" class="muted"></div>
+          <div id="workflow-stages-section" style="display:none;">
+            <strong>Stages</strong>
+            <div id="workflow-stages-list" style="margin:0.4rem 0;"></div>
+            <div class="row" style="gap:0.3rem;">
+              <input id="workflow-stage-name" placeholder="stage name" autocomplete="off" style="flex:1;" />
+              <input id="workflow-stage-order" type="number" placeholder="order" style="width:5rem;" />
+              <button id="workflow-stage-add" class="btn" type="button">Add Stage</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1618,6 +1698,16 @@
           setLeftPanelActive("teams");
           await loadTeams();
           await refreshSelectedTeamDetails();
+          return;
+        }
+        if (action === "workflows") {
+          if (!isAdminUser()) {
+            await uiAlert("Admin access required.");
+            return;
+          }
+          switchPerspective("workflows");
+          setLeftPanelActive("workflows");
+          await loadWorkflows();
           return;
         }
         if (action === "settings") {
@@ -3647,6 +3737,197 @@
         if (event.target === teamModalOverlay) closeTeamModal();
       });
 
+      // ── Workflow Management ──
+      let workflows = [];
+      let selectedWorkflowID = 0;
+      const workflowListEl = document.getElementById("workflow-list");
+      const workflowBrowserStatusEl = document.getElementById("workflows-browser-status");
+      const workflowModalOverlay = document.getElementById("workflow-modal-overlay");
+      const workflowModalTitle = document.getElementById("workflow-modal-title");
+      const workflowNameInput = document.getElementById("workflow-name");
+      const workflowDescInput = document.getElementById("workflow-description");
+      const workflowSaveBtn = document.getElementById("workflow-save");
+      const workflowDeleteBtn = document.getElementById("workflow-delete");
+      const workflowModalCloseBtn = document.getElementById("workflow-modal-close");
+      const workflowStatusEl = document.getElementById("workflow-status");
+      const workflowStagesSection = document.getElementById("workflow-stages-section");
+      const workflowStagesList = document.getElementById("workflow-stages-list");
+      const workflowStageNameInput = document.getElementById("workflow-stage-name");
+      const workflowStageOrderInput = document.getElementById("workflow-stage-order");
+      const workflowStageAddBtn = document.getElementById("workflow-stage-add");
+      const workflowCreateBtn = document.getElementById("workflows-create");
+
+      function setWorkflowStatus(msg = "", isError = false) {
+        workflowStatusEl.textContent = msg;
+        workflowStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
+      }
+
+      async function loadWorkflows() {
+        const list = await call("/api/workflows", { headers: headers() });
+        workflows = Array.isArray(list) ? list : [];
+        renderWorkflowList();
+        workflowBrowserStatusEl.textContent = workflows.length ? `${workflows.length} workflow${workflows.length === 1 ? "" : "s"}` : "No workflows yet.";
+      }
+
+      function renderWorkflowList() {
+        workflowListEl.innerHTML = "";
+        if (!workflows.length) {
+          const empty = document.createElement("div");
+          empty.className = "management-card";
+          empty.textContent = "No workflows";
+          workflowListEl.appendChild(empty);
+          return;
+        }
+        for (const wf of workflows) {
+          const item = document.createElement("div");
+          item.className = "management-card";
+          item.innerHTML = `
+            <div class="management-card-head">
+              <div>
+                <div class="management-card-kicker">Workflow #${escape(wf.workflow_id)}</div>
+                <div class="management-card-title">${escape(wf.name || "")}</div>
+              </div>
+            </div>
+            <div class="management-card-body">${escape(wf.description || "No description")}</div>
+            <div class="management-card-footer">
+              <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
+            </div>
+          `;
+          item.addEventListener("click", () => openWorkflowEditor(wf));
+          item.querySelector("button").addEventListener("click", (event) => {
+            event.stopPropagation();
+            openWorkflowEditor(wf);
+          });
+          workflowListEl.appendChild(item);
+        }
+      }
+
+      async function openWorkflowEditor(wf = null) {
+        selectedWorkflowID = 0;
+        workflowNameInput.value = "";
+        workflowDescInput.value = "";
+        setWorkflowStatus("");
+        workflowStagesSection.style.display = "none";
+        workflowStagesList.innerHTML = "";
+        if (wf) {
+          selectedWorkflowID = wf.workflow_id;
+          workflowModalTitle.textContent = `Workflow #${wf.workflow_id}`;
+          workflowNameInput.value = wf.name || "";
+          workflowDescInput.value = wf.description || "";
+          workflowSaveBtn.textContent = "Save";
+          workflowDeleteBtn.style.display = "";
+          workflowStagesSection.style.display = "";
+          await loadWorkflowStages(wf.workflow_id);
+        } else {
+          workflowModalTitle.textContent = "New Workflow";
+          workflowSaveBtn.textContent = "Create";
+          workflowDeleteBtn.style.display = "none";
+        }
+        workflowModalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        workflowNameInput.focus();
+      }
+
+      async function loadWorkflowStages(wfID) {
+        try {
+          const detail = await call(`/api/workflows/${wfID}`, { headers: headers() });
+          const stages = detail.stages || [];
+          workflowStagesList.innerHTML = "";
+          if (!stages.length) {
+            workflowStagesList.innerHTML = '<div class="muted">No stages</div>';
+            return;
+          }
+          for (const s of stages) {
+            const row = document.createElement("div");
+            row.className = "row";
+            row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
+            const info = document.createElement("span");
+            info.innerHTML = `<strong>${escape(s.stage_name)}</strong> <span class="muted">(order: ${s.sort_order}${s.role_title ? ", role: " + escape(s.role_title) : ""})</span>`;
+            const rm = document.createElement("button");
+            rm.textContent = "\u00d7";
+            rm.className = "btn";
+            rm.style.cssText = "padding:0 0.4rem;";
+            rm.onclick = async () => {
+              await call(`/api/workflows/stages/${s.workflow_stage_id}`, { method: "DELETE", headers: headers() });
+              await loadWorkflowStages(wfID);
+            };
+            row.appendChild(info);
+            row.appendChild(rm);
+            workflowStagesList.appendChild(row);
+          }
+        } catch (e) {
+          workflowStagesList.innerHTML = '<div class="muted">Failed to load stages</div>';
+        }
+      }
+
+      workflowSaveBtn.addEventListener("click", async () => {
+        const name = workflowNameInput.value.trim();
+        if (!name) { setWorkflowStatus("Name is required.", true); return; }
+        try {
+          if (selectedWorkflowID) {
+            // No update endpoint exists, so just notify
+            setWorkflowStatus("Workflow name/description saved at creation time. Manage stages below.");
+          } else {
+            const created = await call("/api/workflows", {
+              method: "POST",
+              headers: headers(true),
+              body: JSON.stringify({ name, description: workflowDescInput.value.trim() }),
+            });
+            selectedWorkflowID = created.workflow_id;
+            workflowModalTitle.textContent = `Workflow #${created.workflow_id}`;
+            workflowSaveBtn.textContent = "Save";
+            workflowDeleteBtn.style.display = "";
+            workflowStagesSection.style.display = "";
+            setWorkflowStatus(`Created workflow #${created.workflow_id}`);
+          }
+          await loadWorkflows();
+        } catch (err) { setWorkflowStatus(err.message, true); }
+      });
+
+      workflowDeleteBtn.addEventListener("click", async () => {
+        if (!selectedWorkflowID) return;
+        const ok = await uiConfirm(`Delete workflow #${selectedWorkflowID}?`, "Delete");
+        if (!ok) return;
+        try {
+          await call(`/api/workflows/${selectedWorkflowID}`, { method: "DELETE", headers: headers() });
+          workflowModalOverlay.classList.add("hidden");
+          document.body.classList.remove("modal-open");
+          await loadWorkflows();
+        } catch (err) { setWorkflowStatus(err.message, true); }
+      });
+
+      workflowStageAddBtn.addEventListener("click", async () => {
+        if (!selectedWorkflowID) return;
+        const stageName = workflowStageNameInput.value.trim();
+        if (!stageName) { setWorkflowStatus("Stage name is required.", true); return; }
+        const sortOrder = Number(workflowStageOrderInput.value || 0);
+        try {
+          await call(`/api/workflows/${selectedWorkflowID}/stages`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ stage_name: stageName, description: "", role_id: null, sort_order: sortOrder }),
+          });
+          workflowStageNameInput.value = "";
+          workflowStageOrderInput.value = "";
+          await loadWorkflowStages(selectedWorkflowID);
+          setWorkflowStatus("");
+        } catch (err) { setWorkflowStatus(err.message, true); }
+      });
+
+      workflowModalCloseBtn.addEventListener("click", () => {
+        workflowModalOverlay.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+      });
+
+      workflowModalOverlay.addEventListener("click", (event) => {
+        if (event.target === workflowModalOverlay) {
+          workflowModalOverlay.classList.add("hidden");
+          document.body.classList.remove("modal-open");
+        }
+      });
+
+      workflowCreateBtn.addEventListener("click", () => openWorkflowEditor());
+
       function setStoryStatus(message = "", isError = false) {
         storyStatusEl.textContent = message;
         storyStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
@@ -4031,12 +4312,13 @@
             const cardLabels = (ticketLabelsMap[ticket.ticket_id] || [])
               .map(l => `<span class="card-label" ${l.color ? `style="border-left:2px solid ${escape(l.color)}"` : ""}>${escape(l.name)}</span>`)
               .join("");
+            const assignee = (ticket.assignee || "").trim();
             card.innerHTML = `
               <div class="ticket-top">
                 <strong>${escape(ticket.title)}</strong>
                 <span class="muted">${escape(ticket.key || "#" + ticket.ticket_id)}</span>
               </div>
-              <div class="muted">${escape(ticket.type)} · ${escape(ticket.state)}</div>
+              <div class="muted">${escape(ticket.type)} · ${escape(ticket.state)}${assignee ? ` · @${escape(assignee)}` : ""}</div>
               ${cardLabels ? `<div class="card-labels">${cardLabels}</div>` : ""}
               <div class="state-line ${stateColorClass(ticket.state)}"></div>
             `;
@@ -4320,10 +4602,12 @@
         document.getElementById("ticket-title").focus();
         loadTicketLabels(ticket.ticket_id);
         loadTicketTime(ticket.ticket_id);
+        loadTicketDeps(ticket.ticket_id);
         loadProjectLabelsDropdown();
       }
 
       function modalValues() {
+        const parentRaw = document.getElementById("ticket-parent-id").value;
         return {
           type: document.getElementById("ticket-type").value,
           title: document.getElementById("ticket-title").value,
@@ -4333,6 +4617,9 @@
           git_branch: document.getElementById("ticket-git-branch").value,
           stage: document.getElementById("ticket-stage").value,
           state: document.getElementById("ticket-state").value,
+          assignee: document.getElementById("ticket-assignee").value,
+          parent_id: parentRaw ? Number(parentRaw) : null,
+          health_score: Number(document.getElementById("ticket-health").value),
         };
       }
 
@@ -4345,11 +4632,26 @@
         document.getElementById("ticket-git-branch").value = ticket.git_branch || "";
         document.getElementById("ticket-stage").value = ticket.stage || "design";
         document.getElementById("ticket-state").value = ticket.state || "idle";
+        document.getElementById("ticket-assignee").value = ticket.assignee || "";
+        document.getElementById("ticket-parent-id").value = ticket.parent_id || "";
+        document.getElementById("ticket-health").value = String(ticket.health_score || 0);
         document.getElementById("ticket-close-open").textContent = ticket.open === false ? "Open" : "Close";
         document.getElementById("ticket-archive").textContent = ticket.archived ? "Unarchive" : "Archive";
         document.getElementById("ticket-delete").disabled = !ticket.ticket_id;
         ticketAnalyseBtn.style.display = ticket.type === "epic" ? "" : "none";
         ticketAnalyseBtn.disabled = !(ticket.ticket_id && ticket.type === "epic");
+        // Parent link
+        const parentLink = document.getElementById("ticket-parent-link");
+        if (ticket.parent_id) {
+          parentLink.textContent = "↗ open parent";
+          parentLink.onclick = () => {
+            const parent = allTickets.find(t => t.ticket_id === ticket.parent_id);
+            if (parent) openEdit(parent);
+          };
+        } else {
+          parentLink.textContent = "";
+          parentLink.onclick = null;
+        }
       }
 
       function loadProjectLabelsDropdown() {
@@ -4423,6 +4725,31 @@
         } catch (e) { totalEl.textContent = ""; entriesEl.innerHTML = ""; }
       }
 
+      async function loadTicketDeps(ticketID) {
+        const container = document.getElementById("ticket-deps-list");
+        const row = document.getElementById("ticket-deps-row");
+        if (!ticketID) { row.style.display = "none"; return; }
+        row.style.display = "";
+        try {
+          const deps = await call(`/api/tickets/${ticketID}/dependencies`, { headers: headers() });
+          if (!deps || deps.length === 0) {
+            container.innerHTML = "<span class='muted'>None</span>";
+            return;
+          }
+          container.innerHTML = "";
+          for (const d of deps) {
+            const link = document.createElement("span");
+            link.style.cssText = "cursor:pointer;text-decoration:underline;margin-right:0.5rem;";
+            link.textContent = `#${d.depends_on}`;
+            link.onclick = () => {
+              const dep = allTickets.find(t => t.ticket_id === d.depends_on);
+              if (dep) openEdit(dep);
+            };
+            container.appendChild(link);
+          }
+        } catch (e) { container.innerHTML = "<span class='muted'>None</span>"; }
+      }
+
       function queueAutosave() {
         clearTimeout(autosaveTimer);
         autosaveTimer = setTimeout(async () => {
@@ -4472,8 +4799,21 @@
           || String(current.git_repository || "") !== String(values.git_repository || "")
           || String(current.git_branch || "") !== String(values.git_branch || "")
           || String(current.stage || "design") !== String(values.stage || "design")
-          || String(current.state || "idle") !== String(values.state || "idle");
-        if (!hasChanges) return;
+          || String(current.state || "idle") !== String(values.state || "idle")
+          || String(current.assignee || "") !== String(values.assignee || "")
+          || String(current.parent_id || "") !== String(values.parent_id || "");
+        // Health uses a separate endpoint
+        const healthChanged = Number(current.health_score || 0) !== Number(values.health_score || 0);
+        if (healthChanged) {
+          const hResult = await call(`/api/tickets/${current.ticket_id}/health`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ score: values.health_score }),
+          });
+          draft.ticket = hResult;
+          upsertTicketLocal(hResult);
+        }
+        if (!hasChanges) { if (healthChanged) refreshTicketViews(); return; }
         const updated = await call(`/api/tickets/${current.ticket_id}`, {
           method: "PUT",
           headers: headers(true),
@@ -4484,8 +4824,8 @@
             acceptance_criteria: values.acceptance_criteria,
             git_repository: values.git_repository,
             git_branch: values.git_branch,
-            parent_id: current.parent_id,
-            assignee: current.assignee,
+            parent_id: values.parent_id,
+            assignee: values.assignee,
             priority: current.priority,
             order: current.order,
             estimate_effort: current.estimate_effort,
@@ -4904,7 +5244,7 @@
         }
       });
 
-      ["ticket-title", "ticket-description", "ticket-ac", "ticket-git-repository", "ticket-git-branch", "ticket-type", "ticket-stage", "ticket-state"].forEach((id) => {
+      ["ticket-title", "ticket-description", "ticket-ac", "ticket-git-repository", "ticket-git-branch", "ticket-type", "ticket-stage", "ticket-state", "ticket-assignee", "ticket-parent-id", "ticket-health"].forEach((id) => {
         document.getElementById(id).addEventListener("input", queueAutosave);
         document.getElementById(id).addEventListener("change", queueAutosave);
       });

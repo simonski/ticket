@@ -2,7 +2,7 @@ EPIC: Core Runtime, Bootstrap, And Delivery
 ID: E1
 DESCRIPTION: Build the single-binary runtime for `task`, including versioning, onboarding, SQLite bootstrap, server startup, embedded web delivery, and make-based quality gates.
 AC:
-- `task onboard` appends the embedded onboarding template into `${CWD}/AGENTS.md`.
+- `task onboard` prints the embedded onboarding template (`TICKETS.md`) to stdout.
 - `task version` prints the embedded semantic version from the build asset.
 - `task initdb` creates the SQLite schema, the `admin` account, and the default project.
 - `task server` starts the API and embedded web UI from the same binary and serves on `http://localhost:8080` by default.
@@ -20,7 +20,7 @@ DEPENDS-ON: NONE
     AC:
     - `VERSION` is incremented during `make build`.
     - The built binary embeds the version value used by `task version`.
-    - The built binary embeds `cmd/task/AGENTS.md` for `task onboard`.
+    - The built binary embeds `cmd/ticket/TICKETS.md` for `ticket onboard`.
     - Automated tests cover version lookup and onboard asset behavior.
     - use red/green testing
     - use make to verify all tests pass

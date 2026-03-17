@@ -378,7 +378,7 @@ ticket status
 ticket logout
 ```
 
-`ticket onboard` must print the embedded `cmd/ticket/AGENTS.md` template to stdout.
+`ticket onboard` must print the embedded `cmd/ticket/TICKETS.md` template to stdout.
 
 `ticket status` must always print the current effective configuration first, then perform a mode-appropriate connectivity check.
 

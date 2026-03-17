@@ -2376,3 +2376,228 @@ func parseTicketReferenceToID(ref string) (int64, error) {
 	}
 	return task.ID, nil
 }
+
+func TestContainsFlag(t *testing.T) {
+	if !containsFlag([]string{"-v", "foo"}, "-v") {
+		t.Error("containsFlag should find -v")
+	}
+	if containsFlag([]string{"foo", "bar"}, "-v") {
+		t.Error("containsFlag should not find -v")
+	}
+	if containsFlag(nil, "-v") {
+		t.Error("containsFlag(nil) should return false")
+	}
+}
+
+func TestParseProjectCommandID(t *testing.T) {
+	id, ok := parseProjectCommandID("42")
+	if !ok || id != 42 {
+		t.Errorf("parseProjectCommandID(42) = (%d, %v)", id, ok)
+	}
+	_, ok = parseProjectCommandID("abc")
+	if ok {
+		t.Error("parseProjectCommandID(abc) should fail")
+	}
+}
+
+func TestResolveLifecycleInput(t *testing.T) {
+	stage, state, err := resolveLifecycleInput("", "develop", "active")
+	if err != nil || stage != "develop" || state != "active" {
+		t.Errorf("explicit stage/state = (%q, %q, %v)", stage, state, err)
+	}
+	stage, state, err = resolveLifecycleInput("design/idle", "", "")
+	if err != nil || stage != "design" || state != "idle" {
+		t.Errorf("status parse = (%q, %q, %v)", stage, state, err)
+	}
+	stage, state, err = resolveLifecycleInput("", "", "")
+	if err != nil || stage != "" || state != "" {
+		t.Errorf("empty = (%q, %q, %v)", stage, state, err)
+	}
+	_, _, err = resolveLifecycleInput("bogus", "", "")
+	if err == nil {
+		t.Error("bogus status should error")
+	}
+}
+
+func TestIsReviewerAuthor(t *testing.T) {
+	if !isReviewerAuthor("Reviewer-Agent") {
+		t.Error("should match reviewer")
+	}
+	if isReviewerAuthor("alice") {
+		t.Error("should not match alice")
+	}
+}
+
+func TestIsReviewerCommentText(t *testing.T) {
+	if !isReviewerCommentText("This has been reviewed and approved") {
+		t.Error("should match reviewed")
+	}
+	if isReviewerCommentText("Just a normal comment") {
+		t.Error("should not match")
+	}
+}
+
+func TestHasReviewerAgentComment(t *testing.T) {
+	if hasReviewerAgentComment(nil) {
+		t.Error("nil should return false")
+	}
+	comments := []store.Comment{
+		{Author: "alice", Text: "hello"},
+	}
+	if hasReviewerAgentComment(comments) {
+		t.Error("no reviewer should return false")
+	}
+	comments = append(comments, store.Comment{Author: "Reviewer", Text: "approved"})
+	if !hasReviewerAgentComment(comments) {
+		t.Error("reviewer comment should return true")
+	}
+}
+
+func TestBuildAgentPrompt(t *testing.T) {
+	ticket := store.Ticket{
+		Key:                "TK-1",
+		Title:              "Test Task",
+		Description:        "Some description",
+		AcceptanceCriteria: "Must pass",
+	}
+	prompt := buildAgentPrompt(ticket)
+	for _, want := range []string{"autonomous software agent", "Test Task", "Some description", "Must pass"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("buildAgentPrompt missing %q:\n%s", want, prompt)
+		}
+	}
+	// Without description/AC
+	ticket2 := store.Ticket{Title: "Simple"}
+	prompt2 := buildAgentPrompt(ticket2)
+	if strings.Contains(prompt2, "Description:") {
+		t.Error("should not include Description header for empty description")
+	}
+}
+
+func TestRunVersion(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"version"}); err != nil {
+			t.Fatalf("version error = %v", err)
+		}
+	})
+	if strings.TrimSpace(output) == "" {
+		t.Fatal("version output empty")
+	}
+}
+
+func TestRunLabelCRUD(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Label Test"})
+
+	// Create label
+	output := captureStdout(t, func() {
+		if err := run([]string{"label", "create", "-name", "urgent", "-color", "red"}); err != nil {
+			t.Fatalf("label create error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "urgent") {
+		t.Fatalf("label create missing name:\n%s", output)
+	}
+
+	// List labels
+	output = captureStdout(t, func() {
+		if err := run([]string{"label", "ls"}); err != nil {
+			t.Fatalf("label ls error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "urgent") {
+		t.Fatalf("label ls missing urgent:\n%s", output)
+	}
+
+	// Add label to ticket
+	captureStdout(t, func() {
+		if err := run([]string{"label", "add", strconv.FormatInt(taskID, 10), "1"}); err != nil {
+			t.Fatalf("label add error = %v", err)
+		}
+	})
+
+	// Show ticket labels
+	output = captureStdout(t, func() {
+		if err := run([]string{"label", "show", strconv.FormatInt(taskID, 10)}); err != nil {
+			t.Fatalf("label show error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "urgent") {
+		t.Fatalf("label show missing urgent:\n%s", output)
+	}
+
+	// Remove label from ticket
+	captureStdout(t, func() {
+		if err := run([]string{"label", "remove", strconv.FormatInt(taskID, 10), "1"}); err != nil {
+			t.Fatalf("label remove error = %v", err)
+		}
+	})
+
+	// Delete label
+	captureStdout(t, func() {
+		if err := run([]string{"label", "delete", "1"}); err != nil {
+			t.Fatalf("label delete error = %v", err)
+		}
+	})
+}
+
+func TestRunTimeCRUD(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Time Test"})
+	idStr := strconv.FormatInt(taskID, 10)
+
+	// Log time
+	output := captureStdout(t, func() {
+		if err := run([]string{"time", "log", "-id", idStr, "-m", "30", "-note", "morning"}); err != nil {
+			t.Fatalf("time log error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "30") {
+		t.Fatalf("time log missing minutes:\n%s", output)
+	}
+
+	// List time entries
+	output = captureStdout(t, func() {
+		if err := run([]string{"time", "list", idStr}); err != nil {
+			t.Fatalf("time list error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "morning") {
+		t.Fatalf("time list missing note:\n%s", output)
+	}
+
+	// Total time
+	output = captureStdout(t, func() {
+		if err := run([]string{"time", "total", idStr}); err != nil {
+			t.Fatalf("time total error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "30") {
+		t.Fatalf("time total missing minutes:\n%s", output)
+	}
+
+	// Delete time entry
+	captureStdout(t, func() {
+		if err := run([]string{"time", "delete", "1"}); err != nil {
+			t.Fatalf("time delete error = %v", err)
+		}
+	})
+}
+
+func TestRunBoard(t *testing.T) {
+	setupLocalCLI(t)
+	createLocalTask(t, []string{"add", "Board Task"})
+	output := captureStdout(t, func() {
+		if err := run([]string{"board"}); err != nil {
+			t.Fatalf("board error = %v", err)
+		}
+	})
+	for _, want := range []string{"DESIGN", "DEVELOP", "TEST", "DONE"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("board missing %q:\n%s", want, output)
+		}
+	}
+	if !strings.Contains(output, "Board Task") {
+		t.Fatalf("board missing ticket:\n%s", output)
+	}
+}

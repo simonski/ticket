@@ -133,7 +133,7 @@ ticket state change commands
     task inprogress 1        - moves state to inprogress
     task complete 1          - moves state to complete
 
-`ticket onboard` should append an `${CWD}/AGENTS.md` file which is embeddedin the go code under cmd/ticket/AGENTS.md
+`ticket onboard` should print the embedded `cmd/ticket/TICKETS.md` template to stdout
 
 group the CLI usage by admin commands and client commands
 order the CLI commands alphabetically in their section
