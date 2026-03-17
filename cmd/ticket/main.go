@@ -512,6 +512,10 @@ func run(args []string) error {
 		return runTeam(trimmedArgs[1:])
 	case "workflow":
 		return runWorkflow(trimmedArgs[1:])
+	case "label":
+		return runLabel(trimmedArgs[1:])
+	case "time":
+		return runTime(trimmedArgs[1:])
 	case "ls":
 		return runList(trimmedArgs[1:])
 	case "list":
@@ -2586,6 +2590,213 @@ func printWorkflowDetail(wf store.WorkflowWithStages) {
 	_ = w.Flush()
 }
 
+func runLabel(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: ticket label <list|create|delete|add|remove|show>")
+	}
+	_, svc, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "list", "ls":
+		labels, err := svc.ListLabels(project.ID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(labels)
+		}
+		if len(labels) == 0 {
+			fmt.Println("no labels")
+			return nil
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tNAME\tCOLOR")
+		for _, l := range labels {
+			fmt.Fprintf(w, "%d\t%s\t%s\n", l.ID, l.Name, l.Color)
+		}
+		return w.Flush()
+	case "create":
+		fs := flag.NewFlagSet("label create", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		name := fs.String("name", "", "label name")
+		color := fs.String("color", "", "label color (e.g. #ff0000)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *name == "" && fs.NArg() > 0 {
+			*name = fs.Arg(0)
+		}
+		if *name == "" {
+			return errors.New("usage: ticket label create <name> [-color <color>]")
+		}
+		label, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: *name, Color: *color})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(label)
+		}
+		fmt.Printf("label created: %d %s\n", label.ID, label.Name)
+		return nil
+	case "delete":
+		if len(args) < 2 {
+			return errors.New("usage: ticket label delete <label-id>")
+		}
+		var id int64
+		if _, err := fmt.Sscan(args[1], &id); err != nil {
+			return errors.New("label id must be numeric")
+		}
+		return svc.DeleteLabel(id)
+	case "add":
+		if len(args) < 3 {
+			return errors.New("usage: ticket label add <ticket-id> <label-id>")
+		}
+		var ticketID, labelID int64
+		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
+			return errors.New("ticket id must be numeric")
+		}
+		if _, err := fmt.Sscan(args[2], &labelID); err != nil {
+			return errors.New("label id must be numeric")
+		}
+		return svc.AddTicketLabel(ticketID, labelID)
+	case "remove":
+		if len(args) < 3 {
+			return errors.New("usage: ticket label remove <ticket-id> <label-id>")
+		}
+		var ticketID, labelID int64
+		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
+			return errors.New("ticket id must be numeric")
+		}
+		if _, err := fmt.Sscan(args[2], &labelID); err != nil {
+			return errors.New("label id must be numeric")
+		}
+		return svc.RemoveTicketLabel(ticketID, labelID)
+	case "show":
+		if len(args) < 2 {
+			return errors.New("usage: ticket label show <ticket-id>")
+		}
+		var ticketID int64
+		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
+			return errors.New("ticket id must be numeric")
+		}
+		labels, err := svc.ListTicketLabels(ticketID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(labels)
+		}
+		if len(labels) == 0 {
+			fmt.Println("no labels")
+			return nil
+		}
+		for _, l := range labels {
+			fmt.Printf("%d\t%s\n", l.ID, l.Name)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown label subcommand %q", args[0])
+	}
+}
+
+func runTime(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: ticket time <log|list|total|delete>")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "log", "add":
+		fs := flag.NewFlagSet("time log", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		ticketID := fs.Int64("id", 0, "ticket id")
+		minutes := fs.Int("m", 0, "minutes spent")
+		note := fs.String("note", "", "optional note")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *ticketID == 0 || *minutes <= 0 {
+			return errors.New("usage: ticket time log -id <ticket-id> -m <minutes> [-note <text>]")
+		}
+		entry, err := svc.LogTime(*ticketID, libticket.TimeEntryRequest{Minutes: *minutes, Note: *note})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(entry)
+		}
+		fmt.Printf("logged %d min on ticket %d\n", entry.Minutes, entry.TicketID)
+		return nil
+	case "list", "ls":
+		if len(args) < 2 {
+			return errors.New("usage: ticket time list <ticket-id>")
+		}
+		var ticketID int64
+		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
+			return errors.New("ticket id must be numeric")
+		}
+		entries, err := svc.ListTimeEntries(ticketID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(entries)
+		}
+		if len(entries) == 0 {
+			fmt.Println("no time entries")
+			return nil
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tMINUTES\tUSER\tNOTE\tDATE")
+		for _, e := range entries {
+			fmt.Fprintf(w, "%d\t%d\t%d\t%s\t%s\n", e.ID, e.Minutes, e.UserID, e.Note, e.CreatedAt)
+		}
+		return w.Flush()
+	case "total":
+		if len(args) < 2 {
+			return errors.New("usage: ticket time total <ticket-id>")
+		}
+		var ticketID int64
+		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
+			return errors.New("ticket id must be numeric")
+		}
+		total, err := svc.TotalTimeForTicket(ticketID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]int{"total": total})
+		}
+		hours := total / 60
+		mins := total % 60
+		if hours > 0 {
+			fmt.Printf("%dh %dm (%d min total)\n", hours, mins, total)
+		} else {
+			fmt.Printf("%d min\n", total)
+		}
+		return nil
+	case "delete":
+		if len(args) < 2 {
+			return errors.New("usage: ticket time delete <time-entry-id>")
+		}
+		var id int64
+		if _, err := fmt.Sscan(args[1], &id); err != nil {
+			return errors.New("time entry id must be numeric")
+		}
+		return svc.DeleteTimeEntry(id)
+	default:
+		return fmt.Errorf("unknown time subcommand %q", args[0])
+	}
+}
+
 func runTicket(args []string) error {
 	fs := flag.NewFlagSet("ticket", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -2869,7 +3080,14 @@ func runList(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeArchived)
+	// Look up workflow stages for progress column
+	var workflowStages []store.WorkflowStage
+	if project.WorkflowID != nil {
+		if wf, err := api.GetWorkflow(*project.WorkflowID); err == nil {
+			workflowStages = wf.Stages
+		}
+	}
+	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeArchived, workflowStages)
 	return nil
 }
 
@@ -2938,7 +3156,9 @@ func runGet(args []string) error {
 			workflowStages = wf.Stages
 		}
 	}
-	printTicketDetails(ticket, dependencies, history, workflowStages)
+	ticketLabels, _ := svc.ListTicketLabels(ticket.ID)
+	totalTime, _ := svc.TotalTimeForTicket(ticket.ID)
+	printTicketDetails(ticket, dependencies, history, workflowStages, ticketLabels, totalTime)
 	return nil
 }
 
@@ -3409,7 +3629,7 @@ func runUpdate(args []string) error {
 	}
 	dependencies, _ := svc.ListDependencies(current.ID)
 	history, _ := svc.ListHistory(updated.ID)
-	printTicketDetails(updated, dependencies, history, nil)
+	printTicketDetails(updated, dependencies, history, nil, nil, 0)
 	return nil
 }
 
@@ -3462,14 +3682,6 @@ func runUnclaim(args []string) error {
 		return errors.New("no current username; log in first")
 	}
 	return unassignTicket(args[0], username, false)
-}
-
-func parseTicketID(idArg string) (int64, error) {
-	var id int64
-	if _, err := fmt.Sscan(idArg, &id); err != nil {
-		return 0, errors.New("ticket id must be numeric")
-	}
-	return id, nil
 }
 
 func assignTicket(idArg, assignee string, requireAdmin bool) error {
@@ -3968,36 +4180,6 @@ func runRequestDryRun(args []string) error {
 	fmt.Printf("would assign ticket: %s\n", ticketLabel(*response.Ticket))
 	printTicket(*response.Ticket)
 	return nil
-}
-
-func resolveCurrentRequestUser(cfg config.Config, mode string) (string, error) {
-	username := strings.TrimSpace(cfg.Username)
-	if mode == config.ModeLocal {
-		username = localModeUsername()
-	}
-	if strings.TrimSpace(username) == "" {
-		return "", errors.New("no current username; log in first")
-	}
-
-	if mode == config.ModeLocal {
-		return username, nil
-	}
-
-	_, api, _, err := resolveCurrentProjectClient()
-	if err != nil {
-		return "", err
-	}
-	status, err := api.Status()
-	if err != nil {
-		return "", err
-	}
-	if status.User == nil {
-		return "", errors.New("no current username; log in first")
-	}
-	if status.User.Username != "" {
-		return status.User.Username, nil
-	}
-	return username, nil
 }
 
 func parseIDList(raw string) ([]int64, error) {
@@ -4759,7 +4941,7 @@ func printTicket(ticket store.Ticket) {
 	}
 }
 
-func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage) {
+func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage, labels []store.Label, totalMinutes int) {
 	parentID := ""
 	if ticket.ParentID != nil {
 		parentID = fmt.Sprintf("%d", *ticket.ParentID)
@@ -4796,6 +4978,22 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		fmt.Println("Comments     :")
 		for _, comment := range ticket.Comments {
 			fmt.Printf("  - [%s] %s: %s\n", comment.CreatedAt, comment.Author, comment.Text)
+		}
+	}
+	if len(labels) > 0 {
+		var labelNames []string
+		for _, l := range labels {
+			labelNames = append(labelNames, l.Name)
+		}
+		fmt.Printf("Labels       : %s\n", strings.Join(labelNames, ", "))
+	}
+	if totalMinutes > 0 {
+		hours := totalMinutes / 60
+		mins := totalMinutes % 60
+		if hours > 0 {
+			fmt.Printf("TimeLogged   : %dh %dm\n", hours, mins)
+		} else {
+			fmt.Printf("TimeLogged   : %dm\n", mins)
 		}
 	}
 	if len(history) > 0 {
@@ -4835,14 +5033,6 @@ func formatDependsOn(dependencies []store.Dependency) string {
 		return "[]"
 	}
 	return "[" + strings.Join(ids, ",") + "]"
-}
-
-func heading(label string) {
-	if noColorOutput {
-		fmt.Printf("%s\n", label)
-		return
-	}
-	fmt.Printf("\x1b[2;36m%s\x1b[0m\n", label)
 }
 
 func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
@@ -5098,9 +5288,6 @@ func runLocalStatus() error {
 		return err
 	}
 	dbPath := resolved.DBPath
-	if err != nil {
-		return err
-	}
 	_, statErr := os.Stat(dbPath)
 	dbExists := statErr == nil
 	if outputJSON {
@@ -5261,6 +5448,8 @@ func renderRootUsage() string {
 		{"team", "Manage teams, hierarchy, and team membership"},
 		{"agent", "Manage autonomous agents and run agent workers"},
 		{"workflow", "Manage workflow definitions and stages"},
+		{"label", "Manage project labels and ticket tagging"},
+		{"time", "Log and view time entries on tickets"},
 		{"add", "Create a ticket in the active project"},
 		{"get", "Show a ticket with history and comments"},
 		{"list", "List tickets in the active project"},
@@ -5367,16 +5556,23 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	}
 }
 
-func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool) {
+func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool, workflowStages []store.WorkflowStage) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
 	}
+	// Build stage index for progress display
+	stageIndex := make(map[string]int, len(workflowStages))
+	for i, s := range workflowStages {
+		stageIndex[s.StageName] = i + 1
+	}
+	totalStages := len(workflowStages)
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	if includeArchived {
-		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tPROGRESS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
 	} else {
-		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tPROGRESS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
 	}
 	for _, ticket := range tickets {
 		symbol := formatTicketStatusSymbol(ticket.Status, statusUnicode)
@@ -5396,10 +5592,16 @@ func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, sta
 		if strings.TrimSpace(key) == "" {
 			key = strconv.FormatInt(ticket.ID, 10)
 		}
+		progress := ""
+		if totalStages > 0 {
+			if idx, ok := stageIndex[ticket.Stage]; ok {
+				progress = fmt.Sprintf("[%d/%d]", idx, totalStages)
+			}
+		}
 		if includeArchived {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, ticketOpenLabel(ticket), ticket.Archived, parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, progress, ticketOpenLabel(ticket), ticket.Archived, parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
 		} else {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, ticketOpenLabel(ticket), parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, progress, ticketOpenLabel(ticket), parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
 		}
 	}
 	_ = w.Flush()

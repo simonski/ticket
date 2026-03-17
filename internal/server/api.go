@@ -1541,6 +1541,68 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			}
 		}
 
+		if (len(parts) == 2 && parts[1] == "labels") || (len(parts) == 3 && parts[1] == "labels") {
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var projectID int64
+			if _, err := fmt.Sscan(parts[0], &projectID); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid project id")
+				return
+			}
+			if len(parts) == 3 {
+				// /api/projects/<id>/labels/<label_id>
+				var labelID int64
+				if _, err := fmt.Sscan(parts[2], &labelID); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid label id")
+					return
+				}
+				if r.Method == http.MethodDelete {
+					if err := store.DeleteLabel(db, labelID); err != nil {
+						if errors.Is(err, store.ErrLabelNotFound) {
+							writeError(w, http.StatusNotFound, "label not found")
+							return
+						}
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+					return
+				}
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			// /api/projects/<id>/labels
+			switch r.Method {
+			case http.MethodGet:
+				labels, err := store.ListLabels(db, projectID)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, labels)
+			case http.MethodPost:
+				var req struct {
+					Name  string `json:"name"`
+					Color string `json:"color"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				label, err := store.CreateLabel(db, projectID, req.Name, req.Color)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusCreated, label)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			user, err := requireUser(db, r)
 			if err != nil {
@@ -2010,6 +2072,115 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+
+			if (len(parts) == 2 && parts[1] == "labels") || (len(parts) == 3 && parts[1] == "labels") {
+				if len(parts) == 3 {
+					// /api/tickets/<ref>/labels/<label_id>
+					var labelID int64
+					if _, err := fmt.Sscan(parts[2], &labelID); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid label id")
+						return
+					}
+					if r.Method == http.MethodDelete {
+						if !canWriteProject(role) {
+							writeAuthError(w, store.ErrForbidden)
+							return
+						}
+						if err := store.RemoveTicketLabel(db, id, labelID); err != nil {
+							writeError(w, http.StatusBadRequest, err.Error())
+							return
+						}
+						writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+						return
+					}
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+					return
+				}
+				switch r.Method {
+				case http.MethodGet:
+					if !canReadProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					labels, err := store.ListTicketLabels(db, id)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, labels)
+				case http.MethodPost:
+					if !canWriteProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					var req struct {
+						LabelID int64 `json:"label_id"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					if err := store.AddTicketLabel(db, id, req.LabelID); err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, map[string]string{"status": "added"})
+				default:
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				}
+				return
+			}
+
+			if (len(parts) == 2 && parts[1] == "time") || (len(parts) == 3 && parts[1] == "time") {
+				if len(parts) == 3 && parts[2] == "total" {
+					if !canReadProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					total, err := store.TotalTimeForTicket(db, id)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, map[string]int{"total": total})
+					return
+				}
+				switch r.Method {
+				case http.MethodGet:
+					if !canReadProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					entries, err := store.ListTimeEntries(db, id)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
+					writeJSON(w, http.StatusOK, entries)
+				case http.MethodPost:
+					if !canWriteProject(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					var req struct {
+						Minutes int    `json:"minutes"`
+						Note    string `json:"note"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					entry, err := store.LogTime(db, id, user.ID, req.Minutes, req.Note)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					writeJSON(w, http.StatusCreated, entry)
+				default:
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				}
 				return
 			}
 

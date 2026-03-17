@@ -39,13 +39,6 @@ var legacyStateAliases = map[string]string{
 	StateComplete: StateSuccess,
 }
 
-var stageOrder = map[string]int{
-	StageDesign:  0,
-	StageDevelop: 1,
-	StageTest:    2,
-	StageDone:    3,
-}
-
 func ValidStage(stage string) bool {
 	return validStages[stage]
 }
@@ -76,22 +69,6 @@ func ValidLifecycle(stage, state string) bool {
 
 func RenderLifecycleStatus(stage, state string) string {
 	return stage + "/" + state
-}
-
-func CompareStageOrder(left, right string) int {
-	leftOrder, leftOK := stageOrder[left]
-	rightOrder, rightOK := stageOrder[right]
-	if !leftOK || !rightOK {
-		return 0
-	}
-	switch {
-	case leftOrder < rightOrder:
-		return -1
-	case leftOrder > rightOrder:
-		return 1
-	default:
-		return 0
-	}
 }
 
 func ParseLifecycleStatus(raw string) (string, string, error) {

@@ -982,3 +982,97 @@ func (s *LocalService) ImportWorkflow(export store.WorkflowExport) (store.Workfl
 	defer db.Close()
 	return store.ImportWorkflow(db, export)
 }
+
+func (s *LocalService) LogTime(ticketID int64, request TimeEntryRequest) (store.TimeEntry, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.TimeEntry{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.TimeEntry{}, err
+	}
+	return store.LogTime(db, ticketID, user.ID, request.Minutes, request.Note)
+}
+
+func (s *LocalService) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTimeEntries(db, ticketID)
+}
+
+func (s *LocalService) DeleteTimeEntry(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteTimeEntry(db, id)
+}
+
+func (s *LocalService) TotalTimeForTicket(ticketID int64) (int, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	return store.TotalTimeForTicket(db, ticketID)
+}
+
+func (s *LocalService) CreateLabel(projectID int64, request LabelRequest) (store.Label, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Label{}, err
+	}
+	defer db.Close()
+	return store.CreateLabel(db, projectID, request.Name, request.Color)
+}
+
+func (s *LocalService) ListLabels(projectID int64) ([]store.Label, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListLabels(db, projectID)
+}
+
+func (s *LocalService) DeleteLabel(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteLabel(db, id)
+}
+
+func (s *LocalService) AddTicketLabel(ticketID, labelID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.AddTicketLabel(db, ticketID, labelID)
+}
+
+func (s *LocalService) RemoveTicketLabel(ticketID, labelID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveTicketLabel(db, ticketID, labelID)
+}
+
+func (s *LocalService) ListTicketLabels(ticketID int64) ([]store.Label, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListTicketLabels(db, ticketID)
+}

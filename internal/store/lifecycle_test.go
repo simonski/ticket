@@ -56,14 +56,4 @@ func TestRenderLifecycleStatus(t *testing.T) {
 	}
 }
 
-func TestCompareStageOrder(t *testing.T) {
-	if got := CompareStageOrder(StageDesign, StageDevelop); got >= 0 {
-		t.Fatalf("CompareStageOrder(design, develop) = %d, want < 0", got)
-	}
-	if got := CompareStageOrder(StageDone, StageTest); got <= 0 {
-		t.Fatalf("CompareStageOrder(done, test) = %d, want > 0", got)
-	}
-	if got := CompareStageOrder(StageTest, StageTest); got != 0 {
-		t.Fatalf("CompareStageOrder(test, test) = %d, want 0", got)
-	}
-}
+

@@ -370,6 +370,36 @@ CREATE TABLE IF NOT EXISTS workflows (
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS labels (
+	label_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	color TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id),
+	UNIQUE(project_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_labels (
+	ticket_id INTEGER NOT NULL,
+	label_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(ticket_id, label_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(label_id) REFERENCES labels(label_id)
+);
+
+CREATE TABLE IF NOT EXISTS time_entries (
+	time_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	ticket_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	minutes INTEGER NOT NULL,
+	note TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
+
 CREATE TABLE IF NOT EXISTS workflow_stages (
 	workflow_stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	workflow_id INTEGER NOT NULL,

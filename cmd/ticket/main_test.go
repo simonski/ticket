@@ -72,6 +72,8 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  team",
 		"  agent",
 		"  workflow",
+		"  label",
+		"  time",
 		"  add",
 		"  get",
 		"  list",
@@ -1105,7 +1107,7 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			},
 		}, nil, []store.HistoryEvent{
 			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: 1, Payload: "{\"status\":\"design/idle\"}"},
-		}, nil)
+		}, nil, nil, 0)
 	})
 
 	for _, want := range []string{

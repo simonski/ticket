@@ -326,3 +326,43 @@ func (s *Service) ExportWorkflow(id int64) (store.WorkflowExport, error) {
 func (s *Service) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
 	return s.client.ImportWorkflow(export)
 }
+
+func (s *Service) LogTime(ticketID int64, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
+	return s.client.LogTime(ticketID, request)
+}
+
+func (s *Service) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
+	return s.client.ListTimeEntries(ticketID)
+}
+
+func (s *Service) DeleteTimeEntry(id int64) error {
+	return s.client.DeleteTimeEntry(id)
+}
+
+func (s *Service) TotalTimeForTicket(ticketID int64) (int, error) {
+	return s.client.TotalTimeForTicket(ticketID)
+}
+
+func (s *Service) CreateLabel(projectID int64, request libticket.LabelRequest) (store.Label, error) {
+	return s.client.CreateLabel(projectID, request)
+}
+
+func (s *Service) ListLabels(projectID int64) ([]store.Label, error) {
+	return s.client.ListLabels(projectID)
+}
+
+func (s *Service) DeleteLabel(id int64) error {
+	return s.client.DeleteLabel(id)
+}
+
+func (s *Service) AddTicketLabel(ticketID, labelID int64) error {
+	return s.client.AddTicketLabel(ticketID, labelID)
+}
+
+func (s *Service) RemoveTicketLabel(ticketID, labelID int64) error {
+	return s.client.RemoveTicketLabel(ticketID, labelID)
+}
+
+func (s *Service) ListTicketLabels(ticketID int64) ([]store.Label, error) {
+	return s.client.ListTicketLabels(ticketID)
+}

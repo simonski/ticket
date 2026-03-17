@@ -790,7 +790,7 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 		return ticket.ParentID, nil
 	}
 
-	// Find minimum stage among children (by workflow sort_order or fallback to text comparison)
+	// Find minimum stage among children by workflow sort_order
 	nextStage := children[0].Stage
 	nextWorkflowStageID := children[0].WorkflowStageID
 	minOrder := -1
@@ -813,15 +813,12 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 		if childState == StateFail {
 			anyFail = true
 		}
-		if child.WorkflowStageID != nil && minOrder >= 0 {
-			if o, err := GetWorkflowStageOrder(db, *child.WorkflowStageID); err == nil && o < minOrder {
+		if child.WorkflowStageID != nil {
+			if o, err := GetWorkflowStageOrder(db, *child.WorkflowStageID); err == nil && (minOrder < 0 || o < minOrder) {
 				minOrder = o
 				nextStage = child.Stage
 				nextWorkflowStageID = child.WorkflowStageID
 			}
-		} else if CompareStageOrder(child.Stage, nextStage) < 0 {
-			nextStage = child.Stage
-			nextWorkflowStageID = child.WorkflowStageID
 		}
 	}
 	nextState := StateIdle

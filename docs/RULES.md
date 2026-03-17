@@ -7,6 +7,8 @@
 - externalise strings to constants.go where possible
 - assess the drift between code and design and explain where you believe you are
 
+
+- `drift` means check for drift between documentation and implementation
 - `next` means pickup the next ticket or keep working on the currently assigned ticket
 - `review` means re-read TODO, DESIGN and USER_GUIDE against the code and and propose the next steps
 - `continue` means re-read TODO, DESIGN and USER_GUIDE against the continue the implementation

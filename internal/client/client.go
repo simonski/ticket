@@ -14,6 +14,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 type Client struct {
@@ -1648,4 +1649,142 @@ func (c *Client) ImportWorkflow(export store.WorkflowExport) (store.Workflow, er
 	var wf store.Workflow
 	err := c.doJSON(http.MethodPost, "/api/workflows/import", export, &wf)
 	return wf, err
+}
+
+func (c *Client) LogTime(ticketID int64, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.TimeEntry{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.TimeEntry{}, err
+		}
+		return store.LogTime(db, ticketID, user.ID, request.Minutes, request.Note)
+	}
+	var entry store.TimeEntry
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/time", ticketID), request, &entry)
+	return entry, err
+}
+
+func (c *Client) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListTimeEntries(db, ticketID)
+	}
+	var entries []store.TimeEntry
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/time", ticketID), nil, &entries)
+	return entries, err
+}
+
+func (c *Client) DeleteTimeEntry(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteTimeEntry(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/time/%d", id), nil, nil)
+}
+
+func (c *Client) TotalTimeForTicket(ticketID int64) (int, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return 0, err
+		}
+		defer db.Close()
+		return store.TotalTimeForTicket(db, ticketID)
+	}
+	var result struct {
+		Total int `json:"total"`
+	}
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/time/total", ticketID), nil, &result)
+	return result.Total, err
+}
+
+func (c *Client) CreateLabel(projectID int64, request libticket.LabelRequest) (store.Label, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Label{}, err
+		}
+		defer db.Close()
+		return store.CreateLabel(db, projectID, request.Name, request.Color)
+	}
+	var label store.Label
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/labels", projectID), request, &label)
+	return label, err
+}
+
+func (c *Client) ListLabels(projectID int64) ([]store.Label, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListLabels(db, projectID)
+	}
+	var labels []store.Label
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/labels", projectID), nil, &labels)
+	return labels, err
+}
+
+func (c *Client) DeleteLabel(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteLabel(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/labels/%d", id), nil, nil)
+}
+
+func (c *Client) AddTicketLabel(ticketID, labelID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.AddTicketLabel(db, ticketID, labelID)
+	}
+	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/labels", ticketID), map[string]int64{"label_id": labelID}, nil)
+}
+
+func (c *Client) RemoveTicketLabel(ticketID, labelID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.RemoveTicketLabel(db, ticketID, labelID)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/tickets/%d/labels/%d", ticketID, labelID), nil, nil)
+}
+
+func (c *Client) ListTicketLabels(ticketID int64) ([]store.Label, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListTicketLabels(db, ticketID)
+	}
+	var labels []store.Label
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/labels", ticketID), nil, &labels)
+	return labels, err
 }

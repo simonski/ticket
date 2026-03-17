@@ -55,6 +55,16 @@ type Service interface {
 	ReorderWorkflowStages(workflowID int64, stageIDs []int64) error
 	ExportWorkflow(id int64) (store.WorkflowExport, error)
 	ImportWorkflow(export store.WorkflowExport) (store.Workflow, error)
+	CreateLabel(projectID int64, request LabelRequest) (store.Label, error)
+	ListLabels(projectID int64) ([]store.Label, error)
+	DeleteLabel(id int64) error
+	AddTicketLabel(ticketID, labelID int64) error
+	RemoveTicketLabel(ticketID, labelID int64) error
+	ListTicketLabels(ticketID int64) ([]store.Label, error)
+	LogTime(ticketID int64, request TimeEntryRequest) (store.TimeEntry, error)
+	ListTimeEntries(ticketID int64) ([]store.TimeEntry, error)
+	DeleteTimeEntry(id int64) error
+	TotalTimeForTicket(ticketID int64) (int, error)
 	CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 	ListTickets(projectID int64) ([]store.Ticket, error)
 	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error)
