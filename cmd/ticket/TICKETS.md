@@ -73,16 +73,17 @@ tk unset-parent <child-id>
 
 Tickets have a two-part status: `stage/state` (e.g. `develop/active`, `done/success`).
 
-### Stage Commands
+### Workflow-Driven Stages
 
-Stages: `design`, `develop`, `test`, `done`
+Stages are defined by the project's workflow (an ordered sequence of stages). The default workflow has: `design → develop → test → done`.
+
+Stages advance automatically: when a ticket's state is set to `success`, it moves to the next workflow stage with state `idle`. On the final stage, `success` means the ticket is complete.
+
+You cannot set a ticket's stage directly — use state commands to drive progression.
 
 ```bash
-tk design <id>          # Set stage to design
-tk develop <id>         # Set stage to develop
-tk test <id>            # Set stage to test
-tk done <id>            # Set stage to done
-tk stage <id> develop   # Set stage directly
+# View a project's workflow stages
+tk workflow get -id <workflow-id>
 ```
 
 ### State Commands
@@ -91,16 +92,10 @@ States: `idle`, `active`, `success`, `fail`
 
 ```bash
 tk idle <id>            # Pause work
-tk complete <id>        # Mark success
+tk complete <id>        # Mark success (auto-advances stage)
 tk state <id> active    # Set state directly
-tk state <id> success
+tk state <id> success   # Completes current stage, advances to next
 tk state <id> fail
-```
-
-### Combined
-
-```bash
-tk update <id> --status develop/active
 ```
 
 ## Assignment
@@ -159,8 +154,8 @@ tk project init                    # Write .ticket.json in current dir
 
 ## Workflow Guidelines
 
-1. **Pick up work**: `tk list --status develop/idle`, then `tk claim <id>` and `tk develop <id>`
-2. **Track progress**: update status as you go (`active`, `test`, `done`)
+1. **Pick up work**: `tk list --status design/idle`, then `tk claim <id>` and `tk state <id> active`
+2. **Track progress**: `tk complete <id>` when stage work is done — auto-advances to next stage
 3. **File new issues**: create tickets for anything discovered during work
 4. **Comment**: leave context on tickets for future sessions
-5. **Complete work**: `tk done <id>` when finished, push code, update ticket status
+5. **Complete work**: keep completing stages until the ticket reaches the final stage with `success`

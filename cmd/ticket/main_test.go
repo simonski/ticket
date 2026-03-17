@@ -1105,7 +1105,7 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			},
 		}, nil, []store.HistoryEvent{
 			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: 1, Payload: "{\"status\":\"design/idle\"}"},
-		})
+		}, nil)
 	})
 
 	for _, want := range []string{
@@ -1135,6 +1135,22 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("printTicketDetails() missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestRenderWorkflowProgress(t *testing.T) {
+	noColorOutput = true
+	defer func() { noColorOutput = false }()
+	stages := []store.WorkflowStage{
+		{StageName: "design"},
+		{StageName: "develop"},
+		{StageName: "test"},
+		{StageName: "done"},
+	}
+	got := renderWorkflowProgress("develop", stages)
+	want := "design → [develop] → test → done"
+	if got != want {
+		t.Fatalf("renderWorkflowProgress() = %q, want %q", got, want)
 	}
 }
 

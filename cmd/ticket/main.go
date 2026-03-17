@@ -2931,7 +2931,14 @@ func runGet(args []string) error {
 	if outputJSON {
 		return printJSON(ticket)
 	}
-	printTicketDetails(ticket, dependencies, history)
+	// Look up workflow stages for progress display
+	var workflowStages []store.WorkflowStage
+	if project, err := svc.GetProject(fmt.Sprintf("%d", ticket.ProjectID)); err == nil && project.WorkflowID != nil {
+		if wf, err := svc.GetWorkflow(*project.WorkflowID); err == nil {
+			workflowStages = wf.Stages
+		}
+	}
+	printTicketDetails(ticket, dependencies, history, workflowStages)
 	return nil
 }
 
@@ -3402,7 +3409,7 @@ func runUpdate(args []string) error {
 	}
 	dependencies, _ := svc.ListDependencies(current.ID)
 	history, _ := svc.ListHistory(updated.ID)
-	printTicketDetails(updated, dependencies, history)
+	printTicketDetails(updated, dependencies, history, nil)
 	return nil
 }
 
@@ -4752,7 +4759,7 @@ func printTicket(ticket store.Ticket) {
 	}
 }
 
-func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent) {
+func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage) {
 	parentID := ""
 	if ticket.ParentID != nil {
 		parentID = fmt.Sprintf("%d", *ticket.ParentID)
@@ -4776,6 +4783,9 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 	fmt.Printf("Status       : %s\n", ticket.Status)
 	fmt.Printf("Stage        : %s\n", ticket.Stage)
 	fmt.Printf("State        : %s\n", ticket.State)
+	if len(workflowStages) > 0 {
+		fmt.Printf("Workflow     : %s\n", renderWorkflowProgress(ticket.Stage, workflowStages))
+	}
 	fmt.Printf("Open         : %s\n", ticketOpenLabel(ticket))
 	fmt.Printf("Archived     : %t\n", ticket.Archived)
 	fmt.Printf("Priority     : %d\n", ticket.Priority)
@@ -4798,6 +4808,22 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 			fmt.Println()
 		}
 	}
+}
+
+func renderWorkflowProgress(currentStage string, stages []store.WorkflowStage) string {
+	var parts []string
+	for _, s := range stages {
+		if s.StageName == currentStage {
+			if noColorOutput {
+				parts = append(parts, "["+s.StageName+"]")
+			} else {
+				parts = append(parts, "\x1b[1;32m"+s.StageName+"\x1b[0m")
+			}
+		} else {
+			parts = append(parts, s.StageName)
+		}
+	}
+	return strings.Join(parts, " → ")
 }
 
 func formatDependsOn(dependencies []store.Dependency) string {
