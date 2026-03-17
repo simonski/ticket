@@ -124,6 +124,8 @@ Projects are the top-level container for work items.
 - `key`
 - `project_id`
 - `parent_id`
+- `clone_of`
+- `workflow_stage_id`
 - `type`
 - `title`
 - `description`
@@ -132,26 +134,28 @@ Projects are the top-level container for work items.
 - `git_branch`
 - `stage`
 - `state`
+- `status` (rendered as `stage/state`)
 - `priority`
+- `order`
 - `estimate_effort`
 - `estimate_complete`
 - `assignee`
+- `health_score`
+- `open`
 - `comments`
 - `created_at`
 - `created_by`
 - `updated_at`
 - `archived`
 
-- stage: [design, develop, test, done]
-  design: the ticket is in design and not ready for development
-  develop: the ticket is ready for development
-  test: the ticket is in formal testing
-  done: it has completely passed
-- state: [idle, active, success, fail]
-  idle: it is not active in the stage
-  active: it is currently being worked in in the stage
-  success: it has completed this stage and is deemed a success
-  fail: it has completed this stage and is deemed a failuree
+Stages are defined by the project's workflow (default: design → develop → test → done).
+
+States: `idle`, `active`, `success`, `fail`
+
+- idle: not active in the stage
+- active: currently being worked on in the stage
+- success: completed this stage successfully (auto-advances to next workflow stage)
+- fail: completed this stage and deemed a failure
 
 
 Supported `type` values in the first release:
@@ -560,8 +564,8 @@ changes.
 
 The lifecycle model is:
 
-- stages: `design`, `develop`, `test`, `done`
-- states: `idle`, `active`, `complete`
+- stages: defined by the project's workflow (default: `design`, `develop`, `test`, `done`)
+- states: `idle`, `active`, `success`, `fail`
 - rendered status: `<stage>/<state>`
 
 The CLI and web app must both support easy lifecycle changes.
@@ -766,9 +770,18 @@ Suggested storage areas:
 1. users
 2. sessions
 3. projects
-4. tasks
+4. tickets
 5. ticket_history
 6. comments
+7. workflows
+8. workflow_stages
+9. labels
+10. ticket_labels
+11. time_entries
+12. roles
+13. agents
+14. teams
+15. dependencies
 
 ### Application Shape
 
