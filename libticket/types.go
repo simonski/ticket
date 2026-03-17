@@ -55,6 +55,22 @@ type TeamMemberRequest struct {
 	JobTitle string `json:"job_title"`
 }
 
+type WorkflowRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type WorkflowStageRequest struct {
+	StageName   string `json:"stage_name"`
+	Description string `json:"description"`
+	RoleID      *int64 `json:"role_id,omitempty"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+type WorkflowReorderRequest struct {
+	StageIDs []int64 `json:"stage_ids"`
+}
+
 type TicketCreateRequest struct {
 	ProjectID          int64  `json:"project_id"`
 	ParentID           *int64 `json:"parent_id,omitempty"`

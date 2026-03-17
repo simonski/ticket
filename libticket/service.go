@@ -46,6 +46,15 @@ type Service interface {
 	AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error)
 	RemoveTeamAgent(teamID, agentID int64) error
 	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
+	CreateWorkflow(request WorkflowRequest) (store.Workflow, error)
+	ListWorkflows() ([]store.Workflow, error)
+	GetWorkflow(id int64) (store.WorkflowWithStages, error)
+	DeleteWorkflow(id int64) error
+	AddWorkflowStage(workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error)
+	RemoveWorkflowStage(stageID int64) error
+	ReorderWorkflowStages(workflowID int64, stageIDs []int64) error
+	ExportWorkflow(id int64) (store.WorkflowExport, error)
+	ImportWorkflow(export store.WorkflowExport) (store.Workflow, error)
 	CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 	ListTickets(projectID int64) ([]store.Ticket, error)
 	ListTicketsFiltered(projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error)

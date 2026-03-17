@@ -351,6 +351,28 @@ CREATE TABLE IF NOT EXISTS project_teams (
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(team_id) REFERENCES teams(team_id)
 );
+
+CREATE TABLE IF NOT EXISTS workflows (
+	workflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE,
+	description TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS workflow_stages (
+	workflow_stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	workflow_id INTEGER NOT NULL,
+	stage_name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	role_id INTEGER,
+	sort_order INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
+	FOREIGN KEY(role_id) REFERENCES roles(role_id),
+	UNIQUE(workflow_id, stage_name)
+);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -584,6 +606,48 @@ func migrateSchema(db *sql.DB) error {
 	}
 	if err := seedDefaultRoles(db); err != nil {
 		return err
+	}
+	if err := seedDefaultWorkflow(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func seedDefaultWorkflow(db *sql.DB) error {
+	result, err := db.Exec(`INSERT OR IGNORE INTO workflows (name, description, updated_at) VALUES ('default', 'Standard engineering lifecycle', CURRENT_TIMESTAMP)`)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return nil // already seeded
+	}
+	wfID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	stages := []struct {
+		name      string
+		roleTitle string
+		order     int
+	}{
+		{"design", "BA", 0},
+		{"develop", "Lead Engineer", 1},
+		{"test", "QA/Tester", 2},
+		{"done", "Product Owner", 3},
+	}
+	for _, s := range stages {
+		var roleID *int64
+		role, err := GetRoleByTitle(db, s.roleTitle)
+		if err == nil {
+			roleID = &role.ID
+		}
+		if _, err := db.Exec(`
+			INSERT INTO workflow_stages (workflow_id, stage_name, role_id, sort_order, updated_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, wfID, s.name, roleID, s.order); err != nil {
+			return err
+		}
 	}
 	return nil
 }

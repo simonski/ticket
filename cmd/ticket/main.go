@@ -511,6 +511,8 @@ func run(args []string) error {
 		return runProject(trimmedArgs[1:])
 	case "team":
 		return runTeam(trimmedArgs[1:])
+	case "workflow":
+		return runWorkflow(trimmedArgs[1:])
 	case "ls":
 		return runList(trimmedArgs[1:])
 	case "list":
@@ -2341,6 +2343,240 @@ func printTeamAgentTable(items []store.TeamAgent) {
 	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tNAME\tENABLED\tSTATUS")
 	for _, item := range items {
 		fmt.Fprintf(w, "%d\t%d\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentName, item.Enabled, item.Status)
+	}
+	_ = w.Flush()
+}
+
+func runWorkflow(args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		workflows, err := svc.ListWorkflows()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(workflows)
+		}
+		printWorkflowTable(workflows)
+		return nil
+	}
+	switch args[0] {
+	case "list", "ls":
+		workflows, err := svc.ListWorkflows()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(workflows)
+		}
+		printWorkflowTable(workflows)
+		return nil
+	case "create", "add", "new":
+		fs := flag.NewFlagSet("workflow create", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		name := fs.String("name", "", "workflow name")
+		desc := fs.String("d", "", "workflow description")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *name == "" {
+			return errors.New("usage: ticket workflow create -name <name> [-d <description>]")
+		}
+		wf, err := svc.CreateWorkflow(libticket.WorkflowRequest{Name: *name, Description: *desc})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(wf)
+		}
+		fmt.Printf("workflow: %s\nworkflow_id: %d\n", wf.Name, wf.ID)
+		return nil
+	case "get":
+		fs := flag.NewFlagSet("workflow get", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "workflow id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("usage: ticket workflow get -id <id>")
+		}
+		wf, err := svc.GetWorkflow(*id)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(wf)
+		}
+		printWorkflowDetail(wf)
+		return nil
+	case "delete", "rm":
+		fs := flag.NewFlagSet("workflow delete", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "workflow id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("usage: ticket workflow delete -id <id>")
+		}
+		if err := svc.DeleteWorkflow(*id); err != nil {
+			return err
+		}
+		fmt.Printf("deleted workflow %d\n", *id)
+		return nil
+	case "add-stage":
+		fs := flag.NewFlagSet("workflow add-stage", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		wfID := fs.Int64("id", 0, "workflow id")
+		name := fs.String("name", "", "stage name")
+		desc := fs.String("d", "", "stage description")
+		roleID := fs.Int64("role", 0, "role id")
+		order := fs.Int("order", 0, "sort order")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *wfID == 0 || *name == "" {
+			return errors.New("usage: ticket workflow add-stage -id <workflow_id> -name <stage> [-role <role_id>] [-d <desc>] [-order <n>]")
+		}
+		var rID *int64
+		if *roleID > 0 {
+			rID = roleID
+		}
+		stage, err := svc.AddWorkflowStage(*wfID, libticket.WorkflowStageRequest{
+			StageName:   *name,
+			Description: *desc,
+			RoleID:      rID,
+			SortOrder:   *order,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(stage)
+		}
+		fmt.Printf("added stage: %s (id %d)\n", stage.StageName, stage.ID)
+		return nil
+	case "remove-stage":
+		fs := flag.NewFlagSet("workflow remove-stage", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		stageID := fs.Int64("stage-id", 0, "workflow stage id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *stageID == 0 {
+			return errors.New("usage: ticket workflow remove-stage -stage-id <id>")
+		}
+		if err := svc.RemoveWorkflowStage(*stageID); err != nil {
+			return err
+		}
+		fmt.Printf("removed stage %d\n", *stageID)
+		return nil
+	case "reorder-stages":
+		fs := flag.NewFlagSet("workflow reorder-stages", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		wfID := fs.Int64("id", 0, "workflow id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *wfID == 0 || fs.NArg() < 1 {
+			return errors.New("usage: ticket workflow reorder-stages -id <workflow_id> <stage_id,stage_id,...>")
+		}
+		parts := strings.Split(fs.Arg(0), ",")
+		ids := make([]int64, 0, len(parts))
+		for _, p := range parts {
+			v, err := strconv.ParseInt(strings.TrimSpace(p), 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid stage id %q", p)
+			}
+			ids = append(ids, v)
+		}
+		if err := svc.ReorderWorkflowStages(*wfID, ids); err != nil {
+			return err
+		}
+		fmt.Println("stages reordered")
+		return nil
+	case "export":
+		fs := flag.NewFlagSet("workflow export", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "workflow id")
+		outFile := fs.String("o", "", "output file (default stdout)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("usage: ticket workflow export -id <id> [-o file]")
+		}
+		export, err := svc.ExportWorkflow(*id)
+		if err != nil {
+			return err
+		}
+		data, err := json.MarshalIndent(export, "", "  ")
+		if err != nil {
+			return err
+		}
+		if *outFile != "" {
+			return os.WriteFile(*outFile, append(data, '\n'), 0o644)
+		}
+		fmt.Println(string(data))
+		return nil
+	case "import":
+		fs := flag.NewFlagSet("workflow import", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		inFile := fs.String("file", "", "input file")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *inFile == "" {
+			return errors.New("usage: ticket workflow import -file <file>")
+		}
+		data, err := os.ReadFile(*inFile)
+		if err != nil {
+			return err
+		}
+		var export store.WorkflowExport
+		if err := json.Unmarshal(data, &export); err != nil {
+			return err
+		}
+		wf, err := svc.ImportWorkflow(export)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(wf)
+		}
+		fmt.Printf("imported workflow: %s (id %d)\n", wf.Name, wf.ID)
+		return nil
+	default:
+		return fmt.Errorf("unknown workflow command %q", args[0])
+	}
+}
+
+func printWorkflowTable(workflows []store.Workflow) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION")
+	for _, wf := range workflows {
+		fmt.Fprintf(w, "%d\t%s\t%s\n", wf.ID, wf.Name, wf.Description)
+	}
+	_ = w.Flush()
+}
+
+func printWorkflowDetail(wf store.WorkflowWithStages) {
+	fmt.Printf("ID          : %d\n", wf.ID)
+	fmt.Printf("Name        : %s\n", wf.Name)
+	fmt.Printf("Description : %s\n", wf.Description)
+	fmt.Printf("Stages      :\n")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLE\tDESCRIPTION")
+	for _, s := range wf.Stages {
+		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, s.RoleTitle, s.Description)
 	}
 	_ = w.Flush()
 }
@@ -5035,6 +5271,7 @@ func renderRootUsage() string {
 		{"project", "Manage projects and active project context"},
 		{"team", "Manage teams, hierarchy, and team membership"},
 		{"agent", "Manage autonomous agents and run agent workers"},
+		{"workflow", "Manage workflow definitions and stages"},
 		{"add", "Create a ticket in the active project"},
 		{"get", "Show a ticket with history and comments"},
 		{"list", "List tickets in the active project"},

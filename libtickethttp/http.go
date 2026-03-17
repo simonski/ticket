@@ -290,3 +290,39 @@ func (s *Service) RequestTicket(request libticket.TicketRequest) (libticket.Tick
 	}
 	return libticket.TicketRequestResponse(response), nil
 }
+
+func (s *Service) CreateWorkflow(request libticket.WorkflowRequest) (store.Workflow, error) {
+	return s.client.CreateWorkflow(client.WorkflowRequest(request))
+}
+
+func (s *Service) ListWorkflows() ([]store.Workflow, error) {
+	return s.client.ListWorkflows()
+}
+
+func (s *Service) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
+	return s.client.GetWorkflow(id)
+}
+
+func (s *Service) DeleteWorkflow(id int64) error {
+	return s.client.DeleteWorkflow(id)
+}
+
+func (s *Service) AddWorkflowStage(workflowID int64, request libticket.WorkflowStageRequest) (store.WorkflowStage, error) {
+	return s.client.AddWorkflowStage(workflowID, client.WorkflowStageRequest(request))
+}
+
+func (s *Service) RemoveWorkflowStage(stageID int64) error {
+	return s.client.RemoveWorkflowStage(stageID)
+}
+
+func (s *Service) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error {
+	return s.client.ReorderWorkflowStages(workflowID, stageIDs)
+}
+
+func (s *Service) ExportWorkflow(id int64) (store.WorkflowExport, error) {
+	return s.client.ExportWorkflow(id)
+}
+
+func (s *Service) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
+	return s.client.ImportWorkflow(export)
+}

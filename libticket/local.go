@@ -908,3 +908,84 @@ func (s *LocalService) localUser(db *sql.DB) (store.User, error) {
 func LocalUsername() string {
 	return "admin"
 }
+
+func (s *LocalService) CreateWorkflow(request WorkflowRequest) (store.Workflow, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Workflow{}, err
+	}
+	defer db.Close()
+	return store.CreateWorkflow(db, request.Name, request.Description)
+}
+
+func (s *LocalService) ListWorkflows() ([]store.Workflow, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListWorkflows(db)
+}
+
+func (s *LocalService) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.WorkflowWithStages{}, err
+	}
+	defer db.Close()
+	return store.GetWorkflow(db, id)
+}
+
+func (s *LocalService) DeleteWorkflow(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteWorkflow(db, id)
+}
+
+func (s *LocalService) AddWorkflowStage(workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.WorkflowStage{}, err
+	}
+	defer db.Close()
+	return store.AddWorkflowStage(db, workflowID, request.StageName, request.Description, request.RoleID, request.SortOrder)
+}
+
+func (s *LocalService) RemoveWorkflowStage(stageID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveWorkflowStage(db, stageID)
+}
+
+func (s *LocalService) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.ReorderWorkflowStages(db, workflowID, stageIDs)
+}
+
+func (s *LocalService) ExportWorkflow(id int64) (store.WorkflowExport, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.WorkflowExport{}, err
+	}
+	defer db.Close()
+	return store.ExportWorkflow(db, id)
+}
+
+func (s *LocalService) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Workflow{}, err
+	}
+	defer db.Close()
+	return store.ImportWorkflow(db, export)
+}

@@ -71,6 +71,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  project",
 		"  team",
 		"  agent",
+		"  workflow",
 		"  add",
 		"  get",
 		"  list",
@@ -2174,6 +2175,80 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatalf("ReadFrom() error = %v", err)
 	}
 	return buf.String()
+}
+
+func TestRunWorkflowListInLocalMode(t *testing.T) {
+	setupLocalCLI(t)
+	output := captureStdout(t, func() {
+		if err := run([]string{"workflow", "list"}); err != nil {
+			t.Fatalf("workflow list error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "default") {
+		t.Fatalf("workflow list missing default workflow:\n%s", output)
+	}
+}
+
+func TestRunWorkflowGetShowsStages(t *testing.T) {
+	setupLocalCLI(t)
+	output := captureStdout(t, func() {
+		if err := run([]string{"workflow", "get", "-id", "1"}); err != nil {
+			t.Fatalf("workflow get error = %v", err)
+		}
+	})
+	for _, want := range []string{"design", "develop", "test", "done", "BA", "Lead Engineer", "QA/Tester", "Product Owner"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("workflow get missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunWorkflowCreateAndDelete(t *testing.T) {
+	setupLocalCLI(t)
+	output := captureStdout(t, func() {
+		if err := run([]string{"workflow", "create", "-name", "custom"}); err != nil {
+			t.Fatalf("workflow create error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "custom") {
+		t.Fatalf("workflow create missing name:\n%s", output)
+	}
+	// List should show both
+	output = captureStdout(t, func() {
+		if err := run([]string{"workflow", "list"}); err != nil {
+			t.Fatalf("workflow list error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "custom") {
+		t.Fatalf("workflow list missing custom:\n%s", output)
+	}
+}
+
+func TestRunWorkflowExportImportRoundTrip(t *testing.T) {
+	setupLocalCLI(t)
+	tmpFile := filepath.Join(t.TempDir(), "workflow.json")
+	// Export
+	if err := run([]string{"workflow", "export", "-id", "1", "-o", tmpFile}); err != nil {
+		t.Fatalf("workflow export error = %v", err)
+	}
+	// Modify the file to change the name so we can import
+	data, err := os.ReadFile(tmpFile)
+	if err != nil {
+		t.Fatalf("read export file error = %v", err)
+	}
+	modified := strings.Replace(string(data), `"default"`, `"imported"`, 1)
+	if err := os.WriteFile(tmpFile, []byte(modified), 0o644); err != nil {
+		t.Fatalf("write modified file error = %v", err)
+	}
+	// Import
+	output := captureStdout(t, func() {
+		if err := run([]string{"workflow", "import", "-file", tmpFile}); err != nil {
+			t.Fatalf("workflow import error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "imported") {
+		t.Fatalf("workflow import missing name:\n%s", output)
+	}
 }
 
 func normalizeTestPath(path string) string {

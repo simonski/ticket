@@ -81,6 +81,22 @@ type TeamMemberRequest struct {
 	JobTitle string `json:"job_title"`
 }
 
+type WorkflowRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type WorkflowStageRequest struct {
+	StageName   string `json:"stage_name"`
+	Description string `json:"description"`
+	RoleID      *int64 `json:"role_id,omitempty"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+type WorkflowReorderRequest struct {
+	StageIDs []int64 `json:"stage_ids"`
+}
+
 type TicketCreateRequest struct {
 	ProjectID          int64  `json:"project_id"`
 	ParentID           *int64 `json:"parent_id,omitempty"`
@@ -1517,4 +1533,124 @@ func (c *Client) doJSON(method, path string, body any, out any) error {
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func (c *Client) CreateWorkflow(request WorkflowRequest) (store.Workflow, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Workflow{}, err
+		}
+		defer db.Close()
+		return store.CreateWorkflow(db, request.Name, request.Description)
+	}
+	var wf store.Workflow
+	err := c.doJSON(http.MethodPost, "/api/workflows", request, &wf)
+	return wf, err
+}
+
+func (c *Client) ListWorkflows() ([]store.Workflow, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListWorkflows(db)
+	}
+	var workflows []store.Workflow
+	err := c.doJSON(http.MethodGet, "/api/workflows", nil, &workflows)
+	return workflows, err
+}
+
+func (c *Client) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.WorkflowWithStages{}, err
+		}
+		defer db.Close()
+		return store.GetWorkflow(db, id)
+	}
+	var wf store.WorkflowWithStages
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/workflows/%d", id), nil, &wf)
+	return wf, err
+}
+
+func (c *Client) DeleteWorkflow(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteWorkflow(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/workflows/%d", id), nil, nil)
+}
+
+func (c *Client) AddWorkflowStage(workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.WorkflowStage{}, err
+		}
+		defer db.Close()
+		return store.AddWorkflowStage(db, workflowID, request.StageName, request.Description, request.RoleID, request.SortOrder)
+	}
+	var stage store.WorkflowStage
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/workflows/%d/stages", workflowID), request, &stage)
+	return stage, err
+}
+
+func (c *Client) RemoveWorkflowStage(stageID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.RemoveWorkflowStage(db, stageID)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/workflows/stages/%d", stageID), nil, nil)
+}
+
+func (c *Client) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.ReorderWorkflowStages(db, workflowID, stageIDs)
+	}
+	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/workflows/%d/reorder", workflowID), WorkflowReorderRequest{StageIDs: stageIDs}, nil)
+}
+
+func (c *Client) ExportWorkflow(id int64) (store.WorkflowExport, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.WorkflowExport{}, err
+		}
+		defer db.Close()
+		return store.ExportWorkflow(db, id)
+	}
+	var export store.WorkflowExport
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/workflows/%d/export", id), nil, &export)
+	return export, err
+}
+
+func (c *Client) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Workflow{}, err
+		}
+		defer db.Close()
+		return store.ImportWorkflow(db, export)
+	}
+	var wf store.Workflow
+	err := c.doJSON(http.MethodPost, "/api/workflows/import", export, &wf)
+	return wf, err
 }

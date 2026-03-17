@@ -28,6 +28,8 @@ var snapshotTableOrder = []string{
 	"sessions",
 	"agents",
 	"roles",
+	"workflows",
+	"workflow_stages",
 	"projects",
 	"tickets",
 	"stories",
