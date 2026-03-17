@@ -28,6 +28,7 @@ type Project struct {
 	CreatedBy          int64  `json:"created_by"`
 	CreatedAt          string `json:"created_at"`
 	UpdatedAt          string `json:"updated_at"`
+	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }
 
 type ProjectCreateParams struct {
@@ -40,6 +41,7 @@ type ProjectCreateParams struct {
 	Notes              string
 	Visibility         string
 	CreatedBy          int64
+	WorkflowID         *int64
 }
 
 type ProjectUpdateParams struct {
@@ -50,6 +52,7 @@ type ProjectUpdateParams struct {
 	GitBranch          string
 	Notes              string
 	Visibility         string
+	WorkflowID         *int64
 }
 
 func CreateProject(db *sql.DB, title, description, acceptanceCriteria string, createdBy int64) (Project, error) {
@@ -86,9 +89,9 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 		return Project{}, err
 	}
 	result, err := db.Exec(`
-		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, params.CreatedBy)
+		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, created_by, workflow_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, params.CreatedBy, params.WorkflowID)
 	if err != nil {
 		return Project{}, err
 	}
@@ -106,7 +109,7 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 
 func ListProjects(db *sql.DB) ([]Project, error) {
 	rows, err := db.Query(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at, workflow_id
 		FROM projects
 		ORDER BY created_at, project_id
 	`)
@@ -118,7 +121,7 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 	projects := make([]Project, 0)
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.WorkflowID); err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -141,7 +144,7 @@ func ListProjectsVisibleToUser(db *sql.DB, user User) ([]Project, error) {
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, COALESCE(p.created_by, 0), p.created_at, p.updated_at
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, COALESCE(p.created_by, 0), p.created_at, p.updated_at, p.workflow_id
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -156,7 +159,7 @@ func ListProjectsVisibleToUser(db *sql.DB, user User) ([]Project, error) {
 	projects := make([]Project, 0)
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.WorkflowID); err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -174,12 +177,12 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 		return GetProjectByID(db, id)
 	}
 	row := db.QueryRow(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at, workflow_id
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
 	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.WorkflowID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -190,12 +193,12 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 
 func GetProjectByID(db *sql.DB, id int64) (Project, error) {
 	row := db.QueryRow(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at, workflow_id
 		FROM projects
 		WHERE project_id = ?
 	`, id)
 	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt); err != nil {
+	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.WorkflowID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -248,11 +251,15 @@ func UpdateProjectWithParams(db *sql.DB, id int64, params ProjectUpdateParams) (
 	if !validProjectVisibility(nextVisibility) {
 		return Project{}, fmt.Errorf("invalid project visibility %q", params.Visibility)
 	}
+	nextWorkflowID := params.WorkflowID
+	if nextWorkflowID == nil {
+		nextWorkflowID = current.WorkflowID
+	}
 	_, err = db.Exec(`
 		UPDATE projects
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, visibility = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, visibility = ?, workflow_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
-	`, nextTitle, nextDescription, nextAC, nextRepo, nextBranch, nextNotes, nextVisibility, id)
+	`, nextTitle, nextDescription, nextAC, nextRepo, nextBranch, nextNotes, nextVisibility, nextWorkflowID, id)
 	if err != nil {
 		return Project{}, err
 	}

@@ -48,6 +48,7 @@ type ProjectCreateRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
+	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }
 
 type ProjectUpdateRequest struct {
@@ -58,6 +59,7 @@ type ProjectUpdateRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
+	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }
 
 type ProjectMemberRequest struct {
@@ -676,6 +678,7 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
 			CreatedBy:          user.ID,
+			WorkflowID:         request.WorkflowID,
 		})
 	}
 	var project store.Project
@@ -726,6 +729,7 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
+			WorkflowID:         request.WorkflowID,
 		})
 	}
 	var project store.Project

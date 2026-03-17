@@ -1846,17 +1846,22 @@ Commands:
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitBranch := fs.String("git-branch", "", "project git branch")
+		workflowID := fs.Int64("workflow", 0, "workflow id to associate")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: ticket project create -title <title> -prefix <prefix> [-description text] [-ac text]")
+			return errors.New("usage: ticket project create -title <title> -prefix <prefix> [-description text] [-ac text] [-workflow id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
 		}
 		if strings.TrimSpace(*title) == "" {
 			return errors.New("project title is required")
+		}
+		var wfID *int64
+		if *workflowID > 0 {
+			wfID = workflowID
 		}
 		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
 			Prefix:             *prefix,
@@ -1865,6 +1870,7 @@ Commands:
 			AcceptanceCriteria: *acceptanceCriteria,
 			GitRepository:      strings.TrimSpace(*gitRepository),
 			GitBranch:          strings.TrimSpace(*gitBranch),
+			WorkflowID:         wfID,
 		})
 		if err != nil {
 			return err
@@ -2722,6 +2728,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitBranch := fs.String("git-branch", "", "project git branch")
+		workflowID := fs.Int64("workflow", 0, "workflow ID to associate with project")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -2745,12 +2752,21 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		if containsFlag(args[1:], "-git-branch") {
 			nextBranch = strings.TrimSpace(*gitBranch)
 		}
+		var nextWorkflowID *int64
+		if containsFlag(args[1:], "-workflow") {
+			if *workflowID > 0 {
+				nextWorkflowID = workflowID
+			}
+		} else {
+			nextWorkflowID = current.WorkflowID
+		}
 		project, err := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{
 			Title:              *title,
 			Description:        nextDescription,
 			AcceptanceCriteria: nextAC,
 			GitRepository:      nextRepo,
 			GitBranch:          nextBranch,
+			WorkflowID:         nextWorkflowID,
 		})
 		if err != nil {
 			return err
@@ -4722,6 +4738,9 @@ func printProject(project store.Project) {
 	}
 	if project.GitBranch != "" {
 		fmt.Printf("git_branch: %s\n", project.GitBranch)
+	}
+	if project.WorkflowID != nil {
+		fmt.Printf("workflow_id: %d\n", *project.WorkflowID)
 	}
 }
 

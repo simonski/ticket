@@ -82,12 +82,18 @@ func Init(path, adminUsername, adminPassword string) error {
 		return err
 	}
 
+	var defaultWorkflowID *int64
+	var wfID int64
+	if err := db.QueryRow(`SELECT workflow_id FROM workflows WHERE name = 'default'`).Scan(&wfID); err == nil {
+		defaultWorkflowID = &wfID
+	}
 	if _, err := CreateProjectWithParams(db, ProjectCreateParams{
 		Prefix:             defaultProjectPrefix,
 		Title:              "Default Project",
 		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
 		CreatedBy:          1,
+		WorkflowID:         defaultWorkflowID,
 	}); err != nil {
 		return err
 	}
@@ -191,7 +197,9 @@ CREATE TABLE IF NOT EXISTS projects (
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	ticket_sequence INTEGER NOT NULL DEFAULT 0,
-	FOREIGN KEY(created_by) REFERENCES users(user_id)
+	workflow_id INTEGER,
+	FOREIGN KEY(created_by) REFERENCES users(user_id),
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id)
 );
 
 CREATE TABLE IF NOT EXISTS tickets (
@@ -442,6 +450,11 @@ func migrateSchema(db *sql.DB) error {
 	}
 	if !columnExists(db, "projects", "visibility") {
 		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "projects", "workflow_id") {
+		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
 			return err
 		}
 	}

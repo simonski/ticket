@@ -1277,6 +1277,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
+				WorkflowID:         projectPayload.WorkflowID,
 			})
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
@@ -1648,6 +1649,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
+				WorkflowID:         projectPayload.WorkflowID,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
@@ -2443,6 +2445,7 @@ type projectRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
+	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }
 
 type roleRequest struct {

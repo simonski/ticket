@@ -367,6 +367,7 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 		Notes:              request.Notes,
 		Visibility:         request.Visibility,
 		CreatedBy:          user.ID,
+		WorkflowID:         request.WorkflowID,
 	})
 }
 
@@ -402,6 +403,7 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
 		Visibility:         request.Visibility,
+		WorkflowID:         request.WorkflowID,
 	})
 }
 

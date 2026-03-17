@@ -22,6 +22,7 @@ type ProjectCreateRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
+	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }
 
 type ProjectUpdateRequest struct {
@@ -32,6 +33,7 @@ type ProjectUpdateRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
+	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }
 
 type ProjectMemberRequest struct {
