@@ -579,4 +579,366 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RequestTicket(no work) = %#v", response)
 		}
 	})
+
+	t.Run("ticket-lifecycle-close-open-archive-delete", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Lifecycle"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Lifecycle Task",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		// GetTicketByID
+		got, err := svc.GetTicketByID(ticket.ID)
+		if err != nil {
+			t.Fatalf("GetTicketByID() error = %v", err)
+		}
+		if got.Title != "Lifecycle Task" {
+			t.Fatalf("GetTicketByID().Title = %q", got.Title)
+		}
+
+		// Close/Open
+		closed, err := svc.CloseTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("CloseTicket() error = %v", err)
+		}
+		if closed.Open {
+			t.Fatal("CloseTicket().Open = true, want false")
+		}
+
+		opened, err := svc.OpenTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("OpenTicket() error = %v", err)
+		}
+		if !opened.Open {
+			t.Fatal("OpenTicket().Open = false, want true")
+		}
+
+		// Archive/Unarchive
+		archived, err := svc.ArchiveTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("ArchiveTicket() error = %v", err)
+		}
+		if !archived.Archived {
+			t.Fatal("ArchiveTicket().Archived = false, want true")
+		}
+
+		unarchived, err := svc.UnarchiveTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("UnarchiveTicket() error = %v", err)
+		}
+		if unarchived.Archived {
+			t.Fatal("UnarchiveTicket().Archived = true, want false")
+		}
+
+		// SetTicketHealth
+		healthy, err := svc.SetTicketHealth(ticket.ID, 3)
+		if err != nil {
+			t.Fatalf("SetTicketHealth() error = %v", err)
+		}
+		if healthy.HealthScore != 3 {
+			t.Fatalf("SetTicketHealth().HealthScore = %d, want 3", healthy.HealthScore)
+		}
+
+		// SetTicketParent / UnsetTicketParent
+		child, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Child Task",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket(child) error = %v", err)
+		}
+
+		parented, err := svc.SetTicketParent(child.ID, ticket.ID)
+		if err != nil {
+			t.Fatalf("SetTicketParent() error = %v", err)
+		}
+		if parented.ParentID == nil || *parented.ParentID != ticket.ID {
+			t.Fatalf("SetTicketParent().ParentID = %v, want %d", parented.ParentID, ticket.ID)
+		}
+
+		unparented, err := svc.UnsetTicketParent(child.ID)
+		if err != nil {
+			t.Fatalf("UnsetTicketParent() error = %v", err)
+		}
+		if unparented.ParentID != nil {
+			t.Fatalf("UnsetTicketParent().ParentID = %v, want nil", unparented.ParentID)
+		}
+
+		// DeleteTicket
+		if err := svc.DeleteTicket(child.ID); err != nil {
+			t.Fatalf("DeleteTicket() error = %v", err)
+		}
+		if _, err := svc.GetTicketByID(child.ID); err == nil {
+			t.Fatal("GetTicketByID(deleted) error = nil")
+		}
+	})
+
+	t.Run("workflow-crud-and-stages", func(t *testing.T) {
+		svc := factory(t)
+
+		wf, err := svc.CreateWorkflow(libticket.WorkflowRequest{
+			Name:        "test-workflow",
+			Description: "A test workflow",
+		})
+		if err != nil {
+			t.Fatalf("CreateWorkflow() error = %v", err)
+		}
+		if wf.Name != "test-workflow" {
+			t.Fatalf("CreateWorkflow().Name = %q", wf.Name)
+		}
+
+		workflows, err := svc.ListWorkflows()
+		if err != nil {
+			t.Fatalf("ListWorkflows() error = %v", err)
+		}
+		var found bool
+		for _, w := range workflows {
+			if w.ID == wf.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ListWorkflows() missing created workflow")
+		}
+
+		stage1, err := svc.AddWorkflowStage(wf.ID, libticket.WorkflowStageRequest{
+			StageName: "alpha",
+			SortOrder: 0,
+		})
+		if err != nil {
+			t.Fatalf("AddWorkflowStage(alpha) error = %v", err)
+		}
+
+		stage2, err := svc.AddWorkflowStage(wf.ID, libticket.WorkflowStageRequest{
+			StageName: "beta",
+			SortOrder: 1,
+		})
+		if err != nil {
+			t.Fatalf("AddWorkflowStage(beta) error = %v", err)
+		}
+
+		withStages, err := svc.GetWorkflow(wf.ID)
+		if err != nil {
+			t.Fatalf("GetWorkflow() error = %v", err)
+		}
+		if len(withStages.Stages) != 2 {
+			t.Fatalf("GetWorkflow().Stages len = %d, want 2", len(withStages.Stages))
+		}
+
+		// Reorder stages
+		if err := svc.ReorderWorkflowStages(wf.ID, []int64{stage2.ID, stage1.ID}); err != nil {
+			t.Fatalf("ReorderWorkflowStages() error = %v", err)
+		}
+
+		reordered, err := svc.GetWorkflow(wf.ID)
+		if err != nil {
+			t.Fatalf("GetWorkflow() after reorder error = %v", err)
+		}
+		if reordered.Stages[0].StageName != "beta" {
+			t.Fatalf("ReorderWorkflowStages() first stage = %q, want beta", reordered.Stages[0].StageName)
+		}
+
+		// Export/Import
+		exported, err := svc.ExportWorkflow(wf.ID)
+		if err != nil {
+			t.Fatalf("ExportWorkflow() error = %v", err)
+		}
+		if exported.Name != "test-workflow" || len(exported.Stages) != 2 {
+			t.Fatalf("ExportWorkflow() = %#v", exported)
+		}
+
+		exported.Name = "imported-workflow"
+		imported, err := svc.ImportWorkflow(exported)
+		if err != nil {
+			t.Fatalf("ImportWorkflow() error = %v", err)
+		}
+		if imported.Name != "imported-workflow" {
+			t.Fatalf("ImportWorkflow().Name = %q", imported.Name)
+		}
+
+		// RemoveWorkflowStage
+		if err := svc.RemoveWorkflowStage(stage1.ID); err != nil {
+			t.Fatalf("RemoveWorkflowStage() error = %v", err)
+		}
+
+		afterRemove, err := svc.GetWorkflow(wf.ID)
+		if err != nil {
+			t.Fatalf("GetWorkflow() after remove error = %v", err)
+		}
+		if len(afterRemove.Stages) != 1 {
+			t.Fatalf("GetWorkflow().Stages after remove len = %d, want 1", len(afterRemove.Stages))
+		}
+
+		// DeleteWorkflow
+		if err := svc.DeleteWorkflow(wf.ID); err != nil {
+			t.Fatalf("DeleteWorkflow() error = %v", err)
+		}
+	})
+
+	t.Run("role-crud", func(t *testing.T) {
+		svc := factory(t)
+
+		role, err := svc.CreateRole(libticket.RoleRequest{
+			Title:      "Tester",
+			Motivation: "Ensure quality",
+			Goals:      "Find bugs",
+		})
+		if err != nil {
+			t.Fatalf("CreateRole() error = %v", err)
+		}
+		if role.Title != "Tester" {
+			t.Fatalf("CreateRole().Title = %q", role.Title)
+		}
+
+		roles, err := svc.ListRoles()
+		if err != nil {
+			t.Fatalf("ListRoles() error = %v", err)
+		}
+		var foundRole bool
+		for _, r := range roles {
+			if r.ID == role.ID {
+				foundRole = true
+			}
+		}
+		if !foundRole {
+			t.Fatal("ListRoles() missing created role")
+		}
+
+		updated, err := svc.UpdateRole(role.ID, libticket.RoleRequest{
+			Title:      "Senior Tester",
+			Motivation: "Lead quality",
+			Goals:      "Zero defects",
+		})
+		if err != nil {
+			t.Fatalf("UpdateRole() error = %v", err)
+		}
+		if updated.Title != "Senior Tester" {
+			t.Fatalf("UpdateRole().Title = %q", updated.Title)
+		}
+
+		if err := svc.DeleteRole(role.ID); err != nil {
+			t.Fatalf("DeleteRole() error = %v", err)
+		}
+	})
+
+	t.Run("team-crud-and-membership", func(t *testing.T) {
+		svc := factory(t)
+
+		team, err := svc.CreateTeam(libticket.TeamRequest{Name: "Platform"})
+		if err != nil {
+			t.Fatalf("CreateTeam() error = %v", err)
+		}
+		if team.Name != "Platform" {
+			t.Fatalf("CreateTeam().Name = %q", team.Name)
+		}
+
+		teams, err := svc.ListTeams()
+		if err != nil {
+			t.Fatalf("ListTeams() error = %v", err)
+		}
+		var foundTeam bool
+		for _, tm := range teams {
+			if tm.ID == team.ID {
+				foundTeam = true
+			}
+		}
+		if !foundTeam {
+			t.Fatal("ListTeams() missing created team")
+		}
+
+		updatedTeam, err := svc.UpdateTeam(team.ID, libticket.TeamRequest{Name: "Infrastructure"})
+		if err != nil {
+			t.Fatalf("UpdateTeam() error = %v", err)
+		}
+		if updatedTeam.Name != "Infrastructure" {
+			t.Fatalf("UpdateTeam().Name = %q", updatedTeam.Name)
+		}
+
+		// Team members
+		user, err := svc.CreateUser("team-member", "secret")
+		if err != nil {
+			t.Fatalf("CreateUser() error = %v", err)
+		}
+
+		member, err := svc.AddTeamMember(team.ID, libticket.TeamMemberRequest{
+			UserID: user.ID,
+			Role:   "member",
+		})
+		if err != nil {
+			t.Fatalf("AddTeamMember() error = %v", err)
+		}
+		if member.UserID != user.ID {
+			t.Fatalf("AddTeamMember().UserID = %d", member.UserID)
+		}
+
+		members, err := svc.ListTeamMembers(team.ID)
+		if err != nil {
+			t.Fatalf("ListTeamMembers() error = %v", err)
+		}
+		memberCountBefore := len(members)
+
+		if err := svc.RemoveTeamMember(team.ID, user.ID); err != nil {
+			t.Fatalf("RemoveTeamMember() error = %v", err)
+		}
+
+		membersAfter, err := svc.ListTeamMembers(team.ID)
+		if err != nil {
+			t.Fatalf("ListTeamMembers() after remove error = %v", err)
+		}
+		if len(membersAfter) != memberCountBefore-1 {
+			t.Fatalf("ListTeamMembers() after remove len = %d, want %d", len(membersAfter), memberCountBefore-1)
+		}
+
+		// Remove remaining members before deleting team (HTTP adds creator as member)
+		for _, m := range membersAfter {
+			_ = svc.RemoveTeamMember(team.ID, m.UserID)
+		}
+
+		if err := svc.DeleteTeam(team.ID); err != nil {
+			t.Fatalf("DeleteTeam() error = %v", err)
+		}
+	})
+
+	t.Run("count", func(t *testing.T) {
+		svc := factory(t)
+
+		summary, err := svc.Count(nil)
+		if err != nil {
+			t.Fatalf("Count() error = %v", err)
+		}
+		if summary.Projects == 0 {
+			t.Fatal("Count().Projects = 0, want > 0")
+		}
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Counted"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+		if _, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Count Me",
+		}); err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		scoped, err := svc.Count(&project.ID)
+		if err != nil {
+			t.Fatalf("Count(projectID) error = %v", err)
+		}
+		if len(scoped.Types) == 0 {
+			t.Fatal("Count(projectID).Types is empty, want > 0")
+		}
+	})
 }

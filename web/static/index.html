@@ -609,6 +609,9 @@
       .state-success { background: var(--success); }
       .state-fail { background: var(--fail); }
 
+      .card-labels { display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.3rem; }
+      .card-label { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 2px; background: var(--line); color: var(--muted); }
+
       .ticket.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
 
       .search-overlay {
@@ -1273,6 +1276,11 @@
             <div class="row" style="gap:0.3rem;">
               <select id="ticket-label-select" style="flex:1;"><option value="">-- add label --</option></select>
               <button id="ticket-label-add" class="btn" type="button" style="white-space:nowrap;">+ Label</button>
+            </div>
+            <div class="row" style="gap:0.3rem;">
+              <input id="ticket-label-new-name" type="text" placeholder="new label name" style="flex:1;">
+              <input id="ticket-label-new-color" type="color" value="#888888" style="width:36px;padding:0.15rem;" title="Label color">
+              <button id="ticket-label-create" class="btn" type="button" style="white-space:nowrap;">Create</button>
             </div>
           </div>
           <div id="ticket-time-section" class="stack" style="margin-top:0.6rem; display:none;">
@@ -2792,6 +2800,8 @@
       let roles = [];
       let teams = [];
       let tickets = [];
+      let ticketLabelsMap = {};
+      let projectLabels = [];
       let selectedAgentID = 0;
       let selectedRoleID = 0;
       let selectedTeamID = 0;
@@ -3952,6 +3962,18 @@
             throw error;
           }
           if (seq !== ticketLoadSeq) return;
+          // Load project labels and per-ticket labels in parallel
+          try {
+            projectLabels = await call(`/api/projects/${projectID}/labels`, { headers: headers() }) || [];
+          } catch { projectLabels = []; }
+          const labelMap = {};
+          await Promise.all(tickets.map(async (t) => {
+            try {
+              labelMap[t.ticket_id] = await call(`/api/tickets/${t.ticket_id}/labels`, { headers: headers() }) || [];
+            } catch { labelMap[t.ticket_id] = []; }
+          }));
+          if (seq !== ticketLoadSeq) return;
+          ticketLabelsMap = labelMap;
           refreshTicketViews();
         })();
         ticketLoadPromise = load;
@@ -4006,12 +4028,16 @@
             const card = document.createElement("article");
             card.className = "ticket";
             card.draggable = true;
+            const cardLabels = (ticketLabelsMap[ticket.ticket_id] || [])
+              .map(l => `<span class="card-label" ${l.color ? `style="border-left:2px solid ${escape(l.color)}"` : ""}>${escape(l.name)}</span>`)
+              .join("");
             card.innerHTML = `
               <div class="ticket-top">
                 <strong>${escape(ticket.title)}</strong>
                 <span class="muted">${escape(ticket.key || "#" + ticket.ticket_id)}</span>
               </div>
               <div class="muted">${escape(ticket.type)} · ${escape(ticket.state)}</div>
+              ${cardLabels ? `<div class="card-labels">${cardLabels}</div>` : ""}
               <div class="state-line ${stateColorClass(ticket.state)}"></div>
             `;
             card.dataset.ticketId = String(ticket.ticket_id);
@@ -4294,7 +4320,7 @@
         document.getElementById("ticket-title").focus();
         loadTicketLabels(ticket.ticket_id);
         loadTicketTime(ticket.ticket_id);
-        loadProjectLabels();
+        loadProjectLabelsDropdown();
       }
 
       function modalValues() {
@@ -4326,20 +4352,15 @@
         ticketAnalyseBtn.disabled = !(ticket.ticket_id && ticket.type === "epic");
       }
 
-      async function loadProjectLabels() {
-        const pid = selectedProjectID();
-        if (!pid) return;
-        try {
-          const labels = await call(`/api/projects/${pid}/labels`, { headers: headers() });
-          const sel = document.getElementById("ticket-label-select");
-          sel.innerHTML = '<option value="">-- add label --</option>';
-          for (const l of labels) {
-            const opt = document.createElement("option");
-            opt.value = l.label_id;
-            opt.textContent = l.name;
-            sel.appendChild(opt);
-          }
-        } catch (e) { /* ignore */ }
+      function loadProjectLabelsDropdown() {
+        const sel = document.getElementById("ticket-label-select");
+        sel.innerHTML = '<option value="">-- add label --</option>';
+        for (const l of projectLabels) {
+          const opt = document.createElement("option");
+          opt.value = l.label_id;
+          opt.textContent = l.name;
+          sel.appendChild(opt);
+        }
       }
 
       async function loadTicketLabels(ticketID) {
@@ -4902,6 +4923,30 @@
           loadTicketLabels(draft.ticket.ticket_id);
         } catch (err) {
           appStatus.textContent = `Add label failed: ${err.message}`;
+        }
+      });
+
+      document.getElementById("ticket-label-create").addEventListener("click", async () => {
+        const pid = selectedProjectID();
+        if (!pid) return;
+        const nameInput = document.getElementById("ticket-label-new-name");
+        const colorInput = document.getElementById("ticket-label-new-color");
+        const name = nameInput.value.trim();
+        if (!name) return;
+        try {
+          await call(`/api/projects/${pid}/labels`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ name, color: colorInput.value }),
+          });
+          nameInput.value = "";
+          // Refresh project labels cache and dropdown
+          try {
+            projectLabels = await call(`/api/projects/${pid}/labels`, { headers: headers() }) || [];
+          } catch { /* ignore */ }
+          loadProjectLabelsDropdown();
+        } catch (err) {
+          appStatus.textContent = `Create label failed: ${err.message}`;
         }
       });
 

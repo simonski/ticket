@@ -55,6 +55,10 @@ tk create -t task -title "Fix signup" -d "Description here" -ac "Acceptance crit
 
 # Create and specify priority/estimates
 tk add -title "Urgent fix" -priority 1 -effort 3
+
+# Shorthand typed creation
+tk note "Meeting notes from standup"
+tk question "Should we migrate to Postgres?"
 ```
 
 ## Updating Work
@@ -145,6 +149,32 @@ tk time delete -id <entry-id>
 ```bash
 # Kanban-style view grouped by workflow stage
 tk board
+```
+
+## Requirements and Decisions
+
+```bash
+# Curate a requirement from existing tickets
+tk curate <id> [id...]
+
+# Review requirements by status
+tk review
+tk review -status proposed
+tk review -status accepted
+
+# Accept or reject a requirement
+tk accept requirement <id>
+tk reject requirement <id>
+
+# Mark a requirement as revised
+tk revise requirement <id>
+
+# Record and list decisions
+tk decision add "Use Postgres for production"
+tk decision list
+
+# View ticket conversation (history + comments)
+tk conversation show <id>
 ```
 
 ## Comments and History
