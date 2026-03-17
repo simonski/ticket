@@ -186,6 +186,69 @@ CLI creation defaults:
 - if `-parent` is omitted, the ticket is created without a parent
 - if `-project` is omitted, the active project is used
 
+### Workflow
+
+Workflows define the ordered sequence of stages a ticket progresses through.
+
+- `workflow_id`
+- `name`
+- `description`
+- `created_at`
+- `updated_at`
+
+Each workflow has an ordered set of stages:
+
+- `workflow_stage_id`
+- `workflow_id`
+- `stage_name`
+- `description`
+- `role_id` (optional, links to a Role for agent persona context)
+- `sort_order`
+- `created_at`
+- `updated_at`
+
+Notes:
+
+- a default workflow is seeded on init with stages: design → develop → test → done
+- each stage can be linked to a role, giving agents persona context when working that stage
+- projects reference a workflow; tickets inherit stages from their project's workflow
+- when a ticket's state is set to `success`, it auto-advances to the next workflow stage with state `idle`
+- on the final stage, `success` means the ticket is complete
+- workflows can be exported/imported as JSON for portability between instances
+
+### Label
+
+Labels are project-scoped tags for categorising tickets.
+
+- `label_id`
+- `project_id`
+- `name`
+- `color`
+- `created_at`
+
+Notes:
+
+- labels are unique per project (project_id + name)
+- tickets can have multiple labels via the `ticket_labels` join table
+- deleting a label cascades to remove all ticket associations
+
+### Time Entry
+
+Time entries track effort logged against tickets.
+
+- `time_entry_id`
+- `ticket_id`
+- `user_id`
+- `minutes`
+- `note`
+- `created_at`
+
+Notes:
+
+- minutes must be positive
+- entries are per-user, allowing per-person effort tracking
+- total time for a ticket is the sum of all its entries
+
 ### History
 
 Append-only audit log for important changes.
@@ -760,29 +823,40 @@ The product is successful if a user can:
 
 ## Ticket Lifecycle
 
-The lifecycle of a ticket is:
-    stage: design | develop | test | done
-    state: idle | active | complete
-    status: <stage>/<state>
+Tickets have a two-part status: `stage/state` (e.g. `develop/active`, `done/success`).
 
-This is set using
-    `ticket design N`
-    `ticket develop N`
-    `ticket test N`
-    `ticket done N`
-    `ticket idle N`
-    `ticket active N`
-    `ticket complete N`
-or
-    `ticket update N -status <stage/state>`
-    `ticket update N -title <title>`
-    `ticket update N -description <description>`
-    `ticket update N -ac <acceptance-criteria>`
-    `ticket update N -priority <priority>`
-    `ticket update N -order <order>`
-    `ticket update N -parent_id <parent-id>`
-    `ticket update N -estimate_effort <effort>`
-    `ticket update N -estimate_complete <rfc3339-datetime>`
+### Workflow-Driven Stages
+
+Stages are defined by the project's workflow (an ordered sequence of stages). The default workflow has: `design → develop → test → done`.
+
+Stages advance automatically: when a ticket's state is set to `success`, it moves to the next workflow stage with state `idle`. On the final stage, `success` means the ticket is complete.
+
+You cannot set a ticket's stage directly — use state commands to drive progression.
+
+### State Commands
+
+States: `idle`, `active`, `success`, `fail`
+
+```bash
+ticket idle N            # Pause work
+ticket complete N        # Mark success (auto-advances stage)
+ticket state N active    # Set state directly
+ticket state N success   # Completes current stage, advances to next
+ticket state N fail
+```
+
+### Other Update Commands
+
+```bash
+ticket update N -title <title>
+ticket update N -description <description>
+ticket update N -ac <acceptance-criteria>
+ticket update N -priority <priority>
+ticket update N -order <order>
+ticket update N -parent_id <parent-id>
+ticket update N -estimate_effort <effort>
+ticket update N -estimate_complete <rfc3339-datetime>
+```
 
 ## Requesting Tickets
 

@@ -512,6 +512,8 @@ func run(args []string) error {
 		return runTeam(trimmedArgs[1:])
 	case "workflow":
 		return runWorkflow(trimmedArgs[1:])
+	case "board":
+		return runBoard(trimmedArgs[1:])
 	case "label":
 		return runLabel(trimmedArgs[1:])
 	case "time":
@@ -3043,11 +3045,12 @@ func runList(args []string) error {
 	useUnicode := fs.Bool("unicode", true, "render status symbols as unicode")
 	plain := fs.Bool("plain", false, "render status as plain text")
 	includeArchived := fs.Bool("a", false, "include archived tickets")
+	labelFilter := fs.String("label", "", "filter by label name")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *limit < 0 {
-		return errors.New("usage: ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a]")
+		return errors.New("usage: ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a] [--label <name>]")
 	}
 	statusUnicode := *useUnicode && !*plain
 	resolvedStage, resolvedState, err := resolveLifecycleInput(*status, *stage, *state)
@@ -3061,6 +3064,22 @@ func runList(args []string) error {
 	tickets, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit, *includeArchived)
 	if err != nil {
 		return err
+	}
+	if *labelFilter != "" {
+		filtered := tickets[:0]
+		for _, ticket := range tickets {
+			labels, err := api.ListTicketLabels(ticket.ID)
+			if err != nil {
+				return err
+			}
+			for _, l := range labels {
+				if strings.EqualFold(l.Name, *labelFilter) {
+					filtered = append(filtered, ticket)
+					break
+				}
+			}
+		}
+		tickets = filtered
 	}
 	if len(tickets) == 0 {
 		if outputJSON {
@@ -3088,6 +3107,75 @@ func runList(args []string) error {
 		}
 	}
 	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeArchived, workflowStages)
+	return nil
+}
+
+func runBoard(args []string) error {
+	fs := flag.NewFlagSet("board", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	includeArchived := fs.Bool("a", false, "include archived tickets")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_, api, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+	tickets, err := api.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, *includeArchived)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(tickets)
+	}
+	var workflowStages []store.WorkflowStage
+	if project.WorkflowID != nil {
+		if wf, err := api.GetWorkflow(*project.WorkflowID); err == nil {
+			workflowStages = wf.Stages
+		}
+	}
+	if len(workflowStages) == 0 {
+		fmt.Println("no workflow stages defined for this project")
+		return nil
+	}
+
+	// Group tickets by stage
+	byStage := make(map[string][]store.Ticket)
+	for _, t := range tickets {
+		byStage[t.Stage] = append(byStage[t.Stage], t)
+	}
+
+	// Print each stage as a lane
+	for _, ws := range workflowStages {
+		stageTickets := byStage[ws.StageName]
+		fmt.Printf("── %s (%d) ──\n", strings.ToUpper(ws.StageName), len(stageTickets))
+		if len(stageTickets) == 0 {
+			fmt.Println("  (empty)")
+		}
+		for _, t := range stageTickets {
+			assignee := t.Assignee
+			if strings.TrimSpace(assignee) == "" {
+				assignee = "-"
+			}
+			key := t.Key
+			if strings.TrimSpace(key) == "" {
+				key = strconv.FormatInt(t.ID, 10)
+			}
+			stateIcon := ""
+			switch t.State {
+			case "idle":
+				stateIcon = "○"
+			case "active":
+				stateIcon = "◑"
+			case "success":
+				stateIcon = "◉"
+			case "fail":
+				stateIcon = "✗"
+			}
+			fmt.Printf("  %s %s  %s  [%s]  @%s\n", stateIcon, key, t.Title, t.Type, assignee)
+		}
+		fmt.Println()
+	}
 	return nil
 }
 
@@ -5452,6 +5540,7 @@ func renderRootUsage() string {
 		{"time", "Log and view time entries on tickets"},
 		{"add", "Create a ticket in the active project"},
 		{"get", "Show a ticket with history and comments"},
+		{"board", "Kanban-style board grouped by workflow stage"},
 		{"list", "List tickets in the active project"},
 		{"search", "Search tickets in the active project or across all projects"},
 		{"update", "Update a ticket"},

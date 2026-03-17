@@ -76,6 +76,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  time",
 		"  add",
 		"  get",
+		"  board",
 		"  list",
 		"  search",
 		"  update",

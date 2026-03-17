@@ -248,6 +248,84 @@ test("ticket modal scroll stays inside the popup", async ({ page }) => {
   expect(scrollState.modalScrollTop).toBeGreaterThan(0);
 });
 
+test("ticket modal shows labels and time tracking sections for existing tickets", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(() => {
+    if (typeof showApp !== "function" || typeof openEdit !== "function") return null;
+    showApp("alice", "user");
+    openEdit({
+      ticket_id: 42,
+      key: "TK-42",
+      type: "task",
+      title: "Labels and Time Test",
+      description: "",
+      acceptance_criteria: "",
+      git_repository: "",
+      git_branch: "",
+      stage: "design",
+      state: "idle",
+      open: true,
+      archived: false,
+    });
+    const labelsSection = document.getElementById("ticket-labels-section");
+    const timeSection = document.getElementById("ticket-time-section");
+    const labelSelect = document.getElementById("ticket-label-select");
+    const labelAddBtn = document.getElementById("ticket-label-add");
+    const timeMinutes = document.getElementById("ticket-time-minutes");
+    const timeNote = document.getElementById("ticket-time-note");
+    const timeLogBtn = document.getElementById("ticket-time-log");
+    if (!labelsSection || !timeSection) return null;
+    return {
+      labelsVisible: labelsSection.style.display !== "none",
+      timeVisible: timeSection.style.display !== "none",
+      hasLabelSelect: !!labelSelect,
+      hasLabelAddBtn: !!labelAddBtn,
+      labelAddText: labelAddBtn ? labelAddBtn.textContent : "",
+      hasTimeMinutes: !!timeMinutes,
+      hasTimeNote: !!timeNote,
+      hasTimeLogBtn: !!timeLogBtn,
+      timeLogText: timeLogBtn ? timeLogBtn.textContent : "",
+    };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.labelsVisible).toBe(true);
+  expect(result.timeVisible).toBe(true);
+  expect(result.hasLabelSelect).toBe(true);
+  expect(result.hasLabelAddBtn).toBe(true);
+  expect(result.labelAddText).toBe("+ Label");
+  expect(result.hasTimeMinutes).toBe(true);
+  expect(result.hasTimeNote).toBe(true);
+  expect(result.hasTimeLogBtn).toBe(true);
+  expect(result.timeLogText).toBe("+ Time");
+});
+
+test("new ticket modal hides labels and time sections", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(() => {
+    if (typeof showApp !== "function" || typeof openNew !== "function") return null;
+    showApp("alice", "user");
+    // Need a project selected
+    projects = [{ project_id: 1, title: "Test", prefix: "TK", status: "open" }];
+    if (typeof renderProjectDropdown === "function") renderProjectDropdown();
+    const projSelect = document.getElementById("project-select");
+    if (projSelect) projSelect.value = "1";
+    openNew();
+    const labelsSection = document.getElementById("ticket-labels-section");
+    const timeSection = document.getElementById("ticket-time-section");
+    return {
+      labelsHidden: labelsSection ? labelsSection.style.display === "none" : null,
+      timeHidden: timeSection ? timeSection.style.display === "none" : null,
+    };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.labelsHidden).toBe(true);
+  expect(result.timeHidden).toBe(true);
+});
+
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
   await page.goto("/");
 

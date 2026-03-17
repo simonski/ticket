@@ -1267,6 +1267,24 @@
               </tr>
             </tbody>
           </table>
+          <div id="ticket-labels-section" class="stack" style="margin-top:0.6rem; display:none;">
+            <strong style="font-size:0.85rem;">Labels</strong>
+            <div id="ticket-labels-list" class="row" style="flex-wrap:wrap; gap:0.3rem;"></div>
+            <div class="row" style="gap:0.3rem;">
+              <select id="ticket-label-select" style="flex:1;"><option value="">-- add label --</option></select>
+              <button id="ticket-label-add" class="btn" type="button" style="white-space:nowrap;">+ Label</button>
+            </div>
+          </div>
+          <div id="ticket-time-section" class="stack" style="margin-top:0.6rem; display:none;">
+            <strong style="font-size:0.85rem;">Time Tracking</strong>
+            <div id="ticket-time-total" class="muted" style="font-size:0.85rem;"></div>
+            <div id="ticket-time-entries" class="stack" style="gap:0.2rem; font-size:0.82rem;"></div>
+            <div class="row" style="gap:0.3rem;">
+              <input id="ticket-time-minutes" type="number" min="1" placeholder="minutes" style="width:80px;">
+              <input id="ticket-time-note" type="text" placeholder="note (optional)" style="flex:1;">
+              <button id="ticket-time-log" class="btn" type="button" style="white-space:nowrap;">+ Time</button>
+            </div>
+          </div>
           <div class="row ticket-form-actions">
             <button id="ticket-delete" class="btn" type="button">Delete</button>
             <button id="ticket-close-open" class="btn" type="button">Close</button>
@@ -4258,6 +4276,8 @@
           open: true,
           archived: false,
         });
+        document.getElementById("ticket-labels-section").style.display = "none";
+        document.getElementById("ticket-time-section").style.display = "none";
         modalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
         mainContent.classList.add("modal-open");
@@ -4272,6 +4292,9 @@
         document.body.classList.add("modal-open");
         mainContent.classList.add("modal-open");
         document.getElementById("ticket-title").focus();
+        loadTicketLabels(ticket.ticket_id);
+        loadTicketTime(ticket.ticket_id);
+        loadProjectLabels();
       }
 
       function modalValues() {
@@ -4301,6 +4324,82 @@
         document.getElementById("ticket-delete").disabled = !ticket.ticket_id;
         ticketAnalyseBtn.style.display = ticket.type === "epic" ? "" : "none";
         ticketAnalyseBtn.disabled = !(ticket.ticket_id && ticket.type === "epic");
+      }
+
+      async function loadProjectLabels() {
+        const pid = selectedProjectID();
+        if (!pid) return;
+        try {
+          const labels = await call(`/api/projects/${pid}/labels`, { headers: headers() });
+          const sel = document.getElementById("ticket-label-select");
+          sel.innerHTML = '<option value="">-- add label --</option>';
+          for (const l of labels) {
+            const opt = document.createElement("option");
+            opt.value = l.label_id;
+            opt.textContent = l.name;
+            sel.appendChild(opt);
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      async function loadTicketLabels(ticketID) {
+        const section = document.getElementById("ticket-labels-section");
+        const container = document.getElementById("ticket-labels-list");
+        if (!ticketID) { section.style.display = "none"; return; }
+        section.style.display = "";
+        try {
+          const labels = await call(`/api/tickets/${ticketID}/labels`, { headers: headers() });
+          container.innerHTML = "";
+          for (const l of labels) {
+            const tag = document.createElement("span");
+            tag.style.cssText = "padding:0.15rem 0.5rem;border-radius:3px;font-size:0.8rem;background:var(--line);display:inline-flex;align-items:center;gap:0.3rem;";
+            if (l.color) tag.style.borderLeft = `3px solid ${l.color}`;
+            tag.textContent = l.name;
+            const rm = document.createElement("button");
+            rm.textContent = "\u00d7";
+            rm.style.cssText = "background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:0;line-height:1;";
+            rm.onclick = async () => {
+              await call(`/api/tickets/${ticketID}/labels/${l.label_id}`, { method: "DELETE", headers: headers() });
+              loadTicketLabels(ticketID);
+            };
+            tag.appendChild(rm);
+            container.appendChild(tag);
+          }
+        } catch (e) { container.innerHTML = ""; }
+      }
+
+      async function loadTicketTime(ticketID) {
+        const section = document.getElementById("ticket-time-section");
+        const totalEl = document.getElementById("ticket-time-total");
+        const entriesEl = document.getElementById("ticket-time-entries");
+        if (!ticketID) { section.style.display = "none"; return; }
+        section.style.display = "";
+        try {
+          const entries = await call(`/api/tickets/${ticketID}/time`, { headers: headers() });
+          const totalResp = await call(`/api/tickets/${ticketID}/time/total`, { headers: headers() });
+          const total = totalResp.total || 0;
+          const hrs = Math.floor(total / 60);
+          const mins = total % 60;
+          totalEl.textContent = `Total: ${hrs > 0 ? hrs + "h " : ""}${mins}m (${total} min)`;
+          entriesEl.innerHTML = "";
+          for (const e of entries) {
+            const row = document.createElement("div");
+            row.className = "row";
+            row.style.cssText = "justify-content:space-between;align-items:center;padding:0.15rem 0;border-bottom:1px solid var(--line);";
+            const info = document.createElement("span");
+            info.textContent = `${e.minutes}m${e.note ? " \u2014 " + e.note : ""}`;
+            const rm = document.createElement("button");
+            rm.textContent = "\u00d7";
+            rm.style.cssText = "background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.9rem;padding:0;";
+            rm.onclick = async () => {
+              await call(`/api/time/${e.time_entry_id}`, { method: "DELETE", headers: headers() });
+              loadTicketTime(ticketID);
+            };
+            row.appendChild(info);
+            row.appendChild(rm);
+            entriesEl.appendChild(row);
+          }
+        } catch (e) { totalEl.textContent = ""; entriesEl.innerHTML = ""; }
       }
 
       function queueAutosave() {
@@ -4787,6 +4886,43 @@
       ["ticket-title", "ticket-description", "ticket-ac", "ticket-git-repository", "ticket-git-branch", "ticket-type", "ticket-stage", "ticket-state"].forEach((id) => {
         document.getElementById(id).addEventListener("input", queueAutosave);
         document.getElementById(id).addEventListener("change", queueAutosave);
+      });
+
+      document.getElementById("ticket-label-add").addEventListener("click", async () => {
+        if (!draft || !draft.ticket) return;
+        const sel = document.getElementById("ticket-label-select");
+        const labelID = sel.value;
+        if (!labelID) return;
+        try {
+          await call(`/api/tickets/${draft.ticket.ticket_id}/labels`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ label_id: Number(labelID) }),
+          });
+          loadTicketLabels(draft.ticket.ticket_id);
+        } catch (err) {
+          appStatus.textContent = `Add label failed: ${err.message}`;
+        }
+      });
+
+      document.getElementById("ticket-time-log").addEventListener("click", async () => {
+        if (!draft || !draft.ticket) return;
+        const minutesInput = document.getElementById("ticket-time-minutes");
+        const noteInput = document.getElementById("ticket-time-note");
+        const minutes = parseInt(minutesInput.value, 10);
+        if (!minutes || minutes < 1) return;
+        try {
+          await call(`/api/tickets/${draft.ticket.ticket_id}/time`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ minutes: minutes, note: noteInput.value }),
+          });
+          minutesInput.value = "";
+          noteInput.value = "";
+          loadTicketTime(draft.ticket.ticket_id);
+        } catch (err) {
+          appStatus.textContent = `Log time failed: ${err.message}`;
+        }
       });
 
       // Search dialog

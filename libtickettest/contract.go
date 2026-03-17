@@ -396,6 +396,141 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 	})
 
+	t.Run("labels", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Labels"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		label, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: "bug", Color: "red"})
+		if err != nil {
+			t.Fatalf("CreateLabel() error = %v", err)
+		}
+		if label.Name != "bug" || label.Color != "red" {
+			t.Fatalf("CreateLabel() = %#v", label)
+		}
+
+		label2, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: "feature", Color: "blue"})
+		if err != nil {
+			t.Fatalf("CreateLabel(feature) error = %v", err)
+		}
+
+		labels, err := svc.ListLabels(project.ID)
+		if err != nil {
+			t.Fatalf("ListLabels() error = %v", err)
+		}
+		if len(labels) != 2 {
+			t.Fatalf("ListLabels() len = %d, want 2", len(labels))
+		}
+
+		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Labeled Task",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		if err := svc.AddTicketLabel(ticket.ID, label.ID); err != nil {
+			t.Fatalf("AddTicketLabel() error = %v", err)
+		}
+		if err := svc.AddTicketLabel(ticket.ID, label2.ID); err != nil {
+			t.Fatalf("AddTicketLabel(feature) error = %v", err)
+		}
+
+		ticketLabels, err := svc.ListTicketLabels(ticket.ID)
+		if err != nil {
+			t.Fatalf("ListTicketLabels() error = %v", err)
+		}
+		if len(ticketLabels) != 2 {
+			t.Fatalf("ListTicketLabels() len = %d, want 2", len(ticketLabels))
+		}
+
+		if err := svc.RemoveTicketLabel(ticket.ID, label.ID); err != nil {
+			t.Fatalf("RemoveTicketLabel() error = %v", err)
+		}
+		ticketLabels, err = svc.ListTicketLabels(ticket.ID)
+		if err != nil {
+			t.Fatalf("ListTicketLabels() after remove error = %v", err)
+		}
+		if len(ticketLabels) != 1 {
+			t.Fatalf("ListTicketLabels() after remove len = %d, want 1", len(ticketLabels))
+		}
+
+		if err := svc.DeleteLabel(label2.ID); err != nil {
+			t.Fatalf("DeleteLabel() error = %v", err)
+		}
+		labels, err = svc.ListLabels(project.ID)
+		if err != nil {
+			t.Fatalf("ListLabels() after delete error = %v", err)
+		}
+		if len(labels) != 1 {
+			t.Fatalf("ListLabels() after delete len = %d, want 1", len(labels))
+		}
+	})
+
+	t.Run("time-tracking", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Time"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Timed Task",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		entry1, err := svc.LogTime(ticket.ID, libticket.TimeEntryRequest{Minutes: 30, Note: "morning"})
+		if err != nil {
+			t.Fatalf("LogTime() error = %v", err)
+		}
+		if entry1.Minutes != 30 || entry1.Note != "morning" {
+			t.Fatalf("LogTime() = %#v", entry1)
+		}
+
+		entry2, err := svc.LogTime(ticket.ID, libticket.TimeEntryRequest{Minutes: 45, Note: "afternoon"})
+		if err != nil {
+			t.Fatalf("LogTime(2) error = %v", err)
+		}
+
+		entries, err := svc.ListTimeEntries(ticket.ID)
+		if err != nil {
+			t.Fatalf("ListTimeEntries() error = %v", err)
+		}
+		if len(entries) != 2 {
+			t.Fatalf("ListTimeEntries() len = %d, want 2", len(entries))
+		}
+
+		total, err := svc.TotalTimeForTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("TotalTimeForTicket() error = %v", err)
+		}
+		if total != 75 {
+			t.Fatalf("TotalTimeForTicket() = %d, want 75", total)
+		}
+
+		if err := svc.DeleteTimeEntry(entry2.ID); err != nil {
+			t.Fatalf("DeleteTimeEntry() error = %v", err)
+		}
+
+		total, err = svc.TotalTimeForTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("TotalTimeForTicket() after delete error = %v", err)
+		}
+		if total != 30 {
+			t.Fatalf("TotalTimeForTicket() after delete = %d, want 30", total)
+		}
+	})
+
 	t.Run("user-management-and-request-no-work", func(t *testing.T) {
 		svc := factory(t)
 

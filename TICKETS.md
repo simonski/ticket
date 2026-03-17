@@ -113,6 +113,40 @@ tk assign <id> <username>
 tk unassign <id> <username>
 ```
 
+## Labels
+
+```bash
+# Manage project labels
+tk label create -name "bug" -color "red"
+tk label ls
+tk label delete -id <label-id>
+
+# Tag tickets
+tk label add <ticket-id> <label-id>
+tk label remove <ticket-id> <label-id>
+tk label show <ticket-id>
+
+# Filter list by label
+tk list --label "bug"
+```
+
+## Time Tracking
+
+```bash
+# Log time against a ticket (minutes)
+tk time log <ticket-id> -m 30 -note "Morning session"
+tk time list <ticket-id>
+tk time total <ticket-id>
+tk time delete -id <entry-id>
+```
+
+## Board View
+
+```bash
+# Kanban-style view grouped by workflow stage
+tk board
+```
+
 ## Comments and History
 
 ```bash

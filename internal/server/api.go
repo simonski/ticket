@@ -2495,6 +2495,52 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 	}
 	mux.HandleFunc("/api/tickets/", handleTicketByRef("/api/tickets/"))
 
+	mux.HandleFunc("/api/labels/", func(w http.ResponseWriter, r *http.Request) {
+		_, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		if r.Method != http.MethodDelete {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		idStr := strings.TrimPrefix(r.URL.Path, "/api/labels/")
+		var id int64
+		if _, err := fmt.Sscan(idStr, &id); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid label id")
+			return
+		}
+		if err := store.DeleteLabel(db, id); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	})
+
+	mux.HandleFunc("/api/time/", func(w http.ResponseWriter, r *http.Request) {
+		_, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		if r.Method != http.MethodDelete {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		idStr := strings.TrimPrefix(r.URL.Path, "/api/time/")
+		var id int64
+		if _, err := fmt.Sscan(idStr, &id); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid time entry id")
+			return
+		}
+		if err := store.DeleteTimeEntry(db, id); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	})
+
 	mux.HandleFunc("/api/dependencies", func(w http.ResponseWriter, r *http.Request) {
 		user, err := requireUser(db, r)
 		if err != nil {
