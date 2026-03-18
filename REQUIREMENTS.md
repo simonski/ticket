@@ -1,460 +1,437 @@
-EPIC: Core Platform And Runtime
+EPIC: Core Runtime, Bootstrap, And Delivery
 ID: E1
-DESCRIPTION: Build the single-binary application foundation, including SQLite initialization, configuration, shared runtime wiring, HTTP server startup, embedded frontend serving, and developer quality gates.
+DESCRIPTION: Build the single-binary runtime for `task`, including versioning, onboarding, SQLite bootstrap, server startup, embedded web delivery, and make-based quality gates.
 AC:
-- `task initdb -f <db> -password <password>` creates a new SQLite database and bootstraps the initial administrator account.
-- `task server -f <db>` starts the API server and serves the embedded frontend from the same binary on `http://localhost:8000` by default.
-- The application supports configuration for remote CLI usage, including `TICKET_URL`.
-- Passwords are stored securely using Argon2id hashes in SQLite.
-- The frontend assets are embedded in the Go binary and served by the backend.
-- `make build`, `make test`, `make test-go`, and `make test-playwright` exist and run successfully.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
+- `task onboard` prints the embedded onboarding template (`TICKETS.md`) to stdout.
+- `task version` prints the embedded semantic version from the build asset.
+- `task initdb` creates the SQLite schema, the `admin` account, and the default project.
+- `task server` starts the API and embedded web UI from the same binary and serves on `http://localhost:8080` by default.
+- `task server -v` prints verbose request and response logs to stdout.
+- `task` with no arguments and `task server` print the ASCII-art `TASK` banner.
+- use red/green testing
+- use make to verify all tests pass
+- work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
 PRIORITY: 1
 DEPENDS-ON: NONE
 
-    STORY: Initialize SQLite workspace and bootstrap admin user
+    STORY: Implement build versioning and embedded runtime assets
     ID: E1-S1
-    DESCRIPTION: Implement database initialization, schema creation, and first-run administrator bootstrap through the CLI.
+    DESCRIPTION: Embed static runtime assets needed by the CLI, including `VERSION` and the onboarding template, and wire build-time version incrementing through `make`.
     AC:
-    - Running `task initdb -f filename.db -password password` creates the SQLite file, schema, and initial admin account.
-    - Re-running init against an existing database fails safely or requires an explicit overwrite flag.
-    - The bootstrap password is stored as an Argon2id hash rather than plaintext.
-    - The initialization flow is covered by automated Go tests.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `VERSION` is incremented during `make build`.
+    - The built binary embeds the version value used by `task version`.
+    - The built binary embeds `cmd/ticket/TICKETS.md` for `ticket onboard`.
+    - Automated tests cover version lookup and onboard asset behavior.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: NONE
 
-    STORY: Start HTTP server and serve embedded frontend
+    STORY: Implement SQLite bootstrap and default workspace initialization
     ID: E1-S2
-    DESCRIPTION: Implement the runtime entrypoint that starts the API server and serves embedded SPA assets from the same process.
+    DESCRIPTION: Provide CLI-driven database initialization with safe overwrite behavior and generated admin credentials when needed.
     AC:
-    - Running `task server -f filename.db` starts the application successfully.
-    - The server listens on `http://localhost:8000` by default.
-    - Embedded frontend assets are served from the backend process.
-    - Startup and shutdown behavior are covered by automated tests.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task initdb` creates a database at `$TICKET_CONFIG_DIR/task.db` when `-f` is omitted.
+    - `task initdb -f task.db --force -password secret` overwrites an existing database and uses the supplied password.
+    - `task initdb` without `-password` generates a random admin password and prints it to stdout.
+    - The initialized database contains the `admin` user and the default project with project id `1`.
+    - Passwords are stored as Argon2id hashes in SQLite.
+    - Automated tests cover first-run, overwrite, and generated-password flows.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E1-S1
 
-    STORY: Add runtime configuration for CLI and server
+    STORY: Implement server startup, banner output, and embedded web serving
     ID: E1-S3
-    DESCRIPTION: Implement configuration loading for database path, server URL, and other shared runtime settings used by CLI and server commands.
+    DESCRIPTION: Start the HTTP server, serve the embedded frontend, and print the startup banner, version, and database path.
     AC:
-    - The CLI can target a remote server using `TICKET_URL`.
-    - Local defaults are stored and reused between commands where appropriate.
-    - Configuration behavior is documented through tests.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 2
-    DEPENDS-ON: E1-S2
-
-    STORY: Establish build and test automation
-    ID: E1-S4
-    DESCRIPTION: Create and wire quality gates for build, unit, integration, and browser tests.
-    AC:
-    - `make build` builds the application.
-    - `make test` runs the full automated test suite.
-    - `make test-go` runs backend and CLI tests.
-    - `make test-playwright` runs frontend/browser tests.
-    - CI-ready scripts exist for local verification.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task server` opens `$TICKET_CONFIG_DIR/task.db` when `-f` is omitted.
+    - `task server -f filename.db` serves the API and embedded frontend against the selected database.
+    - `task server` prints the banner, the embedded version, and the resolved task database path before the listen message.
+    - `task server -v` logs request and response details to stdout.
+    - Automated tests cover startup wiring and verbose logging.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E1-S2
 
-EPIC: Authentication And User Administration
+    STORY: Implement root usage and command help output
+    ID: E1-S4
+    DESCRIPTION: Provide concise top-level usage and per-command help with examples that match the documented command surface.
+    AC:
+    - `task` prints the main client and admin commands only.
+    - `task help <command>` prints command usage, details, and a short example.
+    - Root usage and command help stay aligned with the current CLI surface.
+    - Automated tests cover root usage and representative command help output.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 2
+    DEPENDS-ON: E1-S3
+
+EPIC: Authentication, Sessions, And Admin User Management
 ID: E2
-DESCRIPTION: Implement account management, login/logout flows, session handling, CLI identity commands, and administrator user management across API, CLI, and web interfaces.
+DESCRIPTION: Implement registration, login, logout, session storage, status inspection, and admin-only user management across the API, CLI, and web UI.
 AC:
-- The system supports administrator and standard user roles.
-- Administrators can create, enable, disable, and list users.
-- Users can register, log in, log out, and inspect their current identity.
-- The CLI supports `TICKET_USERNAME` and `TICKET_PASSWORD` environment variables.
-- The web UI uses the same authentication system as the CLI.
-- Session and permission checks are enforced on protected operations.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
+- The system supports `admin` and `user` roles.
+- Admins can create, list, delete, enable, and disable users.
+- `task register`, `task login`, `task logout`, and `task status` behave as documented.
+- Client-side state is split between `$TICKET_CONFIG_DIR/config.json` and `$TICKET_CONFIG_DIR/credentials.json`.
+- The web app uses the same authentication and session model as the CLI.
+- Admin-only calls made by non-admin users return HTTP 403 with `user is not an admin`.
+- use red/green testing
+- use make to verify all tests pass
+- work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
 PRIORITY: 1
 DEPENDS-ON: E1
 
-    STORY: Implement user model, storage, and role enforcement
+    STORY: Implement user model, roles, and admin authorization
     ID: E2-S1
-    DESCRIPTION: Add the backend user domain model, repository layer, and authorization checks for admin and normal-user actions.
+    DESCRIPTION: Build backend user storage and enforce admin-only access for protected user-management endpoints.
     AC:
-    - Users have `user_id`, `username`, `password_hash`, `role`, `display_name`, `enabled`, and `created_at`.
-    - Protected endpoints reject unauthorized or disabled users.
-    - Admin-only operations are enforced server-side.
-    - Automated tests cover allowed and forbidden access paths.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - Users persist `user_id`, `username`, `password_hash`, `role`, `display_name`, `enabled`, and `created_at`.
+    - Admin-only endpoints reject authenticated non-admin callers with HTTP 403 and `user is not an admin`.
+    - Disabled users cannot authenticate or perform protected operations.
+    - Automated tests cover allowed and denied access paths.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
-    DEPENDS-ON: E1-S1
+    DEPENDS-ON: E1-S2
 
-    STORY: Implement admin user management commands and API
+    STORY: Implement admin user-management commands and API flows
     ID: E2-S2
-    DESCRIPTION: Provide administrator features for creating, enabling, disabling, and listing users from the CLI and API.
+    DESCRIPTION: Support the documented admin CLI commands for managing users.
     AC:
-    - `task user create -username XXXX -password YYYY` creates a user.
-    - `task user enable -username XXXX` enables a disabled user.
-    - `task user disable -username XXXX` disables a user.
-    - `task user list` and `task user ls` list existing users.
-    - Admin user management is covered by automated tests.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task user create --username alice --password secret` creates a user.
+    - `task user ls` and `task user list` list users.
+    - `task user delete --username alice` and `task user rm --username alice` delete a user.
+    - `task user enable --username alice` and `task user disable --username alice` update enabled state.
+    - Successful commands return human-readable output and support `-json`.
+    - Automated tests cover create, list, delete, enable, and disable flows.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E2-S1
 
-    STORY: Implement registration, login, logout, whoami, and status
+    STORY: Implement registration, login, logout, and local session storage
     ID: E2-S3
-    DESCRIPTION: Provide the core CLI and API authentication flows used by end users.
+    DESCRIPTION: Implement the documented credential resolution rules, interactive prompting, and local session persistence.
     AC:
-    - `task register` supports interactive account creation.
-    - `task login` supports interactive login or credential lookup from environment variables.
-    - `task whoami` shows the current authenticated user.
-    - `task status` shows authentication and connectivity status.
-    - `task logout` clears the local authenticated session.
-    - Automated tests cover successful and failed login scenarios.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task register --username name --password secret` creates an account and does not log the user in.
+    - `task register` resolves missing values from `TICKET_USERNAME`, `TICKET_PASSWORD`, then `whoami` and `password`.
+    - `task login` checks `$TICKET_CONFIG_DIR/credentials.json`, then `$TICKET_CONFIG_DIR/config.json`, then flags, then env vars, then prompts.
+    - `task login` prompts with editable defaults and masks password input with `*` on interactive terminals.
+    - `task login` stores the session token in `$TICKET_CONFIG_DIR/credentials.json` and stores `username` and `server_url` in `$TICKET_CONFIG_DIR/config.json`.
+    - `task logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
+    - Automated tests cover registration, login success, invalid credentials retry, and logout.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E2-S1
 
-    STORY: Implement web authentication flows
+    STORY: Implement status inspection and shared web authentication flows
     ID: E2-S4
-    DESCRIPTION: Add browser login/logout/session behavior against the same backend authentication APIs used by the CLI.
+    DESCRIPTION: Expose server status and version information and reuse the same authentication model in the browser.
     AC:
-    - The web app supports login and logout.
-    - Authenticated browser sessions persist across normal page use.
-    - Unauthenticated users are redirected or blocked from protected project pages.
-    - Browser tests cover login and logout behavior.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task status` prints the effective configuration first, then performs a mode-appropriate connectivity check.
+    - In remote mode it prints mode, server, username, authentication state, and remote connection success/failure.
+    - In local mode it prints mode, resolved database path, file existence, and local connection success/failure.
+    - The web UI supports login, logout, and authenticated session reuse.
+    - Automated tests cover status responses and browser auth state transitions.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 2
-    DEPENDS-ON: E2-S3, E1-S2
+    DEPENDS-ON: E2-S3, E1-S3
 
-EPIC: Project Management And CLI Context
+EPIC: Project Management And Local CLI Context
 ID: E3
-DESCRIPTION: Implement projects as top-level containers, including create/list/get/use flows, active-project defaults, and project switching in the web UI.
+DESCRIPTION: Implement projects as top-level containers, including create/list/get/use workflows, active-project context, and project switching in the web UI.
 AC:
 - Users can create, list, inspect, and select projects from the CLI.
-- The CLI remembers the active project for subsequent commands.
-- The web UI exposes project switching.
-- Project permissions are enforced through authenticated APIs.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
+- The CLI remembers the active project in local config.
+- The web UI supports project selection and creation.
+- Project APIs are authenticated and shared by CLI and web clients.
+- use red/green testing
+- use make to verify all tests pass
+- work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
 PRIORITY: 1
 DEPENDS-ON: E2
 
-    STORY: Implement project model, storage, and API
+    STORY: Implement project model, persistence, and API endpoints
     ID: E3-S1
-    DESCRIPTION: Add the backend project domain model, persistence, and CRUD API endpoints required by CLI and web clients.
+    DESCRIPTION: Add the backend project domain model and authenticated APIs for create, list, and lookup.
     AC:
-    - Projects store `project_id`, `slug`, `title`, `description`, `created_at`, `created_by`, and `status`.
-    - Project create, list, and get APIs exist and are authenticated.
-    - Automated tests cover project creation and lookup.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - Projects persist `project_id`, `title`, `description`, `created_at`, `created_by`, and `status`.
+    - The API supports project creation, listing, and lookup by numeric id.
+    - Project records are available to both CLI and web clients through the same API.
+    - Automated tests cover create, list, and lookup behavior.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E2-S1
 
-    STORY: Implement project CLI commands and active-project state
+    STORY: Implement project CLI commands and active-project persistence
     ID: E3-S2
-    DESCRIPTION: Add the CLI commands for project creation, listing, inspection, and active-project selection.
+    DESCRIPTION: Support the documented project commands and remember the active project for subsequent CLI commands.
     AC:
-    - `task project create "Customer Portal"` creates a project.
-    - `task project list` lists projects.
-    - `task project get <id>` shows project details.
-    - `task project use <id>` sets the active project.
-    - `task project` shows the current project context.
-    - Active-project behavior is covered by automated tests.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task project create "Customer Portal"` creates a project and makes it current.
+    - `task project list` and `task project ls` list projects.
+    - `task project get 2` shows project details.
+    - `task project use 2` changes the active project.
+    - `task project` shows the current project or `no active project`.
+    - Automated tests cover active-project persistence and lookup by id.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
+    DEPENDS-ON: E3-S1, E2-S3
+
+    STORY: Implement project switching and creation in the web UI
+    ID: E3-S3
+    DESCRIPTION: Provide browser controls for listing, creating, and switching the active project.
+    AC:
+    - The web app displays available projects and the current selection.
+    - Users can create a project from the web UI.
+    - Switching the project reloads the visible work items without a full manual reload.
+    - Browser or integration tests cover project creation and switching.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 2
     DEPENDS-ON: E3-S1, E1-S3
 
-    STORY: Implement project switching in the web UI
-    ID: E3-S3
-    DESCRIPTION: Add project navigation and switching controls in the browser experience.
-    AC:
-    - The web app displays a project switcher.
-    - Switching the active project updates visible work items without a manual reload.
-    - Browser tests cover project switching behavior.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 2
-    DEPENDS-ON: E3-S1, E1-S2
-
-EPIC: Task, Epic, Bug, Note, And Question Management
+EPIC: Work Item Model, Creation, And Hierarchy
 ID: E4
-DESCRIPTION: Implement the shared task model, item creation flows, epic hierarchy, active-epic defaults, and item editing capabilities across CLI, API, and web UI.
+DESCRIPTION: Implement the shared work-item model for epics, tasks, and bugs, including creation defaults, parent-child hierarchy, acceptance criteria, and active-epic context.
 AC:
-- The system supports `epic`, `task`, `bug`, `note`, and `question` item types.
-- Item creation captures creator, timestamps, project, status, and parent relationship.
-- Users can create items using all examples in the user guide, including `task add`, `task bug`, `task note`, `task question`, `task epic`, and `task create -type task`.
-- Active-epic behavior attaches new child tasks to the selected epic when appropriate.
-- The web UI supports creating and editing items.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
+- The system supports `epic`, `task`, and `bug` item types only.
+- Users can create work through `task add`, `task create`, `task new`, `task bug`, and `task epic`.
+- Work items support title, description, acceptance criteria, priority, assignee, project, and optional parent.
+- Parent-child relationships support epics with child tasks and bugs.
+- The web UI supports creating and editing items against the same model.
+- use red/green testing
+- use make to verify all tests pass
+- work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
 PRIORITY: 1
 DEPENDS-ON: E3
 
-    STORY: Implement shared task domain model and persistence
+    STORY: Implement the shared work-item schema and validation
     ID: E4-S1
-    DESCRIPTION: Build the core work-item model and database schema used for all item types.
+    DESCRIPTION: Add the persistence layer and validation rules for `epic`, `task`, and `bug` records.
     AC:
-    - Tasks store `task_id`, `project_id`, `parent_id`, `type`, `title`, `description`, `acceptance_criteria`, `status`, `priority`, `assignee`, `created_at`, `created_by`, `updated_at`, and `archived`.
-    - Supported types include `epic`, `task`, `bug`, `note`, and `question`.
-    - Parent-child relationships are persisted correctly.
-    - Automated tests cover schema behavior and CRUD operations.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - Work items persist `task_id`, `project_id`, `parent_id`, `type`, `title`, `description`, `acceptance_criteria`, `status`, `priority`, `assignee`, `created_at`, `created_by`, `updated_at`, and `archived`.
+    - Only `epic`, `task`, and `bug` are accepted as valid task types.
+    - Parent-child relationships are stored correctly.
+    - Automated tests cover CRUD operations and type validation.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E3-S1
 
-    STORY: Implement CLI item creation commands
+    STORY: Implement CLI work-item creation flows
     ID: E4-S2
-    DESCRIPTION: Add terminal commands for all supported item creation flows described in the guide.
+    DESCRIPTION: Support all documented CLI creation examples and defaults for tasks, bugs, and epics.
     AC:
-    - `task add "..."` creates a standard task.
-    - `task note "..."` creates a note.
-    - `task question "..."` creates a question.
-    - `task bug "..."` creates a bug.
-    - `task epic "..."` creates an epic.
-    - `task create -type task "..."` creates a task with explicit type selection.
-    - CLI tests cover all supported creation commands.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task add "Customers can reset their password."` creates a task.
+    - `task create "I am a new task"` and `task new "I am a new task"` are aliases for task creation.
+    - `task add -title "I am a new task"` sets the title without positional words.
+    - `task bug "This is a bug"` creates a bug.
+    - `task epic "This is an Epic"` creates an epic.
+    - `task create -t task -p 1 -a alice -d "This is a Task" -ac "Has a title and description" "This is a Task"` is supported.
+    - Successful create commands print the created task id to stdout.
+    - Automated tests cover aliases, defaults, and flag parsing.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E4-S1, E3-S2
 
-    STORY: Implement active epic context and parent-child defaults
+    STORY: Implement active-epic context and hierarchy behavior
     ID: E4-S3
-    DESCRIPTION: Track the active epic in CLI context so new items can automatically attach beneath it.
+    DESCRIPTION: Track the active epic in the CLI and support hierarchical organization of tasks and bugs under epics.
     AC:
-    - Creating an epic can mark it as the current epic context.
-    - `task create -type task "..."` attaches the new task to the current epic when an active epic exists.
-    - Users can inspect or clear the active epic context.
-    - Automated tests cover parent assignment behavior.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - Creating or selecting an epic can set the active epic context for subsequent work.
+    - New tasks and bugs can be attached beneath an epic via `parent_id`.
+    - The CLI stores useful local context for the active epic.
+    - Automated tests cover parent assignment and active-epic behavior.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 2
     DEPENDS-ON: E4-S2
 
-    STORY: Implement item create and edit flows in the web UI
+    STORY: Implement browser capture and editing for work items
     ID: E4-S4
-    DESCRIPTION: Add browser interfaces for creating, editing, and organizing tasks and other work-item types.
+    DESCRIPTION: Add web UI support for creating and updating tasks, bugs, and epics.
     AC:
-    - The web app provides item creation controls for task, epic, bug, note, and question types.
-    - Users can edit item fields from the web app.
-    - Parent-child relationships are visible and editable in the web UI.
-    - Browser tests cover create and edit workflows.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - The web capture form creates tasks, bugs, and epics.
+    - Newly created items appear in the current project view without manual reload.
+    - The detail form updates title, description, and status through the shared API.
+    - Browser or integration tests cover web creation and update flows.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 2
     DEPENDS-ON: E4-S1, E3-S3
 
-EPIC: Listing, Search, Detail Views, And Status Workflow
+EPIC: Retrieval, Assignment, Dependencies, And Activity
 ID: E5
-DESCRIPTION: Implement item retrieval, filtering, search, status updates, detail views, and review-oriented workflows across the backend, CLI, and frontend.
+DESCRIPTION: Implement list, search, detail, history, comments, dependencies, assignment, orphan detection, and aggregate count workflows for the current project model.
 AC:
-- Users can list items in the active project.
-- Users can filter items by type and status.
-- Users can search item titles and descriptions.
-- Users can inspect item detail by ID.
-- The application supports a default status workflow suitable for CLI lists and board views.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
+- Users can list, search, inspect, and count work items through the CLI and API.
+- `task get` prints the flat detail view documented in the design.
+- Users can add comments and review append-only history.
+- Dependencies can be added and removed between tasks.
+- Admin assignment and self-claim workflows are enforced correctly.
+- `task count` reports users, projects, and current work-item totals by type and status.
+- use red/green testing
+- use make to verify all tests pass
+- work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
 PRIORITY: 1
 DEPENDS-ON: E4
 
-    STORY: Implement list, get, and search APIs
+    STORY: Implement project-scoped list, search, and orphan workflows
     ID: E5-S1
-    DESCRIPTION: Add backend read APIs for listing project items, fetching a single item, and searching by title and description.
+    DESCRIPTION: Provide list, filter, search, and orphan queries for the active project, including server-side limits.
     AC:
-    - The API supports list by project, get by ID, and full-text or equivalent search.
-    - List results can be filtered by item type and status.
-    - Automated tests cover list, get, and search behavior.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - `task list`, `task ls`, and `task list -n 20` list work items from the active project.
+    - `task list --type task`, `task list --type bug`, and `task list --type epic` filter by type.
+    - `task list --status open`, `task list --status in_progress`, and `task list --status done` filter by status.
+    - `task list -u alice` and `task ls -u alice` filter by assignee.
+    - `task search "password reset"` searches titles and descriptions.
+    - `task orphans` lists items whose `parent_id` is null.
+    - `task list` prints a readable table with id, type, status, assignee, priority, and title.
+    - Automated tests cover filtering, search, assignee filtering, and limit handling.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 1
+    DEPENDS-ON: E4-S1, E3-S2
+
+    STORY: Implement task detail rendering, history, and comments
+    ID: E5-S2
+    DESCRIPTION: Support detailed task inspection and append-only activity review through the API, CLI, and web UI.
+    AC:
+    - `task get 42` prints `ID`, `Type`, `Description`, `ParentID`, `ProjectID`, `Title`, `Assignee`, `Order`, `DependsOn`, `Status`, `Priority`, `Created`, `LastModified`, `Closed`, and `Acceptance Criteria`.
+    - `task get -json 42` pretty-prints the raw JSON response.
+    - `task history 17` prints the history for the item.
+    - `task comment add 17 "Waiting on API changes."` creates a comment and corresponding activity entry.
+    - The web detail pane shows the current item, dependencies, comments, and revision history.
+    - Automated tests cover detail rendering, history retrieval, and comment creation.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
     DEPENDS-ON: E4-S1
 
-    STORY: Implement CLI list, get, show, and search commands
-    ID: E5-S2
-    DESCRIPTION: Add CLI commands for the documented read flows over work items.
-    AC:
-    - `task list` lists all items in the active project.
-    - `task list --type <type>` filters by item type.
-    - `task list --status <status>` filters by status.
-    - `task search "password reset"` searches item titles and descriptions.
-    - `task get 42` returns item details.
-    - `task get 42` shows the full item detail view.
-    - CLI tests cover all documented read commands.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 1
-    DEPENDS-ON: E5-S1, E3-S2
-
-    STORY: Implement item status workflow and update operations
+    STORY: Implement assignment, claim, and unclaim workflows
     ID: E5-S3
-    DESCRIPTION: Add backend and CLI support for item status transitions such as open, in progress, blocked, and done.
+    DESCRIPTION: Enforce task assignment rules for admins and standard users across API and CLI flows.
     AC:
-    - Items can transition between the default statuses `open`, `in_progress`, `blocked`, and `done`.
-    - Status changes are persisted and validated.
-    - Status changes produce history events.
-    - Automated tests cover valid and invalid transitions.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 2
-    DEPENDS-ON: E5-S1
+    - `task assign 42 alice` and `task unassign 42 alice` are admin-only.
+    - `task assign` and `task unassign` fail if the named user does not exist.
+    - `task assign` and `task unassign` fail if the named user is disabled.
+    - `task claim 42` assigns the caller unless another user already owns the task.
+    - `task unclaim 42` succeeds only when the caller is the current assignee.
+    - Automated tests cover admin assignment, non-admin rejection, claim, and unclaim flows.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 1
+    DEPENDS-ON: E2-S2, E4-S1
 
-    STORY: Implement item detail views and filters in the web UI
+    STORY: Implement dependency management between work items
     ID: E5-S4
-    DESCRIPTION: Add browser pages and controls for list views, filtering, search, and single-item inspection.
+    DESCRIPTION: Support task dependency creation and removal through the API, CLI, and detail views.
     AC:
-    - The web app supports project-scoped item lists.
-    - Users can filter by type and status in the UI.
-    - Users can search items in the UI.
-    - Clicking an item opens a detail view with fields and metadata.
-    - Browser tests cover list, filter, search, and detail workflows.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 2
-    DEPENDS-ON: E5-S1, E3-S3
+    - `task dependency add 4 1,2,3` adds comma-separated dependencies.
+    - `task dependency remove 4 2` removes one or more dependencies.
+    - `task get` renders `DependsOn` from the stored dependency data.
+    - The web detail pane exposes dependency information.
+    - Automated tests cover add, remove, and detail rendering for dependencies.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 1
+    DEPENDS-ON: E4-S1
 
-EPIC: History, Comments, And Activity Tracking
+    STORY: Implement aggregate count reporting
+    ID: E5-S5
+    DESCRIPTION: Add server-backed aggregate counting for users, projects, and current work-item types.
+    AC:
+    - `task count` prints users, projects, and work-item totals by type.
+    - `task count -project_id 1` prints project-scoped work-item totals and omits the global project total.
+    - Count output groups totals by status for tasks, bugs, and epics where applicable.
+    - Automated tests cover global and project-scoped count responses.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 2
+    DEPENDS-ON: E3-S1, E4-S1, E2-S1
+
+EPIC: Web Application Views And Collaborative UX
 ID: E6
-DESCRIPTION: Implement append-only history events and item comments so users can understand how work changed over time and discuss individual tasks.
+DESCRIPTION: Implement the embedded web experience for authenticated project work, including list, board, hierarchy, detail, comments, and live refresh.
 AC:
-- Important item changes create history events.
-- Users can inspect item history from CLI and web interfaces.
-- Users can add and view comments on work items.
-- Comment creation is reflected in activity history.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
+- The web UI is served from the same binary and uses the same API contracts as the CLI.
+- Authenticated users can create, view, and update project work in the browser.
+- The web UI supports list, board, and hierarchy views.
+- Detail views show history, comments, and dependency context.
+- Connected browser sessions refresh changes without manual page reloads.
+- use red/green testing
+- use make to verify all tests pass
+- work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
 PRIORITY: 2
-DEPENDS-ON: E4, E5
+DEPENDS-ON: E3, E4, E5
 
-    STORY: Implement history event storage and generation
+    STORY: Implement browser list, board, and hierarchy views
     ID: E6-S1
-    DESCRIPTION: Add append-only history storage and generate events for create, update, status change, parent change, and comment operations.
+    DESCRIPTION: Provide the main browser navigation and task browsing modes for the active project.
     AC:
-    - History records include `project_id`, `task_id`, `event_type`, `payload`, `created_at`, and `created_by`.
-    - Creating and updating items generates history events.
-    - Status changes and parent changes generate history events.
-    - Automated tests validate history event generation.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - The web app shows a list view for project work items.
+    - The web app shows a status-based board with `open`, `in_progress`, `blocked`, and `done` columns.
+    - The web app shows a hierarchy view that groups child tasks beneath epics and separates unparented work.
+    - Browser or integration tests cover list, board, and hierarchy rendering.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
-    DEPENDS-ON: E4-S1, E5-S3
+    DEPENDS-ON: E4-S4, E5-S1
 
-    STORY: Implement comment model, API, and CLI command
+    STORY: Implement browser detail, comments, and activity views
     ID: E6-S2
-    DESCRIPTION: Add comments as item-scoped discussion records available via backend and CLI.
+    DESCRIPTION: Surface task detail editing and activity inspection in the web UI.
     AC:
-    - Comments store `item_id`, `user_id`, `comment`, and `created_at`.
-    - `task comment add 17 "Waiting on API changes."` creates a comment on an item.
-    - Adding a comment creates a related history event.
-    - Automated tests cover comment creation and retrieval.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
+    - Selecting an item opens a detail pane for that item.
+    - The detail pane supports title, description, and status updates through the shared API.
+    - The detail pane shows comments and history for the selected item.
+    - The detail pane shows dependency context for the selected item.
+    - Browser or integration tests cover detail editing and activity display.
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
     PRIORITY: 1
-    DEPENDS-ON: E6-S1
+    DEPENDS-ON: E5-S2, E5-S4
 
-    STORY: Implement CLI and web history/comment views
+    STORY: Implement collaborative refresh for active browser sessions
     ID: E6-S3
-    DESCRIPTION: Surface history and comments in item detail experiences across both interfaces.
+    DESCRIPTION: Refresh browser state automatically so active users see project updates without manual reloads.
     AC:
-    - `task history 17` returns ordered history for the target item.
-    - Item detail pages in the web app display history and comments.
-    - Browser tests cover history and comment visibility.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 2
-    DEPENDS-ON: E6-S2, E5-S4
-
-EPIC: Web Board, Hierarchy, And Collaborative UX
-ID: E7
-DESCRIPTION: Implement the primary browser experience, including project switching, status-based board views, hierarchy browsing, collaborative refresh behavior, and core task management interactions.
-AC:
-- The web app provides a status-based board view for project items.
-- Users can browse work hierarchies, including epics and child items.
-- Changes made by one user appear for other connected users without manual refresh under normal operation.
-- The frontend remains operationally lightweight and is covered by browser tests.
-- All tests pass.
-- Use `make` to verify tests.
-- Work in a branch that contains the EPIC and FEATURE name.
-PRIORITY: 2
-DEPENDS-ON: E3, E4, E5, E6
-
-    STORY: Implement status-based board view
-    ID: E7-S1
-    DESCRIPTION: Build the browser board UI grouped by item status for active-project work management.
-    AC:
-    - The web app renders project items grouped by status.
-    - Status columns reflect the configured default workflow.
-    - Board interactions update item status correctly.
-    - Browser tests cover board rendering and status movement.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 1
-    DEPENDS-ON: E5-S3, E5-S4
-
-    STORY: Implement hierarchy browsing for epics and children
-    ID: E7-S2
-    DESCRIPTION: Add browser support for viewing parent-child task relationships and epic contents.
-    AC:
-    - Users can view epics and their child tasks in the web UI.
-    - Item detail views show parent and child relationships.
-    - Hierarchy browsing works alongside board and list views.
-    - Browser tests cover hierarchy rendering.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 2
-    DEPENDS-ON: E4-S4, E5-S4
-
-    STORY: Implement near-real-time collaborative refresh
-    ID: E7-S3
-    DESCRIPTION: Add lightweight live-update behavior so connected clients see new and changed data without manual reloads.
-    AC:
-    - Changes made by one authenticated user become visible to another active browser session without manual refresh.
-    - The live update mechanism builds on the server resource model rather than bypassing it.
+    - Changes made by one user become visible to another connected browser session without manual page reload.
+    - The refresh behavior reuses the existing API and project resource model.
     - Browser or integration tests cover collaborative refresh behavior.
-    - All tests pass.
-    - Use `make` to verify tests.
-    - Work in a branch that contains the EPIC and FEATURE name.
-    PRIORITY: 3
-    DEPENDS-ON: E7-S1, E7-S2
+    - use red/green testing
+    - use make to verify all tests pass
+    - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
+    PRIORITY: 2
+    DEPENDS-ON: E6-S1, E6-S2

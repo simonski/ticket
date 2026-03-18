@@ -1,0 +1,229 @@
+package main
+
+import (
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	osuser "os/user"
+	"strings"
+
+	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
+	"github.com/simonski/ticket/libtickethttp"
+)
+
+func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, nil, store.Project{}, err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return config.Config{}, nil, store.Project{}, err
+	}
+
+	projectID := strings.TrimSpace(cfg.CurrentProject)
+	if projectID == "" {
+		projectID = "1"
+	}
+
+	project, err := svc.GetProject(projectID)
+	if err != nil && projectID != "1" {
+		project, err = svc.GetProject("1")
+		if err == nil {
+			projectID = "1"
+		}
+	}
+	if err != nil {
+		if strings.TrimSpace(cfg.CurrentProject) == "" {
+			return config.Config{}, nil, store.Project{}, errors.New("no active project; use `ticket project create` or `ticket project use <id>` first")
+		}
+		return config.Config{}, nil, store.Project{}, err
+	}
+
+	if cfg.CurrentProject != projectID {
+		cfg.CurrentProject = projectID
+		if saveErr := config.Save(cfg); saveErr != nil {
+			return config.Config{}, nil, store.Project{}, saveErr
+		}
+	}
+	return cfg, svc, project, nil
+}
+
+func resolveService(cfg config.Config) (libticket.Service, error) {
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return nil, err
+	}
+	switch resolved.Mode {
+	case config.ModeLocal:
+		return libticket.NewLocal(cfg), nil
+	case config.ModeRemote:
+		if resolved.ServerURL == "" {
+			return nil, errors.New("TICKET_URL is required for remote mode")
+		}
+		return libtickethttp.New(cfg), nil
+	default:
+		return nil, fmt.Errorf("unsupported mode %q", resolved.Mode)
+	}
+}
+
+func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (string, string, error) {
+	username := strings.TrimSpace(usernameFlag)
+	password := strings.TrimSpace(passwordFlag)
+	resolved, err := config.ResolveURL()
+	if err == nil && resolved.Mode == config.ModeLocal {
+		if username == "" {
+			username = localModeUsername()
+		}
+		return username, password, nil
+	}
+
+	if useEnv {
+		if username == "" {
+			username = envValue("TICKET_USERNAME")
+		}
+		if password == "" {
+			password = envValue("TICKET_PASSWORD")
+		}
+	}
+	if username == "" {
+		username = currentOSUser()
+	}
+	if password == "" {
+		password = "password"
+	}
+	if username == "" || password == "" {
+		return "", "", errors.New("username and password are required")
+	}
+	return username, password, nil
+}
+
+func currentOSUser() string {
+	user, err := osuser.Current()
+	if err == nil && user.Username != "" {
+		parts := strings.Split(user.Username, `\`)
+		return parts[len(parts)-1]
+	}
+	if env := os.Getenv("USER"); env != "" {
+		return env
+	}
+	if env := os.Getenv("USERNAME"); env != "" {
+		return env
+	}
+	return "user"
+}
+
+func localModeUsername() string {
+	return "admin"
+}
+
+func fallbackCommandUsername() string {
+	if resolved, err := config.ResolveURL(); err == nil && resolved.Mode == config.ModeLocal {
+		return localModeUsername()
+	}
+	return currentOSUser()
+}
+
+func extractURLOverride(args []string) ([]string, string, error) {
+	if len(args) == 0 {
+		return args, "", nil
+	}
+	var out []string
+	var override string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-url" {
+			if i+1 >= len(args) {
+				return nil, "", errors.New("missing value for -url")
+			}
+			override = args[i+1]
+			i++
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out, override, nil
+}
+
+func extractDBOverride(args []string) ([]string, string, error) {
+	if len(args) == 0 {
+		return args, "", nil
+	}
+	var out []string
+	var override string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-f" {
+			if i+1 >= len(args) {
+				return nil, "", errors.New("missing value for -f")
+			}
+			override = args[i+1]
+			i++
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out, override, nil
+}
+
+func extractOutputFlags(args []string) ([]string, bool, bool, error) {
+	var out []string
+	var jsonFlag bool
+	var nocolor bool
+	for _, arg := range args {
+		switch arg {
+		case "-json":
+			jsonFlag = true
+		case "-nocolor":
+			nocolor = true
+		default:
+			out = append(out, arg)
+		}
+	}
+	return out, jsonFlag, nocolor, nil
+}
+
+func printJSON(v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+func generatePassword(length int) (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	if length <= 0 {
+		return "", errors.New("password length must be positive")
+	}
+	buf := make([]byte, length)
+	random := make([]byte, length)
+	if _, err := rand.Read(random); err != nil {
+		return "", err
+	}
+	for i, b := range random {
+		buf[i] = alphabet[int(b)%len(alphabet)]
+	}
+	return string(buf), nil
+}
+
+func removeDBFiles(path string) error {
+	for _, suffix := range []string{"", "-shm", "-wal"} {
+		candidate := path + suffix
+		if err := os.Remove(candidate); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+func defaultDatabasePath() (string, error) {
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return "", err
+	}
+	return resolved.DBPath, nil
+}

@@ -1778,3 +1778,291 @@ func decodeResponse(t *testing.T, recorder *httptest.ResponseRecorder, out any) 
 		t.Fatalf("json.Unmarshal() error = %v body=%s", err, recorder.Body.String())
 	}
 }
+
+func loginAdmin(t *testing.T, handler http.Handler) string {
+	t.Helper()
+	resp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("admin login status = %d, want %d, body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	var auth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, resp, &auth)
+	return auth.Token
+}
+
+func TestHealthzAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	resp := doJSONRequest(t, handler, http.MethodGet, "/api/healthz", nil, "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("healthz status = %d, want %d", resp.Code, http.StatusOK)
+	}
+	var payload map[string]string
+	decodeResponse(t, resp, &payload)
+	if payload["status"] != "ok" {
+		t.Fatalf("healthz status = %q, want ok", payload["status"])
+	}
+}
+
+func TestWorkflowAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// List workflows (should include default)
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list workflows status = %d", listResp.Code)
+	}
+	var workflows []store.Workflow
+	decodeResponse(t, listResp, &workflows)
+	if len(workflows) == 0 {
+		t.Fatal("expected at least one default workflow")
+	}
+
+	// Create workflow
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
+		"name":        "CI Pipeline",
+		"description": "build, test, deploy",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create workflow status = %d, body=%s", createResp.Code, createResp.Body.String())
+	}
+	var created store.Workflow
+	decodeResponse(t, createResp, &created)
+	if created.Name != "CI Pipeline" {
+		t.Fatalf("created workflow name = %q", created.Name)
+	}
+
+	// Get workflow with stages
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(created.ID, 10), nil, token)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get workflow status = %d", getResp.Code)
+	}
+
+	// Add stage
+	stageResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(created.ID, 10)+"/stages", map[string]any{
+		"stage_name":  "build",
+		"description": "compile",
+		"sort_order":  0,
+	}, token)
+	if stageResp.Code != http.StatusCreated {
+		t.Fatalf("add stage status = %d, body=%s", stageResp.Code, stageResp.Body.String())
+	}
+	var stage store.WorkflowStage
+	decodeResponse(t, stageResp, &stage)
+	if stage.StageName != "build" {
+		t.Fatalf("stage name = %q", stage.StageName)
+	}
+
+	// Delete stage
+	delStageResp := doJSONRequest(t, handler, http.MethodDelete, "/api/workflows/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
+	if delStageResp.Code != http.StatusOK {
+		t.Fatalf("delete stage status = %d", delStageResp.Code)
+	}
+
+	// Export workflow
+	exportResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(created.ID, 10)+"/export", nil, token)
+	if exportResp.Code != http.StatusOK {
+		t.Fatalf("export workflow status = %d", exportResp.Code)
+	}
+
+	// Delete workflow
+	delResp := doJSONRequest(t, handler, http.MethodDelete, "/api/workflows/"+strconv.FormatInt(created.ID, 10), nil, token)
+	if delResp.Code != http.StatusOK {
+		t.Fatalf("delete workflow status = %d", delResp.Code)
+	}
+}
+
+func TestLabelAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a label for project 1
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/labels", map[string]string{
+		"name":  "urgent",
+		"color": "red",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create label status = %d, body=%s", createResp.Code, createResp.Body.String())
+	}
+	var label store.Label
+	decodeResponse(t, createResp, &label)
+	if label.Name != "urgent" {
+		t.Fatalf("label name = %q", label.Name)
+	}
+
+	// List labels
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/labels", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list labels status = %d", listResp.Code)
+	}
+	var labels []store.Label
+	decodeResponse(t, listResp, &labels)
+	if len(labels) < 1 {
+		t.Fatal("expected at least one label")
+	}
+
+	// Create a ticket to attach the label to
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "Label test ticket",
+		"priority":   1,
+	}, token)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d, body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	// Add label to ticket
+	addLabelResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/labels", map[string]any{
+		"label_id": label.ID,
+	}, token)
+	if addLabelResp.Code != http.StatusOK && addLabelResp.Code != http.StatusCreated {
+		t.Fatalf("add label status = %d, body=%s", addLabelResp.Code, addLabelResp.Body.String())
+	}
+
+	// List ticket labels
+	ticketLabelsResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/labels", nil, token)
+	if ticketLabelsResp.Code != http.StatusOK {
+		t.Fatalf("list ticket labels status = %d", ticketLabelsResp.Code)
+	}
+
+	// Remove label from ticket
+	removeLabelResp := doJSONRequest(t, handler, http.MethodDelete, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/labels/"+strconv.FormatInt(label.ID, 10), nil, token)
+	if removeLabelResp.Code != http.StatusOK {
+		t.Fatalf("remove ticket label status = %d", removeLabelResp.Code)
+	}
+
+	// Delete label
+	delResp := doJSONRequest(t, handler, http.MethodDelete, "/api/labels/"+strconv.FormatInt(label.ID, 10), nil, token)
+	if delResp.Code != http.StatusOK {
+		t.Fatalf("delete label status = %d", delResp.Code)
+	}
+}
+
+func TestTimeEntryAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a ticket
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "Time tracking ticket",
+		"priority":   1,
+	}, token)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d", ticketResp.Code)
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	// Log time
+	logResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/time", map[string]any{
+		"minutes": 45,
+		"note":    "Initial work",
+	}, token)
+	if logResp.Code != http.StatusCreated {
+		t.Fatalf("log time status = %d, body=%s", logResp.Code, logResp.Body.String())
+	}
+	var entry store.TimeEntry
+	decodeResponse(t, logResp, &entry)
+	if entry.Minutes != 45 {
+		t.Fatalf("entry minutes = %d, want 45", entry.Minutes)
+	}
+
+	// List time entries
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/time", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list time status = %d", listResp.Code)
+	}
+	var entries []store.TimeEntry
+	decodeResponse(t, listResp, &entries)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 time entry, got %d", len(entries))
+	}
+
+	// Get total
+	totalResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticket.ID, 10)+"/time/total", nil, token)
+	if totalResp.Code != http.StatusOK {
+		t.Fatalf("total time status = %d", totalResp.Code)
+	}
+	var totalPayload map[string]any
+	decodeResponse(t, totalResp, &totalPayload)
+	if total, ok := totalPayload["total"].(float64); !ok || int(total) != 45 {
+		t.Fatalf("total = %v, want 45", totalPayload["total"])
+	}
+
+	// Delete time entry
+	delResp := doJSONRequest(t, handler, http.MethodDelete, "/api/time/"+strconv.FormatInt(entry.ID, 10), nil, token)
+	if delResp.Code != http.StatusOK {
+		t.Fatalf("delete time entry status = %d", delResp.Code)
+	}
+}
+
+func TestDependencyAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create two tickets
+	t1Resp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1, "type": "task", "title": "Ticket A", "priority": 1,
+	}, token)
+	if t1Resp.Code != http.StatusCreated {
+		t.Fatalf("create ticket A status = %d", t1Resp.Code)
+	}
+	var ticketA store.Ticket
+	decodeResponse(t, t1Resp, &ticketA)
+
+	t2Resp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1, "type": "task", "title": "Ticket B", "priority": 1,
+	}, token)
+	if t2Resp.Code != http.StatusCreated {
+		t.Fatalf("create ticket B status = %d", t2Resp.Code)
+	}
+	var ticketB store.Ticket
+	decodeResponse(t, t2Resp, &ticketB)
+
+	// Add dependency: A depends on B
+	addResp := doJSONRequest(t, handler, http.MethodPost, "/api/dependencies", map[string]any{
+		"project_id": 1,
+		"ticket_id":  ticketA.ID,
+		"depends_on": ticketB.ID,
+	}, token)
+	if addResp.Code != http.StatusCreated {
+		t.Fatalf("add dependency status = %d, body=%s", addResp.Code, addResp.Body.String())
+	}
+
+	// List dependencies for ticket A
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+strconv.FormatInt(ticketA.ID, 10)+"/dependencies", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list dependencies status = %d", listResp.Code)
+	}
+	var deps []store.Dependency
+	decodeResponse(t, listResp, &deps)
+	if len(deps) != 1 {
+		t.Fatalf("expected 1 dependency, got %d", len(deps))
+	}
+	if deps[0].DependsOn != ticketB.ID {
+		t.Fatalf("depends_on = %d, want %d", deps[0].DependsOn, ticketB.ID)
+	}
+
+	// Remove dependency (DELETE uses query params)
+	delPath := "/api/dependencies?project_id=1&ticket_id=" + strconv.FormatInt(ticketA.ID, 10) + "&depends_on=" + strconv.FormatInt(ticketB.ID, 10)
+	delResp := doJSONRequest(t, handler, http.MethodDelete, delPath, nil, token)
+	if delResp.Code != http.StatusOK {
+		t.Fatalf("remove dependency status = %d, body=%s", delResp.Code, delResp.Body.String())
+	}
+}

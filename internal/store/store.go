@@ -413,6 +413,45 @@ CREATE TABLE IF NOT EXISTS workflow_stages (
 	FOREIGN KEY(role_id) REFERENCES roles(role_id),
 	UNIQUE(workflow_id, stage_name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_project_id ON tickets(project_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_parent_id ON tickets(parent_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_assignee ON tickets(assignee);
+CREATE INDEX IF NOT EXISTS idx_tickets_stage ON tickets(stage);
+CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state);
+CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id);
+
+CREATE INDEX IF NOT EXISTS idx_stories_project_id ON stories(project_id);
+
+CREATE INDEX IF NOT EXISTS idx_story_ticket_links_ticket_id ON story_ticket_links(ticket_id);
+
+CREATE INDEX IF NOT EXISTS idx_history_events_project_id ON history_events(project_id);
+CREATE INDEX IF NOT EXISTS idx_history_events_ticket_id ON history_events(ticket_id);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_history_project_id ON ticket_history(project_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_history_ticket_id ON ticket_history(ticket_id);
+
+CREATE INDEX IF NOT EXISTS idx_comments_item_id ON comments(item_id);
+CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_dependencies_project_id ON dependencies(project_id);
+CREATE INDEX IF NOT EXISTS idx_dependencies_ticket_id ON dependencies(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_dependencies_depends_on ON dependencies(depends_on);
+
+CREATE INDEX IF NOT EXISTS idx_labels_project_id ON labels(project_id);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_labels_label_id ON ticket_labels(label_id);
+
+CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_stages_workflow_id ON workflow_stages(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_stages_role_id ON workflow_stages(role_id);
+
+CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id);
 `
 
 	if _, err := db.Exec(schema); err != nil {
