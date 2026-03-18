@@ -686,7 +686,13 @@
         border-bottom: 1px solid var(--line);
       }
       .perspective-item:last-child { border-bottom: none; }
-      .perspective-item:hover, .perspective-item.active { background: #f0ede6; }
+      .perspective-item:hover { background: #f0ede6; }
+      .perspective-item.active {
+        background: rgba(17, 100, 102, 0.12);
+        color: var(--accent);
+        border-left: 3px solid var(--accent);
+        padding-left: calc(1rem - 3px);
+      }
       .perspective-kicker { font-size: 0.82rem; color: var(--muted); }
 
       .fab {
@@ -2507,7 +2513,9 @@
       function syncPerspectiveUI() {
         setLeftPanelActive(currentPerspective);
         perspectiveItems.forEach((el) => {
-          el.classList.toggle("active", el.dataset.perspective === currentPerspective);
+          const matches = el.dataset.perspective === currentPerspective
+            || el.dataset.panelAction === currentPerspective;
+          el.classList.toggle("active", matches);
         });
       }
 
@@ -2527,8 +2535,10 @@
       function openPerspectivePicker() {
         syncPerspectiveUI();
         const visible = visiblePerspectiveItems();
-        perspectiveActiveIdx = Math.max(0, visible.findIndex((el) => el.dataset.perspective === currentPerspective));
-        if (perspectiveActiveIdx < 0) perspectiveActiveIdx = 0;
+        const matchIdx = visible.findIndex((el) =>
+          el.dataset.perspective === currentPerspective || el.dataset.panelAction === currentPerspective
+        );
+        perspectiveActiveIdx = matchIdx >= 0 ? matchIdx : 0;
         visible.forEach((el, idx) => el.classList.toggle("active", idx === perspectiveActiveIdx));
         perspectiveOverlay.classList.remove("hidden");
       }

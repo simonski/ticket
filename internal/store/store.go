@@ -422,8 +422,6 @@ CREATE INDEX IF NOT EXISTS idx_tickets_parent_id ON tickets(parent_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee ON tickets(assignee);
 CREATE INDEX IF NOT EXISTS idx_tickets_stage ON tickets(stage);
 CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state);
-CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id);
-
 CREATE INDEX IF NOT EXISTS idx_stories_project_id ON stories(project_id);
 
 CREATE INDEX IF NOT EXISTS idx_story_ticket_links_ticket_id ON story_ticket_links(ticket_id);
@@ -451,7 +449,6 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_stages_workflow_id ON workflow_stages(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_stages_role_id ON workflow_stages(role_id);
 
-CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -529,6 +526,9 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id)`); err != nil {
+		return err
+	}
 	if _, err := db.Exec(`UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
 		return err
 	}
@@ -600,6 +600,9 @@ func migrateSchema(db *sql.DB) error {
 		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN workflow_stage_id INTEGER REFERENCES workflow_stages(workflow_stage_id)`); err != nil {
 			return err
 		}
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id)`); err != nil {
+		return err
 	}
 	if !tableExists(db, "stories") {
 		if _, err := db.Exec(`
