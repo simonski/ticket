@@ -2664,3 +2664,87 @@ func TestRunBoard(t *testing.T) {
 		t.Fatalf("board missing ticket:\n%s", output)
 	}
 }
+
+func TestRunEpicUseSetsCurrent(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "My Epic"})
+	epicRef := strconv.FormatInt(epicID, 10)
+
+	if err := run([]string{"epic", "use", epicRef}); err != nil {
+		t.Fatalf("epic use error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	if cfg.CurrentEpicID != epicID {
+		t.Fatalf("CurrentEpicID = %d, want %d", cfg.CurrentEpicID, epicID)
+	}
+}
+
+func TestRunEpicUseRejectsNonEpic(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Just a task"})
+	if err := run([]string{"epic", "use", strconv.FormatInt(taskID, 10)}); err == nil {
+		t.Fatal("expected error when using a non-epic ticket, got nil")
+	}
+}
+
+func TestRunEpicClearResetsEpicID(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Clearable Epic"})
+	if err := run([]string{"epic", "use", strconv.FormatInt(epicID, 10)}); err != nil {
+		t.Fatalf("epic use error = %v", err)
+	}
+
+	if err := run([]string{"epic", "clear"}); err != nil {
+		t.Fatalf("epic clear error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	if cfg.CurrentEpicID != 0 {
+		t.Fatalf("CurrentEpicID = %d after clear, want 0", cfg.CurrentEpicID)
+	}
+}
+
+func TestRunEpicListShowsActiveMarker(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Listed Epic"})
+	epicRef := strconv.FormatInt(epicID, 10)
+
+	// Clear active epic so we can test the "no marker" state
+	clearCurrentEpicID(t)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"epic", "ls"}); err != nil {
+			t.Fatalf("epic ls error = %v", err)
+		}
+	})
+	if strings.Contains(output, "*") {
+		t.Fatalf("epic ls should not show active marker before use: %s", output)
+	}
+
+	if err := run([]string{"epic", "use", epicRef}); err != nil {
+		t.Fatalf("epic use error = %v", err)
+	}
+
+	output = captureStdout(t, func() {
+		if err := run([]string{"epic", "ls"}); err != nil {
+			t.Fatalf("epic ls error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "*") {
+		t.Fatalf("epic ls should show active marker after use: %s", output)
+	}
+	if !strings.Contains(output, "Listed Epic") {
+		t.Fatalf("epic ls missing epic title: %s", output)
+	}
+}

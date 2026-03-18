@@ -253,7 +253,7 @@ func run(args []string) error {
 	case "bug":
 		return runTypedTicketCreate("bug", trimmedArgs[1:])
 	case "epic":
-		return runTypedTicketCreate("epic", trimmedArgs[1:])
+		return runEpic(trimmedArgs[1:])
 	case "config":
 		return runConfig(trimmedArgs[1:])
 	default:
@@ -1440,6 +1440,74 @@ func printUserTable(users []store.User) {
 		fmt.Fprintf(w, "%s\t%s\t%t\n", user.Username, user.Role, user.Enabled)
 	}
 	_ = w.Flush()
+}
+
+func runEpic(args []string) error {
+	// Subcommands: use <id>, clear, list/ls — otherwise fall through to create
+	if len(args) > 0 {
+		switch args[0] {
+		case "use":
+			if len(args) != 2 {
+				return errors.New("usage: ticket epic use <id>")
+			}
+			cfg, svc, _, err := resolveCurrentProjectClient()
+			if err != nil {
+				return err
+			}
+			ticket, err := svc.GetTicket(args[1])
+			if err != nil {
+				return err
+			}
+			if ticket.Type != "epic" {
+				return fmt.Errorf("ticket %s is not an epic", args[1])
+			}
+			cfg.CurrentEpicID = ticket.ID
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Printf("using epic %s: %s\n", ticket.Key, ticket.Title)
+			return nil
+		case "clear":
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			cfg.CurrentEpicID = 0
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Println("active epic cleared")
+			return nil
+		case "list", "ls":
+			cfg, _, project, err := resolveCurrentProjectClient()
+			if err != nil {
+				return err
+			}
+			svc, err := resolveService(cfg)
+			if err != nil {
+				return err
+			}
+			epics, err := svc.ListTicketsFiltered(project.ID, "epic", "", "", "", "", "", 0, false)
+			if err != nil {
+				return err
+			}
+			if outputJSON {
+				return printJSON(epics)
+			}
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "KEY\tSTATUS\tTITLE")
+			for _, t := range epics {
+				active := " "
+				if t.ID == cfg.CurrentEpicID {
+					active = "*"
+				}
+				fmt.Fprintf(w, "%s%s\t%s\t%s\n", active, t.Key, t.Status, t.Title)
+			}
+			_ = w.Flush()
+			return nil
+		}
+	}
+	return runTypedTicketCreate("epic", args)
 }
 
 func runProject(args []string) error {
