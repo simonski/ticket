@@ -1076,3 +1076,52 @@ func (s *LocalService) ListTicketLabels(ticketID int64) ([]store.Label, error) {
 	defer db.Close()
 	return store.ListTicketLabels(db, ticketID)
 }
+
+func (s *LocalService) CreateStory(projectID int64, title, description string) (store.Story, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Story{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Story{}, err
+	}
+	return store.CreateStory(db, projectID, title, description, user.ID)
+}
+
+func (s *LocalService) ListStories(projectID int64) ([]store.Story, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListStoriesByProject(db, projectID)
+}
+
+func (s *LocalService) GetStory(id int64) (store.Story, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Story{}, err
+	}
+	defer db.Close()
+	return store.GetStory(db, id)
+}
+
+func (s *LocalService) UpdateStory(id int64, title, description string) (store.Story, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Story{}, err
+	}
+	defer db.Close()
+	return store.UpdateStory(db, id, title, description)
+}
+
+func (s *LocalService) DeleteStory(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteStory(db, id)
+}

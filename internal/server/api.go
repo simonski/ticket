@@ -1841,6 +1841,18 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeAuthError(w, store.ErrForbidden)
 			return
 		}
+		if len(parts) == 1 && r.Method == http.MethodGet {
+			writeJSON(w, http.StatusOK, story)
+			return
+		}
+		if len(parts) == 1 && r.Method == http.MethodDelete {
+			if err := store.DeleteStory(db, story.ID); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if len(parts) == 1 && r.Method == http.MethodPut {
 			var payload storyRequest
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {

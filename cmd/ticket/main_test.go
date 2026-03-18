@@ -2748,3 +2748,97 @@ func TestRunEpicListShowsActiveMarker(t *testing.T) {
 		t.Fatalf("epic ls missing epic title: %s", output)
 	}
 }
+
+func TestRunStoryCreateListGetUpdateDelete(t *testing.T) {
+	setupLocalCLI(t)
+
+	// create
+	createOutput := captureStdout(t, func() {
+		if err := run([]string{"story", "create", "Auth Story", "-d", "User wants to log in"}); err != nil {
+			t.Fatalf("story create error = %v", err)
+		}
+	})
+	if !strings.Contains(createOutput, "Auth Story") {
+		t.Fatalf("story create output missing title: %s", createOutput)
+	}
+
+	// list
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"story", "ls"}); err != nil {
+			t.Fatalf("story ls error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, "Auth Story") {
+		t.Fatalf("story ls missing title: %s", listOutput)
+	}
+	if !strings.Contains(listOutput, "draft") {
+		t.Fatalf("story ls missing status: %s", listOutput)
+	}
+
+	// get
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"story", "get", "1"}); err != nil {
+			t.Fatalf("story get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOutput, "Auth Story") {
+		t.Fatalf("story get missing title: %s", getOutput)
+	}
+	if !strings.Contains(getOutput, "User wants to log in") {
+		t.Fatalf("story get missing description: %s", getOutput)
+	}
+
+	// update
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"story", "update", "1", "-title", "Updated Story"}); err != nil {
+			t.Fatalf("story update error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, "Updated Story") {
+		t.Fatalf("story update output missing new title: %s", updateOutput)
+	}
+
+	// delete
+	if err := run([]string{"story", "delete", "1"}); err != nil {
+		t.Fatalf("story delete error = %v", err)
+	}
+
+	// list should be empty
+	emptyOutput := captureStdout(t, func() {
+		if err := run([]string{"story", "ls"}); err != nil {
+			t.Fatalf("story ls error after delete = %v", err)
+		}
+	})
+	if strings.Contains(emptyOutput, "Updated Story") {
+		t.Fatalf("story ls should be empty after delete: %s", emptyOutput)
+	}
+}
+
+func TestRunStoryCreatePositionalTitle(t *testing.T) {
+	setupLocalCLI(t)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"story", "create", "My User Story"}); err != nil {
+			t.Fatalf("story create error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "My User Story") {
+		t.Fatalf("story create did not use positional title: %s", output)
+	}
+}
+
+func TestRunStoryCreateRequiresTitle(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"story", "create"}); err == nil {
+		t.Fatal("expected error when creating story without title")
+	}
+}
+
+func TestRunStoryGetInvalidID(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"story", "get", "999"}); err == nil {
+		t.Fatal("expected error for non-existent story id")
+	}
+}

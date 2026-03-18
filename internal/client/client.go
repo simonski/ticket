@@ -1509,3 +1509,81 @@ func (c *Client) ListTicketLabels(ticketID int64) ([]store.Label, error) {
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/labels", ticketID), nil, &labels)
 	return labels, err
 }
+
+type storyRequest struct {
+	ProjectID   int64  `json:"project_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+func (c *Client) CreateStory(projectID int64, title, description string) (store.Story, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Story{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Story{}, err
+		}
+		return store.CreateStory(db, projectID, title, description, user.ID)
+	}
+	var created store.Story
+	err := c.doJSON(http.MethodPost, "/api/stories", storyRequest{ProjectID: projectID, Title: title, Description: description}, &created)
+	return created, err
+}
+
+func (c *Client) ListStories(projectID int64) ([]store.Story, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListStoriesByProject(db, projectID)
+	}
+	var stories []store.Story
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/stories", projectID), nil, &stories)
+	return stories, err
+}
+
+func (c *Client) GetStory(id int64) (store.Story, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Story{}, err
+		}
+		defer db.Close()
+		return store.GetStory(db, id)
+	}
+	var story store.Story
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/stories/%d", id), nil, &story)
+	return story, err
+}
+
+func (c *Client) UpdateStory(id int64, title, description string) (store.Story, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Story{}, err
+		}
+		defer db.Close()
+		return store.UpdateStory(db, id, title, description)
+	}
+	var updated store.Story
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/stories/%d", id), storyRequest{Title: title, Description: description}, &updated)
+	return updated, err
+}
+
+func (c *Client) DeleteStory(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteStory(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
+}

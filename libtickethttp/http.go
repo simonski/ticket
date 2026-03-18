@@ -366,3 +366,23 @@ func (s *Service) RemoveTicketLabel(ticketID, labelID int64) error {
 func (s *Service) ListTicketLabels(ticketID int64) ([]store.Label, error) {
 	return s.client.ListTicketLabels(ticketID)
 }
+
+func (s *Service) CreateStory(projectID int64, title, description string) (store.Story, error) {
+	return s.client.CreateStory(projectID, title, description)
+}
+
+func (s *Service) ListStories(projectID int64) ([]store.Story, error) {
+	return s.client.ListStories(projectID)
+}
+
+func (s *Service) GetStory(id int64) (store.Story, error) {
+	return s.client.GetStory(id)
+}
+
+func (s *Service) UpdateStory(id int64, title, description string) (store.Story, error) {
+	return s.client.UpdateStory(id, title, description)
+}
+
+func (s *Service) DeleteStory(id int64) error {
+	return s.client.DeleteStory(id)
+}

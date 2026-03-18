@@ -87,4 +87,9 @@ type Service interface {
 	RemoveDependency(request DependencyRequest) error
 	ListDependencies(id int64) ([]store.Dependency, error)
 	RequestTicket(request TicketRequest) (TicketRequestResponse, error)
+	CreateStory(projectID int64, title, description string) (store.Story, error)
+	ListStories(projectID int64) ([]store.Story, error)
+	GetStory(id int64) (store.Story, error)
+	UpdateStory(id int64, title, description string) (store.Story, error)
+	DeleteStory(id int64) error
 }
