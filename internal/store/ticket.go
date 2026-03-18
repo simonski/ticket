@@ -245,12 +245,16 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 			return Ticket{}, err
 		}
 	}
-	if !current.Open {
+	// An explicit stage override (e.g. board drag-and-drop) is allowed to reopen a
+	// closed ticket — lifecycle moves take precedence over the closed flag.
+	explicitStageOverride := normalizeOptional(params.Stage) != ""
+	if !current.Open && !explicitStageOverride {
 		return Ticket{}, ErrTicketClosed
 	}
 	if current.Archived {
 		return Ticket{}, ErrTicketArchived
 	}
+	reopened := !current.Open && explicitStageOverride
 	assignee := strings.TrimSpace(params.Assignee)
 	nextGitRepository := strings.TrimSpace(params.GitRepository)
 	if nextGitRepository == "" {
@@ -354,11 +358,15 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 	}
 
 writeTicket:
+	openVal := 1
+	if !reopened && !current.Open {
+		openVal = 0
+	}
 	result, err := db.Exec(`
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, open = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableInt64(params.ParentID), assignee, nullableInt64(workflowStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), id)
+	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableInt64(params.ParentID), assignee, nullableInt64(workflowStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), openVal, id)
 	if err != nil {
 		return Ticket{}, err
 	}
