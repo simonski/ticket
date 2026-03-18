@@ -3440,3 +3440,93 @@ func TestRunDependencyInvalidID(t *testing.T) {
 		t.Fatal("dependency add with non-existent dep should return error")
 	}
 }
+
+func TestRunArchiveAndUnarchive(t *testing.T) {
+	setupLocalCLI(t)
+
+	id := createLocalTask(t, []string{"add", "Archive me"})
+	ref := strconv.FormatInt(id, 10)
+
+	// archive
+	archiveOut := captureStdout(t, func() {
+		if err := run([]string{"archive", "-id", ref}); err != nil {
+			t.Fatalf("archive error = %v", err)
+		}
+	})
+	if !strings.Contains(archiveOut, "archived: true") {
+		t.Fatalf("archive output should show archived=true:\n%s", archiveOut)
+	}
+
+	// archived ticket hidden from default list
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if strings.Contains(listOut, "Archive me") {
+		t.Fatalf("archived ticket should not appear in default list:\n%s", listOut)
+	}
+
+	// unarchive
+	unarchiveOut := captureStdout(t, func() {
+		if err := run([]string{"unarchive", "-id", ref}); err != nil {
+			t.Fatalf("unarchive error = %v", err)
+		}
+	})
+	if !strings.Contains(unarchiveOut, "archived: false") {
+		t.Fatalf("unarchive output should show archived=false:\n%s", unarchiveOut)
+	}
+
+	// ticket reappears in list
+	listOut2 := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut2, "Archive me") {
+		t.Fatalf("unarchived ticket should appear in list:\n%s", listOut2)
+	}
+}
+
+func TestRunArchiveRequiresID(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"archive"})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("archive without -id should return usage error, got: %v", err)
+	}
+}
+
+func TestRunCommentAddAndList(t *testing.T) {
+	setupLocalCLI(t)
+
+	id := createLocalTask(t, []string{"add", "Commented ticket"})
+	ref := strconv.FormatInt(id, 10)
+
+	// add comment
+	addOut := captureStdout(t, func() {
+		if err := run([]string{"comment", "add", "-id", ref, "First comment"}); err != nil {
+			t.Fatalf("comment add error = %v", err)
+		}
+	})
+	if !strings.Contains(addOut, "First comment") {
+		t.Fatalf("comment add output should echo comment text:\n%s", addOut)
+	}
+
+	// comment appears in ticket detail
+	getOut := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", ref}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOut, "First comment") {
+		t.Fatalf("get detail should include comment:\n%s", getOut)
+	}
+}
+
+func TestRunCommentAddRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"comment", "add"})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("comment add without args should return usage error, got: %v", err)
+	}
+}
