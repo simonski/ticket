@@ -2925,3 +2925,252 @@ func TestRunStoryGetInvalidID(t *testing.T) {
 		t.Fatal("expected error for non-existent story id")
 	}
 }
+
+func TestRunCurateCreatesRequirement(t *testing.T) {
+	setupLocalCLI(t)
+
+	sourceID := createLocalTask(t, []string{"add", "Implement login"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"curate", strconv.FormatInt(sourceID, 10)}); err != nil {
+			t.Fatalf("curate error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "requirement") {
+		t.Fatalf("curate output missing type=requirement:\n%s", output)
+	}
+	if !strings.Contains(output, "Implement login") {
+		t.Fatalf("curate output missing source title:\n%s", output)
+	}
+}
+
+func TestRunCurateRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	if err := run([]string{"curate"}); err == nil {
+		t.Fatal("expected error when curate has no args")
+	}
+}
+
+func TestRunReviewListsRequirements(t *testing.T) {
+	setupLocalCLI(t)
+
+	sourceID := createLocalTask(t, []string{"add", "Login feature"})
+	if err := run([]string{"curate", strconv.FormatInt(sourceID, 10)}); err != nil {
+		t.Fatalf("curate error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"review"}); err != nil {
+			t.Fatalf("review error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Login feature") {
+		t.Fatalf("review output missing requirement title:\n%s", output)
+	}
+}
+
+func TestRunReviewFiltersByStatus(t *testing.T) {
+	setupLocalCLI(t)
+
+	sourceID := createLocalTask(t, []string{"add", "Filter source"})
+	var reqKey string
+	captureStdout(t, func() {
+		if err := run([]string{"curate", strconv.FormatInt(sourceID, 10)}); err != nil {
+			t.Fatalf("curate error = %v", err)
+		}
+	})
+	// list to get key
+	allOutput := captureStdout(t, func() {
+		if err := run([]string{"review"}); err != nil {
+			t.Fatalf("review error = %v", err)
+		}
+	})
+	// extract key from output line
+	for _, line := range strings.Split(allOutput, "\n") {
+		if strings.Contains(line, "Filter source") {
+			reqKey = strings.Fields(line)[0]
+			break
+		}
+	}
+	if reqKey == "" {
+		t.Fatalf("could not find requirement key in review output: %s", allOutput)
+	}
+
+	// accept it
+	if err := run([]string{"accept", "requirement", reqKey}); err != nil {
+		t.Fatalf("accept error = %v", err)
+	}
+
+	// should appear in accepted review
+	acceptedOutput := captureStdout(t, func() {
+		if err := run([]string{"review", "-status", "accepted"}); err != nil {
+			t.Fatalf("review -status accepted error = %v", err)
+		}
+	})
+	if !strings.Contains(acceptedOutput, "Filter source") {
+		t.Fatalf("review -status accepted missing accepted requirement:\n%s", acceptedOutput)
+	}
+
+	// should not appear in proposed review
+	proposedOutput := captureStdout(t, func() {
+		if err := run([]string{"review", "-status", "proposed"}); err != nil {
+			t.Fatalf("review -status proposed error = %v", err)
+		}
+	})
+	if strings.Contains(proposedOutput, "Filter source") {
+		t.Fatalf("review -status proposed should not show accepted requirement:\n%s", proposedOutput)
+	}
+}
+
+func TestRunAcceptAndRejectRequirement(t *testing.T) {
+	setupLocalCLI(t)
+
+	src1 := createLocalTask(t, []string{"add", "Accept me"})
+	src2 := createLocalTask(t, []string{"add", "Reject me"})
+
+	var req1Key, req2Key string
+	captureStdout(t, func() {
+		if err := run([]string{"curate", strconv.FormatInt(src1, 10)}); err != nil {
+			t.Fatalf("curate error = %v", err)
+		}
+	})
+	captureStdout(t, func() {
+		if err := run([]string{"curate", strconv.FormatInt(src2, 10)}); err != nil {
+			t.Fatalf("curate error = %v", err)
+		}
+	})
+	allOutput := captureStdout(t, func() {
+		if err := run([]string{"review"}); err != nil {
+			t.Fatalf("review error = %v", err)
+		}
+	})
+	for _, line := range strings.Split(allOutput, "\n") {
+		if strings.Contains(line, "Accept me") {
+			req1Key = strings.Fields(line)[0]
+		}
+		if strings.Contains(line, "Reject me") {
+			req2Key = strings.Fields(line)[0]
+		}
+	}
+	if req1Key == "" || req2Key == "" {
+		t.Fatalf("could not extract keys from review output: %s", allOutput)
+	}
+
+	// accept
+	acceptOut := captureStdout(t, func() {
+		if err := run([]string{"accept", "requirement", req1Key}); err != nil {
+			t.Fatalf("accept error = %v", err)
+		}
+	})
+	// accept auto-advances through the workflow: design/success → develop/idle
+	if !strings.Contains(acceptOut, "develop") {
+		t.Fatalf("accept output should show ticket moved to develop stage:\n%s", acceptOut)
+	}
+
+	// reject
+	rejectOut := captureStdout(t, func() {
+		if err := run([]string{"reject", "requirement", req2Key}); err != nil {
+			t.Fatalf("reject error = %v", err)
+		}
+	})
+	if !strings.Contains(rejectOut, "fail") {
+		t.Fatalf("reject output should show fail state:\n%s", rejectOut)
+	}
+}
+
+func TestRunReviseRequirement(t *testing.T) {
+	setupLocalCLI(t)
+
+	srcID := createLocalTask(t, []string{"add", "Revise source"})
+	var reqKey string
+	captureStdout(t, func() {
+		if err := run([]string{"curate", strconv.FormatInt(srcID, 10)}); err != nil {
+			t.Fatalf("curate error = %v", err)
+		}
+	})
+	allOutput := captureStdout(t, func() {
+		if err := run([]string{"review"}); err != nil {
+			t.Fatalf("review error = %v", err)
+		}
+	})
+	for _, line := range strings.Split(allOutput, "\n") {
+		if strings.Contains(line, "Revise source") {
+			reqKey = strings.Fields(line)[0]
+			break
+		}
+	}
+	if reqKey == "" {
+		t.Fatalf("could not find requirement key: %s", allOutput)
+	}
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"revise", "requirement", reqKey}); err != nil {
+			t.Fatalf("revise error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "(revised)") {
+		t.Fatalf("revise output should contain (revised):\n%s", out)
+	}
+}
+
+func TestRunDecisionAddAndList(t *testing.T) {
+	setupLocalCLI(t)
+
+	addOut := captureStdout(t, func() {
+		if err := run([]string{"decision", "add", "Use PostgreSQL for storage"}); err != nil {
+			t.Fatalf("decision add error = %v", err)
+		}
+	})
+	if !strings.Contains(addOut, "decision") {
+		t.Fatalf("decision add output missing type:\n%s", addOut)
+	}
+
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"decision", "list"}); err != nil {
+			t.Fatalf("decision list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "Use PostgreSQL for storage") {
+		t.Fatalf("decision list missing decision text:\n%s", listOut)
+	}
+}
+
+func TestRunConversationShow(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Conversation ticket"})
+	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "First comment"}); err != nil {
+		t.Fatalf("comment add error = %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"conversation", "show", strconv.FormatInt(taskID, 10)}); err != nil {
+			t.Fatalf("conversation show error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "ticket_created") {
+		t.Fatalf("conversation show missing ticket_created event:\n%s", out)
+	}
+}
+
+func TestRunNoteAndQuestionCreate(t *testing.T) {
+	setupLocalCLI(t)
+
+	noteOut := captureStdout(t, func() {
+		if err := run([]string{"note", "Meeting notes from standup"}); err != nil {
+			t.Fatalf("note error = %v", err)
+		}
+	})
+	if noteOut == "" {
+		t.Fatal("note command produced no output")
+	}
+
+	questionOut := captureStdout(t, func() {
+		if err := run([]string{"question", "Should we migrate to Postgres?"}); err != nil {
+			t.Fatalf("question error = %v", err)
+		}
+	})
+	if questionOut == "" {
+		t.Fatal("question command produced no output")
+	}
+}

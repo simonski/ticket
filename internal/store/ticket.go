@@ -932,7 +932,7 @@ func normalizeOptional(v string) string {
 
 func validTicketType(ticketType string) bool {
 	switch ticketType {
-	case "task", "bug", "epic", "spike", "chore":
+	case "task", "bug", "epic", "spike", "chore", "note", "question", "requirement", "decision":
 		return true
 	default:
 		return false

@@ -109,6 +109,14 @@ func ticketTypeCode(ticketType string) (string, error) {
 		return "S", nil
 	case "chore":
 		return "C", nil
+	case "note":
+		return "N", nil
+	case "question":
+		return "Q", nil
+	case "requirement":
+		return "R", nil
+	case "decision":
+		return "D", nil
 	default:
 		return "", fmt.Errorf("invalid task type %q", ticketType)
 	}

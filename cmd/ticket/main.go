@@ -4479,10 +4479,20 @@ func runCurate(args []string) error {
 	return nil
 }
 
+// reviewStatusFilter holds stage/state filters for review vocabulary.
+// "proposed" = design/idle, "accepted" = moved past design (develop stage), "rejected" = design/fail
+type reviewFilter struct{ stage, state string }
+
+var reviewStatusFilters = map[string]reviewFilter{
+	"proposed": {"design", store.StateIdle},
+	"accepted": {store.StageDevelop, ""},
+	"rejected": {"design", store.StateFail},
+}
+
 func runReview(args []string) error {
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	status := fs.String("status", "proposed", "review status")
+	status := fs.String("status", "", "filter by review status: proposed, accepted, rejected")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -4490,7 +4500,16 @@ func runReview(args []string) error {
 	if err != nil {
 		return err
 	}
-	tickets, err := api.ListTicketsFiltered(project.ID, "requirement", "", "", *status, "", "", 0, false)
+	var stageFilter, stateFilter string
+	if *status != "" {
+		f, ok := reviewStatusFilters[strings.ToLower(strings.TrimSpace(*status))]
+		if !ok {
+			return fmt.Errorf("unknown review status %q; use proposed, accepted, or rejected", *status)
+		}
+		stageFilter = f.stage
+		stateFilter = f.state
+	}
+	tickets, err := api.ListTicketsFiltered(project.ID, "requirement", stageFilter, stateFilter, "", "", "", 0, false)
 	if err != nil {
 		return err
 	}
@@ -4500,40 +4519,13 @@ func runReview(args []string) error {
 	return nil
 }
 
-func runRequirementStatus(status string, args []string) error {
-	commandName := map[string]string{"accepted": "accept", "rejected": "reject"}[status]
+func runRequirementStatus(reviewStatus string, args []string) error {
+	commandName := map[string]string{"accepted": "accept", "rejected": "reject"}[reviewStatus]
 	if len(args) != 2 || args[0] != "requirement" {
 		return fmt.Errorf("usage: ticket %s requirement <id>", commandName)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		return err
-	}
-	current, err := svc.GetTicket(args[1])
-	if err != nil {
-		return err
-	}
-	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
-		Title:              current.Title,
-		Description:        current.Description,
-		AcceptanceCriteria: current.AcceptanceCriteria,
-		ParentID:           current.ParentID,
-		Assignee:           current.Assignee,
-		State:              current.State,
-		Priority:           current.Priority,
-		Order:              current.Order,
-		EstimateEffort:     current.EstimateEffort,
-		EstimateComplete:   current.EstimateComplete,
-	})
-	if err != nil {
-		return err
-	}
-	printTicket(updated)
-	return nil
+	stateToSet := map[string]string{"accepted": store.StateSuccess, "rejected": store.StateFail}[reviewStatus]
+	return updateTicketState(args[1], stateToSet)
 }
 
 func runRevise(args []string) error {
