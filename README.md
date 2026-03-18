@@ -75,8 +75,8 @@ Inspect and move work:
 ```bash
 ticket list
 ticket get CUS-T-42
-ticket develop CUS-T-42
-ticket active CUS-T-42
+ticket active -id CUS-T-42
+ticket complete -id CUS-T-42
 ticket claim
 ```
 

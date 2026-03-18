@@ -1,13 +1,13 @@
 EPIC: Core Runtime, Bootstrap, And Delivery
 ID: E1
-DESCRIPTION: Build the single-binary runtime for `task`, including versioning, onboarding, SQLite bootstrap, server startup, embedded web delivery, and make-based quality gates.
+DESCRIPTION: Build the single-binary runtime for `ticket`, including versioning, onboarding, SQLite bootstrap, server startup, embedded web delivery, and make-based quality gates.
 AC:
-- `task onboard` prints the embedded onboarding template (`TICKETS.md`) to stdout.
-- `task version` prints the embedded semantic version from the build asset.
-- `task initdb` creates the SQLite schema, the `admin` account, and the default project.
-- `task server` starts the API and embedded web UI from the same binary and serves on `http://localhost:8080` by default.
-- `task server -v` prints verbose request and response logs to stdout.
-- `task` with no arguments and `task server` print the ASCII-art `TASK` banner.
+- `ticket onboard` prints the embedded onboarding template (`TICKETS.md`) to stdout.
+- `ticket version` prints the embedded semantic version from the build asset.
+- `ticket init` creates the SQLite schema, the `admin` account, and the default project.
+- `ticket server` starts the API and embedded web UI from the same binary and serves on `http://localhost:8080` by default.
+- `ticket server -v` prints verbose request and response logs to stdout.
+- `ticket` with no arguments and `ticket server` print the ASCII-art `TASK` banner.
 - use red/green testing
 - use make to verify all tests pass
 - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
@@ -19,7 +19,7 @@ DEPENDS-ON: NONE
     DESCRIPTION: Embed static runtime assets needed by the CLI, including `VERSION` and the onboarding template, and wire build-time version incrementing through `make`.
     AC:
     - `VERSION` is incremented during `make build`.
-    - The built binary embeds the version value used by `task version`.
+    - The built binary embeds the version value used by `ticket version`.
     - The built binary embeds `cmd/ticket/TICKETS.md` for `ticket onboard`.
     - Automated tests cover version lookup and onboard asset behavior.
     - use red/green testing
@@ -32,9 +32,9 @@ DEPENDS-ON: NONE
     ID: E1-S2
     DESCRIPTION: Provide CLI-driven database initialization with safe overwrite behavior and generated admin credentials when needed.
     AC:
-    - `task initdb` creates a database at `$TICKET_CONFIG_DIR/task.db` when `-f` is omitted.
-    - `task initdb -f task.db --force -password secret` overwrites an existing database and uses the supplied password.
-    - `task initdb` without `-password` generates a random admin password and prints it to stdout.
+    - `ticket init` creates a database at `$TICKET_CONFIG_DIR/ticket.db` when `-f` is omitted.
+    - `ticket init -f ticket.db --force -password secret` overwrites an existing database and uses the supplied password.
+    - `ticket init` without `-password` generates a random admin password and prints it to stdout.
     - The initialized database contains the `admin` user and the default project with project id `1`.
     - Passwords are stored as Argon2id hashes in SQLite.
     - Automated tests cover first-run, overwrite, and generated-password flows.
@@ -48,10 +48,10 @@ DEPENDS-ON: NONE
     ID: E1-S3
     DESCRIPTION: Start the HTTP server, serve the embedded frontend, and print the startup banner, version, and database path.
     AC:
-    - `task server` opens `$TICKET_CONFIG_DIR/task.db` when `-f` is omitted.
-    - `task server -f filename.db` serves the API and embedded frontend against the selected database.
-    - `task server` prints the banner, the embedded version, and the resolved task database path before the listen message.
-    - `task server -v` logs request and response details to stdout.
+    - `ticket server` opens `$TICKET_CONFIG_DIR/ticket.db` when `-f` is omitted.
+    - `ticket server -f filename.db` serves the API and embedded frontend against the selected database.
+    - `ticket server` prints the banner, the embedded version, and the resolved task database path before the listen message.
+    - `ticket server -v` logs request and response details to stdout.
     - Automated tests cover startup wiring and verbose logging.
     - use red/green testing
     - use make to verify all tests pass
@@ -63,8 +63,8 @@ DEPENDS-ON: NONE
     ID: E1-S4
     DESCRIPTION: Provide concise top-level usage and per-command help with examples that match the documented command surface.
     AC:
-    - `task` prints the main client and admin commands only.
-    - `task help <command>` prints command usage, details, and a short example.
+    - `ticket` prints the main client and admin commands only.
+    - `ticket help <command>` prints command usage, details, and a short example.
     - Root usage and command help stay aligned with the current CLI surface.
     - Automated tests cover root usage and representative command help output.
     - use red/green testing
@@ -79,7 +79,7 @@ DESCRIPTION: Implement registration, login, logout, session storage, status insp
 AC:
 - The system supports `admin` and `user` roles.
 - Admins can create, list, delete, enable, and disable users.
-- `task register`, `task login`, `task logout`, and `task status` behave as documented.
+- `ticket register`, `ticket login`, `ticket logout`, and `ticket status` behave as documented.
 - Client-side state is split between `$TICKET_CONFIG_DIR/config.json` and `$TICKET_CONFIG_DIR/credentials.json`.
 - The web app uses the same authentication and session model as the CLI.
 - Admin-only calls made by non-admin users return HTTP 403 with `user is not an admin`.
@@ -107,10 +107,10 @@ DEPENDS-ON: E1
     ID: E2-S2
     DESCRIPTION: Support the documented admin CLI commands for managing users.
     AC:
-    - `task user create --username alice --password secret` creates a user.
-    - `task user ls` and `task user list` list users.
-    - `task user delete --username alice` and `task user rm --username alice` delete a user.
-    - `task user enable --username alice` and `task user disable --username alice` update enabled state.
+    - `ticket user create --username alice --password secret` creates a user.
+    - `ticket user ls` and `ticket user list` list users.
+    - `ticket user delete --username alice` and `ticket user rm --username alice` delete a user.
+    - `ticket user enable --username alice` and `ticket user disable --username alice` update enabled state.
     - Successful commands return human-readable output and support `-json`.
     - Automated tests cover create, list, delete, enable, and disable flows.
     - use red/green testing
@@ -123,12 +123,12 @@ DEPENDS-ON: E1
     ID: E2-S3
     DESCRIPTION: Implement the documented credential resolution rules, interactive prompting, and local session persistence.
     AC:
-    - `task register --username name --password secret` creates an account and does not log the user in.
-    - `task register` resolves missing values from `TICKET_USERNAME`, `TICKET_PASSWORD`, then `whoami` and `password`.
-    - `task login` checks `$TICKET_CONFIG_DIR/credentials.json`, then `$TICKET_CONFIG_DIR/config.json`, then flags, then env vars, then prompts.
-    - `task login` prompts with editable defaults and masks password input with `*` on interactive terminals.
-    - `task login` stores the session token in `$TICKET_CONFIG_DIR/credentials.json` and stores `username` and `server_url` in `$TICKET_CONFIG_DIR/config.json`.
-    - `task logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
+    - `ticket register --username name --password secret` creates an account and does not log the user in.
+    - `ticket register` resolves missing values from `TICKET_USERNAME`, `TICKET_PASSWORD`, then `whoami` and `password`.
+    - `ticket login` checks `$TICKET_CONFIG_DIR/credentials.json`, then `$TICKET_CONFIG_DIR/config.json`, then flags, then env vars, then prompts.
+    - `ticket login` prompts with editable defaults and masks password input with `*` on interactive terminals.
+    - `ticket login` stores the session token in `$TICKET_CONFIG_DIR/credentials.json` and stores `username` and `server_url` in `$TICKET_CONFIG_DIR/config.json`.
+    - `ticket logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
     - Automated tests cover registration, login success, invalid credentials retry, and logout.
     - use red/green testing
     - use make to verify all tests pass
@@ -140,7 +140,7 @@ DEPENDS-ON: E1
     ID: E2-S4
     DESCRIPTION: Expose server status and version information and reuse the same authentication model in the browser.
     AC:
-    - `task status` prints the effective configuration first, then performs a mode-appropriate connectivity check.
+    - `ticket status` prints the effective configuration first, then performs a mode-appropriate connectivity check.
     - In remote mode it prints mode, server, username, authentication state, and remote connection success/failure.
     - In local mode it prints mode, resolved database path, file existence, and local connection success/failure.
     - The web UI supports login, logout, and authenticated session reuse.
@@ -183,11 +183,11 @@ DEPENDS-ON: E2
     ID: E3-S2
     DESCRIPTION: Support the documented project commands and remember the active project for subsequent CLI commands.
     AC:
-    - `task project create "Customer Portal"` creates a project and makes it current.
-    - `task project list` and `task project ls` list projects.
-    - `task project get 2` shows project details.
-    - `task project use 2` changes the active project.
-    - `task project` shows the current project or `no active project`.
+    - `ticket project create "Customer Portal"` creates a project and makes it current.
+    - `ticket project list` and `ticket project ls` list projects.
+    - `ticket project get 2` shows project details.
+    - `ticket project use 2` changes the active project.
+    - `ticket project` shows the current project or `no active project`.
     - Automated tests cover active-project persistence and lookup by id.
     - use red/green testing
     - use make to verify all tests pass
@@ -214,7 +214,7 @@ ID: E4
 DESCRIPTION: Implement the shared work-item model for epics, tasks, and bugs, including creation defaults, parent-child hierarchy, acceptance criteria, and active-epic context.
 AC:
 - The system supports `epic`, `task`, and `bug` item types only.
-- Users can create work through `task add`, `task create`, `task new`, `task bug`, and `task epic`.
+- Users can create work through `ticket add`, `ticket create`, `ticket new`, `ticket bug`, and `ticket epic`.
 - Work items support title, description, acceptance criteria, priority, assignee, project, and optional parent.
 - Parent-child relationships support epics with child tasks and bugs.
 - The web UI supports creating and editing items against the same model.
@@ -242,12 +242,12 @@ DEPENDS-ON: E3
     ID: E4-S2
     DESCRIPTION: Support all documented CLI creation examples and defaults for tasks, bugs, and epics.
     AC:
-    - `task add "Customers can reset their password."` creates a task.
-    - `task create "I am a new task"` and `task new "I am a new task"` are aliases for task creation.
-    - `task add -title "I am a new task"` sets the title without positional words.
-    - `task bug "This is a bug"` creates a bug.
-    - `task epic "This is an Epic"` creates an epic.
-    - `task create -t task -p 1 -a alice -d "This is a Task" -ac "Has a title and description" "This is a Task"` is supported.
+    - `ticket add "Customers can reset their password."` creates a task.
+    - `ticket create "I am a new task"` and `ticket new "I am a new task"` are aliases for task creation.
+    - `ticket add -title "I am a new task"` sets the title without positional words.
+    - `ticket bug "This is a bug"` creates a bug.
+    - `ticket epic "This is an Epic"` creates an epic.
+    - `ticket create -t task -p 1 -a alice -d "This is a Task" -ac "Has a title and description" "This is a Task"` is supported.
     - Successful create commands print the created task id to stdout.
     - Automated tests cover aliases, defaults, and flag parsing.
     - use red/green testing
@@ -289,11 +289,11 @@ ID: E5
 DESCRIPTION: Implement list, search, detail, history, comments, dependencies, assignment, orphan detection, and aggregate count workflows for the current project model.
 AC:
 - Users can list, search, inspect, and count work items through the CLI and API.
-- `task get` prints the flat detail view documented in the design.
+- `ticket get` prints the flat detail view documented in the design.
 - Users can add comments and review append-only history.
 - Dependencies can be added and removed between tasks.
 - Admin assignment and self-claim workflows are enforced correctly.
-- `task count` reports users, projects, and current work-item totals by type and status.
+- `ticket count` reports users, projects, and current work-item totals by type and status.
 - use red/green testing
 - use make to verify all tests pass
 - work in a branch that contains the EPIC and TASK name for example `feature/<epic>-<task>`
@@ -304,13 +304,13 @@ DEPENDS-ON: E4
     ID: E5-S1
     DESCRIPTION: Provide list, filter, search, and orphan queries for the active project, including server-side limits.
     AC:
-    - `task list`, `task ls`, and `task list -n 20` list work items from the active project.
-    - `task list --type task`, `task list --type bug`, and `task list --type epic` filter by type.
-    - `task list --status design/idle`, `task list --status develop/active`, and `task list --status done/success` filter by the two-part `stage/state` status.
-    - `task list -u alice` and `task ls -u alice` filter by assignee.
-    - `task search "password reset"` searches titles and descriptions.
-    - `task orphans` lists items whose `parent_id` is null.
-    - `task list` prints a readable table with id, type, status, assignee, priority, and title.
+    - `ticket list`, `ticket ls`, and `ticket list -n 20` list work items from the active project.
+    - `ticket list --type task`, `ticket list --type bug`, and `ticket list --type epic` filter by type.
+    - `ticket list --status design/idle`, `ticket list --status develop/active`, and `ticket list --status done/success` filter by the two-part `stage/state` status.
+    - `ticket list -u alice` and `ticket ls -u alice` filter by assignee.
+    - `ticket search "password reset"` searches titles and descriptions.
+    - `ticket orphans` lists items whose `parent_id` is null.
+    - `ticket list` prints a readable table with id, type, status, assignee, priority, and title.
     - Automated tests cover filtering, search, assignee filtering, and limit handling.
     - use red/green testing
     - use make to verify all tests pass
@@ -322,10 +322,10 @@ DEPENDS-ON: E4
     ID: E5-S2
     DESCRIPTION: Support detailed task inspection and append-only activity review through the API, CLI, and web UI.
     AC:
-    - `task get 42` prints `ID`, `Type`, `Description`, `ParentID`, `ProjectID`, `Title`, `Assignee`, `Order`, `DependsOn`, `Status`, `Priority`, `Created`, `LastModified`, `Closed`, and `Acceptance Criteria`.
-    - `task get -json 42` pretty-prints the raw JSON response.
-    - `task history 17` prints the history for the item.
-    - `task comment add 17 "Waiting on API changes."` creates a comment and corresponding activity entry.
+    - `ticket get 42` prints `ID`, `Type`, `Description`, `ParentID`, `ProjectID`, `Title`, `Assignee`, `Order`, `DependsOn`, `Status`, `Priority`, `Created`, `LastModified`, `Closed`, and `Acceptance Criteria`.
+    - `ticket get -json 42` pretty-prints the raw JSON response.
+    - `ticket history 17` prints the history for the item.
+    - `ticket comment add 17 "Waiting on API changes."` creates a comment and corresponding activity entry.
     - The web detail pane shows the current item, dependencies, comments, and revision history.
     - Automated tests cover detail rendering, history retrieval, and comment creation.
     - use red/green testing
@@ -338,11 +338,11 @@ DEPENDS-ON: E4
     ID: E5-S3
     DESCRIPTION: Enforce task assignment rules for admins and standard users across API and CLI flows.
     AC:
-    - `task assign 42 alice` and `task unassign 42 alice` are admin-only.
-    - `task assign` and `task unassign` fail if the named user does not exist.
-    - `task assign` and `task unassign` fail if the named user is disabled.
-    - `task claim 42` assigns the caller unless another user already owns the task.
-    - `task unclaim 42` succeeds only when the caller is the current assignee.
+    - `ticket assign 42 alice` and `ticket unassign 42 alice` are admin-only.
+    - `ticket assign` and `ticket unassign` fail if the named user does not exist.
+    - `ticket assign` and `ticket unassign` fail if the named user is disabled.
+    - `ticket claim 42` assigns the caller unless another user already owns the task.
+    - `ticket unclaim 42` succeeds only when the caller is the current assignee.
     - Automated tests cover admin assignment, non-admin rejection, claim, and unclaim flows.
     - use red/green testing
     - use make to verify all tests pass
@@ -354,9 +354,9 @@ DEPENDS-ON: E4
     ID: E5-S4
     DESCRIPTION: Support task dependency creation and removal through the API, CLI, and detail views.
     AC:
-    - `task dependency add 4 1,2,3` adds comma-separated dependencies.
-    - `task dependency remove 4 2` removes one or more dependencies.
-    - `task get` renders `DependsOn` from the stored dependency data.
+    - `ticket dependency add 4 1,2,3` adds comma-separated dependencies.
+    - `ticket dependency remove 4 2` removes one or more dependencies.
+    - `ticket get` renders `DependsOn` from the stored dependency data.
     - The web detail pane exposes dependency information.
     - Automated tests cover add, remove, and detail rendering for dependencies.
     - use red/green testing
@@ -369,8 +369,8 @@ DEPENDS-ON: E4
     ID: E5-S5
     DESCRIPTION: Add server-backed aggregate counting for users, projects, and current work-item types.
     AC:
-    - `task count` prints users, projects, and work-item totals by type.
-    - `task count -project_id 1` prints project-scoped work-item totals and omits the global project total.
+    - `ticket count` prints users, projects, and work-item totals by type.
+    - `ticket count -project_id 1` prints project-scoped work-item totals and omits the global project total.
     - Count output groups totals by status for tasks, bugs, and epics where applicable.
     - Automated tests cover global and project-scoped count responses.
     - use red/green testing

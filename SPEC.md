@@ -268,21 +268,15 @@ On creation of a non-project ticket:
 - `stage=design`
 - `state=idle`
 
-### Stage Commands
+### Stage Commands (removed)
 
-These mutate leaf tickets only:
+Direct stage commands (`ticket design`, `ticket develop`, `ticket test`,
+`ticket done`) have been removed. Stages are now exclusively driven by
+the project workflow: setting `state=success` on a non-final workflow
+stage auto-advances the ticket to the next stage with `state=idle`.
 
-- `ticket design`
-- `ticket develop`
-- `ticket test`
-- `ticket done`
-
-Behavior:
-
-- `design` sets `stage=design`, `state=idle`
-- `develop` sets `stage=develop`, `state=idle`
-- `test` sets `stage=test`, `state=idle`
-- `done` sets `stage=done`, `state=success`
+Use `ticket complete -id <id>` (sets `state=success`) to advance through
+workflow stages, or `ticket state -id <id> <state>` to set state directly.
 
 ### State Commands
 
@@ -444,10 +438,6 @@ Derived lifecycle updates for parent tickets must also emit history entries.
 - `ticket claim -id <KEY|TICKET_ID>`
 - `ticket claim -dry-run`
 - `ticket unclaim <KEY|TICKET_ID>`
-- `ticket design <KEY|TICKET_ID>`
-- `ticket develop <KEY|TICKET_ID>`
-- `ticket test <KEY|TICKET_ID>`
-- `ticket done <KEY|TICKET_ID>`
 - `ticket idle <KEY|TICKET_ID>`
 - `ticket active <KEY|TICKET_ID>`
 - `ticket complete <KEY|TICKET_ID>` (sets `state=success`, auto-advances workflow stage)
