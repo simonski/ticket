@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "spinnerTipsEnabled": false,
+  "attribution": {
+    "commits": true,
+    "pullRequests": true
+  }
+}
