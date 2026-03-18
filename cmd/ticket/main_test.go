@@ -1023,10 +1023,10 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"TICKET_URL: " + server.URL,
-		"username: alice",
-		"authenticated: true",
-		"connection: ",
+		"TICKET_URL       : " + server.URL,
+		"username         : alice",
+		"authenticated    : true",
+		"connection       : ",
 		"success",
 	} {
 		if !strings.Contains(output, want) {
@@ -1048,7 +1048,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 		t.Fatalf("runStatus(local missing) error = %v, want os.ErrNotExist", runErr)
 	}
 	for _, want := range []string{
-		"db_exists: false",
+		"db_exists        : false",
 		"failure",
 		"hint: run ticket init",
 	} {
@@ -1056,7 +1056,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(output, "TICKET_URL: file://"+filepath.Join(tempDir, "ticket.db")) {
+	if !strings.Contains(output, "TICKET_URL       : file://"+filepath.Join(tempDir, "ticket.db")) {
 		t.Fatalf("runStatus(local missing) output missing TICKET_URL:\n%s", output)
 	}
 }
@@ -1075,14 +1075,14 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"db_exists: true",
-		"connection: success",
+		"db_exists        : true",
+		"connection       : success",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(output, "TICKET_URL: file://"+filepath.Join(tempDir, "ticket.db")) {
+	if !strings.Contains(output, "TICKET_URL       : file://"+filepath.Join(tempDir, "ticket.db")) {
 		t.Fatalf("runStatus(local) output missing TICKET_URL:\n%s", output)
 	}
 }
@@ -1804,6 +1804,13 @@ func TestRunTypedTaskCreateSupportsEstimateFlags(t *testing.T) {
 
 func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 	setupLocalCLI(t)
+	// Change cwd to the temp dir so FindLocalConfig does not pick up the
+	// repo-level .ticket.json and override current_project.
+	orig, _ := os.Getwd()
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -2016,8 +2023,8 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
-		"TICKET_URL: http://127.0.0.1:1",
-		"authenticated: false",
+		"TICKET_URL       : http://127.0.0.1:1",
+		"authenticated    : false",
 		"failure",
 	} {
 		if !strings.Contains(output, want) {

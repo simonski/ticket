@@ -10,6 +10,32 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
+// statusEnvVars returns the relevant environment variable names and their
+// current values (empty string when unset).
+func statusEnvVars() map[string]string {
+	vars := []string{"TICKET_URL", "TICKET_CONFIG_DIR"}
+	out := make(map[string]string, len(vars))
+	for _, k := range vars {
+		out[k] = os.Getenv(k)
+	}
+	return out
+}
+
+// resolveCurrentProject returns the active project key and where it came from.
+func resolveCurrentProject(cfg config.Config) (project, source string) {
+	cwd, err := os.Getwd()
+	if err == nil {
+		if lc, ok := config.FindLocalConfig(cwd); ok {
+			return lc.CurrentProject, "local: " + lc.Path
+		}
+	}
+	if cfg.CurrentProject != "" {
+		cfgPath, _ := config.Path()
+		return cfg.CurrentProject, "global: " + cfgPath
+	}
+	return "", ""
+}
+
 func runRemoteStatus(cfg config.Config) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
@@ -29,17 +55,27 @@ func runRemoteStatus(cfg config.Config) error {
 	if status.User != nil {
 		username = status.User.Username
 	}
+	cfgPath, _ := config.Path()
+	envVars := statusEnvVars()
+	project, projectSource := resolveCurrentProject(cfg)
 	if outputJSON {
 		return printJSON(map[string]any{
-			"TICKET_URL":    serverURL,
-			"username":      username,
-			"authenticated": authenticated,
-			"connection":    map[bool]string{true: "success", false: "failure"}[err == nil],
+			"TICKET_URL":        serverURL,
+			"TICKET_CONFIG_DIR": envVars["TICKET_CONFIG_DIR"],
+			"config_file":       cfgPath,
+			"current_project":   project,
+			"project_source":    projectSource,
+			"username":          username,
+			"authenticated":     authenticated,
+			"connection":        map[bool]string{true: "success", false: "failure"}[err == nil],
 		})
 	}
-	fmt.Printf("TICKET_URL: %s\n", serverURL)
-	fmt.Printf("username: %s\n", username)
-	fmt.Printf("authenticated: %t\n", authenticated)
+	fmt.Printf("TICKET_URL       : %s\n", serverURL)
+	printEnvLine("TICKET_CONFIG_DIR", envVars["TICKET_CONFIG_DIR"])
+	fmt.Printf("config_file      : %s\n", cfgPath)
+	printProjectLine(project, projectSource)
+	fmt.Printf("username         : %s\n", username)
+	fmt.Printf("authenticated    : %t\n", authenticated)
 	printConnectionLine(err == nil)
 	return err
 }
@@ -52,15 +88,26 @@ func runLocalStatus() error {
 	dbPath := resolved.DBPath
 	_, statErr := os.Stat(dbPath)
 	dbExists := statErr == nil
+	cfgPath, _ := config.Path()
+	envVars := statusEnvVars()
+	cfg, _ := config.Load()
+	project, projectSource := resolveCurrentProject(cfg)
 	if outputJSON {
 		return printJSON(map[string]any{
-			"TICKET_URL": "file://" + dbPath,
-			"db_exists":  dbExists,
-			"connection": map[bool]string{true: "success", false: "failure"}[localStatusCheck(dbPath) == nil],
+			"TICKET_URL":        "file://" + dbPath,
+			"TICKET_CONFIG_DIR": envVars["TICKET_CONFIG_DIR"],
+			"config_file":       cfgPath,
+			"current_project":   project,
+			"project_source":    projectSource,
+			"db_exists":         dbExists,
+			"connection":        map[bool]string{true: "success", false: "failure"}[localStatusCheck(dbPath) == nil],
 		})
 	}
-	fmt.Printf("TICKET_URL: file://%s\n", dbPath)
-	fmt.Printf("db_exists: %t\n", dbExists)
+	fmt.Printf("TICKET_URL       : file://%s\n", dbPath)
+	printEnvLine("TICKET_CONFIG_DIR", envVars["TICKET_CONFIG_DIR"])
+	fmt.Printf("config_file      : %s\n", cfgPath)
+	printProjectLine(project, projectSource)
+	fmt.Printf("db_exists        : %t\n", dbExists)
 	err = localStatusCheck(dbPath)
 	printConnectionLine(err == nil)
 	if !dbExists {
@@ -85,6 +132,22 @@ func localStatusCheck(dbPath string) error {
 	return nil
 }
 
+func printEnvLine(name, value string) {
+	if value == "" {
+		fmt.Printf("%-17s: (not set)\n", name)
+	} else {
+		fmt.Printf("%-17s: %s\n", name, value)
+	}
+}
+
+func printProjectLine(project, source string) {
+	if project == "" {
+		fmt.Printf("current_project  : (none)\n")
+		return
+	}
+	fmt.Printf("current_project  : %s  [%s]\n", project, source)
+}
+
 func printConnectionLine(ok bool) {
 	status := "failure"
 	color := "\x1b[31m"
@@ -93,8 +156,8 @@ func printConnectionLine(ok bool) {
 		color = "\x1b[32m"
 	}
 	if noColorOutput {
-		fmt.Printf("connection: %s\n", status)
+		fmt.Printf("connection       : %s\n", status)
 		return
 	}
-	fmt.Printf("connection: %s%s\x1b[0m\n", color, status)
+	fmt.Printf("connection       : %s%s\x1b[0m\n", color, status)
 }
