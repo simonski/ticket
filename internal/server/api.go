@@ -2449,7 +2449,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					return
 				}
 				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username)
-				_, state, _ := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
+				stage, state, _ := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 				ticket, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
 					Title:              ticketPayload.Title,
 					Description:        ticketPayload.Description,
@@ -2458,6 +2458,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					GitBranch:          ticketPayload.GitBranch,
 					ParentID:           ticketPayload.ParentID,
 					Assignee:           ticketPayload.Assignee,
+					Stage:              stage,
 					State:              state,
 					Priority:           ticketPayload.Priority,
 					Order:              ticketPayload.Order,

@@ -73,6 +73,7 @@ type TicketUpdateParams struct {
 	GitBranch          string
 	ParentID           *int64
 	Assignee           string
+	Stage              string
 	State              string
 	Priority           int
 	Order              int
@@ -275,13 +276,49 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 		}
 	}
 
+	explicitStage := normalizeOptional(params.Stage) != ""
 	explicitState := normalizeOptional(params.State) != ""
-	if hasChildren && explicitState {
+	if hasChildren && (explicitState || explicitStage) {
 		return Ticket{}, errors.New("ticket has children; state is derived from descendants")
 	}
 	state := current.State
 	stage := current.Stage
 	workflowStageID := current.WorkflowStageID
+	// Direct stage override (e.g. drag-and-drop on the board)
+	if explicitStage {
+		nextStage := strings.ToLower(strings.TrimSpace(params.Stage))
+		if !ValidStage(nextStage) {
+			return Ticket{}, fmt.Errorf("invalid stage %q", params.Stage)
+		}
+		if nextStage != current.Stage {
+			stage = nextStage
+			// Determine appropriate state for the new stage
+			if explicitState {
+				state = normalizeState(params.State)
+			} else {
+				if stage == StageDone {
+					state = StateSuccess
+				} else {
+					state = StateIdle
+				}
+			}
+			// Update workflow_stage_id to match the new stage (if a workflow is attached)
+			if current.WorkflowStageID != nil {
+				var workflowID int64
+				if err := db.QueryRow(`SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *current.WorkflowStageID).Scan(&workflowID); err == nil {
+					var wsID int64
+					if err := db.QueryRow(`SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND stage_name = ? LIMIT 1`, workflowID, stage).Scan(&wsID); err == nil {
+						workflowStageID = &wsID
+					} else {
+						workflowStageID = nil
+					}
+				}
+			}
+			// Stage changed; state already resolved above — skip state-only processing
+			goto writeTicket
+		}
+		// Stage unchanged; fall through to state-only processing if state was also given
+	}
 	if explicitState {
 		nextState := normalizeState(params.State)
 		if !ValidState(nextState) {
@@ -316,6 +353,7 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 		}
 	}
 
+writeTicket:
 	result, err := db.Exec(`
 		UPDATE tickets
 		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, updated_at = CURRENT_TIMESTAMP
