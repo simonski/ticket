@@ -3332,3 +3332,111 @@ func TestRunTeamAddUserRequiresArgs(t *testing.T) {
 		t.Fatalf("team add-user without user_id should return usage error, got: %v", err)
 	}
 }
+
+func TestRunDependencyAddAndRemove(t *testing.T) {
+	setupLocalCLI(t)
+
+	// create two tickets
+	id1 := createLocalTask(t, []string{"add", "Ticket Alpha"})
+	id2 := createLocalTask(t, []string{"add", "Ticket Beta"})
+	ref1 := strconv.FormatInt(id1, 10)
+	ref2 := strconv.FormatInt(id2, 10)
+
+	// add dependency: alpha depends on beta
+	addOut := captureStdout(t, func() {
+		if err := run([]string{"dependency", "add", "-id", ref1, ref2}); err != nil {
+			t.Fatalf("dependency add error = %v", err)
+		}
+	})
+	if !strings.Contains(addOut, "added") {
+		t.Fatalf("dependency add output unexpected:\n%s", addOut)
+	}
+
+	// verify via get detail
+	getOut := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", ref1}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOut, ref2) {
+		t.Fatalf("get detail should show dependency id %s:\n%s", ref2, getOut)
+	}
+
+	// remove dependency
+	removeOut := captureStdout(t, func() {
+		if err := run([]string{"dependency", "remove", "-id", ref1, ref2}); err != nil {
+			t.Fatalf("dependency remove error = %v", err)
+		}
+	})
+	if !strings.Contains(removeOut, "removed") {
+		t.Fatalf("dependency remove output unexpected:\n%s", removeOut)
+	}
+
+	// verify removed
+	getOut2 := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", ref1}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	// DependsOn should be empty
+	for _, line := range strings.Split(getOut2, "\n") {
+		if strings.HasPrefix(line, "DependsOn") && strings.Contains(line, ref2) {
+			t.Fatalf("dependency should be removed but still present:\n%s", getOut2)
+		}
+	}
+}
+
+func TestRunDependencyShorthandForm(t *testing.T) {
+	setupLocalCLI(t)
+
+	id1 := createLocalTask(t, []string{"add", "Ticket X"})
+	id2 := createLocalTask(t, []string{"add", "Ticket Y"})
+	ref1 := strconv.FormatInt(id1, 10)
+	ref2 := strconv.FormatInt(id2, 10)
+
+	// shorthand: add-dependency <id> <dep-id>
+	addOut := captureStdout(t, func() {
+		if err := run([]string{"add-dependency", ref1, ref2}); err != nil {
+			t.Fatalf("add-dependency error = %v", err)
+		}
+	})
+	if !strings.Contains(addOut, "added") {
+		t.Fatalf("add-dependency output unexpected:\n%s", addOut)
+	}
+
+	// shorthand remove
+	removeOut := captureStdout(t, func() {
+		if err := run([]string{"remove-dependency", ref1, ref2}); err != nil {
+			t.Fatalf("remove-dependency error = %v", err)
+		}
+	})
+	if !strings.Contains(removeOut, "removed") {
+		t.Fatalf("remove-dependency output unexpected:\n%s", removeOut)
+	}
+}
+
+func TestRunDependencyRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+
+	err := run([]string{"dependency", "add"})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("dependency add without args should return usage error, got: %v", err)
+	}
+
+	err = run([]string{"dependency", "remove"})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("dependency remove without args should return usage error, got: %v", err)
+	}
+}
+
+func TestRunDependencyInvalidID(t *testing.T) {
+	setupLocalCLI(t)
+
+	id1 := createLocalTask(t, []string{"add", "Ticket Z"})
+	ref1 := strconv.FormatInt(id1, 10)
+
+	err := run([]string{"dependency", "add", "-id", ref1, "99999"})
+	if err == nil {
+		t.Fatal("dependency add with non-existent dep should return error")
+	}
+}
