@@ -228,7 +228,7 @@ DEPENDS-ON: E3
     ID: E4-S1
     DESCRIPTION: Add the persistence layer and validation rules for `epic`, `task`, and `bug` records.
     AC:
-    - Work items persist `task_id`, `project_id`, `parent_id`, `type`, `title`, `description`, `acceptance_criteria`, `status`, `priority`, `assignee`, `created_at`, `created_by`, `updated_at`, and `archived`.
+    - Work items persist `ticket_id`, `project_id`, `parent_id`, `type`, `title`, `description`, `acceptance_criteria`, `stage`, `state`, `status` (composite `stage/state`), `priority`, `assignee`, `created_at`, `created_by`, `updated_at`, and `archived`.
     - Only `epic`, `task`, and `bug` are accepted as valid task types.
     - Parent-child relationships are stored correctly.
     - Automated tests cover CRUD operations and type validation.
@@ -306,7 +306,7 @@ DEPENDS-ON: E4
     AC:
     - `task list`, `task ls`, and `task list -n 20` list work items from the active project.
     - `task list --type task`, `task list --type bug`, and `task list --type epic` filter by type.
-    - `task list --status open`, `task list --status in_progress`, and `task list --status done` filter by status.
+    - `task list --status design/idle`, `task list --status develop/active`, and `task list --status done/success` filter by the two-part `stage/state` status.
     - `task list -u alice` and `task ls -u alice` filter by assignee.
     - `task search "password reset"` searches titles and descriptions.
     - `task orphans` lists items whose `parent_id` is null.
@@ -399,7 +399,7 @@ DEPENDS-ON: E3, E4, E5
     DESCRIPTION: Provide the main browser navigation and task browsing modes for the active project.
     AC:
     - The web app shows a list view for project work items.
-    - The web app shows a status-based board with `open`, `in_progress`, `blocked`, and `done` columns.
+    - The web app shows a workflow-stage board with columns matching the project's workflow stages (e.g. `design`, `develop`, `test`, `done`), where each ticket's column is determined by its current stage in the two-part `stage/state` lifecycle.
     - The web app shows a hierarchy view that groups child tasks beneath epics and separates unparented work.
     - Browser or integration tests cover list, board, and hierarchy rendering.
     - use red/green testing
