@@ -3023,6 +3023,7 @@
       let ticketRefreshPending = false;
       let draft = null;
       let autosaveTimer = null;
+      let recentlySavedTicketIds = new Set();
       var token = localStorage.getItem("task-token") || "";
 
       function headers(json = false) {
@@ -5114,6 +5115,9 @@
         });
         draft.ticket = updated;
         upsertTicketLocal(updated);
+        const savedId = String(updated.ticket_id);
+        recentlySavedTicketIds.add(savedId);
+        setTimeout(() => recentlySavedTicketIds.delete(savedId), 2000);
         refreshTicketViews();
       }
 
@@ -5161,11 +5165,14 @@
             shouldRefreshBoard = wsShouldRefreshBoard(msg, eventType);
           } catch (_) { /* non-JSON ping — ignore */ }
           if (!shouldRefreshBoard) return;
+          const wsTicketId = msg.ticket_id ? String(msg.ticket_id) : "";
+          if (wsTicketId && recentlySavedTicketIds.has(wsTicketId)) return;
           scheduleTicketReload("ws", { delayMs: 140 });
         };
         socket.onclose = () => {
           wsHealthy = false;
           if (!firstWSUnhealthyAt) firstWSUnhealthyAt = Date.now();
+          if (!token && !localStorage.getItem("task-token")) return;
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
         };
@@ -5173,6 +5180,7 @@
           wsHealthy = false;
           if (!firstWSUnhealthyAt) firstWSUnhealthyAt = Date.now();
           try { socket.close(); } catch {}
+          if (!token && !localStorage.getItem("task-token")) return;
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
         };
