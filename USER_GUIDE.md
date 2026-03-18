@@ -32,12 +32,12 @@ ticket onboard
 Initialize a task sqlite database:
 
 ```bash
-ticket initdb
+ticket init
 ```
 
-If `-f` is omitted, `ticket initdb` creates the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
+If `-f` is omitted, `ticket init` creates the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
-`ticket initdb` creates:
+`ticket init` creates:
 
 1. an `admin` account
 2. the default project, `Default Project`, with project id `1` and prefix `TK`
@@ -224,7 +224,7 @@ Then it opens the database if present and verifies the schema is usable. It prin
 
 If the database does not exist in LOCAL mode, it also prints:
 
-- `hint: run ticket initdb`
+- `hint: run ticket init`
 
 If `-nocolor` is set, the same output is printed without ANSI colors.
 
@@ -602,7 +602,7 @@ Keyboard shortcuts in the board view:
 ## Command Reference
 
 ```bash
-ticket initdb
+ticket init
 ticket export -o ./ticket-snapshot.json
 ticket import -i ./ticket-snapshot.json
 ticket server -v

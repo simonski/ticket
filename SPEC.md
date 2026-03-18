@@ -143,6 +143,10 @@ Supported ticket types:
 - `bug`
 - `spike`
 - `chore`
+- `note`
+- `question`
+- `requirement`
+- `decision`
 
 Type codes for keys:
 
@@ -151,6 +155,10 @@ Type codes for keys:
 - `B` = `bug`
 - `S` = `spike`
 - `C` = `chore`
+- `N` = `note`
+- `Q` = `question`
+- `R` = `requirement`
+- `D` = `decision`
 
 `design` is not a ticket type. It is a lifecycle stage only.
 
@@ -204,20 +212,22 @@ Allowed states:
 
 - `idle`
 - `active`
-- `complete`
+- `success`
+- `fail`
 
 Meaning:
 
 - `idle`: ready but not currently in progress
 - `active`: currently being worked on with a named assignee
-- `complete`: work for the current stage is complete
+- `success`: work for the current stage is complete
+- `fail`: stage work did not succeed (blocked, rejected, or abandoned)
 
 Valid combinations:
 
-- `design`: `idle | active | complete`
-- `develop`: `idle | active | complete`
-- `test`: `idle | active | complete`
-- `done`: `complete`
+- `design`: `idle | active | success | fail`
+- `develop`: `idle | active | success | fail`
+- `test`: `idle | active | success | fail`
+- `done`: `success | fail`
 
 ### Rendered Status
 
@@ -231,15 +241,15 @@ Examples:
 
 - `design/idle`
 - `develop/active`
-- `done/complete`
+- `done/success`
 
 ### Lifecycle Invariants
 
 - `state=active` requires `assignee != ""`
 - `state=idle` may be unassigned
-- `state=complete` may retain assignee
-- `stage=done` requires `state=complete`
-- `stage!=done` allows `idle | active | complete`
+- `state=success` may retain assignee
+- `stage=done` requires `state=success` or `state=fail`
+- `stage!=done` allows `idle | active | success | fail`
 
 ## Lifecycle Mutation Rules
 
@@ -272,7 +282,7 @@ Behavior:
 - `design` sets `stage=design`, `state=idle`
 - `develop` sets `stage=develop`, `state=idle`
 - `test` sets `stage=test`, `state=idle`
-- `done` sets `stage=done`, `state=complete`
+- `done` sets `stage=done`, `state=success`
 
 ### State Commands
 
@@ -280,13 +290,14 @@ These mutate leaf tickets only:
 
 - `ticket idle`
 - `ticket active`
-- `ticket complete`
+- `ticket complete` (alias: sets `state=success`)
+- `ticket state -id <id> <state>`
 
 Behavior:
 
 - `idle` keeps stage and sets `state=idle`
 - `active` keeps stage and sets `state=active`
-- `complete` keeps stage and sets `state=complete`
+- `complete` keeps stage and sets `state=success` (auto-advances stage if workflow is attached)
 
 ## Derived Parent Lifecycle
 
@@ -305,14 +316,15 @@ Stage ordering:
 
 Parent effective state is derived as:
 
-- `complete` if all descendants are complete
-- `active` if any descendant is active
+- `success` if all descendants are `success`
+- `active` if any descendant is `active`
+- `fail` if any descendant is `fail` (and none are `active`)
 - `idle` otherwise
 
 Implications:
 
 - when any leaf moves to `active`, all ancestors become effectively `active`
-- a parent reaches `done` only when all descendants are `done/complete`
+- a parent reaches `done` only when all descendants are `done/success`
 
 ## Assignment Rules
 
@@ -438,7 +450,7 @@ Derived lifecycle updates for parent tickets must also emit history entries.
 - `ticket done <KEY|TICKET_ID>`
 - `ticket idle <KEY|TICKET_ID>`
 - `ticket active <KEY|TICKET_ID>`
-- `ticket complete <KEY|TICKET_ID>`
+- `ticket complete <KEY|TICKET_ID>` (sets `state=success`, auto-advances workflow stage)
 
 CLI notes:
 
@@ -527,10 +539,10 @@ Tickets table must include:
 Constraints:
 
 - unique `key`
-- `type in ('epic','task','bug','spike','chore')`
+- `type in ('epic','task','bug','spike','chore','note','question','requirement','decision')`
 - `stage in ('design','develop','test','done')`
-- `state in ('idle','active','complete')`
-- reject `stage='done'` with non-`complete` state
+- `state in ('idle','active','success','fail')`
+- `done` stage requires `state in ('success','fail')`
 - enforce parent project equality in service layer and, where possible, in SQL
 
 ### Ticket History
@@ -550,7 +562,7 @@ Ticket history table must include:
 The main remodel phases are complete:
 
 - project prefixes and human ticket keys are implemented
-- `spike` and `chore` are supported ticket types
+- `spike`, `chore`, `note`, `question`, `requirement`, and `decision` are supported ticket types
 - the CLI and docs are project/ticket oriented
 - `ticket_history` is present and used for append-only reads
 - claim ordering and leaf-only claim behavior are implemented
