@@ -414,6 +414,7 @@
         flex: 0 0 auto;
       }
       #view-stories,
+      #view-hierarchy,
       #view-agents,
       #view-roles,
       #view-teams,
@@ -424,6 +425,54 @@
         overflow: auto;
         background:
           radial-gradient(circle at 12% 18%, #fffdf6 0%, #f4efe3 42%, #ece5d9 100%);
+      }
+      .hierarchy-group {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: 0.7rem;
+        background: #fffef9;
+        overflow: hidden;
+      }
+      .hierarchy-epic {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        padding: 0.55rem 0.75rem;
+        background: rgba(17, 100, 102, 0.07);
+        border-bottom: 1px solid var(--line);
+        cursor: pointer;
+      }
+      .hierarchy-epic:hover { background: rgba(17, 100, 102, 0.13); }
+      .hierarchy-epic-title { font-weight: bold; flex: 1; }
+      .hierarchy-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        padding: 0.45rem 0.75rem 0.45rem 1.4rem;
+        border-bottom: 1px solid var(--line);
+        cursor: pointer;
+      }
+      .hierarchy-row:last-child { border-bottom: none; }
+      .hierarchy-row:hover { background: #f0ede6; }
+      .hierarchy-row-title { flex: 1; }
+      .hierarchy-badge {
+        font-size: 0.72rem;
+        padding: 0.1rem 0.35rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .hierarchy-badge.epic { border-color: var(--accent); color: var(--accent); }
+      .hierarchy-badge.bug { border-color: #c62828; color: #c62828; }
+      .hierarchy-empty {
+        padding: 0.45rem 0.75rem 0.45rem 1.4rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .hierarchy-noparent > .hierarchy-epic {
+        background: #f7f3ea;
       }
       .stories-head {
         display: flex;
@@ -914,6 +963,7 @@
           <nav class="left-panel-nav">
             <button type="button" class="left-panel-item" data-left-panel-action="stories">stories</button>
             <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">board</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="hierarchy">hierarchy</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="teams">teams</button>
@@ -945,6 +995,9 @@
                 <button id="story-new" class="btn" type="button">New Story (S)</button>
               </div>
               <div id="stories-list" class="stories-list"></div>
+            </section>
+            <section id="view-hierarchy" class="perspective-view">
+              <div id="hierarchy-list"></div>
             </section>
             <section id="view-agents" class="perspective-view">
               <div class="stories-head">
@@ -1112,6 +1165,10 @@
         <div class="perspective-item active" data-perspective="swimlanes">
           <div><strong>board</strong></div>
           <div class="perspective-kicker">Current board lanes for this project</div>
+        </div>
+        <div class="perspective-item" data-perspective="hierarchy">
+          <div><strong>hierarchy</strong></div>
+          <div class="perspective-kicker">Epics with nested child tickets</div>
         </div>
         <div class="perspective-item admin-only hidden" data-panel-action="agents">
           <div><strong>agents</strong></div>
@@ -1510,6 +1567,7 @@
       const viewSwimlanes = document.getElementById("view-swimlanes");
       const viewTV = document.getElementById("view-tv");
       const viewStories = document.getElementById("view-stories");
+      const viewHierarchy = document.getElementById("view-hierarchy");
       const viewAgents = document.getElementById("view-agents");
       const viewRoles = document.getElementById("view-roles");
       const viewTeams = document.getElementById("view-teams");
@@ -2483,6 +2541,7 @@
       const perspectiveViews = {
         swimlanes: viewSwimlanes,
         stories: viewStories,
+        hierarchy: viewHierarchy,
         agents: viewAgents,
         roles: viewRoles,
         teams: viewTeams,
@@ -2499,6 +2558,7 @@
         if (currentPerspective === "chat") connectChatWS();
         if (currentPerspective === "stories") loadStories();
         if (currentPerspective === "agents") loadAgents();
+        if (currentPerspective === "hierarchy") renderHierarchy();
         if (currentPerspective === "roles") loadRoles();
         if (currentPerspective === "teams") {
           loadTeams().then(refreshSelectedTeamDetails).catch(() => {});
@@ -4251,6 +4311,82 @@
         }
       }
 
+      function renderHierarchy() {
+        const el = document.getElementById("hierarchy-list");
+        if (!el) return;
+        el.innerHTML = "";
+
+        const epics = tickets.filter(t => t.type === "epic");
+        const children = tickets.filter(t => t.type !== "epic" && t.parent_id);
+        const orphans = tickets.filter(t => t.type !== "epic" && !t.parent_id);
+
+        const childrenByParent = {};
+        for (const t of children) {
+          const key = String(t.parent_id);
+          if (!childrenByParent[key]) childrenByParent[key] = [];
+          childrenByParent[key].push(t);
+        }
+
+        function makeRow(ticket) {
+          const row = document.createElement("div");
+          row.className = "hierarchy-row";
+          row.innerHTML = `
+            <span class="hierarchy-badge ${escape(ticket.type)}">${escape(ticket.type)}</span>
+            <span class="hierarchy-row-title">${escape(ticket.title)}</span>
+            <span class="muted">${escape(ticket.key || "#" + ticket.ticket_id)}</span>
+            <span class="muted">${escape(ticket.stage || "")}/${escape(ticket.state || "")}</span>
+          `;
+          row.addEventListener("click", () => openEdit(ticket));
+          return row;
+        }
+
+        function makeGroup(epic, kids) {
+          const group = document.createElement("div");
+          group.className = "hierarchy-group" + (epic ? "" : " hierarchy-noparent");
+
+          const header = document.createElement("div");
+          header.className = "hierarchy-epic";
+          if (epic) {
+            header.innerHTML = `
+              <span class="hierarchy-badge epic">epic</span>
+              <span class="hierarchy-epic-title">${escape(epic.title)}</span>
+              <span class="muted">${escape(epic.key || "#" + epic.ticket_id)}</span>
+              <span class="muted">${escape(epic.stage || "")}/${escape(epic.state || "")}</span>
+            `;
+            header.addEventListener("click", () => openEdit(epic));
+          } else {
+            header.innerHTML = `<span class="hierarchy-epic-title muted">No parent</span>`;
+          }
+          group.appendChild(header);
+
+          if (!kids || !kids.length) {
+            const empty = document.createElement("div");
+            empty.className = "hierarchy-empty";
+            empty.textContent = "No child tickets";
+            group.appendChild(empty);
+          } else {
+            for (const t of kids) group.appendChild(makeRow(t));
+          }
+          return group;
+        }
+
+        for (const epic of epics) {
+          const kids = childrenByParent[String(epic.ticket_id)] || [];
+          el.appendChild(makeGroup(epic, kids));
+        }
+
+        if (orphans.length) {
+          el.appendChild(makeGroup(null, orphans));
+        }
+
+        if (!epics.length && !orphans.length) {
+          const empty = document.createElement("div");
+          empty.className = "hierarchy-empty";
+          empty.textContent = "No tickets";
+          el.appendChild(empty);
+        }
+      }
+
       async function loadStories() {
         const projectID = selectedProjectID();
         if (!projectID) {
@@ -4458,6 +4594,7 @@
       function refreshTicketViews() {
         renderBoard();
         renderTicketVision();
+        if (currentPerspective === "hierarchy") renderHierarchy();
       }
 
       function scheduleTicketReload(reason = "event", options = {}) {
