@@ -3174,3 +3174,161 @@ func TestRunNoteAndQuestionCreate(t *testing.T) {
 		t.Fatal("question command produced no output")
 	}
 }
+
+func TestRunTeamCreateListUpdateDelete(t *testing.T) {
+	setupLocalCLI(t)
+
+	// create
+	createOut := captureStdout(t, func() {
+		if err := run([]string{"team", "create", "-name", "Alpha Team"}); err != nil {
+			t.Fatalf("team create error = %v", err)
+		}
+	})
+	if !strings.Contains(createOut, "Alpha Team") {
+		t.Fatalf("team create output missing name:\n%s", createOut)
+	}
+	// extract team id — output format: "created team #<id> <name>"
+	var teamID string
+	for _, f := range strings.Fields(createOut) {
+		clean := strings.TrimPrefix(f, "#")
+		if n, err := strconv.ParseInt(clean, 10, 64); err == nil && n > 0 {
+			teamID = clean
+			break
+		}
+	}
+	if teamID == "" {
+		t.Fatalf("could not extract team id from: %s", createOut)
+	}
+
+	// list
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"team", "list"}); err != nil {
+			t.Fatalf("team list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "Alpha Team") {
+		t.Fatalf("team list missing Alpha Team:\n%s", listOut)
+	}
+
+	// ls alias
+	lsOut := captureStdout(t, func() {
+		if err := run([]string{"team", "ls"}); err != nil {
+			t.Fatalf("team ls error = %v", err)
+		}
+	})
+	if !strings.Contains(lsOut, "Alpha Team") {
+		t.Fatalf("team ls missing Alpha Team:\n%s", lsOut)
+	}
+
+	// update
+	id, _ := strconv.ParseInt(teamID, 10, 64)
+	updateOut := captureStdout(t, func() {
+		if err := run([]string{"team", "update", "-id", teamID, "-name", "Beta Team"}); err != nil {
+			t.Fatalf("team update error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOut, "Beta Team") {
+		t.Fatalf("team update output missing new name:\n%s", updateOut)
+	}
+
+	// delete
+	captureStdout(t, func() {
+		if err := run([]string{"team", "delete", "-id", strconv.FormatInt(id, 10)}); err != nil {
+			t.Fatalf("team delete error = %v", err)
+		}
+	})
+
+	// verify gone
+	afterDelete := captureStdout(t, func() {
+		if err := run([]string{"team", "list"}); err != nil {
+			t.Fatalf("team list after delete error = %v", err)
+		}
+	})
+	if strings.Contains(afterDelete, "Beta Team") {
+		t.Fatalf("team list still shows deleted team:\n%s", afterDelete)
+	}
+}
+
+func TestRunTeamCreateRequiresName(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"team", "create"})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("team create without -name should return usage error, got: %v", err)
+	}
+}
+
+func TestRunTeamAddAndRemoveUser(t *testing.T) {
+	setupLocalCLI(t)
+
+	// create a team
+	createOut := captureStdout(t, func() {
+		if err := run([]string{"team", "create", "-name", "Dev Squad"}); err != nil {
+			t.Fatalf("team create error = %v", err)
+		}
+	})
+	// output format: "created team #<id> <name>"
+	var teamID int64
+	for _, f := range strings.Fields(createOut) {
+		clean := strings.TrimPrefix(f, "#")
+		if n, err := strconv.ParseInt(clean, 10, 64); err == nil && n > 0 {
+			teamID = n
+			break
+		}
+	}
+	if teamID == 0 {
+		t.Fatalf("could not extract team id from: %s", createOut)
+	}
+
+	// admin user has user_id = 1 (created by runInitDB)
+	addOut := captureStdout(t, func() {
+		if err := run([]string{"team", "add-user",
+			"-team_id", strconv.FormatInt(teamID, 10),
+			"-user_id", "1",
+			"-role", "owner",
+			"-job_title", "Tech Lead",
+		}); err != nil {
+			t.Fatalf("team add-user error = %v", err)
+		}
+	})
+	if !strings.Contains(addOut, "team_id=") {
+		t.Fatalf("team add-user output unexpected:\n%s", addOut)
+	}
+
+	// list users
+	usersOut := captureStdout(t, func() {
+		if err := run([]string{"team", "users", "-team_id", strconv.FormatInt(teamID, 10)}); err != nil {
+			t.Fatalf("team users error = %v", err)
+		}
+	})
+	if !strings.Contains(usersOut, "admin") {
+		t.Fatalf("team users missing admin:\n%s", usersOut)
+	}
+
+	// remove user
+	captureStdout(t, func() {
+		if err := run([]string{"team", "remove-user",
+			"-team_id", strconv.FormatInt(teamID, 10),
+			"-user_id", "1",
+		}); err != nil {
+			t.Fatalf("team remove-user error = %v", err)
+		}
+	})
+
+	// verify removed
+	afterRemove := captureStdout(t, func() {
+		if err := run([]string{"team", "users", "-team_id", strconv.FormatInt(teamID, 10)}); err != nil {
+			t.Fatalf("team users after remove error = %v", err)
+		}
+	})
+	if strings.Contains(afterRemove, "admin") {
+		t.Fatalf("team users still shows removed user:\n%s", afterRemove)
+	}
+}
+
+func TestRunTeamAddUserRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"team", "add-user", "-team_id", "1"})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Fatalf("team add-user without user_id should return usage error, got: %v", err)
+	}
+}
