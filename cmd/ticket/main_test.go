@@ -2749,6 +2749,89 @@ func TestRunEpicListShowsActiveMarker(t *testing.T) {
 	}
 }
 
+func TestRunUnclaimRejectsNonOwner(t *testing.T) {
+	setupLocalCLI(t)
+
+	// Create and assign to alice
+	taskID := createLocalTask(t, []string{"add", "Unclaim Test Task"})
+	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
+		t.Fatalf("user create error = %v", err)
+	}
+	if err := run([]string{"assign", strconv.FormatInt(taskID, 10), "alice"}); err != nil {
+		t.Fatalf("assign error = %v", err)
+	}
+
+	// Admin (local mode user) is not alice; unclaim should fail
+	err := run([]string{"unclaim", strconv.FormatInt(taskID, 10)})
+	if err == nil {
+		t.Fatal("expected error when unclaiming a ticket not owned by the caller")
+	}
+	if !strings.Contains(err.Error(), "not assigned to admin") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestRunClaimRejectsAlreadyAssigned(t *testing.T) {
+	setupLocalCLI(t)
+
+	// Create and assign to alice
+	taskID := createLocalTask(t, []string{"add", "Claim Conflict Task"})
+	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
+		t.Fatalf("user create error = %v", err)
+	}
+	if err := run([]string{"assign", strconv.FormatInt(taskID, 10), "alice"}); err != nil {
+		t.Fatalf("assign error = %v", err)
+	}
+
+	// Advance to develop/idle so it is "claimable" stage-wise
+	if err := run([]string{"complete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		t.Fatalf("complete error = %v", err)
+	}
+
+	// claim as admin (already assigned to alice) — runRequest returns nil and prints REJECTED
+	output := captureStdout(t, func() {
+		if err := run([]string{"claim", strconv.FormatInt(taskID, 10)}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	if !strings.Contains(output, "REJECTED") {
+		t.Fatalf("claim of already-assigned ticket should print REJECTED, got: %s", output)
+	}
+}
+
+func TestRunAssignDisabledUserFails(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Disabled Assign Task"})
+	if err := run([]string{"user", "create", "-username", "carol", "-password", "secret"}); err != nil {
+		t.Fatalf("user create error = %v", err)
+	}
+	if err := run([]string{"user", "disable", "-username", "carol"}); err != nil {
+		t.Fatalf("user disable error = %v", err)
+	}
+
+	err := run([]string{"assign", strconv.FormatInt(taskID, 10), "carol"})
+	if err == nil {
+		t.Fatal("expected error when assigning to a disabled user")
+	}
+	if !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestRunAssignNonExistentUserFails(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "No User Task"})
+	err := run([]string{"assign", strconv.FormatInt(taskID, 10), "nobody"})
+	if err == nil {
+		t.Fatal("expected error when assigning to a non-existent user")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func TestRunStoryCreateListGetUpdateDelete(t *testing.T) {
 	setupLocalCLI(t)
 
