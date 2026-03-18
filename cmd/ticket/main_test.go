@@ -71,6 +71,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  project",
 		"  team",
 		"  agent",
+		"  role",
 		"  workflow",
 		"  label",
 		"  time",
@@ -2276,6 +2277,68 @@ func TestRunWorkflowExportImportRoundTrip(t *testing.T) {
 	})
 	if !strings.Contains(output, "imported") {
 		t.Fatalf("workflow import missing name:\n%s", output)
+	}
+}
+
+func TestRunRoleCRUD(t *testing.T) {
+	setupLocalCLI(t)
+	// List seeded roles
+	output := captureStdout(t, func() {
+		if err := run([]string{"role", "list"}); err != nil {
+			t.Fatalf("role list error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "BA") {
+		t.Fatalf("role list missing seeded role BA:\n%s", output)
+	}
+	// Create
+	createOutput := captureStdout(t, func() {
+		if err := run([]string{"role", "create", "-title", "Security Lead", "-motivation", "Protect systems", "-goals", "Zero breaches"}); err != nil {
+			t.Fatalf("role create error = %v", err)
+		}
+	})
+	if !strings.Contains(createOutput, "Security Lead") {
+		t.Fatalf("role create missing name:\n%s", createOutput)
+	}
+	// List again should include new role
+	output = captureStdout(t, func() {
+		if err := run([]string{"role", "ls"}); err != nil {
+			t.Fatalf("role ls error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Security Lead") {
+		t.Fatalf("role ls missing Security Lead:\n%s", output)
+	}
+	// Extract role ID from create output (e.g. "created role #6 Security Lead")
+	var roleID string
+	for _, line := range strings.Split(createOutput, "\n") {
+		if strings.HasPrefix(line, "created role #") {
+			parts := strings.Fields(line)
+			if len(parts) >= 3 {
+				roleID = strings.TrimPrefix(parts[2], "#")
+			}
+		}
+	}
+	if roleID == "" {
+		t.Fatalf("could not extract role ID from create output:\n%s", createOutput)
+	}
+	// Update
+	output = captureStdout(t, func() {
+		if err := run([]string{"role", "update", "-id", roleID, "-title", "Chief Security", "-motivation", "Lead design", "-goals", "Excellence"}); err != nil {
+			t.Fatalf("role update error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Chief Security") {
+		t.Fatalf("role update missing new title:\n%s", output)
+	}
+	// Delete
+	output = captureStdout(t, func() {
+		if err := run([]string{"role", "delete", "-id", roleID}); err != nil {
+			t.Fatalf("role delete error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "deleted") {
+		t.Fatalf("role delete missing confirmation:\n%s", output)
 	}
 }
 

@@ -941,4 +941,305 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("Count(projectID).Types is empty, want > 0")
 		}
 	})
+
+	t.Run("agent-crud", func(t *testing.T) {
+		svc := factory(t)
+
+		// Create agent
+		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{
+			Name:        "test-agent",
+			Description: "A test agent",
+		})
+		if err != nil {
+			t.Fatalf("CreateAgent() error = %v", err)
+		}
+		if agent.Name != "test-agent" {
+			t.Fatalf("agent.Name = %q, want %q", agent.Name, "test-agent")
+		}
+		if password == "" {
+			t.Fatal("CreateAgent() returned empty password")
+		}
+
+		// List agents
+		agents, err := svc.ListAgents()
+		if err != nil {
+			t.Fatalf("ListAgents() error = %v", err)
+		}
+		found := false
+		for _, a := range agents {
+			if a.ID == agent.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ListAgents() did not include created agent %d", agent.ID)
+		}
+
+		// Update agent
+		newName := "updated-agent"
+		updated, err := svc.UpdateAgent(agent.ID, libticket.AgentUpdateRequest{
+			Name: &newName,
+		})
+		if err != nil {
+			t.Fatalf("UpdateAgent() error = %v", err)
+		}
+		if updated.Name != "updated-agent" {
+			t.Fatalf("updated.Name = %q, want %q", updated.Name, "updated-agent")
+		}
+
+		// Disable agent
+		disabled, err := svc.SetAgentEnabled(agent.ID, false)
+		if err != nil {
+			t.Fatalf("SetAgentEnabled(false) error = %v", err)
+		}
+		if disabled.Enabled {
+			t.Fatal("expected agent to be disabled")
+		}
+
+		// Re-enable
+		enabled, err := svc.SetAgentEnabled(agent.ID, true)
+		if err != nil {
+			t.Fatalf("SetAgentEnabled(true) error = %v", err)
+		}
+		if !enabled.Enabled {
+			t.Fatal("expected agent to be enabled")
+		}
+
+		// Delete agent
+		if err := svc.DeleteAgent(agent.ID); err != nil {
+			t.Fatalf("DeleteAgent() error = %v", err)
+		}
+	})
+
+	t.Run("agent-register-and-request-work", func(t *testing.T) {
+		svc := factory(t)
+
+		// Create an agent with known password
+		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{
+			Name:        "worker-agent",
+			Description: "Worker",
+			Password:    "secret123",
+		})
+		if err != nil {
+			t.Fatalf("CreateAgent() error = %v", err)
+		}
+		_ = password
+
+		// Register (authenticate) the agent
+		registered, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
+			Name:     "worker-agent",
+			Password: "secret123",
+		})
+		if err != nil {
+			t.Fatalf("RegisterAgent() error = %v", err)
+		}
+		if registered.ID != agent.ID {
+			t.Fatalf("registered.ID = %d, want %d", registered.ID, agent.ID)
+		}
+
+		// Request work (no tickets — expect NONE)
+		resp, err := svc.RequestAgentWork(libticket.AgentRequest{
+			Name:     "worker-agent",
+			Password: "secret123",
+		})
+		if err != nil {
+			t.Fatalf("RequestAgentWork() error = %v", err)
+		}
+		if resp.Status != "NONE" {
+			t.Logf("RequestAgentWork() status = %q (may have existing tickets)", resp.Status)
+		}
+
+		// Cleanup
+		_ = svc.DeleteAgent(agent.ID)
+	})
+
+	t.Run("project-member-management", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+			Title:       "Member Test Project",
+			Description: "For testing project members",
+		})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		// List members (may include creator)
+		membersBefore, err := svc.ListProjectMembers(project.ID)
+		if err != nil {
+			t.Fatalf("ListProjectMembers() error = %v", err)
+		}
+		countBefore := len(membersBefore)
+
+		// Create a user to add as member
+		user, err := svc.CreateUser("projmember", "pass123")
+		if err != nil {
+			t.Fatalf("CreateUser() error = %v", err)
+		}
+
+		// Add project member
+		member, err := svc.AddProjectMember(project.ID, libticket.ProjectMemberRequest{
+			UserID: user.ID,
+			Role:   "editor",
+		})
+		if err != nil {
+			t.Fatalf("AddProjectMember() error = %v", err)
+		}
+		if member.UserID != user.ID {
+			t.Fatalf("member.UserID = %d, want %d", member.UserID, user.ID)
+		}
+
+		// List members (should have one more)
+		membersAfter, err := svc.ListProjectMembers(project.ID)
+		if err != nil {
+			t.Fatalf("ListProjectMembers() error = %v", err)
+		}
+		if len(membersAfter) != countBefore+1 {
+			t.Fatalf("ListProjectMembers() count = %d, want %d", len(membersAfter), countBefore+1)
+		}
+
+		// Remove project member
+		if err := svc.RemoveProjectMember(project.ID, user.ID); err != nil {
+			t.Fatalf("RemoveProjectMember() error = %v", err)
+		}
+
+		// Verify removed
+		membersEnd, err := svc.ListProjectMembers(project.ID)
+		if err != nil {
+			t.Fatalf("ListProjectMembers() error = %v", err)
+		}
+		if len(membersEnd) != countBefore {
+			t.Fatalf("ListProjectMembers() count after remove = %d, want %d", len(membersEnd), countBefore)
+		}
+
+		_ = svc.DeleteUser("projmember")
+	})
+
+	t.Run("project-team-member-management", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+			Title:       "Team Member Test Project",
+			Description: "For testing project team members",
+		})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		team, err := svc.CreateTeam(libticket.TeamRequest{Name: "projteam"})
+		if err != nil {
+			t.Fatalf("CreateTeam() error = %v", err)
+		}
+
+		// List project teams (initially empty or minimal)
+		teamsBefore, err := svc.ListProjectTeamMembers(project.ID)
+		if err != nil {
+			t.Fatalf("ListProjectTeamMembers() error = %v", err)
+		}
+		countBefore := len(teamsBefore)
+
+		// Add team to project
+		ptm, err := svc.AddProjectTeamMember(project.ID, libticket.ProjectTeamMemberRequest{
+			TeamID: team.ID,
+			Role:   "editor",
+		})
+		if err != nil {
+			t.Fatalf("AddProjectTeamMember() error = %v", err)
+		}
+		if ptm.TeamID != team.ID {
+			t.Fatalf("ptm.TeamID = %d, want %d", ptm.TeamID, team.ID)
+		}
+
+		// List project teams (should have one more)
+		teamsAfter, err := svc.ListProjectTeamMembers(project.ID)
+		if err != nil {
+			t.Fatalf("ListProjectTeamMembers() error = %v", err)
+		}
+		if len(teamsAfter) != countBefore+1 {
+			t.Fatalf("ListProjectTeamMembers() count = %d, want %d", len(teamsAfter), countBefore+1)
+		}
+
+		// Remove team from project
+		if err := svc.RemoveProjectTeamMember(project.ID, team.ID); err != nil {
+			t.Fatalf("RemoveProjectTeamMember() error = %v", err)
+		}
+
+		// Cleanup
+		_ = svc.DeleteTeam(team.ID)
+	})
+
+	t.Run("team-agent-management", func(t *testing.T) {
+		svc := factory(t)
+
+		team, err := svc.CreateTeam(libticket.TeamRequest{Name: "agent-team"})
+		if err != nil {
+			t.Fatalf("CreateTeam() error = %v", err)
+		}
+
+		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{
+			Name:        "team-bot",
+			Description: "Bot for team",
+		})
+		if err != nil {
+			t.Fatalf("CreateAgent() error = %v", err)
+		}
+
+		// Add agent to team
+		ta, err := svc.AddTeamAgent(team.ID, agent.ID)
+		if err != nil {
+			t.Fatalf("AddTeamAgent() error = %v", err)
+		}
+		if ta.AgentID != agent.ID {
+			t.Fatalf("ta.AgentID = %d, want %d", ta.AgentID, agent.ID)
+		}
+
+		// List team agents
+		agents, err := svc.ListTeamAgents(team.ID)
+		if err != nil {
+			t.Fatalf("ListTeamAgents() error = %v", err)
+		}
+		if len(agents) == 0 {
+			t.Fatal("ListTeamAgents() returned empty list")
+		}
+
+		// Remove agent from team
+		if err := svc.RemoveTeamAgent(team.ID, agent.ID); err != nil {
+			t.Fatalf("RemoveTeamAgent() error = %v", err)
+		}
+
+		// Cleanup
+		_ = svc.DeleteAgent(agent.ID)
+		_ = svc.DeleteTeam(team.ID)
+	})
+
+	t.Run("registration-toggle", func(t *testing.T) {
+		svc := factory(t)
+
+		// Toggle registration
+		if err := svc.SetRegistrationEnabled(false); err != nil {
+			t.Fatalf("SetRegistrationEnabled(false) error = %v", err)
+		}
+		if err := svc.SetRegistrationEnabled(true); err != nil {
+			t.Fatalf("SetRegistrationEnabled(true) error = %v", err)
+		}
+	})
+
+	t.Run("list-tickets-unfiltered", func(t *testing.T) {
+		svc := factory(t)
+
+		projects, err := svc.ListProjects()
+		if err != nil {
+			t.Fatalf("ListProjects() error = %v", err)
+		}
+		if len(projects) == 0 {
+			t.Fatal("no projects")
+		}
+
+		// ListTickets (unfiltered wrapper)
+		tickets, err := svc.ListTickets(projects[0].ID)
+		if err != nil {
+			t.Fatalf("ListTickets() error = %v", err)
+		}
+		_ = tickets // may be empty, just verify no error
+	})
 }

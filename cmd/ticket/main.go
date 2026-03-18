@@ -510,6 +510,8 @@ func run(args []string) error {
 		return runProject(trimmedArgs[1:])
 	case "team":
 		return runTeam(trimmedArgs[1:])
+	case "role":
+		return runRole(trimmedArgs[1:])
 	case "workflow":
 		return runWorkflow(trimmedArgs[1:])
 	case "board":
@@ -2354,6 +2356,124 @@ func printTeamAgentTable(items []store.TeamAgent) {
 	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tNAME\tENABLED\tSTATUS")
 	for _, item := range items {
 		fmt.Fprintf(w, "%d\t%d\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentName, item.Enabled, item.Status)
+	}
+	_ = w.Flush()
+}
+
+func runRole(args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		roles, err := svc.ListRoles()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(roles)
+		}
+		printRoleTable(roles)
+		return nil
+	}
+	switch args[0] {
+	case "list", "ls":
+		roles, err := svc.ListRoles()
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(roles)
+		}
+		printRoleTable(roles)
+		return nil
+	case "create", "add", "new":
+		fs := flag.NewFlagSet("role create", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		title := fs.String("title", "", "role title")
+		motivation := fs.String("motivation", "", "role motivation")
+		goals := fs.String("goals", "", "role goals")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
+			return errors.New("usage: ticket role create -title <title> [-motivation <text>] [-goals <text>]")
+		}
+		role, err := svc.CreateRole(libticket.RoleRequest{
+			Title:      strings.TrimSpace(*title),
+			Motivation: strings.TrimSpace(*motivation),
+			Goals:      strings.TrimSpace(*goals),
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(role)
+		}
+		fmt.Printf("created role #%d %s\n", role.ID, role.Title)
+		return nil
+	case "update":
+		fs := flag.NewFlagSet("role update", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "role id")
+		title := fs.String("title", "", "role title")
+		motivation := fs.String("motivation", "", "role motivation")
+		goals := fs.String("goals", "", "role goals")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
+			return errors.New("usage: ticket role update -id <id> -title <title> [-motivation <text>] [-goals <text>]")
+		}
+		role, err := svc.UpdateRole(*id, libticket.RoleRequest{
+			Title:      strings.TrimSpace(*title),
+			Motivation: strings.TrimSpace(*motivation),
+			Goals:      strings.TrimSpace(*goals),
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(role)
+		}
+		fmt.Printf("updated role #%d %s\n", role.ID, role.Title)
+		return nil
+	case "delete", "rm":
+		fs := flag.NewFlagSet("role delete", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "role id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 || fs.NArg() != 0 {
+			return errors.New("usage: ticket role delete -id <id>")
+		}
+		if err := svc.DeleteRole(*id); err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"status": "deleted", "role_id": *id})
+		}
+		fmt.Printf("deleted role #%d\n", *id)
+		return nil
+	default:
+		return fmt.Errorf("unknown role subcommand %q — try: list, create, update, delete", args[0])
+	}
+}
+
+func printRoleTable(roles []store.Role) {
+	if len(roles) == 0 {
+		fmt.Println("no roles")
+		return
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tTITLE\tMOTIVATION\tGOALS")
+	for _, role := range roles {
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", role.ID, role.Title, role.Motivation, role.Goals)
 	}
 	_ = w.Flush()
 }
@@ -5535,6 +5655,7 @@ func renderRootUsage() string {
 		{"project", "Manage projects and active project context"},
 		{"team", "Manage teams, hierarchy, and team membership"},
 		{"agent", "Manage autonomous agents and run agent workers"},
+		{"role", "Manage roles (title, motivation, goals)"},
 		{"workflow", "Manage workflow definitions and stages"},
 		{"label", "Manage project labels and ticket tagging"},
 		{"time", "Log and view time entries on tickets"},

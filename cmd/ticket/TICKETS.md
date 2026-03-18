@@ -135,6 +135,23 @@ tk label show <ticket-id>
 tk list --label "bug"
 ```
 
+## Roles
+
+```bash
+# List all roles
+tk role list
+tk role ls
+
+# Create a role
+tk role create -title "Security Lead" -motivation "Protect systems" -goals "Zero breaches"
+
+# Update a role
+tk role update -id <id> -title "New Title" -motivation "Updated" -goals "Updated"
+
+# Delete a role
+tk role delete -id <id>
+```
+
 ## Time Tracking
 
 ```bash

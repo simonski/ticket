@@ -418,6 +418,7 @@
       #view-roles,
       #view-teams,
       #view-workflows,
+      #view-members,
       #view-settings {
         padding: 0.9rem;
         overflow: auto;
@@ -911,6 +912,7 @@
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="teams">teams</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="workflows">workflows</button>
+            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="members">members</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="settings">settings</button>
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
           </nav>
@@ -924,6 +926,12 @@
             </section>
             <section id="view-tv" class="perspective-view">
               <canvas id="tv-canvas"></canvas>
+              <div style="position:absolute;bottom:0.8rem;left:0.8rem;display:flex;gap:1rem;font-size:0.75rem;color:#555;">
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#116466;vertical-align:middle;"></span> Project</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0ea5e9;vertical-align:middle;"></span> Epic</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#916b3b;vertical-align:middle;"></span> Task/Story</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d43b2a;vertical-align:middle;"></span> Bug</span>
+              </div>
             </section>
             <section id="view-stories" class="perspective-view">
               <div class="stories-head">
@@ -1012,11 +1020,53 @@
                   <div class="management-browser-head">
                     <div class="muted">Manage workflow definitions and their stages.</div>
                     <div class="management-browser-actions">
+                      <button id="workflows-import" class="btn" type="button">Import</button>
                       <button id="workflows-create" class="btn" type="button">New Workflow</button>
                     </div>
                   </div>
                   <div id="workflow-list" class="management-grid cards"></div>
                   <div id="workflows-browser-status" class="muted"></div>
+                </section>
+              </div>
+            </section>
+            <section id="view-members" class="perspective-view">
+              <div class="stories-head">
+                <strong>Project Members</strong>
+              </div>
+              <div class="management-host">
+                <section class="management-browser">
+                  <div class="management-browser-head">
+                    <div class="muted">Manage user and team access for the current project.</div>
+                  </div>
+                  <div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:280px;">
+                      <strong style="font-size:0.9rem;">Users</strong>
+                      <div id="project-members-list" class="agent-list" style="margin:0.4rem 0;"></div>
+                      <div class="row" style="gap:0.3rem;">
+                        <input id="project-member-user-id" type="number" placeholder="user id" style="width:6rem;" />
+                        <select id="project-member-role">
+                          <option value="viewer">viewer</option>
+                          <option value="editor">editor</option>
+                          <option value="owner">owner</option>
+                        </select>
+                        <button id="project-member-add" class="btn" type="button">Add User</button>
+                      </div>
+                    </div>
+                    <div style="flex:1; min-width:280px;">
+                      <strong style="font-size:0.9rem;">Teams</strong>
+                      <div id="project-teams-list" class="agent-list" style="margin:0.4rem 0;"></div>
+                      <div class="row" style="gap:0.3rem;">
+                        <input id="project-team-id" type="number" placeholder="team id" style="width:6rem;" />
+                        <select id="project-team-role">
+                          <option value="viewer">viewer</option>
+                          <option value="editor">editor</option>
+                          <option value="owner">owner</option>
+                        </select>
+                        <button id="project-team-add" class="btn" type="button">Add Team</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="project-members-status" class="muted" style="margin-top:0.4rem;"></div>
                 </section>
               </div>
             </section>
@@ -1068,6 +1118,10 @@
         <div class="perspective-item admin-only hidden" data-panel-action="teams">
           <div><strong>teams</strong></div>
           <div class="perspective-kicker">Open team management</div>
+        </div>
+        <div class="perspective-item admin-only hidden" data-panel-action="members">
+          <div><strong>members</strong></div>
+          <div class="perspective-kicker">Manage project user and team access</div>
         </div>
         <div class="perspective-item admin-only hidden" data-panel-action="workflows">
           <div><strong>workflows</strong></div>
@@ -1320,6 +1374,10 @@
                 <td class="field-label">Dependencies</td>
                 <td class="field-value">
                   <div id="ticket-deps-list" class="muted" style="font-size:0.85rem;"></div>
+                  <div class="row" style="gap:0.3rem; margin-top:0.3rem;">
+                    <input id="ticket-dep-add-id" type="text" placeholder="ticket id" style="width:6rem;" />
+                    <button id="ticket-dep-add" class="btn" type="button" style="font-size:0.8rem;">Add Dep</button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -1367,6 +1425,7 @@
           <input id="workflow-description" placeholder="description (optional)" autocomplete="off" />
           <div class="row">
             <button id="workflow-save" class="btn" type="button">Create</button>
+            <button id="workflow-export" class="btn" type="button" style="display:none;">Export</button>
             <button id="workflow-delete" class="btn" type="button">Delete</button>
             <button id="workflow-modal-close" class="btn" type="button">Close</button>
           </div>
@@ -1698,6 +1757,16 @@
           setLeftPanelActive("teams");
           await loadTeams();
           await refreshSelectedTeamDetails();
+          return;
+        }
+        if (action === "members") {
+          if (!isAdminUser()) {
+            await uiAlert("Admin access required.");
+            return;
+          }
+          switchPerspective("members");
+          setLeftPanelActive("members");
+          await loadProjectMembers();
           return;
         }
         if (action === "workflows") {
@@ -2562,6 +2631,29 @@
         tvGraph.edges = [];
       }
 
+      function createTVTextSprite(text, maxWidth) {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const fontSize = 13;
+        ctx.font = `${fontSize}px sans-serif`;
+        const truncated = text.length > 28 ? text.slice(0, 26) + "…" : text;
+        const measured = ctx.measureText(truncated);
+        const pw = Math.ceil(measured.width) + 6;
+        const ph = fontSize + 6;
+        canvas.width = pw;
+        canvas.height = ph;
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.fillStyle = "#2a2a2a";
+        ctx.textBaseline = "middle";
+        ctx.fillText(truncated, 3, ph / 2);
+        const tex = new window.THREE.CanvasTexture(canvas);
+        tex.minFilter = window.THREE.LinearFilter;
+        const mat = new window.THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const sprite = new window.THREE.Sprite(mat);
+        sprite.scale.set(pw, ph, 1);
+        return sprite;
+      }
+
       function createTVNode(id, label, level, color, x, y) {
         const radius = level === 0 ? 11 : 8;
         const geom = new window.THREE.CircleGeometry(radius, 16);
@@ -2569,7 +2661,10 @@
         const mesh = new window.THREE.Mesh(geom, mat);
         mesh.position.set(x, y, -2);
         tvGraph.scene.add(mesh);
-        return { id, label, level, x, y, vx: 0, vy: 0, tx: x, ty: y, mesh };
+        const textSprite = createTVTextSprite(label, 200);
+        textSprite.position.set(x, y - radius - 10, 1);
+        tvGraph.scene.add(textSprite);
+        return { id, label, level, x, y, vx: 0, vy: 0, tx: x, ty: y, mesh, textSprite };
       }
 
       function renderTicketVision() {
@@ -2658,6 +2753,10 @@
             n.x += n.vx;
             n.y += n.vy;
             n.mesh.position.set(n.x, n.y, 0);
+            if (n.textSprite) {
+              const r = n.level === 0 ? 11 : 8;
+              n.textSprite.position.set(n.x, n.y - r - 10, 1);
+            }
           }
           for (const seg of tvGraph.edgeSegments) {
             const a = byID.get(seg.a);
@@ -3816,12 +3915,14 @@
           workflowDescInput.value = wf.description || "";
           workflowSaveBtn.textContent = "Save";
           workflowDeleteBtn.style.display = "";
+          workflowExportBtn.style.display = "";
           workflowStagesSection.style.display = "";
           await loadWorkflowStages(wf.workflow_id);
         } else {
           workflowModalTitle.textContent = "New Workflow";
           workflowSaveBtn.textContent = "Create";
           workflowDeleteBtn.style.display = "none";
+          workflowExportBtn.style.display = "none";
         }
         workflowModalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
@@ -3877,6 +3978,7 @@
             workflowModalTitle.textContent = `Workflow #${created.workflow_id}`;
             workflowSaveBtn.textContent = "Save";
             workflowDeleteBtn.style.display = "";
+            workflowExportBtn.style.display = "";
             workflowStagesSection.style.display = "";
             setWorkflowStatus(`Created workflow #${created.workflow_id}`);
           }
@@ -3927,6 +4029,160 @@
       });
 
       workflowCreateBtn.addEventListener("click", () => openWorkflowEditor());
+
+      // Workflow export button
+      const workflowExportBtn = document.getElementById("workflow-export");
+      workflowExportBtn.addEventListener("click", async () => {
+        if (!selectedWorkflowID) return;
+        try {
+          const data = await call(`/api/workflows/${selectedWorkflowID}/export`, { headers: headers() });
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `workflow-${selectedWorkflowID}.json`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          setWorkflowStatus("Exported workflow JSON");
+        } catch (err) { setWorkflowStatus(err.message, true); }
+      });
+
+      // Workflow import button
+      const workflowImportBtn = document.getElementById("workflows-import");
+      workflowImportBtn.addEventListener("click", () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.onchange = async () => {
+          const file = input.files[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const payload = JSON.parse(text);
+            await call("/api/workflows/import", {
+              method: "POST",
+              headers: headers(true),
+              body: JSON.stringify(payload),
+            });
+            await loadWorkflows();
+          } catch (err) {
+            await uiAlert(`Import failed: ${err.message}`);
+          }
+        };
+        input.click();
+      });
+
+      // Dependency add/remove
+      document.getElementById("ticket-dep-add").addEventListener("click", async () => {
+        if (!draft || !draft.ticket) return;
+        const depInput = document.getElementById("ticket-dep-add-id");
+        const depRef = depInput.value.trim();
+        if (!depRef) return;
+        const projectID = Number(selectedProjectID() || 0);
+        try {
+          await call("/api/dependencies", {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ project_id: projectID, ticket_id: draft.ticket.ticket_id, depends_on: Number(depRef) }),
+          });
+          depInput.value = "";
+          await loadTicketDeps(draft.ticket.ticket_id);
+        } catch (err) {
+          appStatus.textContent = `Add dependency failed: ${err.message}`;
+        }
+      });
+
+      // ── Project Members ──
+      const projectMembersListEl = document.getElementById("project-members-list");
+      const projectTeamsListEl = document.getElementById("project-teams-list");
+      const projectMembersStatusEl = document.getElementById("project-members-status");
+
+      async function loadProjectMembers() {
+        const projectID = selectedProjectID();
+        if (!projectID) return;
+        try {
+          const members = await call(`/api/projects/${projectID}/users`, { headers: headers() });
+          projectMembersListEl.innerHTML = "";
+          if (!members || members.length === 0) {
+            projectMembersListEl.innerHTML = '<div class="muted">No user members</div>';
+          } else {
+            for (const m of members) {
+              const row = document.createElement("div");
+              row.className = "row";
+              row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
+              row.innerHTML = `<span>User #${escape(m.user_id)} <span class="muted">(${escape(m.role)})</span></span>`;
+              const rm = document.createElement("button");
+              rm.textContent = "\u00d7";
+              rm.className = "btn";
+              rm.style.cssText = "padding:0 0.4rem;";
+              rm.onclick = async () => {
+                await call(`/api/projects/${projectID}/users/${m.user_id}`, { method: "DELETE", headers: headers() });
+                await loadProjectMembers();
+              };
+              row.appendChild(rm);
+              projectMembersListEl.appendChild(row);
+            }
+          }
+        } catch (e) { projectMembersListEl.innerHTML = '<div class="muted">Failed to load</div>'; }
+        try {
+          const teams = await call(`/api/projects/${projectID}/teams`, { headers: headers() });
+          projectTeamsListEl.innerHTML = "";
+          if (!teams || teams.length === 0) {
+            projectTeamsListEl.innerHTML = '<div class="muted">No team members</div>';
+          } else {
+            for (const t of teams) {
+              const row = document.createElement("div");
+              row.className = "row";
+              row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
+              row.innerHTML = `<span>Team #${escape(t.team_id)} <span class="muted">(${escape(t.role)})</span></span>`;
+              const rm = document.createElement("button");
+              rm.textContent = "\u00d7";
+              rm.className = "btn";
+              rm.style.cssText = "padding:0 0.4rem;";
+              rm.onclick = async () => {
+                await call(`/api/projects/${projectID}/teams/${t.team_id}`, { method: "DELETE", headers: headers() });
+                await loadProjectMembers();
+              };
+              row.appendChild(rm);
+              projectTeamsListEl.appendChild(row);
+            }
+          }
+        } catch (e) { projectTeamsListEl.innerHTML = '<div class="muted">Failed to load</div>'; }
+        projectMembersStatusEl.textContent = "";
+      }
+
+      document.getElementById("project-member-add").addEventListener("click", async () => {
+        const projectID = selectedProjectID();
+        if (!projectID) return;
+        const userID = Number(document.getElementById("project-member-user-id").value);
+        const role = document.getElementById("project-member-role").value;
+        if (!userID) { projectMembersStatusEl.textContent = "User ID required"; return; }
+        try {
+          await call(`/api/projects/${projectID}/users`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ user_id: userID, role }),
+          });
+          document.getElementById("project-member-user-id").value = "";
+          await loadProjectMembers();
+        } catch (err) { projectMembersStatusEl.textContent = err.message; }
+      });
+
+      document.getElementById("project-team-add").addEventListener("click", async () => {
+        const projectID = selectedProjectID();
+        if (!projectID) return;
+        const teamID = Number(document.getElementById("project-team-id").value);
+        const role = document.getElementById("project-team-role").value;
+        if (!teamID) { projectMembersStatusEl.textContent = "Team ID required"; return; }
+        try {
+          await call(`/api/projects/${projectID}/teams`, {
+            method: "POST",
+            headers: headers(true),
+            body: JSON.stringify({ team_id: teamID, role }),
+          });
+          document.getElementById("project-team-id").value = "";
+          await loadProjectMembers();
+        } catch (err) { projectMembersStatusEl.textContent = err.message; }
+      });
 
       function setStoryStatus(message = "", isError = false) {
         storyStatusEl.textContent = message;
@@ -4738,14 +4994,26 @@
           }
           container.innerHTML = "";
           for (const d of deps) {
+            const tag = document.createElement("span");
+            tag.style.cssText = "display:inline-flex;align-items:center;gap:0.2rem;margin-right:0.5rem;padding:0.1rem 0.4rem;border-radius:3px;background:var(--line);";
             const link = document.createElement("span");
-            link.style.cssText = "cursor:pointer;text-decoration:underline;margin-right:0.5rem;";
+            link.style.cssText = "cursor:pointer;text-decoration:underline;";
             link.textContent = `#${d.depends_on}`;
             link.onclick = () => {
               const dep = allTickets.find(t => t.ticket_id === d.depends_on);
               if (dep) openEdit(dep);
             };
-            container.appendChild(link);
+            tag.appendChild(link);
+            const rm = document.createElement("span");
+            rm.textContent = "\u00d7";
+            rm.style.cssText = "cursor:pointer;color:var(--muted);font-size:0.9rem;";
+            rm.onclick = async () => {
+              const pid = Number(selectedProjectID() || d.project_id);
+              await call(`/api/dependencies?project_id=${pid}&ticket_id=${d.ticket_id}&depends_on=${d.depends_on}`, { method: "DELETE", headers: headers() });
+              await loadTicketDeps(ticketID);
+            };
+            tag.appendChild(rm);
+            container.appendChild(tag);
           }
         } catch (e) { container.innerHTML = "<span class='muted'>None</span>"; }
       }
