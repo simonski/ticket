@@ -391,6 +391,108 @@ func printCommandUsageRows(b *strings.Builder, rows [][2]string, commandWidth in
 	_ = w.Flush()
 }
 
+// ---------------------------------------------------------------------------
+// Per-namespace help text — consistent format across all nouns
+// ---------------------------------------------------------------------------
+
+const depUsage = `Usage: ticket dep <command> [flags]
+
+Commands:
+  add      -id <id> <depends-on-id>   Add a dependency
+  remove   -id <id> <depends-on-id>   Remove a dependency`
+
+const labelUsage = `Usage: ticket label <command> [flags]
+
+Commands:
+  list                                List all project labels
+  create   -name <name> [-color hex]  Create a label
+  delete   -id <label-id>             Delete a label
+  add      -id <ticket-id> <label-id> Tag a ticket with a label
+  remove   -id <ticket-id> <label-id> Remove a label from a ticket
+  show     -id <ticket-id>            Show labels on a ticket`
+
+const timeUsage = `Usage: ticket time <command> [flags]
+
+Commands:
+  log      -id <ticket-id> -m <minutes> [-note text]   Log time
+  list     -id <ticket-id>                              List entries
+  total    -id <ticket-id>                              Sum total time
+  delete   -id <entry-id>                               Delete an entry`
+
+const projectUsage = `Usage: ticket project <command> [flags]
+
+Commands:
+  list, ls                            List all projects
+  create   -title <name>              Create a project
+  get      <id>                       Show project details
+  use      <id>                       Switch active project
+  init                                Init project in current directory
+  add-user                            Add a user to a project
+  remove-user                         Remove a user from a project
+  add-team                            Add a team to a project
+  remove-team                         Remove a team from a project`
+
+const roleUsage = `Usage: ticket role <command> [flags]
+
+Commands:
+  list                                List all roles
+  create   -title <t> [-motivation m] [-goals g]   Create a role
+  update   -id <id> [-title t] [-motivation m] [-goals g]   Update a role
+  delete   -id <id>                   Delete a role`
+
+const workflowUsage = `Usage: ticket workflow <command> [flags]
+
+Commands:
+  list                                List all workflows
+  create   -name <n> [-d desc]        Create a workflow
+  get      -id <id>                   Show workflow details
+  delete   -id <id>                   Delete a workflow
+  add-stage    -id <wf-id> -name <n>  Add a stage
+  remove-stage -stage-id <id>         Remove a stage
+  reorder-stages -id <wf-id> <ids>    Reorder stages
+  export   -id <id> [-o file]         Export a workflow`
+
+const decisionUsage = `Usage: ticket decision <command> [flags]
+
+Commands:
+  add      "text"                     Record a decision
+  list                                List all decisions`
+
+const teamUsage = `Usage: ticket team <command> [flags]
+
+Commands:
+  list                                List all teams
+  create   -name <name>              Create a team
+  update   -id <id> -name <name>     Update a team
+  delete   -id <id>                   Delete a team
+  add-user     -team_id <id> -user_id <id>    Add a user
+  remove-user  -team_id <id> -user_id <id>    Remove a user
+  users        -id <id>                       List team users
+  add-agent    -team_id <id> -agent_id <id>   Add an agent
+  remove-agent -team_id <id> -agent_id <id>   Remove an agent
+  agents       -id <id>                       List team agents`
+
+const agentUsage = `Usage: ticket agent <command> [flags]
+
+Commands:
+  list                                List all agents
+  create   -name <n> [-description d] Create an agent
+  update   -id <id> [-name n]         Update an agent
+  delete   -id <id>                   Delete an agent
+  enable   -id <id>                   Enable an agent
+  disable  -id <id>                   Disable an agent
+  request  -id <id>                   Request work for an agent
+  run      -id <id>                   Run an agent worker loop`
+
+const userUsage = `Usage: ticket user <command> [flags]
+
+Commands:
+  list                                List all users
+  create   --username <u> --password <p>   Create a user
+  delete   -id <id>                   Delete a user
+  enable   -id <id>                   Enable a user
+  disable  -id <id>                   Disable a user`
+
 func renderCommandHelp(command string) string {
 	command = normalizeHelpCommand(command)
 	info, ok := helpIndex[command]

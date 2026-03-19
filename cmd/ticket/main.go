@@ -992,8 +992,9 @@ func runCount(args []string) error {
 }
 
 func runUser(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: ticket user <create|ls|list|rm|delete|enable|disable>")
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(userUsage)
+		return nil
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1073,13 +1074,14 @@ func runUser(args []string) error {
 		printUserTable(users)
 		return nil
 	default:
-		return fmt.Errorf("unknown user command %q", args[0])
+		return fmt.Errorf("unknown user command %q; see: ticket user help", args[0])
 	}
 }
 
 func runAgent(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: ticket agent <create|ls|list|update|rm|delete|enable|disable|request|run>")
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(agentUsage)
+		return nil
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1395,7 +1397,7 @@ func runAgent(args []string) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("unknown agent command %q", args[0])
+		return fmt.Errorf("unknown agent command %q; see: ticket agent help", args[0])
 	}
 }
 
@@ -1673,22 +1675,8 @@ func runProject(args []string) error {
 		return err
 	}
 
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, `Usage: ticket project <command>
-
-Commands:
-  init                              Init project in current directory
-  list, ls                          List all projects
-  create, add, new                  Create a new project
-  get <id>                          Show project details
-  use <id>                          Switch active project
-  <id> update                       Update a project
-  <id> enable                       Enable a project
-  <id> disable                      Disable a project
-  add-user                          Add a user to a project
-  remove-user                       Remove a user from a project
-  add-team                          Add a team to a project
-  remove-team                       Remove a team from a project`)
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(projectUsage)
 		return nil
 	}
 
@@ -1794,7 +1782,7 @@ Commands:
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
 	default:
-		return fmt.Errorf("unknown project command %q", args[0])
+		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
 	}
 }
 
@@ -1968,6 +1956,9 @@ func runTeam(args []string) error {
 		return nil
 	}
 	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Println(teamUsage)
+		return nil
 	case "list", "ls":
 		teams, err := svc.ListTeams()
 		if err != nil {
@@ -2174,7 +2165,7 @@ func runTeam(args []string) error {
 		printTeamAgentTable(items)
 		return nil
 	default:
-		return fmt.Errorf("unknown team command %q", args[0])
+		return fmt.Errorf("unknown team command %q; see: ticket team help", args[0])
 	}
 }
 
@@ -2242,6 +2233,9 @@ func runRole(args []string) error {
 		return nil
 	}
 	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Println(roleUsage)
+		return nil
 	case "list", "ls":
 		roles, err := svc.ListRoles()
 		if err != nil {
@@ -2322,7 +2316,7 @@ func runRole(args []string) error {
 		fmt.Printf("deleted role #%d\n", *id)
 		return nil
 	default:
-		return fmt.Errorf("unknown role subcommand %q — try: list, create, update, delete", args[0])
+		return fmt.Errorf("unknown role command %q; see: ticket role help", args[0])
 	}
 }
 
@@ -2349,6 +2343,9 @@ func runWorkflow(args []string) error {
 		return nil
 	}
 	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Println(workflowUsage)
+		return nil
 	case "list", "ls":
 		workflows, err := svc.ListWorkflows()
 		if err != nil {
@@ -2536,7 +2533,7 @@ func runWorkflow(args []string) error {
 		fmt.Printf("imported workflow: %s (id %d)\n", wf.Name, wf.ID)
 		return nil
 	default:
-		return fmt.Errorf("unknown workflow command %q", args[0])
+		return fmt.Errorf("unknown workflow command %q; see: ticket workflow help", args[0])
 	}
 }
 
@@ -2563,8 +2560,9 @@ func printWorkflowDetail(wf store.WorkflowWithStages) {
 }
 
 func runLabel(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: ticket label <list|create|delete|add|remove|show>")
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(labelUsage)
+		return nil
 	}
 	_, svc, project, err := resolveCurrentProjectClient()
 	if err != nil {
@@ -2718,13 +2716,14 @@ func runLabel(args []string) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("unknown label subcommand %q", args[0])
+		return fmt.Errorf("unknown label command %q; see: ticket label help", args[0])
 	}
 }
 
 func runTime(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: ticket time <log|list|total|delete>")
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(timeUsage)
+		return nil
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -2838,7 +2837,7 @@ func runTime(args []string) error {
 		}
 		return svc.DeleteTimeEntry(id)
 	default:
-		return fmt.Errorf("unknown time subcommand %q", args[0])
+		return fmt.Errorf("unknown time command %q; see: ticket time help", args[0])
 	}
 }
 
@@ -3192,7 +3191,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		printProject(project)
 		return nil
 	default:
-		return fmt.Errorf("unknown project command %q", args[0])
+		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
 	}
 }
 
@@ -4326,10 +4325,11 @@ func runDependencyCommand(args []string, add bool) error {
 }
 
 func runDependency(args []string) error {
-	usage := "ticket dependency <add|remove> -id <id> <dependency-id[,dependency-id...]>"
-	if len(args) == 0 {
-		return errors.New("usage: " + usage)
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(depUsage)
+		return nil
 	}
+	depUsageErr := "usage: ticket dep <add|remove> -id <id> <dependency-id>"
 	action := args[0]
 	switch args[0] {
 	case "add":
@@ -4340,7 +4340,7 @@ func runDependency(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
-			return errors.New("usage: " + usage)
+			return errors.New(depUsageErr)
 		}
 		return runDependencyCommand([]string{strings.TrimSpace(*id), strings.TrimSpace(fs.Args()[0])}, true)
 	case "remove":
@@ -4351,14 +4351,14 @@ func runDependency(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
-			return errors.New("usage: " + usage)
+			return errors.New(depUsageErr)
 		}
 		return runDependencyCommand([]string{strings.TrimSpace(*id), strings.TrimSpace(fs.Args()[0])}, false)
 	default:
 		if action == "" {
-			return errors.New("usage: " + usage)
+			return errors.New(depUsageErr)
 		}
-		return fmt.Errorf("unknown dependency action %q", action)
+		return fmt.Errorf("unknown dep command %q; see: ticket dep help", action)
 	}
 }
 
@@ -4917,8 +4917,9 @@ func runReqRevise(args []string) error {
 }
 
 func runDecision(args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: ticket decision <add|list>")
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(decisionUsage)
+		return nil
 	}
 	switch args[0] {
 	case "add":
@@ -4954,7 +4955,7 @@ func runDecision(args []string) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("unknown decision command %q", args[0])
+		return fmt.Errorf("unknown decision command %q; see: ticket decision help", args[0])
 	}
 }
 
