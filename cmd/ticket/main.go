@@ -178,16 +178,8 @@ func run(args []string) error {
 		return runSetParent(trimmedArgs[1:], trimmedArgs[0])
 	case "unset-parent", "detach":
 		return runUnsetParent(trimmedArgs[1:], trimmedArgs[0])
-	case "design":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageDesign, "design")
-	case "develop":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageDevelop, trimmedArgs[0])
-	case "test":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageTest, trimmedArgs[0])
-	case "done":
-		return runTicketStageAlias(trimmedArgs[1:], store.StageDone, trimmedArgs[0])
 	case "stage":
-		return runTicketStage(trimmedArgs[1:])
+		return runTicketState(trimmedArgs[1:])
 	case "idle":
 		return runTicketStateAlias(trimmedArgs[1:], store.StateIdle, trimmedArgs[0])
 	case "state":
@@ -3678,10 +3670,6 @@ func runUnsetParent(args []string, command string) error {
 	return nil
 }
 
-func runTicketStageAlias(args []string, stage, command string) error {
-	return fmt.Errorf("stage is now workflow-driven; use 'ticket state -id <id> success' to advance, or 'ticket state -id <id> <idle|active|success|fail>'")
-}
-
 func runTicketStateAlias(args []string, state, command string) error {
 	fs := flag.NewFlagSet("ticket "+command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -3693,10 +3681,6 @@ func runTicketStateAlias(args []string, state, command string) error {
 		return fmt.Errorf("usage: ticket %s -id <id>", command)
 	}
 	return updateTicketState(strings.TrimSpace(*id), state)
-}
-
-func runTicketStage(args []string) error {
-	return fmt.Errorf("stage is now workflow-driven; use 'ticket state -id <id> success' to advance, or 'ticket state -id <id> <idle|active|success|fail>'")
 }
 
 func runTicketState(args []string) error {
@@ -4804,6 +4788,10 @@ func runReq(args []string) error {
 		return runReqAcceptReject("reject", args[1:])
 	case "revise":
 		return runReqRevise(args[1:])
+	case "break":
+		return runReqBreak(args[1:])
+	case "pin":
+		return runReqPin(args[1:])
 	default:
 		return fmt.Errorf("unknown req command %q; see: ticket req help", args[0])
 	}
@@ -4816,6 +4804,7 @@ Commands:
   list   [-status raw|shaping|accepted|rejected]    List requirements
   get    -id <id>                                   View requirement detail
   shape  -id <id> [-d text] [-ac text]              Refine a requirement
+  break  -id <id> [--retry] [--reset]              Show/manage breakdown
   accept -id <id>                                   Approve a requirement
   reject -id <id>                                   Reject a requirement
   revise -id <id>                                   Send back for rethinking
@@ -4914,6 +4903,81 @@ func runReqRevise(args []string) error {
 		return errors.New("usage: ticket req revise -id <id>")
 	}
 	return runRevise([]string{"requirement", *id})
+}
+
+func runReqBreak(args []string) error {
+	fs := flag.NewFlagSet("req break", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "requirement ID")
+	retry := fs.Bool("retry", false, "regenerate breakdown, keeping pinned items")
+	reset := fs.Bool("reset", false, "discard all children and regenerate")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == "" {
+		return errors.New("usage: ticket req break -id <id> [--retry] [--reset]")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	req, err := svc.GetTicket(*id)
+	if err != nil {
+		return err
+	}
+	if req.Type != "requirement" {
+		return fmt.Errorf("%s is a %s, not a requirement", req.Key, req.Type)
+	}
+
+	// List all tickets in the project, filter to children of this requirement.
+	tickets, err := svc.ListTicketsFiltered(req.ProjectID, "", "", "", "", "", "", 0, false)
+	if err != nil {
+		return err
+	}
+	var children []store.Ticket
+	for _, t := range tickets {
+		if t.ParentID != nil && *t.ParentID == req.ID {
+			children = append(children, t)
+		}
+	}
+
+	if *reset {
+		// Delete all unpinned children — for now, delete all (pin not yet tracked).
+		for _, child := range children {
+			if err := svc.DeleteTicket(child.ID); err != nil {
+				return fmt.Errorf("failed to delete %s: %w", child.Key, err)
+			}
+			fmt.Printf("deleted %s: %s\n", child.Key, child.Title)
+		}
+		children = nil
+	}
+
+	_ = *retry // retry keeps pinned items; without pin tracking, behaves like showing current state
+
+	if len(children) == 0 {
+		fmt.Printf("no breakdown items for %s\n", req.Key)
+		fmt.Println("hint: create child tickets with `tk add -parent <id> \"title\"` then re-run `tk req break -id <id>`")
+		return nil
+	}
+
+	if outputJSON {
+		return printJSON(children)
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "Breakdown of %s: %s\n\n", req.Key, req.Title)
+	fmt.Fprintln(w, "KEY\tTYPE\tSTATUS\tTITLE")
+	for _, child := range children {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", child.Key, child.Type, child.Status, child.Title)
+	}
+	return w.Flush()
+}
+
+func runReqPin(args []string) error {
+	return errors.New("req pin is not yet implemented; planned for a future release")
 }
 
 func runDecision(args []string) error {

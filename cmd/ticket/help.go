@@ -181,31 +181,6 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Alias for `ticket unset-parent`."},
 		example: "ticket detach -id CUS-T-12",
 	},
-	"design": {
-		usage:   "ticket design -id <id>",
-		details: []string{"Sets the ticket stage to `design` and the state to `idle`."},
-		example: "ticket design -id 42",
-	},
-	"stage": {
-		usage:   "ticket stage -id <id> <design|develop|test|done>",
-		details: []string{"Sets a ticket stage directly. `done` sets state to `success`; other stages set state to `idle`."},
-		example: "ticket stage -id 42 develop",
-	},
-	"develop": {
-		usage:   "ticket develop -id <id>",
-		details: []string{"Sets the ticket stage to `develop` and the state to `idle`."},
-		example: "ticket develop -id 42",
-	},
-	"test": {
-		usage:   "ticket test -id <id>",
-		details: []string{"Sets the ticket stage to `test` and the state to `idle`."},
-		example: "ticket test -id 42",
-	},
-	"done": {
-		usage:   "ticket done -id <id>",
-		details: []string{"Sets the ticket stage to `done` and the state to `success`."},
-		example: "ticket done -id 42",
-	},
 	"idle": {
 		usage:   "ticket idle -id <id>",
 		details: []string{"Sets the ticket state to `idle` without changing the stage."},
@@ -321,6 +296,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Manages API agents for autonomous ticket processing.", "`request` fetches an enriched work envelope (project, ticket, parents). `run` registers an agent then continuously requests and processes work."},
 		example: "ticket agent create -name worker-1 -description \"Autonomous worker\"",
 	},
+	"story": {
+		usage:   "ticket story <create|list|get|update|delete>",
+		details: []string{"Manages stories within the active project.", "Stories provide a lightweight grouping layer within a project."},
+		example: "ticket story create -title \"User onboarding flow\"",
+	},
 	"config": {
 		usage:   "ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
 		details: []string{"Local config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges in remote mode."},
@@ -343,6 +323,7 @@ func renderRootUsage() string {
 		{"label", "Manage project labels and ticket tagging"},
 		{"time", "Log and view time entries on tickets"},
 		{"role", "Manage roles (title, motivation, goals)"},
+		{"story", "Manage stories within a project"},
 		{"workflow", "Manage workflow definitions and stages"},
 		{"decision", "Record and list architectural decisions"},
 		{"team", "Manage teams, hierarchy, and team membership"},
