@@ -638,6 +638,7 @@ func runServer(args []string) error {
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	port := fs.Int("p", 0, "HTTP listen port (shorthand for -addr :<port>)")
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
+	staticPath := fs.String("path", "", "serve static files from this filesystem path instead of embedded assets")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -660,7 +661,7 @@ func runServer(args []string) error {
 	}
 	defer db.Close()
 
-	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout)
+	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath)
 	if err != nil {
 		return err
 	}

@@ -261,7 +261,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	handler, err := server.Handler(db, "test-version", false, nil)
+	handler, err := server.Handler(db, "test-version", false, nil, "")
 	if err != nil {
 		t.Fatalf("server.Handler() error = %v", err)
 	}

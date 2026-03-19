@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 
 	web "github.com/simonski/ticket/web"
@@ -18,8 +19,8 @@ type Server struct {
 	httpServer *http.Server
 }
 
-func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer) (*Server, error) {
-	handler, err := Handler(db, version, verbose, output)
+func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath string) (*Server, error) {
+	handler, err := Handler(db, version, verbose, output, staticPath)
 	if err != nil {
 		return nil, err
 	}
@@ -31,10 +32,16 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 	}, nil
 }
 
-func Handler(db *sql.DB, version string, verbose bool, output io.Writer) (http.Handler, error) {
-	staticFS, err := fs.Sub(web.Static, "static")
-	if err != nil {
-		return nil, err
+func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath string) (http.Handler, error) {
+	var staticFS fs.FS
+	if staticPath != "" {
+		staticFS = os.DirFS(staticPath)
+	} else {
+		var err error
+		staticFS, err = fs.Sub(web.Static, "static")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	mux := http.NewServeMux()
