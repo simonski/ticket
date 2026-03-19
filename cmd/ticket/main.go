@@ -141,7 +141,7 @@ func run(args []string) error {
 	case "count":
 		return runCount(trimmedArgs[1:])
 	case "ticket":
-		return runTicket(trimmedArgs[1:])
+		return runTicketNS(trimmedArgs[1:])
 	case "agent":
 		return runAgent(trimmedArgs[1:])
 	case "user":
@@ -208,7 +208,7 @@ func run(args []string) error {
 		return runDependencyCommand(trimmedArgs[1:], true)
 	case "remove-dependency":
 		return runDependencyCommand(trimmedArgs[1:], false)
-	case "dependency":
+	case "dep", "dependency":
 		return runDependency(trimmedArgs[1:])
 	case "request":
 		return runRequest(trimmedArgs[1:])
@@ -232,6 +232,12 @@ func run(args []string) error {
 		return runSetTicketArchived(trimmedArgs[1:], false)
 	case "rm", "delete":
 		return runDeleteTicket(trimmedArgs[1:])
+	case "req":
+		return runReq(trimmedArgs[1:])
+	case "idea":
+		return runReqAdd(trimmedArgs[1:])
+	case "ideas":
+		return runReqList(trimmedArgs[1:])
 	case "curate":
 		return runCurate(trimmedArgs[1:])
 	case "review":
@@ -2607,44 +2613,93 @@ func runLabel(args []string) error {
 		fmt.Printf("label created: %d %s\n", label.ID, label.Name)
 		return nil
 	case "delete":
-		if len(args) < 2 {
-			return errors.New("usage: ticket label delete <label-id>")
+		fs := flag.NewFlagSet("label delete", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.String("id", "", "label ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		idStr := *idFlag
+		if idStr == "" && fs.NArg() > 0 {
+			idStr = fs.Arg(0)
+		}
+		if idStr == "" {
+			return errors.New("usage: ticket label delete -id <label-id>")
 		}
 		var id int64
-		if _, err := fmt.Sscan(args[1], &id); err != nil {
+		if _, err := fmt.Sscan(idStr, &id); err != nil {
 			return errors.New("label id must be numeric")
 		}
 		return svc.DeleteLabel(id)
 	case "add":
-		if len(args) < 3 {
-			return errors.New("usage: ticket label add <ticket-id> <label-id>")
+		fs := flag.NewFlagSet("label add", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.String("id", "", "ticket ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
 		}
 		var ticketID, labelID int64
-		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
-			return errors.New("ticket id must be numeric")
-		}
-		if _, err := fmt.Sscan(args[2], &labelID); err != nil {
-			return errors.New("label id must be numeric")
+		if *idFlag != "" && fs.NArg() > 0 {
+			if _, err := fmt.Sscan(*idFlag, &ticketID); err != nil {
+				return errors.New("ticket id must be numeric")
+			}
+			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
+				return errors.New("label id must be numeric")
+			}
+		} else if fs.NArg() >= 2 {
+			// positional fallback
+			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
+				return errors.New("ticket id must be numeric")
+			}
+			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
+				return errors.New("label id must be numeric")
+			}
+		} else {
+			return errors.New("usage: ticket label add -id <ticket-id> <label-id>")
 		}
 		return svc.AddTicketLabel(ticketID, labelID)
 	case "remove":
-		if len(args) < 3 {
-			return errors.New("usage: ticket label remove <ticket-id> <label-id>")
+		fs := flag.NewFlagSet("label remove", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.String("id", "", "ticket ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
 		}
 		var ticketID, labelID int64
-		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
-			return errors.New("ticket id must be numeric")
-		}
-		if _, err := fmt.Sscan(args[2], &labelID); err != nil {
-			return errors.New("label id must be numeric")
+		if *idFlag != "" && fs.NArg() > 0 {
+			if _, err := fmt.Sscan(*idFlag, &ticketID); err != nil {
+				return errors.New("ticket id must be numeric")
+			}
+			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
+				return errors.New("label id must be numeric")
+			}
+		} else if fs.NArg() >= 2 {
+			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
+				return errors.New("ticket id must be numeric")
+			}
+			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
+				return errors.New("label id must be numeric")
+			}
+		} else {
+			return errors.New("usage: ticket label remove -id <ticket-id> <label-id>")
 		}
 		return svc.RemoveTicketLabel(ticketID, labelID)
 	case "show":
-		if len(args) < 2 {
-			return errors.New("usage: ticket label show <ticket-id>")
+		fs := flag.NewFlagSet("label show", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.String("id", "", "ticket ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		idStr := *idFlag
+		if idStr == "" && fs.NArg() > 0 {
+			idStr = fs.Arg(0)
+		}
+		if idStr == "" {
+			return errors.New("usage: ticket label show -id <ticket-id>")
 		}
 		var ticketID int64
-		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
+		if _, err := fmt.Sscan(idStr, &ticketID); err != nil {
 			return errors.New("ticket id must be numeric")
 		}
 		labels, err := svc.ListTicketLabels(ticketID)
@@ -2702,12 +2757,20 @@ func runTime(args []string) error {
 		fmt.Printf("logged %d min on ticket %d\n", entry.Minutes, entry.TicketID)
 		return nil
 	case "list", "ls":
-		if len(args) < 2 {
-			return errors.New("usage: ticket time list <ticket-id>")
+		fs := flag.NewFlagSet("time list", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.Int64("id", 0, "ticket ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
 		}
-		var ticketID int64
-		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
-			return errors.New("ticket id must be numeric")
+		ticketID := *idFlag
+		if ticketID == 0 && fs.NArg() > 0 {
+			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
+				return errors.New("ticket id must be numeric")
+			}
+		}
+		if ticketID == 0 {
+			return errors.New("usage: ticket time list -id <ticket-id>")
 		}
 		entries, err := svc.ListTimeEntries(ticketID)
 		if err != nil {
@@ -2727,12 +2790,20 @@ func runTime(args []string) error {
 		}
 		return w.Flush()
 	case "total":
-		if len(args) < 2 {
-			return errors.New("usage: ticket time total <ticket-id>")
+		fs := flag.NewFlagSet("time total", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.Int64("id", 0, "ticket ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
 		}
-		var ticketID int64
-		if _, err := fmt.Sscan(args[1], &ticketID); err != nil {
-			return errors.New("ticket id must be numeric")
+		ticketID := *idFlag
+		if ticketID == 0 && fs.NArg() > 0 {
+			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
+				return errors.New("ticket id must be numeric")
+			}
+		}
+		if ticketID == 0 {
+			return errors.New("usage: ticket time total -id <ticket-id>")
 		}
 		total, err := svc.TotalTimeForTicket(ticketID)
 		if err != nil {
@@ -2750,12 +2821,20 @@ func runTime(args []string) error {
 		}
 		return nil
 	case "delete":
-		if len(args) < 2 {
-			return errors.New("usage: ticket time delete <time-entry-id>")
+		fs := flag.NewFlagSet("time delete", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		idFlag := fs.Int64("id", 0, "time entry ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
 		}
-		var id int64
-		if _, err := fmt.Sscan(args[1], &id); err != nil {
-			return errors.New("time entry id must be numeric")
+		id := *idFlag
+		if id == 0 && fs.NArg() > 0 {
+			if _, err := fmt.Sscan(fs.Arg(0), &id); err != nil {
+				return errors.New("time entry id must be numeric")
+			}
+		}
+		if id == 0 {
+			return errors.New("usage: ticket time delete -id <entry-id>")
 		}
 		return svc.DeleteTimeEntry(id)
 	default:
@@ -2763,7 +2842,147 @@ func runTime(args []string) error {
 	}
 }
 
-func runTicket(args []string) error {
+// ---------------------------------------------------------------------------
+// tk ticket — ticket namespace
+// ---------------------------------------------------------------------------
+
+func runTicketNS(args []string) error {
+	if len(args) == 0 {
+		return runList(nil)
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Println(ticketNSUsage)
+		return nil
+
+	// List & search
+	case "list", "ls":
+		return runList(args[1:])
+	case "search":
+		return runSearch(args[1:])
+	case "board":
+		return runBoard(args[1:])
+	case "count":
+		return runCount(args[1:])
+	case "orphans":
+		return runOrphans(args[1:])
+
+	// Create
+	case "add", "create", "new":
+		return runTicketCreate(args[1:])
+
+	// View
+	case "get", "show":
+		return runGet(args[1:])
+	case "tree":
+		return runGet(args[1:]) // TODO: dedicated tree view
+
+	// Update
+	case "update":
+		return runUpdate(args[1:])
+
+	// State
+	case "active":
+		return runTicketStateAlias(args[1:], store.StateActive, "active")
+	case "idle":
+		return runTicketStateAlias(args[1:], store.StateIdle, "idle")
+	case "complete":
+		return runTicketStateAlias(args[1:], store.StateSuccess, "complete")
+	case "fail":
+		return runTicketStateAlias(args[1:], store.StateFail, "fail")
+	case "state":
+		return runTicketState(args[1:])
+
+	// Ownership
+	case "claim":
+		return runClaim(args[1:])
+	case "unclaim":
+		return runUnclaim(args[1:])
+	case "assign":
+		return runAssign(args[1:])
+	case "unassign":
+		return runUnassign(args[1:])
+	case "request":
+		return runRequest(args[1:])
+
+	// Hierarchy
+	case "attach":
+		return runSetParent(args[1:], "attach")
+	case "detach":
+		return runUnsetParent(args[1:], "detach")
+
+	// Comments & history
+	case "comment":
+		return runComment(args[1:])
+	case "history":
+		return runHistory(args[1:])
+	case "conversation":
+		return runConversation(args[1:])
+
+	// Lifecycle
+	case "close":
+		return runSetTicketClosed(args[1:], true)
+	case "open":
+		return runSetTicketClosed(args[1:], false)
+	case "archive":
+		return runSetTicketArchived(args[1:], true)
+	case "unarchive":
+		return runSetTicketArchived(args[1:], false)
+	case "clone", "cp":
+		return runClone(args[1:])
+	case "delete", "rm":
+		return runDeleteTicket(args[1:])
+
+	// Legacy: agent-based ticket generation
+	case "gen":
+		return runTicketGen(args[1:])
+
+	default:
+		return fmt.Errorf("unknown ticket command %q; see: ticket ticket help", args[0])
+	}
+}
+
+const ticketNSUsage = `Usage: ticket ticket <command> [flags]
+
+Commands:
+  list    [--type T] [--status S] [-u user]   List tickets
+  search  "query"                             Full-text search
+  board                                       Kanban view
+  count                                       Aggregate counts
+  orphans                                     Tickets with no parent
+
+  add     "title" [-type T] [-d desc] [-ac criteria]   Create a ticket
+  get     -id <id> [-json]                    View ticket detail
+  update  -id <id> [field flags]              Update ticket fields
+
+  active   -id <id>                           Start work
+  idle     -id <id>                           Pause work
+  complete -id <id>                           Finish stage, advance
+  fail     -id <id>                           Mark failed
+
+  claim    -id <id>                           Assign to self
+  unclaim  -id <id>                           Unassign self
+  assign   -id <id> <user>                    Assign to someone
+  unassign -id <id> <user>                    Unassign someone
+  request                                     Next available ticket
+
+  attach   -id <id> <parent-id>               Set parent
+  detach   -id <id>                           Remove parent
+
+  comment  add -id <id> "text"                Add comment
+  history  <id>                               Activity log
+  conversation show <id>                      Full thread
+
+  close    -id <id>                           Close ticket
+  open     -id <id>                           Reopen ticket
+  archive  -id <id>                           Archive
+  unarchive -id <id>                          Unarchive
+  clone    -id <id>                           Duplicate
+  delete   -id <id>                           Delete permanently
+
+  gen      -f <files> -o <output>             Generate tickets via agent`
+
+func runTicketGen(args []string) error {
 	fs := flag.NewFlagSet("ticket", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	filesArg := fs.String("f", "", "comma-separated input files")
@@ -4562,6 +4781,144 @@ func runRevise(args []string) error {
 	}
 	printTicket(updated)
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// tk req — requirements namespace
+// ---------------------------------------------------------------------------
+
+func runReq(args []string) error {
+	if len(args) == 0 {
+		return runReqList(nil)
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Println(reqUsage)
+		return nil
+	case "add":
+		return runReqAdd(args[1:])
+	case "list", "ls":
+		return runReqList(args[1:])
+	case "get":
+		return runReqGet(args[1:])
+	case "shape":
+		return runReqShape(args[1:])
+	case "accept":
+		return runReqAcceptReject("accept", args[1:])
+	case "reject":
+		return runReqAcceptReject("reject", args[1:])
+	case "revise":
+		return runReqRevise(args[1:])
+	default:
+		return fmt.Errorf("unknown req command %q; see: ticket req help", args[0])
+	}
+}
+
+const reqUsage = `Usage: ticket req <command> [flags]
+
+Commands:
+  add    "title" [-d description] [-ac criteria]   Capture a new requirement
+  list   [-status raw|shaping|accepted|rejected]    List requirements
+  get    -id <id>                                   View requirement detail
+  shape  -id <id> [-d text] [-ac text]              Refine a requirement
+  accept -id <id>                                   Approve a requirement
+  reject -id <id>                                   Reject a requirement
+  revise -id <id>                                   Send back for rethinking
+
+Shortcuts:
+  tk idea "title"    →  tk req add "title"
+  tk ideas           →  tk req list`
+
+func runReqAdd(args []string) error {
+	return runTicketCreate(append([]string{"-type", "requirement"}, args...))
+}
+
+func runReqList(args []string) error {
+	return runReview(args)
+}
+
+func runReqGet(args []string) error {
+	return runGet(args)
+}
+
+func runReqShape(args []string) error {
+	fs := flag.NewFlagSet("req shape", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "requirement ID")
+	desc := fs.String("d", "", "description")
+	ac := fs.String("ac", "", "acceptance criteria")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == "" {
+		return errors.New("usage: ticket req shape -id <id> [-d description] [-ac criteria]")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	current, err := svc.GetTicket(*id)
+	if err != nil {
+		return err
+	}
+	if current.Type != "requirement" {
+		return fmt.Errorf("%s is a %s, not a requirement", current.Key, current.Type)
+	}
+	update := libticket.TicketUpdateRequest{
+		Title:              current.Title,
+		Description:        current.Description,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		ParentID:           current.ParentID,
+		Assignee:           current.Assignee,
+		State:              current.State,
+		Priority:           current.Priority,
+		Order:              current.Order,
+		EstimateEffort:     current.EstimateEffort,
+		EstimateComplete:   current.EstimateComplete,
+	}
+	if *desc != "" {
+		update.Description = *desc
+	}
+	if *ac != "" {
+		update.AcceptanceCriteria = *ac
+	}
+	updated, err := svc.UpdateTicket(current.ID, update)
+	if err != nil {
+		return err
+	}
+	printTicket(updated)
+	return nil
+}
+
+func runReqAcceptReject(verb string, args []string) error {
+	fs := flag.NewFlagSet("req "+verb, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "requirement ID")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == "" {
+		return fmt.Errorf("usage: ticket req %s -id <id>", verb)
+	}
+	stateToSet := map[string]string{"accept": store.StateSuccess, "reject": store.StateFail}[verb]
+	return updateTicketState(*id, stateToSet)
+}
+
+func runReqRevise(args []string) error {
+	fs := flag.NewFlagSet("req revise", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "requirement ID")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *id == "" {
+		return errors.New("usage: ticket req revise -id <id>")
+	}
+	return runRevise([]string{"requirement", *id})
 }
 
 func runDecision(args []string) error {

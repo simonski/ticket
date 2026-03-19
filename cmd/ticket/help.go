@@ -79,9 +79,29 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket count -project_id 1",
 	},
 	"ticket": {
-		usage:   "ticket ticket -f <file1,file2,...> -o <output-file> [-agent <agent>]",
-		details: []string{"Reads the listed input files, sends a requirements-breakdown prompt to an agent, and writes the agent output to the requested output file.", "Default agent is `codex`, which is invoked as `codex exec <prompt>`. Other agents are invoked as `<agent> -p <prompt>`."},
-		example: "ticket ticket -f README.md,docs/DESIGN.md -o requirements.md",
+		usage:   "ticket ticket <verb> [flags]",
+		details: []string{"Namespace for all ticket operations: list, search, board, add, get, update, state changes, ownership, hierarchy, comments, lifecycle.", "Run `ticket ticket help` for the full verb list."},
+		example: "ticket ticket list --type bug",
+	},
+	"req": {
+		usage:   "ticket req <verb> [flags]",
+		details: []string{"Namespace for requirements: capture ideas, shape them, accept/reject/revise.", "Shortcuts: `ticket idea \"title\"` = `ticket req add \"title\"`, `ticket ideas` = `ticket req list`.", "Run `ticket req help` for the full verb list."},
+		example: "ticket req add \"offline mode\" -d \"the app should work without network\"",
+	},
+	"dep": {
+		usage:   "ticket dep <add|remove> -id <id> <dependency-id>",
+		details: []string{"Manages `depends_on` links for a ticket.", "`add` creates dependency links; `remove` deletes them.", "Alias for `ticket dependency`."},
+		example: "ticket dep add -id TK-4 TK-1",
+	},
+	"idea": {
+		usage:   "ticket idea \"title\" [-d description] [-ac criteria]",
+		details: []string{"Shortcut for `ticket req add`. Captures a new requirement."},
+		example: "ticket idea \"dark mode support\"",
+	},
+	"ideas": {
+		usage:   "ticket ideas [-status raw|shaping|accepted|rejected]",
+		details: []string{"Shortcut for `ticket req list`. Lists all requirements."},
+		example: "ticket ideas -status proposed",
 	},
 	"health": {
 		usage:   "ticket health <id>|execute",
@@ -314,104 +334,53 @@ func renderRootUsage() string {
 	h := "\x1b[38;5;117m" // pastel blue
 	r := "\x1b[0m"
 	b.WriteString("\n" + h + "USAGE" + r + "\n")
-	b.WriteString("  ticket <command> [options]\n\n")
-	b.WriteString(h + "CLIENT COMMANDS" + r + "\n")
-	clientRows := [][2]string{
-		{"login", "Log into the server"},
-		{"register", "Create a user account on the server"},
-		{"logout", "Clear the local session"},
-		{"status", "Show server and authentication status"},
-		{"config", "Manage local config keys and registration controls"},
+	b.WriteString("  ticket <noun> <verb> [flags]\n\n")
+	nounRows := [][2]string{
+		{"ticket", "Manage tickets — create, update, state, assign, comment, close"},
+		{"req", "Capture and refine requirements — add, shape, accept, reject"},
 		{"project", "Manage projects and active project context"},
-		{"team", "Manage teams, hierarchy, and team membership"},
-		{"agent", "Manage autonomous agents and run agent workers"},
-		{"role", "Manage roles (title, motivation, goals)"},
-		{"workflow", "Manage workflow definitions and stages"},
+		{"dep", "Manage dependency links between tickets"},
 		{"label", "Manage project labels and ticket tagging"},
 		{"time", "Log and view time entries on tickets"},
-		{"add", "Create a ticket in the active project"},
-		{"get", "Show a ticket with history and comments"},
-		{"board", "Kanban-style board grouped by workflow stage"},
-		{"list", "List tickets in the active project"},
-		{"search", "Search tickets in the active project or across all projects"},
-		{"update", "Update a ticket"},
-		{"delete", "Delete a ticket permanently"},
-		{"clone", "Clone a ticket or epic"},
-		{"claim", "Assign yourself to a ticket"},
-		{"unclaim", "Remove yourself from a ticket"},
-		{"request", "Request work for the current user"},
-		{"request-dryrun", "Simulate a request assignment without mutation"},
-		{"set-parent", "Set the parent of a ticket"},
-		{"attach", "Alias for set-parent"},
-		{"unset-parent", "Clear the parent of a ticket"},
-		{"detach", "Alias for unset-parent"},
-		{"comment", "Add comments to a ticket"},
-		{"dependency", "Manage dependency links between tickets"},
-		{"health", "Compute ticket health by project-specific heuristics"},
-		{"count", "Count users, projects, and work by type"},
-		{"orphans", "List tickets with no parent"},
-		{"ticket", "Generate requirements via an external agent"},
-		{"onboard", "Print ticket CLI instructions for agents to stdout"},
-		{"help", "Show command help"},
-		{"upgrade", "Check whether a newer version is available"},
-		{"version", "Print the current version from VERSION"},
-	}
-	lifecycleRows := [][2]string{
-		{"archive", "Archive a ticket"},
-		{"unarchive", "Unarchive a ticket"},
-		{"close", "Close a ticket and freeze modifications"},
-		{"open", "Reopen a closed ticket"},
-	}
-	stageRows := [][2]string{
-		{"design", "Set a ticket stage to design"},
-		{"develop", "Set a ticket stage to develop"},
-		{"test", "Set a ticket stage to test"},
-		{"done", "Set a ticket stage to done"},
-		{"stage", "Set a ticket stage directly [design, develop, test, done]"},
-	}
-	stateRows := [][2]string{
-		{"idle", "Set a ticket state to idle"},
-		{"active", "Set a ticket state to active"},
-		{"complete", "Set a ticket state to success"},
-		{"state", "Set a ticket state directly [idle, active, success, fail]"},
-	}
-	adminRows := [][2]string{
-		{"assign", "Admin-only ticket assignment"},
-		{"export", "Export all entities to a schema-versioned JSON snapshot"},
-		{"import", "Import entities from a schema-versioned JSON snapshot"},
-		{"init", "Initialize the database, bootstrap admin, and create the default project"},
-		{"server", "Start the API server and embedded web UI"},
-		{"unassign", "Admin-only ticket unassignment"},
+		{"role", "Manage roles (title, motivation, goals)"},
+		{"workflow", "Manage workflow definitions and stages"},
+		{"decision", "Record and list architectural decisions"},
+		{"team", "Manage teams, hierarchy, and team membership"},
+		{"agent", "Manage autonomous agents and run agent workers"},
 		{"user", "Admin-only user management"},
 	}
-	commandWidth := commandUsageWidth(clientRows, lifecycleRows, stageRows, stateRows, adminRows)
-	printCommandUsageRows(&b, clientRows, commandWidth)
-	b.WriteString("\n" + h + "LIFECYCLE COMMANDS" + r + "\n")
-	printCommandUsageRows(&b, lifecycleRows, commandWidth)
-	b.WriteString("\n" + h + "STAGE COMMANDS" + r + "\n")
-	printCommandUsageRows(&b, stageRows, commandWidth)
-	b.WriteString("\n" + h + "STATE COMMANDS" + r + "\n")
-	printCommandUsageRows(&b, stateRows, commandWidth)
-	b.WriteString("\n" + h + "ADMIN COMMANDS" + r + "\n")
-	printCommandUsageRows(&b, adminRows, commandWidth)
+	b.WriteString(h + "NAMESPACES" + r + "\n")
+	printCommandUsageRows(&b, nounRows, 10)
+	shortcutRows := [][2]string{
+		{"tk", "List tickets in the active project (alias: tk ticket list)"},
+		{"tk add", "Create a ticket (alias: tk ticket add)"},
+		{"tk bug", "Create a bug (alias: tk ticket add -type bug)"},
+		{"tk epic", "Create an epic (alias: tk ticket add -type epic)"},
+		{"tk idea", "Capture a requirement (alias: tk req add)"},
+		{"tk ideas", "List requirements (alias: tk req list)"},
+	}
+	b.WriteString("\n" + h + "SHORTCUTS" + r + "\n")
+	printCommandUsageRows(&b, shortcutRows, 10)
+	systemRows := [][2]string{
+		{"status", "Show connection and authentication status"},
+		{"server", "Start the API server and web UI"},
+		{"login", "Log into the server"},
+		{"logout", "Clear the local session"},
+		{"register", "Create a user account on the server"},
+		{"config", "Manage local config keys"},
+		{"init", "Initialize the database"},
+		{"export", "Export entities to a JSON snapshot"},
+		{"import", "Import entities from a JSON snapshot"},
+		{"version", "Print the current version"},
+		{"upgrade", "Check for a newer version"},
+		{"help", "Show command help"},
+	}
+	b.WriteString("\n" + h + "SYSTEM" + r + "\n")
+	printCommandUsageRows(&b, systemRows, 10)
 	b.WriteString("\n" + h + "HELP" + r + "\n")
-	b.WriteString("  ticket help <command>\n")
+	b.WriteString("  ticket <noun> help        Show verbs for a namespace\n")
+	b.WriteString("  ticket help <command>     Show detailed command help\n")
 	return strings.TrimSpace(b.String()) + "\n"
-}
-
-func commandUsageWidth(groups ...[][2]string) int {
-	max := 0
-	for _, rows := range groups {
-		for _, row := range rows {
-			if len(row[0]) > max {
-				max = len(row[0])
-			}
-		}
-	}
-	if max < 1 {
-		return 2
-	}
-	return max
 }
 
 func printCommandUsageRows(b *strings.Builder, rows [][2]string, commandWidth int) {

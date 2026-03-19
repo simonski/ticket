@@ -29,19 +29,22 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	for _, want := range []string{
 		"TTTTTTT",
 		"USAGE",
-		"CLIENT COMMANDS",
-		"LIFECYCLE COMMANDS",
-		"STAGE COMMANDS",
-		"STATE COMMANDS",
-		"ADMIN COMMANDS",
+		"NAMESPACES",
+		"SHORTCUTS",
+		"SYSTEM",
 		"\x1b[38;5;117m",
+		"ticket",
+		"req",
+		"project",
+		"dep",
+		"label",
+		"time",
 		"config",
 		"init",
 		"server",
 		"version",
 		"upgrade",
 		"login",
-		"project",
 		"help",
 	} {
 		if !strings.Contains(usage, want) {
@@ -62,72 +65,48 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		}
 	}
 
-	clientOrder := []string{
-		"  login",
-		"  register",
-		"  logout",
-		"  status",
-		"  config",
+	// Verify noun-based ordering in NAMESPACES section
+	nounOrder := []string{
+		"  ticket",
+		"  req",
 		"  project",
-		"  team",
-		"  agent",
-		"  role",
-		"  workflow",
+		"  dep",
 		"  label",
 		"  time",
-		"  add",
-		"  get",
-		"  board",
-		"  list",
-		"  search",
-		"  update",
-		"  delete",
-		"  clone",
-		"  claim",
-		"  unclaim",
-		"  request",
-		"  request-dryrun",
-		"  set-parent",
-		"  attach",
-		"  unset-parent",
-		"  detach",
-		"  comment",
-		"  dependency",
-		"  health",
-		"  count",
-		"  orphans",
-		"\n  ticket          ",
-		"  onboard",
-		"  help",
-		"  upgrade",
-		"  version",
+		"  role",
+		"  workflow",
+		"  decision",
+		"  team",
+		"  agent",
+		"  user",
 	}
 	last := -1
-	for _, item := range clientOrder {
+	for _, item := range nounOrder {
 		idx := strings.Index(usage, item)
 		if idx == -1 {
-			t.Fatalf("root usage missing ordered client command %q:\n%s", item, usage)
+			t.Fatalf("root usage missing namespace %q:\n%s", item, usage)
 		}
 		if idx <= last {
-			t.Fatalf("root usage client commands not in expected order around %q:\n%s", item, usage)
+			t.Fatalf("root usage namespaces not in expected order around %q:\n%s", item, usage)
 		}
 		last = idx
 	}
 
-	adminOrder := []string{"  assign", "  export", "  import", "  init", "  server", "  unassign", "  user"}
+	// Verify SYSTEM section ordering
+	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  init", "  export", "  import", "  version", "  upgrade", "  help"}
 	last = -1
-	for _, item := range adminOrder {
-		idx := strings.Index(usage, item)
+	for _, item := range systemOrder {
+		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
 		if idx == -1 {
-			t.Fatalf("root usage missing ordered admin command %q:\n%s", item, usage)
+			t.Fatalf("root usage missing system command %q:\n%s", item, usage)
 		}
 		if idx <= last {
-			t.Fatalf("root usage admin commands not alphabetical around %q:\n%s", item, usage)
+			t.Fatalf("root usage system commands not in expected order around %q:\n%s", item, usage)
 		}
 		last = idx
 	}
 
-	for _, unwanted := range []string{"ALIASES", "create,new", "del,delete", "  ls", "  show"} {
+	for _, unwanted := range []string{"ALIASES", "create,new", "del,delete"} {
 		if strings.Contains(usage, unwanted) {
 			t.Fatalf("root usage should not include aliases %q:\n%s", unwanted, usage)
 		}
@@ -497,15 +476,15 @@ func TestRunTicketUsesCodexByDefaultAndWritesOutput(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		if err := runTicket([]string{"-f", input, "-o", output}); err != nil {
-			t.Fatalf("runTicket() error = %v", err)
+		if err := runTicketGen([]string{"-f", input, "-o", output}); err != nil {
+			t.Fatalf("runTicketGen() error = %v", err)
 		}
 	})
 	if gotAgent != "codex" {
-		t.Fatalf("runTicket() agent = %q, want codex", gotAgent)
+		t.Fatalf("runTicketGen() agent = %q, want codex", gotAgent)
 	}
 	if !strings.Contains(gotPrompt, "source") || !strings.Contains(gotPrompt, "requirements.md") {
-		t.Fatalf("runTicket() prompt = %q", gotPrompt)
+		t.Fatalf("runTicketGen() prompt = %q", gotPrompt)
 	}
 	data, err := os.ReadFile(output)
 	if err != nil {
@@ -536,11 +515,11 @@ func TestRunTicketUsesConfiguredAgent(t *testing.T) {
 		return "ok", nil
 	}
 
-	if err := runTicket([]string{"-f", input, "-o", output, "-agent", "copilot"}); err != nil {
-		t.Fatalf("runTicket(agent override) error = %v", err)
+	if err := runTicketGen([]string{"-f", input, "-o", output, "-agent", "copilot"}); err != nil {
+		t.Fatalf("runTicketGen(agent override) error = %v", err)
 	}
 	if gotAgent != "copilot" {
-		t.Fatalf("runTicket(agent override) agent = %q, want copilot", gotAgent)
+		t.Fatalf("runTicketGen(agent override) agent = %q, want copilot", gotAgent)
 	}
 }
 
