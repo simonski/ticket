@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -158,11 +159,7 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 	if len(history) > 0 {
 		fmt.Println("History      :")
 		for _, event := range history {
-			fmt.Printf("  - [%s] %s by %d", event.CreatedAt, event.EventType, event.CreatedBy)
-			if strings.TrimSpace(event.Payload) != "" && event.Payload != "{}" {
-				fmt.Printf(": %s", event.Payload)
-			}
-			fmt.Println()
+			fmt.Printf("  - [%s] %s\n", event.CreatedAt, formatHistoryEvent(event))
 		}
 	}
 }
@@ -331,4 +328,142 @@ func printRoleTable(roles []store.Role) {
 		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", role.ID, role.Title, role.Motivation, role.Goals)
 	}
 	_ = w.Flush()
+}
+
+func formatHistoryEvent(event store.HistoryEvent) string {
+	payload := strings.TrimSpace(event.Payload)
+	if payload == "" || payload == "{}" {
+		return event.EventType
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
+		return event.EventType + ": " + payload
+	}
+
+	switch event.EventType {
+	case "ticket_created":
+		title, _ := data["title"].(string)
+		typ, _ := data["type"].(string)
+		status, _ := data["status"].(string)
+		return fmt.Sprintf("created %s \"%s\" [%s]", typ, title, status)
+
+	case "ticket_lifecycle_changed":
+		fromStatus, _ := data["from_status"].(string)
+		toStatus, _ := data["to_status"].(string)
+		who, _ := data["who"].(string)
+		if who != "" {
+			return fmt.Sprintf("%s → %s (by %s)", fromStatus, toStatus, who)
+		}
+		return fmt.Sprintf("%s → %s", fromStatus, toStatus)
+
+	case "ticket_updated":
+		return formatTicketUpdatePayload(data)
+
+	case "ticket_assigned":
+		assignee, _ := data["assignee"].(string)
+		return fmt.Sprintf("assigned to %s", assignee)
+
+	case "ticket_unassigned":
+		assignee, _ := data["assignee"].(string)
+		return fmt.Sprintf("unassigned from %s", assignee)
+
+	case "ticket_commented":
+		text, _ := data["text"].(string)
+		author, _ := data["author"].(string)
+		if len(text) > 80 {
+			text = text[:77] + "..."
+		}
+		if author != "" {
+			return fmt.Sprintf("comment by %s: %s", author, text)
+		}
+		return fmt.Sprintf("comment: %s", text)
+
+	case "ticket_closed":
+		return "closed"
+
+	case "ticket_opened":
+		return "reopened"
+
+	case "ticket_archived":
+		return "archived"
+
+	case "ticket_unarchived":
+		return "unarchived"
+
+	case "ticket_cloned":
+		cloneOf, _ := data["clone_of"].(float64)
+		if cloneOf > 0 {
+			return fmt.Sprintf("cloned from #%d", int64(cloneOf))
+		}
+		return "cloned"
+
+	case "ticket_parent_set":
+		parentID, _ := data["parent_id"].(float64)
+		return fmt.Sprintf("parent set to #%d", int64(parentID))
+
+	case "ticket_parent_cleared":
+		return "parent removed"
+
+	default:
+		return event.EventType + ": " + formatPayloadKeyValues(data)
+	}
+}
+
+func formatTicketUpdatePayload(data map[string]interface{}) string {
+	var parts []string
+
+	interesting := []struct {
+		key   string
+		label string
+	}{
+		{"title", "title"},
+		{"status", "status"},
+		{"assignee", "assignee"},
+		{"priority", "priority"},
+		{"parent_id", "parent"},
+		{"description", "description"},
+		{"acceptance_criteria", "acceptance criteria"},
+	}
+
+	for _, field := range interesting {
+		val, ok := data[field.key]
+		if !ok {
+			continue
+		}
+		switch v := val.(type) {
+		case string:
+			if v == "" {
+				continue
+			}
+			if field.key == "description" || field.key == "acceptance_criteria" {
+				if len(v) > 60 {
+					v = v[:57] + "..."
+				}
+			}
+			parts = append(parts, fmt.Sprintf("%s: %s", field.label, v))
+		case float64:
+			parts = append(parts, fmt.Sprintf("%s: %v", field.label, v))
+		}
+	}
+
+	if len(parts) == 0 {
+		return "updated"
+	}
+	return "updated — " + strings.Join(parts, ", ")
+}
+
+func formatPayloadKeyValues(data map[string]interface{}) string {
+	var parts []string
+	for k, v := range data {
+		switch val := v.(type) {
+		case string:
+			if val != "" {
+				parts = append(parts, fmt.Sprintf("%s=%s", k, val))
+			}
+		default:
+			parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+	return strings.Join(parts, ", ")
 }

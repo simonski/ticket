@@ -1113,7 +1113,7 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 		"Comments     :",
 		"[2026-03-02 10:00:00] alice: latest comment",
 		"History      :",
-		"[2026-03-01 12:00:00] ticket_created by 1: {\"status\":\"design/idle\"}",
+		"[2026-03-01 12:00:00] created",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("printTicketDetails() missing %q:\n%s", want, output)
@@ -2033,7 +2033,7 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 			t.Fatalf("history error = %v", err)
 		}
 	})
-	if !strings.Contains(historyOutput, "Event      : ticket_created") {
+	if !strings.Contains(historyOutput, "created task") {
 		t.Fatalf("history output = %q", historyOutput)
 	}
 
@@ -2042,7 +2042,7 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{"History      :", "ticket_created"} {
+	for _, want := range []string{"History      :", "created task"} {
 		if !strings.Contains(getOutput, want) {
 			t.Fatalf("get output missing %q:\n%s", want, getOutput)
 		}
@@ -3134,8 +3134,8 @@ func TestRunConversationShow(t *testing.T) {
 			t.Fatalf("conversation show error = %v", err)
 		}
 	})
-	if !strings.Contains(out, "ticket_created") {
-		t.Fatalf("conversation show missing ticket_created event:\n%s", out)
+	if !strings.Contains(out, "created task") {
+		t.Fatalf("conversation show missing created event:\n%s", out)
 	}
 }
 

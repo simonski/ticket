@@ -4094,12 +4094,7 @@ func runHistory(args []string) error {
 		return nil
 	}
 	for _, event := range events {
-		fmt.Printf("ID         : %d\n", event.ID)
-		fmt.Printf("TicketID     : %d\n", event.TicketID)
-		fmt.Printf("Event      : %s\n", event.EventType)
-		fmt.Printf("Created    : %s\n", event.CreatedAt)
-		fmt.Printf("Created By : %d\n", event.CreatedBy)
-		fmt.Printf("Payload    : %s\n\n", event.Payload)
+		fmt.Printf("[%s] %s\n", event.CreatedAt, formatHistoryEvent(event))
 	}
 	return nil
 }
