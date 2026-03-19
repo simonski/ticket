@@ -12,6 +12,13 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	t.Setenv("TICKET_CONFIG_DIR", tempDir)
 	t.Setenv("TICKET_URL", "")
 
+	// Chdir to temp dir so local .ticket.json in the repo doesn't override values.
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
 	cfg := Config{ServerURL: "http://example.test:9000"}
 	if err := Save(cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
