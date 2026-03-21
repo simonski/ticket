@@ -107,6 +107,8 @@ func run(args []string) error {
 	switch trimmedArgs[0] {
 	case "help", "-h", "--help":
 		return runHelp(trimmedArgs[1:])
+	case "summary":
+		return runSummary(trimmedArgs[1:])
 	case "onboard":
 		return runOnboard(trimmedArgs[1:])
 	case "setup":
@@ -284,6 +286,148 @@ func runHelp(args []string) error {
 	fmt.Print(renderCommandHelp(args[0]))
 	printTicketEnvironment()
 	return nil
+}
+
+func runSummary(_ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Resolve project
+	_, _, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+
+	// Ticket counts for this project
+	projectID := project.ID
+	allTickets, _ := svc.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
+
+	// Count open tickets by type
+	typeCounts := map[string]int{}
+	for _, t := range allTickets {
+		typeCounts[t.Type]++
+	}
+
+	// Last 5 recently-updated tickets (sort by UpdatedAt desc)
+	recent := make([]store.Ticket, len(allTickets))
+	copy(recent, allTickets)
+	sort.Slice(recent, func(i, j int) bool {
+		return recent[i].UpdatedAt > recent[j].UpdatedAt
+	})
+	if len(recent) > 5 {
+		recent = recent[:5]
+	}
+
+	// Environment
+	ticketHome, _ := config.Home()
+	resolved, _ := config.ResolveURL()
+	cfgPath, _ := config.Path()
+	envHome := envValue("TICKET_HOME")
+
+	if outputJSON {
+		return printJSON(map[string]any{
+			"project":     project,
+			"type_counts": typeCounts,
+			"recent":      recent,
+			"db_path":     resolved.DBPath,
+			"config_file": cfgPath,
+		})
+	}
+
+	// Build box lines
+	var lines []statusLine
+
+	// Project header
+	projectLabel := project.Prefix + " — " + project.Title
+	lines = append(lines, statusLine{key: "project", value: projectLabel})
+	if strings.TrimSpace(project.Description) != "" {
+		lines = append(lines, statusLine{key: "description", value: strings.TrimSpace(project.Description)})
+	}
+
+	// Ticket counts
+	lines = append(lines, statusLine{})
+	total := len(allTickets)
+	typeOrder := []string{"task", "epic", "bug", "story", "requirement", "decision", "question", "note"}
+	var typeBreakdown []string
+	for _, t := range typeOrder {
+		if n := typeCounts[t]; n > 0 {
+			label := t + "s"
+			if t == "story" {
+				label = "stories"
+			}
+			typeBreakdown = append(typeBreakdown, fmt.Sprintf("%d %s", n, label))
+		}
+	}
+	ticketVal := fmt.Sprintf("%d open", total)
+	if len(typeBreakdown) > 0 {
+		ticketVal += "  (" + strings.Join(typeBreakdown, ", ") + ")"
+	}
+	lines = append(lines, statusLine{key: "open tickets", value: ticketVal})
+
+	// Recent activity
+	if len(recent) > 0 {
+		lines = append(lines, statusLine{})
+		lines = append(lines, statusLine{key: "recently active", value: ""})
+		now := time.Now().UTC()
+		for _, t := range recent {
+			sym := formatTicketStatusSymbol(t.Status, true)
+			ago := timeAgo(t.UpdatedAt, now)
+			val := fmt.Sprintf("%s  %-*s  %s  %s", sym, 30, t.Title, t.Status, ago)
+			lines = append(lines, statusLine{key: "  " + t.Key, value: val})
+		}
+	}
+
+	// Environment
+	lines = append(lines, statusLine{})
+	lines = append(lines, statusLine{key: "database", value: resolved.DBPath})
+	lines = append(lines, statusLine{key: "config", value: cfgPath})
+	if envHome != "" {
+		lines = append(lines, statusLine{key: "TICKET_HOME", value: envHome})
+	} else {
+		lines = append(lines, statusLine{key: "TICKET_HOME", value: ticketHome + "  (auto-discovered)"})
+	}
+
+	printStatusBox(lines)
+	return nil
+}
+
+// timeAgo returns a human-friendly relative time string.
+func timeAgo(ts string, now time.Time) string {
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05Z",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	var t time.Time
+	for _, l := range layouts {
+		if p, err := time.Parse(l, ts); err == nil {
+			t = p.UTC()
+			break
+		}
+	}
+	if t.IsZero() {
+		return ts
+	}
+	d := now.Sub(t)
+	switch {
+	case d < 2*time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	default:
+		return t.Format("2006-01-02")
+	}
 }
 
 func runOnboard(args []string) error {
