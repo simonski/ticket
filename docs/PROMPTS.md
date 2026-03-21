@@ -47,7 +47,7 @@ I have put a SKILL.md file into the docs folder.  This should be rehomed so it i
 
 ## DB/Query Performance
 
-Review the database and SQL for performance issues and make recommendations.
+Review the database and SQL for performance issues and make recommendations, especially around the `tk ls`
 
 Anticipate we get to thousands of tickets - I want to exclude as much as possible in terms of query and traffic; e.g. most stories will be closed, so exlucde them from queries unless it is is explicity that hte user wants to see closed inormation.
 
@@ -81,7 +81,7 @@ The TUI shoudl be nicely coloured in a dark mode - dark, gray on gray.
 Themes in the TUI should be available
     deep dark green
         this should have a round-rect the full size of the screen which is generally dark but has a sort of a pulse going aroudn the screen slowly, using perlin noise to vary the velocity.  teh pulse should be like an ECG where it has a neon effect rotating aroudn the screen
-        
+
 
     maudlin maroon
     neon nights
@@ -91,8 +91,23 @@ Themes in the TUI should be available
     brain-fuzz (maximally offensive bubbletea)
     k-pop
 
+TUI:
 
-
+- first load should show a RAD dialog that flys past like teh original superman movie 
+- landing screen should be last screen
+- need to be able to list and select epics and their children
+- very keyboard driven
+- arrow keys and wsad
+- e/enter to edit the current entity
+- n to create a new
+- tab to mvoe around screen
+- if on epic, right acts as expand to show childre, left acts as reduce to hide children
+- double-tap shift raise or dismiss a context-aware popup window which is probably a multiple-choice dropdown of actions; or editor of the currently selected entity
+- / should bring up a terminal to type commands
+- qq, CTRL-C twice should should quit the app
+- bottom bar shoudl be a little single-line status bar
+- make a little ascii icon for TK maybe a slowly animating moon
+- ? should bring up a settings dialog for themes and general config
 
 
 HISTORY

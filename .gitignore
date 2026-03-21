@@ -2,6 +2,7 @@
 bin/
 commands.sh
 commands2.sh
+.ticket/credentials.json
 ./tk
 ./task
 /ticket

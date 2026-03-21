@@ -168,6 +168,28 @@ func extractDBOverride(args []string) ([]string, string, error) {
 	return out, override, nil
 }
 
+// extractGUIFlag removes -g/--gui and optional -theme=<id> from args.
+// Returns trimmed args and the theme ID (empty string = use default).
+func extractGUIFlag(args []string) ([]string, string) {
+	var out []string
+	var theme string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-g" || arg == "--gui" || arg == "gui":
+			theme = "gui-requested"
+		case strings.HasPrefix(arg, "-theme="):
+			theme = strings.TrimPrefix(arg, "-theme=")
+		case arg == "-theme" && i+1 < len(args):
+			i++
+			theme = args[i]
+		default:
+			out = append(out, arg)
+		}
+	}
+	return out, theme
+}
+
 func extractOutputFlags(args []string) ([]string, bool, bool, error) {
 	var out []string
 	var jsonFlag bool

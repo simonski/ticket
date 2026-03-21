@@ -75,6 +75,8 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	var guiTheme string
+	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
 	// -f /path/to/dir (or db file) sets TICKET_HOME to the directory
 	if dbOverride != "" {
 		absPath, pathErr := filepath.Abs(dbOverride)
@@ -99,6 +101,14 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	// -g launches the TUI (may appear before or after other args)
+	if guiTheme != "" || (len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui")) {
+		if len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui") {
+			trimmedArgs = trimmedArgs[1:]
+		}
+		return runGUI(guiTheme)
+	}
+
 	if len(trimmedArgs) == 0 {
 		fmt.Print(renderRootUsage())
 		return nil
@@ -594,8 +604,20 @@ func runSetup(args []string) error {
 
 	if claudePath != "" {
 		fmt.Println()
-		if promptYN(reader, "install tk skill for Claude Code (~/.claude/skills/tk/SKILL.md)?", true) {
-			skillDir := filepath.Join(os.Getenv("HOME"), ".claude", "skills", "tk")
+		if promptYN(reader, "install tk skill for Claude Code?", true) {
+			cwd, _ := os.Getwd()
+			localSkillDir := filepath.Join(cwd, ".claude", "skills", "tk")
+			globalSkillDir := filepath.Join(os.Getenv("HOME"), ".claude", "skills", "tk")
+			fmt.Printf("  [1] local   %s\n", localSkillDir+"/SKILL.md")
+			fmt.Printf("  [2] global  %s\n", globalSkillDir+"/SKILL.md")
+			choice := prompt(reader, "install location", "1")
+			var skillDir string
+			switch strings.TrimSpace(choice) {
+			case "2", "global":
+				skillDir = globalSkillDir
+			default:
+				skillDir = localSkillDir
+			}
 			if err := os.MkdirAll(skillDir, 0o755); err != nil {
 				fmt.Printf("  warning: could not create skill dir: %v\n", err)
 			} else {
