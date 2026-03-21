@@ -401,6 +401,7 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
+		Status:             request.Status,
 		Visibility:         request.Visibility,
 		WorkflowID:         request.WorkflowID,
 	})

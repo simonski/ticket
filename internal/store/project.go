@@ -51,6 +51,7 @@ type ProjectUpdateParams struct {
 	GitRepository      string
 	GitBranch          string
 	Notes              string
+	Status             string
 	Visibility         string
 	WorkflowID         *int64
 }
@@ -259,15 +260,19 @@ func UpdateProjectWithParams(db *sql.DB, id int64, params ProjectUpdateParams) (
 	if !validProjectVisibility(nextVisibility) {
 		return Project{}, fmt.Errorf("invalid project visibility %q", params.Visibility)
 	}
+	nextStatus := strings.TrimSpace(params.Status)
+	if nextStatus == "" {
+		nextStatus = current.Status
+	}
 	nextWorkflowID := params.WorkflowID
 	if nextWorkflowID == nil {
 		nextWorkflowID = current.WorkflowID
 	}
 	_, err = db.Exec(`
 		UPDATE projects
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, visibility = ?, workflow_id = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, status = ?, visibility = ?, workflow_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
-	`, nextTitle, nextDescription, nextAC, nextRepo, nextBranch, nextNotes, nextVisibility, nextWorkflowID, id)
+	`, nextTitle, nextDescription, nextAC, nextRepo, nextBranch, nextNotes, nextStatus, nextVisibility, nextWorkflowID, id)
 	if err != nil {
 		return Project{}, err
 	}

@@ -1206,6 +1206,10 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 		}
 	}
 
+	// Switch to project 1 before disabling project 2 (can't close the current project).
+	if err := run([]string{"project", "use", "1"}); err != nil {
+		t.Fatalf("project use 1 error = %v", err)
+	}
 	disableOutput := captureStdout(t, func() {
 		if err := run([]string{"project", "2", "disable"}); err != nil {
 			t.Fatalf("project disable error = %v", err)

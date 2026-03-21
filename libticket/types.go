@@ -32,6 +32,7 @@ type ProjectUpdateRequest struct {
 	GitRepository      string `json:"git_repository"`
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
+	Status             string `json:"status"`
 	Visibility         string `json:"visibility"`
 	WorkflowID         *int64 `json:"workflow_id,omitempty"`
 }

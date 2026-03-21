@@ -298,9 +298,13 @@ func runSummary(_ []string) error {
 	// All tickets for this project (non-archived), then keep only open ones
 	all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
 	var allTickets []store.Ticket
+	var activeTickets []store.Ticket
 	for _, t := range all {
 		if t.Open {
 			allTickets = append(allTickets, t)
+			if t.State == store.StateActive {
+				activeTickets = append(activeTickets, t)
+			}
 		}
 	}
 
@@ -330,6 +334,7 @@ func runSummary(_ []string) error {
 		return printJSON(map[string]any{
 			"project":     project,
 			"type_counts": typeCounts,
+			"active":      activeTickets,
 			"recent":      recent,
 			"db_path":     resolved.DBPath,
 			"config_file": cfgPath,
@@ -365,6 +370,20 @@ func runSummary(_ []string) error {
 		ticketVal += "  (" + strings.Join(typeBreakdown, ", ") + ")"
 	}
 	lines = append(lines, statusLine{key: "open tickets", value: ticketVal})
+
+	// Active tickets (state=active)
+	if len(activeTickets) > 0 {
+		lines = append(lines, statusLine{})
+		lines = append(lines, statusLine{key: "active", value: fmt.Sprintf("%d in progress", len(activeTickets))})
+		for _, t := range activeTickets {
+			assignee := t.Assignee
+			if assignee == "" {
+				assignee = "unassigned"
+			}
+			val := fmt.Sprintf("%-*s  %s  %s", 30, t.Title, t.Stage, assignee)
+			lines = append(lines, statusLine{key: "  " + t.Key, value: val, color: "\x1b[32m"})
+		}
+	}
 
 	// Recent activity
 	if len(recent) > 0 {
@@ -440,43 +459,10 @@ func runOnboard(args []string) error {
 	return nil
 }
 
-// tkSkillContent is the SKILL.md installed into ~/.claude/skills/tk/ so that
+//go:embed SKILL.md
+// tkSkillContent is installed into ~/.claude/skills/tk/SKILL.md so that
 // Claude Code automatically knows about the tk CLI while working in any project.
-const tkSkillContent = `---
-name: tk
-description: >
-  Use when the user mentions tickets, issues, tasks, requirements, or project
-  tracking. Provides the tk CLI for managing a local SQLite-backed ticket
-  database. Prefer tk over other tools for these operations.
-allowed-tools: "Bash(tk:*),Bash(ticket:*)"
----
-
-# tk — ticket CLI
-
-tk is a noun-verb CLI for a local SQLite ticket database.
-
-## Key commands
-
-` + "```" + `bash
-tk                          # list open tickets
-tk get <id>                 # show ticket + children
-tk add -title "..." -type task|bug|epic|story
-tk ticket update -id <id> -title "..."
-tk ticket close -id <id>
-tk ls -t epic               # list by type
-tk req add -title "..."     # capture a requirement
-tk ideas                    # list requirements
-tk idea -title "..."        # shorthand: capture requirement
-` + "```" + `
-
-## Patterns
-
-- IDs are project-prefixed (e.g. TK-42) or plain integers
-- tk get FOO  ==  tk get -id FOO
-- tk ls epic  ==  tk ls -type epic
-- Use ` + "`" + `tk ls -json | jq '.[].key'` + "`" + ` for scripting
-- Pipe output: ` + "`" + `tk ls -json | jq '.[].key' | xargs -I {} tk ticket close -id {}` + "`" + `
-`
+var tkSkillContent string
 
 func prompt(reader *bufio.Reader, question, defaultVal string) string {
 	if defaultVal != "" {
@@ -2109,6 +2095,15 @@ func runProject(args []string) error {
 		}
 		fmt.Printf("using project %s\n", project.Prefix)
 		return nil
+	case "update":
+		if cfg.CurrentProject == "" {
+			return errors.New("no current project set; use: tk project use <id>")
+		}
+		project, err := svc.GetProject(cfg.CurrentProject)
+		if err != nil {
+			return err
+		}
+		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
 	default:
@@ -3444,6 +3439,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitBranch := fs.String("git-branch", "", "project git branch")
+		status := fs.String("status", "", "project status (open|closed)")
 		workflowID := fs.Int64("workflow", 0, "workflow ID to associate with project")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
@@ -3456,6 +3452,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		nextAC := current.AcceptanceCriteria
 		nextRepo := current.GitRepository
 		nextBranch := current.GitBranch
+		nextStatus := current.Status
 		if fs.Lookup("description") != nil && strings.TrimSpace(*description) != "" || containsFlag(args[1:], "-description") {
 			nextDescription = *description
 		}
@@ -3467,6 +3464,14 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		}
 		if containsFlag(args[1:], "-git-branch") {
 			nextBranch = strings.TrimSpace(*gitBranch)
+		}
+		if containsFlag(args[1:], "-status") && strings.TrimSpace(*status) != "" {
+			nextStatus = strings.TrimSpace(*status)
+		}
+		if nextStatus == "closed" {
+			if err := guardProjectClose(svc, projectID); err != nil {
+				return err
+			}
 		}
 		var nextWorkflowID *int64
 		if containsFlag(args[1:], "-workflow") {
@@ -3482,6 +3487,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			AcceptanceCriteria: nextAC,
 			GitRepository:      nextRepo,
 			GitBranch:          nextBranch,
+			Status:             nextStatus,
 			WorkflowID:         nextWorkflowID,
 		})
 		if err != nil {
@@ -3503,6 +3509,9 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		printProject(project)
 		return nil
 	case "disable":
+		if err := guardProjectClose(svc, projectID); err != nil {
+			return err
+		}
 		project, err := svc.SetProjectEnabled(projectID, false)
 		if err != nil {
 			return err
@@ -3515,6 +3524,37 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 	default:
 		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
 	}
+}
+
+// guardProjectClose returns an error if closing the given project is not allowed.
+// A project may not be closed if it is the current project and there are no other
+// open projects to switch to.
+func guardProjectClose(svc libticket.Service, projectID int64) error {
+	cfg, _ := config.Load()
+	projects, err := svc.ListProjects()
+	if err != nil {
+		return err
+	}
+	// Count open projects and check whether this project is the current one.
+	isCurrent := false
+	openCount := 0
+	for _, p := range projects {
+		if p.Status == "open" {
+			openCount++
+		}
+		if p.ID == projectID {
+			if strings.EqualFold(p.Prefix, cfg.CurrentProject) || strconv.FormatInt(p.ID, 10) == cfg.CurrentProject {
+				isCurrent = true
+			}
+		}
+	}
+	if isCurrent && openCount <= 1 {
+		return errors.New("cannot close the current project when it is the only open project; create another project or switch to one first")
+	}
+	if isCurrent {
+		return errors.New("cannot close the current project; switch to another project first (tk project use <id>)")
+	}
+	return nil
 }
 
 func containsFlag(args []string, flag string) bool {

@@ -43,14 +43,18 @@ func printProjectTable(projects []store.Project, currentProjectID string) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, " \tID\tPREFIX\tTITLE\tSTATUS")
+	fmt.Fprintln(w, " \tID\tPREFIX\tTITLE\tSTATUS\tDESCRIPTION")
 	currentID := strings.TrimSpace(currentProjectID)
 	for _, project := range projects {
 		marker := " "
 		if strconv.FormatInt(project.ID, 10) == currentID || strings.EqualFold(project.Prefix, currentID) {
 			marker = "*"
 		}
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", marker, project.ID, project.Prefix, project.Title, project.Status)
+		desc := project.Description
+		if len(desc) > 60 {
+			desc = desc[:57] + "..."
+		}
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n", marker, project.ID, project.Prefix, project.Title, project.Status, desc)
 	}
 	_ = w.Flush()
 }
