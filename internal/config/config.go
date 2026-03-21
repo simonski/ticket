@@ -45,41 +45,28 @@ func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
-// ResolveURL parses TICKET_URL to determine mode and target.
+// ResolveURL determines mode and target from environment.
 //
-//	file:///path/to/ticket.db  → local mode, DBPath = /path/to/ticket.db
-//	http://host or https://host → remote mode, ServerURL = the URL
-//	(unset)                    → local mode, DBPath = <config_home>/ticket.db
+//	TICKET_URL=http(s)://host  → remote mode
+//	(unset)                    → local mode, DBPath = <Home()>/ticket.db
 func ResolveURL() (Resolved, error) {
 	raw := envValue("TICKET_URL")
 	if raw == "" {
-		// default: local mode, db in config home
 		home, err := Home()
 		if err != nil {
 			return Resolved{}, err
 		}
-		return Resolved{
-			Mode:   ModeLocal,
-			DBPath: filepath.Join(home, "ticket.db"),
-		}, nil
+		return Resolved{Mode: ModeLocal, DBPath: filepath.Join(home, "ticket.db")}, nil
 	}
-
 	u, err := url.Parse(raw)
 	if err != nil {
 		return Resolved{}, fmt.Errorf("invalid TICKET_URL %q: %w", raw, err)
 	}
-
 	switch u.Scheme {
-	case "file":
-		dbPath := u.Path
-		if dbPath == "" {
-			return Resolved{}, fmt.Errorf("TICKET_URL file:// requires a path")
-		}
-		return Resolved{Mode: ModeLocal, DBPath: dbPath}, nil
 	case "http", "https":
 		return Resolved{Mode: ModeRemote, ServerURL: raw}, nil
 	default:
-		return Resolved{}, fmt.Errorf("TICKET_URL scheme %q not supported (use file://, http://, or https://)", u.Scheme)
+		return Resolved{}, fmt.Errorf("TICKET_URL scheme %q not supported (use http:// or https://)", u.Scheme)
 	}
 }
 
@@ -226,6 +213,7 @@ func ClearCredentials() error {
 	return nil
 }
 
+// Path returns the path to the config file ($TICKET_HOME/config.json).
 func Path() (string, error) {
 	home, err := Home()
 	if err != nil {
@@ -242,15 +230,17 @@ func CredentialsPath() (string, error) {
 	return filepath.Join(home, "credentials.json"), nil
 }
 
-// Home returns the config directory. This is where config.json and
-// credentials.json live. Override with TICKET_CONFIG_DIR.
+// Home returns the ticket home directory used for config and (in local mode) the database.
+// Resolution order:
+//  1. $TICKET_HOME if set
+//  2. ${CWD}/.ticket (default)
 func Home() (string, error) {
-	if dir := envValue("TICKET_CONFIG_DIR"); dir != "" {
+	if dir := envValue("TICKET_HOME"); dir != "" {
 		return dir, nil
 	}
-	homeDir, err := os.UserHomeDir()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(homeDir, ".config", "ticket"), nil
+	return filepath.Join(cwd, ".ticket"), nil
 }

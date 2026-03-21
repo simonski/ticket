@@ -248,7 +248,7 @@ type remoteFixture struct {
 func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	t.Helper()
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {

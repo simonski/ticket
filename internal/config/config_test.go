@@ -9,7 +9,7 @@ import (
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 
 	// Chdir to temp dir so local .ticket.json in the repo doesn't override values.
@@ -56,7 +56,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 
 func TestResolveURLDefaultsToLocal(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 
 	resolved, err := ResolveURL()
@@ -71,19 +71,6 @@ func TestResolveURLDefaultsToLocal(t *testing.T) {
 	}
 }
 
-func TestResolveURLFileScheme(t *testing.T) {
-	t.Setenv("TICKET_URL", "file:///tmp/test.db")
-	resolved, err := ResolveURL()
-	if err != nil {
-		t.Fatalf("ResolveURL() error = %v", err)
-	}
-	if resolved.Mode != ModeLocal {
-		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeLocal)
-	}
-	if resolved.DBPath != "/tmp/test.db" {
-		t.Fatalf("DBPath = %q, want /tmp/test.db", resolved.DBPath)
-	}
-}
 
 func TestResolveURLHTTPScheme(t *testing.T) {
 	t.Setenv("TICKET_URL", "http://localhost:8080")
@@ -121,25 +108,30 @@ func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
 }
 
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
-	t.Setenv("TICKET_CONFIG_DIR", "")
+	t.Setenv("TICKET_HOME", "")
 
-	userHome, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("UserHomeDir() error = %v", err)
+	tempDir := t.TempDir()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	want := filepath.Join(userHome, ".config", "ticket")
+	// On macOS /var is a symlink to /private/var; resolve both sides for comparison.
+	resolvedTempDir, _ := filepath.EvalSymlinks(tempDir)
+	want := filepath.Join(resolvedTempDir, ".ticket")
 	if got != want {
 		t.Fatalf("Home() = %q, want %q", got, want)
 	}
 }
 
-func TestHomeUsesConfigDir(t *testing.T) {
+func TestHomeUsesTicketHome(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 
 	got, err := Home()
 	if err != nil {
@@ -152,7 +144,7 @@ func TestHomeUsesConfigDir(t *testing.T) {
 
 func TestCredentialsStoredSeparately(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 
 	cfg := Config{ServerURL: "http://example.test:9000", Username: "alice", Token: "sensitive"}
@@ -221,7 +213,7 @@ func TestFindLocalConfigWalksUp(t *testing.T) {
 
 func TestLocalConfigOverridesGlobalProject(t *testing.T) {
 	tempHome := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempHome)
+	t.Setenv("TICKET_HOME", tempHome)
 	t.Setenv("TICKET_URL", "")
 
 	// Save global config with project BAR

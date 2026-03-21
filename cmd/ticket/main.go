@@ -75,13 +75,20 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	// -f /path/to/db is shorthand for -url file:///path/to/db
+	// -f /path/to/dir (or db file) sets TICKET_HOME to the directory
 	if dbOverride != "" {
 		absPath, pathErr := filepath.Abs(dbOverride)
 		if pathErr != nil {
 			return pathErr
 		}
-		urlOverride = "file://" + absPath
+		// If user passed a .db file path, use its directory as TICKET_HOME
+		dir := absPath
+		if strings.HasSuffix(absPath, ".db") || strings.HasSuffix(absPath, ".sqlite") {
+			dir = filepath.Dir(absPath)
+		}
+		if err := os.Setenv("TICKET_HOME", dir); err != nil {
+			return err
+		}
 	}
 	if urlOverride != "" {
 		if err := os.Setenv("TICKET_URL", urlOverride); err != nil {
@@ -112,12 +119,12 @@ func run(args []string) error {
 		return runServer(trimmedArgs[1:])
 	case "export":
 		if resolved.Mode != config.ModeLocal {
-			return errors.New("ticket export requires TICKET_URL=file://...")
+			return errors.New("ticket export requires local mode (no TICKET_URL set)")
 		}
 		return runExportSnapshot(trimmedArgs[1:])
 	case "import":
 		if resolved.Mode != config.ModeLocal {
-			return errors.New("ticket import requires TICKET_URL=file://...")
+			return errors.New("ticket import requires local mode (no TICKET_URL set)")
 		}
 		return runImportSnapshot(trimmedArgs[1:])
 	case "version":

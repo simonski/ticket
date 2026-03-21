@@ -13,8 +13,8 @@ import (
 
 func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -99,8 +99,8 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 
 func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -144,8 +144,8 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 
 func TestLocalModeClientDeleteTicket(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -171,8 +171,8 @@ func TestLocalModeClientDeleteTicket(t *testing.T) {
 
 func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -197,8 +197,8 @@ func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 
 func TestLocalModeClientStatusFailsWhenDatabaseMissing(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 
 	api := New(config.Config{})
 	if _, err := api.Status(); err == nil {

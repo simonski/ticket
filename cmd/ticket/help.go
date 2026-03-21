@@ -20,22 +20,22 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "ticket init [-f <db-path>] [--force] [-password <password>] [--populate]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_URL (default: ~/.config/ticket/ticket.db).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db in the current directory).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
 		example: "ticket init -f /path/to/ticket.db --force -password secret --populate",
 	},
 	"export": {
 		usage:   "ticket export [-o <snapshot-file>]",
-		details: []string{"Local mode only (TICKET_URL=file://...). Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
+		details: []string{"Local mode only (no TICKET_URL set). Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
 		example: "ticket export -o ./ticket-snapshot.json",
 	},
 	"import": {
 		usage:   "ticket import -i <snapshot-file>",
-		details: []string{"Local mode only (TICKET_URL=file://...). Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
+		details: []string{"Local mode only (no TICKET_URL set). Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
 		example: "ticket import -i ./ticket-snapshot.json",
 	},
 	"server": {
 		usage:   "ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_URL (default: ~/.config/ticket/ticket.db).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_HOME (default: .ticket/ticket.db in the current directory).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
 		example: "ticket server -f /path/to/ticket.db -p 9999 -v",
 	},
 	"version": {
@@ -50,7 +50,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"login": {
 		usage:   "ticket login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs into the server and stores the session token in ~/.config/ticket/credentials.json.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults.", "Server resolution: `-url`, then `TICKET_URL`, then configured URL, then `http://localhost:8080`."},
+		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs into the server and stores the session token in $TICKET_HOME/credentials.json.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults.", "Server resolution: `-url`, then `TICKET_URL`, then configured URL, then `http://localhost:8080`."},
 		example: "ticket login -username simon -password secret -url http://localhost:8080",
 	},
 	"register": {
@@ -60,7 +60,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"logout": {
 		usage:   "ticket logout [-url <server-url>]",
-		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs out from the configured server and removes ~/.config/ticket/credentials.json."},
+		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs out from the configured server and removes $TICKET_HOME/credentials.json."},
 		example: "ticket logout",
 	},
 	"status": {
@@ -509,7 +509,7 @@ func renderCommandHelp(command string) string {
 func printTicketEnvironment() {
 	variableNames := []string{
 		"TICKET_URL",
-		"TICKET_CONFIG_DIR",
+		"TICKET_HOME",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
 	}

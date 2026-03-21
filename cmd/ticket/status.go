@@ -13,7 +13,7 @@ import (
 // statusEnvVars returns the relevant environment variable names and their
 // current values (empty string when unset).
 func statusEnvVars() map[string]string {
-	vars := []string{"TICKET_URL", "TICKET_CONFIG_DIR"}
+	vars := []string{"TICKET_URL", "TICKET_HOME"}
 	out := make(map[string]string, len(vars))
 	for _, k := range vars {
 		out[k] = os.Getenv(k)
@@ -60,18 +60,18 @@ func runRemoteStatus(cfg config.Config) error {
 	project, projectSource := resolveCurrentProject(cfg)
 	if outputJSON {
 		return printJSON(map[string]any{
-			"TICKET_URL":        serverURL,
-			"TICKET_CONFIG_DIR": envVars["TICKET_CONFIG_DIR"],
-			"config_file":       cfgPath,
-			"current_project":   project,
-			"project_source":    projectSource,
-			"username":          username,
-			"authenticated":     authenticated,
-			"connection":        map[bool]string{true: "success", false: "failure"}[err == nil],
+			"TICKET_URL":      serverURL,
+			"TICKET_HOME":     envVars["TICKET_HOME"],
+			"config_file":     cfgPath,
+			"current_project": project,
+			"project_source":  projectSource,
+			"username":        username,
+			"authenticated":   authenticated,
+			"connection":      map[bool]string{true: "success", false: "failure"}[err == nil],
 		})
 	}
 	fmt.Printf("TICKET_URL       : %s\n", serverURL)
-	printEnvLine("TICKET_CONFIG_DIR", envVars["TICKET_CONFIG_DIR"])
+	printEnvLine("TICKET_HOME", envVars["TICKET_HOME"])
 	fmt.Printf("config_file      : %s\n", cfgPath)
 	printProjectLine(project, projectSource)
 	fmt.Printf("username         : %s\n", username)
@@ -94,17 +94,17 @@ func runLocalStatus() error {
 	project, projectSource := resolveCurrentProject(cfg)
 	if outputJSON {
 		return printJSON(map[string]any{
-			"TICKET_URL":        "file://" + dbPath,
-			"TICKET_CONFIG_DIR": envVars["TICKET_CONFIG_DIR"],
-			"config_file":       cfgPath,
-			"current_project":   project,
-			"project_source":    projectSource,
-			"db_exists":         dbExists,
-			"connection":        map[bool]string{true: "success", false: "failure"}[localStatusCheck(dbPath) == nil],
+			"db_path":         dbPath,
+			"TICKET_HOME":     envVars["TICKET_HOME"],
+			"config_file":     cfgPath,
+			"current_project": project,
+			"project_source":  projectSource,
+			"db_exists":       dbExists,
+			"connection":      map[bool]string{true: "success", false: "failure"}[localStatusCheck(dbPath) == nil],
 		})
 	}
-	fmt.Printf("TICKET_URL       : file://%s\n", dbPath)
-	printEnvLine("TICKET_CONFIG_DIR", envVars["TICKET_CONFIG_DIR"])
+	fmt.Printf("db_path          : %s\n", dbPath)
+	printEnvLine("TICKET_HOME", envVars["TICKET_HOME"])
 	fmt.Printf("config_file      : %s\n", cfgPath)
 	printProjectLine(project, projectSource)
 	fmt.Printf("db_exists        : %t\n", dbExists)

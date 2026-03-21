@@ -340,7 +340,7 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{
 		"ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		"the server uses the database path from TICKET_URL",
+		"the server uses the database path from TICKET_HOME",
 		"ticket server -f /path/to/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
@@ -400,13 +400,13 @@ func TestRunHelpRejectsInvalidCommand(t *testing.T) {
 func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
 	for _, name := range []string{
 		"TICKET_URL",
-		"TICKET_CONFIG_DIR",
+		"TICKET_HOME",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
 	} {
 		t.Setenv(name, "")
 	}
-	t.Setenv("TICKET_URL", "file:///tmp/test.db")
+	t.Setenv("TICKET_URL", "http://localhost:8080")
 
 	output := captureStdout(t, func() {
 		if err := runHelp([]string{}); err != nil {
@@ -416,8 +416,8 @@ func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
 
 	for _, want := range []string{
 		"ENVIRONMENT",
-		"  TICKET_URL: file:///tmp/test.db",
-		"  TICKET_CONFIG_DIR: <unset>",
+		"  TICKET_URL: http://localhost:8080",
+		"  TICKET_HOME: <unset>",
 		"  TICKET_USERNAME: <unset>",
 		"  TICKET_PASSWORD: <unset>",
 	} {
@@ -698,7 +698,7 @@ func TestCompareVersions(t *testing.T) {
 
 func TestRunInitDBGeneratesPasswordWhenMissing(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
@@ -721,7 +721,7 @@ func TestRunInitDBGeneratesPasswordWhenMissing(t *testing.T) {
 
 func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 
 	if err := runInitDB([]string{"-password", "secret"}); err != nil {
@@ -735,7 +735,7 @@ func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 
 func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
@@ -752,7 +752,7 @@ func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 
 func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
@@ -846,7 +846,7 @@ func TestPromptForCredentialsUsesDefaultsWhenInputIsEmpty(t *testing.T) {
 
 func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	credsPath := filepath.Join(tempDir, "credentials.json")
 	t.Setenv("TICKET_URL", "")
 
@@ -932,7 +932,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 
 func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"username":"alice"}`), 0o600); err != nil {
@@ -982,7 +982,7 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 }
 
 func TestRunStatusRemoteSuccess(t *testing.T) {
-	t.Setenv("TICKET_CONFIG_DIR", t.TempDir())
+	t.Setenv("TICKET_HOME", t.TempDir())
 	t.Setenv("TICKET_URL", "")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1016,8 +1016,8 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 
 func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 
 	var runErr error
 	output := captureStdout(t, func() {
@@ -1035,15 +1035,15 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(output, "TICKET_URL       : file://"+filepath.Join(tempDir, "ticket.db")) {
-		t.Fatalf("runStatus(local missing) output missing TICKET_URL:\n%s", output)
+	if !strings.Contains(output, "db_path          : "+filepath.Join(tempDir, "ticket.db")) {
+		t.Fatalf("runStatus(local missing) output missing db_path:\n%s", output)
 	}
 }
 
 func TestRunStatusLocalSuccess(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 	if err := runInitDB([]string{"-password", "secret"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
@@ -1061,8 +1061,8 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(output, "TICKET_URL       : file://"+filepath.Join(tempDir, "ticket.db")) {
-		t.Fatalf("runStatus(local) output missing TICKET_URL:\n%s", output)
+	if !strings.Contains(output, "db_path          : "+filepath.Join(tempDir, "ticket.db")) {
+		t.Fatalf("runStatus(local) output missing db_path:\n%s", output)
 	}
 }
 
@@ -1994,7 +1994,7 @@ func TestRunRemoteOnlyCommandsFailInLocalMode(t *testing.T) {
 
 func TestRunRemoteModeStatusFailure(t *testing.T) {
 	t.Setenv("TICKET_URL", "http://127.0.0.1:1")
-	t.Setenv("TICKET_CONFIG_DIR", t.TempDir())
+	t.Setenv("TICKET_HOME", t.TempDir())
 
 	var runErr error
 	output := captureStdout(t, func() {
@@ -2338,8 +2338,8 @@ func normalizeTestPath(path string) string {
 func setupLocalCLI(t *testing.T) {
 	t.Helper()
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "file://"+filepath.Join(tempDir, "ticket.db"))
-	t.Setenv("TICKET_CONFIG_DIR", tempDir)
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
 	if err := runInitDB([]string{"-password", "secret"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
