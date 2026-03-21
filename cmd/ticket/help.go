@@ -364,6 +364,7 @@ func renderRootUsage() string {
 	b.WriteString("  tk idea -title \"Dark mode support\"          Capture a requirement\n")
 	b.WriteString("  tk ticket get -id 42                        Show ticket details\n")
 	b.WriteString("  tk ls -json | jq '.[].key' | xargs -I {} ticket close -id {}   Close all tickets\n")
+	b.WriteString("  tk summary                                  Your daily starting point\n")
 
 	b.WriteString("\n" + h + "HELP" + r + "\n")
 	b.WriteString("  ticket <noun> help        Show verbs for a namespace\n")

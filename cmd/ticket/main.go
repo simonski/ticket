@@ -289,24 +289,20 @@ func runHelp(args []string) error {
 }
 
 func runSummary(_ []string) error {
-	cfg, err := config.Load()
+	cfg, svc, project, err := resolveCurrentProjectClient()
 	if err != nil {
 		return err
 	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		return err
-	}
+	_ = cfg
 
-	// Resolve project
-	_, _, project, err := resolveCurrentProjectClient()
-	if err != nil {
-		return err
+	// All tickets for this project (non-archived), then keep only open ones
+	all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
+	var allTickets []store.Ticket
+	for _, t := range all {
+		if t.Open {
+			allTickets = append(allTickets, t)
+		}
 	}
-
-	// Ticket counts for this project
-	projectID := project.ID
-	allTickets, _ := svc.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
 
 	// Count open tickets by type
 	typeCounts := map[string]int{}
