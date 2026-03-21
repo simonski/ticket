@@ -129,6 +129,62 @@ func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	}
 }
 
+func TestHomeWalksUpToFindDotTicket(t *testing.T) {
+	t.Setenv("TICKET_HOME", "")
+	root := t.TempDir()
+
+	// Create root/.ticket/
+	ticketHome := filepath.Join(root, ".ticket")
+	if err := os.Mkdir(ticketHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Chdir to a deep subdirectory
+	deep := filepath.Join(root, "a", "b", "c")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(deep); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	got, err := Home()
+	if err != nil {
+		t.Fatalf("Home() error = %v", err)
+	}
+	// Resolve symlinks for macOS /private/var
+	resolvedTicketHome, _ := filepath.EvalSymlinks(ticketHome)
+	resolvedGot, _ := filepath.EvalSymlinks(got)
+	if resolvedGot != resolvedTicketHome {
+		t.Fatalf("Home() = %q, want %q", got, ticketHome)
+	}
+}
+
+func TestHomeDefaultsToLocalDotTicketWhenNoneFound(t *testing.T) {
+	t.Setenv("TICKET_HOME", "")
+	tempDir := t.TempDir() // no .ticket dir here
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	got, err := Home()
+	if err != nil {
+		t.Fatalf("Home() error = %v", err)
+	}
+	// Resolve symlinks on the parent (the .ticket dir won't exist yet).
+	resolvedTempDir, _ := filepath.EvalSymlinks(tempDir)
+	want := filepath.Join(resolvedTempDir, ".ticket")
+	// Normalise got the same way.
+	resolvedParent, _ := filepath.EvalSymlinks(filepath.Dir(got))
+	resolvedGot := filepath.Join(resolvedParent, filepath.Base(got))
+	if resolvedGot != want {
+		t.Fatalf("Home() = %q, want %q", got, want)
+	}
+}
+
 func TestHomeUsesTicketHome(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)

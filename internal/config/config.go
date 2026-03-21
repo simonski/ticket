@@ -233,7 +233,8 @@ func CredentialsPath() (string, error) {
 // Home returns the ticket home directory used for config and (in local mode) the database.
 // Resolution order:
 //  1. $TICKET_HOME if set
-//  2. ${CWD}/.ticket (default)
+//  2. Walk up from CWD looking for an existing .ticket directory
+//  3. ${CWD}/.ticket (default, may not yet exist)
 func Home() (string, error) {
 	if dir := envValue("TICKET_HOME"); dir != "" {
 		return dir, nil
@@ -242,5 +243,26 @@ func Home() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if found, ok := findTicketHome(cwd); ok {
+		return found, nil
+	}
 	return filepath.Join(cwd, ".ticket"), nil
+}
+
+// findTicketHome walks up the directory tree from startDir looking for an
+// existing .ticket directory. Stops at the filesystem root.
+func findTicketHome(startDir string) (string, bool) {
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, ".ticket")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
 }
