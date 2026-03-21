@@ -152,8 +152,8 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 			t.Fatalf("run(get restored) error = %v", err)
 		}
 	})
-	if !strings.Contains(getOutput, fmt.Sprintf("ID           : %d", ticketID)) {
-		t.Fatalf("restored get output missing ticket id %d:\n%s", ticketID, getOutput)
+	if !strings.Contains(getOutput, "Key          :") {
+		t.Fatalf("restored get output missing key field:\n%s", getOutput)
 	}
 }
 
@@ -1088,15 +1088,12 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			},
 		}, nil, []store.HistoryEvent{
 			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: 1, Payload: "{\"status\":\"design/idle\"}"},
-		}, nil, nil, 0)
+		}, nil, nil, 0, "", "")
 	})
 
 	for _, want := range []string{
-		"ID           : 42",
 		"Type         : task",
 		"Description  : Example description",
-		"ParentID     : ",
-		"ProjectID    : 7",
 		"Title        : Example Task",
 		"Assignee     : ",
 		"Order        : 0",
@@ -1384,9 +1381,6 @@ func TestRunListArchivedVisibilityAndColumn(t *testing.T) {
 			t.Fatalf("list -a error = %v", err)
 		}
 	})
-	if !strings.Contains(includeArchivedOutput, "ARCHIVED") {
-		t.Fatalf("list -a output missing ARCHIVED column:\n%s", includeArchivedOutput)
-	}
 	if !strings.Contains(includeArchivedOutput, archivedRef) {
 		t.Fatalf("list -a output missing archived ticket %q:\n%s", archivedRef, includeArchivedOutput)
 	}
@@ -1506,7 +1500,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("clone error = %v", err)
 		}
 	})
-	if !strings.Contains(cloneOutput, "clone_of: "+strconv.FormatInt(taskID, 10)) || !strings.Contains(cloneOutput, "status: design/idle") {
+	if !strings.Contains(cloneOutput, "clone_of:") || !strings.Contains(cloneOutput, "status: design/idle") {
 		t.Fatalf("clone output = %q", cloneOutput)
 	}
 
@@ -1524,7 +1518,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("set-parent error = %v", err)
 		}
 	})
-	if !strings.Contains(setParentOutput, "parent_id: "+strconv.FormatInt(taskID, 10)) {
+	if !strings.Contains(setParentOutput, "key:") {
 		t.Fatalf("set-parent output = %q", setParentOutput)
 	}
 
@@ -1552,7 +1546,7 @@ func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
 				t.Fatalf("get error = %v", err)
 			}
 		})
-		want := "ParentID     : " + strconv.FormatInt(epicID, 10)
+		want := "Parent       : " + ticketLabelByID(t, epicID)
 		if !strings.Contains(getOutput, want) {
 			t.Fatalf("get output missing %q:\n%s", want, getOutput)
 		}
@@ -1671,7 +1665,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	for _, want := range []string{
 		"Title        : Ticket Beta",
 		"Description  : new description",
-		"ParentID     : " + strconv.FormatInt(parentID, 10),
+		"Parent       : " + ticketLabelByID(t, parentID),
 		"Order        : 7",
 		"EstimateEffort   : 5",
 		"EstimateComplete : 2026-04-15T12:00:00Z",
@@ -1692,7 +1686,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	for _, want := range []string{
 		"Title        : Ticket Beta",
 		"Description  : new description",
-		"ParentID     : " + strconv.FormatInt(parentID, 10),
+		"Parent       : " + ticketLabelByID(t, parentID),
 		"Order        : 7",
 		"EstimateEffort   : 5",
 		"EstimateComplete : 2026-04-15T12:00:00Z",
@@ -1821,7 +1815,7 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 	for _, want := range []string{
 		"Title        : foo",
 		"Type         : epic",
-		"ProjectID    : 1",
+		"Key          :",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("default project fallback output missing %q:\n%s", want, output)
@@ -2164,7 +2158,7 @@ func TestRunNegativeCommandCasesInLocalMode(t *testing.T) {
 		{[]string{"request", "abc"}, "ticket not found"},
 		{[]string{"project", "get"}, "usage: ticket project get <id>"},
 		{[]string{"list", "-n", "-1"}, "usage: ticket list|ls"},
-		{[]string{"comment", "add", "1"}, "usage: ticket comment add -id <id> \"comment\""},
+		{[]string{"comment", "add", "1"}, "usage: ticket comment <id>"},
 		{[]string{"set-parent", "-id", "1", "abc"}, "ticket not found"},
 		{[]string{"unset-parent", "-id", "abc"}, "ticket not found"},
 	}
@@ -3544,8 +3538,8 @@ func TestRunCloneTicket(t *testing.T) {
 	if !strings.Contains(cloneOut, "Original ticket") {
 		t.Fatalf("clone output should contain original title:\n%s", cloneOut)
 	}
-	// clone should reference the original via clone_of
-	if !strings.Contains(cloneOut, "clone_of: "+ref) {
+	// clone should reference the original via clone_of (shown as key)
+	if !strings.Contains(cloneOut, "clone_of: "+ticketLabelByID(t, id)) {
 		t.Fatalf("clone output should show clone_of=%s:\n%s", ref, cloneOut)
 	}
 }

@@ -53,20 +53,43 @@ tk epic "Name of epic"
 tk idea "The requirement"
 ```
 
-## Completing Work
+## Failing Work
 
-When a task is done, update state and log time if appropriate:
+When a task fails and cannot be completed, **always** close the ticket by setting it to `failed` state and adding a comment:
 
 ```bash
-# Transition ticket state
-tk state <id> done   # or whatever the terminal stage is
+# Mark ticket as successfully completed
+tk state <id> failed
 
-# Add a completion comment
+# Add a completion comment summarising what was done
 tk comment <id> "What was done and any relevant notes"
 
 # Log time if the user mentioned duration
 tk time log <id> <duration> "description"
+
+tk close <id> 
 ```
+
+
+## Completing Work
+
+When a task is done, **always** close the ticket by setting it to `success` state and adding a comment:
+
+```bash
+# Mark ticket as successfully completed
+tk state <id> success
+
+# Add a completion comment summarising what was done
+tk comment <id> "What was done and any relevant notes"
+
+# Log time if the user mentioned duration
+tk time log <id> <duration> "description"
+
+tk close <id> 
+
+```
+
+**Important:** Do not leave tickets in `active` state after work is complete. Always transition to `success` (or `fail` if the work was abandoned/unsuccessful) before ending the session.
 
 ## Recording Decisions
 

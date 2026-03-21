@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 
@@ -110,19 +111,11 @@ func printTicket(ticket store.Ticket) {
 		return
 	}
 	fmt.Printf("ticket: %s\n", ticket.Title)
-	fmt.Printf("id: %d\n", ticket.ID)
 	fmt.Printf("key: %s\n", ticket.Key)
 	fmt.Printf("type: %s\n", ticket.Type)
 	fmt.Printf("status: %s\n", ticket.Status)
 	fmt.Printf("open: %s\n", ticketOpenLabel(ticket))
 	fmt.Printf("archived: %t\n", ticket.Archived)
-	fmt.Printf("project_id: %d\n", ticket.ProjectID)
-	if ticket.ParentID != nil {
-		fmt.Printf("parent_id: %d\n", *ticket.ParentID)
-	}
-	if ticket.CloneOf != nil {
-		fmt.Printf("clone_of: %d\n", *ticket.CloneOf)
-	}
 	if ticket.Description != "" {
 		fmt.Printf("description: %s\n", ticket.Description)
 	}
@@ -143,21 +136,17 @@ func printTicket(ticket store.Ticket) {
 	}
 }
 
-func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage, labels []store.Label, totalMinutes int) {
-	parentID := ""
-	if ticket.ParentID != nil {
-		parentID = fmt.Sprintf("%d", *ticket.ParentID)
-	}
+func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string) {
 	dependsOn := formatDependsOn(dependencies)
-	fmt.Printf("ID           : %d\n", ticket.ID)
 	fmt.Printf("Key          : %s\n", ticket.Key)
 	fmt.Printf("Type         : %s\n", ticket.Type)
 	fmt.Printf("Description  : %s\n", ticket.Description)
-	fmt.Printf("ParentID     : %s\n", parentID)
-	if ticket.CloneOf != nil {
-		fmt.Printf("CloneOf      : %d\n", *ticket.CloneOf)
+	if parentKey != "" {
+		fmt.Printf("Parent       : %s\n", parentKey)
 	}
-	fmt.Printf("ProjectID    : %d\n", ticket.ProjectID)
+	if cloneKey != "" {
+		fmt.Printf("CloneOf      : %s\n", cloneKey)
+	}
 	fmt.Printf("Title        : %s\n", ticket.Title)
 	fmt.Printf("Assignee     : %s\n", ticket.Assignee)
 	fmt.Printf("Order        : %d\n", ticket.Order)
@@ -266,63 +255,151 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	printStatusBox(lines)
 }
 
-func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool) {
+func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, statusUnicode bool, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
 	}
 
-	// Collect per-row status values so we can colorize after tab-alignment.
-	rowStatuses := make([]string, 0, len(tickets))
+	useColor := isTerminal()
 
-	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	if includeArchived {
-		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON")
-	} else {
-		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON")
+	// Get terminal width; default to 120 for non-terminal output.
+	termW := 120
+	if useColor {
+		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 {
+			termW = tw
+		}
 	}
-	for _, ticket := range tickets {
-		rowStatuses = append(rowStatuses, ticket.Status)
-		symbol := formatTicketStatusSymbol(ticket.Status, statusUnicode)
-		assignee := ticket.Assignee
+
+	makeHeader := func() string {
+		return "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+	}
+
+	makeDataRow := func(t store.Ticket, title string) string {
+		symbol := formatTicketStatusSymbol(t.Status, statusUnicode)
+		assignee := t.Assignee
 		if strings.TrimSpace(assignee) == "" {
 			assignee = "-"
 		}
-		dependsOn := dependencies[ticket.ID]
-		if dependsOn == "[]" {
-			dependsOn = ""
-		}
-		parentID := ""
-		if ticket.ParentID != nil {
-			parentID = strconv.FormatInt(*ticket.ParentID, 10)
-		}
-		key := ticket.Key
+		parent := parentKeys[t.ID]
+		key := t.Key
 		if strings.TrimSpace(key) == "" {
-			key = strconv.FormatInt(ticket.ID, 10)
+			key = strconv.FormatInt(t.ID, 10)
 		}
-		if includeArchived {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\n", symbol, key, ticket.Type, ticket.Title, ticket.Status, ticketOpenLabel(ticket), ticket.Archived, parentID, assignee, ticket.Priority, dependsOn)
-		} else {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", symbol, key, ticket.Type, ticket.Title, ticket.Status, ticketOpenLabel(ticket), parentID, assignee, ticket.Priority, dependsOn)
+		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+			symbol, key, t.Type, title, t.Status, ticketOpenLabel(t), parent, assignee, t.Priority)
+	}
+
+	// Pass 1: render with a sentinel title to locate where the title column
+	// starts. We measure from the HEADER row (all ASCII) rather than a data
+	// row, because data rows contain multi-byte Unicode symbols (○/◑/◉ = 3
+	// bytes, 1 visual column) that cause tabwriter's byte-based alignment to
+	// diverge from the actual visual width — leading to overdraw.
+	const titleSentinel = "\x01"
+	const titleHeaderLen = 5 // len("TITLE")
+	var mBuf bytes.Buffer
+	mw := tabwriter.NewWriter(&mBuf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(mw, makeHeader())
+	for _, t := range tickets {
+		fmt.Fprintln(mw, makeDataRow(t, titleSentinel))
+	}
+	_ = mw.Flush()
+
+	mLines := strings.Split(strings.TrimRight(mBuf.String(), "\n"), "\n")
+
+	titleW := 40 // fallback
+	preWidth := 0
+	if len(mLines) >= 1 {
+		// The header is pure ASCII: byte index == visual column index.
+		headerLine := mLines[0]
+		if idx := strings.Index(headerLine, "TITLE"); idx >= 0 {
+			preWidth = idx // ASCII header: bytes == visual columns
+			// Title column in pass 1 = titleHeaderLen + 2 padding = 7 chars.
+			postWidth := len(headerLine) - idx - (titleHeaderLen + 2)
+			if postWidth < 0 {
+				postWidth = 0
+			}
+			// Inside the box: "│ " (2) + preWidth + titleW + 2(pad) + postWidth + " │" (2) = termW
+			if computed := termW - 4 - preWidth - 2 - postWidth; computed >= 10 {
+				titleW = computed
+			}
 		}
 	}
-	_ = w.Flush()
 
-	useColor := isTerminal()
+	runeCount := utf8.RuneCountInString
+
+	// padToWidth pads or truncates s to exactly n runes.
+	padToWidth := func(s string, n int) string {
+		r := []rune(s)
+		if len(r) >= n {
+			return string(r[:n])
+		}
+		return s + strings.Repeat(" ", n-len(r))
+	}
+
+	// wrapRunes splits s into chunks of at most w runes.
+	wrapRunes := func(s string, w int) []string {
+		r := []rune(s)
+		if len(r) == 0 {
+			return []string{""}
+		}
+		var out []string
+		for len(r) > 0 {
+			n := w
+			if n > len(r) {
+				n = len(r)
+			}
+			out = append(out, string(r[:n]))
+			r = r[n:]
+		}
+		return out
+	}
+
+	// Pass 2: render with titles padded to exactly titleW runes so the tab
+	// writer fixes the TITLE column at titleW (plus its 2-space padding).
+	var buf bytes.Buffer
+	bw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(bw, makeHeader())
+	for _, t := range tickets {
+		fmt.Fprintln(bw, makeDataRow(t, padToWidth(t.Title, titleW)))
+	}
+	_ = bw.Flush()
+
 	rawLines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
-	// Compute max visible width (raw lines have no ANSI codes).
+	// Build the final list of display lines, inserting title continuation lines
+	// immediately after each ticket row that has a title longer than titleW.
+	type displayLine struct {
+		text   string
+		status string // non-empty on ticket rows, enables row coloring
+	}
+
+	display := make([]displayLine, 0, len(rawLines))
+	display = append(display, displayLine{text: rawLines[0]}) // header
+
+	for i, t := range tickets {
+		if i+1 >= len(rawLines) {
+			break
+		}
+		display = append(display, displayLine{text: rawLines[i+1], status: t.Status})
+		chunks := wrapRunes(t.Title, titleW)
+		for _, chunk := range chunks[1:] {
+			cont := strings.Repeat(" ", preWidth) + chunk
+			display = append(display, displayLine{text: cont, status: t.Status})
+		}
+	}
+
+	// Compute max visible width across all display lines.
 	maxW := 0
-	for _, l := range rawLines {
-		if len(l) > maxW {
-			maxW = len(l)
+	for _, l := range display {
+		if n := runeCount(l.text); n > maxW {
+			maxW = n
 		}
 	}
 
 	if !useColor {
-		for _, line := range rawLines {
-			fmt.Println(line)
+		for _, l := range display {
+			fmt.Println(l.text)
 		}
 		return
 	}
@@ -330,15 +407,15 @@ func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, sta
 	// Render inside a rounded Unicode box with optional row coloring.
 	border := strings.Repeat("─", maxW+2)
 	fmt.Println("╭" + border + "╮")
-	for i, raw := range rawLines {
-		pad := strings.Repeat(" ", maxW-len(raw))
-		display := raw
-		if i > 0 && i-1 < len(rowStatuses) {
-			if c := rowColor(rowStatuses[i-1]); c != "" {
-				display = c + raw + ansiReset
+	for _, l := range display {
+		pad := strings.Repeat(" ", maxW-runeCount(l.text))
+		text := l.text
+		if l.status != "" {
+			if c := rowColor(l.status); c != "" {
+				text = c + l.text + ansiReset
 			}
 		}
-		fmt.Printf("│ %s%s │\n", display, pad)
+		fmt.Printf("│ %s%s │\n", text, pad)
 	}
 	fmt.Println("╰" + border + "╯")
 }

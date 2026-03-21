@@ -3675,18 +3675,27 @@ func runList(args []string) error {
 		fmt.Printf("no tickets for project %s\n", project.Prefix)
 		return nil
 	}
-	dependenciesByTicket := make(map[int64]string, len(tickets))
+	// Build parent key map: ticket ID → parent's key string.
+	// Cache lookups so shared parents are only fetched once.
+	parentKeys := make(map[int64]string, len(tickets))
+	parentCache := make(map[int64]string)
 	for _, ticket := range tickets {
-		dependencies, err := api.ListDependencies(ticket.ID)
-		if err != nil {
-			return err
+		if ticket.ParentID == nil {
+			continue
 		}
-		dependenciesByTicket[ticket.ID] = formatDependsOn(dependencies)
+		pid := *ticket.ParentID
+		if key, ok := parentCache[pid]; ok {
+			parentKeys[ticket.ID] = key
+		} else if p, err := api.GetTicket(strconv.FormatInt(pid, 10)); err == nil {
+			key := ticketLabel(p)
+			parentCache[pid] = key
+			parentKeys[ticket.ID] = key
+		}
 	}
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeAll)
+	printTicketTable(tickets, parentKeys, statusUnicode, *includeAll)
 	return nil
 }
 
@@ -3831,7 +3840,19 @@ func runGet(args []string) error {
 	}
 	ticketLabels, _ := svc.ListTicketLabels(ticket.ID)
 	totalTime, _ := svc.TotalTimeForTicket(ticket.ID)
-	printTicketDetails(ticket, dependencies, history, workflowStages, ticketLabels, totalTime)
+	parentKey := ""
+	if ticket.ParentID != nil {
+		if p, err := svc.GetTicket(fmt.Sprintf("%d", *ticket.ParentID)); err == nil {
+			parentKey = ticketLabel(p)
+		}
+	}
+	cloneKey := ""
+	if ticket.CloneOf != nil {
+		if c, err := svc.GetTicket(fmt.Sprintf("%d", *ticket.CloneOf)); err == nil {
+			cloneKey = ticketLabel(c)
+		}
+	}
+	printTicketDetails(ticket, dependencies, history, workflowStages, ticketLabels, totalTime, parentKey, cloneKey)
 	// Show children if any
 	if projectErr == nil {
 		all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, true)
@@ -4108,19 +4129,27 @@ func runTicketStateAlias(args []string, state, command string) error {
 }
 
 func runTicketState(args []string) error {
-	usage := "ticket state -id <id> <idle|active|success|fail>"
+	usage := "ticket state <id> <idle|active|success|fail>"
 	fs := flag.NewFlagSet("ticket state", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 1 {
+	idVal := strings.TrimSpace(*id)
+	var stateArg string
+	switch {
+	case idVal != "" && fs.NArg() == 1:
+		stateArg = fs.Args()[0]
+	case idVal == "" && fs.NArg() == 2:
+		idVal = fs.Args()[0]
+		stateArg = fs.Args()[1]
+	default:
 		return errors.New("usage: " + usage)
 	}
-	switch strings.ToLower(strings.TrimSpace(fs.Args()[0])) {
+	switch strings.ToLower(strings.TrimSpace(stateArg)) {
 	case store.StateIdle, store.StateActive, store.StateSuccess, store.StateFail:
-		return updateTicketState(strings.TrimSpace(*id), strings.ToLower(strings.TrimSpace(fs.Args()[0])))
+		return updateTicketState(idVal, strings.ToLower(strings.TrimSpace(stateArg)))
 	default:
 		return errors.New("usage: " + usage)
 	}
@@ -4307,7 +4336,13 @@ func runUpdate(args []string) error {
 	}
 	dependencies, _ := svc.ListDependencies(current.ID)
 	history, _ := svc.ListHistory(updated.ID)
-	printTicketDetails(updated, dependencies, history, nil, nil, 0)
+	parentKey := ""
+	if updated.ParentID != nil {
+		if p, err := svc.GetTicket(fmt.Sprintf("%d", *updated.ParentID)); err == nil {
+			parentKey = ticketLabel(p)
+		}
+	}
+	printTicketDetails(updated, dependencies, history, nil, nil, 0, parentKey, "")
 	return nil
 }
 
@@ -4916,45 +4951,56 @@ func parseIDList(raw string) ([]int64, error) {
 }
 
 func runComment(args []string) error {
+	usage := "ticket comment <id> \"comment\""
 	if len(args) == 0 {
-		return errors.New("usage: ticket comment add -id <id> \"comment\"")
+		return errors.New("usage: " + usage)
 	}
-	switch args[0] {
-	case "add":
-		fs := flag.NewFlagSet("ticket comment add", flag.ContinueOnError)
-		fs.SetOutput(os.Stderr)
-		id := fs.String("id", "", "ticket id")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-		commentValues := fs.Args()
-		if strings.TrimSpace(*id) == "" || len(commentValues) != 1 {
-			return errors.New("usage: ticket comment add -id <id> \"comment\"")
-		}
-		cfg, err := config.Load()
-		if err != nil {
-			return err
-		}
-		svc, err := resolveService(cfg)
-		if err != nil {
-			return err
-		}
-		ticket, err := svc.GetTicket(strings.TrimSpace(*id))
-		if err != nil {
-			return err
-		}
-		comment, err := svc.AddComment(ticket.ID, commentValues[0])
-		if err != nil {
-			return err
-		}
-		if outputJSON {
-			return printJSON(comment)
-		}
-		fmt.Printf("commented on %s: %s\n", ticketLabel(ticket), comment.Comment)
+	// Support "add" subcommand for backwards compatibility
+	addArgs := args
+	if args[0] == "add" {
+		addArgs = args[1:]
+	} else if args[0] == "help" || args[0] == "-help" || args[0] == "--help" {
+		fmt.Println("usage: " + usage)
 		return nil
-	default:
-		return fmt.Errorf("unknown comment command %q", args[0])
 	}
+	fs := flag.NewFlagSet("ticket comment", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(addArgs); err != nil {
+		return err
+	}
+	idVal := strings.TrimSpace(*id)
+	var commentText string
+	switch {
+	case idVal != "" && len(fs.Args()) == 1:
+		commentText = fs.Args()[0]
+	case idVal == "" && len(fs.Args()) == 2:
+		idVal = fs.Args()[0]
+		commentText = fs.Args()[1]
+	default:
+		return errors.New("usage: " + usage)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	ticket, err := svc.GetTicket(idVal)
+	if err != nil {
+		return err
+	}
+	comment, err := svc.AddComment(ticket.ID, commentText)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(comment)
+	}
+	fmt.Printf("commented on %s: %s\n", ticketLabel(ticket), comment.Comment)
+	return nil
 }
 
 func runClone(args []string) error {
@@ -4981,6 +5027,7 @@ func runClone(args []string) error {
 		return printJSON(ticket)
 	}
 	printTicket(ticket)
+	fmt.Printf("clone_of: %s\n", ticketLabel(taskRef))
 	return nil
 }
 
@@ -5025,14 +5072,20 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if closed {
 		command = "close"
 	}
-	usage := fmt.Sprintf("ticket %s -id <id>", command)
+	usage := fmt.Sprintf("ticket %s <id>", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+	idVal := strings.TrimSpace(*id)
+	switch {
+	case idVal != "" && fs.NArg() == 0:
+		// -id flag form
+	case idVal == "" && fs.NArg() == 1:
+		idVal = fs.Args()[0]
+	default:
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -5043,7 +5096,7 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}

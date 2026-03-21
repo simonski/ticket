@@ -1,5 +1,39 @@
 2025-03-21
 
+- fix the topology
+    idea
+    requirement
+    specification
+        epic
+            story
+            feature
+            task
+            bug
+            chore
+            doc
+
+    actions
+        review
+        document
+        test
+        develop
+        verify
+
+    status
+        active
+        idle
+
+    open/closed
+
+roles
+    enginer
+    architect
+    tester
+    cyber
+    devops
+    tech writer
+    release manager
+
 - have an integration mode with
     gh issues
     gitlab

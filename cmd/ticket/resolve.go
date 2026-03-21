@@ -207,12 +207,45 @@ func extractOutputFlags(args []string) ([]string, bool, bool, error) {
 	return out, jsonFlag, nocolor, nil
 }
 
+// jsonKeysToOmit lists internal numeric ID keys that are stripped from all
+// CLI JSON output. The fields remain in the structs for internal use.
+var jsonKeysToOmit = map[string]bool{
+	"ticket_id": true,
+}
+
+// stripJSONKeys recursively removes unwanted keys from a decoded JSON value.
+func stripJSONKeys(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		for k := range val {
+			if jsonKeysToOmit[k] {
+				delete(val, k)
+			} else {
+				val[k] = stripJSONKeys(val[k])
+			}
+		}
+	case []any:
+		for i, item := range val {
+			val[i] = stripJSONKeys(item)
+		}
+	}
+	return v
+}
+
 func printJSON(v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(data))
+	var decoded any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	stripped, err := json.MarshalIndent(stripJSONKeys(decoded), "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(stripped))
 	return nil
 }
 
