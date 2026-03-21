@@ -206,17 +206,22 @@ func formatDependsOn(dependencies []store.Dependency) string {
 }
 
 func printCountSummary(summary store.CountSummary, scopedToProject bool) {
-	fmt.Printf("users %d\n", summary.Users)
+	var lines []statusLine
+	lines = append(lines, statusLine{key: "users", value: fmt.Sprintf("%d", summary.Users)})
 	if !scopedToProject {
-		fmt.Printf("projects %d\n", summary.Projects)
+		lines = append(lines, statusLine{key: "projects", value: fmt.Sprintf("%d", summary.Projects)})
+	}
+	if len(summary.Types) > 0 {
+		lines = append(lines, statusLine{}) // blank separator
 	}
 	for _, item := range summary.Types {
-		fmt.Printf("%ss %d", item.Type, item.Total)
+		val := fmt.Sprintf("%d", item.Total)
 		if suffix := formatStatusCounts(item.Statuses); suffix != "" {
-			fmt.Printf(" (%s)", suffix)
+			val += "  (" + suffix + ")"
 		}
-		fmt.Println()
+		lines = append(lines, statusLine{key: item.Type + "s", value: val})
 	}
+	printStatusBox(lines)
 }
 
 func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool, workflowStages []store.WorkflowStage) {

@@ -1029,7 +1029,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	for _, want := range []string{
 		"db_exists        : false",
 		"failure",
-		"hint: run ticket init",
+		"hint: run tk setup",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
