@@ -28,6 +28,14 @@ type Config struct {
 	Username       string `json:"username"`
 	CurrentProject string `json:"current_project"`
 	CurrentEpicID  int64  `json:"current_epic_id"`
+
+	// TUI state — persisted between sessions by default.
+	// Set TUIDisablePersist=true to skip save/restore.
+	TUIDisablePersist bool    `json:"tui_disable_persist,omitempty"`
+	TUITheme          string  `json:"tui_theme,omitempty"`
+	TUIMode           string  `json:"tui_mode,omitempty"`   // "summary" | "projects" | "ideas" | "list" | "settings"
+	TUICursor         int     `json:"tui_cursor,omitempty"`
+	TUIExpandedEpics  []int64 `json:"tui_expanded_epics,omitempty"`
 }
 
 type Credentials struct {
