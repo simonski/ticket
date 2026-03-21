@@ -14,10 +14,14 @@ This guide describes a single Go binary that provides a server, a CLI, and an em
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
-Client-side files live under `$TICKET_CONFIG_DIR`, which defaults to `~/.config/ticket`.
+Client-side files live under `$TICKET_HOME`.
 
-- `$TICKET_CONFIG_DIR/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
-- `$TICKET_CONFIG_DIR/credentials.json` stores the current session token
+If `$TICKET_HOME` is not set, `tk` walks up the directory tree from the current
+working directory looking for an existing `.ticket` directory. If none is found,
+`.ticket` in the current directory is used as the default.
+
+- `$TICKET_HOME/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
+- `$TICKET_HOME/credentials.json` stores the current session token
 
 ## Getting Started
 
@@ -35,7 +39,7 @@ Initialize a task sqlite database:
 ticket init
 ```
 
-If `-f` is omitted, `ticket init` creates the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
+If `-f` is omitted, `ticket init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` in the current or nearest parent directory).
 
 `ticket init` creates:
 
@@ -64,7 +68,7 @@ Start the server:
 ticket server
 ```
 
-If `-f` is omitted, `ticket server` uses the default local database path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
+If `-f` is omitted, `ticket server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `ticket init`).
 
 If `-v` is supplied, `ticket server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
@@ -155,8 +159,8 @@ For `ticket register`, you can omit the flags and let the CLI resolve them from 
 
 `ticket login` resolves values in this order:
 
-1. a valid session already stored in `$TICKET_CONFIG_DIR/credentials.json`
-2. the `username` already stored in `$TICKET_CONFIG_DIR/config.json`
+1. a valid session already stored in `$TICKET_HOME/credentials.json`
+2. the `username` already stored in `$TICKET_HOME/config.json`
 3. `-username` and `-password`
 4. `TICKET_USERNAME` and `TICKET_PASSWORD`
 5. interactive prompts for anything still missing
@@ -169,8 +173,8 @@ When `ticket login` prompts for a password in an interactive terminal, typed cha
 
 On successful login:
 
-- the session token is stored in `$TICKET_CONFIG_DIR/credentials.json`
-- the `username` and `server_url` fields in `$TICKET_CONFIG_DIR/config.json` are updated
+- the session token is stored in `$TICKET_HOME/credentials.json`
+- the `username` and `server_url` fields in `$TICKET_HOME/config.json` are updated
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -245,7 +249,7 @@ Log out:
 ticket logout
 ```
 
-`ticket logout` removes `$TICKET_CONFIG_DIR/credentials.json`.
+`ticket logout` removes `$TICKET_HOME/credentials.json`.
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
 
@@ -294,26 +298,25 @@ ticket project use CUS
 
 ### Per-directory project binding
 
-You can bind a directory tree to a project using `ticket project init`. This creates a `.ticket.json` file in the current directory:
-
-```bash
-cd ~/code/my-project
-ticket project init -prefix MYP -title "My Project"
-```
-
-When `tk` is run from any subdirectory, it walks up the filesystem looking for `.ticket.json` and uses that project automatically. This allows working on multiple projects without `ticket project use`:
+`tk` automatically locates the right workspace by walking up the directory tree
+from the current working directory looking for an existing `.ticket` directory.
+The first one found is used as `$TICKET_HOME`. This means different directories
+can have separate databases and configs:
 
 ```bash
 cd ~/code/project-1/
-tk create "A new ticket"    # creates in project-1's project
+tk init                     # creates ~/code/project-1/.ticket/
+tk add "A new ticket"       # uses project-1's database
 
 cd ~/code/project-2/
-tk create "A new ticket"    # creates in project-2's project
+tk init                     # creates ~/code/project-2/.ticket/
+tk add "A new ticket"       # uses project-2's database
 ```
 
 The lookup order is:
-1. `.ticket.json` in the current directory or any parent up to `$HOME`
-2. `$TICKET_CONFIG_DIR/config.json` (global config)
+1. `$TICKET_HOME` env var if set
+2. Walk up from CWD looking for an existing `.ticket` directory
+3. `.ticket` in the current directory (default if none found)
 
 Show project usage:
 
@@ -533,6 +536,49 @@ In the web app, the item detail pane shows:
 3. comments
 4. revision history
 
+## Terminal UI (TUI)
+
+Launch the full-screen terminal UI:
+
+```bash
+tk -g
+```
+
+The TUI provides a keyboard-driven interface to your tickets without starting
+a web server.
+
+### Panels
+
+The TUI has five top-level panels, navigated with **Tab** (forward) or
+**Shift-Tab** / **left arrow** (back):
+
+| Tab    | Contents                                              |
+|--------|-------------------------------------------------------|
+| Home   | Project summary — counts by type, in-progress, recent history |
+| Projects | All projects; select one to make it active          |
+| Ideas  | Captured requirements/ideas (raw, unprocessed tickets) |
+| Epics  | Ticket tree — epics with nested tasks, bugs, etc.   |
+| Config | Theme picker and TUI settings                       |
+
+### Navigation
+
+- **Tab / Shift-Tab** or **← →** — cycle panels
+- **↑ ↓** — move cursor within a panel
+- **Enter** — open/confirm selected item
+- **←** / **→** on the ticket tree — collapse / expand an epic
+- **q** or **Ctrl-C** — quit
+
+### Themes
+
+The Config panel lists available themes. Arrowing up/down immediately applies
+the highlighted theme so you can preview before leaving the panel.
+
+### Persistence
+
+The TUI saves the last active panel, cursor position, expanded epics, and
+selected theme on exit. These are restored on next launch. Set
+`tui_disable_persist: true` in your config to opt out.
+
 ## Web Interface
 
 The embedded web app is the easiest way to work visually across many related items.
@@ -675,13 +721,10 @@ ticket attach <key-or-id> <parent-key-or-id>
 ticket detach <key-or-id>
 ticket rm <key-or-id>
 ticket delete <key-or-id>
-ticket design <key-or-id>
-ticket develop <key-or-id>
-ticket test <key-or-id>
-ticket done <key-or-id>
 ticket idle <key-or-id>
 ticket active <key-or-id>
 ticket complete <key-or-id>
+ticket state <key-or-id> <state>
 ticket update <key-or-id> -stage <stage> -state <state>
 ticket count
 ticket count -project_id <prefix-or-id>

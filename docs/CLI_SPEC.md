@@ -94,7 +94,7 @@ tk req shape -id <id> -d "more detail"  # refine
 tk req break -id <id>                   # show breakdown (child tickets)
 tk req break -id <id> --retry           # regenerate, keep pinned
 tk req break -id <id> --reset           # discard all children, regenerate
-tk req pin -id <id>                     # pin a breakdown item (planned)
+tk req pin -id <id>                     # pin a breakdown item (not yet implemented)
 tk req accept -id <id>                  # approve
 tk req reject -id <id>                  # reject
 tk req revise -id <id>                  # send back for rethinking

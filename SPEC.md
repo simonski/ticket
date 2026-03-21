@@ -85,14 +85,23 @@ Fields:
 - `key`
 - `project_id`
 - `parent_id`
+- `clone_of` _(nullable — set when a ticket is cloned from another)_
+- `workflow_stage_id` _(nullable — links to the active workflow stage)_
 - `type`
 - `title`
 - `description`
 - `acceptance_criteria`
+- `git_repository` _(optional — repo URL associated with this ticket)_
+- `git_branch` _(optional — branch name associated with this ticket)_
 - `priority`
+- `order` _(optional integer for manual ordering within a list)_
 - `stage`
 - `state`
 - `assignee`
+- `estimate_effort` _(optional integer effort estimate)_
+- `estimate_complete` _(optional RFC3339 estimated delivery datetime)_
+- `health_score` _(optional computed health indicator)_
+- `open` _(boolean — false when archived or done)_
 - `created_at`
 - `updated_at`
 - `created_by`
@@ -111,6 +120,7 @@ Field rules:
 - `priority` is an integer. Initial default remains `1`.
 - `assignee` is nullable.
 - `archived` is boolean.
+- `open` is derived: `true` unless archived or in `done/success` or `done/fail`.
 
 `key` format:
 

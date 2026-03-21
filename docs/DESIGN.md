@@ -19,7 +19,7 @@ The system has three interfaces:
 
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `ticket version`.
 
-Client-side files are stored under `$TICKET_CONFIG_DIR`, which defaults to `~/.config/ticket`.
+Client-side files are stored under `$TICKET_HOME`. If `$TICKET_HOME` is not set, `tk` walks up the directory tree from the current working directory looking for an existing `.ticket` directory; if none is found, `.ticket` in the current directory is used as the default.
 
 ## Product Principles
 
@@ -904,11 +904,13 @@ If the user has already been assigned a `develop/active` ticket, that ticket is 
 ticket upgrade
 ```
 
-Should lookup the VERSION file at the path github.com/simonski/ticket/cmd/ticket/VERSION and compare it to the go:embed VERSION
+Fetches the `VERSION` file from the GitHub repository
+(`https://raw.githubusercontent.com/simonski/ticket/refs/heads/main/cmd/ticket/VERSION`)
+with a 3-second timeout and compares it to the version embedded at build time.
 
-Outcomes
+Outcomes:
 
-- network unavailable: fail fast (3s), indicate wiht friendly message.
-- same version "You are on the latest version (VERSION)"
-- out of date "A newer version of ticket is available, upgrade using `go install github.com/simonski/ticket@latest"
-- local-newer "Your local copy is newer than the repo"
+- **network unavailable** — fails fast (3 s timeout) with a friendly message
+- **same version** — `You are on the latest version (VERSION)`
+- **newer available** — `A newer version of ticket is available, upgrade using: go install github.com/simonski/ticket@latest`
+- **local is newer** — `Your local copy is newer than the repo`

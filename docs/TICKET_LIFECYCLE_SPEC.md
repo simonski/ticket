@@ -91,14 +91,18 @@ State represents progress within a stage:
 
 - `idle`: ready but not currently in progress
 - `active`: currently being worked on with a named assignee
-- `complete`: work for the current stage is complete
+- `success`: work for the current stage is complete and deemed successful
+- `fail`: stage work did not succeed (blocked, rejected, or abandoned)
+
+`complete` is accepted as a legacy alias for `success` in commands and API inputs,
+but responses always use `success`.
 
 Allowed states by stage:
 
-- `design`: `idle | active | complete`
-- `develop`: `idle | active | complete`
-- `test`: `idle | active | complete`
-- `done`: `complete`
+- `design`: `idle | active | success | fail`
+- `develop`: `idle | active | success | fail`
+- `test`: `idle | active | success | fail`
+- `done`: `success | fail`
 
 ### Rendered Status
 
@@ -121,9 +125,9 @@ These are hard lifecycle invariants:
 
 - `state=active` requires `assignee != ""`
 - `state=idle` may be unassigned
-- `state=complete` may retain assignee for audit/history
-- `stage=done` requires `state=complete`
-- `stage!=done` allows `idle | active | complete`
+- `state=success` may retain assignee for audit/history
+- `stage=done` requires `state=success` or `state=fail`
+- `stage!=done` allows `idle | active | success | fail`
 
 ## Direct Lifecycle Mutation Rules
 
@@ -154,23 +158,15 @@ Result:
 
 - returns new ticket id
 
-### Stage Commands
+### Stage Commands (removed)
 
-Stage commands mutate leaf tickets only.
+Direct stage commands (`ticket design`, `ticket develop`, `ticket test`,
+`ticket done`) have been removed from the external command surface.
 
-```bash
-ticket design <id>
-ticket develop <id>
-ticket test <id>
-ticket done <id>
-```
-
-Behavior:
-
-- `ticket design <id>` => `stage=design`, `state=idle`
-- `ticket develop <id>` => `stage=develop`, `state=idle`
-- `ticket test <id>` => `stage=test`, `state=idle`
-- `ticket done <id>` => `stage=done`, `state=complete`
+Stages are driven by state progression: setting `state=success` on a
+non-final workflow stage auto-advances the ticket to the next stage with
+`state=idle`. Use `ticket complete -id <id>` to advance, or
+`ticket state -id <id> <state>` to set state directly.
 
 ### State Commands
 
@@ -186,14 +182,13 @@ Behavior:
 
 - `ticket idle <id>` => keep current stage, set `state=idle`
 - `ticket active <id>` => keep current stage, set `state=active`
-- `ticket complete <id>` => keep current stage, set `state=complete`
+- `ticket complete <id>` => keep current stage, set `state=success` (auto-advances stage if workflow is attached)
 
 Notes:
 
 - `ticket active <id>` must fail when no assignee is set
 - `ticket complete <id>` is valid for `design`, `develop`, and `test`
-- `ticket done <id>` remains the canonical way to move a ticket into terminal
-  `done/complete`
+- `ticket complete` on a `done`-stage ticket sets `state=success` (terminal)
 
 ## Parent Ticket Derivation
 
@@ -218,15 +213,16 @@ Examples:
 
 Effective parent state is derived as:
 
-- `complete` if all descendants are complete
-- `active` if any descendant is active
+- `success` if all descendants are `success`
+- `active` if any descendant is `active`
+- `fail` if any descendant is `fail` (and none are `active`)
 - `idle` otherwise
 
 This means:
 
-- when a leaf moves to `active`, all ancestors become effectively `active`
-- when all descendants are complete, the parent becomes effectively `complete`
-- otherwise, the parent is effectively `idle`
+- when any leaf moves to `active`, all ancestors become effectively `active`
+- a parent reaches `done` only when all descendants are `done/success`
+- a single failing leaf causes the parent's effective state to become `fail`
 
 ## Effective vs Stored Lifecycle
 
@@ -249,19 +245,20 @@ relevant descendants change.
 Required lifecycle commands:
 
 - `ticket create`
-- `ticket design <id>`
-- `ticket develop <id>`
-- `ticket test <id>`
-- `ticket done <id>`
 - `ticket idle <id>`
 - `ticket active <id>`
-- `ticket complete <id>`
+- `ticket complete <id>` (sets `state=success`, auto-advances stage)
+- `ticket state -id <id> <state>` (set state directly)
 
-### Commands to Remove or Rework
+Stage commands (`design`, `develop`, `test`, `done`) have been removed —
+use `ticket complete` to advance through workflow stages.
 
-The following single-status commands are obsolete and must be removed from the
+### Commands Removed
+
+The following commands are obsolete and have been removed from the
 external command surface:
 
+- `ticket design`, `ticket develop`, `ticket test`, `ticket done`
 - `ticket open`
 - `ticket ready`
 - `ticket inprogress`

@@ -8,22 +8,32 @@ It models:
 - tickets with human keys such as `CUS-42`
 - ticket types `epic`, `task`, `bug`, `spike`, and `chore`
 - lifecycle as `stage/state`, for example `develop/active`
-- stage: [design, develop, test, done]
-  design: the ticket is in design and not ready for development
-  develop: the ticket is ready for development
-  test: the ticket is in formal testing
-  done: it has completely passed
-- state: [idle, active, success, fail]
-  idle: it is not active in the stage
-  active: it is currently being worked in in the stage
-  success: it has completed this stage and is deemed a success
-  fail: it has completed this stage and is deemed a failure
+- stages: `design → develop → test → done`
+- states: `idle | active | success | fail`
+  - `idle`: ready but not currently in progress
+  - `active`: currently being worked on (requires an assignee)
+  - `success`: stage complete, auto-advances to next stage
+  - `fail`: stage did not succeed
 
 The authoritative system contract is in [SPEC.md](./SPEC.md). User-facing
 workflow details are in [USER_GUIDE.md](./USER_GUIDE.md). Implementation and
 architecture notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
-## Build
+## Install
+
+```bash
+brew install simonski/tap/ticket
+```
+
+Or in one step (no prior tap needed):
+
+```bash
+brew install simonski/tap/ticket
+```
+
+Both `ticket` and `tk` commands are installed.
+
+## Build from source
 
 ```bash
 make build
