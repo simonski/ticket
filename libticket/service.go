@@ -81,6 +81,7 @@ type Service interface {
 	GetTicket(ref string) (store.Ticket, error)
 	CloneTicket(id int64) (store.Ticket, error)
 	ListHistory(id int64) ([]store.HistoryEvent, error)
+	ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error)
 	AddComment(id int64, comment string) (store.Comment, error)
 	ListComments(id int64) ([]store.Comment, error)
 	AddDependency(request DependencyRequest) (store.Dependency, error)

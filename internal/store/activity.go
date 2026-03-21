@@ -9,6 +9,7 @@ type HistoryEvent struct {
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`
 	TicketID  int64  `json:"ticket_id"`
+	TicketKey string `json:"ticket_key,omitempty"`
 	EventType string `json:"event_type"`
 	Payload   string `json:"payload"`
 	CreatedBy int64  `json:"created_by"`
@@ -62,6 +63,36 @@ func ListHistoryEvents(db *sql.DB, ticketID int64) ([]HistoryEvent, error) {
 	for rows.Next() {
 		var event HistoryEvent
 		if err := rows.Scan(&event.ID, &event.ProjectID, &event.TicketID, &event.EventType, &event.Payload, &event.CreatedBy, &event.CreatedAt); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+// ListProjectHistory returns the most recent history events for all tickets in
+// a project, ordered newest first, limited to limit rows.
+func ListProjectHistory(db *sql.DB, projectID int64, limit int) ([]HistoryEvent, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := db.Query(`
+		SELECT h.id, h.project_id, h.ticket_id, COALESCE(t.key, ''), h.event_type, h.payload, COALESCE(h.created_by, 0), h.created_at
+		FROM ticket_history h
+		LEFT JOIN tickets t ON t.ticket_id = h.ticket_id
+		WHERE h.project_id = ?
+		ORDER BY h.id DESC
+		LIMIT ?
+	`, projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []HistoryEvent
+	for rows.Next() {
+		var event HistoryEvent
+		if err := rows.Scan(&event.ID, &event.ProjectID, &event.TicketID, &event.TicketKey, &event.EventType, &event.Payload, &event.CreatedBy, &event.CreatedAt); err != nil {
 			return nil, err
 		}
 		events = append(events, event)

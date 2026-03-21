@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,8 +9,39 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"golang.org/x/term"
+
 	"github.com/simonski/ticket/internal/store"
 )
+
+const (
+	ansiReset  = "\033[0m"
+	ansiGreen  = "\033[32m"
+	ansiRed    = "\033[31m"
+	ansiGray   = "\033[90m"
+)
+
+func isTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// rowColor returns an ANSI color code based on the ticket state embedded in the status string
+// (e.g. "design/active" → green, "design/fail" → red, "design/idle" → gray).
+func rowColor(status string) string {
+	_, state, err := store.ParseLifecycleStatus(status)
+	if err != nil {
+		return ""
+	}
+	switch state {
+	case store.StateActive:
+		return ansiGreen
+	case store.StateFail:
+		return ansiRed
+	case store.StateIdle:
+		return ansiGray
+	}
+	return ""
+}
 
 func printProject(project store.Project) {
 	if outputJSON {
@@ -37,13 +69,13 @@ func printProject(project store.Project) {
 	}
 }
 
-func printProjectTable(projects []store.Project, currentProjectID string) {
+func printProjectTable(projects []store.Project, currentProjectID string, workflowNames map[int64]string) {
 	if len(projects) == 0 {
 		fmt.Println("no projects")
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, " \tID\tPREFIX\tTITLE\tSTATUS\tDESCRIPTION")
+	fmt.Fprintln(w, " \tID\tPREFIX\tTITLE\tSTATUS\tWORKFLOW\tDESCRIPTION")
 	currentID := strings.TrimSpace(currentProjectID)
 	for _, project := range projects {
 		marker := " "
@@ -54,7 +86,13 @@ func printProjectTable(projects []store.Project, currentProjectID string) {
 		if len(desc) > 60 {
 			desc = desc[:57] + "..."
 		}
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n", marker, project.ID, project.Prefix, project.Title, project.Status, desc)
+		workflow := ""
+		if project.WorkflowID != nil {
+			if name, ok := workflowNames[*project.WorkflowID]; ok {
+				workflow = name
+			}
+		}
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\t%s\n", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, desc)
 	}
 	_ = w.Flush()
 }
@@ -228,25 +266,24 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	printStatusBox(lines)
 }
 
-func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool, workflowStages []store.WorkflowStage) {
+func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, statusUnicode bool, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
 	}
-	// Build stage index for progress display
-	stageIndex := make(map[string]int, len(workflowStages))
-	for i, s := range workflowStages {
-		stageIndex[s.StageName] = i + 1
-	}
-	totalStages := len(workflowStages)
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	// Collect per-row status values so we can colorize after tab-alignment.
+	rowStatuses := make([]string, 0, len(tickets))
+
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	if includeArchived {
-		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tPROGRESS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tOPEN\tARCHIVED\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON")
 	} else {
-		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tSTATUS\tPROGRESS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON\tHEALTH\tTITLE")
+		fmt.Fprintln(w, "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tOPEN\tPARENT_ID\tASSIGNEE\tPRIORITY\tDEPENDSON")
 	}
 	for _, ticket := range tickets {
+		rowStatuses = append(rowStatuses, ticket.Status)
 		symbol := formatTicketStatusSymbol(ticket.Status, statusUnicode)
 		assignee := ticket.Assignee
 		if strings.TrimSpace(assignee) == "" {
@@ -264,19 +301,46 @@ func printTicketTable(tickets []store.Ticket, dependencies map[int64]string, sta
 		if strings.TrimSpace(key) == "" {
 			key = strconv.FormatInt(ticket.ID, 10)
 		}
-		progress := ""
-		if totalStages > 0 {
-			if idx, ok := stageIndex[ticket.Stage]; ok {
-				progress = fmt.Sprintf("[%d/%d]", idx, totalStages)
-			}
-		}
 		if includeArchived {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, progress, ticketOpenLabel(ticket), ticket.Archived, parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\t%s\t%d\t%s\n", symbol, key, ticket.Type, ticket.Title, ticket.Status, ticketOpenLabel(ticket), ticket.Archived, parentID, assignee, ticket.Priority, dependsOn)
 		} else {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%.2f\t%s\n", symbol, key, ticket.Type, ticket.Status, progress, ticketOpenLabel(ticket), parentID, assignee, ticket.Priority, dependsOn, float64(ticket.HealthScore)/4.0, ticket.Title)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", symbol, key, ticket.Type, ticket.Title, ticket.Status, ticketOpenLabel(ticket), parentID, assignee, ticket.Priority, dependsOn)
 		}
 	}
 	_ = w.Flush()
+
+	useColor := isTerminal()
+	rawLines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	// Compute max visible width (raw lines have no ANSI codes).
+	maxW := 0
+	for _, l := range rawLines {
+		if len(l) > maxW {
+			maxW = len(l)
+		}
+	}
+
+	if !useColor {
+		for _, line := range rawLines {
+			fmt.Println(line)
+		}
+		return
+	}
+
+	// Render inside a rounded Unicode box with optional row coloring.
+	border := strings.Repeat("─", maxW+2)
+	fmt.Println("╭" + border + "╮")
+	for i, raw := range rawLines {
+		pad := strings.Repeat(" ", maxW-len(raw))
+		display := raw
+		if i > 0 && i-1 < len(rowStatuses) {
+			if c := rowColor(rowStatuses[i-1]); c != "" {
+				display = c + raw + ansiReset
+			}
+		}
+		fmt.Printf("│ %s%s │\n", display, pad)
+	}
+	fmt.Println("╰" + border + "╯")
 }
 
 func ticketOpenLabel(ticket store.Ticket) string {

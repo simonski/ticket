@@ -1090,6 +1090,23 @@ func (c *Client) ListHistory(id int64) ([]store.HistoryEvent, error) {
 	return events, err
 }
 
+func (c *Client) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListProjectHistory(db, projectID, limit)
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	var events []store.HistoryEvent
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/history?limit=%d", projectID, limit), nil, &events)
+	return events, err
+}
+
 func (c *Client) AddComment(id int64, comment string) (store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

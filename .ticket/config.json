@@ -4,6 +4,7 @@
   "username": "",
   "current_project": "1",
   "current_epic_id": 0,
-  "tui_theme": "the-grey",
-  "tui_mode": "summary"
+  "tui_theme": "k-pop",
+  "tui_mode": "summary",
+  "tui_cursor": 8
 }

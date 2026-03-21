@@ -90,6 +90,14 @@ ticket complete -id CUS-T-42
 ticket claim
 ```
 
+## Claude Code integration
+
+`ticket` ships a Claude Code skill in `.claude/skills/tk/`. Copy it into your
+project's `.claude/skills/` directory (or `~/.claude/skills/` globally) and Claude
+will query and update tickets during coding sessions automatically.
+
+See [QUICKSTART.md](./QUICKSTART.md#using-with-claude-code) for setup details.
+
 ## Notes
 
 - The CLI and web app use the same HTTP API.

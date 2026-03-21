@@ -607,7 +607,7 @@ func ListTickets(db *sql.DB, params TicketListParams) ([]Ticket, error) {
 		args = append(args, assignee)
 	}
 	if !params.IncludeArchived {
-		query += ` AND archived = 0`
+		query += ` AND archived = 0 AND open = 1`
 	}
 	query += ` ORDER BY sort_order, created_at, ticket_id`
 	if params.Limit < 0 {

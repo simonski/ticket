@@ -2087,7 +2087,13 @@ func runProject(args []string) error {
 		if outputJSON {
 			return printJSON(projects)
 		}
-		printProjectTable(projects, cfg.CurrentProject)
+		workflowNames := map[int64]string{}
+		if wfs, err := svc.ListWorkflows(); err == nil {
+			for _, wf := range wfs {
+				workflowNames[wf.ID] = wf.Name
+			}
+		}
+		printProjectTable(projects, cfg.CurrentProject, workflowNames)
 		return nil
 	case "get":
 		if len(args) != 2 {
@@ -3680,14 +3686,7 @@ func runList(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	// Look up workflow stages for progress column
-	var workflowStages []store.WorkflowStage
-	if project.WorkflowID != nil {
-		if wf, err := api.GetWorkflow(*project.WorkflowID); err == nil {
-			workflowStages = wf.Stages
-		}
-	}
-	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeAll, workflowStages)
+	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeAll)
 	return nil
 }
 
@@ -4475,8 +4474,43 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool) error {
 }
 
 func runHistory(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket history <id>")
+	fs := flag.NewFlagSet("history", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	limit := fs.Int("n", 10, "maximum number of events to show; 0 means all")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	remaining := fs.Args()
+
+	// No positional args: show recent events for the active project.
+	if len(remaining) == 0 {
+		_, svc, project, err := resolveCurrentProjectClient()
+		if err != nil {
+			return err
+		}
+		events, err := svc.ListProjectHistory(project.ID, *limit)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(events)
+		}
+		if len(events) == 0 {
+			fmt.Println("no history")
+			return nil
+		}
+		for _, event := range events {
+			key := event.TicketKey
+			if key == "" {
+				key = fmt.Sprintf("#%d", event.TicketID)
+			}
+			fmt.Printf("[%s] %-10s %s\n", event.CreatedAt, key, formatHistoryEvent(event))
+		}
+		return nil
+	}
+
+	if len(remaining) != 1 {
+		return errors.New("usage: ticket history [-n <limit>] [<id>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -4486,13 +4520,17 @@ func runHistory(args []string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(args[0])
+	ticket, err := svc.GetTicket(remaining[0])
 	if err != nil {
 		return err
 	}
 	events, err := svc.ListHistory(ticket.ID)
 	if err != nil {
 		return err
+	}
+	// Apply limit for per-ticket history too
+	if *limit > 0 && len(events) > *limit {
+		events = events[len(events)-*limit:]
 	}
 	if outputJSON {
 		return printJSON(events)

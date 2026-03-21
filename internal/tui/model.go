@@ -37,7 +37,7 @@ const (
 
 // tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Config.
 var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeSettings}
-var tabNames = []string{"Home", "Projects", "Ideas", "Epics", "Config"}
+var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Config"}
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
@@ -185,8 +185,8 @@ func makeNewTicketForm() *newTicketForm {
 		desc:       desc,
 		acceptCrit: ac,
 		ticketType: "task",
-		state:      "open",
-		stage:      "",
+		state:      "idle",
+		stage:      "design",
 		focus:      nfTitle,
 	}
 }
@@ -1684,9 +1684,9 @@ func (m Model) viewSettings() []string {
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 	type krow struct{ key, desc string }
 	shortcuts := []krow{
-		{"tab", "cycle panels (Home/Epics/Config)"},
+		{"tab", "cycle panels (Home/Tickets/Config)"},
 		{"↑↓/ws", "navigate"},
-		{"→/d  ←/a", "expand / collapse epics"},
+		{"→/d  ←/a", "expand / collapse epics in tickets"},
 		{"enter", "open detail"},
 		{"e", "edit  · n  new  · r  reload"},
 		{"p", "project picker"},

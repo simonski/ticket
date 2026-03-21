@@ -87,7 +87,27 @@ tk -g
 ```
 
 Launches the full-screen terminal UI. Navigate panels with Tab / arrow keys.
-Tabs: **Home** · **Projects** · **Ideas** · **Epics** · **Config**.
+Tabs: **Home** · **Projects** · **Ideas** · **Tickets** · **Config**.
+
+---
+
+## Using with Claude Code
+
+`ticket` ships a Claude Code skill that lets Claude work with your backlog directly
+during coding sessions. To enable it:
+
+1. Copy `.claude/skills/tk/` into your project's `.claude/skills/` directory (or the
+   global `~/.claude/skills/` directory for all projects).
+2. Claude will automatically read the skill when you mention tickets or use `/tk`.
+
+Once active, Claude can:
+- Query and update ticket state (`tk list`, `tk show`, `tk state`)
+- Log time against tickets (`tk time log`)
+- Create tickets for bugs or ideas discovered during work
+- Record architectural decisions
+
+The skill ensures Claude reads live ticket state on every action rather than relying
+on conversation memory.
 
 ---
 

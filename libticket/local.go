@@ -794,6 +794,15 @@ func (s *LocalService) ListHistory(id int64) ([]store.HistoryEvent, error) {
 	return store.ListHistoryEvents(db, id)
 }
 
+func (s *LocalService) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListProjectHistory(db, projectID, limit)
+}
+
 func (s *LocalService) AddComment(id int64, comment string) (store.Comment, error) {
 	db, err := s.openDB()
 	if err != nil {

@@ -259,6 +259,10 @@ func (s *Service) ListHistory(id int64) ([]store.HistoryEvent, error) {
 	return s.client.ListHistory(id)
 }
 
+func (s *Service) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
+	return s.client.ListProjectHistory(projectID, limit)
+}
+
 func (s *Service) AddComment(id int64, comment string) (store.Comment, error) {
 	return s.client.AddComment(id, comment)
 }

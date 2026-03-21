@@ -56,6 +56,7 @@ tk idea "The requirement"
 ## Completing Work
 
 When a task is done, update state and log time if appropriate:
+
 ```bash
 # Transition ticket state
 tk state <id> done   # or whatever the terminal stage is
@@ -116,4 +117,4 @@ tk label <id> <label>
 3. **On completion** — update ticket state and add a comment summarising what changed
 4. **On decisions** — always `tk decision add` rather than leaving decisions implicit in code
 5. **On new bugs found during work** — `tk bug "..."` immediately so nothing is lost
-
+6. Only work on 1 ticket at a time — don't switch between tasks without updating ticket state to reflect what you're doing.  Only have 1 active ticket in "in-progress" state at a time.
