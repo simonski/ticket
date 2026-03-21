@@ -322,7 +322,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == modeIntro {
 			m.intro.advance(dt)
 			if m.intro.done() {
-				m.mode = modeSummary
+				var extraCmd tea.Cmd
+				m, extraCmd = m.restoreSession()
+				m.tickCount++
+				if m.tickCount%20 == 0 {
+					m.moonPhase = (m.moonPhase + 1) % len(moonPhases)
+				}
+				return m, tea.Batch(tickCmd(), extraCmd)
 			}
 		}
 		// Advance moon ~every second (20 ticks @ 50ms)
@@ -396,10 +402,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
-	// Intro: any key skips to list
+	// Intro: any key skips to restored panel
 	if m.mode == modeIntro {
-		m.mode = modeList
-		return m, nil
+		var cmd tea.Cmd
+		m, cmd = m.restoreSession()
+		return m, cmd
 	}
 
 	// Command input active: route there
@@ -463,10 +470,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "p":
 			m.mode = modeProjects
-			if len(m.projects) == 0 {
-				return m, loadProjects(m.svc)
-			}
-			return m, nil
+			return m, m.panelEntryCmd()
 		case "/":
 			m.showCmd = true
 			m.cmdInput.SetValue("")
@@ -561,6 +565,7 @@ func (m Model) handleKeyList(key string) (tea.Model, tea.Cmd) {
 		if !consumed {
 			return m.prevPanel()
 		}
+		return m, m.saveExpandedState()
 	case "right", "d":
 		consumed := false
 		if m.cursor < len(m.items) {
@@ -574,6 +579,7 @@ func (m Model) handleKeyList(key string) (tea.Model, tea.Cmd) {
 		if !consumed {
 			return m.nextPanel()
 		}
+		return m, m.saveExpandedState()
 	case "home", "g":
 		m.cursor = 0
 		m.offset = 0
@@ -773,15 +779,17 @@ func (m Model) handleKeySettings(key string) (tea.Model, tea.Cmd) {
 	case "up", "k", "w":
 		if m.settingsCursor > 0 {
 			m.settingsCursor--
+			m.theme = Themes[ThemeOrder[m.settingsCursor]]
+			m.ecg.params = m.theme.ECGStyle
+			m.cfg.TUITheme = string(m.theme.ID)
 		}
 	case "down", "j", "s":
 		if m.settingsCursor < len(ThemeOrder)-1 {
 			m.settingsCursor++
+			m.theme = Themes[ThemeOrder[m.settingsCursor]]
+			m.ecg.params = m.theme.ECGStyle
+			m.cfg.TUITheme = string(m.theme.ID)
 		}
-	case "enter", " ", "t":
-		// Apply the highlighted theme without changing the panel
-		m.theme = Themes[ThemeOrder[m.settingsCursor]]
-		m.ecg.params = m.theme.ECGStyle
 	case "P":
 		m.cfg.TUIDisablePersist = !m.cfg.TUIDisablePersist
 		if err := config.Save(m.cfg); err != nil {
@@ -956,11 +964,11 @@ func (m Model) nextPanel() (tea.Model, tea.Cmd) {
 	for i, tm := range tabModes {
 		if m.mode == tm {
 			m.mode = tabModes[(i+1)%len(tabModes)]
-			return m, nil
+			return m, m.panelEntryCmd()
 		}
 	}
 	m.mode = tabModes[0]
-	return m, nil
+	return m, m.panelEntryCmd()
 }
 
 // prevPanel cycles to the previous tab in the tabModes ring.
@@ -968,11 +976,11 @@ func (m Model) prevPanel() (tea.Model, tea.Cmd) {
 	for i, tm := range tabModes {
 		if m.mode == tm {
 			m.mode = tabModes[(i-1+len(tabModes))%len(tabModes)]
-			return m, nil
+			return m, m.panelEntryCmd()
 		}
 	}
 	m.mode = tabModes[len(tabModes)-1]
-	return m, nil
+	return m, m.panelEntryCmd()
 }
 
 // goBack implements the universal "back" action (ESC / double-shift / left).
@@ -2001,4 +2009,84 @@ func wordWrap(s string, width int) []string {
 		lines = append(lines, line.String())
 	}
 	return lines
+}
+
+// ─── session persistence ──────────────────────────────────────────────────────
+
+func modeToString(m viewMode) string {
+	switch m {
+	case modeProjects:
+		return "projects"
+	case modeIdeas:
+		return "ideas"
+	case modeList:
+		return "list"
+	case modeSettings:
+		return "settings"
+	default:
+		return "summary"
+	}
+}
+
+func modeFromString(s string) viewMode {
+	switch s {
+	case "projects":
+		return modeProjects
+	case "ideas":
+		return modeIdeas
+	case "list":
+		return modeList
+	case "settings":
+		return modeSettings
+	default:
+		return modeSummary
+	}
+}
+
+// restoreSession sets the mode from persisted config and returns any
+// cmd needed to populate that panel (e.g. load projects).
+func (m Model) restoreSession() (Model, tea.Cmd) {
+	m.mode = modeFromString(m.cfg.TUIMode)
+	var cmd tea.Cmd
+	if m.mode == modeProjects && len(m.projects) == 0 {
+		cmd = loadProjects(m.svc)
+	}
+	return m, cmd
+}
+
+// panelEntryCmd saves panel state and loads data required for the new panel.
+func (m Model) panelEntryCmd() tea.Cmd {
+	var cmds []tea.Cmd
+	if !m.cfg.TUIDisablePersist {
+		cfg := m.cfg
+		cfg.TUIMode = modeToString(m.mode)
+		m.cfg = cfg
+		cmds = append(cmds, func() tea.Msg {
+			_ = config.Save(cfg)
+			return nil
+		})
+	}
+	if m.mode == modeProjects && len(m.projects) == 0 {
+		cmds = append(cmds, loadProjects(m.svc))
+	}
+	return tea.Batch(cmds...)
+}
+
+// saveExpandedState persists the current expanded epic set to config.
+func (m Model) saveExpandedState() tea.Cmd {
+	if m.cfg.TUIDisablePersist {
+		return nil
+	}
+	var ids []int64
+	for id, exp := range m.expanded {
+		if exp {
+			ids = append(ids, id)
+		}
+	}
+	cfg := m.cfg
+	cfg.TUIExpandedEpics = ids
+	return func() tea.Msg {
+		_ = config.Save(cfg)
+		return nil
+	}
 }

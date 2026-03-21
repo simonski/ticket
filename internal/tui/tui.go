@@ -60,7 +60,8 @@ func Run(svc libticket.Service, cfg config.Config, project store.Project, themeI
 	// Persist state on exit when enabled.
 	if persistEnabled {
 		if fm, ok := final.(Model); ok {
-			saveTUIState(cfg, fm)
+			// Use fm.cfg so in-session changes (project switch, theme) are included.
+			saveTUIState(fm.cfg, fm)
 		}
 	}
 

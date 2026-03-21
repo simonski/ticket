@@ -1,5 +1,29 @@
 2025-03-21
 
+- have an integration mode with
+    gh issues
+    gitlab
+    jira
+    beads
+    ticket itself
+
+- Installation a github pages
+
+`brew install ticket`
+
+I want a makefile target that prepares and makes the above so that a user can brew install this.  Plan and explain what is necessary. 
+
+Update the make release target to print out any instructions necessary for finishing steps.
+
+## animation
+
+The landing animation is incorrect
+    - it shoudl NOT bound backwards
+    - it is far too fast, near the end, it should onyl speed up a little bit
+    - there is no multicolour faded chroma
+    - it is not tilting away and translating away as it approches the viewer
+    
+
 ## Refactoring the TICKET_HOME, TICKET_URL
 
 Refactor the env vars and locating of config files so that it works like this:
@@ -82,6 +106,8 @@ Themes in the TUI should be available
     deep dark green
         this should have a round-rect the full size of the screen which is generally dark but has a sort of a pulse going aroudn the screen slowly, using perlin noise to vary the velocity.  teh pulse should be like an ECG where it has a neon effect rotating aroudn the screen
 
+        deep dark green - animation - slow it way way down, make it carry a glow with anticipation ahead and memory behind
+
 
     maudlin maroon
     neon nights
@@ -108,9 +134,53 @@ TUI:
 - bottom bar shoudl be a little single-line status bar
 - make a little ascii icon for TK maybe a slowly animating moon
 - ? should bring up a settings dialog for themes and general config
+- ESC should dismiss dialogs, double-shift should dismiss dialogs
+    pressing ESC should move the GUI "back" to the home eventually landing on the animating landing page.  
+    the next page should be a summary page of tickets, epics
+    tab shoudl cycle across the windows - whose titles shoul be visiable at the top
+- p should bring up a project picker.  the gui should default to the project in the $TICKET_HOME/itcket.json config current project
 
+- panels should be
+    home > ideas -> epics -> config
+
+home: 
+    the animation and summary page
+    
+ideas: a list of the high level ideas
+    projects: the list of projects
+     
+epics: the list of epics - start with them closed, right on one opens it and retains hte memory of the epic being open (persist into the $TICKET_HOME/config.json)
+
+config: the configuration of hte tui
+
+
+left or esc or double-shift should act like a "back" button
+
+the animation landing should be a little slower and smoother, use perlin noise and interpolation, as the word gets closder it should rotate off-angle and leave a chroma fade which follows it
+
+add a "the grey" theme which gives a dark gray subtle theme; make it default
+
+panels shoudl be
+    home
+    projects
+        list of projects
+    ideas
+        list of ideas
+    epics
+        list of epics
+    config
+
+remember to persist the current panel and state of the opened trees so that the user impression on reload is where the left off
+
+
+the animation is not right
+    - I dont see a chroma
+    - it's too fast
+    - the animation springs "back" - it is supposed to fly "past" the viewer, rotating away, with a chroma effect following it
 
 HISTORY
+
+
 ------------------------------------------------------------------
 
 2025-03-20

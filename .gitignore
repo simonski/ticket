@@ -1,3 +1,4 @@
+dist/
 .beads
 bin/
 commands.sh

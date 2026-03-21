@@ -6,6 +6,7 @@ import "github.com/charmbracelet/lipgloss"
 type ThemeID string
 
 const (
+	ThemeTheGrey       ThemeID = "the-grey"
 	ThemeDeepDarkGreen ThemeID = "deep-dark-green"
 	ThemeMaudlinMaroon ThemeID = "maudlin-maroon"
 	ThemeNeonNights    ThemeID = "neon-nights"
@@ -39,6 +40,7 @@ type Theme struct {
 
 // ThemeOrder controls the cycle order when the user presses 't'.
 var ThemeOrder = []ThemeID{
+	ThemeTheGrey,
 	ThemeDeepDarkGreen,
 	ThemeMaudlinMaroon,
 	ThemeNeonNights,
@@ -50,6 +52,25 @@ var ThemeOrder = []ThemeID{
 }
 
 var Themes = map[ThemeID]Theme{
+	ThemeTheGrey: {
+		ID:       ThemeTheGrey,
+		Name:     "The Grey",
+		Bg:       "#111213",
+		Fg:       "#9a9ea3",
+		Accent:   "#c0c4c8",
+		Muted:    "#454a50",
+		Border:   "#2a2d30",
+		SelBg:    "#1e2124",
+		SelFg:    "#dde0e3",
+		Header:   "#b0b4b8",
+		StatusBg: "#1a1d1f",
+		StatusFg: "#7a7e82",
+		PulseGrad: []lipgloss.Color{
+			"#1a1d1f", "#222528", "#2a2d30", "#363a3e",
+			"#474b50", "#585d62", "#6a6f74", "#8a8f94",
+		},
+		HasPulse: false,
+	},
 	ThemeDeepDarkGreen: {
 		ID:       ThemeDeepDarkGreen,
 		Name:     "Deep Dark Green",

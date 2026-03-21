@@ -1,6 +1,10 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean
+.PHONY: help default build setup setup-go setup-node setup-playwright tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean release release-build release-checksums release-formula release-publish release-clean
 
-VERSION_FILE := cmd/ticket/VERSION
+VERSION_FILE  := cmd/ticket/VERSION
+VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
+GITHUB_REPO   := simonski/ticket
+DIST_DIR      := dist
+HOMEBREW_TAP  := ../homebrew-tap  # local checkout of simonski/homebrew-tap (optional)
 
 default: help
 
@@ -20,6 +24,14 @@ help:
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
 	@printf "  make clean           Remove built binaries from ./bin.\n"
+	@printf "\n"
+	@printf "Release targets:\n\n"
+	@printf "  make release         Full release: build → checksums → formula → instructions.\n"
+	@printf "  make release-build   Cross-compile binaries and pack tarballs into ./dist.\n"
+	@printf "  make release-checksums  Write SHA256 checksums for all dist tarballs.\n"
+	@printf "  make release-formula Generate homebrew/ticket.rb from the formula template.\n"
+	@printf "  make release-publish Upload tarballs to a GitHub release via gh CLI.\n"
+	@printf "  make release-clean   Remove the ./dist directory.\n"
 	@printf "\n"
 
 build: 
@@ -99,6 +111,106 @@ test-playwright:
 	npm install
 	npx playwright install chromium
 	npx playwright test
+
+# ─── release ──────────────────────────────────────────────────────────────────
+# Produces cross-platform tarballs in ./dist and updates homebrew/ticket.rb.
+# Prerequisites: go, gh (GitHub CLI), shasum.
+#
+# Workflow:
+#   make release          → build + checksums + formula
+#   make release-publish  → gh release create + upload tarballs
+#   (copy homebrew/ticket.rb → simonski/homebrew-tap/Formula/ticket.rb and push)
+
+RELEASE_PLATFORMS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64
+
+release-clean:
+	@rm -rf $(DIST_DIR)
+
+release-build:
+	@$(MAKE) release-clean
+	@mkdir -p $(DIST_DIR)
+	@echo "Building v$(VERSION) for all platforms..."
+	@for platform in $(RELEASE_PLATFORMS); do \
+		os=$$(echo $$platform | cut -d/ -f1); \
+		arch=$$(echo $$platform | cut -d/ -f2); \
+		name=ticket_$(VERSION)_$${os}_$${arch}; \
+		outdir=$(DIST_DIR)/$$name; \
+		mkdir -p $$outdir; \
+		printf "  %-32s" "$$os/$$arch"; \
+		GOOS=$$os GOARCH=$$arch go build -o $$outdir/ticket ./cmd/ticket && echo "ok" || exit 1; \
+		tar -czf $(DIST_DIR)/$${name}.tar.gz -C $$outdir ticket; \
+		rm -rf $$outdir; \
+	done
+	@echo "Tarballs written to $(DIST_DIR)/"
+
+release-checksums:
+	@echo "Computing SHA256 checksums..."
+	@cd $(DIST_DIR) && \
+		for f in *.tar.gz; do \
+			shasum -a 256 "$$f"; \
+		done | tee checksums.txt
+	@echo "Checksums written to $(DIST_DIR)/checksums.txt"
+
+release-formula:
+	@echo "Generating homebrew/ticket.rb for v$(VERSION)..."
+	@darwin_arm64=$$(shasum -a 256 $(DIST_DIR)/ticket_$(VERSION)_darwin_arm64.tar.gz | cut -d' ' -f1); \
+	 darwin_amd64=$$(shasum -a 256 $(DIST_DIR)/ticket_$(VERSION)_darwin_amd64.tar.gz | cut -d' ' -f1); \
+	 linux_amd64=$$(shasum -a 256  $(DIST_DIR)/ticket_$(VERSION)_linux_amd64.tar.gz  | cut -d' ' -f1); \
+	 linux_arm64=$$(shasum -a 256  $(DIST_DIR)/ticket_$(VERSION)_linux_arm64.tar.gz  | cut -d' ' -f1); \
+	 sed \
+		-e "s/__VERSION__/$(VERSION)/g" \
+		-e "s/__DARWIN_ARM64_SHA256__/$$darwin_arm64/g" \
+		-e "s/__DARWIN_AMD64_SHA256__/$$darwin_amd64/g" \
+		-e "s/__LINUX_AMD64_SHA256__/$$linux_amd64/g" \
+		-e "s/__LINUX_ARM64_SHA256__/$$linux_arm64/g" \
+		homebrew/ticket.rb.tmpl > homebrew/ticket.rb
+	@echo "Formula written to homebrew/ticket.rb"
+
+release-publish:
+	@echo "Creating GitHub release v$(VERSION)..."
+	@gh release create v$(VERSION) \
+		--repo $(GITHUB_REPO) \
+		--title "v$(VERSION)" \
+		--generate-notes \
+		$(DIST_DIR)/ticket_$(VERSION)_darwin_arm64.tar.gz \
+		$(DIST_DIR)/ticket_$(VERSION)_darwin_amd64.tar.gz \
+		$(DIST_DIR)/ticket_$(VERSION)_linux_amd64.tar.gz \
+		$(DIST_DIR)/ticket_$(VERSION)_linux_arm64.tar.gz \
+		$(DIST_DIR)/checksums.txt
+	@echo "Release v$(VERSION) published."
+
+release: release-build release-checksums release-formula
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "  Release v$(VERSION) ready"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "  Artifacts:   $(DIST_DIR)/"
+	@echo "  Formula:     homebrew/ticket.rb"
+	@echo "  Tap dir:     $(HOMEBREW_TAP)"
+	@echo ""
+	@echo "  Step 1 — publish the GitHub release:"
+	@echo ""
+	@echo "    make release-publish"
+	@echo ""
+	@echo "  Step 2 — push the formula to the tap repo:"
+	@echo ""
+	@echo "    cp homebrew/ticket.rb ../homebrew-tap/Formula/ticket.rb"
+	@echo "    git -C $(HOMEBREW_TAP) add Formula/ticket.rb"
+	@echo "    git -C $(HOMEBREW_TAP) commit -m \"ticket $(VERSION)\""
+	@echo "    git -C $(HOMEBREW_TAP) push"
+	@echo ""
+	@echo "  Users then install with:"
+	@echo ""
+	@echo "    brew tap simonski/tap"
+	@echo "    brew install ticket"
+	@echo ""
+	@echo "  Or in one line:"
+	@echo ""
+	@echo "    brew install simonski/tap/ticket"
+	@echo ""
+
+# ─── clean ────────────────────────────────────────────────────────────────────
 
 clean:
 	@rm -rf bin
