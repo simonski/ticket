@@ -22,11 +22,10 @@ help:
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
 
-build:
+build: 
 	@$(MAKE) bump-version
 	@mkdir -p bin
 	go build -o ./bin/ticket ./cmd/ticket
-	@ln -sf ./bin/ticket ./tk
 
 setup: setup-go setup-node setup-playwright
 
@@ -106,7 +105,7 @@ clean:
 	@rm -f tk
 	@rm -f parser
 
-install:
+install: clean build
 	go install ./cmd/ticket
 
 dev:

@@ -1,3 +1,105 @@
+2025-03-21
+
+## Refactoring the TICKET_HOME, TICKET_URL
+
+Refactor the env vars and locating of config files so that it works like this:
+
+If $TICKET_URL is missing then this is a local installation.  If it is present then the `tk` commands are going to be making remote calls.
+
+$TICKET_HOME if present is used to locate teh configuration file, `$TICKET_HOME/config` -  details what the current project ID is, the username.
+
+If neither TICKET_URL or TICKET_HOME are specified, then `${CWD}/.ticket` is the default TICKET_HOME and it is assumed all commands are local.
+
+## Autolocating $TICKET_HOME
+
+If $TICKET_HOME is missing, to "find" the local ticket home relative to the CWD, first walk "up" the filesystem from $CWD looking for a .ticket folder.  If none exists, $CWD is the default.  If a parent folder contains a .ticket folder then use that.
+
+`$TICKET_HOME/ticket.db` - the database that stores the tickets in local-mode.
+
+If the user is running this database as a server, then for the client they would have
+
+`TICKET_URL` - which would be expected to be in the format `https://server.name`.  At this point they would be expected to also have 
+
+## SKILLS.md
+
+I want a robust CLAUDE skill created so you can type
+
+`tk skill` which prints out the SKILL and advises on how to set it up either in-project or globally.
+
+
+
+## Singleplayer setup
+
+I want to a have a robust singleplayer database available locally via a single command the queries the user.  It should also review the current if present
+
+```bash
+tk setup / init
+```
+
+> database exists? Y/N
+> name of project (dirname)
+> admin user :admin (when remote)
+Auto-detect claude etc.
+> install claude skill in ~/.claude/skills/tk ?
+> install codex? in ~/.claude/skills/tk ?
+
+I have put a SKILL.md file into the docs folder.  This should be rehomed so it is a go:embed artifact that can then be installed locally during hte setup/init call.
+
+## DB/Query Performance
+
+Review the database and SQL for performance issues and make recommendations.
+
+Anticipate we get to thousands of tickets - I want to exclude as much as possible in terms of query and traffic; e.g. most stories will be closed, so exlucde them from queries unless it is is explicity that hte user wants to see closed inormation.
+
+## Summary
+
+```bash
+tk summary
+```
+
+Prints a friendly summary of the project, goals, status of tickets, last N things worked on, env vars, location of database.
+
+## TUI
+
+Enter TUI mode
+
+```bash
+tk -g 
+```
+
+Note: all TUI commands shoudl go via API so that it is behaving in the same way as the CLI - so if the client is setup locally, it talks locally, if if the client is setup to be remote, it talks to the remote server.
+
+
+I want to make a TUI that allows me to navigate epics and stories easily wiht arrow keys and then edit them to manage their title/description/parentge, type etc.
+
+the TUI should check the update call when started to show if an update is available.
+
+Teh TUI shoudl feel like a multiplayer game insofar as you shoudl be able to chat to other users if it is multiplayer mode.
+
+The TUI shoudl be nicely coloured in a dark mode - dark, gray on gray.  
+
+Themes in the TUI should be available
+    deep dark green
+        this should have a round-rect the full size of the screen which is generally dark but has a sort of a pulse going aroudn the screen slowly, using perlin noise to vary the velocity.  teh pulse should be like an ECG where it has a neon effect rotating aroudn the screen
+        
+
+    maudlin maroon
+    neon nights
+    bright n breezy
+    contrast my disco
+    lo-fi
+    brain-fuzz (maximally offensive bubbletea)
+    k-pop
+
+
+
+
+
+HISTORY
+------------------------------------------------------------------
+
+2025-03-20
+
 ------------------------------------------------------------------
 0. <freeform converted to DESIGN.md>
 
@@ -1246,3 +1348,34 @@ Create a workflow file
     DESIGN, role=DESIGNER 
     DEVELOP, role=DEVELOPER
     REVIEW, role=REVIEWER
+
+
+------
+
+Next steps:
+
+I want to use the website or the terminal to manage extending the binary itself - that is, I want to be bootstrapping the development of this project by using the binary.   
+
+This is so that the bootstrapping demonstrates the value of the ticket system itself.
+
+I want this to be in phases:
+
+1. capturing requirements
+2. breaking a requirement via an agent into tickets
+3. executing on those requirements
+
+I want to try to get each phase "done" before we move to the next phase.
+
+For each, I want to have steps:
+
+1. describe and refine the problem
+2. make an engineering plan with tests/ac
+3. implement
+4. verify and refine
+5. complete
+
+As much as possible I want to use the ticket system to achieve this itself.
+
+Ok so if that is the approach, here is the problem
+
+"I want to be able to type a command inthe CLI that captures a very high level problem statement - the "requirement".  This partially exists now - so please explain what the *current* process actually is"

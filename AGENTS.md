@@ -1,5 +1,3 @@
-# Agent Instructions
-
 - read docs/TICKETS.md
 - read docs/RULES.md
 

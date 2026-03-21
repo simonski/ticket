@@ -8,8 +8,6 @@ commands2.sh
 backup.json
 ./parser
 ./wiggum
-task.db
-ticket.db
 *db-shm
 *db-wal
 node_modules/
