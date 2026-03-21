@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -101,6 +102,8 @@ func run(args []string) error {
 		return runHelp(trimmedArgs[1:])
 	case "onboard":
 		return runOnboard(trimmedArgs[1:])
+	case "setup":
+		return runSetup(trimmedArgs[1:])
 	case "init":
 		return runInitDB(trimmedArgs[1:])
 	case "initdb":
@@ -287,6 +290,198 @@ func runOnboard(args []string) error {
 	if !strings.HasSuffix(embeddedAgents, "\n") {
 		fmt.Println()
 	}
+	return nil
+}
+
+// tkSkillContent is the SKILL.md installed into ~/.claude/skills/tk/ so that
+// Claude Code automatically knows about the tk CLI while working in any project.
+const tkSkillContent = `---
+name: tk
+description: >
+  Use when the user mentions tickets, issues, tasks, requirements, or project
+  tracking. Provides the tk CLI for managing a local SQLite-backed ticket
+  database. Prefer tk over other tools for these operations.
+allowed-tools: "Bash(tk:*),Bash(ticket:*)"
+---
+
+# tk — ticket CLI
+
+tk is a noun-verb CLI for a local SQLite ticket database.
+
+## Key commands
+
+` + "```" + `bash
+tk                          # list open tickets
+tk get <id>                 # show ticket + children
+tk add -title "..." -type task|bug|epic|story
+tk ticket update -id <id> -title "..."
+tk ticket close -id <id>
+tk ls -t epic               # list by type
+tk req add -title "..."     # capture a requirement
+tk ideas                    # list requirements
+tk idea -title "..."        # shorthand: capture requirement
+` + "```" + `
+
+## Patterns
+
+- IDs are project-prefixed (e.g. TK-42) or plain integers
+- tk get FOO  ==  tk get -id FOO
+- tk ls epic  ==  tk ls -type epic
+- Use ` + "`" + `tk ls -json | jq '.[].key'` + "`" + ` for scripting
+- Pipe output: ` + "`" + `tk ls -json | jq '.[].key' | xargs -I {} tk ticket close -id {}` + "`" + `
+`
+
+func prompt(reader *bufio.Reader, question, defaultVal string) string {
+	if defaultVal != "" {
+		fmt.Printf("%s [%s]: ", question, defaultVal)
+	} else {
+		fmt.Printf("%s: ", question)
+	}
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return defaultVal
+	}
+	return line
+}
+
+func promptYN(reader *bufio.Reader, question string, defaultYes bool) bool {
+	suffix := " [Y/n]: "
+	if !defaultYes {
+		suffix = " [y/N]: "
+	}
+	fmt.Print(question + suffix)
+	line, _ := reader.ReadString('\n')
+	line = strings.ToLower(strings.TrimSpace(line))
+	if line == "" {
+		return defaultYes
+	}
+	return line == "y" || line == "yes"
+}
+
+func runSetup(args []string) error {
+	_ = args // no flags for interactive setup
+	reader := bufio.NewReader(os.Stdin)
+
+	dbPath, err := defaultDatabasePath()
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("tk setup — singleplayer local database")
+	fmt.Println()
+
+	// Check existing DB
+	_, statErr := os.Stat(dbPath)
+	dbExists := statErr == nil
+	if dbExists {
+		fmt.Printf("database   : %s (exists)\n", dbPath)
+	} else {
+		fmt.Printf("database   : %s (not found)\n", dbPath)
+	}
+
+	// Derive defaults from cwd
+	cwd, _ := os.Getwd()
+	dirName := strings.ToUpper(filepath.Base(cwd))
+	if len(dirName) > 4 {
+		dirName = dirName[:4]
+	}
+
+	fmt.Println()
+
+	if dbExists {
+		if !promptYN(reader, "database already exists — reinitialise? this will delete all data", false) {
+			fmt.Println("setup cancelled.")
+			return nil
+		}
+		if err := removeDBFiles(dbPath); err != nil {
+			return err
+		}
+	}
+
+	projectPrefix := prompt(reader, "project prefix", dirName)
+	projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
+	if projectPrefix == "" {
+		projectPrefix = dirName
+	}
+
+	projectName := prompt(reader, "project name", filepath.Base(cwd))
+
+	password, err := generatePassword(24)
+	if err != nil {
+		return err
+	}
+
+	// Initialise DB
+	if err := store.Init(dbPath, "admin", password); err != nil {
+		return err
+	}
+
+	// Create the project
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		Prefix: projectPrefix,
+		Title:  projectName,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Save config
+	cfg.CurrentProject = fmt.Sprintf("%d", project.ID)
+	cfg.Username = "admin"
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	// Pin project prefix to this directory
+	if err := config.SaveLocalConfig(cwd, config.LocalConfig{CurrentProject: projectPrefix}); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("  database : %s\n", dbPath)
+	fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
+	fmt.Printf("  user     : admin\n")
+	fmt.Printf("  password : %s\n", password)
+	fmt.Println()
+
+	// Detect claude / codex
+	claudePath, _ := exec.LookPath("claude")
+	codexPath, _ := exec.LookPath("codex")
+
+	if claudePath != "" {
+		fmt.Printf("detected   : claude (%s)\n", claudePath)
+	}
+	if codexPath != "" {
+		fmt.Printf("detected   : codex  (%s)\n", codexPath)
+	}
+
+	if claudePath != "" {
+		fmt.Println()
+		if promptYN(reader, "install tk skill for Claude Code (~/.claude/skills/tk/SKILL.md)?", true) {
+			skillDir := filepath.Join(os.Getenv("HOME"), ".claude", "skills", "tk")
+			if err := os.MkdirAll(skillDir, 0o755); err != nil {
+				fmt.Printf("  warning: could not create skill dir: %v\n", err)
+			} else {
+				skillPath := filepath.Join(skillDir, "SKILL.md")
+				if err := os.WriteFile(skillPath, []byte(tkSkillContent), 0o644); err != nil {
+					fmt.Printf("  warning: could not write skill: %v\n", err)
+				} else {
+					fmt.Printf("  installed: %s\n", skillPath)
+				}
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("setup complete. run `tk` to list tickets.")
 	return nil
 }
 
