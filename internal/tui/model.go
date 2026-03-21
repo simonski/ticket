@@ -347,15 +347,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode != modeEdit && m.mode != modeNew {
 		switch key {
 		case "tab":
-			// Cycle top-level tabs: Summary → Tickets → Settings → …
-			for i, tm := range tabModes {
-				if m.mode == tm {
-					m.mode = tabModes[(i+1)%len(tabModes)]
-					return m, nil
-				}
-			}
-			m.mode = tabModes[0]
-			return m, nil
+			return m.nextPanel()
 		case "t":
 			m.theme = Themes[NextTheme(m.theme.ID)]
 			m.ecg.params = m.theme.ECGStyle
@@ -450,20 +442,30 @@ func (m Model) handleKeyList(key string) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "left", "a":
+		consumed := false
 		if m.cursor < len(m.items) {
-			t := m.items[m.cursor].ticket
-			if t.Type == "epic" {
-				m.expanded[t.ID] = false
+			item := m.items[m.cursor]
+			if item.ticket.Type == "epic" && item.hasChildren && item.expanded {
+				m.expanded[item.ticket.ID] = false
 				m.items = flattenTree(m.nodes, m.toplevel, m.expanded)
+				consumed = true
 			}
 		}
+		if !consumed {
+			return m.prevPanel()
+		}
 	case "right", "d":
+		consumed := false
 		if m.cursor < len(m.items) {
-			t := m.items[m.cursor].ticket
-			if t.Type == "epic" {
-				m.expanded[t.ID] = true
+			item := m.items[m.cursor]
+			if item.ticket.Type == "epic" && item.hasChildren && !item.expanded {
+				m.expanded[item.ticket.ID] = true
 				m.items = flattenTree(m.nodes, m.toplevel, m.expanded)
+				consumed = true
 			}
+		}
+		if !consumed {
+			return m.nextPanel()
 		}
 	case "home", "g":
 		m.cursor = 0
@@ -569,6 +571,10 @@ func (m Model) handleKeySummary(key string) (tea.Model, tea.Cmd) {
 		m.statusMsg = "press q again to quit"
 	case "enter", " ", "e":
 		m.mode = modeList
+	case "right", "d":
+		return m.nextPanel()
+	case "left", "a":
+		return m.prevPanel()
 	case "n":
 		m.selected = nil
 		m.form = newCreateForm()
@@ -583,7 +589,7 @@ func (m Model) handleKeySummary(key string) (tea.Model, tea.Cmd) {
 func (m Model) handleKeySettings(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q", "esc":
-		m.mode = modeList
+		return m.goBack()
 	case "up", "k", "w":
 		if m.settingsCursor > 0 {
 			m.settingsCursor--
@@ -593,9 +599,13 @@ func (m Model) handleKeySettings(key string) (tea.Model, tea.Cmd) {
 			m.settingsCursor++
 		}
 	case "enter", " ", "t":
+		// Apply the highlighted theme without changing the panel
 		m.theme = Themes[ThemeOrder[m.settingsCursor]]
 		m.ecg.params = m.theme.ECGStyle
-		m.mode = modeList
+	case "right", "d":
+		return m.nextPanel()
+	case "left", "a":
+		return m.prevPanel()
 	}
 	return m, nil
 }
@@ -678,6 +688,30 @@ func (m Model) createTicket() tea.Cmd {
 		}
 		return ticketCreatedMsg(t)
 	}
+}
+
+// nextPanel cycles to the next tab in the tabModes ring.
+func (m Model) nextPanel() (tea.Model, tea.Cmd) {
+	for i, tm := range tabModes {
+		if m.mode == tm {
+			m.mode = tabModes[(i+1)%len(tabModes)]
+			return m, nil
+		}
+	}
+	m.mode = tabModes[0]
+	return m, nil
+}
+
+// prevPanel cycles to the previous tab in the tabModes ring.
+func (m Model) prevPanel() (tea.Model, tea.Cmd) {
+	for i, tm := range tabModes {
+		if m.mode == tm {
+			m.mode = tabModes[(i-1+len(tabModes))%len(tabModes)]
+			return m, nil
+		}
+	}
+	m.mode = tabModes[len(tabModes)-1]
+	return m, nil
 }
 
 // goBack implements the universal "back" action (ESC / double-shift / left).
