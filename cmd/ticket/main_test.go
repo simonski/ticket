@@ -1726,16 +1726,18 @@ func TestRunUpdateRequiresIDFlag(t *testing.T) {
 	}
 }
 
-func TestRunGetRequiresIDFlag(t *testing.T) {
+func TestRunGetAcceptsPositionalID(t *testing.T) {
 	setupLocalCLI(t)
-	taskID := createLocalTask(t, []string{"add", "Needs ID Get"})
+	taskID := createLocalTask(t, []string{"add", "Positional ID Get"})
 
-	if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err == nil || !strings.Contains(err.Error(), "usage: ticket get -id") {
-		t.Fatalf("expected usage error for positional id, got %v", err)
+	// positional arg should work the same as -id
+	if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+		t.Fatalf("expected positional id to work, got %v", err)
 	}
 
-	if err := run([]string{"get"}); err == nil || !strings.Contains(err.Error(), "usage: ticket get -id") {
-		t.Fatalf("expected usage error for missing -id, got %v", err)
+	// no id at all should still fail
+	if err := run([]string{"get"}); err == nil || !strings.Contains(err.Error(), "usage:") {
+		t.Fatalf("expected usage error for missing id, got %v", err)
 	}
 }
 

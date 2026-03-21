@@ -164,6 +164,20 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 	}
 }
 
+func printTicketChildren(children []store.Ticket) {
+	fmt.Println("Children     :")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	for _, c := range children {
+		symbol := formatTicketStatusSymbol(c.Status, true)
+		key := c.Key
+		if key == "" {
+			key = strconv.FormatInt(c.ID, 10)
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, key, c.Type, c.Status, c.Title)
+	}
+	_ = w.Flush()
+}
+
 func renderWorkflowProgress(currentStage string, stages []store.WorkflowStage) string {
 	var parts []string
 	for _, s := range stages {

@@ -3210,6 +3210,7 @@ func runList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	taskType := fs.String("type", "", "filter by ticket type")
+	fs.StringVar(taskType, "t", "", "filter by ticket type (shorthand)")
 	stage := fs.String("stage", "", "filter by ticket stage")
 	state := fs.String("state", "", "filter by ticket state")
 	status := fs.String("status", "", "filter by rendered ticket status")
@@ -3218,13 +3219,18 @@ func runList(args []string) error {
 	limit := fs.Int("n", 0, "maximum number of tickets to return; 0 means all")
 	useUnicode := fs.Bool("unicode", true, "render status symbols as unicode")
 	plain := fs.Bool("plain", false, "render status as plain text")
-	includeArchived := fs.Bool("a", false, "include archived tickets")
+	includeAll := fs.Bool("a", false, "include all tickets (closed and archived)")
 	labelFilter := fs.String("label", "", "filter by label name")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	// Allow positional type: tk ls epic  ==  tk ls -type epic
+	if *taskType == "" && fs.NArg() == 1 {
+		v := fs.Arg(0)
+		taskType = &v
+	}
 	if *limit < 0 {
-		return errors.New("usage: ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a] [--label <name>]")
+		return errors.New("usage: ticket list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-label <name>]")
 	}
 	statusUnicode := *useUnicode && !*plain
 	resolvedStage, resolvedState, err := resolveLifecycleInput(*status, *stage, *state)
@@ -3235,9 +3241,18 @@ func runList(args []string) error {
 	if err != nil {
 		return err
 	}
-	tickets, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit, *includeArchived)
+	tickets, err := api.ListTicketsFiltered(project.ID, *taskType, resolvedStage, resolvedState, "", "", *assignee, *limit, *includeAll)
 	if err != nil {
 		return err
+	}
+	if !*includeAll {
+		open := tickets[:0]
+		for _, t := range tickets {
+			if t.Open {
+				open = append(open, t)
+			}
+		}
+		tickets = open
 	}
 	if *labelFilter != "" {
 		filtered := tickets[:0]
@@ -3280,7 +3295,7 @@ func runList(args []string) error {
 			workflowStages = wf.Stages
 		}
 	}
-	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeArchived, workflowStages)
+	printTicketTable(tickets, dependenciesByTicket, statusUnicode, *includeAll, workflowStages)
 	return nil
 }
 
@@ -3381,17 +3396,21 @@ func runOrphans(args []string) error {
 }
 
 func runGet(args []string) error {
-	usage := "ticket get -id <id>"
+	usage := "ticket get [-id] <id>"
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" {
+	// Allow positional: tk get FOO is the same as tk get -id FOO
+	if strings.TrimSpace(*id) == "" && fs.NArg() == 1 {
+		v := fs.Arg(0)
+		id = &v
+	} else if fs.NArg() != 0 {
 		return errors.New("usage: " + usage)
 	}
-	if fs.NArg() != 0 {
+	if strings.TrimSpace(*id) == "" {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -3413,7 +3432,8 @@ func runGet(args []string) error {
 	}
 	// Look up workflow stages for progress display
 	var workflowStages []store.WorkflowStage
-	if project, err := svc.GetProject(fmt.Sprintf("%d", ticket.ProjectID)); err == nil && project.WorkflowID != nil {
+	project, projectErr := svc.GetProject(fmt.Sprintf("%d", ticket.ProjectID))
+	if projectErr == nil && project.WorkflowID != nil {
 		if wf, err := svc.GetWorkflow(*project.WorkflowID); err == nil {
 			workflowStages = wf.Stages
 		}
@@ -3421,6 +3441,19 @@ func runGet(args []string) error {
 	ticketLabels, _ := svc.ListTicketLabels(ticket.ID)
 	totalTime, _ := svc.TotalTimeForTicket(ticket.ID)
 	printTicketDetails(ticket, dependencies, history, workflowStages, ticketLabels, totalTime)
+	// Show children if any
+	if projectErr == nil {
+		all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, true)
+		var children []store.Ticket
+		for _, t := range all {
+			if t.ParentID != nil && *t.ParentID == ticket.ID {
+				children = append(children, t)
+			}
+		}
+		if len(children) > 0 {
+			printTicketChildren(children)
+		}
+	}
 	return nil
 }
 
