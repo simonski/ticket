@@ -66,49 +66,53 @@ func projectStatusLine(project, source string) statusLine {
 }
 
 // printStatusBox renders lines inside a rounded Unicode box.
+//
+// Each line is rendered in two passes: first as a plain string to measure
+// visual width, then as a styled string (with any ANSI codes) for printing.
+// This keeps the right-hand padding consistent regardless of ANSI content.
 func printStatusBox(lines []statusLine) {
 	const keyWidth = 17
-	const padding = 2 // spaces inside each border
+	const padding = 2 // minimum spaces on each side of content
 
-	// Measure max content width
-	maxContent := 0
-	for _, l := range lines {
+	type row struct {
+		plain  string // visible text, for width measurement
+		styled string // text to print (may contain ANSI codes)
+	}
+
+	rows := make([]row, len(lines))
+	maxWidth := 0
+	for i, l := range lines {
 		if l.key == "" {
-			continue
+			continue // blank separator — width handled separately
 		}
-		w := keyWidth + 2 + utf8.RuneCountInString(l.value) // "key : value"
-		if w > maxContent {
-			maxContent = w
+		plain := fmt.Sprintf("%-*s: %s", keyWidth, l.key, l.value)
+		styled := plain
+		if !noColorOutput && l.color != "" {
+			styled = fmt.Sprintf("%-*s: %s%s\x1b[0m", keyWidth, l.key, l.color, l.value)
+		}
+		rows[i] = row{plain, styled}
+		if w := utf8.RuneCountInString(plain); w > maxWidth {
+			maxWidth = w
 		}
 	}
-	inner := maxContent + padding*2 // total inside box (between │ and │)
 
-	top := "╭" + strings.Repeat("─", inner) + "╮"
-	bot := "╰" + strings.Repeat("─", inner) + "╯"
-	fmt.Println(top)
-	for _, l := range lines {
+	// inner = visible chars between │ and │ on every row
+	inner := maxWidth + padding*2
+
+	fmt.Println("╭" + strings.Repeat("─", inner) + "╮")
+	for i, l := range lines {
 		if l.key == "" {
-			// blank separator row
 			fmt.Println("│" + strings.Repeat(" ", inner) + "│")
 			continue
 		}
-		valueStr := l.value
-		if !noColorOutput && l.color != "" {
-			valueStr = l.color + l.value + "\x1b[0m"
-		}
-		content := fmt.Sprintf("%-*s: %s", keyWidth, l.key, valueStr)
-		// Pad to inner width (measure without ANSI codes)
-		visibleLen := keyWidth + 2 + utf8.RuneCountInString(l.value)
-		pad := inner - padding - visibleLen
-		if pad < 0 {
-			pad = 0
-		}
-		fmt.Printf("│%s%-*s%s│\n",
+		r := rows[i]
+		rightPad := inner - padding - utf8.RuneCountInString(r.plain)
+		fmt.Printf("│%s%s%s│\n",
 			strings.Repeat(" ", padding),
-			0, content,
-			strings.Repeat(" ", pad+padding))
+			r.styled,
+			strings.Repeat(" ", rightPad))
 	}
-	fmt.Println(bot)
+	fmt.Println("╰" + strings.Repeat("─", inner) + "╯")
 }
 
 func runRemoteStatus(cfg config.Config) error {

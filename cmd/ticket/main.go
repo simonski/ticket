@@ -406,22 +406,19 @@ func runSetup(args []string) error {
 		}
 	}
 
-	projectPrefix := prompt(reader, "project prefix", dirName)
-	projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
-	if projectPrefix == "" {
-		projectPrefix = dirName
-	}
-
-	projectName := prompt(reader, "project name", filepath.Base(cwd))
-
-	var password string
+	fmt.Println()
 	if reinit {
-		var err error
-		password, err = generatePassword(24)
+		projectPrefix := prompt(reader, "project prefix", dirName)
+		projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
+		if projectPrefix == "" {
+			projectPrefix = dirName
+		}
+		projectName := prompt(reader, "project name", filepath.Base(cwd))
+
+		password, err := generatePassword(24)
 		if err != nil {
 			return err
 		}
-		// Initialise DB and create the project
 		if err := store.Init(dbPath, "admin", password); err != nil {
 			return err
 		}
@@ -448,16 +445,14 @@ func runSetup(args []string) error {
 		if err := config.SaveLocalConfig(cwd, config.LocalConfig{CurrentProject: projectPrefix}); err != nil {
 			return err
 		}
-		fmt.Println()
 		fmt.Printf("  database : %s\n", dbPath)
 		fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
 		fmt.Printf("  user     : admin\n")
 		fmt.Printf("  password : %s\n", password)
 	} else {
-		// Existing DB — just show current state
-		fmt.Println()
-		fmt.Printf("  database : %s (unchanged)\n", dbPath)
+		// Existing DB — show current state without touching any config
 		cfg, _ := config.Load()
+		fmt.Printf("  database : %s (unchanged)\n", dbPath)
 		fmt.Printf("  project  : %s\n", cfg.CurrentProject)
 		fmt.Printf("  user     : %s\n", cfg.Username)
 	}
