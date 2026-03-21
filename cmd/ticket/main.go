@@ -396,13 +396,13 @@ func runSetup(args []string) error {
 
 	fmt.Println()
 
+	reinit := !dbExists
 	if dbExists {
-		if !promptYN(reader, "database already exists — reinitialise? this will delete all data", false) {
-			fmt.Println("setup cancelled.")
-			return nil
-		}
-		if err := removeDBFiles(dbPath); err != nil {
-			return err
+		reinit = promptYN(reader, "database already exists — reinitialise? this will delete all data", false)
+		if reinit {
+			if err := removeDBFiles(dbPath); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -414,49 +414,53 @@ func runSetup(args []string) error {
 
 	projectName := prompt(reader, "project name", filepath.Base(cwd))
 
-	password, err := generatePassword(24)
-	if err != nil {
-		return err
+	var password string
+	if reinit {
+		var err error
+		password, err = generatePassword(24)
+		if err != nil {
+			return err
+		}
+		// Initialise DB and create the project
+		if err := store.Init(dbPath, "admin", password); err != nil {
+			return err
+		}
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+			Prefix: projectPrefix,
+			Title:  projectName,
+		})
+		if err != nil {
+			return err
+		}
+		cfg.CurrentProject = fmt.Sprintf("%d", project.ID)
+		cfg.Username = "admin"
+		if err := config.Save(cfg); err != nil {
+			return err
+		}
+		if err := config.SaveLocalConfig(cwd, config.LocalConfig{CurrentProject: projectPrefix}); err != nil {
+			return err
+		}
+		fmt.Println()
+		fmt.Printf("  database : %s\n", dbPath)
+		fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
+		fmt.Printf("  user     : admin\n")
+		fmt.Printf("  password : %s\n", password)
+	} else {
+		// Existing DB — just show current state
+		fmt.Println()
+		fmt.Printf("  database : %s (unchanged)\n", dbPath)
+		cfg, _ := config.Load()
+		fmt.Printf("  project  : %s\n", cfg.CurrentProject)
+		fmt.Printf("  user     : %s\n", cfg.Username)
 	}
-
-	// Initialise DB
-	if err := store.Init(dbPath, "admin", password); err != nil {
-		return err
-	}
-
-	// Create the project
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		return err
-	}
-	project, err := svc.CreateProject(libticket.ProjectCreateRequest{
-		Prefix: projectPrefix,
-		Title:  projectName,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Save config
-	cfg.CurrentProject = fmt.Sprintf("%d", project.ID)
-	cfg.Username = "admin"
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-	// Pin project prefix to this directory
-	if err := config.SaveLocalConfig(cwd, config.LocalConfig{CurrentProject: projectPrefix}); err != nil {
-		return err
-	}
-
-	fmt.Println()
-	fmt.Printf("  database : %s\n", dbPath)
-	fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
-	fmt.Printf("  user     : admin\n")
-	fmt.Printf("  password : %s\n", password)
 	fmt.Println()
 
 	// Detect claude / codex
