@@ -3,30 +3,30 @@
 class Ticket < Formula
   desc "A local-first ticket system for engineers — epics, stories, bugs, requirements, decisions"
   homepage "https://github.com/simonski/ticket"
-  version "0.1.600"
+  version "0.1.613"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.600/ticket_0.1.600_darwin_arm64.tar.gz"
-      sha256 "a5726d45457dd822ac380f76949f6124eac82af80618303f808aaab11ee9a03c"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.613/ticket_0.1.613_darwin_arm64.tar.gz"
+      sha256 "d086331d7664c050f37510587d10103245f45f97e832f0ed86370d6b6f155055"
     end
 
     on_intel do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.600/ticket_0.1.600_darwin_amd64.tar.gz"
-      sha256 "75e4fe3beb6e8012112c037ac184ec183f69c0a9147552de5429d01d774b469b"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.613/ticket_0.1.613_darwin_amd64.tar.gz"
+      sha256 "1ec7e193de5bb26743b497250506bfefae8b548cd1e1ab8c9be0b4b88da55eb5"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.600/ticket_0.1.600_linux_arm64.tar.gz"
-      sha256 "7564f1f8ee78120a31303af7b3e7a683a57aa756ed04536065407084d3108609"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.613/ticket_0.1.613_linux_arm64.tar.gz"
+      sha256 "5948156ac4da7d57ba310c89c2c331d5e8abff6adfc13d2755f53341735890d0"
     end
 
     on_intel do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.600/ticket_0.1.600_linux_amd64.tar.gz"
-      sha256 "a563b8612c8f9c24ac3a39edcc1ab6e19cfe4f9864ffd5f7caf7dcc2c5af3187"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.613/ticket_0.1.613_linux_amd64.tar.gz"
+      sha256 "477fea79d122627ce612cc2ffba58df842d290f2044df3b4e1b723aeaa1d45b2"
     end
   end
 
@@ -37,6 +37,6 @@ class Ticket < Formula
   end
 
   test do
-    assert_match "0.1.600", shell_output("#{bin}/ticket version")
+    assert_match "0.1.613", shell_output("#{bin}/ticket version")
   end
 end

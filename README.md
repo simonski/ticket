@@ -25,34 +25,28 @@ architecture notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 brew install simonski/tap/ticket
 ```
 
-Or in one step (no prior tap needed):
+Both `ticket` and the alias `tk` are installed.
+
+or
 
 ```bash
-brew install simonski/tap/ticket
+go install github.com/simonski/ticket/cmd/ticket@latest
 ```
-
-Both `ticket` and `tk` commands are installed.
 
 ## Build from source
 
 ```bash
-make build
-make tools
+cd $CODE
+git clone github.com/simonski/ticket
+cd ticket
+make install
 ```
-
-`make build` writes the CLI binary to `./bin/ticket` and updates a `./tk` symlink for shorter invocation.
 
 ## Test
 
 ```bash
 make test
-make test-unit
-make test-integration
-make test-playwright
 ```
-
-`make test` runs the unit suite, integration suite, and Playwright frontend
-smoke test.
 
 ## Run
 
