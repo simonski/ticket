@@ -442,9 +442,6 @@ func runSetup(args []string) error {
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
-		if err := config.SaveLocalConfig(cwd, config.LocalConfig{CurrentProject: projectPrefix}); err != nil {
-			return err
-		}
 		fmt.Printf("  database : %s\n", dbPath)
 		fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
 		fmt.Printf("  user     : admin\n")
@@ -1995,9 +1992,10 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 		return err
 	}
 
-	// Check if a .ticket.json already exists in cwd
-	if lc, ok := config.FindLocalConfig(cwd); ok && filepath.Dir(lc.Path) == cwd {
-		return fmt.Errorf(".ticket.json already exists in %s (project: %s)", cwd, lc.CurrentProject)
+	// Check if a project is already initialised
+	if cfg.CurrentProject != "" {
+		cfgPath, _ := config.Path()
+		return fmt.Errorf("project already initialised: %s (in %s)", cfg.CurrentProject, cfgPath)
 	}
 
 	// Try to find existing project by prefix
@@ -2017,15 +2015,6 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
 	}
 
-	// Write .ticket.json in cwd
-	if err := config.SaveLocalConfig(cwd, config.LocalConfig{
-		CurrentProject: project.Prefix,
-	}); err != nil {
-		return err
-	}
-	fmt.Printf("wrote %s in %s\n", config.LocalConfigFile, cwd)
-
-	// Also update global config
 	cfg.CurrentProject = project.Prefix
 	cfg.CurrentEpicID = 0
 	if err := config.Save(cfg); err != nil {

@@ -12,13 +12,6 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 	t.Setenv("TICKET_URL", "")
 
-	// Chdir to temp dir so local .ticket.json in the repo doesn't override values.
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-
 	cfg := Config{ServerURL: "http://example.test:9000"}
 	if err := Save(cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -235,83 +228,3 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 	}
 }
 
-func TestFindLocalConfigWalksUp(t *testing.T) {
-	root := t.TempDir()
-	child := filepath.Join(root, "a", "b", "c")
-	if err := os.MkdirAll(child, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Place .ticket.json in root/a
-	if err := SaveLocalConfig(filepath.Join(root, "a"), LocalConfig{CurrentProject: "FOO"}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Should find it from root/a/b/c
-	lc, ok := FindLocalConfig(child)
-	if !ok {
-		t.Fatal("FindLocalConfig() returned false, want true")
-	}
-	if lc.CurrentProject != "FOO" {
-		t.Fatalf("CurrentProject = %q, want FOO", lc.CurrentProject)
-	}
-	wantPath := filepath.Join(root, "a", LocalConfigFile)
-	if lc.Path != wantPath {
-		t.Fatalf("Path = %q, want %q", lc.Path, wantPath)
-	}
-
-	// Should not find it from root (sibling of a)
-	_, ok = FindLocalConfig(root)
-	if ok {
-		t.Fatal("FindLocalConfig(root) returned true, want false")
-	}
-}
-
-func TestLocalConfigOverridesGlobalProject(t *testing.T) {
-	tempHome := t.TempDir()
-	t.Setenv("TICKET_HOME", tempHome)
-	t.Setenv("TICKET_URL", "")
-
-	// Save global config with project BAR
-	cfg := Config{CurrentProject: "BAR"}
-	if err := Save(cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a dir with .ticket.json pointing to FOO
-	projDir := t.TempDir()
-	if err := SaveLocalConfig(projDir, LocalConfig{CurrentProject: "FOO"}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Change to that dir and load
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(projDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-
-	loaded, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if loaded.CurrentProject != "FOO" {
-		t.Fatalf("CurrentProject = %q, want FOO (local override)", loaded.CurrentProject)
-	}
-}
-
-func TestSaveLocalConfig(t *testing.T) {
-	dir := t.TempDir()
-	lc := LocalConfig{CurrentProject: "ABC"}
-	if err := SaveLocalConfig(dir, lc); err != nil {
-		t.Fatal(err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(dir, LocalConfigFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), "ABC") {
-		t.Fatalf("saved file does not contain ABC: %s", data)
-	}
-}

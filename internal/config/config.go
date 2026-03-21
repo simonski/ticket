@@ -30,13 +30,6 @@ type Config struct {
 	CurrentEpicID  int64  `json:"current_epic_id"`
 }
 
-// LocalConfig is a per-directory config file (.ticket.json) that binds a
-// directory tree to a specific project.
-type LocalConfig struct {
-	CurrentProject string `json:"current_project"`
-	Path           string `json:"-"` // filesystem path where this was found
-}
-
 type Credentials struct {
 	Token string `json:"token"`
 }
@@ -70,48 +63,6 @@ func ResolveURL() (Resolved, error) {
 	}
 }
 
-const LocalConfigFile = ".ticket.json"
-
-// FindLocalConfig walks from startDir up to the user's home directory looking
-// for a .ticket.json file. Returns the parsed config and true if found.
-func FindLocalConfig(startDir string) (LocalConfig, bool) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return LocalConfig{}, false
-	}
-	dir := startDir
-	for {
-		p := filepath.Join(dir, LocalConfigFile)
-		data, err := os.ReadFile(p)
-		if err == nil {
-			var lc LocalConfig
-			if json.Unmarshal(data, &lc) == nil && lc.CurrentProject != "" {
-				lc.Path = p
-				return lc, true
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		// stop after checking $HOME
-		if dir == homeDir {
-			break
-		}
-		dir = parent
-	}
-	return LocalConfig{}, false
-}
-
-// SaveLocalConfig writes a .ticket.json in the given directory.
-func SaveLocalConfig(dir string, lc LocalConfig) error {
-	data, err := json.MarshalIndent(lc, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, LocalConfigFile), data, 0o644)
-}
-
 func Load() (Config, error) {
 	path, err := Path()
 	if err != nil {
@@ -135,14 +86,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.Token = creds.Token
-
-	// Local .ticket.json overrides the project from the global config.
-	cwd, cwdErr := os.Getwd()
-	if cwdErr == nil {
-		if lc, ok := FindLocalConfig(cwd); ok {
-			cfg.CurrentProject = lc.CurrentProject
-		}
-	}
 
 	return cfg, nil
 }

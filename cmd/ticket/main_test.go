@@ -1228,6 +1228,17 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 func TestRunProjectInit(t *testing.T) {
 	setupLocalCLI(t)
 
+	// Clear CurrentProject so project init is not blocked by the default set
+	// during setupLocalCLI.
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.CurrentProject = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+
 	projDir := t.TempDir()
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(projDir); err != nil {
@@ -1243,20 +1254,17 @@ func TestRunProjectInit(t *testing.T) {
 	if !strings.Contains(initOutput, "created project INI") {
 		t.Fatalf("project init output missing created: %s", initOutput)
 	}
-	if !strings.Contains(initOutput, ".ticket.json") {
-		t.Fatalf("project init output missing .ticket.json: %s", initOutput)
-	}
 
-	// Verify .ticket.json was created
-	data, err := os.ReadFile(filepath.Join(projDir, ".ticket.json"))
+	// Verify config.json was updated with the correct project
+	cfg, err = config.Load()
 	if err != nil {
-		t.Fatalf("reading .ticket.json: %v", err)
+		t.Fatalf("config.Load() error = %v", err)
 	}
-	if !strings.Contains(string(data), "INI") {
-		t.Fatalf(".ticket.json does not contain INI: %s", data)
+	if cfg.CurrentProject != "INI" {
+		t.Fatalf("config.CurrentProject = %q, want INI", cfg.CurrentProject)
 	}
 
-	// Running init again should fail (already exists)
+	// Running init again should fail (already initialised)
 	if err := run([]string{"project", "init", "-prefix", "INI"}); err == nil {
 		t.Fatal("expected error on second init, got nil")
 	}
@@ -1785,8 +1793,6 @@ func TestRunTypedTaskCreateSupportsEstimateFlags(t *testing.T) {
 
 func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 	setupLocalCLI(t)
-	// Change cwd to the temp dir so FindLocalConfig does not pick up the
-	// repo-level .ticket.json and override current_project.
 	orig, _ := os.Getwd()
 	if err := os.Chdir(t.TempDir()); err != nil {
 		t.Fatalf("chdir: %v", err)

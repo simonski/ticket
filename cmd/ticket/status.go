@@ -24,15 +24,9 @@ func statusEnvVars() map[string]string {
 
 // resolveCurrentProject returns the active project key and where it came from.
 func resolveCurrentProject(cfg config.Config) (project, source string) {
-	cwd, err := os.Getwd()
-	if err == nil {
-		if lc, ok := config.FindLocalConfig(cwd); ok {
-			return lc.CurrentProject, "local: " + lc.Path
-		}
-	}
 	if cfg.CurrentProject != "" {
 		cfgPath, _ := config.Path()
-		return cfg.CurrentProject, "global: " + cfgPath
+		return cfg.CurrentProject, cfgPath
 	}
 	return "", ""
 }
