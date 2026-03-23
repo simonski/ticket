@@ -2558,7 +2558,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 		AcceptanceCriteria: "Must pass",
 	}
 	prompt := buildAgentPrompt(ticket)
-	for _, want := range []string{"autonomous software agent", "Test Task", "Some description", "Must pass"} {
+	for _, want := range []string{"Test Task", "Some description", "Must pass"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("buildAgentPrompt missing %q:\n%s", want, prompt)
 		}

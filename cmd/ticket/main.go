@@ -33,7 +33,7 @@ var (
 	loginPromptOutput io.Writer = os.Stdout
 	outputJSON        bool
 	noColorOutput     bool
-	runAgentCommand = defaultRunTicketAgentCommand
+	runAgentCommand   = defaultRunTicketAgentCommand
 	selectBannerWord  = randomBannerWord
 	fetchRepoVersion  = defaultFetchRepoVersion
 )
@@ -44,13 +44,11 @@ func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
-
 //go:embed VERSION
 var embeddedVersion string
 
 //go:embed TICKETS.md
 var embeddedAgents string
-
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -485,9 +483,10 @@ func runOnboard(args []string) error {
 	return nil
 }
 
-//go:embed SKILL.md
 // tkSkillContent is installed into ~/.claude/skills/tk/SKILL.md so that
 // Claude Code automatically knows about the tk CLI while working in any project.
+//
+//go:embed SKILL.md
 var tkSkillContent string
 
 func prompt(reader *bufio.Reader, question, defaultVal string) string {
@@ -2012,8 +2011,8 @@ func runAgent(args []string) error {
 
 func buildAgentPrompt(ticket store.Ticket) string {
 	var b strings.Builder
-	b.WriteString("You are an autonomous software agent working a ticket.\n")
-	b.WriteString("Return only the final ticket update text.\n\n")
+	// b.WriteString("You are an autonomous software agent working a ticket.\n")
+	// b.WriteString("Return only the final ticket update text.\n\n")
 	b.WriteString(fmt.Sprintf("Ticket: %s\n", ticketLabel(ticket)))
 	b.WriteString(fmt.Sprintf("Title: %s\n", strings.TrimSpace(ticket.Title)))
 	if strings.TrimSpace(ticket.Description) != "" {
@@ -3005,8 +3004,6 @@ func runRole(args []string) error {
 	}
 }
 
-
-
 func runWorkflow(args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -3829,6 +3826,7 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 	} else {
 		promptFile = "prompt_agent.md"
 	}
+	prompt += "\n"
 	if err := os.WriteFile(promptFile, []byte(prompt), 0644); err != nil {
 		return "", fmt.Errorf("write prompt file: %w", err)
 	}
@@ -3843,31 +3841,24 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 	default:
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("%s -p < %s", agent, promptFile))
 	}
+	// Always stream stdout to the terminal so the operator can see
+	// the LLM working. With -v, add > / < prefixes.
+	var buf bytes.Buffer
 	if stream {
-		// Log the command being executed.
 		fmt.Printf("> %s\n\n", strings.Join(cmd.Args, " "))
-
-		// Wire up stdin/stdout/stderr with prefixed writers so the
-		// operator can distinguish input from output at a glance.
-		var buf bytes.Buffer
-		cmd.Stdin = &prefixReader{r: os.Stdin, prefix: "> ", w: os.Stdout}
 		cmd.Stdout = io.MultiWriter(&prefixWriter{w: os.Stdout, prefix: "< "}, &buf)
 		cmd.Stderr = &prefixWriter{w: os.Stderr, prefix: "< "}
-		if err := cmd.Run(); err != nil {
-			return "", err
-		}
+	} else {
+		cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
+		cmd.Stderr = os.Stderr
+	}
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	if stream {
 		fmt.Println()
-		return buf.String(), nil
 	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		message := strings.TrimSpace(string(output))
-		if message == "" {
-			return "", err
-		}
-		return "", fmt.Errorf("%v: %s", err, message)
-	}
-	return string(output), nil
+	return buf.String(), nil
 }
 
 func parseProjectCommandID(raw string) (int64, bool) {
@@ -6518,5 +6509,3 @@ func runConfig(args []string) error {
 		return fmt.Errorf("unknown config action %q", args[0])
 	}
 }
-
-
