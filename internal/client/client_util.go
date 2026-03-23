@@ -70,16 +70,16 @@ func getenvFirst(keys ...string) string {
 	return ""
 }
 
-// friendlyConnectionError wraps low-level network errors with a clear message.
+// friendlyConnectionError converts low-level network errors to a clear message.
 func friendlyConnectionError(err error, baseURL string) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		var netErr *net.OpError
 		if errors.As(urlErr.Err, &netErr) {
-			return fmt.Errorf("cannot connect to %s: %w\nhint: is the server running? check TICKET_URL", baseURL, netErr)
+			return fmt.Errorf("cannot connect to %s\nhint: is the server running? check TICKET_URL", baseURL)
 		}
 	}
-	return fmt.Errorf("cannot connect to %s: %w", baseURL, err)
+	return fmt.Errorf("cannot connect to %s", baseURL)
 }
 
 // doJSONBasicAuth is like doJSON but uses HTTP Basic Auth instead of Bearer token.
