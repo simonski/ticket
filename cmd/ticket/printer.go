@@ -274,7 +274,7 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, statu
 	}
 
 	makeHeader := func() string {
-		return "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+		return "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
 	}
 
 	makeDataRow := func(t store.Ticket, title string) string {
@@ -288,8 +288,12 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, statu
 		if strings.TrimSpace(key) == "" {
 			key = strconv.FormatInt(t.ID, 10)
 		}
-		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-			symbol, key, t.Type, title, t.Status, ticketOpenLabel(t), parent, assignee, t.Priority)
+		ready := "no"
+		if t.Ready {
+			ready = "yes"
+		}
+		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+			symbol, key, t.Type, title, t.Status, ready, ticketOpenLabel(t), parent, assignee, t.Priority)
 	}
 
 	// Pass 1: render with a sentinel title to locate where the title column
