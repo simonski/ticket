@@ -69,7 +69,14 @@ claude -p "work on next ticket"
 ```
 
 
-## WebServer
+## Web Server
+
+Start the server and web UI:
+
+```bash
+tk server
+```
+
 The web UI is then available at `http://localhost:8080`.
 
 ## CLI Quick Start
@@ -93,10 +100,10 @@ Inspect and move work:
 
 ```bash
 ticket list
-ticket get CUS-T-42
+ticket get -id CUS-T-42
 ticket active -id CUS-T-42
 ticket complete -id CUS-T-42
-ticket claim
+ticket claim -id CUS-T-42
 ```
 
 ## Claude Code integration
@@ -112,4 +119,6 @@ See [QUICKSTART.md](./QUICKSTART.md#using-with-claude-code) for setup details.
 - The CLI and web app use the same HTTP API.
 - Ticket refs accept human keys such as `CUS-T-42` and internal numeric ids
   where supported, but keys are preferred.
-- The supported HTTP resource family is `/api/tickets`.
+- `tk ls` hides closed and archived tickets by default; use `tk ls -a` to show all.
+- The HTTP API exposes resource families under `/api/` including tickets, projects,
+  users, agents, teams, roles, workflows, and more.

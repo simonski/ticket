@@ -1042,6 +1042,42 @@ func (c *Client) UnarchiveTicket(id int64) (store.Ticket, error) {
 	return ticket, err
 }
 
+func (c *Client) ReadyTicket(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetTicketReady(db, id, true, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/ready", id), nil, &ticket)
+	return ticket, err
+}
+
+func (c *Client) NotReadyTicket(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.SetTicketReady(db, id, false, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notready", id), nil, &ticket)
+	return ticket, err
+}
+
 func (c *Client) DeleteTicket(id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

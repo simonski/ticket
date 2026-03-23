@@ -78,6 +78,8 @@ type Service interface {
 	OpenTicket(id int64) (store.Ticket, error)
 	ArchiveTicket(id int64) (store.Ticket, error)
 	UnarchiveTicket(id int64) (store.Ticket, error)
+	ReadyTicket(id int64) (store.Ticket, error)
+	NotReadyTicket(id int64) (store.Ticket, error)
 	DeleteTicket(id int64) error
 	SetTicketParent(id, parentID int64) (store.Ticket, error)
 	UnsetTicketParent(id int64) (store.Ticket, error)

@@ -39,6 +39,7 @@ type Ticket struct {
 	HealthScore        int       `json:"health_score"`
 	Assignee           string    `json:"assignee"`
 	Comments           []Comment `json:"comments,omitempty"`
+	Ready              bool      `json:"ready"`
 	Open               bool      `json:"open"`
 	Archived           bool      `json:"archived"`
 	CreatedBy          int64     `json:"created_by"`
@@ -469,6 +470,43 @@ func SetTicketArchived(db *sql.DB, id int64, archived bool, actorUsername string
 	return GetTicket(db, id)
 }
 
+func SetTicketReady(db *sql.DB, id int64, ready bool, actorUsername string, actorID int64) (Ticket, error) {
+	current, err := GetTicket(db, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if current.Ready == ready {
+		return current, nil
+	}
+	result, err := db.Exec(`
+		UPDATE tickets
+		SET ready = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE ticket_id = ?
+	`, boolToInt(ready), id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return Ticket{}, err
+	}
+	if affected == 0 {
+		return Ticket{}, ErrTicketNotFound
+	}
+	action := "marked_not_ready"
+	if ready {
+		action = "marked_ready"
+	}
+	if err := AddHistoryEvent(db, current.ProjectID, current.ID, action, map[string]any{
+		"from_ready": current.Ready,
+		"to_ready":   ready,
+		"who":        actorUsername,
+	}, actorID); err != nil {
+		return Ticket{}, err
+	}
+	return GetTicket(db, id)
+}
+
 func addTicketOpenHistoryEvent(db *sql.DB, current Ticket, from bool, to bool, actorUsername string, actorID int64) error {
 	if from == to {
 		return nil
@@ -569,7 +607,7 @@ func ListTickets(db *sql.DB, params TicketListParams) ([]Ticket, error) {
 	}
 
 	query := `
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE project_id = ?
 	`
@@ -644,7 +682,7 @@ func SearchTickets(db *sql.DB, projectID int64, query string) ([]Ticket, error) 
 
 func GetTicketByProject(db *sql.DB, projectID, id int64) (Ticket, error) {
 	row := db.QueryRow(`
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE project_id = ? AND ticket_id = ?
 	`, projectID, id)
@@ -660,7 +698,7 @@ func GetTicketByProject(db *sql.DB, projectID, id int64) (Ticket, error) {
 
 func GetTicket(db *sql.DB, id int64) (Ticket, error) {
 	row := db.QueryRow(`
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE ticket_id = ?
 	`, id)
@@ -684,7 +722,7 @@ func GetTicketByRef(db *sql.DB, raw string) (Ticket, error) {
 		return GetTicket(db, id)
 	}
 	row := db.QueryRow(`
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE key = ?
 	`, strings.ToUpper(raw))
@@ -726,6 +764,7 @@ func scanTicket(s scanner) (Ticket, error) {
 	var cloneOf sql.NullInt64
 	var workflowStageID sql.NullInt64
 	var storedStatus string
+	var ready int
 	var open int
 	var archived int
 	if err := s.Scan(
@@ -750,6 +789,7 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.EstimateComplete,
 		&ticket.HealthScore,
 		&ticket.Assignee,
+		&ready,
 		&open,
 		&archived,
 		&ticket.CreatedBy,
@@ -768,6 +808,7 @@ func scanTicket(s scanner) (Ticket, error) {
 		ticket.WorkflowStageID = &workflowStageID.Int64
 	}
 	ticket.Status = RenderLifecycleStatus(ticket.Stage, ticket.State)
+	ticket.Ready = ready == 1
 	ticket.Open = open == 1
 	ticket.Archived = archived == 1
 	return ticket, nil
@@ -905,7 +946,7 @@ func recalculateParentLifecycle(db *sql.DB, id int64, actorID int64) (*int64, er
 
 func listStoredChildTickets(db *sql.DB, parentID int64) ([]Ticket, error) {
 	rows, err := db.Query(`
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE parent_id = ?
 		ORDER BY created_at, ticket_id
@@ -928,7 +969,7 @@ func listStoredChildTickets(db *sql.DB, parentID int64) ([]Ticket, error) {
 
 func getStoredTicket(db *sql.DB, id int64) (Ticket, error) {
 	ticket, err := scanTicket(db.QueryRow(`
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE ticket_id = ?
 	`, id))
@@ -1165,7 +1206,7 @@ func ticketClaimable(db *sql.DB, ticket Ticket, projectID int64) (bool, error) {
 
 func findAssignedTicketForUser(db *sql.DB, projectID int64, username, state string) (Ticket, bool, error) {
 	query := `
-		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, open, archived, COALESCE(created_by, 0), created_at, updated_at
+		SELECT ticket_id, key, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, ready, open, archived, COALESCE(created_by, 0), created_at, updated_at
 		FROM tickets
 		WHERE assignee = ? AND open = 1 AND archived = 0 AND state = ?
 	`
@@ -1194,10 +1235,10 @@ func findClaimCandidate(db *sql.DB, projectID int64) (Ticket, bool, error) {
 		return Ticket{}, false, errors.New("project is required")
 	}
 	ticket, err := scanTicket(db.QueryRow(`
-		SELECT t.ticket_id, t.key, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.git_repository, t.git_branch, t.workflow_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, t.open, t.archived, COALESCE(t.created_by, 0), t.created_at, t.updated_at
+		SELECT t.ticket_id, t.key, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.git_repository, t.git_branch, t.workflow_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, t.ready, t.open, t.archived, COALESCE(t.created_by, 0), t.created_at, t.updated_at
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
-		WHERE t.project_id = ? AND p.status = 'open' AND t.open = 1 AND t.archived = 0 AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
+		WHERE t.project_id = ? AND p.status = 'open' AND t.open = 1 AND t.archived = 0 AND t.ready = 1 AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
 		  AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id)
 		ORDER BY t.priority DESC, t.created_at, t.key, t.ticket_id
 		LIMIT 1

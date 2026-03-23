@@ -2343,6 +2343,42 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "ready" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				ticket, err := store.SetTicketReady(db, id, true, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "notready" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				ticket, err := store.SetTicketReady(db, id, false, user.Username, user.ID)
+				if err != nil {
+					if errors.Is(err, store.ErrTicketNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
 			if len(parts) == 2 && parts[1] == "analyse" && r.Method == http.MethodPost {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)

@@ -61,7 +61,7 @@ ticket ideas          # list all ideas
 ```bash
 ticket list
 ticket get CUS-T-1
-ticket attach CUS-T-1 CUS-E-1   # set parent epic
+ticket attach -id CUS-T-1 CUS-E-1   # set parent epic
 ```
 
 ## 6. Move work through the lifecycle
@@ -87,7 +87,7 @@ tk -g
 ```
 
 Launches the full-screen terminal UI. Navigate panels with Tab / arrow keys.
-Tabs: **Home** · **Projects** · **Ideas** · **Tickets** · **Config**.
+Tabs: **Home** · **Projects** · **Ideas** · **Tickets** · **Workflows** · **Config**.
 
 ---
 
@@ -113,10 +113,12 @@ on conversation memory.
 
 ## Environment variables
 
-| Variable      | Purpose                                              |
-|---------------|------------------------------------------------------|
-| `TICKET_HOME` | Override the config/database directory               |
-| `TICKET_URL`  | Connect to a remote server (`http(s)://host:port`)   |
+| Variable             | Purpose                                              |
+|----------------------|------------------------------------------------------|
+| `TICKET_HOME`        | Override the config/database directory               |
+| `TICKET_URL`         | Connect to a remote server (`http(s)://host:port`)   |
+| `TICKET_USERNAME`    | Default username for login/register                  |
+| `TICKET_PASSWORD`    | Default password for login/register                  |
 
 When `TICKET_URL` is set the CLI communicates with a running `ticket server`
 rather than opening the local database directly.

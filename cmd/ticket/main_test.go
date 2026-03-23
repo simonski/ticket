@@ -1938,11 +1938,13 @@ func TestRunDeleteRequiresIDFlag(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Needs ID Delete"})
 
-	if err := run([]string{"delete", strconv.FormatInt(taskID, 10)}); err == nil || !strings.Contains(err.Error(), "usage: ticket rm|delete -id") {
-		t.Fatalf("expected positional delete usage error, got %v", err)
+	// Positional ID should now work (no error).
+	if err := run([]string{"delete", strconv.FormatInt(taskID, 10)}); err != nil {
+		t.Fatalf("positional delete should succeed, got %v", err)
 	}
-	if err := run([]string{"delete"}); err == nil || !strings.Contains(err.Error(), "usage: ticket rm|delete -id") {
-		t.Fatalf("expected missing -id usage error, got %v", err)
+	// No ID at all should still fail.
+	if err := run([]string{"delete"}); err == nil || !strings.Contains(err.Error(), "usage:") {
+		t.Fatalf("expected missing id usage error, got %v", err)
 	}
 }
 
@@ -3580,6 +3582,10 @@ func TestRunRequestAssignsNextTicket(t *testing.T) {
 	ref := strconv.FormatInt(id, 10)
 	captureStdout(t, func() {
 		_ = run([]string{"complete", "-id", ref})
+	})
+	// mark ticket as ready so it can be claimed
+	captureStdout(t, func() {
+		_ = run([]string{"ready", ref})
 	})
 
 	requestOut := captureStdout(t, func() {

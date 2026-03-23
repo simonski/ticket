@@ -114,6 +114,7 @@ func printTicket(ticket store.Ticket) {
 	fmt.Printf("key: %s\n", ticket.Key)
 	fmt.Printf("type: %s\n", ticket.Type)
 	fmt.Printf("status: %s\n", ticket.Status)
+	fmt.Printf("ready: %t\n", ticket.Ready)
 	fmt.Printf("open: %s\n", ticketOpenLabel(ticket))
 	fmt.Printf("archived: %t\n", ticket.Archived)
 	if ticket.Description != "" {
@@ -159,6 +160,7 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 	if len(workflowStages) > 0 {
 		fmt.Printf("Workflow     : %s\n", renderWorkflowProgress(ticket.Stage, workflowStages))
 	}
+	fmt.Printf("Ready        : %t\n", ticket.Ready)
 	fmt.Printf("Open         : %s\n", ticketOpenLabel(ticket))
 	fmt.Printf("Archived     : %t\n", ticket.Archived)
 	fmt.Printf("Priority     : %d\n", ticket.Priority)

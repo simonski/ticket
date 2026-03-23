@@ -42,6 +42,10 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		t.Fatalf("CreateTicket() = %#v", ticket)
 	}
 
+	if _, err := api.ReadyTicket(ticket.ID); err != nil {
+		t.Fatalf("ReadyTicket() error = %v", err)
+	}
+
 	requested, err := api.RequestTicket(TicketRequest{ProjectID: 1})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)

@@ -295,7 +295,11 @@ func TestRequestTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(design/idle) error = %v", err)
 	}
-	_, err = CreateTicket(db, TicketCreateParams{
+	// Mark first ticket as ready so it can be claimed.
+	if _, err := SetTicketReady(db, notReady.ID, true, "admin", 1); err != nil {
+		t.Fatalf("SetTicketReady() error = %v", err)
+	}
+	secondTicket, err := CreateTicket(db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Open task",
@@ -304,6 +308,10 @@ func TestRequestTicket(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(develop/idle) error = %v", err)
+	}
+	// Mark second ticket as ready too.
+	if _, err := SetTicketReady(db, secondTicket.ID, true, "admin", 1); err != nil {
+		t.Fatalf("SetTicketReady() error = %v", err)
 	}
 
 	assigned, status, err := RequestTicket(db, TicketRequestParams{

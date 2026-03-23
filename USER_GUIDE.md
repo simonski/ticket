@@ -228,7 +228,7 @@ Then it opens the database if present and verifies the schema is usable. It prin
 
 If the database does not exist in LOCAL mode, it also prints:
 
-- `hint: run ticket init`
+- `hint: run tk setup`
 
 If `-nocolor` is set, the same output is printed without ANSI colors.
 
@@ -415,12 +415,13 @@ In the web app, use the capture panel at the top of the project page to create t
 
 ## Review And Search
 
-List all items in the active project:
+List open items in the active project:
 
 ```bash
 ticket list
 ticket ls
 ticket list -n 20
+ticket ls -a              # include closed and archived tickets
 ```
 
 Filter by item kind:
@@ -499,7 +500,16 @@ ticket delete CUS-T-17
 
 They also fail if the named user does not exist or is disabled.
 
-`ticket claim` is server-mediated. If the current user already has an active claimed ticket, that ticket is returned. Otherwise the server assigns the highest-priority oldest eligible `develop/idle` leaf ticket in the active project. `ticket claim -dry-run` shows the candidate without changing server state. `ticket unclaim` is retained as a compatibility alias for clearing your own assignment.
+`ticket claim` is server-mediated. If the current user already has an active claimed ticket, that ticket is returned. Otherwise the server assigns the highest-priority oldest eligible ready `develop/idle` leaf ticket in the active project. `ticket claim -dry-run` shows the candidate without changing server state. `ticket unclaim` is retained as a compatibility alias for clearing your own assignment.
+
+New tickets default to not-ready. Mark a ticket as ready before it can be picked up by `claim` or `request`:
+
+```bash
+ticket ready CUS-T-42       # mark ready for work
+ticket notready CUS-T-42    # mark not ready
+```
+
+Only ready tickets are eligible for automatic assignment. You can still explicitly request a specific not-ready ticket by ID.
 
 `ticket rm` and `ticket delete` remove a ticket permanently. They fail if the ticket still has child tickets.
 
@@ -549,16 +559,17 @@ a web server.
 
 ### Panels
 
-The TUI has five top-level panels, navigated with **Tab** (forward) or
+The TUI has six top-level panels, navigated with **Tab** (forward) or
 **Shift-Tab** / **left arrow** (back):
 
-| Tab    | Contents                                              |
-|--------|-------------------------------------------------------|
-| Home   | Project summary — counts by type, in-progress, recent history |
-| Projects | All projects; select one to make it active          |
-| Ideas  | Captured requirements/ideas (raw, unprocessed tickets) |
-| Epics  | Ticket tree — epics with nested tasks, bugs, etc.   |
-| Config | Theme picker and TUI settings                       |
+| Tab       | Contents                                              |
+|-----------|-------------------------------------------------------|
+| Home      | Project summary — counts by type, in-progress, recent history |
+| Projects  | All projects; select one to make it active            |
+| Ideas     | Captured requirements/ideas (raw, unprocessed tickets) |
+| Tickets   | Ticket tree — epics with nested tasks, bugs, etc.     |
+| Workflows | Workflow definitions and stages                       |
+| Config    | Theme picker and TUI settings                         |
 
 ### Navigation
 
@@ -666,8 +677,7 @@ ticket user ls
 ticket user delete --username <name>
 ticket user enable --username <name>
 ticket user disable --username <name>
-ticket export -o ./ticket-snapshot.json
-ticket import -i ./ticket-snapshot.json
+ticket user reset-password -username <name> [-password <password>]
 ticket agent create -name <name> -description <description> [-password <password>]
 ticket agent list
 ticket agent update -id <id> [-name <name>] [-description <description>] [-password <password>]
@@ -676,6 +686,10 @@ ticket agent enable -id <id>
 ticket agent disable -id <id>
 ticket agent run -name <name> -password <password> -url <server-url>
 ticket agent request -password <password> -url <server-url> [-id <ticket-id>] [-dryrun]
+ticket agent reset-password -id <id> [-password <password>]
+ticket agent config-set -id <id> <key> <value>
+ticket agent config-ls -id <id>
+ticket agent config-rm -id <id> <key>
 
 ticket project create -prefix ABC -title "..."
 ticket project init
@@ -692,6 +706,9 @@ ticket project <prefix-or-id> update -git-repository "https://github.com/org/rep
 ticket project <prefix-or-id> update -git-branch "main"
 ticket project <prefix-or-id> enable
 ticket project <prefix-or-id> disable
+ticket project rm [-id] <prefix-or-id> [--confirm <token>]
+
+ticket ticket <verb> [flags]                              # namespace for all ticket verbs
 
 ticket add "..."
 ticket bug "..."
@@ -699,12 +716,14 @@ ticket epic "..."
 
 ticket list
 ticket ls
+ticket ls -a                                              # include closed/archived
 ticket list --type task
 ticket list --status develop/idle
 ticket list -u <name>
 ticket search "..."
 ticket search "..." -allprojects
-ticket get <key-or-id>
+ticket get -id <key-or-id>
+ticket edit [-id] <key-or-id>
 ticket history <key-or-id>
 ticket health <key-or-id>
 ticket comment add <key-or-id> "..."
@@ -714,33 +733,54 @@ ticket dependency add <key-or-id> <key-or-id[,key-or-id...]>
 ticket dependency remove <key-or-id> <key-or-id[,key-or-id...]>
 ticket assign <key-or-id> <name>
 ticket unassign <key-or-id> <name>
-ticket claim <key-or-id>
+ticket claim -id <key-or-id>
 ticket unclaim <key-or-id>
 ticket request [<key-or-id>]
-ticket attach <key-or-id> <parent-key-or-id>
-ticket detach <key-or-id>
+ticket attach -id <key-or-id> <parent-key-or-id>
+ticket detach -id <key-or-id>
+ticket ready <key-or-id>
+ticket notready <key-or-id>
+ticket close -id <key-or-id>
+ticket open -id <key-or-id>
+ticket archive -id <key-or-id>
+ticket unarchive -id <key-or-id>
 ticket rm <key-or-id>
 ticket delete <key-or-id>
-ticket idle <key-or-id>
-ticket active <key-or-id>
-ticket complete <key-or-id>
-ticket state <key-or-id> <state>
-ticket update <key-or-id> -stage <stage> -state <state>
+ticket idle -id <key-or-id>
+ticket active -id <key-or-id>
+ticket complete -id <key-or-id>
+ticket state -id <key-or-id> <state>
+ticket update -id <key-or-id> -stage <stage> -state <state>
 ticket count
 ticket count -project_id <prefix-or-id>
+ticket whoami
+ticket summary
 
-ticket update <key-or-id> -stage develop -state idle
-ticket update <key-or-id> -title "new title"
-ticket update <key-or-id> -description "new description"
-ticket update <key-or-id> -ac "new acceptance criteria"
-ticket update <key-or-id> -git-repository "https://github.com/org/repo.git"
-ticket update <key-or-id> -git-branch "feature/x"
-ticket update <key-or-id> -priority 4
-ticket update <key-or-id> -order 7
-ticket update <key-or-id> -parent_id 12
-ticket update <key-or-id> -estimate_effort 5
-ticket update <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
-ticket update <key-or-id> -stage develop -state active -priority 2 -title "new title"
+ticket update -id <key-or-id> -stage develop -state idle
+ticket update -id <key-or-id> -title "new title"
+ticket update -id <key-or-id> -description "new description"
+ticket update -id <key-or-id> -ac "new acceptance criteria"
+ticket update -id <key-or-id> -git-repository "https://github.com/org/repo.git"
+ticket update -id <key-or-id> -git-branch "feature/x"
+ticket update -id <key-or-id> -priority 4
+ticket update -id <key-or-id> -order 7
+ticket update -id <key-or-id> -parent_id 12
+ticket update -id <key-or-id> -estimate_effort 5
+ticket update -id <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
+ticket update -id <key-or-id> -stage develop -state active -priority 2 -title "new title"
+
+ticket workflow list
+ticket workflow create -name <name> [-d <description>]
+ticket workflow get -id <id>
+ticket workflow delete -id <id>
+ticket workflow add-stage -id <wf-id> -name <name>
+ticket workflow remove-stage -stage-id <id>
+ticket workflow reorder-stages -id <wf-id> <ids>
+
+ticket decision add "text"
+ticket decision list
+
+ticket conversation show <key-or-id>
 
 ```
 
@@ -793,18 +833,18 @@ tk server
 You can now run as the user
 
 ```bash
-export TK_URL=http://localhost:8080
-export TK_USERNAME=user-username
-export TK_PASSWORD=tk-password
+export TICKET_URL=http://localhost:8080
+export TICKET_USERNAME=user-username
+export TICKET_PASSWORD=user-password
 tk ls
 ```
 
 You could run as an agent to do work automatically
 
 ```bash
-export TK_URL=http://localhost:8080
-export TK_AGENT_USERNAME=agent-username
-export TK_AGENT_PASSWORD=tk-password
+export TICKET_URL=http://localhost:8080
+export AGENT_NAME=my-agent
+export AGENT_PASSWORD=agent-password
 tk agent run
 ```
 

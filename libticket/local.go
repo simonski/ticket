@@ -742,6 +742,32 @@ func (s *LocalService) UnarchiveTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketArchived(db, id, false, user.Username, user.ID)
 }
 
+func (s *LocalService) ReadyTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketReady(db, id, true, user.Username, user.ID)
+}
+
+func (s *LocalService) NotReadyTicket(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.SetTicketReady(db, id, false, user.Username, user.ID)
+}
+
 func (s *LocalService) DeleteTicket(id int64) error {
 	db, err := s.openDB()
 	if err != nil {

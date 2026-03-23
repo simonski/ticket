@@ -251,6 +251,14 @@ func (s *Service) UnarchiveTicket(id int64) (store.Ticket, error) {
 	return s.client.UnarchiveTicket(id)
 }
 
+func (s *Service) ReadyTicket(id int64) (store.Ticket, error) {
+	return s.client.ReadyTicket(id)
+}
+
+func (s *Service) NotReadyTicket(id int64) (store.Ticket, error) {
+	return s.client.NotReadyTicket(id)
+}
+
 func (s *Service) DeleteTicket(id int64) error {
 	return s.client.DeleteTicket(id)
 }

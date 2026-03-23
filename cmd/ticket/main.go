@@ -247,6 +247,10 @@ func run(args []string) error {
 		return runSetTicketArchived(trimmedArgs[1:], true)
 	case "unarchive":
 		return runSetTicketArchived(trimmedArgs[1:], false)
+	case "ready":
+		return runSetTicketReady(trimmedArgs[1:], true)
+	case "notready":
+		return runSetTicketReady(trimmedArgs[1:], false)
 	case "rm", "delete":
 		return runDeleteTicket(trimmedArgs[1:])
 	case "req":
@@ -3593,6 +3597,10 @@ func runTicketNS(args []string) error {
 		return runSetTicketArchived(args[1:], true)
 	case "unarchive":
 		return runSetTicketArchived(args[1:], false)
+	case "ready":
+		return runSetTicketReady(args[1:], true)
+	case "notready":
+		return runSetTicketReady(args[1:], false)
 	case "clone", "cp":
 		return runClone(args[1:])
 	case "delete", "rm":
@@ -3643,6 +3651,8 @@ Commands:
   open     -id <id>                           Reopen ticket
   archive  -id <id>                           Archive
   unarchive -id <id>                          Unarchive
+  ready    -id <id>                           Mark ready for work
+  notready -id <id>                          Mark not ready
   clone    -id <id>                           Duplicate
   delete   -id <id>                           Delete permanently
 
@@ -3914,6 +3924,20 @@ func containsFlag(args []string, flag string) bool {
 		}
 	}
 	return false
+}
+
+// resolveIDFlag extracts a ticket ID from either an -id flag value or a
+// positional argument. It returns the resolved ID and remaining positional
+// args, or an error if neither form provides an ID.
+func resolveIDFlag(flagVal string, positional []string) (string, []string, error) {
+	idVal := strings.TrimSpace(flagVal)
+	if idVal != "" {
+		return idVal, positional, nil
+	}
+	if len(positional) > 0 {
+		return positional[0], positional[1:], nil
+	}
+	return "", nil, errors.New("missing ticket id")
 }
 
 func resolveLifecycleInput(status, stage, state string) (string, string, error) {
@@ -4431,17 +4455,15 @@ func ticketMatchesSearch(ticket store.Ticket, query, stage, state, status, title
 }
 
 func runSetParent(args []string, command string) error {
-	usage := fmt.Sprintf("ticket %s -id <id> <parent-id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id> <parent-id>", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" {
-		return errors.New("usage: " + usage)
-	}
-	if fs.NArg() != 1 {
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 1 {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -4452,11 +4474,11 @@ func runSetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
-	child, err := svc.GetTicket(strings.TrimSpace(*id))
+	child, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}
-	parent, err := svc.GetTicket(fs.Args()[0])
+	parent, err := svc.GetTicket(rest[0])
 	if err != nil {
 		return err
 	}
@@ -4472,14 +4494,15 @@ func runSetParent(args []string, command string) error {
 }
 
 func runUnsetParent(args []string, command string) error {
-	usage := fmt.Sprintf("ticket %s -id <id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id>", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -4490,7 +4513,7 @@ func runUnsetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}
@@ -4512,10 +4535,11 @@ func runTicketStateAlias(args []string, state, command string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
-		return fmt.Errorf("usage: ticket %s -id <id>", command)
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return fmt.Errorf("usage: ticket %s [-id] <id>", command)
 	}
-	return updateTicketState(strings.TrimSpace(*id), state)
+	return updateTicketState(idVal, state)
 }
 
 func runTicketState(args []string) error {
@@ -4775,17 +4799,31 @@ func runUpdate(args []string) error {
 }
 
 func runAssign(args []string) error {
-	if len(args) != 2 {
-		return errors.New("usage: ticket assign <id> <name>")
+	fs := flag.NewFlagSet("assign", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	return assignTicket(args[0], args[1], true)
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 1 {
+		return errors.New("usage: ticket assign [-id] <id> <name>")
+	}
+	return assignTicket(idVal, rest[0], true)
 }
 
 func runUnassign(args []string) error {
-	if len(args) != 2 {
-		return errors.New("usage: ticket unassign <id> <name>")
+	fs := flag.NewFlagSet("unassign", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	return unassignTicket(args[0], args[1], true)
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 1 {
+		return errors.New("usage: ticket unassign [-id] <id> <name>")
+	}
+	return unassignTicket(idVal, rest[0], true)
 }
 
 func runClaim(args []string) error {
@@ -4808,8 +4846,15 @@ func runClaim(args []string) error {
 }
 
 func runUnclaim(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket unclaim <id>")
+	fs := flag.NewFlagSet("unclaim", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: ticket unclaim [-id] <id>")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -4822,7 +4867,7 @@ func runUnclaim(args []string) error {
 	if strings.TrimSpace(username) == "" {
 		return errors.New("no current username; log in first")
 	}
-	return unassignTicket(args[0], username, false)
+	return unassignTicket(idVal, username, false)
 }
 
 func assignTicket(idArg, assignee string, requireAdmin bool) error {
@@ -4939,11 +4984,16 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool) error {
 func runHistory(args []string) error {
 	fs := flag.NewFlagSet("history", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
 	limit := fs.Int("n", 10, "maximum number of events to show; 0 means all")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	remaining := fs.Args()
+	// Merge -id flag into remaining for uniform handling below.
+	if strings.TrimSpace(*id) != "" {
+		remaining = append([]string{strings.TrimSpace(*id)}, remaining...)
+	}
 
 	// No positional args: show recent events for the active project.
 	if len(remaining) == 0 {
@@ -5009,8 +5059,15 @@ func runHistory(args []string) error {
 }
 
 func runHealth(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket health <id>|execute")
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, _, err := resolveIDFlag(*id, fs.Args())
+	if err != nil {
+		return errors.New("usage: ticket health [-id] <id>|execute")
 	}
 
 	cfg, err := config.Load()
@@ -5021,7 +5078,7 @@ func runHealth(args []string) error {
 	if err != nil {
 		return err
 	}
-	if strings.EqualFold(args[0], "execute") {
+	if strings.EqualFold(idVal, "execute") {
 		_, api, project, err := resolveCurrentProjectClient()
 		if err != nil {
 			return err
@@ -5080,7 +5137,7 @@ func runHealth(args []string) error {
 		return nil
 	}
 
-	ticket, err := svc.GetTicket(args[0])
+	ticket, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}
@@ -5432,8 +5489,15 @@ func runComment(args []string) error {
 }
 
 func runClone(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: ticket clone|cp <id>")
+	fs := flag.NewFlagSet("clone", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: ticket clone|cp [-id] <id>")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -5443,7 +5507,7 @@ func runClone(args []string) error {
 	if err != nil {
 		return err
 	}
-	taskRef, err := svc.GetTicket(args[0])
+	taskRef, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}
@@ -5460,17 +5524,15 @@ func runClone(args []string) error {
 }
 
 func runDeleteTicket(args []string) error {
-	usage := "ticket rm|delete -id <id>"
+	usage := "ticket rm|delete [-id] <id>"
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" {
-		return errors.New("usage: " + usage)
-	}
-	if fs.NArg() != 0 {
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -5481,7 +5543,7 @@ func runDeleteTicket(args []string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}
@@ -5549,14 +5611,15 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if archived {
 		command = "archive"
 	}
-	usage := fmt.Sprintf("ticket %s -id <id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id>", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*id) == "" || fs.NArg() != 0 {
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -5567,7 +5630,7 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
+	ticket, err := svc.GetTicket(idVal)
 	if err != nil {
 		return err
 	}
@@ -5576,6 +5639,50 @@ func runSetTicketArchived(args []string, archived bool) error {
 		updated, err = svc.ArchiveTicket(ticket.ID)
 	} else {
 		updated, err = svc.UnarchiveTicket(ticket.ID)
+	}
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	printTicket(updated)
+	return nil
+}
+
+func runSetTicketReady(args []string, ready bool) error {
+	command := "notready"
+	if ready {
+		command = "ready"
+	}
+	usage := fmt.Sprintf("ticket %s [-id] <id>", command)
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: " + usage)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	ticket, err := svc.GetTicket(idVal)
+	if err != nil {
+		return err
+	}
+	var updated store.Ticket
+	if ready {
+		updated, err = svc.ReadyTicket(ticket.ID)
+	} else {
+		updated, err = svc.NotReadyTicket(ticket.ID)
 	}
 	if err != nil {
 		return err
@@ -5968,8 +6075,8 @@ func runDecision(args []string) error {
 }
 
 func runConversation(args []string) error {
-	if len(args) != 2 || args[0] != "show" {
-		return errors.New("usage: ticket conversation show <id>")
+	if len(args) < 2 || args[0] != "show" {
+		return errors.New("usage: ticket conversation show [-id] <id>")
 	}
 	return runHistory(args[1:])
 }
@@ -6079,7 +6186,13 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		}
 		positional = append(positional, arg)
 	}
-	return append(flagArgs, positional...), nil
+	// Insert "--" before positional args so flag.Parse won't treat
+	// words like "-id" in the title as unknown flags.
+	if len(positional) > 0 {
+		flagArgs = append(flagArgs, "--")
+		return append(flagArgs, positional...), nil
+	}
+	return flagArgs, nil
 }
 
 func createTicket(opts ticketCreateOptions) error {

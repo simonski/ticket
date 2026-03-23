@@ -51,6 +51,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() = %#v", ticket)
 		}
 
+		if _, err := svc.ReadyTicket(ticket.ID); err != nil {
+			t.Fatalf("ReadyTicket() error = %v", err)
+		}
+
 		response, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID})
 		if err != nil {
 			t.Fatalf("RequestTicket() error = %v", err)

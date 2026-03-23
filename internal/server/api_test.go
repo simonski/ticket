@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -843,9 +844,14 @@ func TestTicketRouteAliasesAPI(t *testing.T) {
 		t.Fatalf("update ticket status = %d body=%s", updateResp.Code, updateResp.Body.String())
 	}
 
+	// Mark ticket ready so it can be claimed.
+	readyResp := doJSONRequest(t, handler, http.MethodPost, fmt.Sprintf("/api/tickets/%d/ready", ticket.ID), nil, adminAuth.Token)
+	if readyResp.Code != http.StatusOK {
+		t.Fatalf("ready ticket status = %d body=%s", readyResp.Code, readyResp.Body.String())
+	}
+
 	claimResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
 		"project_id": project.ID,
-		"task_ref":   ticket.Key,
 	}, aliceAuth.Token)
 	if claimResp.Code != http.StatusOK {
 		t.Fatalf("claim ticket status = %d body=%s", claimResp.Code, claimResp.Body.String())
@@ -1097,6 +1103,16 @@ func TestTicketRequestAPI(t *testing.T) {
 	}, adminAuth.Token)
 	var otherTask store.Ticket
 	decodeResponse(t, otherResp, &otherTask)
+
+	// Mark both tickets as ready so they can be claimed.
+	readyResp := doJSONRequest(t, handler, http.MethodPost, fmt.Sprintf("/api/tickets/%d/ready", openTask.ID), nil, adminAuth.Token)
+	if readyResp.Code != http.StatusOK {
+		t.Fatalf("ready open task status = %d body=%s", readyResp.Code, readyResp.Body.String())
+	}
+	readyResp2 := doJSONRequest(t, handler, http.MethodPost, fmt.Sprintf("/api/tickets/%d/ready", otherTask.ID), nil, adminAuth.Token)
+	if readyResp2.Code != http.StatusOK {
+		t.Fatalf("ready other task status = %d body=%s", readyResp2.Code, readyResp2.Body.String())
+	}
 
 	requestAnyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
 		"project_id": project.ID,

@@ -810,6 +810,11 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "tickets", "ready") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN ready INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
