@@ -131,6 +131,10 @@ func (s *Service) UpdateProject(id int64, request libticket.ProjectUpdateRequest
 	return s.client.UpdateProject(id, client.ProjectUpdateRequest(request))
 }
 
+func (s *Service) DeleteProject(id int64) error {
+	return s.client.DeleteProject(id)
+}
+
 func (s *Service) SetProjectEnabled(id int64, enabled bool) (store.Project, error) {
 	return s.client.SetProjectEnabled(id, enabled)
 }

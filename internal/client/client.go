@@ -564,6 +564,18 @@ func (c *Client) SetProjectEnabled(id int64, enabled bool) (store.Project, error
 	return project, err
 }
 
+func (c *Client) DeleteProject(id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteProject(db, id)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d", id), nil, nil)
+}
+
 func (c *Client) AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

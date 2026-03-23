@@ -68,6 +68,26 @@ func Run(svc libticket.Service, cfg config.Config, project store.Project, themeI
 	return err
 }
 
+// RunEdit opens the TUI directly in edit mode for the given ticket.
+func RunEdit(svc libticket.Service, cfg config.Config, project store.Project, ticket store.Ticket) error {
+	th := Themes[ThemeTheGrey]
+	if cfg.TUITheme != "" {
+		if t, ok := Themes[ThemeID(cfg.TUITheme)]; ok {
+			th = t
+		}
+	}
+
+	m := newModel(svc, cfg, th)
+	m.project = project
+	m.selected = &ticket
+	m.form = newEditForm(ticket)
+	m.mode = modeEdit
+
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
 func saveTUIState(cfg config.Config, m Model) {
 	cfg.TUITheme = string(m.theme.ID)
 	switch m.mode {

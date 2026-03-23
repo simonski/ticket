@@ -295,14 +295,14 @@ func TestRenderBannerContainsTaskArtAndColors(t *testing.T) {
 }
 
 func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
-	help := renderCommandHelp("init")
+	help := renderCommandHelp("initdb")
 
 	for _, want := range []string{
 		"USAGE",
-		"ticket init",
+		"ticket initdb",
 		"DETAILS",
 		"EXAMPLE",
-		"ticket init -f /path/to/ticket.db --force -password secret --populate",
+		"ticket initdb -f /path/to/ticket.db --force -password secret --populate",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("command help missing %q:\n%s", want, help)
@@ -1138,23 +1138,40 @@ func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "-ac", "criteria", "Ticket Beta"})
+	idArg := strconv.FormatInt(taskID, 10)
 
-	// Stage commands now return errors (stage is workflow-driven)
-	if err := run([]string{"stage", "-id", strconv.FormatInt(taskID, 10), "develop"}); err == nil {
-		t.Fatal("stage command should return error, got nil")
+	// Stage names are now valid arguments to tk state/stage
+	stageOutput := captureStdout(t, func() {
+		if err := run([]string{"stage", "-id", idArg, "develop", "-json"}); err != nil {
+			t.Fatalf("stage command error = %v", err)
+		}
+	})
+	var stageData map[string]any
+	if err := json.Unmarshal([]byte(stageOutput), &stageData); err != nil {
+		t.Fatalf("stage output parse error = %v\n%s", err, stageOutput)
 	}
-	if err := run([]string{"develop", "-id", strconv.FormatInt(taskID, 10)}); err == nil {
+	if stageData["stage"] != "develop" {
+		t.Fatalf("expected stage=develop, got %#v", stageData)
+	}
+
+	// tk state -id ID <stage> form also works
+	if err := run([]string{"state", "-id", idArg, "design"}); err != nil {
+		t.Fatalf("state with stage name error = %v", err)
+	}
+
+	// Unrecognised top-level commands like "develop" still return errors
+	if err := run([]string{"develop", "-id", idArg}); err == nil {
 		t.Fatal("develop command should return error, got nil")
 	}
 
 	// Claim first so active state is allowed (requires assignee)
-	if err := run([]string{"claim", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"claim", idArg}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
 
 	// State commands still work and keep the current stage (design)
 	stateOutput := captureStdout(t, func() {
-		if err := run([]string{"state", "-id", strconv.FormatInt(taskID, 10), "active", "-json"}); err != nil {
+		if err := run([]string{"state", "-id", idArg, "active", "-json"}); err != nil {
 			t.Fatalf("state command error = %v", err)
 		}
 	})

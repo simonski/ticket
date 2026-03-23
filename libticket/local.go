@@ -407,6 +407,15 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 	})
 }
 
+func (s *LocalService) DeleteProject(id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteProject(db, id)
+}
+
 func (s *LocalService) SetProjectEnabled(id int64, enabled bool) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
@@ -623,7 +632,7 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
+	stage, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
 	return store.UpdateTicket(db, id, store.TicketUpdateParams{
 		Title:              request.Title,
 		Description:        request.Description,
@@ -632,6 +641,7 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 		GitBranch:          request.GitBranch,
 		ParentID:           request.ParentID,
 		Assignee:           request.Assignee,
+		Stage:              stage,
 		State:              state,
 		Priority:           request.Priority,
 		Order:              request.Order,

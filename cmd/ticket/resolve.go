@@ -265,6 +265,14 @@ func generatePassword(length int) (string, error) {
 	return string(buf), nil
 }
 
+func generateConfirmToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b), nil
+}
+
 func removeDBFiles(path string) error {
 	for _, suffix := range []string{"", "-shm", "-wal"} {
 		candidate := path + suffix

@@ -705,6 +705,17 @@ func migrateSchema(db *sql.DB) error {
 	if err := backfillTicketWorkflowStages(db); err != nil {
 		return err
 	}
+	// Add DoR/DoD to workflow stages
+	if !columnExists(db, "workflow_stages", "definition_of_ready") {
+		if _, err := db.Exec(`ALTER TABLE workflow_stages ADD COLUMN definition_of_ready TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "workflow_stages", "definition_of_done") {
+		if _, err := db.Exec(`ALTER TABLE workflow_stages ADD COLUMN definition_of_done TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

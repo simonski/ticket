@@ -24,6 +24,7 @@ import (
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/tui"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -121,12 +122,10 @@ func run(args []string) error {
 		return runSummary(trimmedArgs[1:])
 	case "onboard":
 		return runOnboard(trimmedArgs[1:])
-	case "setup":
+	case "init", "setup":
 		return runSetup(trimmedArgs[1:])
-	case "init":
-		return runInitDB(trimmedArgs[1:])
 	case "initdb":
-		return errors.New("use `ticket init`")
+		return runInitDB(trimmedArgs[1:])
 	case "server":
 		return runServer(trimmedArgs[1:])
 	case "export":
@@ -192,6 +191,8 @@ func run(args []string) error {
 		return runOrphans(trimmedArgs[1:])
 	case "get", "show":
 		return runGet(trimmedArgs[1:])
+	case "edit":
+		return runEdit(trimmedArgs[1:])
 	case "search":
 		return runSearch(trimmedArgs[1:])
 	case "update":
@@ -629,6 +630,37 @@ func runSetup(args []string) error {
 				}
 			}
 		}
+	}
+
+	// Check for CLAUDE.md and AGENTS.md
+	cwd2, _ := os.Getwd()
+	claudeMD := filepath.Join(cwd2, "CLAUDE.md")
+	agentsMD := filepath.Join(cwd2, "AGENTS.md")
+
+	if _, err := os.Stat(claudeMD); os.IsNotExist(err) {
+		fmt.Println()
+		if promptYN(reader, "CLAUDE.md not found — create it?", true) {
+			content := "Read AGENTS.md\n"
+			if writeErr := os.WriteFile(claudeMD, []byte(content), 0o644); writeErr != nil {
+				fmt.Printf("  warning: could not write CLAUDE.md: %v\n", writeErr)
+			} else {
+				fmt.Printf("  created: %s\n", claudeMD)
+			}
+		}
+	} else {
+		fmt.Printf("detected   : %s\n", claudeMD)
+	}
+
+	if _, err := os.Stat(agentsMD); os.IsNotExist(err) {
+		if promptYN(reader, "AGENTS.md not found — create it?", true) {
+			if writeErr := os.WriteFile(agentsMD, []byte(embeddedAgents), 0o644); writeErr != nil {
+				fmt.Printf("  warning: could not write AGENTS.md: %v\n", writeErr)
+			} else {
+				fmt.Printf("  created: %s\n", agentsMD)
+			}
+		}
+	} else {
+		fmt.Printf("detected   : %s\n", agentsMD)
 	}
 
 	fmt.Println()
@@ -2108,9 +2140,20 @@ func runProject(args []string) error {
 		}
 		printProject(project)
 		return nil
-	case "use":
-		if len(args) != 2 {
-			return errors.New("usage: ticket project use <id>")
+	case "use", "default":
+		if len(args) < 2 {
+			// No ID: print the current project
+			if cfg.CurrentProject == "" {
+				fmt.Println("no project set")
+				return nil
+			}
+			project, err := svc.GetProject(cfg.CurrentProject)
+			if err != nil {
+				fmt.Println(cfg.CurrentProject)
+				return nil
+			}
+			fmt.Printf("%s — %s\n", project.Prefix, project.Title)
+			return nil
 		}
 		project, err := svc.GetProject(args[1])
 		if err != nil {
@@ -2134,6 +2177,60 @@ func runProject(args []string) error {
 		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
+	case "rm", "delete":
+		fs := flag.NewFlagSet("project rm", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.String("id", "", "project id or prefix")
+		confirm := fs.String("confirm", "", "confirmation token from first run")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*id) == "" && fs.NArg() == 1 {
+			v := fs.Arg(0)
+			id = &v
+		}
+		if strings.TrimSpace(*id) == "" {
+			return errors.New("usage: ticket project rm [-id] <id> [--confirm <token>]")
+		}
+		project, err := svc.GetProject(strings.TrimSpace(*id))
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*confirm) == "" {
+			// Phase 1: generate confirmation token
+			token, err := generateConfirmToken()
+			if err != nil {
+				return err
+			}
+			tickets, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, true)
+			fmt.Printf("project  : %s — %s\n", project.Prefix, project.Title)
+			fmt.Printf("tickets  : %d\n", len(tickets))
+			fmt.Printf("\nThis will permanently delete the project and all associated data.\n")
+			fmt.Printf("To confirm, run:\n\n")
+			fmt.Printf("  ticket project rm -id %s --confirm %s\n\n", *id, token)
+			// Store token temporarily in config
+			cfg.DeleteConfirmToken = token
+			cfg.DeleteConfirmProject = fmt.Sprintf("%d", project.ID)
+			return config.Save(cfg)
+		}
+		// Phase 2: verify token and delete
+		if *confirm != cfg.DeleteConfirmToken || fmt.Sprintf("%d", project.ID) != cfg.DeleteConfirmProject {
+			return errors.New("invalid confirmation token")
+		}
+		if err := svc.DeleteProject(project.ID); err != nil {
+			return err
+		}
+		// Clear stored token and switch project if needed
+		cfg.DeleteConfirmToken = ""
+		cfg.DeleteConfirmProject = ""
+		if cfg.CurrentProject == project.Prefix || cfg.CurrentProject == fmt.Sprintf("%d", project.ID) {
+			cfg.CurrentProject = ""
+		}
+		if err := config.Save(cfg); err != nil {
+			return err
+		}
+		fmt.Printf("deleted project %s — %s\n", project.Prefix, project.Title)
+		return nil
 	default:
 		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
 	}
@@ -3221,6 +3318,10 @@ func runTicketNS(args []string) error {
 	case "tree":
 		return runGet(args[1:]) // TODO: dedicated tree view
 
+	// Edit (TUI)
+	case "edit":
+		return runEdit(args[1:])
+
 	// Update
 	case "update":
 		return runUpdate(args[1:])
@@ -3297,6 +3398,7 @@ Commands:
 
   add     "title" [-type T] [-d desc] [-ac criteria]   Create a ticket
   get     -id <id> [-json]                    View ticket detail
+  edit    [-id] <id>                          Open TUI editor for ticket
   update  -id <id> [field flags]              Update ticket fields
 
   active   -id <id>                           Start work
@@ -3869,6 +3971,74 @@ func runGet(args []string) error {
 	return nil
 }
 
+func runEdit(args []string) error {
+	usage := "ticket edit [-id] <id>"
+	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id or key")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*id) == "" && fs.NArg() == 1 {
+		v := fs.Arg(0)
+		id = &v
+	} else if strings.TrimSpace(*id) == "" && fs.NArg() == 0 {
+		// No ID: open the most recently modified ticket in the current project.
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		var project store.Project
+		if cfg.CurrentProject != "" {
+			project, err = svc.GetProject(cfg.CurrentProject)
+			if err != nil {
+				return err
+			}
+		} else {
+			return errors.New(usage)
+		}
+		tickets, err := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
+		if err != nil {
+			return err
+		}
+		if len(tickets) == 0 {
+			return errors.New("no tickets in project")
+		}
+		// Find most recently updated ticket.
+		latest := tickets[0]
+		for _, t := range tickets[1:] {
+			if t.UpdatedAt > latest.UpdatedAt {
+				latest = t
+			}
+		}
+		return tui.RunEdit(svc, cfg, project, latest)
+	}
+	if strings.TrimSpace(*id) == "" {
+		return errors.New(usage)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	ticket, err := svc.GetTicket(strings.TrimSpace(*id))
+	if err != nil {
+		return err
+	}
+	var project store.Project
+	if cfg.CurrentProject != "" {
+		project, _ = svc.GetProject(cfg.CurrentProject)
+	}
+	return tui.RunEdit(svc, cfg, project, ticket)
+}
+
 func runSearch(args []string) error {
 	query, filters, err := parseSearchArgs(args)
 	if err != nil {
@@ -4129,7 +4299,7 @@ func runTicketStateAlias(args []string, state, command string) error {
 }
 
 func runTicketState(args []string) error {
-	usage := "ticket state <id> <idle|active|success|fail>"
+	usage := "ticket state <id> <idle|active|success|fail|design|develop|test|done>"
 	fs := flag.NewFlagSet("ticket state", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -4147,12 +4317,50 @@ func runTicketState(args []string) error {
 	default:
 		return errors.New("usage: " + usage)
 	}
-	switch strings.ToLower(strings.TrimSpace(stateArg)) {
-	case store.StateIdle, store.StateActive, store.StateSuccess, store.StateFail:
-		return updateTicketState(idVal, strings.ToLower(strings.TrimSpace(stateArg)))
+	normalized := strings.ToLower(strings.TrimSpace(stateArg))
+	switch {
+	case store.ValidState(normalized):
+		return updateTicketState(idVal, normalized)
+	case store.ValidStage(normalized):
+		return updateTicketStage(idVal, normalized)
 	default:
 		return errors.New("usage: " + usage)
 	}
+}
+
+func updateTicketStage(idArg, stage string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	current, err := svc.GetTicket(idArg)
+	if err != nil {
+		return err
+	}
+	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
+		Title:              current.Title,
+		Description:        current.Description,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		ParentID:           current.ParentID,
+		Assignee:           current.Assignee,
+		Stage:              stage,
+		Priority:           current.Priority,
+		Order:              current.Order,
+		EstimateEffort:     current.EstimateEffort,
+		EstimateComplete:   current.EstimateComplete,
+	})
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	printTicket(updated)
+	return nil
 }
 
 func updateTicketState(idArg, state string) error {
@@ -5711,8 +5919,9 @@ func createTicket(opts ticketCreateOptions) error {
 }
 
 func runConfig(args []string) error {
-	if len(args) < 1 {
-		return errors.New("usage: ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]")
+	if len(args) < 1 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(configUsage)
+		return nil
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -5824,10 +6033,9 @@ func runConfig(args []string) error {
 		fmt.Printf("deleted %s\n", args[1])
 		return nil
 	default:
+		fmt.Println(configUsage)
 		return fmt.Errorf("unknown config action %q", args[0])
 	}
 }
-
-
 
 

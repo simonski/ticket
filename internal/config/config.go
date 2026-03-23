@@ -36,6 +36,10 @@ type Config struct {
 	TUIMode           string  `json:"tui_mode,omitempty"`   // "summary" | "projects" | "ideas" | "list" | "settings"
 	TUICursor         int     `json:"tui_cursor,omitempty"`
 	TUIExpandedEpics  []int64 `json:"tui_expanded_epics,omitempty"`
+
+	// Temporary delete confirmation state
+	DeleteConfirmToken   string `json:"delete_confirm_token,omitempty"`
+	DeleteConfirmProject string `json:"delete_confirm_project,omitempty"`
 }
 
 type Credentials struct {

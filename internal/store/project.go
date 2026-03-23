@@ -310,3 +310,55 @@ func SetProjectStatus(db *sql.DB, id int64, enabled bool) (Project, error) {
 	}
 	return GetProjectByID(db, id)
 }
+
+// DeleteProject removes a project and all associated data.
+func DeleteProject(db *sql.DB, id int64) error {
+	if _, err := GetProjectByID(db, id); err != nil {
+		return err
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete child data that references tickets in this project
+	if _, err := tx.Exec(`DELETE FROM comments WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM time_entries WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM ticket_labels WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM dependencies WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM history_events WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM ticket_history WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM story_ticket_links WHERE story_id IN (SELECT story_id FROM stories WHERE project_id = ?)`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM stories WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM tickets WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM project_members WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM project_teams WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM projects WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

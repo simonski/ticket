@@ -16,15 +16,17 @@ type Workflow struct {
 }
 
 type WorkflowStage struct {
-	ID          int64  `json:"workflow_stage_id"`
-	WorkflowID  int64  `json:"workflow_id"`
-	StageName   string `json:"stage_name"`
-	Description string `json:"description"`
-	RoleID      *int64 `json:"role_id"`
-	RoleTitle   string `json:"role_title"`
-	SortOrder   int    `json:"sort_order"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID                int64  `json:"workflow_stage_id"`
+	WorkflowID        int64  `json:"workflow_id"`
+	StageName         string `json:"stage_name"`
+	Description       string `json:"description"`
+	DefinitionOfReady string `json:"definition_of_ready"`
+	DefinitionOfDone  string `json:"definition_of_done"`
+	RoleID            *int64 `json:"role_id"`
+	RoleTitle         string `json:"role_title"`
+	SortOrder         int    `json:"sort_order"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
 }
 
 type WorkflowWithStages struct {
@@ -235,6 +237,7 @@ func getWorkflowRow(db *sql.DB, id int64) (Workflow, error) {
 func getWorkflowStageRow(db *sql.DB, id int64) (WorkflowStage, error) {
 	row := db.QueryRow(`
 		SELECT ws.workflow_stage_id, ws.workflow_id, ws.stage_name, ws.description,
+		       ws.definition_of_ready, ws.definition_of_done,
 		       ws.role_id, COALESCE(r.title, ''), ws.sort_order, ws.created_at, ws.updated_at
 		FROM workflow_stages ws
 		LEFT JOIN roles r ON r.role_id = ws.role_id
@@ -242,6 +245,7 @@ func getWorkflowStageRow(db *sql.DB, id int64) (WorkflowStage, error) {
 	`, id)
 	var s WorkflowStage
 	if err := row.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
+		&s.DefinitionOfReady, &s.DefinitionOfDone,
 		&s.RoleID, &s.RoleTitle, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return WorkflowStage{}, err
 	}
@@ -251,6 +255,7 @@ func getWorkflowStageRow(db *sql.DB, id int64) (WorkflowStage, error) {
 func listWorkflowStages(db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
 	rows, err := db.Query(`
 		SELECT ws.workflow_stage_id, ws.workflow_id, ws.stage_name, ws.description,
+		       ws.definition_of_ready, ws.definition_of_done,
 		       ws.role_id, COALESCE(r.title, ''), ws.sort_order, ws.created_at, ws.updated_at
 		FROM workflow_stages ws
 		LEFT JOIN roles r ON r.role_id = ws.role_id
@@ -265,6 +270,7 @@ func listWorkflowStages(db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
 	for rows.Next() {
 		var s WorkflowStage
 		if err := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
+			&s.DefinitionOfReady, &s.DefinitionOfDone,
 			&s.RoleID, &s.RoleTitle, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}

@@ -18,10 +18,10 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Prints ticket CLI instructions to stdout for use by agents.", "Usage: ticket onboard > TICKET.md"},
 		example: "ticket onboard > TICKET.md",
 	},
-	"init": {
-		usage:   "ticket init [-f <db-path>] [--force] [-password <password>] [--populate]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db in the current directory).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
-		example: "ticket init -f /path/to/ticket.db --force -password secret --populate",
+	"initdb": {
+		usage:   "ticket initdb [-f <db-path>] [--force] [-password <password>] [--populate]",
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db in the current directory).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `--force` is supplied, any existing database file is overwritten.", "If `--populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "Alias: `ticket init`."},
+		example: "ticket initdb -f /path/to/ticket.db --force -password secret --populate",
 	},
 	"export": {
 		usage:   "ticket export [-o <snapshot-file>]",
@@ -120,7 +120,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"list": {
 		usage:   "ticket list|ls [--type <type>] [--stage <stage>] [--state <state>] [--status <stage/state>] [-u <user>] [-n <limit>] [-a] [--unicode] [--plain]",
-		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default archived tickets are hidden; use `-a` to include them."},
+		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include all tickets."},
 		example: "ticket list --type bug --status develop/idle -u alice -n 20",
 	},
 	"orphans": {
@@ -137,6 +137,11 @@ var helpIndex = map[string]commandHelp{
 		usage:   "ticket show -id <id>",
 		details: []string{"Alias for `ticket get`."},
 		example: "ticket show -id 42",
+	},
+	"edit": {
+		usage:   "ticket edit [-id] <id>",
+		details: []string{"Opens the TUI editor for the specified ticket.", "If no ID is given, opens the most recently modified ticket in the current project."},
+		example: "ticket edit TK-42",
 	},
 	"search": {
 		usage:   "ticket search <free form query> [-stage <stage>] [-state <state>] [-status <stage/state>] [-title <text>] [-description <text>] [-priority <n>] [-owner <user>] [-allprojects]",
@@ -349,7 +354,8 @@ func renderRootUsage() string {
 		{"logout", "Clear the local session"},
 		{"register", "Create a user account on the server"},
 		{"config", "Manage local config keys"},
-		{"init", "Initialize the database"},
+		{"init", "Interactive project setup (alias: setup)"},
+		{"initdb", "Initialize the database"},
 		{"export", "Export entities to a JSON snapshot"},
 		{"import", "Import entities from a JSON snapshot"},
 		{"version", "Print the current version"},
@@ -414,7 +420,8 @@ Commands:
   list, ls                            List all projects
   create   -title <name>              Create a project
   get      <id>                       Show project details
-  use      <id>                       Switch active project
+  use, default  [<id>]                Switch active project (or show current)
+  rm       [-id] <id> [--confirm tok]  Delete a project (two-step)
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
@@ -460,6 +467,18 @@ Commands:
   add-agent    -team_id <id> -agent_id <id>   Add an agent
   remove-agent -team_id <id> -agent_id <id>   Remove an agent
   agents       -id <id>                       List team agents`
+
+const configUsage = `Usage: ticket config <command> [flags]
+
+Commands:
+  ls, list                              List all config values
+  get      <key>                        Get a config value
+  set      <key> <value>                Set a config value
+  rm       <key>                        Remove a config value
+  registration-enable                   Enable user registration (server)
+  registration-disable                  Disable user registration (server)
+
+Keys: server, username, current_project, current_epic_id, registration_enabled`
 
 const agentUsage = `Usage: ticket agent <command> [flags]
 

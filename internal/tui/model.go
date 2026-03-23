@@ -32,12 +32,14 @@ const (
 	modeSettings
 	modeProjectPicker
 	modeProjects // new: inline projects panel (replaces the modal modeProjectPicker)
-	modeIdeas    // new: list of top-level non-epic tickets (m.toplevel)
+	modeProjectEdit
+	modeIdeas     // new: list of top-level non-epic tickets (m.toplevel)
+	modeWorkflows // workflow list with expandable stages
 )
 
-// tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Config.
-var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeSettings}
-var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Config"}
+// tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Workflows > Config.
+var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeWorkflows, modeSettings}
+var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Workflows", "Config"}
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
@@ -50,6 +52,7 @@ type ticketCreatedMsg store.Ticket
 type updateAvailableMsg string
 type errMsg struct{ err error }
 type projectsLoadedMsg []store.Project
+type workflowsLoadedMsg []store.WorkflowWithStages
 type projectSwitchedMsg struct {
 	project store.Project
 	tickets treeLoadedMsg
@@ -73,59 +76,191 @@ type listItem struct {
 
 // ─── edit form ───────────────────────────────────────────────────────────────
 
-var editFieldNames = []string{"title", "description", "type", "status"}
-var newFieldNames = []string{"title", "type"}
+const (
+	efTitle  = 0
+	efDesc   = 1
+	efAC     = 2
+	efType   = 3
+	efStatus = 4
+	efSave   = 5
+	efCount  = 6
+)
 
 type editForm struct {
-	inputs []textinput.Model
-	focus  int
-	names  []string
+	title      textinput.Model
+	desc       textarea.Model
+	acceptCrit textarea.Model
+	ticketType string
+	status     string
+	focus      int
+	picker     *pickerPopup
 }
 
 func newEditForm(t store.Ticket) editForm {
-	return buildForm(editFieldNames, []string{t.Title, t.Description, t.Type, t.Status})
-}
+	ti := textinput.New()
+	ti.SetValue(t.Title)
+	ti.CharLimit = 200
+	ti.Focus()
 
-func newCreateForm() editForm {
-	return buildForm(newFieldNames, []string{"", "task"})
-}
+	desc := textarea.New()
+	desc.SetValue(t.Description)
+	desc.Placeholder = "describe the ticket..."
+	desc.SetHeight(4)
+	desc.ShowLineNumbers = false
+	desc.CharLimit = 2000
 
-func buildForm(names, vals []string) editForm {
-	inputs := make([]textinput.Model, len(names))
-	for i := range names {
-		ti := textinput.New()
-		if i < len(vals) {
-			ti.SetValue(vals[i])
-		}
-		ti.CharLimit = 200
-		if i == 0 {
-			ti.Focus()
-		}
-		inputs[i] = ti
+	ac := textarea.New()
+	ac.SetValue(t.AcceptanceCriteria)
+	ac.Placeholder = "acceptance criteria..."
+	ac.SetHeight(3)
+	ac.ShowLineNumbers = false
+	ac.CharLimit = 2000
+
+	return editForm{
+		title:      ti,
+		desc:       desc,
+		acceptCrit: ac,
+		ticketType: t.Type,
+		status:     t.Status,
+		focus:      efTitle,
 	}
-	return editForm{inputs: inputs, focus: 0, names: names}
+}
+
+func (f *editForm) applyFocus(w int) {
+	f.desc.SetWidth(w - 4)
+	f.acceptCrit.SetWidth(w - 4)
+	f.title.Blur()
+	f.desc.Blur()
+	f.acceptCrit.Blur()
+	switch f.focus {
+	case efTitle:
+		f.title.Focus()
+	case efDesc:
+		f.desc.Focus()
+	case efAC:
+		f.acceptCrit.Focus()
+	}
 }
 
 func (f *editForm) update(msg tea.Msg) tea.Cmd {
-	var cmds []tea.Cmd
-	for i := range f.inputs {
-		var cmd tea.Cmd
-		f.inputs[i], cmd = f.inputs[i].Update(msg)
-		cmds = append(cmds, cmd)
+	var cmd tea.Cmd
+	switch f.focus {
+	case efTitle:
+		f.title, cmd = f.title.Update(msg)
+	case efDesc:
+		f.desc, cmd = f.desc.Update(msg)
+	case efAC:
+		f.acceptCrit, cmd = f.acceptCrit.Update(msg)
 	}
-	return tea.Batch(cmds...)
+	return cmd
 }
 
 func (f *editForm) nextField() {
-	f.inputs[f.focus].Blur()
-	f.focus = (f.focus + 1) % len(f.inputs)
-	f.inputs[f.focus].Focus()
+	f.focus = (f.focus + 1) % efCount
 }
 
 func (f *editForm) prevField() {
-	f.inputs[f.focus].Blur()
-	f.focus = (f.focus - 1 + len(f.inputs)) % len(f.inputs)
-	f.inputs[f.focus].Focus()
+	f.focus = (f.focus - 1 + efCount) % efCount
+}
+
+// ─── project edit form ───────────────────────────────────────────────────────
+
+const (
+	pfTitle = 0
+	pfDesc  = 1
+	pfDoR   = 2
+	pfDoD   = 3
+	pfSave  = 4
+	pfCount = 5
+)
+
+type projectEditForm struct {
+	project    store.Project
+	title      textinput.Model
+	desc       textarea.Model
+	dor        textarea.Model // Definition of Ready (acceptance_criteria)
+	dod        textarea.Model // Definition of Done (notes)
+	focus      int
+}
+
+func newProjectEditForm(p store.Project) *projectEditForm {
+	ti := textinput.New()
+	ti.SetValue(p.Title)
+	ti.CharLimit = 200
+	ti.Focus()
+
+	desc := textarea.New()
+	desc.SetValue(p.Description)
+	desc.Placeholder = "project description..."
+	desc.SetHeight(3)
+	desc.ShowLineNumbers = false
+	desc.CharLimit = 2000
+
+	dor := textarea.New()
+	dor.SetValue(p.AcceptanceCriteria)
+	dor.Placeholder = "definition of ready..."
+	dor.SetHeight(3)
+	dor.ShowLineNumbers = false
+	dor.CharLimit = 2000
+
+	dod := textarea.New()
+	dod.SetValue(p.Notes)
+	dod.Placeholder = "definition of done..."
+	dod.SetHeight(3)
+	dod.ShowLineNumbers = false
+	dod.CharLimit = 2000
+
+	return &projectEditForm{
+		project: p,
+		title:   ti,
+		desc:    desc,
+		dor:     dor,
+		dod:     dod,
+		focus:   pfTitle,
+	}
+}
+
+func (f *projectEditForm) applyFocus(w int) {
+	f.desc.SetWidth(w - 4)
+	f.dor.SetWidth(w - 4)
+	f.dod.SetWidth(w - 4)
+	f.title.Blur()
+	f.desc.Blur()
+	f.dor.Blur()
+	f.dod.Blur()
+	switch f.focus {
+	case pfTitle:
+		f.title.Focus()
+	case pfDesc:
+		f.desc.Focus()
+	case pfDoR:
+		f.dor.Focus()
+	case pfDoD:
+		f.dod.Focus()
+	}
+}
+
+func (f *projectEditForm) update(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	switch f.focus {
+	case pfTitle:
+		f.title, cmd = f.title.Update(msg)
+	case pfDesc:
+		f.desc, cmd = f.desc.Update(msg)
+	case pfDoR:
+		f.dor, cmd = f.dor.Update(msg)
+	case pfDoD:
+		f.dod, cmd = f.dod.Update(msg)
+	}
+	return cmd
+}
+
+func (f *projectEditForm) nextField() {
+	f.focus = (f.focus + 1) % pfCount
+}
+
+func (f *projectEditForm) prevField() {
+	f.focus = (f.focus - 1 + pfCount) % pfCount
 }
 
 // ─── new ticket form ─────────────────────────────────────────────────────────
@@ -241,9 +376,10 @@ type Model struct {
 	offset   int
 
 	// detail / edit
-	selected *store.Ticket
-	form     editForm
-	newForm  *newTicketForm
+	selected    *store.Ticket
+	form        editForm
+	newForm     *newTicketForm
+	projectForm *projectEditForm
 
 	// settings / theme picker
 	settingsCursor int
@@ -253,8 +389,19 @@ type Model struct {
 	projectCursor int
 
 	// ideas panel
+	ideas       []store.Ticket
 	ideasCursor int
 	ideasOffset int
+
+	// workflows panel
+	workflows       []store.WorkflowWithStages
+	wfCursor        int
+	wfOffset        int
+	wfExpanded      map[int64]bool // expanded workflow IDs
+	wfStageCursor   int            // cursor within expanded stages
+	wfInStages      bool           // true when navigating stages within an expanded workflow
+	wfAddingStage   bool
+	wfStageInput    textinput.Model
 
 	// animation
 	ecg       ecgState
@@ -291,8 +438,9 @@ func newModel(svc libticket.Service, cfg config.Config, th Theme) Model {
 		mode:     modeIntro,
 		intro:    newIntroState(),
 		lastTick: time.Now(),
-		expanded: map[int64]bool{},
-		cmdInput: ci,
+		expanded:   map[int64]bool{},
+		wfExpanded: map[int64]bool{},
+		cmdInput:   ci,
 		ecg:      ecgState{params: th.ECGStyle},
 	}
 }
@@ -302,6 +450,7 @@ func newModel(svc libticket.Service, cfg config.Config, th Theme) Model {
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadTickets(m.svc, m.cfg),
+		loadWorkflows(m.svc),
 		checkUpdate(m.svc),
 		tickCmd(),
 	)
@@ -341,6 +490,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case treeLoadedMsg:
 		m.nodes = msg.nodes
 		m.toplevel = msg.toplevel
+		m.ideas = filterRequirements(msg.toplevel)
 		for _, n := range m.nodes {
 			if _, set := m.expanded[n.epic.ID]; !set {
 				m.expanded[n.epic.ID] = false // default: collapsed
@@ -381,11 +531,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case workflowsLoadedMsg:
+		m.workflows = []store.WorkflowWithStages(msg)
+
+	case projectSavedMsg:
+		m.projectForm = nil
+		m.mode = modeProjects
+		m.statusMsg = "project saved"
+		return m, loadProjects(m.svc)
+
 	case projectSwitchedMsg:
 		m.project = msg.project
 		m.cfg.CurrentProject = fmt.Sprintf("%d", msg.project.ID)
 		m.nodes = msg.tickets.nodes
 		m.toplevel = msg.tickets.toplevel
+		m.ideas = filterRequirements(msg.tickets.toplevel)
 		m.expanded = map[int64]bool{} // reset expand state for new project
 		m.items = flattenTree(m.nodes, m.toplevel, m.expanded)
 		m.cursor = 0
@@ -498,8 +658,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleKeyProjectPicker(key)
 	case modeProjects:
 		return m.handleKeyProjects(key)
+	case modeProjectEdit:
+		return m.handleKeyProjectEdit(msg)
 	case modeIdeas:
 		return m.handleKeyIdeas(key)
+	case modeWorkflows:
+		return m.handleKeyWorkflows(msg)
 	}
 
 	return m, nil
@@ -640,19 +804,61 @@ func (m Model) handleKeyDetail(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	f := &m.form
 	key := msg.String()
+
+	// Picker overlay absorbs keys
+	if f.picker != nil {
+		switch key {
+		case "esc":
+			f.picker = nil
+		case "up", "k":
+			if f.picker.cursor > 0 {
+				f.picker.cursor--
+			}
+		case "down", "j":
+			if f.picker.cursor < len(f.picker.items)-1 {
+				f.picker.cursor++
+			}
+		case "enter", " ":
+			val := f.picker.items[f.picker.cursor]
+			switch f.picker.forField {
+			case "type":
+				f.ticketType = val
+			case "status":
+				f.status = val
+			}
+			f.picker = nil
+		}
+		return m, nil
+	}
+
 	switch key {
 	case "esc":
 		return m.goBack()
 	case "ctrl+s", "ctrl+d":
 		return m, m.saveTicket()
-	case "tab", "down":
-		m.form.nextField()
-	case "shift+tab", "up":
-		m.form.prevField()
+	case "tab":
+		f.nextField()
+		f.applyFocus(m.width - 2)
+	case "shift+tab":
+		f.prevField()
+		f.applyFocus(m.width - 2)
+	case "enter", " ":
+		switch f.focus {
+		case efType:
+			f.picker = &pickerPopup{items: ticketTypes, cursor: indexOf(ticketTypes, f.ticketType), forField: "type"}
+		case efStatus:
+			statuses := []string{"design/idle", "design/active", "develop/idle", "develop/active", "test/idle", "test/active", "done/success", "done/fail"}
+			f.picker = &pickerPopup{items: statuses, cursor: indexOf(statuses, f.status), forField: "status"}
+		case efSave:
+			return m, m.saveTicket()
+		}
 	default:
-		cmd := m.form.update(msg)
-		return m, cmd
+		if f.focus == efTitle || f.focus == efDesc || f.focus == efAC {
+			cmd := f.update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -837,11 +1043,18 @@ func (m Model) handleKeyProjects(key string) (tea.Model, tea.Cmd) {
 		if m.projectCursor < len(m.projects)-1 {
 			m.projectCursor++
 		}
-	case "enter", " ":
+	case " ":
 		if m.projectCursor < len(m.projects) {
 			chosen := m.projects[m.projectCursor]
 			m.mode = modeList
 			return m, m.switchProject(chosen)
+		}
+	case "enter", "e":
+		if m.projectCursor < len(m.projects) {
+			chosen := m.projects[m.projectCursor]
+			m.projectForm = newProjectEditForm(chosen)
+			m.projectForm.applyFocus(m.width - 2)
+			m.mode = modeProjectEdit
 		}
 	case "left", "a":
 		return m.prevPanel()
@@ -849,6 +1062,61 @@ func (m Model) handleKeyProjects(key string) (tea.Model, tea.Cmd) {
 		return m.nextPanel()
 	}
 	return m, nil
+}
+
+func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.projectForm == nil {
+		m.mode = modeProjects
+		return m, nil
+	}
+	f := m.projectForm
+	key := msg.String()
+
+	switch key {
+	case "esc":
+		m.mode = modeProjects
+		m.projectForm = nil
+	case "ctrl+s", "ctrl+d":
+		return m, m.saveProject()
+	case "tab":
+		f.nextField()
+		f.applyFocus(m.width - 2)
+	case "shift+tab":
+		f.prevField()
+		f.applyFocus(m.width - 2)
+	case "enter", " ":
+		if f.focus == pfSave {
+			return m, m.saveProject()
+		}
+	default:
+		cmd := f.update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+type projectSavedMsg struct{}
+
+func (m Model) saveProject() tea.Cmd {
+	if m.projectForm == nil {
+		return nil
+	}
+	f := m.projectForm
+	id := f.project.ID
+	req := libticket.ProjectUpdateRequest{
+		Title:              f.title.Value(),
+		Description:        f.desc.Value(),
+		AcceptanceCriteria: f.dor.Value(),
+		Notes:              f.dod.Value(),
+	}
+	svc := m.svc
+	return func() tea.Msg {
+		_, err := svc.UpdateProject(id, req)
+		if err != nil {
+			return errMsg{err}
+		}
+		return projectSavedMsg{}
+	}
 }
 
 func (m Model) handleKeyIdeas(key string) (tea.Model, tea.Cmd) {
@@ -863,7 +1131,7 @@ func (m Model) handleKeyIdeas(key string) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "down", "j", "s":
-		if m.ideasCursor < len(m.toplevel)-1 {
+		if m.ideasCursor < len(m.ideas)-1 {
 			m.ideasCursor++
 			vis := m.visibleRows()
 			if m.ideasCursor >= m.ideasOffset+vis {
@@ -871,14 +1139,14 @@ func (m Model) handleKeyIdeas(key string) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "enter", " ":
-		if m.ideasCursor < len(m.toplevel) {
-			t := m.toplevel[m.ideasCursor]
+		if m.ideasCursor < len(m.ideas) {
+			t := m.ideas[m.ideasCursor]
 			m.selected = &t
 			m.mode = modeDetail
 		}
 	case "e":
-		if m.ideasCursor < len(m.toplevel) {
-			t := m.toplevel[m.ideasCursor]
+		if m.ideasCursor < len(m.ideas) {
+			t := m.ideas[m.ideasCursor]
 			m.selected = &t
 			m.form = newEditForm(t)
 			m.mode = modeEdit
@@ -886,8 +1154,175 @@ func (m Model) handleKeyIdeas(key string) (tea.Model, tea.Cmd) {
 	case "n":
 		m.selected = nil
 		m.newForm = makeNewTicketForm()
+		m.newForm.ticketType = "requirement"
 		m.newForm.applyFocus(m.width - 2)
 		m.mode = modeNew
+	case "left", "a":
+		return m.prevPanel()
+	case "right", "d":
+		return m.nextPanel()
+	}
+	return m, nil
+}
+
+// ─── workflow key handler ─────────────────────────────────────────────────────
+
+// wfRowCount returns the total visible rows (workflows + expanded stages).
+func (m Model) wfRowCount() int {
+	n := len(m.workflows)
+	for _, wf := range m.workflows {
+		if m.wfExpanded[wf.ID] {
+			n += len(wf.Stages)
+		}
+	}
+	return n
+}
+
+// wfRowAt returns the workflow index and stage index at the given flat row.
+// stageIdx == -1 means the row is a workflow header.
+func (m Model) wfRowAt(row int) (wfIdx int, stageIdx int) {
+	cur := 0
+	for i, wf := range m.workflows {
+		if cur == row {
+			return i, -1
+		}
+		cur++
+		if m.wfExpanded[wf.ID] {
+			for j := range wf.Stages {
+				if cur == row {
+					return i, j
+				}
+				cur++
+			}
+		}
+	}
+	return 0, -1
+}
+
+func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	// Stage name input mode
+	if m.wfAddingStage {
+		switch key {
+		case "esc":
+			m.wfAddingStage = false
+		case "enter":
+			name := strings.TrimSpace(m.wfStageInput.Value())
+			if name != "" {
+				wfIdx, _ := m.wfRowAt(m.wfCursor)
+				if wfIdx < len(m.workflows) {
+					wf := m.workflows[wfIdx]
+					svc := m.svc
+					order := len(wf.Stages)
+					m.wfAddingStage = false
+					return m, func() tea.Msg {
+						_, err := svc.AddWorkflowStage(wf.ID, libticket.WorkflowStageRequest{
+							StageName: name,
+							SortOrder: order,
+						})
+						if err != nil {
+							return errMsg{err}
+						}
+						return loadWorkflows(svc)()
+					}
+				}
+			}
+			m.wfAddingStage = false
+		default:
+			var cmd tea.Cmd
+			m.wfStageInput, cmd = m.wfStageInput.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	total := m.wfRowCount()
+	switch key {
+	case "q", "esc":
+		return m.goBack()
+	case "up", "k", "w":
+		if m.wfCursor > 0 {
+			m.wfCursor--
+		}
+	case "down", "j", "s":
+		if m.wfCursor < total-1 {
+			m.wfCursor++
+		}
+	case "enter", " ":
+		// Toggle expand on workflow headers
+		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
+		if stageIdx == -1 && wfIdx < len(m.workflows) {
+			wfID := m.workflows[wfIdx].ID
+			m.wfExpanded[wfID] = !m.wfExpanded[wfID]
+		}
+	case "n":
+		// Add a stage to the workflow under cursor
+		wfIdx, _ := m.wfRowAt(m.wfCursor)
+		if wfIdx < len(m.workflows) {
+			m.wfExpanded[m.workflows[wfIdx].ID] = true
+			m.wfAddingStage = true
+			ti := textinput.New()
+			ti.Placeholder = "stage name..."
+			ti.CharLimit = 100
+			ti.Focus()
+			m.wfStageInput = ti
+		}
+	case "x":
+		// Delete stage under cursor
+		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
+		if stageIdx >= 0 && wfIdx < len(m.workflows) {
+			stage := m.workflows[wfIdx].Stages[stageIdx]
+			svc := m.svc
+			return m, func() tea.Msg {
+				if err := svc.RemoveWorkflowStage(stage.ID); err != nil {
+					return errMsg{err}
+				}
+				return loadWorkflows(svc)()
+			}
+		}
+	case "shift+up", "K":
+		// Move stage up
+		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
+		if stageIdx > 0 && wfIdx < len(m.workflows) {
+			wf := m.workflows[wfIdx]
+			ids := make([]int64, len(wf.Stages))
+			for i, s := range wf.Stages {
+				ids[i] = s.ID
+			}
+			ids[stageIdx], ids[stageIdx-1] = ids[stageIdx-1], ids[stageIdx]
+			svc := m.svc
+			wfID := wf.ID
+			m.wfCursor--
+			return m, func() tea.Msg {
+				if err := svc.ReorderWorkflowStages(wfID, ids); err != nil {
+					return errMsg{err}
+				}
+				return loadWorkflows(svc)()
+			}
+		}
+	case "shift+down", "J":
+		// Move stage down
+		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
+		if stageIdx >= 0 && wfIdx < len(m.workflows) {
+			wf := m.workflows[wfIdx]
+			if stageIdx < len(wf.Stages)-1 {
+				ids := make([]int64, len(wf.Stages))
+				for i, s := range wf.Stages {
+					ids[i] = s.ID
+				}
+				ids[stageIdx], ids[stageIdx+1] = ids[stageIdx+1], ids[stageIdx]
+				svc := m.svc
+				wfID := wf.ID
+				m.wfCursor++
+				return m, func() tea.Msg {
+					if err := svc.ReorderWorkflowStages(wfID, ids); err != nil {
+						return errMsg{err}
+					}
+					return loadWorkflows(svc)()
+				}
+			}
+		}
 	case "left", "a":
 		return m.prevPanel()
 	case "right", "d":
@@ -914,9 +1349,10 @@ func (m Model) saveTicket() tea.Cmd {
 	}
 	id := m.selected.ID
 	req := libticket.TicketUpdateRequest{
-		Title:       m.form.inputs[0].Value(),
-		Description: m.form.inputs[1].Value(),
-		Status:      m.form.inputs[3].Value(),
+		Title:              m.form.title.Value(),
+		Description:        m.form.desc.Value(),
+		AcceptanceCriteria: m.form.acceptCrit.Value(),
+		Status:             m.form.status,
 	}
 	svc := m.svc
 	cfg := m.cfg
@@ -990,9 +1426,12 @@ func (m Model) goBack() (tea.Model, tea.Cmd) {
 	case modeDetail, modeEdit, modeNew:
 		m.mode = modeList
 		m.selected = nil
+	case modeProjectEdit:
+		m.mode = modeProjects
+		m.projectForm = nil
 	case modeProjectPicker, modeSettings:
 		m.mode = modeList
-	case modeProjects, modeIdeas:
+	case modeProjects, modeIdeas, modeWorkflows:
 		m.mode = modeSummary
 	case modeList:
 		m.mode = modeSummary
@@ -1029,6 +1468,24 @@ func loadProjects(svc libticket.Service) tea.Cmd {
 	}
 }
 
+func loadWorkflows(svc libticket.Service) tea.Cmd {
+	return func() tea.Msg {
+		wfs, err := svc.ListWorkflows()
+		if err != nil {
+			return errMsg{err}
+		}
+		var result []store.WorkflowWithStages
+		for _, wf := range wfs {
+			ws, err := svc.GetWorkflow(wf.ID)
+			if err != nil {
+				continue
+			}
+			result = append(result, ws)
+		}
+		return workflowsLoadedMsg(result)
+	}
+}
+
 // ─── View ─────────────────────────────────────────────────────────────────────
 
 func (m Model) View() string {
@@ -1060,8 +1517,12 @@ func (m Model) View() string {
 		content = m.viewProjectPicker()
 	case modeProjects:
 		content = m.viewProjects()
+	case modeProjectEdit:
+		content = m.viewProjectEdit()
 	case modeIdeas:
 		content = m.viewIdeas()
+	case modeWorkflows:
+		content = m.viewWorkflows()
 	}
 
 	if m.showPopup {
@@ -1200,12 +1661,14 @@ func (m Model) statusBar(w int) string {
 			modeSummary:       "tab cycle · e edit · n new · p project · t theme · ? settings · qq quit",
 			modeList:          "↑↓/wasd · enter · e edit · n new · p project · / cmd · t theme · ? settings · qq quit",
 			modeDetail:        "↑↓/ws nav · e edit · esc back",
-			modeEdit:          "tab next · ctrl+s save · esc cancel",
+			modeEdit:          "tab next · enter pick/save · ctrl+s save · esc cancel",
 			modeNew:           "tab next · ctrl+s create · esc cancel",
 			modeSettings:      "↑↓ nav · enter apply theme · esc close",
 			modeProjectPicker: "↑↓ nav · enter switch · esc cancel",
-			modeProjects:      "↑↓ nav · enter switch project · esc back",
+			modeProjects:      "↑↓ nav · space switch · enter/e edit · esc back",
+			modeProjectEdit:   "tab next · enter save · ctrl+s save · esc cancel",
 			modeIdeas:         "↑↓/wasd · enter · e edit · n new · esc back",
+			modeWorkflows:     "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
 		}
 		hint := hints[m.mode]
 		text = " " + moon + "  " + hint
@@ -1501,29 +1964,98 @@ func (m Model) overlayPickerOnLines(lines []string, p *pickerPopup, inner int) [
 }
 
 func (m Model) viewForm(title string) []string {
+	f := &m.form
 	th := m.theme
 	inner := m.width - 2
 
+	f.applyFocus(inner)
+
 	headerStyle := lipgloss.NewStyle().Foreground(th.Header).Bold(true).Background(th.Bg)
 	labelStyle := lipgloss.NewStyle().Foreground(th.Muted).Background(th.Bg)
-	activeStyle := lipgloss.NewStyle().Foreground(th.Accent).Background(th.SelBg)
+	activeLabel := lipgloss.NewStyle().Foreground(th.Accent).Background(th.SelBg).Bold(true)
+	valStyle := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
+	pickerHint := lipgloss.NewStyle().Foreground(th.Muted).Background(th.Bg)
+	sepStyle := lipgloss.NewStyle().Foreground(th.Border).Background(th.Bg)
+
+	field := func(idx int, name, val string) string {
+		lbl := fmt.Sprintf("  %-14s", name+":")
+		if idx == f.focus {
+			return activeLabel.Render(lbl) + valStyle.Render(" "+val) + pickerHint.Render(" ↵ pick")
+		}
+		return labelStyle.Render(lbl) + valStyle.Render(" "+val)
+	}
 
 	var lines []string
 	lines = append(lines, headerStyle.Render(padRight(title, inner)))
-	lines = append(lines, lipgloss.NewStyle().Foreground(th.Border).Background(th.Bg).
-		Render(strings.Repeat("─", inner)))
+	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 	lines = append(lines, "")
 
-	for i, name := range m.form.names {
-		inp := m.form.inputs[i]
-		label := padRight(fmt.Sprintf("  %-12s", name+":"), 14)
-		if i == m.form.focus {
-			lines = append(lines, activeStyle.Render(label)+inp.View())
-		} else {
-			lines = append(lines, labelStyle.Render(label)+
-				lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg).Render(inp.Value()))
+	// Title
+	titleLbl := fmt.Sprintf("  %-14s", "title:")
+	if f.focus == efTitle {
+		lines = append(lines, activeLabel.Render(titleLbl)+f.title.View())
+	} else {
+		lines = append(lines, labelStyle.Render(titleLbl)+valStyle.Render(" "+f.title.Value()))
+	}
+	lines = append(lines, "")
+
+	// Description textarea
+	descLbl := fmt.Sprintf("  %-14s", "description:")
+	if f.focus == efDesc {
+		lines = append(lines, activeLabel.Render(descLbl))
+		for _, tl := range strings.Split(f.desc.View(), "\n") {
+			lines = append(lines, "  "+tl)
 		}
-		lines = append(lines, "")
+	} else {
+		lines = append(lines, labelStyle.Render(descLbl))
+		descVal := f.desc.Value()
+		if descVal == "" {
+			descVal = "(empty)"
+		}
+		for _, dl := range wordWrap(descVal, inner-4) {
+			lines = append(lines, valStyle.Render("  "+dl))
+		}
+	}
+	lines = append(lines, "")
+
+	// Acceptance criteria textarea
+	acLbl := fmt.Sprintf("  %-14s", "acceptance:")
+	if f.focus == efAC {
+		lines = append(lines, activeLabel.Render(acLbl))
+		for _, tl := range strings.Split(f.acceptCrit.View(), "\n") {
+			lines = append(lines, "  "+tl)
+		}
+	} else {
+		lines = append(lines, labelStyle.Render(acLbl))
+		acVal := f.acceptCrit.Value()
+		if acVal == "" {
+			acVal = "(empty)"
+		}
+		for _, dl := range wordWrap(acVal, inner-4) {
+			lines = append(lines, valStyle.Render("  "+dl))
+		}
+	}
+	lines = append(lines, "")
+
+	// Type
+	lines = append(lines, field(efType, "type", f.ticketType))
+	lines = append(lines, "")
+
+	// Status
+	lines = append(lines, field(efStatus, "status", f.status))
+	lines = append(lines, "")
+
+	// Save button
+	saveStr := "  [ Save ]"
+	if f.focus == efSave {
+		lines = append(lines, lipgloss.NewStyle().Foreground(th.SelFg).Background(th.SelBg).Bold(true).Render(padRight(saveStr, inner)))
+	} else {
+		lines = append(lines, valStyle.Render(padRight(saveStr, inner)))
+	}
+
+	// Overlay picker popup if open
+	if f.picker != nil {
+		lines = m.overlayPickerOnLines(lines, f.picker, inner)
 	}
 
 	for len(lines) < m.height-3 {
@@ -1795,6 +2327,110 @@ func (m Model) viewProjects() []string {
 	return lines
 }
 
+// ─── project edit view ────────────────────────────────────────────────────────
+
+func (m Model) viewProjectEdit() []string {
+	if m.projectForm == nil {
+		return []string{"no form"}
+	}
+	f := m.projectForm
+	th := m.theme
+	inner := m.width - 2
+
+	f.applyFocus(inner)
+
+	headerStyle := lipgloss.NewStyle().Foreground(th.Header).Bold(true).Background(th.Bg)
+	labelStyle := lipgloss.NewStyle().Foreground(th.Muted).Background(th.Bg)
+	activeLabel := lipgloss.NewStyle().Foreground(th.Accent).Background(th.SelBg).Bold(true)
+	valStyle := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
+	sepStyle := lipgloss.NewStyle().Foreground(th.Border).Background(th.Bg)
+
+	var lines []string
+	lines = append(lines, headerStyle.Render(padRight(" edit project  "+f.project.Prefix, inner)))
+	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
+	lines = append(lines, "")
+
+	// Title
+	titleLbl := fmt.Sprintf("  %-14s", "title:")
+	if f.focus == pfTitle {
+		lines = append(lines, activeLabel.Render(titleLbl)+f.title.View())
+	} else {
+		lines = append(lines, labelStyle.Render(titleLbl)+valStyle.Render(" "+f.title.Value()))
+	}
+	lines = append(lines, "")
+
+	// Description
+	descLbl := fmt.Sprintf("  %-14s", "description:")
+	if f.focus == pfDesc {
+		lines = append(lines, activeLabel.Render(descLbl))
+		for _, tl := range strings.Split(f.desc.View(), "\n") {
+			lines = append(lines, "  "+tl)
+		}
+	} else {
+		lines = append(lines, labelStyle.Render(descLbl))
+		descVal := f.desc.Value()
+		if descVal == "" {
+			descVal = "(empty)"
+		}
+		for _, dl := range wordWrap(descVal, inner-4) {
+			lines = append(lines, valStyle.Render("  "+dl))
+		}
+	}
+	lines = append(lines, "")
+
+	// Definition of Ready
+	dorLbl := fmt.Sprintf("  %-14s", "def of ready:")
+	if f.focus == pfDoR {
+		lines = append(lines, activeLabel.Render(dorLbl))
+		for _, tl := range strings.Split(f.dor.View(), "\n") {
+			lines = append(lines, "  "+tl)
+		}
+	} else {
+		lines = append(lines, labelStyle.Render(dorLbl))
+		dorVal := f.dor.Value()
+		if dorVal == "" {
+			dorVal = "(empty)"
+		}
+		for _, dl := range wordWrap(dorVal, inner-4) {
+			lines = append(lines, valStyle.Render("  "+dl))
+		}
+	}
+	lines = append(lines, "")
+
+	// Definition of Done
+	dodLbl := fmt.Sprintf("  %-14s", "def of done:")
+	if f.focus == pfDoD {
+		lines = append(lines, activeLabel.Render(dodLbl))
+		for _, tl := range strings.Split(f.dod.View(), "\n") {
+			lines = append(lines, "  "+tl)
+		}
+	} else {
+		lines = append(lines, labelStyle.Render(dodLbl))
+		dodVal := f.dod.Value()
+		if dodVal == "" {
+			dodVal = "(empty)"
+		}
+		for _, dl := range wordWrap(dodVal, inner-4) {
+			lines = append(lines, valStyle.Render("  "+dl))
+		}
+	}
+	lines = append(lines, "")
+
+	// Save button
+	saveStr := "  [ Save ]"
+	if f.focus == pfSave {
+		lines = append(lines, lipgloss.NewStyle().Foreground(th.SelFg).Background(th.SelBg).Bold(true).Render(padRight(saveStr, inner)))
+	} else {
+		lines = append(lines, valStyle.Render(padRight(saveStr, inner)))
+	}
+
+	for len(lines) < m.height-3 {
+		lines = append(lines, lipgloss.NewStyle().Background(th.Bg).Render(strings.Repeat(" ", inner)))
+	}
+	lines = append(lines, m.statusBar(inner))
+	return lines
+}
+
 // ─── ideas panel view ─────────────────────────────────────────────────────────
 
 func (m Model) viewIdeas() []string {
@@ -1810,17 +2446,17 @@ func (m Model) viewIdeas() []string {
 	lines = append(lines, headerStyle.Render(padRight("  ideas", inner)))
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 
-	if len(m.toplevel) == 0 {
+	if len(m.ideas) == 0 {
 		lines = append(lines, mutedStyle.Render(padRight("  (no ideas — press n to add one)", inner)))
 	} else {
 		// Clamp cursor
 		cursor := m.ideasCursor
-		if cursor >= len(m.toplevel) {
-			cursor = len(m.toplevel) - 1
+		if cursor >= len(m.ideas) {
+			cursor = len(m.ideas) - 1
 		}
 		vis := m.visibleRows() - 1 // extra row used by tab bar
-		for i := m.ideasOffset; i < len(m.toplevel) && len(lines)-3 < vis; i++ {
-			t := m.toplevel[i]
+		for i := m.ideasOffset; i < len(m.ideas) && len(lines)-3 < vis; i++ {
+			t := m.ideas[i]
 			si := stateIcon(t.State, t.Open)
 			icon := typeIcon(t.Type)
 			title := truncate(t.Title, inner-12)
@@ -1833,6 +2469,75 @@ func (m Model) viewIdeas() []string {
 			}
 			lines = append(lines, style.Render(padRight(row, inner)))
 		}
+	}
+
+	for len(lines) < m.height-3 {
+		lines = append(lines, lipgloss.NewStyle().Background(th.Bg).Render(strings.Repeat(" ", inner)))
+	}
+	lines = append(lines, m.statusBar(inner))
+	return lines
+}
+
+// ─── workflows panel view ─────────────────────────────────────────────────────
+
+func (m Model) viewWorkflows() []string {
+	th := m.theme
+	inner := m.width - 2
+
+	headerStyle := lipgloss.NewStyle().Foreground(th.Header).Bold(true).Background(th.Bg)
+	sepStyle := lipgloss.NewStyle().Foreground(th.Border).Background(th.Bg)
+	mutedStyle := lipgloss.NewStyle().Foreground(th.Muted).Background(th.Bg)
+	accentStyle := lipgloss.NewStyle().Foreground(th.Accent).Background(th.Bg)
+
+	var lines []string
+	lines = append(lines, m.tabBar(inner))
+	lines = append(lines, headerStyle.Render(padRight("  workflows", inner)))
+	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
+
+	if len(m.workflows) == 0 {
+		lines = append(lines, mutedStyle.Render(padRight("  (no workflows)", inner)))
+	} else {
+		row := 0
+		for _, wf := range m.workflows {
+			expanded := m.wfExpanded[wf.ID]
+			arrow := "▸"
+			if expanded {
+				arrow = "▾"
+			}
+			stageCount := fmt.Sprintf("(%d stages)", len(wf.Stages))
+			line := fmt.Sprintf("  %s %s  %s", arrow, wf.Name, stageCount)
+
+			style := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
+			if row == m.wfCursor {
+				style = lipgloss.NewStyle().Foreground(th.SelFg).Background(th.SelBg).Bold(true)
+			}
+			lines = append(lines, style.Render(padRight(line, inner)))
+			row++
+
+			if expanded {
+				for j, stage := range wf.Stages {
+					prefix := fmt.Sprintf("    %d. ", j+1)
+					desc := ""
+					if stage.Description != "" {
+						desc = "  — " + truncate(stage.Description, inner-30)
+					}
+					sline := prefix + stage.StageName + desc
+
+					sStyle := mutedStyle
+					if row == m.wfCursor {
+						sStyle = lipgloss.NewStyle().Foreground(th.SelFg).Background(th.SelBg).Bold(true)
+					}
+					lines = append(lines, sStyle.Render(padRight(sline, inner)))
+					row++
+				}
+			}
+		}
+	}
+
+	// Stage input overlay
+	if m.wfAddingStage {
+		lines = append(lines, "")
+		lines = append(lines, accentStyle.Render("  new stage: ")+m.wfStageInput.View())
 	}
 
 	for len(lines) < m.height-3 {
@@ -1889,6 +2594,16 @@ func loadTicketsSync(svc libticket.Service, cfg config.Config) treeLoadedMsg {
 		nodes = append(nodes, treeNode{epic: e, children: epicMap[e.ID]})
 	}
 	return treeLoadedMsg{nodes: nodes, toplevel: toplevel}
+}
+
+func filterRequirements(tickets []store.Ticket) []store.Ticket {
+	var out []store.Ticket
+	for _, t := range tickets {
+		if t.Type == "requirement" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func flattenTree(nodes []treeNode, toplevel []store.Ticket, expanded map[int64]bool) []listItem {
