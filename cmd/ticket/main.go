@@ -1819,6 +1819,7 @@ func runAgent(args []string) error {
 			prompt := buildAgentPrompt(*ticket)
 			result, err := runAgentCommand(modelCommand, prompt, agentVerbose)
 			if err != nil {
+				fmt.Printf("failed %s: %v\n", ticketLabel(*ticket), err)
 				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
 			}
 			if agentVerbose {
@@ -1830,15 +1831,15 @@ func runAgent(args []string) error {
 				Result:   strings.TrimSpace(result),
 			})
 			if err != nil {
+				fmt.Printf("failed %s: could not submit result: %v\n", ticketLabel(*ticket), err)
 				return err
 			}
 			if outputJSON {
 				if err := printJSON(updated); err != nil {
 					return err
 				}
-			} else {
-				fmt.Printf("completed %s -> %s\n", ticketLabel(*ticket), updated.Status)
 			}
+			fmt.Printf("completed %s -> %s\n", ticketLabel(*ticket), updated.Status)
 		}
 	case "request":
 		fs := flag.NewFlagSet("agent request", flag.ContinueOnError)
