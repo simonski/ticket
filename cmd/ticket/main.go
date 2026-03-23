@@ -1723,7 +1723,7 @@ func runAgent(args []string) error {
 		url := fs.String("url", "", "ticket server url")
 		projectID := fs.Int64("project-id", 0, "project id override")
 		pollSeconds := fs.Int("poll-seconds", 2, "idle poll interval seconds")
-		llmCommand := fs.String("llm", envValue("TICKET_AGENT_LLM"), "llm command (default codex)")
+		llmCommand := fs.String("llm", envValue("TICKET_AGENT_LLM"), "llm command (claude, codex, or path to binary)")
 		verbose := fs.Bool("v", false, "verbose logging")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
@@ -1782,7 +1782,7 @@ func runAgent(args []string) error {
 		}
 		modelCommand := strings.TrimSpace(*llmCommand)
 		if modelCommand == "" {
-			modelCommand = "codex"
+			modelCommand = "claude"
 		}
 		agentVerbose := *verbose
 		idleDelay := time.Duration(*pollSeconds) * time.Second
@@ -3773,9 +3773,12 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool) (string, er
 		return "", errors.New("agent is required")
 	}
 	var cmd *exec.Cmd
-	if agent == "codex" {
+	switch agent {
+	case "claude":
+		cmd = exec.Command("claude", "-p", "--model", "claude-sonnet-4-5-20250514", prompt)
+	case "codex":
 		cmd = exec.Command("codex", "exec", prompt)
-	} else {
+	default:
 		cmd = exec.Command(agent, "-p", prompt)
 	}
 	if stream {
