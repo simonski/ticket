@@ -33,7 +33,7 @@ var (
 	loginPromptOutput io.Writer = os.Stdout
 	outputJSON        bool
 	noColorOutput     bool
-	runAgentCommand   = defaultRunTicketAgentCommand
+	runAgentCommand = defaultRunTicketAgentCommand
 	selectBannerWord  = randomBannerWord
 	fetchRepoVersion  = defaultFetchRepoVersion
 )
@@ -1817,7 +1817,7 @@ func runAgent(args []string) error {
 				fmt.Printf("[agent] processing %s %q\n", ticketLabel(*ticket), ticket.Title)
 			}
 			prompt := buildAgentPrompt(*ticket)
-			result, err := runAgentCommand(modelCommand, prompt)
+			result, err := runAgentCommand(modelCommand, prompt, agentVerbose)
 			if err != nil {
 				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
 			}
@@ -3697,7 +3697,7 @@ func runTicketGen(args []string) error {
 	if err != nil {
 		return err
 	}
-	response, err := runAgentCommand(strings.TrimSpace(*agent), prompt)
+	response, err := runAgentCommand(strings.TrimSpace(*agent), prompt, false)
 	if err != nil {
 		return err
 	}
@@ -3767,7 +3767,7 @@ func buildTicketPrompt(files []string, outputFile string) (string, error) {
 	return b.String(), nil
 }
 
-func defaultRunTicketAgentCommand(agent, prompt string) (string, error) {
+func defaultRunTicketAgentCommand(agent, prompt string, stream bool) (string, error) {
 	if agent == "" {
 		return "", errors.New("agent is required")
 	}
@@ -3776,6 +3776,18 @@ func defaultRunTicketAgentCommand(agent, prompt string) (string, error) {
 		cmd = exec.Command("codex", "exec", prompt)
 	} else {
 		cmd = exec.Command(agent, "-p", prompt)
+	}
+	if stream {
+		// Wire up stdin/stdout/stderr so the user can see the LLM
+		// agent's I/O in real time while we capture stdout for the result.
+		var buf bytes.Buffer
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
