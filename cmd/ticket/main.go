@@ -1539,6 +1539,36 @@ func runUser(args []string) error {
 		}
 		printUserTable(users)
 		return nil
+	case "reset-password":
+		fs := flag.NewFlagSet("user reset-password", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		username := fs.String("username", "", "username")
+		newPassword := fs.String("password", "", "new password (generated if omitted)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*username) == "" {
+			return errors.New("usage: ticket user reset-password -username <name> [-password <new-password>]")
+		}
+		pw := strings.TrimSpace(*newPassword)
+		if pw == "" {
+			generated, err := generatePassword(24)
+			if err != nil {
+				return err
+			}
+			pw = generated
+		}
+		user, err := svc.ResetUserPassword(strings.TrimSpace(*username), pw)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"user_id": user.ID, "username": user.Username, "password": pw})
+		}
+		fmt.Printf("username : %s\n", user.Username)
+		fmt.Printf("password : %s\n", pw)
+		fmt.Println("all sessions invalidated")
+		return nil
 	default:
 		return fmt.Errorf("unknown user command %q; see: ticket user help", args[0])
 	}
@@ -1585,7 +1615,7 @@ func runAgent(args []string) error {
 		if outputJSON {
 			return printJSON(map[string]any{"agent": agent, "password": generatedPassword})
 		}
-		fmt.Printf("agent_id: %d\n", agent.ID)
+		fmt.Printf("agent_id: %s\n", agent.UUID)
 		fmt.Printf("password: %s\n", generatedPassword)
 		return nil
 	case "ls", "list":
@@ -1645,7 +1675,7 @@ func runAgent(args []string) error {
 		if outputJSON {
 			return printJSON(agent)
 		}
-		fmt.Printf("updated agent %d\n", agent.ID)
+		fmt.Printf("updated agent %s\n", agent.UUID)
 		return nil
 	case "rm", "delete":
 		fs := flag.NewFlagSet("agent "+args[0], flag.ContinueOnError)
@@ -1682,7 +1712,7 @@ func runAgent(args []string) error {
 		if outputJSON {
 			return printJSON(agent)
 		}
-		fmt.Printf("%sd agent %d\n", args[0], agent.ID)
+		fmt.Printf("%sd agent %s\n", args[0], agent.UUID)
 		return nil
 	case "run":
 		fs := flag.NewFlagSet("agent run", flag.ContinueOnError)
@@ -1746,7 +1776,7 @@ func runAgent(args []string) error {
 			return err
 		}
 		if !outputJSON {
-			fmt.Printf("agent %s registered (id=%d)\n", agent.Name, agent.ID)
+			fmt.Printf("agent %s registered (id=%s)\n", agent.Name, agent.UUID)
 		}
 		modelCommand := strings.TrimSpace(*llmCommand)
 		if modelCommand == "" {
@@ -1889,9 +1919,9 @@ func runAgent(args []string) error {
 			return err
 		}
 		if outputJSON {
-			return printJSON(map[string]any{"agent_id": agent.ID, "password": pw})
+			return printJSON(map[string]any{"agent_id": agent.UUID, "password": pw})
 		}
-		fmt.Printf("agent    : %s (id %d)\n", agent.Name, agent.ID)
+		fmt.Printf("agent    : %s (%s)\n", agent.Name, agent.UUID)
 		fmt.Printf("password : %s\n", pw)
 		return nil
 	case "config-set":
@@ -1991,7 +2021,7 @@ func printAgentTable(agents []store.Agent) {
 		if lastSeen == "" {
 			lastSeen = "-"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%t\t%s\t%s\n", agent.ID, agent.Name, agent.Description, agent.Enabled, agent.Status, lastSeen)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\t%s\n", agent.UUID, agent.Name, agent.Description, agent.Enabled, agent.Status, lastSeen)
 	}
 	_ = w.Flush()
 }

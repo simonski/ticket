@@ -21,6 +21,7 @@ var (
 type User struct {
 	ID          int64  `json:"user_id"`
 	Username    string `json:"username"`
+	Email       string `json:"email"`
 	Role        string `json:"role"`
 	DisplayName string `json:"display_name"`
 	Enabled     bool   `json:"enabled"`
@@ -66,7 +67,7 @@ func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) 
 
 func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) {
 	row := db.QueryRow(`
-		SELECT user_id, username, password_hash, role, display_name, enabled, created_at
+		SELECT user_id, username, COALESCE(email, ''), password_hash, role, display_name, enabled, created_at
 		FROM users
 		WHERE username = ?
 	`, username)
@@ -74,7 +75,7 @@ func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) 
 	var user User
 	var hash string
 	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &hash, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+	if err := row.Scan(&user.ID, &user.Username, &user.Email, &hash, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrInvalidCredentials
 		}
@@ -122,7 +123,7 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 	}
 
 	row := db.QueryRow(`
-		SELECT u.user_id, u.username, u.role, u.display_name, u.enabled, u.created_at
+		SELECT u.user_id, u.username, COALESCE(u.email, ''), u.role, u.display_name, u.enabled, u.created_at
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
 		WHERE s.token = ?
@@ -130,7 +131,7 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 
 	var user User
 	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrUnauthorized
 		}
@@ -145,14 +146,14 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 
 func GetUserByID(db *sql.DB, id int64) (User, error) {
 	row := db.QueryRow(`
-		SELECT user_id, username, role, display_name, enabled, created_at
+		SELECT user_id, username, COALESCE(email, ''), role, display_name, enabled, created_at
 		FROM users
 		WHERE user_id = ?
 	`, id)
 
 	var user User
 	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
 		return User{}, err
 	}
 	user.Enabled = enabled == 1
@@ -161,14 +162,14 @@ func GetUserByID(db *sql.DB, id int64) (User, error) {
 
 func GetUserByUsername(db *sql.DB, username string) (User, error) {
 	row := db.QueryRow(`
-		SELECT user_id, username, role, display_name, enabled, created_at
+		SELECT user_id, username, COALESCE(email, ''), role, display_name, enabled, created_at
 		FROM users
 		WHERE username = ?
 	`, strings.TrimSpace(username))
 
 	var user User
 	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
 		return User{}, err
 	}
 	user.Enabled = enabled == 1
@@ -177,7 +178,7 @@ func GetUserByUsername(db *sql.DB, username string) (User, error) {
 
 func ListUsers(db *sql.DB) ([]User, error) {
 	rows, err := db.Query(`
-		SELECT user_id, username, role, display_name, enabled, created_at
+		SELECT user_id, username, COALESCE(email, ''), role, display_name, enabled, created_at
 		FROM users
 		ORDER BY username
 	`)
@@ -190,7 +191,7 @@ func ListUsers(db *sql.DB) ([]User, error) {
 	for rows.Next() {
 		var user User
 		var enabled int
-		if err := rows.Scan(&user.ID, &user.Username, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
 			return nil, err
 		}
 		user.Enabled = enabled == 1
@@ -233,6 +234,34 @@ func DeleteUser(db *sql.DB, username string) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// ResetUserPassword changes the password and invalidates all sessions.
+func ResetUserPassword(db *sql.DB, username, newPlainPassword string) (User, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return User{}, errors.New("username is required")
+	}
+	if strings.TrimSpace(newPlainPassword) == "" {
+		return User{}, errors.New("password cannot be empty")
+	}
+	hash, err := password.Hash(strings.TrimSpace(newPlainPassword))
+	if err != nil {
+		return User{}, err
+	}
+	result, err := db.Exec(`UPDATE users SET password_hash = ? WHERE username = ?`, hash, username)
+	if err != nil {
+		return User{}, err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return User{}, sql.ErrNoRows
+	}
+	// Invalidate all sessions for this user
+	if _, err := db.Exec(`DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE username = ?)`, username); err != nil {
+		return User{}, err
+	}
+	return GetUserByUsername(db, username)
 }
 
 func boolToInt(v bool) int {

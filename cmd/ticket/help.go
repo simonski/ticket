@@ -507,7 +507,8 @@ Commands:
   create   --username <u> --password <p>   Create a user
   delete   -id <id>                   Delete a user
   enable   -id <id>                   Enable a user
-  disable  -id <id>                   Disable a user`
+  disable  -id <id>                   Disable a user
+  reset-password -username <u> [-password]  Reset password and invalidate sessions`
 
 func renderCommandHelp(command string) string {
 	command = normalizeHelpCommand(command)

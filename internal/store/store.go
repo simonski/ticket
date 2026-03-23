@@ -738,6 +738,32 @@ func migrateSchema(db *sql.DB) error {
 			}
 		}
 	}
+	// Add email to users
+	if !columnExists(db, "users", "email") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	// Messages table
+	if !tableExists(db, "messages") {
+		if _, err := db.Exec(`
+			CREATE TABLE messages (
+				message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				from_user_id INTEGER NOT NULL,
+				to_user_id INTEGER NOT NULL,
+				title TEXT NOT NULL DEFAULT '',
+				body TEXT NOT NULL DEFAULT '',
+				medium TEXT NOT NULL DEFAULT 'dm',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				sent_at TEXT NOT NULL DEFAULT '',
+				received_at TEXT NOT NULL DEFAULT '',
+				FOREIGN KEY(from_user_id) REFERENCES users(user_id),
+				FOREIGN KEY(to_user_id) REFERENCES users(user_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
 	// Agent config key-value store
 	if !tableExists(db, "agent_config") {
 		if _, err := db.Exec(`

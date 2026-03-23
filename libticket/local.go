@@ -137,6 +137,15 @@ func (s *LocalService) DeleteUser(username string) error {
 	return store.DeleteUser(db, username)
 }
 
+func (s *LocalService) ResetUserPassword(username, newPassword string) (store.User, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.User{}, err
+	}
+	defer db.Close()
+	return store.ResetUserPassword(db, username, newPassword)
+}
+
 func (s *LocalService) CreateRole(request RoleRequest) (store.Role, error) {
 	db, err := s.openDB()
 	if err != nil {

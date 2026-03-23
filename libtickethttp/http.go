@@ -63,6 +63,10 @@ func (s *Service) DeleteUser(username string) error {
 	return s.client.DeleteUser(username)
 }
 
+func (s *Service) ResetUserPassword(username, newPassword string) (store.User, error) {
+	return s.client.ResetUserPassword(username, newPassword)
+}
+
 func (s *Service) CreateRole(request libticket.RoleRequest) (store.Role, error) {
 	return s.client.CreateRole(client.RoleRequest(request))
 }

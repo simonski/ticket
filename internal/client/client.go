@@ -202,6 +202,20 @@ func (c *Client) DeleteUser(username string) error {
 	return c.doJSON(http.MethodDelete, "/api/users/"+username, nil, nil)
 }
 
+func (c *Client) ResetUserPassword(username, newPassword string) (store.User, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.User{}, err
+		}
+		defer db.Close()
+		return store.ResetUserPassword(db, username, newPassword)
+	}
+	var user store.User
+	err := c.doJSON(http.MethodPost, "/api/users/"+username+"/reset-password", map[string]string{"password": newPassword}, &user)
+	return user, err
+}
+
 func (c *Client) CreateRole(request RoleRequest) (store.Role, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
