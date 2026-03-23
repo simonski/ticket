@@ -82,6 +82,50 @@ func friendlyConnectionError(err error, baseURL string) error {
 	return fmt.Errorf("cannot connect to %s: %w", baseURL, err)
 }
 
+// doJSONBasicAuth is like doJSON but uses HTTP Basic Auth instead of Bearer token.
+func (c *Client) doJSONBasicAuth(method, path, username, password string, body any, out any) error {
+	var reader *bytes.Reader
+	if body == nil {
+		reader = bytes.NewReader(nil)
+	} else {
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(payload)
+	}
+
+	httpRequest, err := http.NewRequest(method, c.baseURL+path, reader)
+	if err != nil {
+		return err
+	}
+	if body != nil {
+		httpRequest.Header.Set("Content-Type", "application/json")
+	}
+	httpRequest.SetBasicAuth(username, password)
+
+	resp, err := c.http.Do(httpRequest)
+	if err != nil {
+		return friendlyConnectionError(err, c.baseURL)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Error != "" {
+			return errors.New(apiErr.Error)
+		}
+		return fmt.Errorf("request failed with status %s", resp.Status)
+	}
+
+	if out == nil {
+		return nil
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
 func (c *Client) doJSON(method, path string, body any, out any) error {
 	var reader *bytes.Reader
 	if body == nil {

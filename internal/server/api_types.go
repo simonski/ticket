@@ -13,24 +13,6 @@ type agentRequest struct {
 	Password    string `json:"password,omitempty"`
 }
 
-type agentAuthRequest struct {
-	Name     string `json:"name"`
-	Password string `json:"password"`
-}
-
-type agentRequestWork struct {
-	Name      string `json:"name"`
-	Password  string `json:"password"`
-	ProjectID int64  `json:"project_id,omitempty"`
-	TicketID  *int64 `json:"ticket_id,omitempty"`
-	DryRun    bool   `json:"dry_run,omitempty"`
-}
-
-type agentTicketUpdateRequest struct {
-	Name     string `json:"name"`
-	Password string `json:"password"`
-	Result   string `json:"result"`
-}
 
 type projectRequest struct {
 	Prefix             string `json:"prefix"`

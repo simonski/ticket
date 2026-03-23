@@ -492,12 +492,12 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
-			var payload agentAuthRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				writeError(w, http.StatusBadRequest, "invalid json body")
+			agentName, agentPass, ok := r.BasicAuth()
+			if !ok || agentName == "" || agentPass == "" {
+				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			agent, err := store.AuthenticateAgent(db, agentName, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
@@ -519,20 +519,27 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
-			var payload agentRequestWork
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				writeError(w, http.StatusBadRequest, "invalid json body")
+			agentName, agentPass, ok := r.BasicAuth()
+			if !ok || agentName == "" || agentPass == "" {
+				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
+			var payload struct {
+				ProjectID int64  `json:"project_id,omitempty"`
+				TicketID  *int64 `json:"ticket_id,omitempty"`
+				DryRun    bool   `json:"dry_run,omitempty"`
+			}
+			// Body is optional — may be empty for simple requests.
+			_ = json.NewDecoder(r.Body).Decode(&payload)
 			vlog := func(format string, args ...any) {
 				if verbose && output != nil {
 					fmt.Fprintf(output, "AGENT %s\n", fmt.Sprintf(format, args...))
 				}
 			}
-			vlog("request from agent=%q project_id=%d", payload.Name, payload.ProjectID)
-			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			vlog("request from agent=%q project_id=%d", agentName, payload.ProjectID)
+			agent, err := store.AuthenticateAgent(db, agentName, agentPass)
 			if err != nil {
-				vlog("auth failed for agent=%q: %v", payload.Name, err)
+				vlog("auth failed for agent=%q: %v", agentName, err)
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
 					return
@@ -639,17 +646,24 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
+			agentName, agentPass, ok := r.BasicAuth()
+			if !ok || agentName == "" || agentPass == "" {
+				writeError(w, http.StatusUnauthorized, "basic auth required")
+				return
+			}
 			var ticketID int64
 			if _, err := fmt.Sscan(parts[1], &ticketID); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid ticket id")
 				return
 			}
-			var payload agentTicketUpdateRequest
+			var payload struct {
+				Result string `json:"result"`
+			}
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
+			agent, err := store.AuthenticateAgent(db, agentName, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)

@@ -403,7 +403,7 @@ func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error
 	var response struct {
 		Agent store.Agent `json:"agent"`
 	}
-	err := c.doJSON(http.MethodPost, "/api/agents/register", request, &response)
+	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/register", request.Name, request.Password, nil, &response)
 	return response.Agent, err
 }
 
@@ -476,7 +476,14 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 		return response, nil
 	}
 	var response AgentWorkResponse
-	err := c.doJSON(http.MethodPost, "/api/agents/request", request, &response)
+	body := map[string]any{
+		"project_id": request.ProjectID,
+		"dry_run":    request.DryRun,
+	}
+	if request.TicketID != nil {
+		body["ticket_id"] = *request.TicketID
+	}
+	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/request", request.Name, request.Password, body, &response)
 	return response, err
 }
 
@@ -514,7 +521,8 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 		})
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%d/update", id), request, &ticket)
+	body := map[string]string{"result": request.Result}
+	err := c.doJSONBasicAuth(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%d/update", id), request.Name, request.Password, body, &ticket)
 	return ticket, err
 }
 

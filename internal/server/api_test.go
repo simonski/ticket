@@ -564,10 +564,7 @@ func TestAgentAPI(t *testing.T) {
 		t.Fatalf("update agent status = %d body=%s", updatedResp.Code, updatedResp.Body.String())
 	}
 
-	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents/register", map[string]string{
-		"name":     "worker-1",
-		"password": createPayload.Password,
-	}, "")
+	registerResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/register", "worker-1", createPayload.Password, nil)
 	if registerResp.Code != http.StatusOK {
 		t.Fatalf("register agent status = %d body=%s", registerResp.Code, registerResp.Body.String())
 	}
@@ -1749,6 +1746,29 @@ func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 		t.Fatalf("New() error = %v", err)
 	}
 	return srv.httpServer.Handler, db
+}
+
+func doBasicAuthRequest(t *testing.T, handler http.Handler, method, path, username, password string, payload any) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var body []byte
+	if payload != nil {
+		var err error
+		body, err = json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+	}
+
+	request := httptest.NewRequest(method, path, bytes.NewReader(body))
+	if payload != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	request.SetBasicAuth(username, password)
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
 }
 
 func doJSONRequest(t *testing.T, handler http.Handler, method, path string, payload any, token string) *httptest.ResponseRecorder {
