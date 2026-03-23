@@ -138,8 +138,11 @@ ticket agent run -name worker-1 -password <password> -url http://localhost:8080
 - `AGENT_NAME`
 - `AGENT_PASSWORD`
 - `TICKET_URL`
+- `TICKET_AGENT_LLM` (optional, default: `claude`)
 
-If any are missing, the command exits with an explicit missing-fields error.
+If any required values are missing, the command exits with an explicit missing-fields error.
+
+The `-llm` flag selects the LLM: `claude` (default, uses Sonnet 4.5), `codex`, or a path to any binary. Use `-v` to stream all LLM input/output to the terminal with `>` / `<` prefixes.
 
 ## Accounts And Login
 
@@ -820,8 +823,8 @@ tk project public ID
 
 ```bash
 tk agent create -name my-agent
-ID: xxxx-xxxx-xxxx
-tk agent add-project -project_id XX -agent_id XX
+agent_id: xxxx-xxxx-xxxx
+password: xxxx-xxxx-xxxx
 ```
 
 ### 5. Run the server
@@ -845,6 +848,11 @@ You could run as an agent to do work automatically
 export TICKET_URL=http://localhost:8080
 export AGENT_NAME=my-agent
 export AGENT_PASSWORD=agent-password
-tk agent run
+tk agent run                  # default LLM: claude (Sonnet 4.5)
+tk agent run -llm codex       # use codex instead
+tk agent run -v               # stream LLM I/O to terminal
 ```
+
+Only tickets marked as ready are eligible for automatic assignment (`tk ready <id>`).
+Agents are stored in the users table with `user_type=agent`.
 

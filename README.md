@@ -108,27 +108,31 @@ ticket claim -id CUS-T-42
 
 ## Running an agent
 
-First create an agent
+Create an agent (requires a running server):
 
 ```bash
-tk agent create
+tk agent create -name my-agent
 ```
 
+This prints the agent UUID and a generated password.
+
+Run the agent worker:
+
 ```bash
-export AGENT_NAME=xxxx
-export AGENT_PASSWORD=xxxx
+export AGENT_NAME=my-agent
+export AGENT_PASSWORD=<generated-password>
 export TICKET_URL=http://localhost:8080
 tk agent run
 ```
 
-or
+or with flags:
 
 ```bash
-tk agent run -username xxxx -password xxxx -url http://localhost:8080
+tk agent run -name my-agent -password <password> -url http://localhost:8080
 ```
 
-
-
+Options: `-llm claude` (default, uses Sonnet 4.5), `-llm codex`, or `-llm /path/to/binary`.
+Use `-v` to stream LLM input/output to the terminal.
 
 ## Claude Code integration
 
@@ -143,6 +147,6 @@ See [QUICKSTART.md](./QUICKSTART.md#using-with-claude-code) for setup details.
 - The CLI and web app use the same HTTP API.
 - Ticket refs accept human keys such as `CUS-T-42` and internal numeric ids
   where supported, but keys are preferred.
-- `tk ls` hides closed and archived tickets by default; use `tk ls -a` to show all.
+- `tk ls` hides closed and archived tickets by default; use `-a` to include closed, `-d` to also include archived.
 - The HTTP API exposes resource families under `/api/` including tickets, projects,
   users, agents, teams, roles, workflows, and more.

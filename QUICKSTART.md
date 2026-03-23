@@ -60,7 +60,7 @@ ticket ideas          # list all ideas
 
 ```bash
 ticket list
-ticket get CUS-T-1
+ticket get -id CUS-T-1
 ticket attach -id CUS-T-1 CUS-E-1   # set parent epic
 ```
 
@@ -76,11 +76,30 @@ ticket idle -id CUS-T-1         # pause
 
 ```bash
 ticket assign CUS-T-1 alice
-ticket claim CUS-T-1            # assign to yourself
+ticket claim -id CUS-T-1        # assign to yourself
 ticket request                  # get the next available ticket
 ```
 
-## 8. Use the TUI
+## 8. Run an agent (optional)
+
+Create an agent and run it against a server:
+
+```bash
+ticket agent create -name worker-1
+# prints agent_id and password
+
+export TICKET_URL=http://localhost:8080
+export AGENT_NAME=worker-1
+export AGENT_PASSWORD=<generated-password>
+ticket agent run                  # default LLM: claude (Sonnet 4.5)
+ticket agent run -llm codex       # use codex instead
+ticket agent run -v               # stream LLM I/O to terminal
+```
+
+Only tickets marked as `ready` are eligible for automatic assignment. Use
+`ticket ready <id>` to make a ticket available to agents.
+
+## 9. Use the TUI
 
 ```bash
 tk -g
@@ -119,6 +138,9 @@ on conversation memory.
 | `TICKET_URL`         | Connect to a remote server (`http(s)://host:port`)   |
 | `TICKET_USERNAME`    | Default username for login/register                  |
 | `TICKET_PASSWORD`    | Default password for login/register                  |
+| `AGENT_NAME`         | Agent name for `tk agent run`                        |
+| `AGENT_PASSWORD`     | Agent password for `tk agent run`                    |
+| `TICKET_AGENT_LLM`  | Override default LLM command (default: `claude`)     |
 
 When `TICKET_URL` is set the CLI communicates with a running `ticket server`
 rather than opening the local database directly.
