@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/simonski/ticket/internal/password"
@@ -12,6 +13,7 @@ import (
 
 type Agent struct {
 	ID          int64  `json:"agent_id"`
+	UUID        string `json:"uuid"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled"`
@@ -45,10 +47,14 @@ func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, st
 	if err != nil {
 		return Agent{}, "", err
 	}
+	uuid, err := generateAgentUUID()
+	if err != nil {
+		return Agent{}, "", err
+	}
 	result, err := db.Exec(`
-		INSERT INTO agents (name, description, password_hash, enabled, status, updated_at)
-		VALUES (?, ?, ?, 1, 'idle', CURRENT_TIMESTAMP)
-	`, name, description, hash)
+		INSERT INTO agents (uuid, name, description, password_hash, enabled, status, updated_at)
+		VALUES (?, ?, ?, ?, 1, 'idle', CURRENT_TIMESTAMP)
+	`, uuid, name, description, hash)
 	if err != nil {
 		return Agent{}, "", err
 	}
@@ -65,7 +71,7 @@ func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, st
 
 func GetAgentByID(db *sql.DB, id int64) (Agent, error) {
 	row := db.QueryRow(`
-		SELECT agent_id, name, description, enabled, status, last_seen, created_at, updated_at
+		SELECT agent_id, COALESCE(uuid, ''), name, description, enabled, status, last_seen, created_at, updated_at
 		FROM agents
 		WHERE agent_id = ?
 	`, id)
@@ -74,7 +80,7 @@ func GetAgentByID(db *sql.DB, id int64) (Agent, error) {
 
 func GetAgentByName(db *sql.DB, name string) (Agent, error) {
 	row := db.QueryRow(`
-		SELECT agent_id, name, description, enabled, status, last_seen, created_at, updated_at
+		SELECT agent_id, COALESCE(uuid, ''), name, description, enabled, status, last_seen, created_at, updated_at
 		FROM agents
 		WHERE name = ?
 	`, strings.TrimSpace(name))
@@ -83,7 +89,7 @@ func GetAgentByName(db *sql.DB, name string) (Agent, error) {
 
 func ListAgents(db *sql.DB) ([]Agent, error) {
 	rows, err := db.Query(`
-		SELECT agent_id, name, description, enabled, status, last_seen, created_at, updated_at
+		SELECT agent_id, COALESCE(uuid, ''), name, description, enabled, status, last_seen, created_at, updated_at
 		FROM agents
 		ORDER BY name
 	`)
@@ -95,7 +101,7 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 	for rows.Next() {
 		var a Agent
 		var enabled int
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.UUID, &a.Name, &a.Description, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		a.Enabled = enabled == 1
@@ -194,14 +200,14 @@ func AuthenticateAgent(db *sql.DB, name, plainPassword string) (Agent, error) {
 		return Agent{}, ErrInvalidCredentials
 	}
 	row := db.QueryRow(`
-		SELECT agent_id, name, description, password_hash, enabled, status, last_seen, created_at, updated_at
+		SELECT agent_id, COALESCE(uuid, ''), name, description, password_hash, enabled, status, last_seen, created_at, updated_at
 		FROM agents
 		WHERE name = ?
 	`, name)
 	var a Agent
 	var hash string
 	var enabled int
-	if err := row.Scan(&a.ID, &a.Name, &a.Description, &hash, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := row.Scan(&a.ID, &a.UUID, &a.Name, &a.Description, &hash, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Agent{}, ErrInvalidCredentials
 		}
@@ -247,11 +253,22 @@ func TouchAgent(db *sql.DB, id int64, status string) (Agent, error) {
 func scanAgent(row *sql.Row) (Agent, error) {
 	var a Agent
 	var enabled int
-	if err := row.Scan(&a.ID, &a.Name, &a.Description, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := row.Scan(&a.ID, &a.UUID, &a.Name, &a.Description, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		return Agent{}, err
 	}
 	a.Enabled = enabled == 1
 	return a, nil
+}
+
+func generateAgentUUID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	// Set version 4 and variant bits
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 func randomSecret(n int) (string, error) {

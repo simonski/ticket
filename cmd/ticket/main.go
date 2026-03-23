@@ -1727,6 +1727,9 @@ func runAgent(args []string) error {
 		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
 			return err
 		}
+		if resolved, rErr := config.ResolveURL(); rErr != nil || resolved.Mode != config.ModeRemote {
+			return errors.New("agent run requires a remote server (TICKET_URL must be set to an http(s) URL)")
+		}
 		cfg, err := config.Load()
 		if err != nil {
 			return err
@@ -1861,6 +1864,35 @@ func runAgent(args []string) error {
 				time.Sleep(time.Duration(*sleepSeconds) * time.Second)
 			}
 		}
+		return nil
+	case "reset-password":
+		fs := flag.NewFlagSet("agent reset-password", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "agent id")
+		newPassword := fs.String("password", "", "new password (generated if omitted)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			return errors.New("usage: ticket agent reset-password -id <agent-id> [-password <new-password>]")
+		}
+		pw := strings.TrimSpace(*newPassword)
+		if pw == "" {
+			generated, err := generatePassword(24)
+			if err != nil {
+				return err
+			}
+			pw = generated
+		}
+		agent, err := svc.UpdateAgent(*id, libticket.AgentUpdateRequest{Password: &pw})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"agent_id": agent.ID, "password": pw})
+		}
+		fmt.Printf("agent    : %s (id %d)\n", agent.Name, agent.ID)
+		fmt.Printf("password : %s\n", pw)
 		return nil
 	case "config-set":
 		if len(args) < 4 {

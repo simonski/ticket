@@ -716,6 +716,28 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	// Add UUID column to agents
+	if !columnExists(db, "agents", "uuid") {
+		if _, err := db.Exec(`ALTER TABLE agents ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+		// Backfill UUIDs for existing agents
+		var agentIDs []int64
+		if rows, err := db.Query(`SELECT agent_id FROM agents WHERE uuid = ''`); err == nil {
+			for rows.Next() {
+				var id int64
+				if err := rows.Scan(&id); err == nil {
+					agentIDs = append(agentIDs, id)
+				}
+			}
+			rows.Close()
+		}
+		for _, id := range agentIDs {
+			if u, err := generateAgentUUID(); err == nil {
+				db.Exec(`UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
+			}
+		}
+	}
 	// Agent config key-value store
 	if !tableExists(db, "agent_config") {
 		if _, err := db.Exec(`

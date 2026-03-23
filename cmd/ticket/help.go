@@ -495,6 +495,7 @@ Commands:
   disable  -id <id>                   Disable an agent
   request  -id <id>                   Request work for an agent
   run      -id <id>                   Run an agent worker loop
+  reset-password -id <id> [-password] Reset an agent's password
   config-set -id <id> <key> <value>  Set a config value on an agent
   config-ls  -id <id>                List agent config values
   config-rm  -id <id> <key>          Remove a config value from an agent`
