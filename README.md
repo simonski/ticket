@@ -106,6 +106,30 @@ ticket complete -id CUS-T-42
 ticket claim -id CUS-T-42
 ```
 
+## Running an agent
+
+First create an agent
+
+```bash
+tk agent create
+```
+
+```bash
+export AGENT_NAME=xxxx
+export AGENT_PASSWORD=xxxx
+export TICKET_URL=http://localhost:8080
+tk agent run
+```
+
+or
+
+```bash
+tk agent run -username xxxx -password xxxx -url http://localhost:8080
+```
+
+
+
+
 ## Claude Code integration
 
 `ticket` ships a Claude Code skill in `.claude/skills/tk/`. Copy it into your
