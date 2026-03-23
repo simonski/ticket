@@ -471,7 +471,7 @@ func TestRunTicketUsesCodexByDefaultAndWritesOutput(t *testing.T) {
 	defer func() { runAgentCommand = original }()
 
 	var gotAgent, gotPrompt string
-	runAgentCommand = func(agent, prompt string, stream bool) (string, error) {
+	runAgentCommand = func(agent, prompt string, stream bool, ticketKey string) (string, error) {
 		gotAgent = agent
 		gotPrompt = prompt
 		return "generated requirements", nil
@@ -512,7 +512,7 @@ func TestRunTicketUsesConfiguredAgent(t *testing.T) {
 	defer func() { runAgentCommand = original }()
 
 	var gotAgent string
-	runAgentCommand = func(agent, prompt string, stream bool) (string, error) {
+	runAgentCommand = func(agent, prompt string, stream bool, ticketKey string) (string, error) {
 		gotAgent = agent
 		return "ok", nil
 	}

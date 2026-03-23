@@ -1817,7 +1817,7 @@ func runAgent(args []string) error {
 				fmt.Printf("[agent] processing %s %q\n", ticketLabel(*ticket), ticket.Title)
 			}
 			prompt := buildAgentPrompt(*ticket)
-			result, err := runAgentCommand(modelCommand, prompt, agentVerbose)
+			result, err := runAgentCommand(modelCommand, prompt, agentVerbose, ticket.Key)
 			if err != nil {
 				fmt.Printf("failed %s: %v\n", ticketLabel(*ticket), err)
 				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
@@ -3698,7 +3698,7 @@ func runTicketGen(args []string) error {
 	if err != nil {
 		return err
 	}
-	response, err := runAgentCommand(strings.TrimSpace(*agent), prompt, false)
+	response, err := runAgentCommand(strings.TrimSpace(*agent), prompt, false, "")
 	if err != nil {
 		return err
 	}
@@ -3816,18 +3816,32 @@ func (pr *prefixReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func defaultRunTicketAgentCommand(agent, prompt string, stream bool) (string, error) {
+func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey string) (string, error) {
 	if agent == "" {
 		return "", errors.New("agent is required")
 	}
+
+	// Write the prompt to a file so large prompts don't hit arg-length
+	// limits and to work around CLI escaping issues.
+	promptFile := ""
+	if ticketKey != "" {
+		promptFile = fmt.Sprintf("prompt_%s.md", ticketKey)
+	} else {
+		promptFile = "prompt_agent.md"
+	}
+	if err := os.WriteFile(promptFile, []byte(prompt), 0644); err != nil {
+		return "", fmt.Errorf("write prompt file: %w", err)
+	}
+	defer os.Remove(promptFile)
+
 	var cmd *exec.Cmd
 	switch agent {
 	case "claude":
-		cmd = exec.Command("claude", "-p", "--model", "claude-sonnet-4-5", prompt)
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("claude -p --model claude-sonnet-4-5 < %s", promptFile))
 	case "codex":
-		cmd = exec.Command("codex", "exec", prompt)
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("codex exec < %s", promptFile))
 	default:
-		cmd = exec.Command(agent, "-p", prompt)
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("%s -p < %s", agent, promptFile))
 	}
 	if stream {
 		// Log the command being executed.
