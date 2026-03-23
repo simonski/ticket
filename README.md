@@ -6,7 +6,7 @@ It models:
 
 - projects with unique prefixes such as `CUS`
 - tickets with human keys such as `CUS-42`
-- ticket types `epic`, `task`, `bug`, `spike`, and `chore`
+- ticket types `epic`, `task`, `bug`, `story`, `requirement`, `decision`, `question`, and `note`
 - lifecycle as `stage/state`, for example `develop/active`
 - stages: `design → develop → test → done`
 - states: `idle | active | success | fail`
@@ -31,6 +31,7 @@ or
 
 ```bash
 go install github.com/simonski/ticket/cmd/ticket@latest
+alias tk=ticket
 ```
 
 ## Build from source
@@ -40,6 +41,7 @@ cd $CODE
 git clone github.com/simonski/ticket
 cd ticket
 make install
+alias tk=ticket
 ```
 
 ## Test
@@ -48,13 +50,26 @@ make install
 make test
 ```
 
-## Run
+## Usage
+
+In your project, run
 
 ```bash
-ticket init
-ticket server
+tk init
 ```
 
+You can now create tickets
+
+```bash
+tk add "Create a skeleton project in go."
+```
+
+```bash
+claude -p "work on next ticket"
+```
+
+
+## WebServer
 The web UI is then available at `http://localhost:8080`.
 
 ## CLI Quick Start

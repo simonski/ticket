@@ -769,6 +769,31 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	// Project goals
+	if !tableExists(db, "goals") {
+		if _, err := db.Exec(`
+			CREATE TABLE goals (
+				goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				title TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				notes TEXT NOT NULL DEFAULT '',
+				eta TEXT NOT NULL DEFAULT '',
+				priority INTEGER NOT NULL DEFAULT 1,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	// Link epics to goals
+	if !columnExists(db, "tickets", "goal_id") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN goal_id INTEGER REFERENCES goals(goal_id)`); err != nil {
+			return err
+		}
+	}
 	// Agent config key-value store
 	if !tableExists(db, "agent_config") {
 		if _, err := db.Exec(`
