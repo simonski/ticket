@@ -3950,7 +3950,41 @@ func resolveLifecycleInput(status, stage, state string) (string, string, error) 
 	return store.ParseLifecycleStatus(status)
 }
 
+// expandListShortFlags expands combined POSIX-style boolean flags for the
+// list command. For example: -ad → -a -d, -la → -l -a.
+// Only boolean short flags (a, d, l) are expanded. Flags that take values
+// (t, u, n) are left as-is to avoid consuming the next argument.
+func expandListShortFlags(args []string) []string {
+	boolFlags := map[byte]bool{
+		'a': true, // include all (closed)
+		'd': true, // include archived/deleted
+	}
+	var expanded []string
+	for _, arg := range args {
+		if len(arg) > 2 && arg[0] == '-' && arg[1] != '-' {
+			allBool := true
+			for i := 1; i < len(arg); i++ {
+				if !boolFlags[arg[i]] {
+					allBool = false
+					break
+				}
+			}
+			if allBool {
+				for i := 1; i < len(arg); i++ {
+					expanded = append(expanded, "-"+string(arg[i]))
+				}
+				continue
+			}
+		}
+		expanded = append(expanded, arg)
+	}
+	return expanded
+}
+
 func runList(args []string) error {
+	// Expand combined boolean short flags: -ad → -a -d, -la → -l -a, etc.
+	args = expandListShortFlags(args)
+
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	taskType := fs.String("type", "", "filter by ticket type")
@@ -3964,6 +3998,7 @@ func runList(args []string) error {
 	useUnicode := fs.Bool("unicode", true, "render status symbols as unicode")
 	plain := fs.Bool("plain", false, "render status as plain text")
 	includeAll := fs.Bool("a", false, "include all tickets (closed and archived)")
+	includeDeleted := fs.Bool("d", false, "include archived (deleted) tickets")
 	labelFilter := fs.String("label", "", "filter by label name")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -3975,6 +4010,10 @@ func runList(args []string) error {
 	}
 	if *limit < 0 {
 		return errors.New("usage: ticket list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-label <name>]")
+	}
+	// -d implies -a (archived tickets are a superset of closed)
+	if *includeDeleted {
+		*includeAll = true
 	}
 	statusUnicode := *useUnicode && !*plain
 	resolvedStage, resolvedState, err := resolveLifecycleInput(*status, *stage, *state)
@@ -3997,6 +4036,15 @@ func runList(args []string) error {
 			}
 		}
 		tickets = open
+	} else if !*includeDeleted {
+		// -a without -d: show closed but hide archived
+		nonArchived := tickets[:0]
+		for _, t := range tickets {
+			if !t.Archived {
+				nonArchived = append(nonArchived, t)
+			}
+		}
+		tickets = nonArchived
 	}
 	if *labelFilter != "" {
 		filtered := tickets[:0]

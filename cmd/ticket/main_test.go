@@ -1395,13 +1395,34 @@ func TestRunListArchivedVisibilityAndColumn(t *testing.T) {
 		t.Fatalf("list output should not include archived ticket %q without -a:\n%s", archivedRef, defaultOutput)
 	}
 
-	includeArchivedOutput := captureStdout(t, func() {
+	// -a shows closed but not archived
+	includeClosedOutput := captureStdout(t, func() {
 		if err := run([]string{"list", "-a"}); err != nil {
 			t.Fatalf("list -a error = %v", err)
 		}
 	})
-	if !strings.Contains(includeArchivedOutput, archivedRef) {
-		t.Fatalf("list -a output missing archived ticket %q:\n%s", archivedRef, includeArchivedOutput)
+	if strings.Contains(includeClosedOutput, archivedRef) {
+		t.Fatalf("list -a output should not include archived ticket %q:\n%s", archivedRef, includeClosedOutput)
+	}
+
+	// -d (or -ad) shows archived tickets
+	includeDeletedOutput := captureStdout(t, func() {
+		if err := run([]string{"list", "-d"}); err != nil {
+			t.Fatalf("list -d error = %v", err)
+		}
+	})
+	if !strings.Contains(includeDeletedOutput, archivedRef) {
+		t.Fatalf("list -d output missing archived ticket %q:\n%s", archivedRef, includeDeletedOutput)
+	}
+
+	// combined -ad also shows archived
+	combinedOutput := captureStdout(t, func() {
+		if err := run([]string{"list", "-ad"}); err != nil {
+			t.Fatalf("list -ad error = %v", err)
+		}
+	})
+	if !strings.Contains(combinedOutput, archivedRef) {
+		t.Fatalf("list -ad output missing archived ticket %q:\n%s", archivedRef, combinedOutput)
 	}
 }
 
