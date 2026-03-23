@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -68,6 +70,18 @@ func getenvFirst(keys ...string) string {
 	return ""
 }
 
+// friendlyConnectionError wraps low-level network errors with a clear message.
+func friendlyConnectionError(err error, baseURL string) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		var netErr *net.OpError
+		if errors.As(urlErr.Err, &netErr) {
+			return fmt.Errorf("cannot connect to %s: %w\nhint: is the server running? check TICKET_URL", baseURL, netErr)
+		}
+	}
+	return fmt.Errorf("cannot connect to %s: %w", baseURL, err)
+}
+
 func (c *Client) doJSON(method, path string, body any, out any) error {
 	var reader *bytes.Reader
 	if body == nil {
@@ -93,7 +107,7 @@ func (c *Client) doJSON(method, path string, body any, out any) error {
 
 	resp, err := c.http.Do(httpRequest)
 	if err != nil {
-		return err
+		return friendlyConnectionError(err, c.baseURL)
 	}
 	defer resp.Body.Close()
 

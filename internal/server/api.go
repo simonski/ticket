@@ -524,8 +524,15 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
+			vlog := func(format string, args ...any) {
+				if verbose && output != nil {
+					fmt.Fprintf(output, "AGENT %s\n", fmt.Sprintf(format, args...))
+				}
+			}
+			vlog("request from agent=%q project_id=%d", payload.Name, payload.ProjectID)
 			agent, err := store.AuthenticateAgent(db, payload.Name, payload.Password)
 			if err != nil {
+				vlog("auth failed for agent=%q: %v", payload.Name, err)
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
 					return
@@ -533,6 +540,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			vlog("agent=%q authenticated (id=%d uuid=%s)", agent.Name, agent.ID, agent.UUID)
 			projectID := payload.ProjectID
 			if payload.TicketID == nil && projectID == 0 {
 				projects, err := store.ListProjects(db)
@@ -543,14 +551,23 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				for _, p := range projects {
 					if p.Status == "open" {
 						projectID = p.ID
+						vlog("auto-selected project=%d %q (first open)", p.ID, p.Title)
 						break
 					}
+				}
+				if projectID == 0 {
+					vlog("no open projects found")
 				}
 			}
 			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
+			}
+			if hadCurrent {
+				vlog("agent has current assignment: %s %q (status=%s)", currentAssigned.Key, currentAssigned.Title, currentAssigned.Status)
+			} else {
+				vlog("agent has no current assignment")
 			}
 			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 				ProjectID: projectID,
@@ -560,18 +577,34 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				DryRun:    payload.DryRun,
 			})
 			if err != nil {
+				vlog("RequestTicket error: %v", err)
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
+			}
+			vlog("RequestTicket result: status=%s ticket_id=%d key=%s", status, ticket.ID, ticket.Key)
+			if status == "NO-WORK" {
+				// Explain why no work was found.
+				vlog("explaining NO-WORK decision for project=%d:", projectID)
+				if reasons, err := store.ExplainNoWork(db, projectID, agent.Name); err == nil {
+					for _, reason := range reasons {
+						vlog("  %s", reason)
+					}
+				}
 			}
 			agentStatus := "NONE"
 			switch status {
 			case "NO-WORK", "REJECTED":
 				agentStatus = "NONE"
+				if status == "REJECTED" {
+					vlog("ticket rejected: not claimable (wrong stage, already assigned, or has children)")
+				}
 			case "ASSIGNED", "AVAILABLE":
 				if hadCurrent && currentAssigned.ID == ticket.ID {
 					agentStatus = "CURRENT"
+					vlog("returning current assignment %s", ticket.Key)
 				} else {
 					agentStatus = "NEW"
+					vlog("assigned new ticket %s %q to agent", ticket.Key, ticket.Title)
 				}
 			default:
 				agentStatus = status
@@ -597,6 +630,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					response["parents"] = parents
 				}
 			}
+			vlog("response: agent_status=%s", agentStatus)
 			writeJSON(w, http.StatusOK, response)
 			return
 		}

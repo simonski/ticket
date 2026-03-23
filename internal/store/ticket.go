@@ -1252,6 +1252,103 @@ func findClaimCandidate(db *sql.DB, projectID int64) (Ticket, bool, error) {
 	return ticket, true, nil
 }
 
+// ExplainNoWork returns human-readable reasons why no ticket was available
+// for automatic assignment in the given project.
+func ExplainNoWork(db *sql.DB, projectID int64, username string) ([]string, error) {
+	var reasons []string
+
+	// Count total tickets in project.
+	var total int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE project_id = ?`, projectID).Scan(&total); err != nil {
+		return nil, err
+	}
+	reasons = append(reasons, fmt.Sprintf("total tickets in project: %d", total))
+
+	// Count by state.
+	rows, err := db.Query(`
+		SELECT state, COUNT(*) FROM tickets
+		WHERE project_id = ? AND open = 1 AND archived = 0
+		GROUP BY state
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var state string
+		var count int
+		if err := rows.Scan(&state, &count); err != nil {
+			return nil, err
+		}
+		reasons = append(reasons, fmt.Sprintf("  open state=%s: %d", state, count))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Count idle unassigned.
+	var idleUnassigned int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM tickets
+		WHERE project_id = ? AND open = 1 AND archived = 0 AND state = 'idle'
+		AND TRIM(COALESCE(assignee, '')) = ''
+	`, projectID).Scan(&idleUnassigned); err != nil {
+		return nil, err
+	}
+	reasons = append(reasons, fmt.Sprintf("idle + unassigned: %d", idleUnassigned))
+
+	// Count not ready.
+	var notReady int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM tickets
+		WHERE project_id = ? AND open = 1 AND archived = 0 AND state = 'idle'
+		AND TRIM(COALESCE(assignee, '')) = '' AND ready = 0
+	`, projectID).Scan(&notReady); err != nil {
+		return nil, err
+	}
+	if notReady > 0 {
+		reasons = append(reasons, fmt.Sprintf("not ready (blocked): %d — use 'tk ready <id>' to make eligible", notReady))
+	}
+
+	// Count with children (non-leaf).
+	var withChildren int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM tickets t
+		WHERE t.project_id = ? AND t.open = 1 AND t.archived = 0 AND t.ready = 1
+		AND t.state = 'idle' AND TRIM(COALESCE(t.assignee, '')) = ''
+		AND EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id)
+	`, projectID).Scan(&withChildren); err != nil {
+		return nil, err
+	}
+	if withChildren > 0 {
+		reasons = append(reasons, fmt.Sprintf("ready but has children (not leaf): %d", withChildren))
+	}
+
+	// Count assigned to someone else.
+	var assignedOther int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM tickets
+		WHERE project_id = ? AND open = 1 AND archived = 0 AND state = 'idle'
+		AND TRIM(COALESCE(assignee, '')) != '' AND assignee != ?
+	`, projectID, username).Scan(&assignedOther); err != nil {
+		return nil, err
+	}
+	if assignedOther > 0 {
+		reasons = append(reasons, fmt.Sprintf("idle but assigned to others: %d", assignedOther))
+	}
+
+	// Count closed.
+	var closed int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE project_id = ? AND open = 0`, projectID).Scan(&closed); err != nil {
+		return nil, err
+	}
+	if closed > 0 {
+		reasons = append(reasons, fmt.Sprintf("closed: %d", closed))
+	}
+
+	return reasons, nil
+}
+
 func CloneTicket(db *sql.DB, id, createdBy int64) (Ticket, error) {
 	original, err := GetTicket(db, id)
 	if err != nil {

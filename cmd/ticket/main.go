@@ -1605,9 +1605,6 @@ func runAgent(args []string) error {
 		if strings.TrimSpace(*name) == "" {
 			return errors.New("agent create requires -name")
 		}
-		if strings.TrimSpace(*description) == "" {
-			return errors.New("agent create requires -description")
-		}
 		agent, generatedPassword, err := svc.CreateAgent(libticket.AgentCreateRequest{
 			Name:        strings.TrimSpace(*name),
 			Description: strings.TrimSpace(*description),
@@ -1727,6 +1724,7 @@ func runAgent(args []string) error {
 		projectID := fs.Int64("project-id", 0, "project id override")
 		pollSeconds := fs.Int("poll-seconds", 2, "idle poll interval seconds")
 		llmCommand := fs.String("llm", envValue("TICKET_AGENT_LLM"), "llm command (default codex)")
+		verbose := fs.Bool("v", false, "verbose logging")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -1786,8 +1784,12 @@ func runAgent(args []string) error {
 		if modelCommand == "" {
 			modelCommand = "codex"
 		}
+		agentVerbose := *verbose
 		idleDelay := time.Duration(*pollSeconds) * time.Second
 		for {
+			if agentVerbose {
+				fmt.Printf("[agent] requesting work (project=%d)\n", *projectID)
+			}
 			response, err := svc.RequestAgentWork(libticket.AgentRequest{
 				Name:      agentName,
 				Password:  agentPassword,
@@ -1796,15 +1798,31 @@ func runAgent(args []string) error {
 			if err != nil {
 				return err
 			}
+			if agentVerbose {
+				fmt.Printf("[agent] response status=%s", response.Status)
+				if response.Ticket != nil {
+					fmt.Printf(" ticket=%s type=%s title=%q", response.Ticket.Key, response.Ticket.Type, response.Ticket.Title)
+				}
+				fmt.Println()
+			}
 			if (response.Status != "NEW" && response.Status != "CURRENT") || response.Ticket == nil {
+				if agentVerbose {
+					fmt.Printf("[agent] no work, sleeping %s\n", idleDelay)
+				}
 				time.Sleep(idleDelay)
 				continue
 			}
 			ticket := response.Ticket
+			if agentVerbose {
+				fmt.Printf("[agent] processing %s %q\n", ticketLabel(*ticket), ticket.Title)
+			}
 			prompt := buildAgentPrompt(*ticket)
 			result, err := runAgentCommand(modelCommand, prompt)
 			if err != nil {
 				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
+			}
+			if agentVerbose {
+				fmt.Printf("[agent] submitting result for %s (%d bytes)\n", ticketLabel(*ticket), len(result))
 			}
 			updated, err := svc.AgentUpdateTicket(ticket.ID, libticket.AgentTicketUpdateRequest{
 				Name:     agentName,
