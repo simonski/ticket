@@ -22,6 +22,9 @@ type Service interface {
 	ListAgents() ([]store.Agent, error)
 	UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error)
 	DeleteAgent(id int64) error
+	SetAgentConfig(agentID int64, key, value string) error
+	ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error)
+	DeleteAgentConfig(agentID int64, key string) error
 	RegisterAgent(request AgentRegisterRequest) (store.Agent, error)
 	RequestAgentWork(request AgentRequest) (AgentWorkResponse, error)
 	AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error)

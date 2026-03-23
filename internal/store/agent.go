@@ -264,3 +264,53 @@ func randomSecret(n int) (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
+
+// ─── agent config ─────────────────────────────────────────────────────────────
+
+type AgentConfigEntry struct {
+	AgentID int64  `json:"agent_id"`
+	Key     string `json:"key"`
+	Value   string `json:"value"`
+}
+
+func SetAgentConfig(db *sql.DB, agentID int64, key, value string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errors.New("config key is required")
+	}
+	_, err := db.Exec(`
+		INSERT INTO agent_config (agent_id, key, value, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(agent_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, agentID, key, value)
+	return err
+}
+
+func ListAgentConfig(db *sql.DB, agentID int64) ([]AgentConfigEntry, error) {
+	rows, err := db.Query(`SELECT agent_id, key, value FROM agent_config WHERE agent_id = ? ORDER BY key`, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []AgentConfigEntry
+	for rows.Next() {
+		var e AgentConfigEntry
+		if err := rows.Scan(&e.AgentID, &e.Key, &e.Value); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+func DeleteAgentConfig(db *sql.DB, agentID int64, key string) error {
+	result, err := db.Exec(`DELETE FROM agent_config WHERE agent_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return errors.New("config key not found")
+	}
+	return nil
+}

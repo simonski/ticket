@@ -29,7 +29,8 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	for _, want := range []string{
 		"TTTTTTT",
 		"USAGE",
-		"NAMESPACES",
+		"COMMANDS",
+		"ADMIN",
 		"SHORTCUTS",
 		"SYSTEM",
 		"\x1b[38;5;117m",
@@ -65,7 +66,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		}
 	}
 
-	// Verify noun-based ordering in NAMESPACES section
+	// Verify ordering: COMMANDS section then ADMIN section
 	nounOrder := []string{
 		"  ticket",
 		"  req",
@@ -73,9 +74,10 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  dep",
 		"  label",
 		"  time",
+		"  story",
+		"  decision",
 		"  role",
 		"  workflow",
-		"  decision",
 		"  team",
 		"  agent",
 		"  user",

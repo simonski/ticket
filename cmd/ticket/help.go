@@ -320,23 +320,27 @@ func renderRootUsage() string {
 	r := "\x1b[0m"
 	b.WriteString("\n" + h + "USAGE" + r + "\n")
 	b.WriteString("  ticket <noun> <verb> [flags]\n\n")
-	nounRows := [][2]string{
+	commandRows := [][2]string{
 		{"ticket", "Manage tickets — create, update, state, assign, comment, close"},
 		{"req", "Capture and refine requirements — add, shape, accept, reject"},
 		{"project", "Manage projects and active project context"},
 		{"dep", "Manage dependency links between tickets"},
 		{"label", "Manage project labels and ticket tagging"},
 		{"time", "Log and view time entries on tickets"},
-		{"role", "Manage roles (title, motivation, goals)"},
 		{"story", "Manage stories within a project"},
-		{"workflow", "Manage workflow definitions and stages"},
 		{"decision", "Record and list architectural decisions"},
+	}
+	b.WriteString(h + "COMMANDS" + r + "\n")
+	printCommandUsageRows(&b, commandRows, 10)
+	adminRows := [][2]string{
+		{"role", "Manage roles (title, motivation, goals)"},
+		{"workflow", "Manage workflow definitions and stages"},
 		{"team", "Manage teams, hierarchy, and team membership"},
 		{"agent", "Manage autonomous agents and run agent workers"},
 		{"user", "Admin-only user management"},
 	}
-	b.WriteString(h + "NAMESPACES" + r + "\n")
-	printCommandUsageRows(&b, nounRows, 10)
+	b.WriteString("\n" + h + "ADMIN" + r + "\n")
+	printCommandUsageRows(&b, adminRows, 10)
 	shortcutRows := [][2]string{
 		{"tk", "List tickets in the active project (alias: tk ticket list)"},
 		{"tk add", "Create a ticket (alias: tk ticket add)"},
@@ -490,7 +494,10 @@ Commands:
   enable   -id <id>                   Enable an agent
   disable  -id <id>                   Disable an agent
   request  -id <id>                   Request work for an agent
-  run      -id <id>                   Run an agent worker loop`
+  run      -id <id>                   Run an agent worker loop
+  config-set -id <id> <key> <value>  Set a config value on an agent
+  config-ls  -id <id>                List agent config values
+  config-rm  -id <id> <key>          Remove a config value from an agent`
 
 const userUsage = `Usage: ticket user <command> [flags]
 

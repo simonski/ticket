@@ -99,6 +99,18 @@ func (s *Service) DeleteAgent(id int64) error {
 	return s.client.DeleteAgent(id)
 }
 
+func (s *Service) SetAgentConfig(agentID int64, key, value string) error {
+	return s.client.SetAgentConfig(agentID, key, value)
+}
+
+func (s *Service) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error) {
+	return s.client.ListAgentConfig(agentID)
+}
+
+func (s *Service) DeleteAgentConfig(agentID int64, key string) error {
+	return s.client.DeleteAgentConfig(agentID, key)
+}
+
 func (s *Service) RegisterAgent(request libticket.AgentRegisterRequest) (store.Agent, error) {
 	return s.client.RegisterAgent(client.AgentRegisterRequest(request))
 }

@@ -716,6 +716,22 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	// Agent config key-value store
+	if !tableExists(db, "agent_config") {
+		if _, err := db.Exec(`
+			CREATE TABLE agent_config (
+				agent_id INTEGER NOT NULL,
+				key TEXT NOT NULL,
+				value TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(agent_id, key),
+				FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

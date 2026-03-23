@@ -222,6 +222,33 @@ func (s *LocalService) DeleteAgent(id int64) error {
 	return store.DeleteAgent(db, id)
 }
 
+func (s *LocalService) SetAgentConfig(agentID int64, key, value string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.SetAgentConfig(db, agentID, key, value)
+}
+
+func (s *LocalService) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListAgentConfig(db, agentID)
+}
+
+func (s *LocalService) DeleteAgentConfig(agentID int64, key string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.DeleteAgentConfig(db, agentID, key)
+}
+
 func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {

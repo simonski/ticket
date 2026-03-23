@@ -335,6 +335,44 @@ func (c *Client) DeleteAgent(id int64) error {
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%d", id), nil, nil)
 }
 
+func (c *Client) SetAgentConfig(agentID int64, key, value string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.SetAgentConfig(db, agentID, key, value)
+	}
+	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%d/config", agentID), map[string]string{"key": key, "value": value}, nil)
+}
+
+func (c *Client) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListAgentConfig(db, agentID)
+	}
+	var entries []store.AgentConfigEntry
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/agents/%d/config", agentID), nil, &entries)
+	return entries, err
+}
+
+func (c *Client) DeleteAgentConfig(agentID int64, key string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.DeleteAgentConfig(db, agentID, key)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%d/config/%s", agentID, key), nil, nil)
+}
+
 func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

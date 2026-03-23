@@ -159,6 +159,8 @@ func run(args []string) error {
 		return runLogout(trimmedArgs[1:])
 	case "status":
 		return runStatus(trimmedArgs[1:])
+	case "whoami":
+		return runWhoami(trimmedArgs[1:])
 	case "count":
 		return runCount(trimmedArgs[1:])
 	case "ticket":
@@ -408,6 +410,15 @@ func runSummary(_ []string) error {
 			lines = append(lines, statusLine{key: "  " + t.Key, value: val})
 		}
 	}
+
+	// System counts
+	lines = append(lines, statusLine{})
+	projects, _ := svc.ListProjects()
+	users, _ := svc.ListUsers()
+	agents, _ := svc.ListAgents()
+	lines = append(lines, statusLine{key: "projects", value: fmt.Sprintf("%d", len(projects))})
+	lines = append(lines, statusLine{key: "users", value: fmt.Sprintf("%d", len(users))})
+	lines = append(lines, statusLine{key: "agents", value: fmt.Sprintf("%d", len(agents))})
 
 	// Environment
 	lines = append(lines, statusLine{})
@@ -1361,6 +1372,91 @@ func runCount(args []string) error {
 	return nil
 }
 
+func runWhoami(args []string) error {
+	_ = args
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	// User info
+	username := cfg.Username
+	if username == "" {
+		username = "admin"
+	}
+	users, _ := svc.ListUsers()
+	var currentUser *store.User
+	for _, u := range users {
+		if u.Username == username {
+			currentUser = &u
+			break
+		}
+	}
+
+	fmt.Println("USER")
+	if currentUser != nil {
+		fmt.Printf("  username : %s\n", currentUser.Username)
+		fmt.Printf("  role     : %s\n", currentUser.Role)
+		fmt.Printf("  user_id  : %d\n", currentUser.ID)
+	} else {
+		fmt.Printf("  username : %s\n", username)
+	}
+
+	// Connection info
+	fmt.Println()
+	fmt.Println("CONNECTION")
+	fmt.Printf("  mode     : %s\n", resolved.Mode)
+	if resolved.Mode == config.ModeRemote {
+		fmt.Printf("  server   : %s\n", resolved.ServerURL)
+	} else {
+		fmt.Printf("  database : %s\n", resolved.DBPath)
+	}
+
+	// Projects with user role
+	fmt.Println()
+	fmt.Println("PROJECTS")
+	projects, err := svc.ListProjects()
+	if err != nil {
+		fmt.Println("  (unable to list projects)")
+		return nil
+	}
+	if len(projects) == 0 {
+		fmt.Println("  (none)")
+		return nil
+	}
+	for _, p := range projects {
+		marker := "  "
+		if p.Prefix == cfg.CurrentProject || fmt.Sprintf("%d", p.ID) == cfg.CurrentProject {
+			marker = "* "
+		}
+		role := ""
+		if currentUser != nil {
+			members, _ := svc.ListProjectMembers(p.ID)
+			for _, m := range members {
+				if m.UserID == currentUser.ID {
+					role = m.Role
+					break
+				}
+			}
+		}
+		if role != "" {
+			fmt.Printf("  %s%-6s  %-20s  (%s)\n", marker, p.Prefix, p.Title, role)
+		} else {
+			fmt.Printf("  %s%-6s  %s\n", marker, p.Prefix, p.Title)
+		}
+	}
+
+	return nil
+}
+
 func runUser(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		fmt.Println(userUsage)
@@ -1765,6 +1861,64 @@ func runAgent(args []string) error {
 				time.Sleep(time.Duration(*sleepSeconds) * time.Second)
 			}
 		}
+		return nil
+	case "config-set":
+		if len(args) < 4 {
+			return errors.New("usage: ticket agent config-set -id <agent-id> <key> <value>")
+		}
+		fs := flag.NewFlagSet("agent config-set", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		agentID := fs.Int64("id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *agentID == 0 || fs.NArg() < 2 {
+			return errors.New("usage: ticket agent config-set -id <agent-id> <key> <value>")
+		}
+		if err := svc.SetAgentConfig(*agentID, fs.Arg(0), fs.Arg(1)); err != nil {
+			return err
+		}
+		fmt.Printf("%s=%s\n", fs.Arg(0), fs.Arg(1))
+		return nil
+	case "config-ls":
+		fs := flag.NewFlagSet("agent config-ls", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		agentID := fs.Int64("id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *agentID == 0 {
+			return errors.New("usage: ticket agent config-ls -id <agent-id>")
+		}
+		entries, err := svc.ListAgentConfig(*agentID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(entries)
+		}
+		if len(entries) == 0 {
+			fmt.Println("(no config)")
+			return nil
+		}
+		for _, e := range entries {
+			fmt.Printf("%s=%s\n", e.Key, e.Value)
+		}
+		return nil
+	case "config-rm":
+		fs := flag.NewFlagSet("agent config-rm", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		agentID := fs.Int64("id", 0, "agent id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *agentID == 0 || fs.NArg() < 1 {
+			return errors.New("usage: ticket agent config-rm -id <agent-id> <key>")
+		}
+		if err := svc.DeleteAgentConfig(*agentID, fs.Arg(0)); err != nil {
+			return err
+		}
+		fmt.Printf("deleted %s\n", fs.Arg(0))
 		return nil
 	default:
 		return fmt.Errorf("unknown agent command %q; see: ticket agent help", args[0])

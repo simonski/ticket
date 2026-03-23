@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"golang.org/x/term"
+
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 )
@@ -68,6 +70,20 @@ func printStatusBox(lines []statusLine) {
 	const keyWidth = 17
 	const padding = 2 // minimum spaces on each side of content
 
+	// Determine terminal width for capping box width.
+	// Non-terminal (piped/tests): no cap. Terminal: use detected width.
+	maxContent := 0 // 0 = unlimited
+	if isTerminal() {
+		termW := 120
+		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 {
+			termW = tw
+		}
+		maxContent = termW - 2 - padding*2
+		if maxContent < 40 {
+			maxContent = 40
+		}
+	}
+
 	type row struct {
 		plain  string // visible text, for width measurement
 		styled string // text to print (may contain ANSI codes)
@@ -77,12 +93,21 @@ func printStatusBox(lines []statusLine) {
 	maxWidth := 0
 	for i, l := range lines {
 		if l.key == "" {
-			continue // blank separator — width handled separately
+			continue
 		}
-		plain := fmt.Sprintf("%-*s: %s", keyWidth, l.key, l.value)
+		plainVal := l.value
+		keyPart := fmt.Sprintf("%-*s: ", keyWidth, l.key)
+		// Truncate value if the full line would exceed terminal width
+		if maxContent > 0 {
+			maxVal := maxContent - utf8.RuneCountInString(keyPart)
+			if maxVal > 0 && utf8.RuneCountInString(plainVal) > maxVal {
+				plainVal = string([]rune(plainVal)[:maxVal-1]) + "…"
+			}
+		}
+		plain := keyPart + plainVal
 		styled := plain
 		if !noColorOutput && l.color != "" {
-			styled = fmt.Sprintf("%-*s: %s%s\x1b[0m", keyWidth, l.key, l.color, l.value)
+			styled = fmt.Sprintf("%-*s: %s%s\x1b[0m", keyWidth, l.key, l.color, plainVal)
 		}
 		rows[i] = row{plain, styled}
 		if w := utf8.RuneCountInString(plain); w > maxWidth {
@@ -90,7 +115,6 @@ func printStatusBox(lines []statusLine) {
 		}
 	}
 
-	// inner = visible chars between │ and │ on every row
 	inner := maxWidth + padding*2
 
 	fmt.Println("╭" + strings.Repeat("─", inner) + "╮")
@@ -101,6 +125,9 @@ func printStatusBox(lines []statusLine) {
 		}
 		r := rows[i]
 		rightPad := inner - padding - utf8.RuneCountInString(r.plain)
+		if rightPad < 0 {
+			rightPad = 0
+		}
 		fmt.Printf("│%s%s%s│\n",
 			strings.Repeat(" ", padding),
 			r.styled,
