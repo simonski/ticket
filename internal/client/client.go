@@ -434,14 +434,14 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 				}
 			}
 		}
-		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Username)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
 		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 			ProjectID: projectID,
 			TicketID:  request.TicketID,
-			Username:  agent.Name,
+			Username:  agent.Username,
 			UserID:    0,
 			DryRun:    request.DryRun,
 		})
@@ -502,14 +502,14 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 			GitRepository:      current.GitRepository,
 			GitBranch:          current.GitBranch,
 			ParentID:           current.ParentID,
-			Assignee:           agent.Name,
+			Assignee:           agent.Username,
 			State:              store.StateSuccess,
 			Priority:           current.Priority,
 			Order:              current.Order,
 			EstimateEffort:     current.EstimateEffort,
 			EstimateComplete:   current.EstimateComplete,
 			UpdatedBy:          0,
-			ActorUsername:      agent.Name,
+			ActorUsername:      agent.Username,
 			ActorRole:          "admin",
 		})
 	}

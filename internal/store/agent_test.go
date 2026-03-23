@@ -40,6 +40,9 @@ func TestCreateAgentGeneratesPasswordWhenMissing(t *testing.T) {
 	if agent.Status != "idle" {
 		t.Fatalf("agent status = %q, want idle", agent.Status)
 	}
+	if agent.UserType != "agent" {
+		t.Fatalf("agent user_type = %q, want agent", agent.UserType)
+	}
 
 	authenticated, err := AuthenticateAgent(db, "worker-1", generatedPassword)
 	if err != nil {
@@ -73,8 +76,8 @@ func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateAgent() error = %v", err)
 	}
-	if updated.Name != updatedName {
-		t.Fatalf("updated.Name = %q, want %q", updated.Name, updatedName)
+	if updated.Username != updatedName {
+		t.Fatalf("updated.Username = %q, want %q", updated.Username, updatedName)
 	}
 	if updated.Description != updatedDesc {
 		t.Fatalf("updated.Description = %q, want %q", updated.Description, updatedDesc)
@@ -121,5 +124,43 @@ func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 	}
 	if _, err := GetAgentByID(db, agent.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetAgentByID(deleted) err = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestAgentDoesNotAppearInListUsers(t *testing.T) {
+	db := openAgentTestDB(t)
+	defer db.Close()
+
+	_, _, err := CreateAgent(db, "worker-hidden", "should not appear", "secret")
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	users, err := ListUsers(db)
+	if err != nil {
+		t.Fatalf("ListUsers() error = %v", err)
+	}
+	for _, u := range users {
+		if u.Username == "worker-hidden" {
+			t.Fatalf("ListUsers() should not include agents, found %q", u.Username)
+		}
+	}
+}
+
+func TestAgentFoundByGetUserByUsername(t *testing.T) {
+	db := openAgentTestDB(t)
+	defer db.Close()
+
+	_, _, err := CreateAgent(db, "worker-findable", "findable agent", "secret")
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	user, err := GetUserByUsername(db, "worker-findable")
+	if err != nil {
+		t.Fatalf("GetUserByUsername() error = %v", err)
+	}
+	if user.UserType != "agent" {
+		t.Fatalf("user.UserType = %q, want agent", user.UserType)
 	}
 }

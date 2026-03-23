@@ -271,17 +271,17 @@ func AddTeamAgent(db *sql.DB, teamID, agentID int64) (TeamAgent, error) {
 		return TeamAgent{}, err
 	}
 	if _, err := db.Exec(`
-		INSERT INTO team_agents (team_id, agent_id)
+		INSERT INTO team_agents (team_id, user_id)
 		VALUES (?, ?)
-		ON CONFLICT(team_id, agent_id) DO NOTHING
+		ON CONFLICT(team_id, user_id) DO NOTHING
 	`, teamID, agentID); err != nil {
 		return TeamAgent{}, err
 	}
 	row := db.QueryRow(`
-		SELECT ta.team_id, a.agent_id, a.name, a.description, a.enabled, a.status
+		SELECT ta.team_id, u.user_id, u.username, COALESCE(u.description, ''), u.enabled, COALESCE(u.status, '')
 		FROM team_agents ta
-		JOIN agents a ON a.agent_id = ta.agent_id
-		WHERE ta.team_id = ? AND ta.agent_id = ?
+		JOIN users u ON u.user_id = ta.user_id
+		WHERE ta.team_id = ? AND ta.user_id = ?
 	`, teamID, agentID)
 	var item TeamAgent
 	var enabled int
@@ -293,7 +293,7 @@ func AddTeamAgent(db *sql.DB, teamID, agentID int64) (TeamAgent, error) {
 }
 
 func RemoveTeamAgent(db *sql.DB, teamID, agentID int64) error {
-	result, err := db.Exec(`DELETE FROM team_agents WHERE team_id = ? AND agent_id = ?`, teamID, agentID)
+	result, err := db.Exec(`DELETE FROM team_agents WHERE team_id = ? AND user_id = ?`, teamID, agentID)
 	if err != nil {
 		return err
 	}
@@ -309,11 +309,11 @@ func RemoveTeamAgent(db *sql.DB, teamID, agentID int64) error {
 
 func ListTeamAgents(db *sql.DB, teamID int64) ([]TeamAgent, error) {
 	rows, err := db.Query(`
-		SELECT ta.team_id, a.agent_id, a.name, a.description, a.enabled, a.status
+		SELECT ta.team_id, u.user_id, u.username, COALESCE(u.description, ''), u.enabled, COALESCE(u.status, '')
 		FROM team_agents ta
-		JOIN agents a ON a.agent_id = ta.agent_id
+		JOIN users u ON u.user_id = ta.user_id
 		WHERE ta.team_id = ?
-		ORDER BY a.name
+		ORDER BY u.username
 	`, teamID)
 	if err != nil {
 		return nil, err

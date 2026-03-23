@@ -26,7 +26,6 @@ type Snapshot struct {
 var snapshotTableOrder = []string{
 	"users",
 	"sessions",
-	"agents",
 	"roles",
 	"workflows",
 	"workflow_stages",

@@ -957,8 +957,8 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
-		if agent.Name != "test-agent" {
-			t.Fatalf("agent.Name = %q, want %q", agent.Name, "test-agent")
+		if agent.Username != "test-agent" {
+			t.Fatalf("agent.Username = %q, want %q", agent.Username, "test-agent")
 		}
 		if password == "" {
 			t.Fatal("CreateAgent() returned empty password")
@@ -987,8 +987,8 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("UpdateAgent() error = %v", err)
 		}
-		if updated.Name != "updated-agent" {
-			t.Fatalf("updated.Name = %q, want %q", updated.Name, "updated-agent")
+		if updated.Username != "updated-agent" {
+			t.Fatalf("updated.Username = %q, want %q", updated.Username, "updated-agent")
 		}
 
 		// Disable agent

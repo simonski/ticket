@@ -548,7 +548,7 @@ func TestAgentAPI(t *testing.T) {
 	}
 	var agents []store.Agent
 	decodeResponse(t, listResp, &agents)
-	if len(agents) != 1 || agents[0].Name != "worker-1" {
+	if len(agents) != 1 || agents[0].Username != "worker-1" {
 		t.Fatalf("agents list = %#v", agents)
 	}
 

@@ -1778,7 +1778,7 @@ func runAgent(args []string) error {
 			return err
 		}
 		if !outputJSON {
-			fmt.Printf("agent %s registered (id=%s)\n", agent.Name, agent.UUID)
+			fmt.Printf("agent %s registered (id=%s)\n", agent.Username, agent.UUID)
 		}
 		modelCommand := strings.TrimSpace(*llmCommand)
 		if modelCommand == "" {
@@ -1943,7 +1943,7 @@ func runAgent(args []string) error {
 		if outputJSON {
 			return printJSON(map[string]any{"agent_id": agent.UUID, "password": pw})
 		}
-		fmt.Printf("agent    : %s (%s)\n", agent.Name, agent.UUID)
+		fmt.Printf("agent    : %s (%s)\n", agent.Username, agent.UUID)
 		fmt.Printf("password : %s\n", pw)
 		return nil
 	case "config-set":
@@ -2034,7 +2034,7 @@ func printAgentTable(agents []store.Agent) {
 		return
 	}
 	sort.SliceStable(agents, func(i, j int) bool {
-		return strings.ToLower(agents[i].Name) < strings.ToLower(agents[j].Name)
+		return strings.ToLower(agents[i].Username) < strings.ToLower(agents[j].Username)
 	})
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION\tENABLED\tSTATUS\tLAST_SEEN")
@@ -2043,7 +2043,7 @@ func printAgentTable(agents []store.Agent) {
 		if lastSeen == "" {
 			lastSeen = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\t%s\n", agent.UUID, agent.Name, agent.Description, agent.Enabled, agent.Status, lastSeen)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\t%s\n", agent.UUID, agent.Username, agent.Description, agent.Enabled, agent.Status, lastSeen)
 	}
 	_ = w.Flush()
 }

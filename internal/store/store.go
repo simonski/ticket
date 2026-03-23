@@ -149,7 +149,13 @@ CREATE TABLE IF NOT EXISTS users (
 	role TEXT NOT NULL,
 	display_name TEXT NOT NULL,
 	enabled INTEGER NOT NULL DEFAULT 1,
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	user_type TEXT NOT NULL DEFAULT 'user',
+	uuid TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT '',
+	last_seen TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -159,18 +165,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	expires_at TEXT,
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
-);
-
-CREATE TABLE IF NOT EXISTS agents (
-	agent_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	name TEXT NOT NULL UNIQUE,
-	description TEXT NOT NULL DEFAULT '',
-	password_hash TEXT NOT NULL,
-	enabled INTEGER NOT NULL DEFAULT 1,
-	status TEXT NOT NULL DEFAULT 'idle',
-	last_seen TEXT NOT NULL DEFAULT '',
-	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS roles (
@@ -345,11 +339,11 @@ CREATE TABLE IF NOT EXISTS team_members (
 
 CREATE TABLE IF NOT EXISTS team_agents (
 	team_id INTEGER NOT NULL,
-	agent_id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY(team_id, agent_id),
+	PRIMARY KEY(team_id, user_id),
 	FOREIGN KEY(team_id) REFERENCES teams(team_id),
-	FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
 CREATE TABLE IF NOT EXISTS project_teams (
@@ -716,26 +710,109 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
-	// Add UUID column to agents
-	if !columnExists(db, "agents", "uuid") {
-		if _, err := db.Exec(`ALTER TABLE agents ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+	// Add new columns to users for merged agent support
+	if !columnExists(db, "users", "user_type") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN user_type TEXT NOT NULL DEFAULT 'user'`); err != nil {
 			return err
 		}
-		// Backfill UUIDs for existing agents
-		var agentIDs []int64
-		if rows, err := db.Query(`SELECT agent_id FROM agents WHERE uuid = ''`); err == nil {
-			for rows.Next() {
+	}
+	if !columnExists(db, "users", "uuid") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "users", "description") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN description TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "users", "status") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "users", "last_seen") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN last_seen TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(db, "users", "updated_at") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	// Migrate agents table into users if it still exists
+	if tableExists(db, "agents") {
+		// Add UUID column to agents if missing (for very old DBs)
+		if !columnExists(db, "agents", "uuid") {
+			if _, err := db.Exec(`ALTER TABLE agents ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+		// Backfill UUIDs for agents that don't have one
+		if agentRows, err := db.Query(`SELECT agent_id FROM agents WHERE TRIM(COALESCE(uuid, '')) = ''`); err == nil {
+			var agentIDs []int64
+			for agentRows.Next() {
 				var id int64
-				if err := rows.Scan(&id); err == nil {
+				if err := agentRows.Scan(&id); err == nil {
 					agentIDs = append(agentIDs, id)
 				}
 			}
-			rows.Close()
-		}
-		for _, id := range agentIDs {
-			if u, err := generateAgentUUID(); err == nil {
-				db.Exec(`UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
+			agentRows.Close()
+			for _, id := range agentIDs {
+				if u, err := generateAgentUUID(); err == nil {
+					db.Exec(`UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
+				}
 			}
+		}
+		// Migrate agent data into users table
+		if _, err := db.Exec(`
+			INSERT OR IGNORE INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, description, status, last_seen, created_at, updated_at)
+			SELECT name, password_hash, 'agent', name, enabled, 'agent', COALESCE(uuid, ''), COALESCE(description, ''), COALESCE(status, 'idle'), COALESCE(last_seen, ''), created_at, updated_at
+			FROM agents
+		`); err != nil {
+			return err
+		}
+		// Migrate team_agents references from old agent_id to new user_id
+		if columnExists(db, "team_agents", "agent_id") {
+			if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+				return err
+			}
+			// Create a mapping from old agent_id to new user_id
+			if _, err := db.Exec(`
+				CREATE TABLE IF NOT EXISTS team_agents_new (
+					team_id INTEGER NOT NULL,
+					user_id INTEGER NOT NULL,
+					created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					PRIMARY KEY(team_id, user_id),
+					FOREIGN KEY(team_id) REFERENCES teams(team_id),
+					FOREIGN KEY(user_id) REFERENCES users(user_id)
+				)
+			`); err != nil {
+				return err
+			}
+			if _, err := db.Exec(`
+				INSERT OR IGNORE INTO team_agents_new (team_id, user_id, created_at)
+				SELECT ta.team_id, u.user_id, ta.created_at
+				FROM team_agents ta
+				JOIN agents a ON a.agent_id = ta.agent_id
+				JOIN users u ON u.username = a.name AND u.user_type = 'agent'
+			`); err != nil {
+				return err
+			}
+			if _, err := db.Exec(`DROP TABLE team_agents`); err != nil {
+				return err
+			}
+			if _, err := db.Exec(`ALTER TABLE team_agents_new RENAME TO team_agents`); err != nil {
+				return err
+			}
+			if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+				return err
+			}
+		}
+		// Drop the old agents table
+		if _, err := db.Exec(`DROP TABLE agents`); err != nil {
+			return err
 		}
 	}
 	// Add email to users
@@ -798,15 +875,49 @@ func migrateSchema(db *sql.DB) error {
 	if !tableExists(db, "agent_config") {
 		if _, err := db.Exec(`
 			CREATE TABLE agent_config (
-				agent_id INTEGER NOT NULL,
+				user_id INTEGER NOT NULL,
 				key TEXT NOT NULL,
 				value TEXT NOT NULL DEFAULT '',
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				PRIMARY KEY(agent_id, key),
-				FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+				PRIMARY KEY(user_id, key),
+				FOREIGN KEY(user_id) REFERENCES users(user_id)
 			)
 		`); err != nil {
+			return err
+		}
+	}
+	// Migrate agent_config from agent_id to user_id if needed
+	if columnExists(db, "agent_config", "agent_id") && !columnExists(db, "agent_config", "user_id") {
+		if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`
+			CREATE TABLE agent_config_new (
+				user_id INTEGER NOT NULL,
+				key TEXT NOT NULL,
+				value TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(user_id, key),
+				FOREIGN KEY(user_id) REFERENCES users(user_id)
+			)
+		`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`
+			INSERT OR IGNORE INTO agent_config_new (user_id, key, value, created_at, updated_at)
+			SELECT agent_id, key, value, created_at, updated_at FROM agent_config
+		`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`DROP TABLE agent_config`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`ALTER TABLE agent_config_new RENAME TO agent_config`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
 			return err
 		}
 	}

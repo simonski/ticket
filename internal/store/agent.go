@@ -11,17 +11,8 @@ import (
 	"github.com/simonski/ticket/internal/password"
 )
 
-type Agent struct {
-	ID          int64  `json:"agent_id"`
-	UUID        string `json:"uuid"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
-	Status      string `json:"status"`
-	LastSeen    string `json:"last_seen"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-}
+// Agent is a type alias for User. Agents are users with user_type='agent'.
+type Agent = User
 
 type AgentUpdateParams struct {
 	Name        *string
@@ -52,9 +43,9 @@ func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, st
 		return Agent{}, "", err
 	}
 	result, err := db.Exec(`
-		INSERT INTO agents (uuid, name, description, password_hash, enabled, status, updated_at)
-		VALUES (?, ?, ?, ?, 1, 'idle', CURRENT_TIMESTAMP)
-	`, uuid, name, description, hash)
+		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, description, status, updated_at)
+		VALUES (?, ?, 'agent', ?, 1, 'agent', ?, ?, 'idle', CURRENT_TIMESTAMP)
+	`, name, hash, name, uuid, description)
 	if err != nil {
 		return Agent{}, "", err
 	}
@@ -71,27 +62,28 @@ func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, st
 
 func GetAgentByID(db *sql.DB, id int64) (Agent, error) {
 	row := db.QueryRow(`
-		SELECT agent_id, COALESCE(uuid, ''), name, description, enabled, status, last_seen, created_at, updated_at
-		FROM agents
-		WHERE agent_id = ?
+		SELECT `+userSelectColumns+`
+		FROM users
+		WHERE user_id = ? AND user_type = 'agent'
 	`, id)
-	return scanAgent(row)
+	return scanUser(row.Scan)
 }
 
 func GetAgentByName(db *sql.DB, name string) (Agent, error) {
 	row := db.QueryRow(`
-		SELECT agent_id, COALESCE(uuid, ''), name, description, enabled, status, last_seen, created_at, updated_at
-		FROM agents
-		WHERE name = ?
+		SELECT `+userSelectColumns+`
+		FROM users
+		WHERE username = ? AND user_type = 'agent'
 	`, strings.TrimSpace(name))
-	return scanAgent(row)
+	return scanUser(row.Scan)
 }
 
 func ListAgents(db *sql.DB) ([]Agent, error) {
 	rows, err := db.Query(`
-		SELECT agent_id, COALESCE(uuid, ''), name, description, enabled, status, last_seen, created_at, updated_at
-		FROM agents
-		ORDER BY name
+		SELECT `+userSelectColumns+`
+		FROM users
+		WHERE user_type = 'agent'
+		ORDER BY username
 	`)
 	if err != nil {
 		return nil, err
@@ -99,13 +91,11 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 	defer rows.Close()
 	agents := make([]Agent, 0)
 	for rows.Next() {
-		var a Agent
-		var enabled int
-		if err := rows.Scan(&a.ID, &a.UUID, &a.Name, &a.Description, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		agent, err := scanUser(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		a.Enabled = enabled == 1
-		agents = append(agents, a)
+		agents = append(agents, agent)
 	}
 	return agents, rows.Err()
 }
@@ -115,7 +105,7 @@ func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) 
 	if err != nil {
 		return Agent{}, err
 	}
-	name := current.Name
+	name := current.Username
 	description := current.Description
 	passwordHash := ""
 	if params.Name != nil {
@@ -139,16 +129,16 @@ func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) 
 	}
 	if passwordHash != "" {
 		_, err = db.Exec(`
-			UPDATE agents
-			SET name = ?, description = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE agent_id = ?
-		`, name, description, passwordHash, id)
+			UPDATE users
+			SET username = ?, display_name = ?, description = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE user_id = ? AND user_type = 'agent'
+		`, name, name, description, passwordHash, id)
 	} else {
 		_, err = db.Exec(`
-			UPDATE agents
-			SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE agent_id = ?
-		`, name, description, id)
+			UPDATE users
+			SET username = ?, display_name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE user_id = ? AND user_type = 'agent'
+		`, name, name, description, id)
 	}
 	if err != nil {
 		return Agent{}, err
@@ -157,7 +147,11 @@ func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) 
 }
 
 func DeleteAgent(db *sql.DB, id int64) error {
-	result, err := db.Exec(`DELETE FROM agents WHERE agent_id = ?`, id)
+	// Delete sessions for this agent first
+	if _, err := db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
+		return err
+	}
+	result, err := db.Exec(`DELETE FROM users WHERE user_id = ? AND user_type = 'agent'`, id)
 	if err != nil {
 		return err
 	}
@@ -177,9 +171,9 @@ func SetAgentEnabled(db *sql.DB, id int64, enabled bool) (Agent, error) {
 		status = "idle"
 	}
 	result, err := db.Exec(`
-		UPDATE agents
+		UPDATE users
 		SET enabled = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE agent_id = ?
+		WHERE user_id = ? AND user_type = 'agent'
 	`, boolToInt(enabled), status, id)
 	if err != nil {
 		return Agent{}, err
@@ -200,14 +194,20 @@ func AuthenticateAgent(db *sql.DB, name, plainPassword string) (Agent, error) {
 		return Agent{}, ErrInvalidCredentials
 	}
 	row := db.QueryRow(`
-		SELECT agent_id, COALESCE(uuid, ''), name, description, password_hash, enabled, status, last_seen, created_at, updated_at
-		FROM agents
-		WHERE name = ?
+		SELECT `+userSelectColumns+`, password_hash
+		FROM users
+		WHERE username = ? AND user_type = 'agent'
 	`, name)
 	var a Agent
 	var hash string
 	var enabled int
-	if err := row.Scan(&a.ID, &a.UUID, &a.Name, &a.Description, &hash, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := row.Scan(
+		&a.ID, &a.Username, &a.Email, &a.EmailConfirmedAt,
+		&a.Role, &a.DisplayName, &enabled, &a.CreatedAt,
+		&a.UserType, &a.UUID, &a.Description, &a.Status,
+		&a.LastSeen, &a.UpdatedAt,
+		&hash,
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Agent{}, ErrInvalidCredentials
 		}
@@ -233,9 +233,9 @@ func TouchAgent(db *sql.DB, id int64, status string) (Agent, error) {
 		status = "idle"
 	}
 	result, err := db.Exec(`
-		UPDATE agents
+		UPDATE users
 		SET status = ?, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-		WHERE agent_id = ?
+		WHERE user_id = ?
 	`, status, id)
 	if err != nil {
 		return Agent{}, err
@@ -248,16 +248,6 @@ func TouchAgent(db *sql.DB, id int64, status string) (Agent, error) {
 		return Agent{}, sql.ErrNoRows
 	}
 	return GetAgentByID(db, id)
-}
-
-func scanAgent(row *sql.Row) (Agent, error) {
-	var a Agent
-	var enabled int
-	if err := row.Scan(&a.ID, &a.UUID, &a.Name, &a.Description, &enabled, &a.Status, &a.LastSeen, &a.CreatedAt, &a.UpdatedAt); err != nil {
-		return Agent{}, err
-	}
-	a.Enabled = enabled == 1
-	return a, nil
 }
 
 func generateAgentUUID() (string, error) {
@@ -285,9 +275,9 @@ func randomSecret(n int) (string, error) {
 // ─── agent config ─────────────────────────────────────────────────────────────
 
 type AgentConfigEntry struct {
-	AgentID int64  `json:"agent_id"`
-	Key     string `json:"key"`
-	Value   string `json:"value"`
+	UserID int64  `json:"user_id"`
+	Key    string `json:"key"`
+	Value  string `json:"value"`
 }
 
 func SetAgentConfig(db *sql.DB, agentID int64, key, value string) error {
@@ -296,15 +286,15 @@ func SetAgentConfig(db *sql.DB, agentID int64, key, value string) error {
 		return errors.New("config key is required")
 	}
 	_, err := db.Exec(`
-		INSERT INTO agent_config (agent_id, key, value, updated_at)
+		INSERT INTO agent_config (user_id, key, value, updated_at)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(agent_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+		ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
 	`, agentID, key, value)
 	return err
 }
 
 func ListAgentConfig(db *sql.DB, agentID int64) ([]AgentConfigEntry, error) {
-	rows, err := db.Query(`SELECT agent_id, key, value FROM agent_config WHERE agent_id = ? ORDER BY key`, agentID)
+	rows, err := db.Query(`SELECT user_id, key, value FROM agent_config WHERE user_id = ? ORDER BY key`, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +302,7 @@ func ListAgentConfig(db *sql.DB, agentID int64) ([]AgentConfigEntry, error) {
 	var entries []AgentConfigEntry
 	for rows.Next() {
 		var e AgentConfigEntry
-		if err := rows.Scan(&e.AgentID, &e.Key, &e.Value); err != nil {
+		if err := rows.Scan(&e.UserID, &e.Key, &e.Value); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -321,7 +311,7 @@ func ListAgentConfig(db *sql.DB, agentID int64) ([]AgentConfigEntry, error) {
 }
 
 func DeleteAgentConfig(db *sql.DB, agentID int64, key string) error {
-	result, err := db.Exec(`DELETE FROM agent_config WHERE agent_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
+	result, err := db.Exec(`DELETE FROM agent_config WHERE user_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
 	if err != nil {
 		return err
 	}

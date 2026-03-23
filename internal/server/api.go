@@ -540,7 +540,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			vlog("agent=%q authenticated (id=%d uuid=%s)", agent.Name, agent.ID, agent.UUID)
+			vlog("agent=%q authenticated (id=%d uuid=%s)", agent.Username, agent.ID, agent.UUID)
 			projectID := payload.ProjectID
 			if payload.TicketID == nil && projectID == 0 {
 				projects, err := store.ListProjects(db)
@@ -559,7 +559,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					vlog("no open projects found")
 				}
 			}
-			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Name)
+			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Username)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -572,7 +572,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
 				ProjectID: projectID,
 				TicketID:  payload.TicketID,
-				Username:  agent.Name,
+				Username:  agent.Username,
 				UserID:    0,
 				DryRun:    payload.DryRun,
 			})
@@ -585,7 +585,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			if status == "NO-WORK" {
 				// Explain why no work was found.
 				vlog("explaining NO-WORK decision for project=%d:", projectID)
-				if reasons, err := store.ExplainNoWork(db, projectID, agent.Name); err == nil {
+				if reasons, err := store.ExplainNoWork(db, projectID, agent.Username); err == nil {
 					for _, reason := range reasons {
 						vlog("  %s", reason)
 					}
@@ -674,14 +674,14 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				GitRepository:      current.GitRepository,
 				GitBranch:          current.GitBranch,
 				ParentID:           current.ParentID,
-				Assignee:           agent.Name,
+				Assignee:           agent.Username,
 				State:              store.StateSuccess,
 				Priority:           current.Priority,
 				Order:              current.Order,
 				EstimateEffort:     current.EstimateEffort,
 				EstimateComplete:   current.EstimateComplete,
 				UpdatedBy:          0,
-				ActorUsername:      agent.Name,
+				ActorUsername:      agent.Username,
 				ActorRole:          "admin",
 			})
 			if err != nil {

@@ -27,6 +27,31 @@ type User struct {
 	DisplayName      string `json:"display_name"`
 	Enabled          bool   `json:"enabled"`
 	CreatedAt        string `json:"created_at"`
+	UserType         string `json:"user_type"`
+	UUID             string `json:"uuid,omitempty"`
+	Description      string `json:"description,omitempty"`
+	Status           string `json:"status,omitempty"`
+	LastSeen         string `json:"last_seen,omitempty"`
+	UpdatedAt        string `json:"updated_at,omitempty"`
+}
+
+// userSelectColumns is the standard column list for scanning a User.
+const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(uuid, ''), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, '')`
+
+// scanUser scans a row into a User. The column order must match userSelectColumns.
+func scanUser(scan func(dest ...any) error) (User, error) {
+	var user User
+	var enabled int
+	if err := scan(
+		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
+		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
+		&user.UserType, &user.UUID, &user.Description, &user.Status,
+		&user.LastSeen, &user.UpdatedAt,
+	); err != nil {
+		return User{}, err
+	}
+	user.Enabled = enabled == 1
+	return user, nil
 }
 
 func RegisterUser(db *sql.DB, username, plainPassword string) (User, error) {
@@ -52,8 +77,8 @@ func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) 
 	}
 
 	result, err := db.Exec(`
-		INSERT INTO users (username, password_hash, role, display_name, enabled)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type)
+		VALUES (?, ?, ?, ?, ?, 'user')
 	`, username, hash, role, username, boolToInt(enabled))
 	if err != nil {
 		return User{}, err
@@ -68,7 +93,7 @@ func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) 
 
 func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) {
 	row := db.QueryRow(`
-		SELECT user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), password_hash, role, display_name, enabled, created_at
+		SELECT `+userSelectColumns+`, password_hash
 		FROM users
 		WHERE username = ?
 	`, username)
@@ -76,7 +101,13 @@ func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) 
 	var user User
 	var hash string
 	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt, &hash, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+	if err := row.Scan(
+		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
+		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
+		&user.UserType, &user.UUID, &user.Description, &user.Status,
+		&user.LastSeen, &user.UpdatedAt,
+		&hash,
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrInvalidCredentials
 		}
@@ -124,21 +155,19 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 	}
 
 	row := db.QueryRow(`
-		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.display_name, u.enabled, u.created_at
+		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.uuid, ''), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
 		WHERE s.token = ?
 	`, token)
 
-	var user User
-	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+	user, err := scanUser(row.Scan)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrUnauthorized
 		}
 		return User{}, err
 	}
-	user.Enabled = enabled == 1
 	if !user.Enabled {
 		return User{}, ErrForbidden
 	}
@@ -147,40 +176,29 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 
 func GetUserByID(db *sql.DB, id int64) (User, error) {
 	row := db.QueryRow(`
-		SELECT user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at
+		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_id = ?
 	`, id)
 
-	var user User
-	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
-		return User{}, err
-	}
-	user.Enabled = enabled == 1
-	return user, nil
+	return scanUser(row.Scan)
 }
 
 func GetUserByUsername(db *sql.DB, username string) (User, error) {
 	row := db.QueryRow(`
-		SELECT user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at
+		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE username = ?
 	`, strings.TrimSpace(username))
 
-	var user User
-	var enabled int
-	if err := row.Scan(&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
-		return User{}, err
-	}
-	user.Enabled = enabled == 1
-	return user, nil
+	return scanUser(row.Scan)
 }
 
 func ListUsers(db *sql.DB) ([]User, error) {
 	rows, err := db.Query(`
-		SELECT user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at
+		SELECT `+userSelectColumns+`
 		FROM users
+		WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL
 		ORDER BY username
 	`)
 	if err != nil {
@@ -190,12 +208,10 @@ func ListUsers(db *sql.DB) ([]User, error) {
 
 	var users []User
 	for rows.Next() {
-		var user User
-		var enabled int
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt, &user.Role, &user.DisplayName, &enabled, &user.CreatedAt); err != nil {
+		user, err := scanUser(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
-		user.Enabled = enabled == 1
 		users = append(users, user)
 	}
 	return users, rows.Err()
