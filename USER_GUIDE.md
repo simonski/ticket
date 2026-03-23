@@ -743,3 +743,68 @@ ticket update <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
 ticket update <key-or-id> -stage develop -state active -priority 2 -title "new title"
 
 ```
+
+
+## Running a server
+
+You can run your ticket system as a server.  First you need to convert the database so that
+it can be used remotely
+
+### 1. an admin user
+
+```bash
+tk user create -username admin -role admin
+password: xxxx-xxxx-xxxx-xxxxx
+```
+
+### 2. a human user to interact with
+
+```bash
+tk user create -username my-username -role user
+password: xxxx-xxxx-xxxx-xxxxx
+```
+
+### 3. Associate the user with the project you have been working on locally
+
+```bash
+tk project add-user -username username -role owner,editor,viewer
+```
+
+OR make the project public to any logged in user
+
+```bash
+tk project public ID
+```
+
+### 4. any agents you want to do the work
+
+```bash
+tk agent create -name my-agent
+ID: xxxx-xxxx-xxxx
+tk agent add-project -project_id XX -agent_id XX
+```
+
+### 5. Run the server
+
+```bash
+tk server
+```
+
+You can now run as the user
+
+```bash
+export TK_URL=http://localhost:8080
+export TK_USERNAME=user-username
+export TK_PASSWORD=tk-password
+tk ls
+```
+
+You could run as an agent to do work automatically
+
+```bash
+export TK_URL=http://localhost:8080
+export TK_AGENT_USERNAME=agent-username
+export TK_AGENT_PASSWORD=tk-password
+tk agent run
+```
+
