@@ -2032,9 +2032,13 @@ func printUserTable(users []store.User) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "USERNAME\tROLE\tENABLED")
+	fmt.Fprintln(w, "USERNAME\tROLE\tENABLED\tCREATED")
 	for _, user := range users {
-		fmt.Fprintf(w, "%s\t%s\t%t\n", user.Username, user.Role, user.Enabled)
+		created := user.CreatedAt
+		if len(created) > 10 {
+			created = created[:10]
+		}
+		fmt.Fprintf(w, "%s\t%s\t%t\t%s\n", user.Username, user.Role, user.Enabled, created)
 	}
 	_ = w.Flush()
 }

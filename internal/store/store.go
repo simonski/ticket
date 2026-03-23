@@ -744,6 +744,11 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "users", "email_confirmed_at") {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN email_confirmed_at TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	// Messages table
 	if !tableExists(db, "messages") {
 		if _, err := db.Exec(`
