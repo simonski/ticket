@@ -3768,6 +3768,54 @@ func buildTicketPrompt(files []string, outputFile string) (string, error) {
 	return b.String(), nil
 }
 
+// prefixWriter prepends a prefix to each line written.
+type prefixWriter struct {
+	w      io.Writer
+	prefix string
+	bol    bool // at beginning of line
+}
+
+func (pw *prefixWriter) Write(p []byte) (int, error) {
+	total := len(p)
+	for len(p) > 0 {
+		if pw.bol || !pw.bol && total == len(p) {
+			// First write or start of new line: emit prefix.
+			if _, err := fmt.Fprint(pw.w, pw.prefix); err != nil {
+				return total - len(p), err
+			}
+			pw.bol = false
+		}
+		idx := bytes.IndexByte(p, '\n')
+		if idx < 0 {
+			_, err := pw.w.Write(p)
+			return total, err
+		}
+		if _, err := pw.w.Write(p[:idx+1]); err != nil {
+			return total - len(p), err
+		}
+		p = p[idx+1:]
+		if len(p) > 0 {
+			pw.bol = true
+		}
+	}
+	return total, nil
+}
+
+// prefixReader wraps a reader and echoes what's read with a prefix.
+type prefixReader struct {
+	r      io.Reader
+	prefix string
+	w      io.Writer
+}
+
+func (pr *prefixReader) Read(p []byte) (int, error) {
+	n, err := pr.r.Read(p)
+	if n > 0 {
+		fmt.Fprintf(pr.w, "%s%s\n", pr.prefix, strings.TrimRight(string(p[:n]), "\n"))
+	}
+	return n, err
+}
+
 func defaultRunTicketAgentCommand(agent, prompt string, stream bool) (string, error) {
 	if agent == "" {
 		return "", errors.New("agent is required")
@@ -3775,22 +3823,26 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool) (string, er
 	var cmd *exec.Cmd
 	switch agent {
 	case "claude":
-		cmd = exec.Command("claude", "-p", "--model", "claude-sonnet-4-5-20250514", prompt)
+		cmd = exec.Command("claude", "-p", "--model", "claude-sonnet-4-5", prompt)
 	case "codex":
 		cmd = exec.Command("codex", "exec", prompt)
 	default:
 		cmd = exec.Command(agent, "-p", prompt)
 	}
 	if stream {
-		// Wire up stdin/stdout/stderr so the user can see the LLM
-		// agent's I/O in real time while we capture stdout for the result.
+		// Log the command being executed.
+		fmt.Printf("> %s\n\n", strings.Join(cmd.Args, " "))
+
+		// Wire up stdin/stdout/stderr with prefixed writers so the
+		// operator can distinguish input from output at a glance.
 		var buf bytes.Buffer
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
-		cmd.Stderr = os.Stderr
+		cmd.Stdin = &prefixReader{r: os.Stdin, prefix: "> ", w: os.Stdout}
+		cmd.Stdout = io.MultiWriter(&prefixWriter{w: os.Stdout, prefix: "< "}, &buf)
+		cmd.Stderr = &prefixWriter{w: os.Stderr, prefix: "< "}
 		if err := cmd.Run(); err != nil {
 			return "", err
 		}
+		fmt.Println()
 		return buf.String(), nil
 	}
 	output, err := cmd.CombinedOutput()
