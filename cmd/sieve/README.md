@@ -2,7 +2,7 @@
 
 Implementations of the Sieve of Eratosthenes algorithm to find all prime numbers up to a given limit.
 
-Available in C, Go, and Nim.
+Available in C, Go, Nim, Node.js, Perl, Python, Rust, and Zig.
 
 ## C Implementation
 
@@ -35,6 +35,65 @@ nim c -d:release -o:sieve-nim sieve.nim
 
 # Run with a limit
 ./sieve-nim 100
+```
+
+## Node.js Implementation
+
+```bash
+# Run directly (no build needed)
+node sieve.js 100
+
+# Or make it executable and run
+chmod +x sieve.js
+./sieve.js 100
+```
+
+## Perl Implementation
+
+```bash
+# Run directly (no build needed)
+perl sieve.pl 100
+
+# Or make it executable and run
+chmod +x sieve.pl
+./sieve.pl 100
+```
+
+## Python Implementation
+
+```bash
+# Run directly (no build needed)
+python3 sieve.py 100
+
+# Or make it executable and run
+chmod +x sieve.py
+./sieve.py 100
+```
+
+## Rust Implementation
+
+```bash
+# Build the program
+rustc --edition 2021 -C opt-level=3 -o sieve-rust sieve.rs
+
+# Or use make
+make sieve-rust
+
+# Run with a limit
+./sieve-rust 100
+```
+
+## Zig Implementation
+
+```bash
+# Build the program
+zig build-exe -O ReleaseFast -femit-bin=sieve-zig sieve.zig
+
+# Or use make
+make sieve-zig
+
+# Run with a limit
+./sieve-zig 100
 ```
 
 ## Example

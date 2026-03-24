@@ -1351,7 +1351,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return TicketRequestResponse{}, err
+		return TicketRequestResponse{}, friendlyConnectionError(err, c.baseURL)
 	}
 	defer resp.Body.Close()
 

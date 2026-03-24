@@ -3835,7 +3835,7 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 	var cmd *exec.Cmd
 	switch agent {
 	case "claude":
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("claude -p --model claude-sonnet-4-5 < %s", promptFile))
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("cat %s | claude -p --model claude-sonnet-4-5", promptFile))
 	case "codex":
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("codex exec < %s", promptFile))
 	default:
