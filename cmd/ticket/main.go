@@ -1595,14 +1595,12 @@ func runAgent(args []string) error {
 	case "create":
 		fs := flag.NewFlagSet("agent create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		name := fs.String("name", "", "agent name (optional, UUID generated if not provided)")
 		description := fs.String("description", "", "agent description")
 		password := fs.String("password", "", "agent password")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		agent, generatedPassword, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Name:        strings.TrimSpace(*name),
 			Description: strings.TrimSpace(*description),
 			Password:    strings.TrimSpace(*password),
 		})
@@ -1629,8 +1627,7 @@ func runAgent(args []string) error {
 		fs := flag.NewFlagSet("agent update", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "agent id")
-		var name, description, password string
-		fs.StringVar(&name, "name", "", "agent name")
+		var description, password string
 		fs.StringVar(&description, "desc", "", "agent description")
 		fs.StringVar(&description, "description", "", "agent description")
 		fs.StringVar(&password, "password", "", "agent password")
@@ -1642,17 +1639,12 @@ func runAgent(args []string) error {
 		}
 		visited := map[string]bool{}
 		fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
-		nameSet := visited["name"]
 		descriptionSet := visited["desc"] || visited["description"]
 		passwordSet := visited["password"]
-		if !nameSet && !descriptionSet && !passwordSet {
-			return errors.New("agent update requires at least one of -name, -desc|-description, -password")
+		if !descriptionSet && !passwordSet {
+			return errors.New("agent update requires at least one of -desc|-description, -password")
 		}
-		var namePtr, descPtr, passPtr *string
-		if nameSet {
-			trimmed := strings.TrimSpace(name)
-			namePtr = &trimmed
-		}
+		var descPtr, passPtr *string
 		if descriptionSet {
 			trimmed := strings.TrimSpace(description)
 			descPtr = &trimmed
@@ -1662,7 +1654,6 @@ func runAgent(args []string) error {
 			passPtr = &trimmed
 		}
 		agent, err := svc.UpdateAgent(*id, libticket.AgentUpdateRequest{
-			Name:        namePtr,
 			Description: descPtr,
 			Password:    passPtr,
 		})
@@ -1714,7 +1705,7 @@ func runAgent(args []string) error {
 	case "run":
 		fs := flag.NewFlagSet("agent run", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		name := fs.String("name", "", "agent name")
+		agentID := fs.String("id", "", "agent UUID")
 		password := fs.String("password", "", "agent password")
 		url := fs.String("url", "", "ticket server url")
 		projectID := fs.Int64("project-id", 0, "project id override")
@@ -1724,9 +1715,9 @@ func runAgent(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		agentName := strings.TrimSpace(*name)
-		if agentName == "" {
-			agentName = envValue("AGENT_NAME")
+		agentIDVal := strings.TrimSpace(*agentID)
+		if agentIDVal == "" {
+			agentIDVal = envValue("AGENT_ID")
 		}
 		agentPassword := strings.TrimSpace(*password)
 		if agentPassword == "" {
@@ -1737,8 +1728,8 @@ func runAgent(args []string) error {
 			serverURL = envValue("TICKET_URL")
 		}
 		missing := make([]string, 0, 3)
-		if agentName == "" {
-			missing = append(missing, "AGENT_NAME or -name")
+		if agentIDVal == "" {
+			missing = append(missing, "AGENT_ID or -id")
 		}
 		if agentPassword == "" {
 			missing = append(missing, "AGENT_PASSWORD or -password")
@@ -1766,15 +1757,14 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		agent, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
-			Name:     agentName,
+		if _, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
+			ID:       agentIDVal,
 			Password: agentPassword,
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 		if !outputJSON {
-			fmt.Printf("agent %s registered (id=%s)\n", agent.Username, agent.UUID)
+			fmt.Printf("agent %s registered\n", agentIDVal)
 		}
 		modelCommand := strings.TrimSpace(*llmCommand)
 		if modelCommand == "" {
@@ -1787,7 +1777,7 @@ func runAgent(args []string) error {
 				fmt.Printf("[agent] requesting work (project=%d)\n", *projectID)
 			}
 			response, err := svc.RequestAgentWork(libticket.AgentRequest{
-				Name:      agentName,
+				ID:        agentIDVal,
 				Password:  agentPassword,
 				ProjectID: *projectID,
 			})
@@ -1822,7 +1812,7 @@ func runAgent(args []string) error {
 				fmt.Printf("[agent] submitting result for %s (%d bytes)\n", ticketLabel(*ticket), len(result))
 			}
 			updated, err := svc.AgentUpdateTicket(ticket.ID, libticket.AgentTicketUpdateRequest{
-				Name:     agentName,
+				ID:       agentIDVal,
 				Password: agentPassword,
 				Result:   strings.TrimSpace(result),
 			})
@@ -1840,7 +1830,7 @@ func runAgent(args []string) error {
 	case "request":
 		fs := flag.NewFlagSet("agent request", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		name := fs.String("name", "", "agent name")
+		reqAgentID := fs.String("agent-id", "", "agent UUID")
 		password := fs.String("password", "", "agent password")
 		url := fs.String("url", "", "ticket server url")
 		id := fs.Int64("id", 0, "specific ticket id")
@@ -1850,9 +1840,9 @@ func runAgent(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		agentName := strings.TrimSpace(*name)
-		if agentName == "" {
-			agentName = envValue("AGENT_NAME")
+		reqAgentIDVal := strings.TrimSpace(*reqAgentID)
+		if reqAgentIDVal == "" {
+			reqAgentIDVal = envValue("AGENT_ID")
 		}
 		agentPassword := strings.TrimSpace(*password)
 		if agentPassword == "" {
@@ -1863,8 +1853,8 @@ func runAgent(args []string) error {
 			serverURL = envValue("TICKET_URL")
 		}
 		missing := make([]string, 0, 3)
-		if agentName == "" {
-			missing = append(missing, "AGENT_NAME or -name")
+		if reqAgentIDVal == "" {
+			missing = append(missing, "AGENT_ID or -agent-id")
 		}
 		if agentPassword == "" {
 			missing = append(missing, "AGENT_PASSWORD or -password")
@@ -1898,7 +1888,7 @@ func runAgent(args []string) error {
 		}
 		for i := 0; *loop == 0 || i < *loop; i++ {
 			response, err := svc.RequestAgentWork(libticket.AgentRequest{
-				Name:     agentName,
+				ID:       reqAgentIDVal,
 				Password: agentPassword,
 				TicketID: requestedID,
 				DryRun:   *dryRun,

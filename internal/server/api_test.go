@@ -524,7 +524,6 @@ func TestAgentAPI(t *testing.T) {
 	decodeResponse(t, nonAdminLogin, &nonAdminAuth)
 
 	createAgentResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents", map[string]string{
-		"name":        "worker-1",
 		"description": "Autonomous worker",
 	}, adminAuth.Token)
 	if createAgentResp.Code != http.StatusCreated {
@@ -541,6 +540,7 @@ func TestAgentAPI(t *testing.T) {
 	if createPayload.Password == "" {
 		t.Fatalf("create password empty, want generated password")
 	}
+	agentUUID := createPayload.Agent.UUID
 
 	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/agents", nil, adminAuth.Token)
 	if listResp.Code != http.StatusOK {
@@ -548,8 +548,8 @@ func TestAgentAPI(t *testing.T) {
 	}
 	var agents []store.Agent
 	decodeResponse(t, listResp, &agents)
-	if len(agents) != 1 || agents[0].Username != "worker-1" {
-		t.Fatalf("agents list = %#v", agents)
+	if len(agents) != 1 {
+		t.Fatalf("agents list length = %d, want 1", len(agents))
 	}
 
 	forbiddenList := doJSONRequest(t, handler, http.MethodGet, "/api/agents", nil, nonAdminAuth.Token)
@@ -564,7 +564,7 @@ func TestAgentAPI(t *testing.T) {
 		t.Fatalf("update agent status = %d body=%s", updatedResp.Code, updatedResp.Body.String())
 	}
 
-	registerResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/register", "worker-1", createPayload.Password, nil)
+	registerResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/register", agentUUID, createPayload.Password, nil)
 	if registerResp.Code != http.StatusOK {
 		t.Fatalf("register agent status = %d body=%s", registerResp.Code, registerResp.Body.String())
 	}

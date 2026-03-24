@@ -20,22 +20,29 @@ func openAgentTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestCreateAgentGeneratesPasswordWhenMissing(t *testing.T) {
+func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, generatedPassword, err := CreateAgent(db, "worker-1", "autonomous worker", "")
+	agent, generatedPassword, err := CreateAgent(db, "autonomous worker", "")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 	if agent.ID == 0 {
 		t.Fatalf("agent ID = 0, want non-zero")
 	}
+	if agent.UUID == "" {
+		t.Fatal("agent UUID empty")
+	}
+	// Username should be the UUID
+	if agent.Username != agent.UUID {
+		t.Fatalf("agent.Username = %q, want UUID %q", agent.Username, agent.UUID)
+	}
 	if generatedPassword == "" {
-		t.Fatalf("generatedPassword empty, want generated secret")
+		t.Fatal("generatedPassword empty, want generated secret")
 	}
 	if !agent.Enabled {
-		t.Fatalf("agent enabled = false, want true")
+		t.Fatal("agent enabled = false, want true")
 	}
 	if agent.Status != "idle" {
 		t.Fatalf("agent status = %q, want idle", agent.Status)
@@ -44,45 +51,8 @@ func TestCreateAgentGeneratesPasswordWhenMissing(t *testing.T) {
 		t.Fatalf("agent user_type = %q, want agent", agent.UserType)
 	}
 
-	authenticated, err := AuthenticateAgent(db, "worker-1", generatedPassword)
-	if err != nil {
-		t.Fatalf("AuthenticateAgent() error = %v", err)
-	}
-	if authenticated.ID != agent.ID {
-		t.Fatalf("authenticated ID = %d, want %d", authenticated.ID, agent.ID)
-	}
-}
-
-func TestCreateAgentGeneratesUUIDNameWhenMissing(t *testing.T) {
-	db := openAgentTestDB(t)
-	defer db.Close()
-
-	agent, generatedPassword, err := CreateAgent(db, "", "autonomous worker", "")
-	if err != nil {
-		t.Fatalf("CreateAgent() error = %v", err)
-	}
-	if agent.ID == 0 {
-		t.Fatalf("agent ID = 0, want non-zero")
-	}
-	if agent.Username == "" {
-		t.Fatalf("agent Username empty, want UUID")
-	}
-	// Verify the name is a UUID format (8-4-4-4-12)
-	if len(agent.Username) != 36 {
-		t.Fatalf("agent Username length = %d, want 36 (UUID format)", len(agent.Username))
-	}
-	if agent.UUID == "" {
-		t.Fatalf("agent UUID empty, want generated UUID")
-	}
-	if generatedPassword == "" {
-		t.Fatalf("generatedPassword empty, want generated secret")
-	}
-	if !agent.Enabled {
-		t.Fatalf("agent enabled = false, want true")
-	}
-
-	// Verify we can authenticate with the UUID name
-	authenticated, err := AuthenticateAgent(db, agent.Username, generatedPassword)
+	// Authenticate by UUID
+	authenticated, err := AuthenticateAgent(db, agent.UUID, generatedPassword)
 	if err != nil {
 		t.Fatalf("AuthenticateAgent() error = %v", err)
 	}
@@ -95,7 +65,7 @@ func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, password, err := CreateAgent(db, "worker-2", "desc", "secret-1")
+	agent, password, err := CreateAgent(db, "desc", "secret-1")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -103,28 +73,23 @@ func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 		t.Fatalf("password = %q, want secret-1", password)
 	}
 
-	updatedName := "worker-2a"
 	updatedDesc := "new desc"
 	updatedPassword := "secret-2"
 	updated, err := UpdateAgent(db, agent.ID, AgentUpdateParams{
-		Name:        &updatedName,
 		Description: &updatedDesc,
 		Password:    &updatedPassword,
 	})
 	if err != nil {
 		t.Fatalf("UpdateAgent() error = %v", err)
 	}
-	if updated.Username != updatedName {
-		t.Fatalf("updated.Username = %q, want %q", updated.Username, updatedName)
-	}
 	if updated.Description != updatedDesc {
 		t.Fatalf("updated.Description = %q, want %q", updated.Description, updatedDesc)
 	}
 
-	if _, err := AuthenticateAgent(db, updatedName, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, err := AuthenticateAgent(db, agent.UUID, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("AuthenticateAgent(old password) err = %v, want ErrInvalidCredentials", err)
 	}
-	if _, err := AuthenticateAgent(db, updatedName, "secret-2"); err != nil {
+	if _, err := AuthenticateAgent(db, agent.UUID, "secret-2"); err != nil {
 		t.Fatalf("AuthenticateAgent(new password) error = %v", err)
 	}
 
@@ -135,7 +100,7 @@ func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 	if disabled.Enabled {
 		t.Fatalf("disabled.Enabled = true, want false")
 	}
-	if _, err := AuthenticateAgent(db, updatedName, "secret-2"); !errors.Is(err, ErrForbidden) {
+	if _, err := AuthenticateAgent(db, agent.UUID, "secret-2"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("AuthenticateAgent(disabled) err = %v, want ErrForbidden", err)
 	}
 
@@ -169,7 +134,7 @@ func TestAgentDoesNotAppearInListUsers(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	_, _, err := CreateAgent(db, "worker-hidden", "should not appear", "secret")
+	agent, _, err := CreateAgent(db, "should not appear", "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -179,7 +144,7 @@ func TestAgentDoesNotAppearInListUsers(t *testing.T) {
 		t.Fatalf("ListUsers() error = %v", err)
 	}
 	for _, u := range users {
-		if u.Username == "worker-hidden" {
+		if u.Username == agent.UUID {
 			t.Fatalf("ListUsers() should not include agents, found %q", u.Username)
 		}
 	}
@@ -189,12 +154,12 @@ func TestAgentFoundByGetUserByUsername(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	_, _, err := CreateAgent(db, "worker-findable", "findable agent", "secret")
+	agent, _, err := CreateAgent(db, "findable agent", "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
-	user, err := GetUserByUsername(db, "worker-findable")
+	user, err := GetUserByUsername(db, agent.UUID)
 	if err != nil {
 		t.Fatalf("GetUserByUsername() error = %v", err)
 	}

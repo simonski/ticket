@@ -951,14 +951,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Create agent
 		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Name:        "test-agent",
 			Description: "A test agent",
 		})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
-		if agent.Username != "test-agent" {
-			t.Fatalf("agent.Username = %q, want %q", agent.Username, "test-agent")
+		if agent.UUID == "" {
+			t.Fatal("agent.UUID is empty")
 		}
 		if password == "" {
 			t.Fatal("CreateAgent() returned empty password")
@@ -979,16 +978,16 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListAgents() did not include created agent %d", agent.ID)
 		}
 
-		// Update agent
-		newName := "updated-agent"
+		// Update agent description
+		newDesc := "Updated description"
 		updated, err := svc.UpdateAgent(agent.ID, libticket.AgentUpdateRequest{
-			Name: &newName,
+			Description: &newDesc,
 		})
 		if err != nil {
 			t.Fatalf("UpdateAgent() error = %v", err)
 		}
-		if updated.Username != "updated-agent" {
-			t.Fatalf("updated.Username = %q, want %q", updated.Username, "updated-agent")
+		if updated.Description != "Updated description" {
+			t.Fatalf("updated.Description = %q, want %q", updated.Description, "Updated description")
 		}
 
 		// Disable agent
@@ -1019,19 +1018,17 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		svc := factory(t)
 
 		// Create an agent with known password
-		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Name:        "worker-agent",
+		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{
 			Description: "Worker",
 			Password:    "secret123",
 		})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
-		_ = password
 
 		// Register (authenticate) the agent
 		registered, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
-			Name:     "worker-agent",
+			ID:       agent.UUID,
 			Password: "secret123",
 		})
 		if err != nil {
@@ -1043,7 +1040,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Request work (no tickets — expect NONE)
 		resp, err := svc.RequestAgentWork(libticket.AgentRequest{
-			Name:     "worker-agent",
+			ID:       agent.UUID,
 			Password: "secret123",
 		})
 		if err != nil {
@@ -1181,7 +1178,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Name:        "team-bot",
 			Description: "Bot for team",
 		})
 		if err != nil {

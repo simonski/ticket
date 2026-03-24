@@ -85,13 +85,11 @@ ticket request                  # get the next available ticket
 Create an agent and run it against a server:
 
 ```bash
-ticket agent create -name worker-1
-# or create with auto-generated UUID name:
 ticket agent create
-# prints agent_id and password
+# prints agent_id (UUID) and password
 
 export TICKET_URL=http://localhost:8080
-export AGENT_NAME=worker-1
+export AGENT_ID=<agent-uuid>
 export AGENT_PASSWORD=<generated-password>
 ticket agent run                  # default LLM: claude (Sonnet 4.5)
 ticket agent run -llm codex       # use codex instead
@@ -140,7 +138,7 @@ on conversation memory.
 | `TICKET_URL`         | Connect to a remote server (`http(s)://host:port`)   |
 | `TICKET_USERNAME`    | Default username for login/register                  |
 | `TICKET_PASSWORD`    | Default password for login/register                  |
-| `AGENT_NAME`         | Agent name for `tk agent run`                        |
+| `AGENT_ID`           | Agent UUID for `tk agent run`                        |
 | `AGENT_PASSWORD`     | Agent password for `tk agent run`                    |
 | `TICKET_AGENT_LLM`  | Override default LLM command (default: `claude`)     |
 

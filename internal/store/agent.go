@@ -15,24 +15,16 @@ import (
 type Agent = User
 
 type AgentUpdateParams struct {
-	Name        *string
 	Description *string
 	Password    *string
 }
 
-func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, string, error) {
-	name = strings.TrimSpace(name)
+func CreateAgent(db *sql.DB, description, plainPassword string) (Agent, string, error) {
 	description = strings.TrimSpace(description)
 
-	// Generate UUID first as we may use it for the name
 	uuid, err := generateAgentUUID()
 	if err != nil {
 		return Agent{}, "", err
-	}
-
-	// If no name provided, use the UUID as the name
-	if name == "" {
-		name = uuid
 	}
 
 	passwordToSet := strings.TrimSpace(plainPassword)
@@ -50,7 +42,7 @@ func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, st
 	result, err := db.Exec(`
 		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, description, status, updated_at)
 		VALUES (?, ?, 'agent', ?, 1, 'agent', ?, ?, 'idle', CURRENT_TIMESTAMP)
-	`, name, hash, name, uuid, description)
+	`, uuid, hash, uuid, uuid, description)
 	if err != nil {
 		return Agent{}, "", err
 	}
@@ -74,12 +66,12 @@ func GetAgentByID(db *sql.DB, id int64) (Agent, error) {
 	return scanUser(row.Scan)
 }
 
-func GetAgentByName(db *sql.DB, name string) (Agent, error) {
+func GetAgentByUUID(db *sql.DB, uuid string) (Agent, error) {
 	row := db.QueryRow(`
 		SELECT `+userSelectColumns+`
 		FROM users
-		WHERE username = ? AND user_type = 'agent'
-	`, strings.TrimSpace(name))
+		WHERE uuid = ? AND user_type = 'agent'
+	`, strings.TrimSpace(uuid))
 	return scanUser(row.Scan)
 }
 
@@ -110,17 +102,9 @@ func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) 
 	if err != nil {
 		return Agent{}, err
 	}
-	name := current.Username
 	description := current.Description
-	passwordHash := ""
-	if params.Name != nil {
-		name = strings.TrimSpace(*params.Name)
-	}
 	if params.Description != nil {
 		description = strings.TrimSpace(*params.Description)
-	}
-	if strings.TrimSpace(name) == "" {
-		return Agent{}, errors.New("agent name is required")
 	}
 	if params.Password != nil {
 		if strings.TrimSpace(*params.Password) == "" {
@@ -130,23 +114,23 @@ func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) 
 		if err != nil {
 			return Agent{}, err
 		}
-		passwordHash = hash
-	}
-	if passwordHash != "" {
 		_, err = db.Exec(`
 			UPDATE users
-			SET username = ?, display_name = ?, description = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
+			SET description = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE user_id = ? AND user_type = 'agent'
-		`, name, name, description, passwordHash, id)
+		`, description, hash, id)
+		if err != nil {
+			return Agent{}, err
+		}
 	} else {
 		_, err = db.Exec(`
 			UPDATE users
-			SET username = ?, display_name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+			SET description = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE user_id = ? AND user_type = 'agent'
-		`, name, name, description, id)
-	}
-	if err != nil {
-		return Agent{}, err
+		`, description, id)
+		if err != nil {
+			return Agent{}, err
+		}
 	}
 	return GetAgentByID(db, id)
 }
@@ -193,16 +177,16 @@ func SetAgentEnabled(db *sql.DB, id int64, enabled bool) (Agent, error) {
 	return GetAgentByID(db, id)
 }
 
-func AuthenticateAgent(db *sql.DB, name, plainPassword string) (Agent, error) {
-	name = strings.TrimSpace(name)
-	if name == "" || strings.TrimSpace(plainPassword) == "" {
+func AuthenticateAgent(db *sql.DB, agentID, plainPassword string) (Agent, error) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || strings.TrimSpace(plainPassword) == "" {
 		return Agent{}, ErrInvalidCredentials
 	}
 	row := db.QueryRow(`
 		SELECT `+userSelectColumns+`, password_hash
 		FROM users
-		WHERE username = ? AND user_type = 'agent'
-	`, name)
+		WHERE uuid = ? AND user_type = 'agent'
+	`, agentID)
 	var a Agent
 	var hash string
 	var enabled int

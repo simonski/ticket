@@ -111,8 +111,6 @@ ticket claim -id CUS-T-42
 Create an agent (requires a running server):
 
 ```bash
-tk agent create -name my-agent
-# or create with auto-generated UUID name:
 tk agent create
 ```
 
@@ -121,7 +119,7 @@ This prints the agent UUID and a generated password.
 Run the agent worker:
 
 ```bash
-export AGENT_NAME=my-agent
+export AGENT_ID=<uuid>
 export AGENT_PASSWORD=<generated-password>
 export TICKET_URL=http://localhost:8080
 tk agent run
@@ -130,7 +128,7 @@ tk agent run
 or with flags:
 
 ```bash
-tk agent run -name my-agent -password <password> -url http://localhost:8080
+tk agent run -id <uuid> -password <password> -url http://localhost:8080
 ```
 
 Options: `-llm claude` (default, uses Sonnet 4.5), `-llm codex`, or `-llm /path/to/binary`.

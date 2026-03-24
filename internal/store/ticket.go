@@ -272,18 +272,11 @@ func UpdateTicket(db *sql.DB, id int64, params TicketUpdateParams) (Ticket, erro
 		target, err := GetUserByUsername(db, assignee)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				// Not a user — check if it's an agent name.
-				agent, agentErr := GetAgentByName(db, assignee)
-				if agentErr != nil {
-					return Ticket{}, errors.New("user not found")
-				}
-				if !agent.Enabled {
-					return Ticket{}, errors.New("agent is disabled")
-				}
-			} else {
-				return Ticket{}, err
+				return Ticket{}, errors.New("user not found")
 			}
-		} else if !target.Enabled {
+			return Ticket{}, err
+		}
+		if !target.Enabled {
 			return Ticket{}, errors.New("user is disabled")
 		}
 	}

@@ -143,7 +143,6 @@ type TicketRequestResponse struct {
 }
 
 type AgentCreateRequest struct {
-	Name        string `json:"name"`
 	Description string `json:"description"`
 	Password    string `json:"password,omitempty"`
 }
@@ -155,18 +154,17 @@ type RoleRequest struct {
 }
 
 type AgentUpdateRequest struct {
-	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Password    *string `json:"password,omitempty"`
 }
 
 type AgentRegisterRequest struct {
-	Name     string `json:"name"`
+	ID       string `json:"id"`
 	Password string `json:"password"`
 }
 
 type AgentRequest struct {
-	Name      string `json:"name"`
+	ID        string `json:"id"`
 	Password  string `json:"password"`
 	ProjectID int64  `json:"project_id,omitempty"`
 	TicketID  *int64 `json:"ticket_id,omitempty"`
@@ -174,7 +172,7 @@ type AgentRequest struct {
 }
 
 type AgentTicketUpdateRequest struct {
-	Name     string `json:"name"`
+	ID       string `json:"id"`
 	Password string `json:"password"`
 	Result   string `json:"result"`
 }

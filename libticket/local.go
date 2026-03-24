@@ -188,7 +188,7 @@ func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, str
 		return store.Agent{}, "", err
 	}
 	defer db.Close()
-	return store.CreateAgent(db, request.Name, request.Description, request.Password)
+	return store.CreateAgent(db, request.Description, request.Password)
 }
 
 func (s *LocalService) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
@@ -216,7 +216,6 @@ func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.
 	}
 	defer db.Close()
 	return store.UpdateAgent(db, id, store.AgentUpdateParams{
-		Name:        request.Name,
 		Description: request.Description,
 		Password:    request.Password,
 	})
@@ -264,7 +263,7 @@ func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent,
 		return store.Agent{}, err
 	}
 	defer db.Close()
-	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
 	if err != nil {
 		return store.Agent{}, err
 	}
@@ -277,7 +276,7 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 		return AgentWorkResponse{}, err
 	}
 	defer db.Close()
-	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
@@ -350,7 +349,7 @@ func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequ
 		return store.Ticket{}, err
 	}
 	defer db.Close()
-	agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+	agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
 	if err != nil {
 		return store.Ticket{}, err
 	}

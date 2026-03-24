@@ -277,7 +277,7 @@ func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, e
 			return store.Agent{}, "", err
 		}
 		defer db.Close()
-		return store.CreateAgent(db, request.Name, request.Description, request.Password)
+		return store.CreateAgent(db, request.Description, request.Password)
 	}
 	var response struct {
 		Agent    store.Agent `json:"agent"`
@@ -327,7 +327,6 @@ func (c *Client) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent,
 		}
 		defer db.Close()
 		return store.UpdateAgent(db, id, store.AgentUpdateParams{
-			Name:        request.Name,
 			Description: request.Description,
 			Password:    request.Password,
 		})
@@ -394,7 +393,7 @@ func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error
 			return store.Agent{}, err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+		agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
 		if err != nil {
 			return store.Agent{}, err
 		}
@@ -403,7 +402,7 @@ func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error
 	var response struct {
 		Agent store.Agent `json:"agent"`
 	}
-	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/register", request.Name, request.Password, nil, &response)
+	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/register", request.ID, request.Password, nil, &response)
 	return response.Agent, err
 }
 
@@ -414,7 +413,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 			return AgentWorkResponse{}, err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+		agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
@@ -483,7 +482,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 	if request.TicketID != nil {
 		body["ticket_id"] = *request.TicketID
 	}
-	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/request", request.Name, request.Password, body, &response)
+	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/request", request.ID, request.Password, body, &response)
 	return response, err
 }
 
@@ -494,7 +493,7 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, request.Name, request.Password)
+		agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
 		if err != nil {
 			return store.Ticket{}, err
 		}
@@ -522,7 +521,7 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 	}
 	var ticket store.Ticket
 	body := map[string]string{"result": request.Result}
-	err := c.doJSONBasicAuth(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%d/update", id), request.Name, request.Password, body, &ticket)
+	err := c.doJSONBasicAuth(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%d/update", id), request.ID, request.Password, body, &ticket)
 	return ticket, err
 }
 

@@ -29,7 +29,7 @@ func TestTeamCRUDAndMemberships(t *testing.T) {
 		t.Fatalf("team member mismatch: %#v", member)
 	}
 
-	agent, _, err := CreateAgent(db, "worker-1", "desc", "secret")
+	agent, _, err := CreateAgent(db, "desc", "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}

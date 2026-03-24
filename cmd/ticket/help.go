@@ -498,12 +498,12 @@ const agentUsage = `Usage: ticket agent <command> [flags]
 
 Commands:
   list                                List all agents
-  create   -name <n> [-description d] Create an agent
-  update   -id <id> [-name n]         Update an agent
+  create   [-description d]           Create an agent (UUID auto-generated)
+  update   -id <id> [-description d]  Update an agent
   delete   -id <id>                   Delete an agent
   enable   -id <id>                   Enable an agent
   disable  -id <id>                   Disable an agent
-  request  -id <id>                   Request work for an agent
+  request  [flags]                    Request work for an agent
   run      [flags]                    Run an agent worker loop
   reset-password -id <id> [-password] Reset an agent's password
   config-set -id <id> <key> <value>  Set a config value on an agent
@@ -511,7 +511,7 @@ Commands:
   config-rm  -id <id> <key>          Remove a config value from an agent
 
 Run flags:
-  -name <name>             Agent name (or AGENT_NAME env)
+  -id <uuid>               Agent UUID (or AGENT_ID env)
   -password <password>     Agent password (or AGENT_PASSWORD env)
   -url <url>               Server URL (or TICKET_URL env)
   -llm <command>           LLM to use (default: claude)

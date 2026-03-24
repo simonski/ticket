@@ -466,7 +466,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			agent, generatedPassword, err := store.CreateAgent(db, payload.Name, payload.Description, payload.Password)
+			agent, generatedPassword, err := store.CreateAgent(db, payload.Description, payload.Password)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
@@ -726,7 +726,6 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					return
 				}
 				updated, err := store.UpdateAgent(db, id, store.AgentUpdateParams{
-					Name:        nullableTrimmed(payload.Name),
 					Description: nullableTrimmed(payload.Description),
 					Password:    nullableTrimmed(payload.Password),
 				})
