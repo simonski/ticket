@@ -309,7 +309,7 @@ var helpIndex = map[string]commandHelp{
 	"agent": {
 		usage:   "ticket agent <create|ls|list|update|rm|delete|enable|disable|request|run>",
 		details: []string{"Manages API agents for autonomous ticket processing.", "`request` fetches an enriched work envelope (project, ticket, parents). `run` registers an agent then continuously requests and processes work."},
-		example: "ticket agent create -name worker-1 -description \"Autonomous worker\"",
+		example: "ticket agent create -description \"Autonomous worker\" (name auto-generated)",
 	},
 	"story": {
 		usage:   "ticket story <create|list|get|update|delete>",

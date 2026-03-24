@@ -112,6 +112,8 @@ Create an agent (requires a running server):
 
 ```bash
 tk agent create -name my-agent
+# or create with auto-generated UUID name:
+tk agent create
 ```
 
 This prints the agent UUID and a generated password.

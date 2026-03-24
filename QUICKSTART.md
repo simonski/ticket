@@ -86,6 +86,8 @@ Create an agent and run it against a server:
 
 ```bash
 ticket agent create -name worker-1
+# or create with auto-generated UUID name:
+ticket agent create
 # prints agent_id and password
 
 export TICKET_URL=http://localhost:8080

@@ -207,7 +207,7 @@ tk team agents -team_id <id>                        # list team agents
 
 ```bash
 tk agent list                                       # list all agents
-tk agent create -name <n> -description <d>          # create an agent
+tk agent create [-name <n>] [-description <d>]      # create an agent (UUID name if not provided)
 tk agent update -id <id> [-name n] [-desc d]        # update an agent
 tk agent delete -id <id>                            # delete an agent
 tk agent enable -id <id>                            # enable an agent

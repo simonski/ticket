@@ -1078,8 +1078,8 @@ Create crud tools over API with CLI calls comparable to user registration but fo
 
 # Example commands
 ```bash
-ticket agent create -name X -description Y (-password PASSWORD)
-# (password set to random on server-side if not supplied
+ticket agent create [-name X] [-description Y] [-password PASSWORD]
+# (name auto-generated UUID if not supplied, password set to random if not supplied)
 >return ID, password 
 
 ticket agent ls,list

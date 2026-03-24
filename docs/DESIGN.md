@@ -367,6 +367,8 @@ ticket user delete --username alice
 ticket user enable --username alice
 ticket user disable --username alice
 ticket agent create -name worker-1 -description "LLM worker"
+# or create with auto-generated UUID name:
+ticket agent create -description "LLM worker"
 ticket agent ls
 ticket agent update -id 1 -name worker-main -description "Primary worker"
 ticket agent enable -id 1

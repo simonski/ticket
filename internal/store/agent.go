@@ -23,9 +23,18 @@ type AgentUpdateParams struct {
 func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, string, error) {
 	name = strings.TrimSpace(name)
 	description = strings.TrimSpace(description)
-	if name == "" {
-		return Agent{}, "", errors.New("agent name is required")
+
+	// Generate UUID first as we may use it for the name
+	uuid, err := generateAgentUUID()
+	if err != nil {
+		return Agent{}, "", err
 	}
+
+	// If no name provided, use the UUID as the name
+	if name == "" {
+		name = uuid
+	}
+
 	passwordToSet := strings.TrimSpace(plainPassword)
 	if passwordToSet == "" {
 		var err error
@@ -35,10 +44,6 @@ func CreateAgent(db *sql.DB, name, description, plainPassword string) (Agent, st
 		}
 	}
 	hash, err := password.Hash(passwordToSet)
-	if err != nil {
-		return Agent{}, "", err
-	}
-	uuid, err := generateAgentUUID()
 	if err != nil {
 		return Agent{}, "", err
 	}

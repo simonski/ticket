@@ -53,6 +53,44 @@ func TestCreateAgentGeneratesPasswordWhenMissing(t *testing.T) {
 	}
 }
 
+func TestCreateAgentGeneratesUUIDNameWhenMissing(t *testing.T) {
+	db := openAgentTestDB(t)
+	defer db.Close()
+
+	agent, generatedPassword, err := CreateAgent(db, "", "autonomous worker", "")
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	if agent.ID == 0 {
+		t.Fatalf("agent ID = 0, want non-zero")
+	}
+	if agent.Username == "" {
+		t.Fatalf("agent Username empty, want UUID")
+	}
+	// Verify the name is a UUID format (8-4-4-4-12)
+	if len(agent.Username) != 36 {
+		t.Fatalf("agent Username length = %d, want 36 (UUID format)", len(agent.Username))
+	}
+	if agent.UUID == "" {
+		t.Fatalf("agent UUID empty, want generated UUID")
+	}
+	if generatedPassword == "" {
+		t.Fatalf("generatedPassword empty, want generated secret")
+	}
+	if !agent.Enabled {
+		t.Fatalf("agent enabled = false, want true")
+	}
+
+	// Verify we can authenticate with the UUID name
+	authenticated, err := AuthenticateAgent(db, agent.Username, generatedPassword)
+	if err != nil {
+		t.Fatalf("AuthenticateAgent() error = %v", err)
+	}
+	if authenticated.ID != agent.ID {
+		t.Fatalf("authenticated ID = %d, want %d", authenticated.ID, agent.ID)
+	}
+}
+
 func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()

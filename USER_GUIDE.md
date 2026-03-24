@@ -120,6 +120,8 @@ Manage autonomous agents (admin-only except `agent run`):
 
 ```bash
 ticket agent create -name worker-1 -description "LLM worker"
+# or create with auto-generated UUID name:
+ticket agent create -description "LLM worker"
 ticket agent ls
 ticket agent update -id 1 -name worker-main -description "Primary worker"
 ticket agent disable -id 1
@@ -681,7 +683,7 @@ ticket user delete --username <name>
 ticket user enable --username <name>
 ticket user disable --username <name>
 ticket user reset-password -username <name> [-password <password>]
-ticket agent create -name <name> -description <description> [-password <password>]
+ticket agent create [-name <name>] [-description <description>] [-password <password>]
 ticket agent list
 ticket agent update -id <id> [-name <name>] [-description <description>] [-password <password>]
 ticket agent delete -id <id>
@@ -823,6 +825,8 @@ tk project public ID
 
 ```bash
 tk agent create -name my-agent
+# or create with auto-generated UUID name:
+tk agent create
 agent_id: xxxx-xxxx-xxxx
 password: xxxx-xxxx-xxxx
 ```

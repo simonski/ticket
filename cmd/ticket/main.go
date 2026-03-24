@@ -1595,14 +1595,11 @@ func runAgent(args []string) error {
 	case "create":
 		fs := flag.NewFlagSet("agent create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		name := fs.String("name", "", "agent name")
+		name := fs.String("name", "", "agent name (optional, UUID generated if not provided)")
 		description := fs.String("description", "", "agent description")
 		password := fs.String("password", "", "agent password")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
-		}
-		if strings.TrimSpace(*name) == "" {
-			return errors.New("agent create requires -name")
 		}
 		agent, generatedPassword, err := svc.CreateAgent(libticket.AgentCreateRequest{
 			Name:        strings.TrimSpace(*name),
