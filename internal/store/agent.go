@@ -307,6 +307,14 @@ func ListAgentStatuses(db *sql.DB) ([]AgentStatus, error) {
 
 // ─── agent config ─────────────────────────────────────────────────────────────
 
+// Predefined agent config keys
+const (
+	AgentConfigKeyLLM         = "llm"
+	AgentConfigKeyProjectID   = "project_id"
+	AgentConfigKeyPollSeconds = "poll_seconds"
+	AgentConfigKeyVerbose     = "verbose"
+)
+
 type AgentConfigEntry struct {
 	UserID int64  `json:"user_id"`
 	Key    string `json:"key"`
@@ -353,4 +361,33 @@ func DeleteAgentConfig(db *sql.DB, agentID int64, key string) error {
 		return errors.New("config key not found")
 	}
 	return nil
+}
+
+// GetAgentConfigMap returns agent config as a map[string]string.
+func GetAgentConfigMap(db *sql.DB, agentID int64) (map[string]string, error) {
+	entries, err := ListAgentConfig(db, agentID)
+	if err != nil {
+		return nil, err
+	}
+	configMap := make(map[string]string, len(entries))
+	for _, e := range entries {
+		configMap[e.Key] = e.Value
+	}
+	return configMap, nil
+}
+
+// GetAgentConfigUpdatedAt returns the most recent updated_at timestamp from agent_config.
+// Returns empty string if no config exists.
+func GetAgentConfigUpdatedAt(db *sql.DB, agentID int64) (string, error) {
+	var updatedAt sql.NullString
+	err := db.QueryRow(`
+		SELECT MAX(updated_at) FROM agent_config WHERE user_id = ?
+	`, agentID).Scan(&updatedAt)
+	if err != nil {
+		return "", err
+	}
+	if !updatedAt.Valid {
+		return "", nil
+	}
+	return updatedAt.String, nil
 }

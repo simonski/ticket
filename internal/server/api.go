@@ -542,9 +542,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				return
 			}
 			var payload struct {
-				ProjectID int64  `json:"project_id,omitempty"`
-				TicketID  *int64 `json:"ticket_id,omitempty"`
-				DryRun    bool   `json:"dry_run,omitempty"`
+				ProjectID       int64  `json:"project_id,omitempty"`
+				TicketID        *int64 `json:"ticket_id,omitempty"`
+				DryRun          bool   `json:"dry_run,omitempty"`
+				ConfigUpdatedAt string `json:"config_updated_at,omitempty"`
 			}
 			// Body is optional — may be empty for simple requests.
 			_ = json.NewDecoder(r.Body).Decode(&payload)
@@ -639,13 +640,31 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			} else {
 				_, _ = store.TouchAgent(db, agent.ID, "soliciting")
 			}
+			// Check if config should be included in response.
+			// Include config if: 1) it has changed since last poll, or 2) a new ticket is assigned
+			var configMap map[string]string
+			var configUpdatedAt string
+			currentConfigUpdatedAt, err := store.GetAgentConfigUpdatedAt(db, agent.ID)
+			if err == nil {
+				configHasChanged := payload.ConfigUpdatedAt != currentConfigUpdatedAt
+				includeConfig := configHasChanged || agentStatus == "NEW"
+				if includeConfig {
+					configMap, err = store.GetAgentConfigMap(db, agent.ID)
+					if err == nil && len(configMap) > 0 {
+						configUpdatedAt = currentConfigUpdatedAt
+						vlog("including config in response (changed=%v, new_ticket=%v)", configHasChanged, agentStatus == "NEW")
+					}
+				}
+			}
 			response := map[string]any{
-				"status":   agentStatus,
-				"project":  nil,
-				"ticket":   nil,
-				"parents":  []store.Ticket{},
-				"workflow": nil,
-				"role":     nil,
+				"status":            agentStatus,
+				"project":           nil,
+				"ticket":            nil,
+				"parents":           []store.Ticket{},
+				"workflow":          nil,
+				"role":              nil,
+				"config":            configMap,
+				"config_updated_at": configUpdatedAt,
 			}
 			if agentStatus == "NEW" || agentStatus == "CURRENT" {
 				response["ticket"] = ticket
@@ -701,7 +720,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			}
 			updated, err := store.UpdateTicket(db, ticketID, store.TicketUpdateParams{
 				Title:              current.Title,
-				Description:        payload.Result,
+				Description:        current.Description,
 				AcceptanceCriteria: current.AcceptanceCriteria,
 				GitRepository:      current.GitRepository,
 				GitBranch:          current.GitBranch,
@@ -720,6 +739,13 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			_ = store.AddHistoryEvent(db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
+				"key":       updated.Key,
+				"agent":     agent.Username,
+				"result":    payload.Result,
+				"new_stage": updated.Stage,
+				"new_state": updated.State,
+			}, agent.ID)
 			_, _ = store.TouchAgent(db, agent.ID, "soliciting")
 			notify("ticket_updated", updated.ProjectID, updated.ID)
 			writeJSON(w, http.StatusOK, updated)

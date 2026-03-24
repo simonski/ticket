@@ -366,15 +366,22 @@ ticket user ls
 ticket user delete --username alice
 ticket user enable --username alice
 ticket user disable --username alice
-ticket agent create -name worker-1 -description "LLM worker"
-# or create with auto-generated UUID name:
-ticket agent create -description "LLM worker"
+
+# Agent Commands
+ticket agent request [flags]
+ticket agent run -id <uuid> -url http://localhost:8080  # password from AGENT_PASSWORD env or prompt
+
+# Agent Admin Commands
+ticket agent create [-password <p>]  # UUID auto-generated
 ticket agent ls
-ticket agent update -id 1 -name worker-main -description "Primary worker"
+ticket agent update -id 1 -password <p>
 ticket agent enable -id 1
 ticket agent disable -id 1
 ticket agent delete -id 1
-ticket agent run -name worker-main -password secret -url http://localhost:8080
+ticket agent reset-password -id 1 [-password <p>]
+ticket agent config-set -id 1 <key> <value>
+ticket agent config-ls -id 1
+ticket agent config-rm -id 1 <key>
 
 ticket register
 ticket login

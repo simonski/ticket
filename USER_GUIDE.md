@@ -116,28 +116,39 @@ ticket user rm|delete --username XXXX
 
 These commands are admin-only. If a logged-in non-admin user runs them, the server returns `403` and the CLI prints `user is not an admin`.
 
-Manage autonomous agents (admin-only except `agent run`):
+Manage autonomous agents:
 
+**Agent Commands:**
 ```bash
-ticket agent create -description "LLM worker"
+ticket agent request [flags]
+ticket agent run -id <uuid> -url http://localhost:8080
+```
+
+**Admin Commands:**
+```bash
+ticket agent create [-password <p>]  # UUID auto-generated
 ticket agent ls
-ticket agent update -id 1 -description "Primary worker"
+ticket agent update -id 1 -password <p>
 ticket agent disable -id 1
 ticket agent enable -id 1
 ticket agent delete -id 1
+ticket agent reset-password -id 1 [-password <p>]
+ticket agent config-set -id 1 <key> <value>
+ticket agent config-ls -id 1
+ticket agent config-rm -id 1 <key>
 ```
 
 Run an agent worker process:
 
 ```bash
-ticket agent run -id <uuid> -password <password> -url http://localhost:8080
+ticket agent run -id <uuid> -url http://localhost:8080
 ```
 
 `ticket agent run` resolves required settings from flags first, then env vars:
 
-- `AGENT_ID`
-- `AGENT_PASSWORD`
-- `TICKET_URL`
+- `AGENT_ID` (flag: `-id`)
+- `AGENT_PASSWORD` (no flag; read from env or prompted with `*` masking)
+- `TICKET_URL` (flag: `-url`)
 - `TICKET_AGENT_LLM` (optional, default: `claude`)
 
 If any required values are missing, the command exits with an explicit missing-fields error.
@@ -681,14 +692,17 @@ ticket user delete --username <name>
 ticket user enable --username <name>
 ticket user disable --username <name>
 ticket user reset-password -username <name> [-password <password>]
-ticket agent create [-description <description>] [-password <password>]
+# Agent Commands
+ticket agent request [flags]
+ticket agent run -id <uuid> -url <server-url>  # password from AGENT_PASSWORD env or prompt
+
+# Agent Admin Commands
+ticket agent create [-password <password>]  # UUID auto-generated
 ticket agent list
-ticket agent update -id <id> [-description <description>] [-password <password>]
+ticket agent update -id <id> -password <password>
 ticket agent delete -id <id>
 ticket agent enable -id <id>
 ticket agent disable -id <id>
-ticket agent run -id <uuid> -password <password> -url <server-url>
-ticket agent request -password <password> -url <server-url> [-id <ticket-id>] [-dryrun]
 ticket agent reset-password -id <id> [-password <password>]
 ticket agent config-set -id <id> <key> <value>
 ticket agent config-ls -id <id>

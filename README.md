@@ -128,8 +128,10 @@ tk agent run
 or with flags:
 
 ```bash
-tk agent run -id <uuid> -password <password> -url http://localhost:8080
+tk agent run -id <uuid> -url http://localhost:8080
 ```
+
+The password is read from the `AGENT_PASSWORD` environment variable, or prompted interactively (input masked with `*`).
 
 Options: `-llm claude` (default, uses Sonnet 4.5), `-llm codex`, or `-llm /path/to/binary`.
 Use `-v` to stream LLM input/output to the terminal.

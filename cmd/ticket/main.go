@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1688,7 +1689,6 @@ func runAgent(args []string) error {
 		fs := flag.NewFlagSet("agent run", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		agentID := fs.String("id", "", "agent UUID")
-		password := fs.String("password", "", "agent password")
 		url := fs.String("url", "", "ticket server url")
 		projectID := fs.Int64("project-id", 0, "project id override")
 		pollSeconds := fs.Int("poll-seconds", 2, "idle poll interval seconds")
@@ -1701,9 +1701,15 @@ func runAgent(args []string) error {
 		if agentIDVal == "" {
 			agentIDVal = envValue("AGENT_ID")
 		}
-		agentPassword := strings.TrimSpace(*password)
+		agentPassword := envValue("AGENT_PASSWORD")
 		if agentPassword == "" {
-			agentPassword = envValue("AGENT_PASSWORD")
+			fmt.Fprint(os.Stdout, "agent password: ")
+			var err error
+			agentPassword, err = readPasswordPrompt(bufio.NewReader(os.Stdin), os.Stdin, os.Stdout)
+			if err != nil {
+				return fmt.Errorf("failed to read password: %w", err)
+			}
+			agentPassword = strings.TrimSpace(agentPassword)
 		}
 		serverURL := strings.TrimSpace(*url)
 		if serverURL == "" {
@@ -1714,7 +1720,7 @@ func runAgent(args []string) error {
 			missing = append(missing, "AGENT_ID or -id")
 		}
 		if agentPassword == "" {
-			missing = append(missing, "AGENT_PASSWORD or -password")
+			missing = append(missing, "AGENT_PASSWORD (or prompt)")
 		}
 		if serverURL == "" {
 			missing = append(missing, "TICKET_URL or -url")
@@ -1754,17 +1760,64 @@ func runAgent(args []string) error {
 		}
 		agentVerbose := *verbose
 		idleDelay := time.Duration(*pollSeconds) * time.Second
+		configUpdatedAt := "" // track last received config timestamp
 		for {
 			if agentVerbose {
 				fmt.Printf("[agent] requesting work (project=%d)\n", *projectID)
 			}
 			response, err := svc.RequestAgentWork(libticket.AgentRequest{
-				ID:        agentIDVal,
-				Password:  agentPassword,
-				ProjectID: *projectID,
+				ID:              agentIDVal,
+				Password:        agentPassword,
+				ProjectID:       *projectID,
+				ConfigUpdatedAt: configUpdatedAt,
 			})
 			if err != nil {
 				return err
+			}
+			// Process config updates from server
+			if len(response.Config) > 0 {
+				if agentVerbose {
+					fmt.Printf("[agent] received config update\n")
+				}
+				configUpdatedAt = response.ConfigUpdatedAt
+				// Apply config values (command-line flags take precedence)
+				if *llmCommand == "" || *llmCommand == envValue("TICKET_AGENT_LLM") {
+					if llmVal, ok := response.Config["llm"]; ok && llmVal != "" {
+						modelCommand = llmVal
+						if agentVerbose {
+							fmt.Printf("[agent] config: llm=%s\n", modelCommand)
+						}
+					}
+				}
+				if *projectID == 0 {
+					if projVal, ok := response.Config["project_id"]; ok && projVal != "" {
+						if parsed, err := strconv.ParseInt(projVal, 10, 64); err == nil {
+							*projectID = parsed
+							if agentVerbose {
+								fmt.Printf("[agent] config: project_id=%d\n", *projectID)
+							}
+						}
+					}
+				}
+				if *pollSeconds == 2 {
+					if pollVal, ok := response.Config["poll_seconds"]; ok && pollVal != "" {
+						if parsed, err := strconv.Atoi(pollVal); err == nil && parsed >= 1 {
+							*pollSeconds = parsed
+							idleDelay = time.Duration(*pollSeconds) * time.Second
+							if agentVerbose {
+								fmt.Printf("[agent] config: poll_seconds=%d\n", *pollSeconds)
+							}
+						}
+					}
+				}
+				if !*verbose {
+					if verboseVal, ok := response.Config["verbose"]; ok {
+						agentVerbose = verboseVal == "true" || verboseVal == "1"
+						if agentVerbose {
+							fmt.Printf("[agent] config: verbose=%v\n", agentVerbose)
+						}
+					}
+				}
 			}
 			if agentVerbose {
 				fmt.Printf("[agent] response status=%s", response.Status)
@@ -3910,20 +3963,32 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 	}
 	defer os.Remove(promptFile)
 
-	var cmd *exec.Cmd
+	// Build the LLM command string.
+	var llmCmd string
 	switch agent {
 	case "claude":
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("cat %s | claude -p --model claude-sonnet-4-5", promptFile))
+		llmCmd = fmt.Sprintf("cat %s | claude -p --model claude-sonnet-4-5", promptFile)
 	case "codex":
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("codex exec < %s", promptFile))
+		llmCmd = fmt.Sprintf("codex exec < %s", promptFile)
 	default:
-		cmd = exec.Command("sh", "-c", fmt.Sprintf("%s -p < %s", agent, promptFile))
+		llmCmd = fmt.Sprintf("%s -p < %s", agent, promptFile)
 	}
+
+	// Wrap with script(1) to allocate a PTY so the LLM streams output
+	// in real time instead of buffering until exit.
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		cmd = exec.Command("script", "-q", "/dev/null", "sh", "-c", llmCmd)
+	} else {
+		// Linux: script -qc "cmd" /dev/null
+		cmd = exec.Command("script", "-qc", llmCmd, "/dev/null")
+	}
+
 	// Always stream stdout to the terminal so the operator can see
 	// the LLM working. With -v, add > / < prefixes.
 	var buf bytes.Buffer
 	if stream {
-		fmt.Printf("> %s\n\n", strings.Join(cmd.Args, " "))
+		fmt.Printf("> %s\n\n", llmCmd)
 		cmd.Stdout = io.MultiWriter(&prefixWriter{w: os.Stdout, prefix: "< "}, &buf)
 		cmd.Stderr = &prefixWriter{w: os.Stderr, prefix: "< "}
 	} else {

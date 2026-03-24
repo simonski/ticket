@@ -146,12 +146,14 @@ type TicketRequestResponse struct {
 }
 
 type AgentWorkResponse struct {
-	Status   string                    `json:"status"`
-	Project  *store.Project            `json:"project"`
-	Ticket   *store.Ticket             `json:"ticket"`
-	Parents  []store.Ticket            `json:"parents"`
-	Workflow *store.WorkflowWithStages `json:"workflow,omitempty"`
-	Role     *store.Role               `json:"role,omitempty"`
+	Status          string                    `json:"status"`
+	Project         *store.Project            `json:"project"`
+	Ticket          *store.Ticket             `json:"ticket"`
+	Parents         []store.Ticket            `json:"parents"`
+	Workflow        *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Role            *store.Role               `json:"role,omitempty"`
+	Config          map[string]string         `json:"config,omitempty"`
+	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"`
 }
 
 type AgentCreateRequest struct {
@@ -174,11 +176,12 @@ type AgentRegisterRequest struct {
 }
 
 type AgentRequest struct {
-	ID        string `json:"id"`
-	Password  string `json:"password"`
-	ProjectID int64  `json:"project_id,omitempty"`
-	TicketID  *int64 `json:"ticket_id,omitempty"`
-	DryRun    bool   `json:"dry_run,omitempty"`
+	ID              string `json:"id"`
+	Password        string `json:"password"`
+	ProjectID       int64  `json:"project_id,omitempty"`
+	TicketID        *int64 `json:"ticket_id,omitempty"`
+	DryRun          bool   `json:"dry_run,omitempty"`
+	ConfigUpdatedAt string `json:"config_updated_at,omitempty"`
 }
 
 type AgentTicketUpdateRequest struct {

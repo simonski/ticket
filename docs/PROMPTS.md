@@ -1077,20 +1077,34 @@ Create a new entity in the database, "agent" which represents a process which in
 Create crud tools over API with CLI calls comparable to user registration but for agents.
 
 # Example commands
+
+Agent Commands:
 ```bash
-ticket agent create [-name X] [-description Y] [-password PASSWORD]
-# (name auto-generated UUID if not supplied, password set to random if not supplied)
->return ID, password 
+ticket agent request [flags]
+ticket agent run -id <uuid> -url TICKET_URL
+```
+
+Admin Commands:
+```bash
+ticket agent create [-password PASSWORD]
+# (UUID auto-generated, password set to random if not supplied)
+>return UUID, password
 
 ticket agent ls,list
-> return ID, name, description, status
+> return UUID, status, enabled
 
-ticket agent udpate -id ID (-name <name> -desc[ription] <description> -password <password>)
+ticket agent update -id ID -password <password>
 
 ticket agent rm,delete -id ID
 
 ticket agent enable -id ID
 ticket agent disable -id ID
+
+ticket agent reset-password -id ID [-password PASSWORD]
+
+ticket agent config-set -id ID <key> <value>
+ticket agent config-ls -id ID
+ticket agent config-rm -id ID <key>
 ```
 
 Create a new panel in the GUI to manage agents similar in theme to tickets.  Name, description, enable/disable.
@@ -1103,16 +1117,15 @@ Agent lifecyle
 An agent is run with the command
 
 ```bash
-ticket agent run -name <name> -password PASSWORD -url TICKET_URL
+ticket agent run -id <uuid> -url TICKET_URL
 ```
 
-If the options are provided, they are used, else
+Resolution order:
+- Agent ID: `-id` flag, then AGENT_ID env var
+- Password: AGENT_PASSWORD env var, or interactive prompt (input masked with `*`)
+- URL: `-url` flag, then TICKET_URL env var
 
-AGENT_NAME=
-AGENT_PASSWORD=
-TICKET_URL=
-
-If any are missing, the process will fail exit 1 explaining what is missing.
+If any required values are missing after resolution, the process will fail with exit code 1.
 
 If all are present, the agnet will attempt to REGISTER - meaning declare that it is alive.  A success response from the server will move the agent into solitication mode where it asks for work to be assigned via a REQUEST call.
 

@@ -205,15 +205,24 @@ tk team agents -team_id <id>                        # list team agents
 
 ## agent
 
+### Agent Commands
+```bash
+tk agent request [flags]                            # request work envelope
+tk agent run -id <id> [-url u]                      # run agent worker loop (password from AGENT_PASSWORD or prompt)
+```
+
+### Admin Commands
 ```bash
 tk agent list                                       # list all agents
-tk agent create [-name <n>] [-description <d>]      # create an agent (UUID name if not provided)
-tk agent update -id <id> [-name n] [-desc d]        # update an agent
+tk agent create [-password <p>]                     # create an agent (UUID auto-generated)
+tk agent update -id <id> -password <p>              # update an agent password
 tk agent delete -id <id>                            # delete an agent
 tk agent enable -id <id>                            # enable an agent
 tk agent disable -id <id>                           # disable an agent
-tk agent run -name <n> -password <p> [-url u]       # run agent worker loop
-tk agent request -name <n> -password <p>            # request work envelope
+tk agent reset-password -id <id> [-password <p>]    # reset an agent's password
+tk agent config-set -id <id> <key> <value>         # set agent config
+tk agent config-ls -id <id>                        # list agent config
+tk agent config-rm -id <id> <key>                  # remove agent config
 ```
 
 ## user

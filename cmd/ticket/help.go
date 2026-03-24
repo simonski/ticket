@@ -307,9 +307,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket user create --username alice --password secret",
 	},
 	"agent": {
-		usage:   "ticket agent <create|ls|list|update|rm|delete|enable|disable|request|run>",
-		details: []string{"Manages API agents for autonomous ticket processing.", "`request` fetches an enriched work envelope (project, ticket, parents). `run` registers an agent then continuously requests and processes work."},
-		example: "ticket agent create (UUID and password auto-generated)",
+		usage:   "ticket agent <request|run> (agent) | <create|ls|list|update|rm|delete|enable|disable|reset-password|config-*> (admin)",
+		details: []string{"Manages API agents for autonomous ticket processing.", "Agent commands: `request` fetches work envelope; `run` continuously processes work.", "Admin commands: manage agent lifecycle, credentials, and configuration."},
+		example: "ticket agent run -id <uuid>",
 	},
 	"story": {
 		usage:   "ticket story <create|list|get|update|delete>",
@@ -501,15 +501,17 @@ Keys: server, username, current_project, current_epic_id, registration_enabled`
 
 const agentUsage = `Usage: ticket agent <command> [flags]
 
-Commands:
+Agent Commands:
+  request  [flags]                    Request work for an agent
+  run      [flags]                    Run an agent worker loop
+
+Admin Commands:
   ls                                  List all agents
   new      [-password p]              Create an agent (UUID auto-generated)
   update   -id <id> -password <p>     Update an agent password
   rm       -id <id>                   Delete an agent
   enable   -id <id>                   Enable an agent
   disable  -id <id>                   Disable an agent
-  request  [flags]                    Request work for an agent
-  run      [flags]                    Run an agent worker loop
   reset-password -id <id> [-password] Reset an agent's password
   config-set -id <id> <key> <value>  Set a config value on an agent
   config-ls  -id <id>                List agent config values
@@ -517,13 +519,14 @@ Commands:
 
 Run flags:
   -id <uuid>               Agent UUID (or AGENT_ID env)
-  -password <password>     Agent password (or AGENT_PASSWORD env)
   -url <url>               Server URL (or TICKET_URL env)
   -llm <command>           LLM to use (default: claude)
                            Values: claude (Sonnet 4.5), codex, or path to binary
   -project-id <id>         Project ID override (default: first open project)
   -poll-seconds <n>        Idle poll interval in seconds (default: 2)
-  -v                       Verbose: stream LLM I/O to terminal`
+  -v                       Verbose: stream LLM I/O to terminal
+
+Password: AGENT_PASSWORD env var, or interactive prompt (input masked with *)`
 
 const userUsage = `Usage: ticket user <command> [flags]
 
