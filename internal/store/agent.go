@@ -15,13 +15,10 @@ import (
 type Agent = User
 
 type AgentUpdateParams struct {
-	Description *string
-	Password    *string
+	Password *string
 }
 
-func CreateAgent(db *sql.DB, description, plainPassword string) (Agent, string, error) {
-	description = strings.TrimSpace(description)
-
+func CreateAgent(db *sql.DB, plainPassword string) (Agent, string, error) {
 	uuid, err := generateAgentUUID()
 	if err != nil {
 		return Agent{}, "", err
@@ -40,9 +37,9 @@ func CreateAgent(db *sql.DB, description, plainPassword string) (Agent, string, 
 		return Agent{}, "", err
 	}
 	result, err := db.Exec(`
-		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, description, status, updated_at)
-		VALUES (?, ?, 'agent', ?, 1, 'agent', ?, ?, 'idle', CURRENT_TIMESTAMP)
-	`, uuid, hash, uuid, uuid, description)
+		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, status, updated_at)
+		VALUES (?, ?, 'agent', ?, 1, 'agent', ?, 'idle', CURRENT_TIMESTAMP)
+	`, uuid, hash, uuid, uuid)
 	if err != nil {
 		return Agent{}, "", err
 	}
@@ -98,39 +95,23 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 }
 
 func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) {
-	current, err := GetAgentByID(db, id)
+	if params.Password == nil {
+		return Agent{}, errors.New("agent update requires -password")
+	}
+	if strings.TrimSpace(*params.Password) == "" {
+		return Agent{}, errors.New("agent password cannot be empty")
+	}
+	hash, err := password.Hash(strings.TrimSpace(*params.Password))
 	if err != nil {
 		return Agent{}, err
 	}
-	description := current.Description
-	if params.Description != nil {
-		description = strings.TrimSpace(*params.Description)
-	}
-	if params.Password != nil {
-		if strings.TrimSpace(*params.Password) == "" {
-			return Agent{}, errors.New("agent password cannot be empty")
-		}
-		hash, err := password.Hash(strings.TrimSpace(*params.Password))
-		if err != nil {
-			return Agent{}, err
-		}
-		_, err = db.Exec(`
-			UPDATE users
-			SET description = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE user_id = ? AND user_type = 'agent'
-		`, description, hash, id)
-		if err != nil {
-			return Agent{}, err
-		}
-	} else {
-		_, err = db.Exec(`
-			UPDATE users
-			SET description = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE user_id = ? AND user_type = 'agent'
-		`, description, id)
-		if err != nil {
-			return Agent{}, err
-		}
+	_, err = db.Exec(`
+		UPDATE users
+		SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE user_id = ? AND user_type = 'agent'
+	`, hash, id)
+	if err != nil {
+		return Agent{}, err
 	}
 	return GetAgentByID(db, id)
 }
@@ -259,6 +240,52 @@ func randomSecret(n int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+// ReapStaleAgents sets any non-idle agent to "idle" if its last_seen is older
+// than the given threshold (in minutes). Returns the number of agents reaped.
+func ReapStaleAgents(db *sql.DB, thresholdMinutes int) (int64, error) {
+	result, err := db.Exec(`
+		UPDATE users
+		SET status = 'idle', updated_at = CURRENT_TIMESTAMP
+		WHERE user_type = 'agent' AND enabled = 1
+		  AND status != 'idle' AND status != 'disabled'
+		  AND last_seen IS NOT NULL
+		  AND last_seen < datetime('now', ? || ' minutes')
+	`, fmt.Sprintf("-%d", thresholdMinutes))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// AgentStatus holds an agent and its currently assigned ticket (if any).
+type AgentStatus struct {
+	Agent     Agent   `json:"agent"`
+	TicketKey *string `json:"ticket_key,omitempty"`
+}
+
+// ListAgentStatuses returns all agents with their currently assigned active ticket.
+func ListAgentStatuses(db *sql.DB) ([]AgentStatus, error) {
+	agents, err := ListAgents(db)
+	if err != nil {
+		return nil, err
+	}
+	statuses := make([]AgentStatus, 0, len(agents))
+	for _, a := range agents {
+		as := AgentStatus{Agent: a}
+		var key string
+		err := db.QueryRow(`
+			SELECT t.key FROM tickets t
+			WHERE t.assignee = ? AND t.state = 'active' AND t.open = 1
+			LIMIT 1
+		`, a.Username).Scan(&key)
+		if err == nil {
+			as.TicketKey = &key
+		}
+		statuses = append(statuses, as)
+	}
+	return statuses, nil
 }
 
 // ─── agent config ─────────────────────────────────────────────────────────────

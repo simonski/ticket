@@ -950,9 +950,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		svc := factory(t)
 
 		// Create agent
-		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Description: "A test agent",
-		})
+		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
@@ -978,16 +976,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListAgents() did not include created agent %d", agent.ID)
 		}
 
-		// Update agent description
-		newDesc := "Updated description"
-		updated, err := svc.UpdateAgent(agent.ID, libticket.AgentUpdateRequest{
-			Description: &newDesc,
+		// Update agent password
+		newPass := "new-password"
+		_, err = svc.UpdateAgent(agent.ID, libticket.AgentUpdateRequest{
+			Password: &newPass,
 		})
 		if err != nil {
 			t.Fatalf("UpdateAgent() error = %v", err)
-		}
-		if updated.Description != "Updated description" {
-			t.Fatalf("updated.Description = %q, want %q", updated.Description, "Updated description")
 		}
 
 		// Disable agent
@@ -1019,8 +1014,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Create an agent with known password
 		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Description: "Worker",
-			Password:    "secret123",
+			Password: "secret123",
 		})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
@@ -1177,9 +1171,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTeam() error = %v", err)
 		}
 
-		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Description: "Bot for team",
-		})
+		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}

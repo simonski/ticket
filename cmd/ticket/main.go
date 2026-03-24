@@ -1595,14 +1595,12 @@ func runAgent(args []string) error {
 	case "create":
 		fs := flag.NewFlagSet("agent create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		description := fs.String("description", "", "agent description")
 		password := fs.String("password", "", "agent password")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		agent, generatedPassword, err := svc.CreateAgent(libticket.AgentCreateRequest{
-			Description: strings.TrimSpace(*description),
-			Password:    strings.TrimSpace(*password),
+			Password: strings.TrimSpace(*password),
 		})
 		if err != nil {
 			return err
@@ -1614,48 +1612,32 @@ func runAgent(args []string) error {
 		fmt.Printf("password: %s\n", generatedPassword)
 		return nil
 	case "ls", "list":
-		agents, err := svc.ListAgents()
+		statuses, err := svc.ListAgentStatuses()
 		if err != nil {
 			return err
 		}
 		if outputJSON {
-			return printJSON(agents)
+			return printJSON(statuses)
 		}
-		printAgentTable(agents)
+		printAgentTable(statuses)
 		return nil
 	case "udpate", "update":
 		fs := flag.NewFlagSet("agent update", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "agent id")
-		var description, password string
-		fs.StringVar(&description, "desc", "", "agent description")
-		fs.StringVar(&description, "description", "", "agent description")
-		fs.StringVar(&password, "password", "", "agent password")
+		password := fs.String("password", "", "agent password")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *id == 0 {
 			return errors.New("agent update requires -id")
 		}
-		visited := map[string]bool{}
-		fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
-		descriptionSet := visited["desc"] || visited["description"]
-		passwordSet := visited["password"]
-		if !descriptionSet && !passwordSet {
-			return errors.New("agent update requires at least one of -desc|-description, -password")
-		}
-		var descPtr, passPtr *string
-		if descriptionSet {
-			trimmed := strings.TrimSpace(description)
-			descPtr = &trimmed
-		}
-		if passwordSet {
-			trimmed := strings.TrimSpace(password)
-			passPtr = &trimmed
+		trimmed := strings.TrimSpace(*password)
+		if trimmed == "" {
+			return errors.New("agent update requires -password")
 		}
 		agent, err := svc.UpdateAgent(*id, libticket.AgentUpdateRequest{
-			Description: descPtr,
-			Password:    passPtr,
+			Password: &trimmed,
 		})
 		if err != nil {
 			return err
@@ -2015,22 +1997,30 @@ func buildAgentPrompt(ticket store.Ticket) string {
 	return strings.TrimSpace(b.String())
 }
 
-func printAgentTable(agents []store.Agent) {
-	if len(agents) == 0 {
+func printAgentTable(statuses []store.AgentStatus) {
+	if len(statuses) == 0 {
 		fmt.Println("no agents")
 		return
 	}
-	sort.SliceStable(agents, func(i, j int) bool {
-		return strings.ToLower(agents[i].Username) < strings.ToLower(agents[j].Username)
+	sort.SliceStable(statuses, func(i, j int) bool {
+		return strings.ToLower(statuses[i].Agent.Username) < strings.ToLower(statuses[j].Agent.Username)
 	})
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION\tENABLED\tSTATUS\tLAST_SEEN")
-	for _, agent := range agents {
-		lastSeen := strings.TrimSpace(agent.LastSeen)
+	fmt.Fprintln(w, "UUID\tENABLED\tSTATUS\tTICKET\tCREATED\tLAST_SEEN")
+	for _, s := range statuses {
+		lastSeen := strings.TrimSpace(s.Agent.LastSeen)
 		if lastSeen == "" {
 			lastSeen = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\t%s\n", agent.UUID, agent.Username, agent.Description, agent.Enabled, agent.Status, lastSeen)
+		created := strings.TrimSpace(s.Agent.CreatedAt)
+		if created == "" {
+			created = "-"
+		}
+		ticket := "none"
+		if s.TicketKey != nil {
+			ticket = *s.TicketKey
+		}
+		fmt.Fprintf(w, "%s\t%t\t%s\t%s\t%s\t%s\n", s.Agent.UUID, s.Agent.Enabled, s.Agent.Status, ticket, created, lastSeen)
 	}
 	_ = w.Flush()
 }
@@ -2876,9 +2866,9 @@ func printTeamAgentTable(items []store.TeamAgent) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tNAME\tENABLED\tSTATUS")
+	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tUUID\tENABLED\tSTATUS")
 	for _, item := range items {
-		fmt.Fprintf(w, "%d\t%d\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentName, item.Enabled, item.Status)
+		fmt.Fprintf(w, "%d\t%d\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentUUID, item.Enabled, item.Status)
 	}
 	_ = w.Flush()
 }

@@ -466,7 +466,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			agent, generatedPassword, err := store.CreateAgent(db, payload.Description, payload.Password)
+			agent, generatedPassword, err := store.CreateAgent(db, payload.Password)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
@@ -487,17 +487,34 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
+		if parts[0] == "statuses" {
+			if r.Method != http.MethodGet {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			statuses, err := store.ListAgentStatuses(db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, statuses)
+			return
+		}
 		if parts[0] == "register" {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
-			agentName, agentPass, ok := r.BasicAuth()
-			if !ok || agentName == "" || agentPass == "" {
+			agentID, agentPass, ok := r.BasicAuth()
+			if !ok || agentID == "" || agentPass == "" {
 				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, agentName, agentPass)
+			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
@@ -519,8 +536,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
-			agentName, agentPass, ok := r.BasicAuth()
-			if !ok || agentName == "" || agentPass == "" {
+			agentID, agentPass, ok := r.BasicAuth()
+			if !ok || agentID == "" || agentPass == "" {
 				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
@@ -536,10 +553,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					fmt.Fprintf(output, "AGENT %s\n", fmt.Sprintf(format, args...))
 				}
 			}
-			vlog("request from agent=%q project_id=%d", agentName, payload.ProjectID)
-			agent, err := store.AuthenticateAgent(db, agentName, agentPass)
+			vlog("request from agent=%q project_id=%d", agentID, payload.ProjectID)
+			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
 			if err != nil {
-				vlog("auth failed for agent=%q: %v", agentName, err)
+				vlog("auth failed for agent=%q: %v", agentID, err)
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
 					return
@@ -646,8 +663,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
-			agentName, agentPass, ok := r.BasicAuth()
-			if !ok || agentName == "" || agentPass == "" {
+			agentID, agentPass, ok := r.BasicAuth()
+			if !ok || agentID == "" || agentPass == "" {
 				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
@@ -663,7 +680,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, agentName, agentPass)
+			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
@@ -726,8 +743,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					return
 				}
 				updated, err := store.UpdateAgent(db, id, store.AgentUpdateParams{
-					Description: nullableTrimmed(payload.Description),
-					Password:    nullableTrimmed(payload.Password),
+					Password: nullableTrimmed(payload.Password),
 				})
 				if err != nil {
 					if errors.Is(err, sql.ErrNoRows) {

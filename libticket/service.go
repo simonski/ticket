@@ -21,6 +21,7 @@ type Service interface {
 	CreateAgent(request AgentCreateRequest) (store.Agent, string, error)
 	SetAgentEnabled(id int64, enabled bool) (store.Agent, error)
 	ListAgents() ([]store.Agent, error)
+	ListAgentStatuses() ([]store.AgentStatus, error)
 	UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error)
 	DeleteAgent(id int64) error
 	SetAgentConfig(agentID int64, key, value string) error

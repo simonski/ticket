@@ -11,12 +11,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/simonski/ticket/internal/store"
 	web "github.com/simonski/ticket/web"
 )
 
 type Server struct {
 	httpServer *http.Server
+	stopReaper chan struct{}
 }
 
 func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath string) (*Server, error) {
@@ -24,12 +27,45 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	s := &Server{
 		httpServer: &http.Server{
 			Addr:    addr,
 			Handler: handler,
 		},
-	}, nil
+		stopReaper: make(chan struct{}),
+	}
+	go s.runAgentReaper(db, verbose, output)
+	return s, nil
+}
+
+// runAgentReaper periodically marks agents as idle if they haven't sent a
+// heartbeat (TouchAgent) within the threshold.
+func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
+	const thresholdMinutes = 10
+
+	reap := func() {
+		n, err := store.ReapStaleAgents(db, thresholdMinutes)
+		if err != nil && verbose && output != nil {
+			fmt.Fprintf(output, "REAPER error: %v\n", err)
+		}
+		if n > 0 && verbose && output != nil {
+			fmt.Fprintf(output, "REAPER reaped %d stale agent(s)\n", n)
+		}
+	}
+
+	// Run immediately on startup.
+	reap()
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			reap()
+		case <-s.stopReaper:
+			return
+		}
+	}
 }
 
 func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath string) (http.Handler, error) {

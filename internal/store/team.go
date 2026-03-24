@@ -34,12 +34,11 @@ type TeamMember struct {
 }
 
 type TeamAgent struct {
-	TeamID      int64  `json:"team_id"`
-	AgentID     int64  `json:"agent_id"`
-	AgentName   string `json:"agent_name"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
-	Status      string `json:"status"`
+	TeamID    int64  `json:"team_id"`
+	AgentID   int64  `json:"agent_id"`
+	AgentUUID string `json:"agent_uuid"`
+	Enabled   bool   `json:"enabled"`
+	Status    string `json:"status"`
 }
 
 type ProjectTeamMember struct {
@@ -278,14 +277,14 @@ func AddTeamAgent(db *sql.DB, teamID, agentID int64) (TeamAgent, error) {
 		return TeamAgent{}, err
 	}
 	row := db.QueryRow(`
-		SELECT ta.team_id, u.user_id, u.username, COALESCE(u.description, ''), u.enabled, COALESCE(u.status, '')
+		SELECT ta.team_id, u.user_id, u.username, u.enabled, COALESCE(u.status, '')
 		FROM team_agents ta
 		JOIN users u ON u.user_id = ta.user_id
 		WHERE ta.team_id = ? AND ta.user_id = ?
 	`, teamID, agentID)
 	var item TeamAgent
 	var enabled int
-	if err := row.Scan(&item.TeamID, &item.AgentID, &item.AgentName, &item.Description, &enabled, &item.Status); err != nil {
+	if err := row.Scan(&item.TeamID, &item.AgentID, &item.AgentUUID, &enabled, &item.Status); err != nil {
 		return TeamAgent{}, err
 	}
 	item.Enabled = enabled == 1
@@ -309,7 +308,7 @@ func RemoveTeamAgent(db *sql.DB, teamID, agentID int64) error {
 
 func ListTeamAgents(db *sql.DB, teamID int64) ([]TeamAgent, error) {
 	rows, err := db.Query(`
-		SELECT ta.team_id, u.user_id, u.username, COALESCE(u.description, ''), u.enabled, COALESCE(u.status, '')
+		SELECT ta.team_id, u.user_id, u.username, u.enabled, COALESCE(u.status, '')
 		FROM team_agents ta
 		JOIN users u ON u.user_id = ta.user_id
 		WHERE ta.team_id = ?
@@ -323,7 +322,7 @@ func ListTeamAgents(db *sql.DB, teamID int64) ([]TeamAgent, error) {
 	for rows.Next() {
 		var item TeamAgent
 		var enabled int
-		if err := rows.Scan(&item.TeamID, &item.AgentID, &item.AgentName, &item.Description, &enabled, &item.Status); err != nil {
+		if err := rows.Scan(&item.TeamID, &item.AgentID, &item.AgentUUID, &enabled, &item.Status); err != nil {
 			return nil, err
 		}
 		item.Enabled = enabled == 1

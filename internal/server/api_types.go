@@ -8,8 +8,7 @@ type credentialsRequest struct {
 }
 
 type agentRequest struct {
-	Description string `json:"description"`
-	Password    string `json:"password,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 

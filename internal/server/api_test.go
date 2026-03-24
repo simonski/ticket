@@ -558,13 +558,13 @@ func TestAgentAPI(t *testing.T) {
 	}
 
 	updatedResp := doJSONRequest(t, handler, http.MethodPut, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10), map[string]string{
-		"description": "Updated worker",
+		"password": "new-password",
 	}, adminAuth.Token)
 	if updatedResp.Code != http.StatusOK {
 		t.Fatalf("update agent status = %d body=%s", updatedResp.Code, updatedResp.Body.String())
 	}
 
-	registerResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/register", agentUUID, createPayload.Password, nil)
+	registerResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/register", agentUUID, "new-password", nil)
 	if registerResp.Code != http.StatusOK {
 		t.Fatalf("register agent status = %d body=%s", registerResp.Code, registerResp.Body.String())
 	}

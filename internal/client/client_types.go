@@ -149,8 +149,7 @@ type AgentWorkResponse struct {
 }
 
 type AgentCreateRequest struct {
-	Description string `json:"description"`
-	Password    string `json:"password,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 type RoleRequest struct {
@@ -160,8 +159,7 @@ type RoleRequest struct {
 }
 
 type AgentUpdateRequest struct {
-	Description *string `json:"description,omitempty"`
-	Password    *string `json:"password,omitempty"`
+	Password *string `json:"password,omitempty"`
 }
 
 type AgentRegisterRequest struct {

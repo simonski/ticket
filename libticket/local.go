@@ -188,7 +188,7 @@ func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, str
 		return store.Agent{}, "", err
 	}
 	defer db.Close()
-	return store.CreateAgent(db, request.Description, request.Password)
+	return store.CreateAgent(db, request.Password)
 }
 
 func (s *LocalService) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
@@ -209,6 +209,15 @@ func (s *LocalService) ListAgents() ([]store.Agent, error) {
 	return store.ListAgents(db)
 }
 
+func (s *LocalService) ListAgentStatuses() ([]store.AgentStatus, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListAgentStatuses(db)
+}
+
 func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
@@ -216,8 +225,7 @@ func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.
 	}
 	defer db.Close()
 	return store.UpdateAgent(db, id, store.AgentUpdateParams{
-		Description: request.Description,
-		Password:    request.Password,
+		Password: request.Password,
 	})
 }
 

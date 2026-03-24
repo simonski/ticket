@@ -24,7 +24,7 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, generatedPassword, err := CreateAgent(db, "autonomous worker", "")
+	agent, generatedPassword, err := CreateAgent(db, "")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -61,11 +61,11 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	}
 }
 
-func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
+func TestAgentUpdateAndLifecycle(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, password, err := CreateAgent(db, "desc", "secret-1")
+	agent, password, err := CreateAgent(db, "secret-1")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -73,17 +73,12 @@ func TestAgentUpdateEnableDisableDeleteLifecycle(t *testing.T) {
 		t.Fatalf("password = %q, want secret-1", password)
 	}
 
-	updatedDesc := "new desc"
 	updatedPassword := "secret-2"
-	updated, err := UpdateAgent(db, agent.ID, AgentUpdateParams{
-		Description: &updatedDesc,
-		Password:    &updatedPassword,
+	_, err = UpdateAgent(db, agent.ID, AgentUpdateParams{
+		Password: &updatedPassword,
 	})
 	if err != nil {
 		t.Fatalf("UpdateAgent() error = %v", err)
-	}
-	if updated.Description != updatedDesc {
-		t.Fatalf("updated.Description = %q, want %q", updated.Description, updatedDesc)
 	}
 
 	if _, err := AuthenticateAgent(db, agent.UUID, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
@@ -134,7 +129,7 @@ func TestAgentDoesNotAppearInListUsers(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "should not appear", "secret")
+	agent, _, err := CreateAgent(db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -154,7 +149,7 @@ func TestAgentFoundByGetUserByUsername(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "findable agent", "secret")
+	agent, _, err := CreateAgent(db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}

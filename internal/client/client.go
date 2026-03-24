@@ -277,7 +277,7 @@ func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, e
 			return store.Agent{}, "", err
 		}
 		defer db.Close()
-		return store.CreateAgent(db, request.Description, request.Password)
+		return store.CreateAgent(db, request.Password)
 	}
 	var response struct {
 		Agent    store.Agent `json:"agent"`
@@ -319,6 +319,20 @@ func (c *Client) ListAgents() ([]store.Agent, error) {
 	return agents, err
 }
 
+func (c *Client) ListAgentStatuses() ([]store.AgentStatus, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListAgentStatuses(db)
+	}
+	var statuses []store.AgentStatus
+	err := c.doJSON(http.MethodGet, "/api/agents/statuses", nil, &statuses)
+	return statuses, err
+}
+
 func (c *Client) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
@@ -327,8 +341,7 @@ func (c *Client) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent,
 		}
 		defer db.Close()
 		return store.UpdateAgent(db, id, store.AgentUpdateParams{
-			Description: request.Description,
-			Password:    request.Password,
+			Password: request.Password,
 		})
 	}
 	var agent store.Agent

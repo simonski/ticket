@@ -95,6 +95,10 @@ func (s *Service) ListAgents() ([]store.Agent, error) {
 	return s.client.ListAgents()
 }
 
+func (s *Service) ListAgentStatuses() ([]store.AgentStatus, error) {
+	return s.client.ListAgentStatuses()
+}
+
 func (s *Service) UpdateAgent(id int64, request libticket.AgentUpdateRequest) (store.Agent, error) {
 	return s.client.UpdateAgent(id, client.AgentUpdateRequest(request))
 }

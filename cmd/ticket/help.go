@@ -309,7 +309,7 @@ var helpIndex = map[string]commandHelp{
 	"agent": {
 		usage:   "ticket agent <create|ls|list|update|rm|delete|enable|disable|request|run>",
 		details: []string{"Manages API agents for autonomous ticket processing.", "`request` fetches an enriched work envelope (project, ticket, parents). `run` registers an agent then continuously requests and processes work."},
-		example: "ticket agent create -description \"Autonomous worker\" (name auto-generated)",
+		example: "ticket agent create (UUID and password auto-generated)",
 	},
 	"story": {
 		usage:   "ticket story <create|list|get|update|delete>",
@@ -498,8 +498,8 @@ const agentUsage = `Usage: ticket agent <command> [flags]
 
 Commands:
   list                                List all agents
-  create   [-description d]           Create an agent (UUID auto-generated)
-  update   -id <id> [-description d]  Update an agent
+  create   [-password p]              Create an agent (UUID auto-generated)
+  update   -id <id> -password <p>    Update an agent password
   delete   -id <id>                   Delete an agent
   enable   -id <id>                   Enable an agent
   disable  -id <id>                   Disable an agent
