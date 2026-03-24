@@ -17,6 +17,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
@@ -35,7 +36,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"SYSTEM",
 		"\x1b[38;5;117m",
 		"ticket",
-		"req",
+		"idea",
 		"project",
 		"dep",
 		"label",
@@ -69,13 +70,14 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	// Verify ordering: COMMANDS section then ADMIN section
 	nounOrder := []string{
 		"  ticket",
-		"  req",
+		"  idea",
 		"  project",
 		"  dep",
 		"  label",
 		"  time",
 		"  story",
 		"  decision",
+		"  doctor",
 		"  role",
 		"  workflow",
 		"  team",
@@ -2557,17 +2559,58 @@ func TestBuildAgentPrompt(t *testing.T) {
 		Description:        "Some description",
 		AcceptanceCriteria: "Must pass",
 	}
-	prompt := buildAgentPrompt(ticket)
-	for _, want := range []string{"Test Task", "Some description", "Must pass"} {
+	role := store.Role{Title: "Developer", Motivation: "Ship features", Goals: "Quality code"}
+	wf := store.WorkflowWithStages{
+		Workflow: store.Workflow{Name: "Standard"},
+		Stages:  []store.WorkflowStage{{StageName: "design"}, {StageName: "develop"}, {StageName: "test"}},
+	}
+	project := store.Project{Prefix: "TK", Title: "Test Project", GitRepository: "github.com/test/repo"}
+	resp := libticket.AgentWorkResponse{
+		Status:   "NEW",
+		Ticket:   &ticket,
+		Project:  &project,
+		Workflow: &wf,
+		Role:     &role,
+	}
+	prompt := buildAgentPrompt(resp)
+	for _, want := range []string{"Test Task", "Some description", "Must pass", "Developer", "Ship features", "Standard", "design", "develop", "Test Project", "github.com/test/repo"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("buildAgentPrompt missing %q:\n%s", want, prompt)
 		}
 	}
-	// Without description/AC
+	// Without description/AC/role/workflow
 	ticket2 := store.Ticket{Title: "Simple"}
-	prompt2 := buildAgentPrompt(ticket2)
+	prompt2 := buildAgentPrompt(libticket.AgentWorkResponse{Ticket: &ticket2})
 	if strings.Contains(prompt2, "Description:") {
 		t.Error("should not include Description header for empty description")
+	}
+	if strings.Contains(prompt2, "Role:") {
+		t.Error("should not include Role header when no role")
+	}
+}
+
+func TestAllTopLevelCommandsShowUsageWithNoArgs(t *testing.T) {
+	commands := []string{
+		"project", "workflow", "team", "story", "user", "label",
+		"dep", "decision", "agent", "role", "idea",
+	}
+	for _, cmd := range commands {
+		t.Run(cmd, func(t *testing.T) {
+			output := captureStdout(t, func() {
+				// These should all print usage and return nil (no error).
+				_ = run([]string{cmd})
+			})
+			if !strings.Contains(strings.ToLower(output), "usage") {
+				t.Errorf("tk %s with no args should print usage, got:\n%s", cmd, output)
+			}
+		})
+	}
+}
+
+func TestIdeasCommandIsRemoved(t *testing.T) {
+	err := run([]string{"ideas"})
+	if err == nil {
+		t.Error("tk ideas should return an error, got nil")
 	}
 }
 

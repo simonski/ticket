@@ -81,6 +81,8 @@ type Service interface {
 	UnarchiveTicket(id int64) (store.Ticket, error)
 	ReadyTicket(id int64) (store.Ticket, error)
 	NotReadyTicket(id int64) (store.Ticket, error)
+	SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error)
+	UnsetTicketWorkflow(id int64) (store.Ticket, error)
 	DeleteTicket(id int64) error
 	SetTicketParent(id, parentID int64) (store.Ticket, error)
 	UnsetTicketParent(id int64) (store.Ticket, error)

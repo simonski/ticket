@@ -329,35 +329,37 @@ func renderRootUsage() string {
 	h := "\x1b[38;5;117m" // pastel blue
 	r := "\x1b[0m"
 	b.WriteString("\n" + h + "USAGE" + r + "\n")
-	b.WriteString("  ticket <noun> <verb> [flags]\n\n")
+	b.WriteString("  ticket <noun> <verb> [flags]\n")
+	b.WriteString("  Verbs: ls, new, get, update, rm (consistent across commands)\n\n")
 	commandRows := [][2]string{
-		{"ticket", "Manage tickets — create, update, state, assign, comment, close"},
-		{"req", "Capture and refine requirements — add, shape, accept, reject"},
-		{"project", "Manage projects and active project context"},
-		{"dep", "Manage dependency links between tickets"},
-		{"label", "Manage project labels and ticket tagging"},
-		{"time", "Log and view time entries on tickets"},
-		{"story", "Manage stories within a project"},
-		{"decision", "Record and list architectural decisions"},
+		{"ticket", "Manage tickets (ls, new, get, update, rm, state, assign, close)"},
+		{"idea", "Capture and refine requirements (ls, new, get, shape, accept, reject)"},
+		{"project", "Manage projects (ls, new, get, use, rm, init)"},
+		{"dep", "Manage dependency links (add, remove)"},
+		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
+		{"time", "Log and view time entries (log, ls, total, rm)"},
+		{"story", "Manage stories (ls, new, get, update, rm)"},
+		{"decision", "Record and list decisions (ls, new)"},
+		{"doctor", "Interactive health review (project, ticket)"},
 	}
 	b.WriteString(h + "COMMANDS" + r + "\n")
 	printCommandUsageRows(&b, commandRows, 10)
 	adminRows := [][2]string{
-		{"role", "Manage roles (title, motivation, goals)"},
-		{"workflow", "Manage workflow definitions and stages"},
-		{"team", "Manage teams, hierarchy, and team membership"},
-		{"agent", "Manage autonomous agents and run agent workers"},
-		{"user", "Admin-only user management"},
+		{"role", "Manage roles (ls, new, get, update, rm)"},
+		{"workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
+		{"team", "Manage teams (ls, new, update, rm)"},
+		{"agent", "Manage agents (ls, new, update, rm, run)"},
+		{"user", "Manage users (ls, new, rm, enable, disable)"},
 	}
 	b.WriteString("\n" + h + "ADMIN" + r + "\n")
 	printCommandUsageRows(&b, adminRows, 10)
 	shortcutRows := [][2]string{
-		{"tk", "List tickets in the active project (alias: tk ticket list)"},
+		{"tk", "Show this usage guide"},
 		{"tk add", "Create a ticket (alias: tk ticket add)"},
 		{"tk bug", "Create a bug (alias: tk ticket add -type bug)"},
 		{"tk epic", "Create an epic (alias: tk ticket add -type epic)"},
-		{"tk idea", "Capture a requirement (alias: tk req add)"},
-		{"tk ideas", "List requirements (alias: tk req list)"},
+		{"tk idea new", "Capture a requirement"},
+		{"tk idea ls", "List requirements"},
 	}
 	b.WriteString("\n" + h + "SHORTCUTS" + r + "\n")
 	printCommandUsageRows(&b, shortcutRows, 10)
@@ -379,9 +381,9 @@ func renderRootUsage() string {
 	b.WriteString("\n" + h + "SYSTEM" + r + "\n")
 	printCommandUsageRows(&b, systemRows, 10)
 	b.WriteString("\n" + h + "EXAMPLES" + r + "\n")
-	b.WriteString("  tk                                          List open tickets\n")
+	b.WriteString("  tk ls                                       List open tickets\n")
 	b.WriteString("  tk add -title \"Fix login bug\" -type bug     Create a bug ticket\n")
-	b.WriteString("  tk idea -title \"Dark mode support\"          Capture a requirement\n")
+	b.WriteString("  tk idea new \"Dark mode support\"             Capture a requirement\n")
 	b.WriteString("  tk ticket get -id 42                        Show ticket details\n")
 	b.WriteString("  tk ls -json | jq '.[].key' | xargs -I {} ticket close -id {}   Close all tickets\n")
 	b.WriteString("  tk summary                                  Your daily starting point\n")
@@ -413,9 +415,9 @@ Commands:
 const labelUsage = `Usage: ticket label <command> [flags]
 
 Commands:
-  list                                List all project labels
-  create   -name <name> [-color hex]  Create a label
-  delete   -id <label-id>             Delete a label
+  ls                                  List all project labels
+  new      -name <name> [-color hex]  Create a label
+  rm       -id <label-id>             Delete a label
   add      -id <ticket-id> <label-id> Tag a ticket with a label
   remove   -id <ticket-id> <label-id> Remove a label from a ticket
   show     -id <ticket-id>            Show labels on a ticket`
@@ -431,11 +433,11 @@ Commands:
 const projectUsage = `Usage: ticket project <command> [flags]
 
 Commands:
-  list, ls                            List all projects
-  create   -title <name>              Create a project
+  ls                                  List all projects
+  new      -title <name>              Create a project
   get      <id>                       Show project details
-  use, default  [<id>]                Switch active project (or show current)
-  rm       [-id] <id> [--confirm tok]  Delete a project (two-step)
+  use      [<id>]                     Switch active project (or show current)
+  rm       [-id] <id> [--confirm tok] Delete a project (two-step)
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
@@ -445,18 +447,21 @@ Commands:
 const roleUsage = `Usage: ticket role <command> [flags]
 
 Commands:
-  list                                List all roles
-  create   -title <t> [-motivation m] [-goals g]   Create a role
-  update   -id <id> [-title t] [-motivation m] [-goals g]   Update a role
-  delete   -id <id>                   Delete a role`
+  ls                                             List all roles
+  get      -id <id>                              Show full role details
+  new      -title <t> [-motivation m] [-goals g] Create a role
+  update   -id <id> -title <t> [-motivation m] [-goals g] Update a role
+  rm       -id <id>                              Delete a role`
 
 const workflowUsage = `Usage: ticket workflow <command> [flags]
 
 Commands:
-  list                                List all workflows
-  create   -name <n> [-d desc]        Create a workflow
+  ls                                  List all workflows
+  new      -name <n> [-d desc]        Create a workflow
   get      -id <id>                   Show workflow details
-  delete   -id <id>                   Delete a workflow
+  rm       -id <id>                   Delete a workflow
+  set      -ticket <id> -workflow <id> Set workflow on a ticket (overrides inherited)
+  unset    -ticket <id>               Clear workflow from a ticket (inherit from parent/project)
   add-stage    -id <wf-id> -name <n>  Add a stage
   remove-stage -stage-id <id>         Remove a stage
   reorder-stages -id <wf-id> <ids>    Reorder stages
@@ -465,22 +470,22 @@ Commands:
 const decisionUsage = `Usage: ticket decision <command> [flags]
 
 Commands:
-  add      "text"                     Record a decision
-  list                                List all decisions`
+  new      "text"                     Record a decision
+  ls                                  List all decisions`
 
 const teamUsage = `Usage: ticket team <command> [flags]
 
 Commands:
-  list                                List all teams
-  create   -name <name>              Create a team
-  update   -id <id> -name <name>     Update a team
-  delete   -id <id>                   Delete a team
-  add-user     -team_id <id> -user_id <id>    Add a user
-  remove-user  -team_id <id> -user_id <id>    Remove a user
-  users        -id <id>                       List team users
-  add-agent    -team_id <id> -agent_id <id>   Add an agent
-  remove-agent -team_id <id> -agent_id <id>   Remove an agent
-  agents       -id <id>                       List team agents`
+  ls                                             List all teams
+  new      -name <name>                          Create a team
+  update   -id <id> -name <name>                 Update a team
+  rm       -id <id>                              Delete a team
+  add-user     -team_id <id> -user_id <id>       Add a user
+  remove-user  -team_id <id> -user_id <id>       Remove a user
+  users        -id <id>                          List team users
+  add-agent    -team_id <id> -agent_id <id>      Add an agent
+  remove-agent -team_id <id> -agent_id <id>      Remove an agent
+  agents       -id <id>                          List team agents`
 
 const configUsage = `Usage: ticket config <command> [flags]
 
@@ -497,10 +502,10 @@ Keys: server, username, current_project, current_epic_id, registration_enabled`
 const agentUsage = `Usage: ticket agent <command> [flags]
 
 Commands:
-  list                                List all agents
-  create   [-password p]              Create an agent (UUID auto-generated)
-  update   -id <id> -password <p>    Update an agent password
-  delete   -id <id>                   Delete an agent
+  ls                                  List all agents
+  new      [-password p]              Create an agent (UUID auto-generated)
+  update   -id <id> -password <p>     Update an agent password
+  rm       -id <id>                   Delete an agent
   enable   -id <id>                   Enable an agent
   disable  -id <id>                   Disable an agent
   request  [flags]                    Request work for an agent
@@ -523,12 +528,31 @@ Run flags:
 const userUsage = `Usage: ticket user <command> [flags]
 
 Commands:
-  list                                List all users
-  create   --username <u> --password <p>   Create a user
-  delete   -id <id>                   Delete a user
-  enable   -id <id>                   Enable a user
-  disable  -id <id>                   Disable a user
-  reset-password -username <u> [-password]  Reset password and invalidate sessions`
+  ls                                       List all users
+  new      --username <u> --password <p>   Create a user
+  rm       -id <id>                        Delete a user
+  enable   -id <id>                        Enable a user
+  disable  -id <id>                        Disable a user
+  reset-password -username <u> [-password] Reset password and invalidate sessions`
+
+const storyUsage = `Usage: ticket story <command> [flags]
+
+Commands:
+  ls                                       List stories in active project
+  new      -title <title> [-d <desc>]      Create a story
+  get      <id>                            Show story detail
+  update   <id> -title <title> [-d <desc>] Update a story
+  rm       <id>                            Delete a story`
+
+const ideaUsage = `Usage: ticket idea <command> [flags]
+
+Commands:
+  ls                                       List all ideas/requirements
+  new      <title>                         Capture a new idea/requirement
+  get      -id <id>                        Show idea detail
+  shape    -id <id> [-d desc] [-ac ac]     Refine an idea
+  accept   -id <id>                        Accept an idea
+  reject   -id <id> -reason <reason>       Reject an idea`
 
 func renderCommandHelp(command string) string {
 	command = normalizeHelpCommand(command)

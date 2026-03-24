@@ -233,6 +233,8 @@ func run(args []string) error {
 		return runHistory(trimmedArgs[1:])
 	case "health", "heatlh":
 		return runHealth(trimmedArgs[1:])
+	case "doctor":
+		return runDoctor(trimmedArgs[1:])
 	case "comment":
 		return runComment(trimmedArgs[1:])
 	case "clone", "cp":
@@ -254,9 +256,7 @@ func run(args []string) error {
 	case "req":
 		return runReq(trimmedArgs[1:])
 	case "idea":
-		return runReqAdd(trimmedArgs[1:])
-	case "ideas":
-		return runReqList(trimmedArgs[1:])
+		return runIdea(trimmedArgs[1:])
 	case "curate":
 		return runCurate(trimmedArgs[1:])
 	case "review":
@@ -1784,7 +1784,7 @@ func runAgent(args []string) error {
 			if agentVerbose {
 				fmt.Printf("[agent] processing %s %q\n", ticketLabel(*ticket), ticket.Title)
 			}
-			prompt := buildAgentPrompt(*ticket)
+			prompt := buildAgentPrompt(response)
 			result, err := runAgentCommand(modelCommand, prompt, agentVerbose, ticket.Key)
 			if err != nil {
 				fmt.Printf("failed %s: %v\n", ticketLabel(*ticket), err)
@@ -1978,11 +1978,49 @@ func runAgent(args []string) error {
 	}
 }
 
-func buildAgentPrompt(ticket store.Ticket) string {
+func buildAgentPrompt(resp libticket.AgentWorkResponse) string {
 	var b strings.Builder
-	// b.WriteString("You are an autonomous software agent working a ticket.\n")
-	// b.WriteString("Return only the final ticket update text.\n\n")
-	b.WriteString(fmt.Sprintf("Ticket: %s\n", ticketLabel(ticket)))
+	ticket := resp.Ticket
+	if ticket == nil {
+		return ""
+	}
+
+	if resp.Role != nil {
+		b.WriteString(fmt.Sprintf("Role: %s\n", resp.Role.Title))
+		if resp.Role.Motivation != "" {
+			b.WriteString(fmt.Sprintf("Motivation: %s\n", strings.TrimSpace(resp.Role.Motivation)))
+		}
+		if resp.Role.Goals != "" {
+			b.WriteString(fmt.Sprintf("Goals: %s\n", strings.TrimSpace(resp.Role.Goals)))
+		}
+		b.WriteString("\n")
+	}
+
+	if resp.Project != nil {
+		b.WriteString(fmt.Sprintf("Project: %s — %s\n", resp.Project.Prefix, resp.Project.Title))
+		if resp.Project.GitRepository != "" {
+			b.WriteString(fmt.Sprintf("Repository: %s\n", resp.Project.GitRepository))
+			if resp.Project.GitBranch != "" {
+				b.WriteString(fmt.Sprintf("Branch: %s\n", resp.Project.GitBranch))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	if resp.Workflow != nil {
+		b.WriteString(fmt.Sprintf("Workflow: %s\n", resp.Workflow.Name))
+		b.WriteString("Stages:")
+		for _, stage := range resp.Workflow.Stages {
+			marker := " "
+			if ticket.WorkflowStageID != nil && stage.ID == *ticket.WorkflowStageID {
+				marker = ">"
+			}
+			b.WriteString(fmt.Sprintf(" %s %s", marker, stage.StageName))
+		}
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(fmt.Sprintf("Ticket: %s\n", ticketLabel(*ticket)))
 	b.WriteString(fmt.Sprintf("Title: %s\n", strings.TrimSpace(ticket.Title)))
 	if strings.TrimSpace(ticket.Description) != "" {
 		b.WriteString("Description:\n")
@@ -1994,6 +2032,14 @@ func buildAgentPrompt(ticket store.Ticket) string {
 		b.WriteString(strings.TrimSpace(ticket.AcceptanceCriteria))
 		b.WriteString("\n")
 	}
+
+	if len(resp.Parents) > 0 {
+		b.WriteString("\nParents:\n")
+		for _, p := range resp.Parents {
+			b.WriteString(fmt.Sprintf("  %s [%s] %s\n", p.Key, p.Type, p.Title))
+		}
+	}
+
 	return strings.TrimSpace(b.String())
 }
 
@@ -2006,21 +2052,29 @@ func printAgentTable(statuses []store.AgentStatus) {
 		return strings.ToLower(statuses[i].Agent.Username) < strings.ToLower(statuses[j].Agent.Username)
 	})
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "UUID\tENABLED\tSTATUS\tTICKET\tCREATED\tLAST_SEEN")
+	fmt.Fprintln(w, "UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tWORKFLOW\tROLE\tLAST_SEEN")
 	for _, s := range statuses {
 		lastSeen := strings.TrimSpace(s.Agent.LastSeen)
 		if lastSeen == "" {
 			lastSeen = "-"
 		}
-		created := strings.TrimSpace(s.Agent.CreatedAt)
-		if created == "" {
-			created = "-"
-		}
-		ticket := "none"
+		ticket := "-"
 		if s.TicketKey != nil {
 			ticket = *s.TicketKey
 		}
-		fmt.Fprintf(w, "%s\t%t\t%s\t%s\t%s\t%s\n", s.Agent.UUID, s.Agent.Enabled, s.Agent.Status, ticket, created, lastSeen)
+		proj := "-"
+		if s.ProjectName != "" {
+			proj = s.ProjectName
+		}
+		wf := "-"
+		if s.WorkflowName != "" {
+			wf = s.WorkflowName
+		}
+		role := "-"
+		if s.RoleTitle != "" {
+			role = s.RoleTitle
+		}
+		fmt.Fprintf(w, "%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Agent.UUID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen)
 	}
 	_ = w.Flush()
 }
@@ -2044,14 +2098,7 @@ func printUserTable(users []store.User) {
 
 func runStory(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, `Usage: ticket story <command>
-
-Commands:
-  create, add, new -title <title> [-d <desc>]    Create a story
-  list, ls                                        List stories in active project
-  get <id>                                        Show story detail
-  update <id> -title <title> [-d <desc>]          Update a story
-  delete <id>                                     Delete a story`)
+		fmt.Println(storyUsage)
 		return nil
 	}
 
@@ -2597,6 +2644,10 @@ func runProjectRemoveTeam(svc libticket.Service, args []string) error {
 }
 
 func runTeam(args []string) error {
+	if len(args) == 0 {
+		fmt.Println(teamUsage)
+		return nil
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -2604,17 +2655,6 @@ func runTeam(args []string) error {
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
-	}
-	if len(args) == 0 {
-		teams, err := svc.ListTeams()
-		if err != nil {
-			return err
-		}
-		if outputJSON {
-			return printJSON(teams)
-		}
-		printTeamTable(teams)
-		return nil
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
@@ -2883,14 +2923,7 @@ func runRole(args []string) error {
 		return err
 	}
 	if len(args) == 0 {
-		roles, err := svc.ListRoles()
-		if err != nil {
-			return err
-		}
-		if outputJSON {
-			return printJSON(roles)
-		}
-		printRoleTable(roles)
+		fmt.Println(roleUsage)
 		return nil
 	}
 	switch args[0] {
@@ -2907,6 +2940,42 @@ func runRole(args []string) error {
 		}
 		printRoleTable(roles)
 		return nil
+	case "get", "show":
+		fs := flag.NewFlagSet("role get", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "role id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			if fs.NArg() > 0 {
+				if v, err := strconv.ParseInt(fs.Arg(0), 10, 64); err == nil {
+					*id = v
+				}
+			}
+		}
+		if *id == 0 {
+			return errors.New("usage: ticket role get -id <id>")
+		}
+		roles, err := svc.ListRoles()
+		if err != nil {
+			return err
+		}
+		for _, role := range roles {
+			if role.ID == *id {
+				if outputJSON {
+					return printJSON(role)
+				}
+				fmt.Printf("ID:         %d\n", role.ID)
+				fmt.Printf("Title:      %s\n", role.Title)
+				fmt.Printf("Motivation: %s\n", role.Motivation)
+				fmt.Printf("Goals:      %s\n", role.Goals)
+				fmt.Printf("Created:    %s\n", role.CreatedAt)
+				fmt.Printf("Updated:    %s\n", role.UpdatedAt)
+				return nil
+			}
+		}
+		return fmt.Errorf("role %d not found", *id)
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("role create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -2982,6 +3051,10 @@ func runRole(args []string) error {
 }
 
 func runWorkflow(args []string) error {
+	if len(args) == 0 {
+		fmt.Println(workflowUsage)
+		return nil
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -2989,17 +3062,6 @@ func runWorkflow(args []string) error {
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
-	}
-	if len(args) == 0 {
-		workflows, err := svc.ListWorkflows()
-		if err != nil {
-			return err
-		}
-		if outputJSON {
-			return printJSON(workflows)
-		}
-		printWorkflowTable(workflows)
-		return nil
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
@@ -3190,6 +3252,45 @@ func runWorkflow(args []string) error {
 			return printJSON(wf)
 		}
 		fmt.Printf("imported workflow: %s (id %d)\n", wf.Name, wf.ID)
+		return nil
+	case "set":
+		fs := flag.NewFlagSet("workflow set", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		ticketID := fs.Int64("ticket", 0, "ticket id")
+		workflowID := fs.Int64("workflow", 0, "workflow id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *ticketID == 0 || *workflowID == 0 {
+			return errors.New("usage: ticket workflow set -ticket <ticket-id> -workflow <workflow-id>")
+		}
+		ticket, err := svc.SetTicketWorkflow(*ticketID, *workflowID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(ticket)
+		}
+		fmt.Printf("set workflow %d on ticket %s\n", *workflowID, ticket.Key)
+		return nil
+	case "unset":
+		fs := flag.NewFlagSet("workflow unset", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		ticketID := fs.Int64("ticket", 0, "ticket id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *ticketID == 0 {
+			return errors.New("usage: ticket workflow unset -ticket <ticket-id>")
+		}
+		ticket, err := svc.UnsetTicketWorkflow(*ticketID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(ticket)
+		}
+		fmt.Printf("cleared workflow on ticket %s (now inherits from parent/project)\n", ticket.Key)
 		return nil
 	default:
 		return fmt.Errorf("unknown workflow command %q; see: ticket workflow help", args[0])
@@ -5352,6 +5453,264 @@ func isReviewerCommentText(commentText string) bool {
 	return false
 }
 
+func runDoctor(args []string) error {
+	if len(args) == 0 {
+		fmt.Println(`Usage: ticket doctor <target> [flags]
+
+Targets:
+  project [-id <id>]    Review project health
+  ticket  [-id <id>]    Review ticket health`)
+		return nil
+	}
+
+	_, svc, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+	reader := bufio.NewReader(os.Stdin)
+
+	switch args[0] {
+	case "project":
+		fs := flag.NewFlagSet("doctor project", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "project id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == 0 {
+			*id = project.ID
+		}
+		proj, err := svc.GetProject(strconv.FormatInt(*id, 10))
+		if err != nil {
+			return fmt.Errorf("project %d not found: %w", *id, err)
+		}
+
+		fmt.Printf("=== Project Doctor: %s — %s ===\n\n", proj.Prefix, proj.Title)
+
+		// Workflow check
+		if proj.WorkflowID == nil {
+			fmt.Println("[WARN] Project has no workflow assigned")
+		} else {
+			wf, err := svc.GetWorkflow(*proj.WorkflowID)
+			if err == nil {
+				fmt.Printf("Workflow: %s (%d stages)\n", wf.Name, len(wf.Stages))
+				for _, s := range wf.Stages {
+					role := "-"
+					if s.RoleTitle != "" {
+						role = s.RoleTitle
+					}
+					fmt.Printf("  %s (role: %s)\n", s.StageName, role)
+				}
+			}
+		}
+
+		// Ticket stats
+		tickets, err := svc.ListTickets(proj.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("\nTickets: %d total\n", len(tickets))
+
+		var noDesc, noAC, noAssignee, notReady, stale int
+		for _, t := range tickets {
+			if !t.Open || t.Archived {
+				continue
+			}
+			if strings.TrimSpace(t.Description) == "" {
+				noDesc++
+			}
+			if strings.TrimSpace(t.AcceptanceCriteria) == "" {
+				noAC++
+			}
+			if strings.TrimSpace(t.Assignee) == "" && t.State == store.StateActive {
+				noAssignee++
+			}
+			if !t.Ready && t.State == store.StateIdle {
+				notReady++
+			}
+			if t.State == store.StateActive && strings.TrimSpace(t.Assignee) == "" {
+				stale++
+			}
+		}
+
+		fmt.Println("\nIssues found:")
+		issues := 0
+		if noDesc > 0 {
+			fmt.Printf("  [WARN] %d ticket(s) have no description\n", noDesc)
+			issues += noDesc
+		}
+		if noAC > 0 {
+			fmt.Printf("  [WARN] %d ticket(s) have no acceptance criteria\n", noAC)
+			issues += noAC
+		}
+		if noAssignee > 0 {
+			fmt.Printf("  [WARN] %d active ticket(s) have no assignee\n", noAssignee)
+			issues += noAssignee
+		}
+		if notReady > 0 {
+			fmt.Printf("  [INFO] %d idle ticket(s) are not marked ready\n", notReady)
+		}
+		if issues == 0 {
+			fmt.Println("  No issues found.")
+		}
+
+		// Interactive: offer to run health scores
+		fmt.Println()
+		if promptYN(reader, "Run health scoring on all open tickets?", false) {
+			for _, t := range tickets {
+				if !t.Open || t.Archived {
+					continue
+				}
+				comments, _ := svc.ListComments(t.ID)
+				checks := ticketHealthCheck(t, comments)
+				if _, err := svc.SetTicketHealth(t.ID, checks.score); err != nil {
+					fmt.Printf("  [ERR] %s: %v\n", t.Key, err)
+				} else {
+					fmt.Printf("  %s: score %d/4\n", t.Key, checks.score)
+				}
+			}
+		}
+		return nil
+
+	case "ticket":
+		fs := flag.NewFlagSet("doctor ticket", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.String("id", "", "ticket id or key")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		idVal, _, err := resolveIDFlag(*id, fs.Args())
+		if err != nil || idVal == "" {
+			return errors.New("usage: ticket doctor ticket [-id] <id>")
+		}
+		ticket, err := svc.GetTicket(idVal)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("=== Ticket Doctor: %s — %s ===\n\n", ticket.Key, ticket.Title)
+		fmt.Printf("Type:     %s\n", ticket.Type)
+		fmt.Printf("Status:   %s\n", ticket.Status)
+		fmt.Printf("Assignee: %s\n", orDash(ticket.Assignee))
+		fmt.Printf("Ready:    %t\n", ticket.Ready)
+		fmt.Printf("Priority: %d\n", ticket.Priority)
+
+		// Context — open DB directly for enrichment
+		var ctx store.TicketContext
+		if resolved, err := config.ResolveURL(); err == nil && resolved.DBPath != "" {
+			if db, err := store.Open(resolved.DBPath); err == nil {
+				ctx = store.EnrichTicketContext(db, ticket)
+				db.Close()
+			}
+		}
+
+		if ctx.Project != nil {
+			fmt.Printf("Project:  %s — %s\n", ctx.Project.Prefix, ctx.Project.Title)
+		}
+		if ctx.Workflow != nil {
+			fmt.Printf("Workflow: %s\n", ctx.Workflow.Name)
+		}
+		if ctx.Role != nil {
+			fmt.Printf("Role:     %s\n", ctx.Role.Title)
+		}
+		if len(ctx.Parents) > 0 {
+			fmt.Printf("Parents:  ")
+			for i, p := range ctx.Parents {
+				if i > 0 {
+					fmt.Print(" → ")
+				}
+				fmt.Printf("%s", p.Key)
+			}
+			fmt.Println()
+		}
+
+		// Issues
+		fmt.Println("\nIssues found:")
+		issues := 0
+		if strings.TrimSpace(ticket.Description) == "" {
+			fmt.Println("  [WARN] No description")
+			issues++
+		}
+		if strings.TrimSpace(ticket.AcceptanceCriteria) == "" {
+			fmt.Println("  [WARN] No acceptance criteria")
+			issues++
+		}
+		if ticket.Type != "epic" && ticket.ParentID == nil {
+			fmt.Println("  [WARN] Orphan ticket (no parent)")
+			issues++
+		}
+		if ticket.State == store.StateActive && strings.TrimSpace(ticket.Assignee) == "" {
+			fmt.Println("  [WARN] Active but no assignee")
+			issues++
+		}
+		if ticket.WorkflowID == nil && ctx.Workflow == nil {
+			fmt.Println("  [WARN] No workflow (inherited or explicit)")
+			issues++
+		}
+		if issues == 0 {
+			fmt.Println("  No issues found.")
+		}
+
+		// Interactive actions
+		fmt.Println()
+		if strings.TrimSpace(ticket.Description) == "" {
+			if promptYN(reader, "Add a description?", false) {
+				fmt.Print("Description: ")
+				desc, _ := reader.ReadString('\n')
+				desc = strings.TrimSpace(desc)
+				if desc != "" {
+					if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{Description: desc}); err != nil {
+						fmt.Printf("  [ERR] %v\n", err)
+					} else {
+						fmt.Println("  Updated.")
+					}
+				}
+			}
+		}
+		if strings.TrimSpace(ticket.AcceptanceCriteria) == "" {
+			if promptYN(reader, "Add acceptance criteria?", false) {
+				fmt.Print("Acceptance Criteria: ")
+				ac, _ := reader.ReadString('\n')
+				ac = strings.TrimSpace(ac)
+				if ac != "" {
+					if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{AcceptanceCriteria: ac}); err != nil {
+						fmt.Printf("  [ERR] %v\n", err)
+					} else {
+						fmt.Println("  Updated.")
+					}
+				}
+			}
+		}
+		if !ticket.Ready && ticket.State == store.StateIdle {
+			if promptYN(reader, "Mark ticket as ready?", false) {
+				if _, err := svc.ReadyTicket(ticket.ID); err != nil {
+					fmt.Printf("  [ERR] %v\n", err)
+				} else {
+					fmt.Println("  Marked ready.")
+				}
+			}
+		}
+
+		// Health score
+		comments, _ := svc.ListComments(ticket.ID)
+		checks := ticketHealthCheck(ticket, comments)
+		if _, err := svc.SetTicketHealth(ticket.ID, checks.score); err == nil {
+			fmt.Printf("\nHealth score: %d/4\n", checks.score)
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown doctor target %q; use: project, ticket", args[0])
+	}
+}
+
+func orDash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "-"
+	}
+	return s
+}
+
 func runDependencyCommand(args []string, add bool) error {
 	command := "add-dependency"
 	if !add {
@@ -5485,7 +5844,7 @@ func runRequest(args []string) error {
 		return printJSON(response)
 	}
 	if response.Ticket != nil {
-		printTicket(*response.Ticket)
+		printRequestContext(response)
 		return nil
 	}
 	fmt.Println(response.Status)
@@ -5516,18 +5875,14 @@ func runRequestDryRun(args []string) error {
 		return err
 	}
 	if outputJSON {
-		return printJSON(map[string]any{
-			"dryrun": true,
-			"status": response.Status,
-			"task":   response.Ticket,
-		})
+		return printJSON(response)
 	}
 	fmt.Printf("dry run: %s\n", response.Status)
 	if response.Ticket == nil {
 		return nil
 	}
 	fmt.Printf("would assign ticket: %s\n", ticketLabel(*response.Ticket))
-	printTicket(*response.Ticket)
+	printRequestContext(response)
 	return nil
 }
 
@@ -5979,6 +6334,33 @@ Commands:
 Shortcuts:
   tk idea "title"    →  tk req add "title"
   tk ideas           →  tk req list`
+
+func runIdea(args []string) error {
+	if len(args) == 0 {
+		fmt.Println(ideaUsage)
+		return nil
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Println(ideaUsage)
+		return nil
+	case "ls", "list":
+		return runReqList(args[1:])
+	case "new", "add", "create":
+		return runReqAdd(args[1:])
+	case "get", "show":
+		return runReqGet(args[1:])
+	case "shape":
+		return runReqShape(args[1:])
+	case "accept":
+		return runRequirementStatus("accepted", args[1:])
+	case "reject":
+		return runRequirementStatus("rejected", args[1:])
+	default:
+		// If the first arg doesn't look like a subcommand, treat as title for "new"
+		return runReqAdd(args)
+	}
+}
 
 func runReqAdd(args []string) error {
 	return runTicketCreate(append([]string{"-type", "requirement"}, args...))

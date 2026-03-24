@@ -261,8 +261,11 @@ func ReapStaleAgents(db *sql.DB, thresholdMinutes int) (int64, error) {
 
 // AgentStatus holds an agent and its currently assigned ticket (if any).
 type AgentStatus struct {
-	Agent     Agent   `json:"agent"`
-	TicketKey *string `json:"ticket_key,omitempty"`
+	Agent        Agent   `json:"agent"`
+	TicketKey    *string `json:"ticket_key,omitempty"`
+	ProjectName  string  `json:"project_name,omitempty"`
+	WorkflowName string  `json:"workflow_name,omitempty"`
+	RoleTitle    string  `json:"role_title,omitempty"`
 }
 
 // ListAgentStatuses returns all agents with their currently assigned active ticket.
@@ -274,14 +277,28 @@ func ListAgentStatuses(db *sql.DB) ([]AgentStatus, error) {
 	statuses := make([]AgentStatus, 0, len(agents))
 	for _, a := range agents {
 		as := AgentStatus{Agent: a}
+		var ticketID int64
 		var key string
 		err := db.QueryRow(`
-			SELECT t.key FROM tickets t
+			SELECT t.ticket_id, t.key FROM tickets t
 			WHERE t.assignee = ? AND t.state = 'active' AND t.open = 1
 			LIMIT 1
-		`, a.Username).Scan(&key)
+		`, a.Username).Scan(&ticketID, &key)
 		if err == nil {
 			as.TicketKey = &key
+			ticket, err := GetTicket(db, ticketID)
+			if err == nil {
+				ctx := EnrichTicketContext(db, ticket)
+				if ctx.Project != nil {
+					as.ProjectName = ctx.Project.Prefix
+				}
+				if ctx.Workflow != nil {
+					as.WorkflowName = ctx.Workflow.Name
+				}
+				if ctx.Role != nil {
+					as.RoleTitle = ctx.Role.Title
+				}
+			}
 		}
 		statuses = append(statuses, as)
 	}

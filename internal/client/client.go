@@ -1098,6 +1098,34 @@ func (c *Client) NotReadyTicket(id int64) (store.Ticket, error) {
 	return ticket, err
 }
 
+func (c *Client) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		return store.SetTicketWorkflow(db, id, workflowID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/workflow", id), map[string]int64{"workflow_id": workflowID}, &ticket)
+	return ticket, err
+}
+
+func (c *Client) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		return store.UnsetTicketWorkflow(db, id)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodDelete, fmt.Sprintf("/api/tickets/%d/workflow", id), nil, &ticket)
+	return ticket, err
+}
+
 func (c *Client) DeleteTicket(id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
@@ -1342,6 +1370,11 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 		response := TicketRequestResponse{Status: status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
 			response.Ticket = &ticket
+			ctx := store.EnrichTicketContext(db, ticket)
+			response.Project = ctx.Project
+			response.Parents = ctx.Parents
+			response.Workflow = ctx.Workflow
+			response.Role = ctx.Role
 		}
 		return response, nil
 	}

@@ -775,6 +775,24 @@ func (s *LocalService) NotReadyTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketReady(db, id, false, user.Username, user.ID)
 }
 
+func (s *LocalService) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	return store.SetTicketWorkflow(db, id, workflowID)
+}
+
+func (s *LocalService) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	return store.UnsetTicketWorkflow(db, id)
+}
+
 func (s *LocalService) DeleteTicket(id int64) error {
 	db, err := s.openDB()
 	if err != nil {
@@ -959,6 +977,11 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 	response := TicketRequestResponse{Status: status}
 	if status == "ASSIGNED" || status == "AVAILABLE" {
 		response.Ticket = &ticket
+		ctx := store.EnrichTicketContext(db, ticket)
+		response.Project = ctx.Project
+		response.Parents = ctx.Parents
+		response.Workflow = ctx.Workflow
+		response.Role = ctx.Role
 	}
 	return response, nil
 }

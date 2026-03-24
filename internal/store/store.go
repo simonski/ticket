@@ -595,6 +595,11 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(db, "tickets", "workflow_id") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
+			return err
+		}
+	}
 	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id)`); err != nil {
 		return err
 	}
@@ -694,6 +699,9 @@ func migrateSchema(db *sql.DB) error {
 		return err
 	}
 	if err := seedDefaultWorkflow(db); err != nil {
+		return err
+	}
+	if err := seedYoloWorkflow(db); err != nil {
 		return err
 	}
 	if err := backfillTicketWorkflowStages(db); err != nil {
@@ -987,6 +995,31 @@ func seedDefaultWorkflow(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func seedYoloWorkflow(db *sql.DB) error {
+	result, err := db.Exec(`INSERT OR IGNORE INTO workflows (name, description, updated_at) VALUES ('yolo', 'Single-stage workflow — straight to done', CURRENT_TIMESTAMP)`)
+	if err != nil {
+		return err
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return nil // already seeded
+	}
+	wfID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	var roleID *int64
+	role, err := GetRoleByTitle(db, "Lead Engineer")
+	if err == nil {
+		roleID = &role.ID
+	}
+	_, err = db.Exec(`
+		INSERT INTO workflow_stages (workflow_id, stage_name, role_id, sort_order, updated_at)
+		VALUES (?, 'done', ?, 0, CURRENT_TIMESTAMP)
+	`, wfID, roleID)
+	return err
 }
 
 func seedDefaultRoles(db *sql.DB) error {

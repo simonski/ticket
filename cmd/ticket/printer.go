@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 const (
@@ -134,6 +135,55 @@ func printTicket(ticket store.Ticket) {
 	}
 	if ticket.EstimateComplete != "" {
 		fmt.Printf("estimate_complete: %s\n", ticket.EstimateComplete)
+	}
+}
+
+func printRequestContext(resp libticket.TicketRequestResponse) {
+	if resp.Ticket != nil {
+		printTicket(*resp.Ticket)
+	}
+	if resp.Project != nil {
+		fmt.Println()
+		fmt.Printf("project: %s — %s\n", resp.Project.Prefix, resp.Project.Title)
+		if resp.Project.GitRepository != "" {
+			fmt.Printf("  git: %s", resp.Project.GitRepository)
+			if resp.Project.GitBranch != "" {
+				fmt.Printf(" (%s)", resp.Project.GitBranch)
+			}
+			fmt.Println()
+		}
+	}
+	if len(resp.Parents) > 0 {
+		fmt.Println()
+		fmt.Println("parents:")
+		for _, p := range resp.Parents {
+			fmt.Printf("  %s [%s] %s\n", p.Key, p.Type, p.Title)
+		}
+	}
+	if resp.Workflow != nil {
+		fmt.Println()
+		fmt.Printf("workflow: %s\n", resp.Workflow.Name)
+		for _, stage := range resp.Workflow.Stages {
+			marker := "  "
+			if resp.Ticket != nil && resp.Ticket.WorkflowStageID != nil && stage.ID == *resp.Ticket.WorkflowStageID {
+				marker = "> "
+			}
+			role := ""
+			if stage.RoleTitle != "" {
+				role = fmt.Sprintf(" (role: %s)", stage.RoleTitle)
+			}
+			fmt.Printf("  %s%s%s\n", marker, stage.StageName, role)
+		}
+	}
+	if resp.Role != nil {
+		fmt.Println()
+		fmt.Printf("current role: %s\n", resp.Role.Title)
+		if resp.Role.Motivation != "" {
+			fmt.Printf("  motivation: %s\n", resp.Role.Motivation)
+		}
+		if resp.Role.Goals != "" {
+			fmt.Printf("  goals: %s\n", resp.Role.Goals)
+		}
 	}
 }
 
@@ -492,10 +542,44 @@ func printRoleTable(roles []store.Role) {
 		fmt.Println("no roles")
 		return
 	}
+
+	termW := 120
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		termW = w
+	}
+
+	// Fixed columns: ID (6) + gaps (6 for 3 x 2-char gaps) = 12.
+	// Remaining space split: title 25%, motivation 37.5%, goals 37.5%.
+	const idW = 6
+	const gaps = 6
+	remaining := termW - idW - gaps
+	if remaining < 30 {
+		remaining = 30
+	}
+	titleW := remaining / 4
+	motW := (remaining - titleW) / 2
+	goalW := remaining - titleW - motW
+
+	truncRune := func(s string, n int) string {
+		r := []rune(strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\r", ""))
+		if len(r) <= n {
+			return string(r)
+		}
+		if n <= 3 {
+			return string(r[:n])
+		}
+		return string(r[:n-3]) + "..."
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tTITLE\tMOTIVATION\tGOALS")
 	for _, role := range roles {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", role.ID, role.Title, role.Motivation, role.Goals)
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n",
+			role.ID,
+			truncRune(role.Title, titleW),
+			truncRune(role.Motivation, motW),
+			truncRune(role.Goals, goalW),
+		)
 	}
 	_ = w.Flush()
 }

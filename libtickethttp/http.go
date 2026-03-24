@@ -263,6 +263,14 @@ func (s *Service) NotReadyTicket(id int64) (store.Ticket, error) {
 	return s.client.NotReadyTicket(id)
 }
 
+func (s *Service) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error) {
+	return s.client.SetTicketWorkflow(id, workflowID)
+}
+
+func (s *Service) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
+	return s.client.UnsetTicketWorkflow(id)
+}
+
 func (s *Service) DeleteTicket(id int64) error {
 	return s.client.DeleteTicket(id)
 }

@@ -138,8 +138,12 @@ type TicketRequest struct {
 }
 
 type TicketRequestResponse struct {
-	Status string        `json:"status"`
-	Ticket *store.Ticket `json:"ticket,omitempty"`
+	Status   string                    `json:"status"`
+	Ticket   *store.Ticket             `json:"ticket,omitempty"`
+	Project  *store.Project            `json:"project,omitempty"`
+	Parents  []store.Ticket            `json:"parents,omitempty"`
+	Workflow *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Role     *store.Role               `json:"role,omitempty"`
 }
 
 type AgentCreateRequest struct {
@@ -176,8 +180,10 @@ type AgentTicketUpdateRequest struct {
 }
 
 type AgentWorkResponse struct {
-	Status  string         `json:"status"`
-	Project *store.Project `json:"project"`
-	Ticket  *store.Ticket  `json:"ticket"`
-	Parents []store.Ticket `json:"parents"`
+	Status   string                    `json:"status"`
+	Project  *store.Project            `json:"project"`
+	Ticket   *store.Ticket             `json:"ticket"`
+	Parents  []store.Ticket            `json:"parents"`
+	Workflow *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Role     *store.Role               `json:"role,omitempty"`
 }

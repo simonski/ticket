@@ -640,19 +640,20 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				_, _ = store.TouchAgent(db, agent.ID, "soliciting")
 			}
 			response := map[string]any{
-				"status":  agentStatus,
-				"project": nil,
-				"ticket":  nil,
-				"parents": []store.Ticket{},
+				"status":   agentStatus,
+				"project":  nil,
+				"ticket":   nil,
+				"parents":  []store.Ticket{},
+				"workflow": nil,
+				"role":     nil,
 			}
 			if agentStatus == "NEW" || agentStatus == "CURRENT" {
 				response["ticket"] = ticket
-				if project, err := store.GetProjectByID(db, ticket.ProjectID); err == nil {
-					response["project"] = project
-				}
-				if parents, err := store.ListTicketParents(db, ticket.ID); err == nil {
-					response["parents"] = parents
-				}
+				ctx := store.EnrichTicketContext(db, ticket)
+				response["project"] = ctx.Project
+				response["parents"] = ctx.Parents
+				response["workflow"] = ctx.Workflow
+				response["role"] = ctx.Role
 			}
 			vlog("response: agent_status=%s", agentStatus)
 			writeJSON(w, http.StatusOK, response)
@@ -2082,6 +2083,11 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 		payload := map[string]any{"status": status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
 			payload["ticket"] = ticket
+			ctx := store.EnrichTicketContext(db, ticket)
+			payload["project"] = ctx.Project
+			payload["parents"] = ctx.Parents
+			payload["workflow"] = ctx.Workflow
+			payload["role"] = ctx.Role
 			if status == "ASSIGNED" {
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 			}
@@ -2440,6 +2446,40 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "workflow" {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				switch r.Method {
+				case http.MethodPost:
+					var payload struct {
+						WorkflowID int64 `json:"workflow_id"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.WorkflowID == 0 {
+						writeError(w, http.StatusBadRequest, "workflow_id is required")
+						return
+					}
+					ticket, err := store.SetTicketWorkflow(db, id, payload.WorkflowID)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					notify("ticket_updated", ticket.ProjectID, ticket.ID)
+					writeJSON(w, http.StatusOK, ticket)
+				case http.MethodDelete:
+					ticket, err := store.UnsetTicketWorkflow(db, id)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, err.Error())
+						return
+					}
+					notify("ticket_updated", ticket.ProjectID, ticket.ID)
+					writeJSON(w, http.StatusOK, ticket)
+				default:
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				}
 				return
 			}
 			if len(parts) == 2 && parts[1] == "analyse" && r.Method == http.MethodPost {
