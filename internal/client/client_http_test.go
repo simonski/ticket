@@ -206,9 +206,9 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/users":
-			_, _ = w.Write([]byte(`{"user_id":2,"username":"alice","role":"user","enabled":true}`))
+			_, _ = w.Write([]byte(`{"user_id":"test-uuid-2","username":"alice","role":"user","enabled":true}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/users":
-			_, _ = w.Write([]byte(`[{"user_id":2,"username":"alice","role":"user","enabled":true}]`))
+			_, _ = w.Write([]byte(`[{"user_id":"test-uuid-2","username":"alice","role":"user","enabled":true}]`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/users/alice/enable":
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/users/alice":

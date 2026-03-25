@@ -19,15 +19,16 @@ type Service interface {
 	UpdateRole(id int64, request RoleRequest) (store.Role, error)
 	DeleteRole(id int64) error
 	CreateAgent(request AgentCreateRequest) (store.Agent, string, error)
-	SetAgentEnabled(id int64, enabled bool) (store.Agent, error)
+	SetAgentEnabled(id string, enabled bool) (store.Agent, error)
 	ListAgents() ([]store.Agent, error)
 	ListAgentStatuses() ([]store.AgentStatus, error)
-	UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error)
-	DeleteAgent(id int64) error
-	SetAgentConfig(agentID int64, key, value string) error
-	ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error)
-	DeleteAgentConfig(agentID int64, key string) error
+	UpdateAgent(id string, request AgentUpdateRequest) (store.Agent, error)
+	DeleteAgent(id string) error
+	SetAgentConfig(agentID string, key, value string) error
+	ListAgentConfig(agentID string) ([]store.AgentConfigEntry, error)
+	DeleteAgentConfig(agentID string, key string) error
 	RegisterAgent(request AgentRegisterRequest) (store.Agent, error)
+	HeartbeatAgent(agentID, password, status string) error
 	RequestAgentWork(request AgentRequest) (AgentWorkResponse, error)
 	AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error)
 	CreateProject(request ProjectCreateRequest) (store.Project, error)
@@ -37,7 +38,7 @@ type Service interface {
 	DeleteProject(id int64) error
 	SetProjectEnabled(id int64, enabled bool) (store.Project, error)
 	AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
-	RemoveProjectMember(projectID, userID int64) error
+	RemoveProjectMember(projectID int64, userID string) error
 	ListProjectMembers(projectID int64) ([]store.ProjectMember, error)
 	AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error)
 	RemoveProjectTeamMember(projectID, teamID int64) error
@@ -47,10 +48,10 @@ type Service interface {
 	UpdateTeam(id int64, request TeamRequest) (store.Team, error)
 	DeleteTeam(id int64) error
 	AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error)
-	RemoveTeamMember(teamID, userID int64) error
+	RemoveTeamMember(teamID int64, userID string) error
 	ListTeamMembers(teamID int64) ([]store.TeamMember, error)
-	AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error)
-	RemoveTeamAgent(teamID, agentID int64) error
+	AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error)
+	RemoveTeamAgent(teamID int64, agentID string) error
 	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
 	CreateWorkflow(request WorkflowRequest) (store.Workflow, error)
 	ListWorkflows() ([]store.Workflow, error)

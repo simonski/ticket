@@ -534,13 +534,13 @@ func TestAgentAPI(t *testing.T) {
 		Password string      `json:"password"`
 	}
 	decodeResponse(t, createAgentResp, &createPayload)
-	if createPayload.Agent.ID == 0 {
-		t.Fatalf("created agent id = 0, want non-zero")
+	if createPayload.Agent.ID == "" {
+		t.Fatalf("created agent id empty, want non-empty")
 	}
 	if createPayload.Password == "" {
 		t.Fatalf("create password empty, want generated password")
 	}
-	agentUUID := createPayload.Agent.UUID
+	agentUUID := createPayload.Agent.ID
 
 	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/agents", nil, adminAuth.Token)
 	if listResp.Code != http.StatusOK {
@@ -557,7 +557,7 @@ func TestAgentAPI(t *testing.T) {
 		t.Fatalf("non-admin list agents status = %d, want %d", forbiddenList.Code, http.StatusForbidden)
 	}
 
-	updatedResp := doJSONRequest(t, handler, http.MethodPut, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10), map[string]string{
+	updatedResp := doJSONRequest(t, handler, http.MethodPut, "/api/agents/"+createPayload.Agent.ID, map[string]string{
 		"password": "new-password",
 	}, adminAuth.Token)
 	if updatedResp.Code != http.StatusOK {
@@ -569,12 +569,12 @@ func TestAgentAPI(t *testing.T) {
 		t.Fatalf("register agent status = %d body=%s", registerResp.Code, registerResp.Body.String())
 	}
 
-	disableResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10)+"/disable", nil, adminAuth.Token)
+	disableResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents/"+createPayload.Agent.ID+"/disable", nil, adminAuth.Token)
 	if disableResp.Code != http.StatusOK {
 		t.Fatalf("disable agent status = %d body=%s", disableResp.Code, disableResp.Body.String())
 	}
 
-	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/agents/"+strconv.FormatInt(createPayload.Agent.ID, 10), nil, adminAuth.Token)
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/agents/"+createPayload.Agent.ID, nil, adminAuth.Token)
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("delete agent status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
 	}

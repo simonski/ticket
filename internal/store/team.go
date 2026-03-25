@@ -27,7 +27,7 @@ type Team struct {
 
 type TeamMember struct {
 	TeamID   int64  `json:"team_id"`
-	UserID   int64  `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	JobTitle string `json:"job_title"`
@@ -35,7 +35,7 @@ type TeamMember struct {
 
 type TeamAgent struct {
 	TeamID    int64  `json:"team_id"`
-	AgentID   int64  `json:"agent_id"`
+	AgentID   string `json:"agent_id"`
 	AgentUUID string `json:"agent_uuid"`
 	Enabled   bool   `json:"enabled"`
 	Status    string `json:"status"`
@@ -174,7 +174,7 @@ func DeleteTeam(db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddTeamMember(db *sql.DB, teamID, userID int64, role, jobTitle string) (TeamMember, error) {
+func AddTeamMember(db *sql.DB, teamID int64, userID string, role, jobTitle string) (TeamMember, error) {
 	role = normalizeTeamRole(role)
 	if !validTeamRole(role) {
 		return TeamMember{}, fmt.Errorf("invalid team role %q", role)
@@ -195,7 +195,7 @@ func AddTeamMember(db *sql.DB, teamID, userID int64, role, jobTitle string) (Tea
 	return GetTeamMember(db, teamID, userID)
 }
 
-func GetTeamMember(db *sql.DB, teamID, userID int64) (TeamMember, error) {
+func GetTeamMember(db *sql.DB, teamID int64, userID string) (TeamMember, error) {
 	row := db.QueryRow(`
 		SELECT tm.team_id, tm.user_id, u.username, tm.role, tm.job_title
 		FROM team_members tm
@@ -212,7 +212,7 @@ func GetTeamMember(db *sql.DB, teamID, userID int64) (TeamMember, error) {
 	return member, nil
 }
 
-func RemoveTeamMember(db *sql.DB, teamID, userID int64) error {
+func RemoveTeamMember(db *sql.DB, teamID int64, userID string) error {
 	result, err := db.Exec(`DELETE FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
 	if err != nil {
 		return err
@@ -250,7 +250,7 @@ func ListTeamMembers(db *sql.DB, teamID int64) ([]TeamMember, error) {
 	return members, rows.Err()
 }
 
-func TeamRoleForUser(db *sql.DB, teamID, userID int64) (string, bool, error) {
+func TeamRoleForUser(db *sql.DB, teamID int64, userID string) (string, bool, error) {
 	row := db.QueryRow(`SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
 	var role string
 	if err := row.Scan(&role); err != nil {
@@ -262,7 +262,7 @@ func TeamRoleForUser(db *sql.DB, teamID, userID int64) (string, bool, error) {
 	return normalizeTeamRole(role), true, nil
 }
 
-func AddTeamAgent(db *sql.DB, teamID, agentID int64) (TeamAgent, error) {
+func AddTeamAgent(db *sql.DB, teamID int64, agentID string) (TeamAgent, error) {
 	if _, err := GetTeamByID(db, teamID); err != nil {
 		return TeamAgent{}, err
 	}
@@ -291,7 +291,7 @@ func AddTeamAgent(db *sql.DB, teamID, agentID int64) (TeamAgent, error) {
 	return item, nil
 }
 
-func RemoveTeamAgent(db *sql.DB, teamID, agentID int64) error {
+func RemoveTeamAgent(db *sql.DB, teamID int64, agentID string) error {
 	result, err := db.Exec(`DELETE FROM team_agents WHERE team_id = ? AND user_id = ?`, teamID, agentID)
 	if err != nil {
 		return err
@@ -396,7 +396,7 @@ func ListProjectTeamMembers(db *sql.DB, projectID int64) ([]ProjectTeamMember, e
 	return items, rows.Err()
 }
 
-func TeamIDsForUserWithAncestors(db *sql.DB, userID int64) ([]int64, error) {
+func TeamIDsForUserWithAncestors(db *sql.DB, userID string) ([]int64, error) {
 	rows, err := db.Query(`
 		WITH RECURSIVE walk(team_id, parent_team_id) AS (
 			SELECT t.team_id, t.parent_team_id

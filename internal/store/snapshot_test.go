@@ -25,7 +25,7 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		Title:              "Export Project",
 		Description:        "Export/import coverage",
 		AcceptanceCriteria: "retain IDs",
-		CreatedBy:          1,
+		CreatedBy:          "",
 		Visibility:         ProjectVisibilityPrivate,
 	})
 	if err != nil {
@@ -39,7 +39,7 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		Type:        "epic",
 		Title:       "Export Epic",
 		Description: "Epic for snapshot",
-		CreatedBy:   1,
+		CreatedBy:   "",
 		State:       StateIdle,
 	})
 	if err != nil {
@@ -53,13 +53,13 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		Title:       "Export Task",
 		Description: "Task for snapshot",
 		Assignee:    "admin",
-		CreatedBy:   1,
+		CreatedBy:   "",
 		State:       StateActive,
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	story, err := CreateStory(sourceDB, project.ID, "Snapshot Story", "Story description", 1)
+	story, err := CreateStory(sourceDB, project.ID, "Snapshot Story", "Story description", "")
 	if err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
 	}

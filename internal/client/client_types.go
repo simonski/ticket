@@ -43,7 +43,7 @@ type ProjectUpdateRequest struct {
 }
 
 type ProjectMemberRequest struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Role   string `json:"role"`
 }
 
@@ -58,7 +58,7 @@ type TeamRequest struct {
 }
 
 type TeamMemberRequest struct {
-	UserID   int64  `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Role     string `json:"role"`
 	JobTitle string `json:"job_title"`
 }

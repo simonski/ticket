@@ -531,6 +531,41 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "agent": agent})
 			return
 		}
+		if parts[0] == "heartbeat" {
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			agentID, agentPass, ok := r.BasicAuth()
+			if !ok || agentID == "" || agentPass == "" {
+				writeError(w, http.StatusUnauthorized, "basic auth required")
+				return
+			}
+			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
+			if err != nil {
+				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
+					writeAuthError(w, err)
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			var payload struct {
+				Status string `json:"status"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			status := strings.TrimSpace(payload.Status)
+			if status == "" {
+				status = agent.Status // keep current status
+			}
+			agent, err = store.TouchAgent(db, agent.ID, status)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+			return
+		}
 		if parts[0] == "request" {
 			if r.Method != http.MethodPost {
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -565,7 +600,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			vlog("agent=%q authenticated (id=%d uuid=%s)", agent.Username, agent.ID, agent.UUID)
+			vlog("agent=%q authenticated (id=%s)", agent.Username, agent.ID)
 			projectID := payload.ProjectID
 			if payload.TicketID == nil && projectID == 0 {
 				projects, err := store.ListProjects(db)
@@ -598,7 +633,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				ProjectID: projectID,
 				TicketID:  payload.TicketID,
 				Username:  agent.Username,
-				UserID:    0,
+				UserID:    "",
 				DryRun:    payload.DryRun,
 			})
 			if err != nil {
@@ -731,7 +766,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				Order:              current.Order,
 				EstimateEffort:     current.EstimateEffort,
 				EstimateComplete:   current.EstimateComplete,
-				UpdatedBy:          0,
+				UpdatedBy:          "",
 				ActorUsername:      agent.Username,
 				ActorRole:          "admin",
 			})
@@ -756,8 +791,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeAuthError(w, err)
 			return
 		}
-		var id int64
-		if _, err := fmt.Sscan(parts[0], &id); err != nil {
+		id := strings.TrimSpace(parts[0])
+		if id == "" {
 			writeError(w, http.StatusBadRequest, "invalid agent id")
 			return
 		}
@@ -1245,9 +1280,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
-			var userID int64
-			if _, err := fmt.Sscan(parts[2], &userID); err != nil {
-				writeError(w, http.StatusBadRequest, "user_id must be numeric")
+			userID := strings.TrimSpace(parts[2])
+			if userID == "" {
+				writeError(w, http.StatusBadRequest, "user_id is required")
 				return
 			}
 			if err := store.RemoveTeamMember(db, team.ID, userID); err != nil {
@@ -1288,7 +1323,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					return
 				}
 				var payload struct {
-					AgentID int64 `json:"agent_id"`
+					AgentID string `json:"agent_id"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
@@ -1311,9 +1346,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
-			var agentID int64
-			if _, err := fmt.Sscan(parts[2], &agentID); err != nil {
-				writeError(w, http.StatusBadRequest, "agent_id must be numeric")
+			agentID := strings.TrimSpace(parts[2])
+			if agentID == "" {
+				writeError(w, http.StatusBadRequest, "agent_id is required")
 				return
 			}
 			if err := store.RemoveTeamAgent(db, team.ID, agentID); err != nil {
@@ -1495,9 +1530,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/users/{user_id}")
 					return
 				}
-				var userID int64
-				if _, err := fmt.Sscan(parts[2], &userID); err != nil {
-					writeError(w, http.StatusBadRequest, "user_id must be numeric")
+				userID := strings.TrimSpace(parts[2])
+				if userID == "" {
+					writeError(w, http.StatusBadRequest, "user_id is required")
 					return
 				}
 				if err := store.RemoveProjectMember(db, project.ID, userID); err != nil {
@@ -1517,7 +1552,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					return
 				}
 				var payload struct {
-					UserID int64  `json:"user_id"`
+					UserID string `json:"user_id"`
 					Role   string `json:"role"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {

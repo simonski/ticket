@@ -28,15 +28,12 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
-	if agent.ID == 0 {
-		t.Fatalf("agent ID = 0, want non-zero")
+	if agent.ID == "" {
+		t.Fatalf("agent ID empty, want non-empty")
 	}
-	if agent.UUID == "" {
-		t.Fatal("agent UUID empty")
-	}
-	// Username should be the UUID
-	if agent.Username != agent.UUID {
-		t.Fatalf("agent.Username = %q, want UUID %q", agent.Username, agent.UUID)
+	// Username should be the ID (UUID)
+	if agent.Username != agent.ID {
+		t.Fatalf("agent.Username = %q, want ID %q", agent.Username, agent.ID)
 	}
 	if generatedPassword == "" {
 		t.Fatal("generatedPassword empty, want generated secret")
@@ -52,12 +49,12 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	}
 
 	// Authenticate by UUID
-	authenticated, err := AuthenticateAgent(db, agent.UUID, generatedPassword)
+	authenticated, err := AuthenticateAgent(db, agent.ID, generatedPassword)
 	if err != nil {
 		t.Fatalf("AuthenticateAgent() error = %v", err)
 	}
 	if authenticated.ID != agent.ID {
-		t.Fatalf("authenticated ID = %d, want %d", authenticated.ID, agent.ID)
+		t.Fatalf("authenticated ID = %s, want %s", authenticated.ID, agent.ID)
 	}
 }
 
@@ -81,10 +78,10 @@ func TestAgentUpdateAndLifecycle(t *testing.T) {
 		t.Fatalf("UpdateAgent() error = %v", err)
 	}
 
-	if _, err := AuthenticateAgent(db, agent.UUID, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, err := AuthenticateAgent(db, agent.ID, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("AuthenticateAgent(old password) err = %v, want ErrInvalidCredentials", err)
 	}
-	if _, err := AuthenticateAgent(db, agent.UUID, "secret-2"); err != nil {
+	if _, err := AuthenticateAgent(db, agent.ID, "secret-2"); err != nil {
 		t.Fatalf("AuthenticateAgent(new password) error = %v", err)
 	}
 
@@ -95,7 +92,7 @@ func TestAgentUpdateAndLifecycle(t *testing.T) {
 	if disabled.Enabled {
 		t.Fatalf("disabled.Enabled = true, want false")
 	}
-	if _, err := AuthenticateAgent(db, agent.UUID, "secret-2"); !errors.Is(err, ErrForbidden) {
+	if _, err := AuthenticateAgent(db, agent.ID, "secret-2"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("AuthenticateAgent(disabled) err = %v, want ErrForbidden", err)
 	}
 
@@ -139,7 +136,7 @@ func TestAgentDoesNotAppearInListUsers(t *testing.T) {
 		t.Fatalf("ListUsers() error = %v", err)
 	}
 	for _, u := range users {
-		if u.Username == agent.UUID {
+		if u.Username == agent.ID {
 			t.Fatalf("ListUsers() should not include agents, found %q", u.Username)
 		}
 	}
@@ -154,7 +151,7 @@ func TestAgentFoundByGetUserByUsername(t *testing.T) {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
-	user, err := GetUserByUsername(db, agent.UUID)
+	user, err := GetUserByUsername(db, agent.ID)
 	if err != nil {
 		t.Fatalf("GetUserByUsername() error = %v", err)
 	}

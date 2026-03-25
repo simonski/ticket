@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/simonski/ticket/internal/password"
 )
 
@@ -19,7 +20,7 @@ var (
 )
 
 type User struct {
-	ID               int64  `json:"user_id"`
+	ID               string `json:"user_id"`
 	Username         string `json:"username"`
 	Email            string `json:"email"`
 	EmailConfirmedAt string `json:"email_confirmed_at,omitempty"`
@@ -28,7 +29,6 @@ type User struct {
 	Enabled          bool   `json:"enabled"`
 	CreatedAt        string `json:"created_at"`
 	UserType         string `json:"user_type"`
-	UUID             string `json:"uuid,omitempty"`
 	Description      string `json:"description,omitempty"`
 	Status           string `json:"status,omitempty"`
 	LastSeen         string `json:"last_seen,omitempty"`
@@ -36,7 +36,7 @@ type User struct {
 }
 
 // userSelectColumns is the standard column list for scanning a User.
-const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(uuid, ''), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, '')`
+const userSelectColumns = `user_id, username, COALESCE(email, ''), COALESCE(email_confirmed_at, ''), role, display_name, enabled, created_at, COALESCE(user_type, 'user'), COALESCE(description, ''), COALESCE(status, ''), COALESCE(last_seen, ''), COALESCE(updated_at, '')`
 
 // scanUser scans a row into a User. The column order must match userSelectColumns.
 func scanUser(scan func(dest ...any) error) (User, error) {
@@ -45,13 +45,18 @@ func scanUser(scan func(dest ...any) error) (User, error) {
 	if err := scan(
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
 		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
-		&user.UserType, &user.UUID, &user.Description, &user.Status,
+		&user.UserType, &user.Description, &user.Status,
 		&user.LastSeen, &user.UpdatedAt,
 	); err != nil {
 		return User{}, err
 	}
 	user.Enabled = enabled == 1
 	return user, nil
+}
+
+// generateUserID generates a UUID v4 string for use as a user ID.
+func generateUserID() string {
+	return uuid.NewString()
 }
 
 func RegisterUser(db *sql.DB, username, plainPassword string) (User, error) {
@@ -76,18 +81,16 @@ func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) 
 		return User{}, err
 	}
 
-	result, err := db.Exec(`
-		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type)
-		VALUES (?, ?, ?, ?, ?, 'user')
-	`, username, hash, role, username, boolToInt(enabled))
+	id := generateUserID()
+
+	_, err = db.Exec(`
+		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled, user_type)
+		VALUES (?, ?, ?, ?, ?, ?, 'user')
+	`, id, username, hash, role, username, boolToInt(enabled))
 	if err != nil {
 		return User{}, err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return User{}, err
-	}
 	return GetUserByID(db, id)
 }
 
@@ -104,7 +107,7 @@ func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) 
 	if err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
 		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
-		&user.UserType, &user.UUID, &user.Description, &user.Status,
+		&user.UserType, &user.Description, &user.Status,
 		&user.LastSeen, &user.UpdatedAt,
 		&hash,
 	); err != nil {
@@ -128,7 +131,7 @@ func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) 
 	return user, nil
 }
 
-func CreateSession(db *sql.DB, userID int64) (string, error) {
+func CreateSession(db *sql.DB, userID string) (string, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return "", fmt.Errorf("create session token: %w", err)
@@ -155,7 +158,7 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 	}
 
 	row := db.QueryRow(`
-		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.uuid, ''), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
+		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
 		WHERE s.token = ?
@@ -174,7 +177,7 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 	return user, nil
 }
 
-func GetUserByID(db *sql.DB, id int64) (User, error) {
+func GetUserByID(db *sql.DB, id string) (User, error) {
 	row := db.QueryRow(`
 		SELECT `+userSelectColumns+`
 		FROM users

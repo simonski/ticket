@@ -10,11 +10,11 @@ type Dependency struct {
 	ProjectID int64  `json:"project_id"`
 	TicketID  int64  `json:"ticket_id"`
 	DependsOn int64  `json:"depends_on"`
-	CreatedBy int64  `json:"created_by"`
+	CreatedBy string `json:"created_by"`
 	CreatedAt string `json:"created_at"`
 }
 
-func AddDependency(db *sql.DB, projectID, ticketID, dependsOn, createdBy int64) (Dependency, error) {
+func AddDependency(db *sql.DB, projectID, ticketID, dependsOn int64, createdBy string) (Dependency, error) {
 	ticket, err := GetTicket(db, ticketID)
 	if err != nil {
 		return Dependency{}, err
@@ -37,7 +37,7 @@ func AddDependency(db *sql.DB, projectID, ticketID, dependsOn, createdBy int64) 
 		return Dependency{}, err
 	}
 	row := db.QueryRow(`
-		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, 0), created_at
+		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, ''), created_at
 		FROM dependencies
 		WHERE id = ?
 	`, id)
@@ -50,7 +50,7 @@ func AddDependency(db *sql.DB, projectID, ticketID, dependsOn, createdBy int64) 
 
 func ListDependencies(db *sql.DB, ticketID int64) ([]Dependency, error) {
 	rows, err := db.Query(`
-		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, 0), created_at
+		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, ''), created_at
 		FROM dependencies
 		WHERE ticket_id = ?
 		ORDER BY id

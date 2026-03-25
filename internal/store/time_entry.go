@@ -10,13 +10,13 @@ var ErrTimeEntryNotFound = errors.New("time entry not found")
 type TimeEntry struct {
 	ID        int64  `json:"time_entry_id"`
 	TicketID  int64  `json:"ticket_id"`
-	UserID    int64  `json:"user_id"`
+	UserID    string `json:"user_id"`
 	Minutes   int    `json:"minutes"`
 	Note      string `json:"note"`
 	CreatedAt string `json:"created_at"`
 }
 
-func LogTime(db *sql.DB, ticketID, userID int64, minutes int, note string) (TimeEntry, error) {
+func LogTime(db *sql.DB, ticketID int64, userID string, minutes int, note string) (TimeEntry, error) {
 	if minutes <= 0 {
 		return TimeEntry{}, errors.New("minutes must be positive")
 	}

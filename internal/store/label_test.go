@@ -5,7 +5,7 @@ import "testing"
 func TestLabelCRUD(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Label Test", "", "", 1)
+	project, err := CreateProject(db, "Label Test", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -63,7 +63,7 @@ func TestLabelCRUD(t *testing.T) {
 func TestTicketLabels(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Ticket Labels", "", "", 1)
+	project, err := CreateProject(db, "Ticket Labels", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestTicketLabels(t *testing.T) {
 		Type:      "task",
 		Title:     "Labeled Task",
 		State:     StateIdle,
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)

@@ -4,7 +4,7 @@ import "testing"
 
 func TestDependencies(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", 1)
+	project, err := CreateProject(db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -12,7 +12,7 @@ func TestDependencies(t *testing.T) {
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Prepare password reset flow",
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(source) error = %v", err)
@@ -22,7 +22,7 @@ func TestDependencies(t *testing.T) {
 		Type:      "epic",
 		Title:     "Password Reset",
 		State:     StateIdle,
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(blocker) error = %v", err)
@@ -31,12 +31,12 @@ func TestDependencies(t *testing.T) {
 		ProjectID: project.ID,
 		Type:      "bug",
 		Title:     "Reset link expires immediately.",
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(dependent) error = %v", err)
 	}
-	if _, err := AddDependency(db, project.ID, dependent.ID, blocker.ID, 1); err != nil {
+	if _, err := AddDependency(db, project.ID, dependent.ID, blocker.ID, ""); err != nil {
 		t.Fatalf("AddDependency() error = %v", err)
 	}
 

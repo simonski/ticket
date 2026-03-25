@@ -74,10 +74,12 @@ func Init(path, adminUsername, adminPassword string) error {
 		return err
 	}
 
+	adminID := generateUserID()
+
 	_, err = db.Exec(`
-		INSERT INTO users (username, password_hash, role, display_name, enabled)
-		VALUES (?, ?, 'admin', ?, 1)
-	`, adminUsername, hash, adminUsername)
+		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled)
+		VALUES (?, ?, ?, 'admin', ?, 1)
+	`, adminID, adminUsername, hash, adminUsername)
 	if err != nil {
 		return err
 	}
@@ -92,7 +94,7 @@ func Init(path, adminUsername, adminPassword string) error {
 		Title:              "Default Project",
 		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
-		CreatedBy:          1,
+		CreatedBy:          adminID,
 		WorkflowID:         defaultWorkflowID,
 	}); err != nil {
 		return err
@@ -143,7 +145,7 @@ func createSchema(db *sql.DB) error {
 
 	schema := `
 CREATE TABLE IF NOT EXISTS users (
-	user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id TEXT PRIMARY KEY,
 	username TEXT NOT NULL UNIQUE,
 	password_hash TEXT NOT NULL,
 	role TEXT NOT NULL,
@@ -160,7 +162,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS sessions (
 	session_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	user_id INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
 	token TEXT NOT NULL UNIQUE,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	expires_at TEXT,
@@ -187,7 +189,7 @@ CREATE TABLE IF NOT EXISTS projects (
 	notes TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open',
 	visibility TEXT NOT NULL DEFAULT 'public',
-	created_by INTEGER,
+	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	ticket_sequence INTEGER NOT NULL DEFAULT 0,
@@ -220,7 +222,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	assignee TEXT NOT NULL DEFAULT '',
 	open INTEGER NOT NULL DEFAULT 1,
 	archived INTEGER NOT NULL DEFAULT 0,
-	created_by INTEGER,
+	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
@@ -236,7 +238,7 @@ CREATE TABLE IF NOT EXISTS stories (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'draft',
-	created_by INTEGER,
+	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
@@ -258,7 +260,7 @@ CREATE TABLE IF NOT EXISTS history_events (
 	ticket_id INTEGER NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
-	created_by INTEGER,
+	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
@@ -271,7 +273,7 @@ CREATE TABLE IF NOT EXISTS ticket_history (
 	ticket_id INTEGER NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
-	created_by INTEGER,
+	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
@@ -281,7 +283,7 @@ CREATE TABLE IF NOT EXISTS ticket_history (
 CREATE TABLE IF NOT EXISTS comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	item_id INTEGER NOT NULL,
-	user_id INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
 	comment TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(item_id) REFERENCES tickets(ticket_id),
@@ -293,7 +295,7 @@ CREATE TABLE IF NOT EXISTS dependencies (
 	project_id INTEGER NOT NULL,
 	ticket_id INTEGER NOT NULL,
 	depends_on INTEGER NOT NULL,
-	created_by INTEGER,
+	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
@@ -308,7 +310,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 CREATE TABLE IF NOT EXISTS project_members (
 	project_id INTEGER NOT NULL,
-	user_id INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
 	role TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(project_id, user_id),
@@ -327,7 +329,7 @@ CREATE TABLE IF NOT EXISTS teams (
 
 CREATE TABLE IF NOT EXISTS team_members (
 	team_id INTEGER NOT NULL,
-	user_id INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
 	role TEXT NOT NULL,
 	job_title TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -339,7 +341,7 @@ CREATE TABLE IF NOT EXISTS team_members (
 
 CREATE TABLE IF NOT EXISTS team_agents (
 	team_id INTEGER NOT NULL,
-	user_id INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(team_id, user_id),
 	FOREIGN KEY(team_id) REFERENCES teams(team_id),
@@ -386,7 +388,7 @@ CREATE TABLE IF NOT EXISTS ticket_labels (
 CREATE TABLE IF NOT EXISTS time_entries (
 	time_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	ticket_id INTEGER NOT NULL,
-	user_id INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
 	minutes INTEGER NOT NULL,
 	note TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -611,7 +613,7 @@ func migrateSchema(db *sql.DB) error {
 				title TEXT NOT NULL,
 				description TEXT NOT NULL DEFAULT '',
 				status TEXT NOT NULL DEFAULT 'draft',
-				created_by INTEGER,
+				created_by TEXT,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(project_id) REFERENCES projects(project_id),
@@ -691,7 +693,7 @@ func migrateSchema(db *sql.DB) error {
 		INSERT OR IGNORE INTO project_members (project_id, user_id, role)
 		SELECT project_id, created_by, 'owner'
 		FROM projects
-		WHERE created_by IS NOT NULL AND created_by > 0
+		WHERE created_by IS NOT NULL AND created_by != ''
 	`); err != nil {
 		return err
 	}
@@ -768,9 +770,8 @@ func migrateSchema(db *sql.DB) error {
 			}
 			agentRows.Close()
 			for _, id := range agentIDs {
-				if u, err := generateAgentUUID(); err == nil {
-					db.Exec(`UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
-				}
+				u := generateAgentUUID()
+				db.Exec(`UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
 			}
 		}
 		// Migrate agent data into users table
@@ -790,7 +791,7 @@ func migrateSchema(db *sql.DB) error {
 			if _, err := db.Exec(`
 				CREATE TABLE IF NOT EXISTS team_agents_new (
 					team_id INTEGER NOT NULL,
-					user_id INTEGER NOT NULL,
+					user_id TEXT NOT NULL,
 					created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 					PRIMARY KEY(team_id, user_id),
 					FOREIGN KEY(team_id) REFERENCES teams(team_id),
@@ -839,8 +840,8 @@ func migrateSchema(db *sql.DB) error {
 		if _, err := db.Exec(`
 			CREATE TABLE messages (
 				message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-				from_user_id INTEGER NOT NULL,
-				to_user_id INTEGER NOT NULL,
+				from_user_id TEXT NOT NULL,
+				to_user_id TEXT NOT NULL,
 				title TEXT NOT NULL DEFAULT '',
 				body TEXT NOT NULL DEFAULT '',
 				medium TEXT NOT NULL DEFAULT 'dm',
@@ -883,7 +884,7 @@ func migrateSchema(db *sql.DB) error {
 	if !tableExists(db, "agent_config") {
 		if _, err := db.Exec(`
 			CREATE TABLE agent_config (
-				user_id INTEGER NOT NULL,
+				user_id TEXT NOT NULL,
 				key TEXT NOT NULL,
 				value TEXT NOT NULL DEFAULT '',
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -902,7 +903,7 @@ func migrateSchema(db *sql.DB) error {
 		}
 		if _, err := db.Exec(`
 			CREATE TABLE agent_config_new (
-				user_id INTEGER NOT NULL,
+				user_id TEXT NOT NULL,
 				key TEXT NOT NULL,
 				value TEXT NOT NULL DEFAULT '',
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

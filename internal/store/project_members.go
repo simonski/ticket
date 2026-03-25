@@ -17,7 +17,7 @@ var ErrProjectMembershipNotFound = errors.New("project membership not found")
 
 type ProjectMember struct {
 	ProjectID int64  `json:"project_id"`
-	UserID    int64  `json:"user_id"`
+	UserID    string `json:"user_id"`
 	Username  string `json:"username"`
 	Role      string `json:"role"`
 }
@@ -35,7 +35,7 @@ func validProjectRole(role string) bool {
 	}
 }
 
-func AddProjectMember(db *sql.DB, projectID, userID int64, role string) (ProjectMember, error) {
+func AddProjectMember(db *sql.DB, projectID int64, userID string, role string) (ProjectMember, error) {
 	role = normalizeProjectRole(role)
 	if !validProjectRole(role) {
 		return ProjectMember{}, fmt.Errorf("invalid role %q", role)
@@ -55,7 +55,7 @@ func AddProjectMember(db *sql.DB, projectID, userID int64, role string) (Project
 	return GetProjectMember(db, projectID, userID)
 }
 
-func RemoveProjectMember(db *sql.DB, projectID, userID int64) error {
+func RemoveProjectMember(db *sql.DB, projectID int64, userID string) error {
 	result, err := db.Exec(`DELETE FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func RemoveProjectMember(db *sql.DB, projectID, userID int64) error {
 	return nil
 }
 
-func GetProjectMember(db *sql.DB, projectID, userID int64) (ProjectMember, error) {
+func GetProjectMember(db *sql.DB, projectID int64, userID string) (ProjectMember, error) {
 	row := db.QueryRow(`
 		SELECT pm.project_id, pm.user_id, u.username, pm.role
 		FROM project_members pm
@@ -110,7 +110,7 @@ func ListProjectMembers(db *sql.DB, projectID int64) ([]ProjectMember, error) {
 	return members, rows.Err()
 }
 
-func ProjectRoleForUser(db *sql.DB, projectID, userID int64) (string, bool, error) {
+func ProjectRoleForUser(db *sql.DB, projectID int64, userID string) (string, bool, error) {
 	row := db.QueryRow(`SELECT role FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
 	var role string
 	if err := row.Scan(&role); err != nil {

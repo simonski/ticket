@@ -1091,7 +1091,7 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 				{Author: "alice", Text: "latest comment", CreatedAt: "2026-03-02 10:00:00"},
 			},
 		}, nil, []store.HistoryEvent{
-			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: 1, Payload: "{\"status\":\"design/idle\"}"},
+			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: "test-user", Payload: "{\"status\":\"design/idle\"}"},
 		}, nil, nil, 0, "", "")
 	})
 
@@ -2393,6 +2393,25 @@ func setupLocalCLI(t *testing.T) {
 	}
 }
 
+// testAdminUserID returns the admin user's ID by opening the local DB and looking up the user.
+func testAdminUserID(t *testing.T) string {
+	t.Helper()
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		t.Fatalf("ResolveURL() error = %v", err)
+	}
+	db, err := store.Open(resolved.DBPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	user, err := store.GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	return user.ID
+}
+
 func createLocalTask(t *testing.T, args []string) int64 {
 	t.Helper()
 	output := captureStdout(t, func() {
@@ -3356,11 +3375,12 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 		t.Fatalf("could not extract team id from: %s", createOut)
 	}
 
-	// admin user has user_id = 1 (created by runInitDB)
+	// Look up admin user ID (created by runInitDB)
+	adminUserID := testAdminUserID(t)
 	addOut := captureStdout(t, func() {
 		if err := run([]string{"team", "add-user",
 			"-team_id", strconv.FormatInt(teamID, 10),
-			"-user_id", "1",
+			"-user_id", adminUserID,
 			"-role", "owner",
 			"-job_title", "Tech Lead",
 		}); err != nil {
@@ -3385,7 +3405,7 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 	captureStdout(t, func() {
 		if err := run([]string{"team", "remove-user",
 			"-team_id", strconv.FormatInt(teamID, 10),
-			"-user_id", "1",
+			"-user_id", adminUserID,
 		}); err != nil {
 			t.Fatalf("team remove-user error = %v", err)
 		}

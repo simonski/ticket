@@ -191,7 +191,7 @@ func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, str
 	return store.CreateAgent(db, request.Password)
 }
 
-func (s *LocalService) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+func (s *LocalService) SetAgentEnabled(id string, enabled bool) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, err
@@ -218,7 +218,7 @@ func (s *LocalService) ListAgentStatuses() ([]store.AgentStatus, error) {
 	return store.ListAgentStatuses(db)
 }
 
-func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
+func (s *LocalService) UpdateAgent(id string, request AgentUpdateRequest) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, err
@@ -229,7 +229,7 @@ func (s *LocalService) UpdateAgent(id int64, request AgentUpdateRequest) (store.
 	})
 }
 
-func (s *LocalService) DeleteAgent(id int64) error {
+func (s *LocalService) DeleteAgent(id string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func (s *LocalService) DeleteAgent(id int64) error {
 	return store.DeleteAgent(db, id)
 }
 
-func (s *LocalService) SetAgentConfig(agentID int64, key, value string) error {
+func (s *LocalService) SetAgentConfig(agentID string, key, value string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -247,7 +247,7 @@ func (s *LocalService) SetAgentConfig(agentID int64, key, value string) error {
 	return store.SetAgentConfig(db, agentID, key, value)
 }
 
-func (s *LocalService) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error) {
+func (s *LocalService) ListAgentConfig(agentID string) ([]store.AgentConfigEntry, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func (s *LocalService) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry,
 	return store.ListAgentConfig(db, agentID)
 }
 
-func (s *LocalService) DeleteAgentConfig(agentID int64, key string) error {
+func (s *LocalService) DeleteAgentConfig(agentID string, key string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -276,6 +276,20 @@ func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent,
 		return store.Agent{}, err
 	}
 	return store.TouchAgent(db, agent.ID, "online")
+}
+
+func (s *LocalService) HeartbeatAgent(agentID, password, status string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	agent, err := store.AuthenticateAgent(db, agentID, password)
+	if err != nil {
+		return err
+	}
+	_, err = store.TouchAgent(db, agent.ID, status)
+	return err
 }
 
 func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
@@ -312,7 +326,7 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 		ProjectID: projectID,
 		TicketID:  request.TicketID,
 		Username:  agent.Username,
-		UserID:    0,
+		UserID:    "",
 		DryRun:    request.DryRun,
 	})
 	if err != nil {
@@ -378,7 +392,7 @@ func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequ
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
-		UpdatedBy:          0,
+		UpdatedBy:          "",
 		ActorUsername:      agent.Username,
 		ActorRole:          "admin",
 	})
@@ -477,7 +491,7 @@ func (s *LocalService) AddProjectMember(projectID int64, request ProjectMemberRe
 	return store.AddProjectMember(db, projectID, request.UserID, request.Role)
 }
 
-func (s *LocalService) RemoveProjectMember(projectID, userID int64) error {
+func (s *LocalService) RemoveProjectMember(projectID int64, userID string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -567,7 +581,7 @@ func (s *LocalService) AddTeamMember(teamID int64, request TeamMemberRequest) (s
 	return store.AddTeamMember(db, teamID, request.UserID, request.Role, request.JobTitle)
 }
 
-func (s *LocalService) RemoveTeamMember(teamID, userID int64) error {
+func (s *LocalService) RemoveTeamMember(teamID int64, userID string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -585,7 +599,7 @@ func (s *LocalService) ListTeamMembers(teamID int64) ([]store.TeamMember, error)
 	return store.ListTeamMembers(db, teamID)
 }
 
-func (s *LocalService) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+func (s *LocalService) AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.TeamAgent{}, err
@@ -594,7 +608,7 @@ func (s *LocalService) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, err
 	return store.AddTeamAgent(db, teamID, agentID)
 }
 
-func (s *LocalService) RemoveTeamAgent(teamID, agentID int64) error {
+func (s *LocalService) RemoveTeamAgent(teamID int64, agentID string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err

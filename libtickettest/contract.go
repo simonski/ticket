@@ -954,8 +954,8 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
-		if agent.UUID == "" {
-			t.Fatal("agent.UUID is empty")
+		if agent.ID == "" {
+			t.Fatal("agent.ID is empty")
 		}
 		if password == "" {
 			t.Fatal("CreateAgent() returned empty password")
@@ -1022,7 +1022,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Register (authenticate) the agent
 		registered, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
-			ID:       agent.UUID,
+			ID:       agent.ID,
 			Password: "secret123",
 		})
 		if err != nil {
@@ -1034,7 +1034,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Request work (no tickets — expect NONE)
 		resp, err := svc.RequestAgentWork(libticket.AgentRequest{
-			ID:       agent.UUID,
+			ID:       agent.ID,
 			Password: "secret123",
 		})
 		if err != nil {

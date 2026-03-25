@@ -4,8 +4,9 @@ import "testing"
 
 func TestTimeEntryCRUD(t *testing.T) {
 	db := testDB(t)
+	adminID := testAdminID(t, db)
 
-	project, err := CreateProject(db, "Time Test", "", "", 1)
+	project, err := CreateProject(db, "Time Test", "", "", adminID)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -15,14 +16,14 @@ func TestTimeEntryCRUD(t *testing.T) {
 		Type:      "task",
 		Title:     "Timed Task",
 		State:     StateIdle,
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
 	// Log time
-	entry, err := LogTime(db, ticket.ID, 1, 30, "initial work")
+	entry, err := LogTime(db, ticket.ID, adminID, 30, "initial work")
 	if err != nil {
 		t.Fatalf("LogTime() error = %v", err)
 	}
@@ -31,13 +32,13 @@ func TestTimeEntryCRUD(t *testing.T) {
 	}
 
 	// Log more time
-	_, err = LogTime(db, ticket.ID, 1, 45, "follow-up")
+	_, err = LogTime(db, ticket.ID, adminID, 45, "follow-up")
 	if err != nil {
 		t.Fatalf("LogTime() second error = %v", err)
 	}
 
 	// Invalid minutes
-	if _, err := LogTime(db, ticket.ID, 1, 0, ""); err == nil {
+	if _, err := LogTime(db, ticket.ID, adminID, 0, ""); err == nil {
 		t.Fatal("LogTime() with 0 minutes should fail")
 	}
 

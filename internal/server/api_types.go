@@ -52,7 +52,7 @@ type teamRequest struct {
 }
 
 type teamMemberRequest struct {
-	UserID   int64  `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Role     string `json:"role"`
 	JobTitle string `json:"job_title"`
 }

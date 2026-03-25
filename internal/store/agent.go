@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/simonski/ticket/internal/password"
 )
 
@@ -19,10 +20,7 @@ type AgentUpdateParams struct {
 }
 
 func CreateAgent(db *sql.DB, plainPassword string) (Agent, string, error) {
-	uuid, err := generateAgentUUID()
-	if err != nil {
-		return Agent{}, "", err
-	}
+	uuid := generateAgentUUID()
 
 	passwordToSet := strings.TrimSpace(plainPassword)
 	if passwordToSet == "" {
@@ -36,25 +34,22 @@ func CreateAgent(db *sql.DB, plainPassword string) (Agent, string, error) {
 	if err != nil {
 		return Agent{}, "", err
 	}
-	result, err := db.Exec(`
-		INSERT INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, status, updated_at)
-		VALUES (?, ?, 'agent', ?, 1, 'agent', ?, 'idle', CURRENT_TIMESTAMP)
-	`, uuid, hash, uuid, uuid)
+	// Use the UUID as both the user_id and the username for agents
+	_, err = db.Exec(`
+		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled, user_type, uuid, status, updated_at)
+		VALUES (?, ?, ?, 'agent', ?, 1, 'agent', ?, 'idle', CURRENT_TIMESTAMP)
+	`, uuid, uuid, hash, uuid, uuid)
 	if err != nil {
 		return Agent{}, "", err
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Agent{}, "", err
-	}
-	agent, err := GetAgentByID(db, id)
+	agent, err := GetAgentByID(db, uuid)
 	if err != nil {
 		return Agent{}, "", err
 	}
 	return agent, passwordToSet, nil
 }
 
-func GetAgentByID(db *sql.DB, id int64) (Agent, error) {
+func GetAgentByID(db *sql.DB, id string) (Agent, error) {
 	row := db.QueryRow(`
 		SELECT `+userSelectColumns+`
 		FROM users
@@ -94,7 +89,7 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 	return agents, rows.Err()
 }
 
-func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) {
+func UpdateAgent(db *sql.DB, id string, params AgentUpdateParams) (Agent, error) {
 	if params.Password == nil {
 		return Agent{}, errors.New("agent update requires -password")
 	}
@@ -116,7 +111,7 @@ func UpdateAgent(db *sql.DB, id int64, params AgentUpdateParams) (Agent, error) 
 	return GetAgentByID(db, id)
 }
 
-func DeleteAgent(db *sql.DB, id int64) error {
+func DeleteAgent(db *sql.DB, id string) error {
 	// Delete sessions for this agent first
 	if _, err := db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
 		return err
@@ -135,7 +130,7 @@ func DeleteAgent(db *sql.DB, id int64) error {
 	return nil
 }
 
-func SetAgentEnabled(db *sql.DB, id int64, enabled bool) (Agent, error) {
+func SetAgentEnabled(db *sql.DB, id string, enabled bool) (Agent, error) {
 	status := "disabled"
 	if enabled {
 		status = "idle"
@@ -174,7 +169,7 @@ func AuthenticateAgent(db *sql.DB, agentID, plainPassword string) (Agent, error)
 	if err := row.Scan(
 		&a.ID, &a.Username, &a.Email, &a.EmailConfirmedAt,
 		&a.Role, &a.DisplayName, &enabled, &a.CreatedAt,
-		&a.UserType, &a.UUID, &a.Description, &a.Status,
+		&a.UserType, &a.Description, &a.Status,
 		&a.LastSeen, &a.UpdatedAt,
 		&hash,
 	); err != nil {
@@ -197,7 +192,7 @@ func AuthenticateAgent(db *sql.DB, agentID, plainPassword string) (Agent, error)
 	return a, nil
 }
 
-func TouchAgent(db *sql.DB, id int64, status string) (Agent, error) {
+func TouchAgent(db *sql.DB, id string, status string) (Agent, error) {
 	status = strings.TrimSpace(status)
 	if status == "" {
 		status = "idle"
@@ -220,15 +215,8 @@ func TouchAgent(db *sql.DB, id int64, status string) (Agent, error) {
 	return GetAgentByID(db, id)
 }
 
-func generateAgentUUID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	// Set version 4 and variant bits
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
+func generateAgentUUID() string {
+	return uuid.NewString()
 }
 
 func randomSecret(n int) (string, error) {
@@ -316,12 +304,12 @@ const (
 )
 
 type AgentConfigEntry struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Key    string `json:"key"`
 	Value  string `json:"value"`
 }
 
-func SetAgentConfig(db *sql.DB, agentID int64, key, value string) error {
+func SetAgentConfig(db *sql.DB, agentID string, key, value string) error {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return errors.New("config key is required")
@@ -334,7 +322,7 @@ func SetAgentConfig(db *sql.DB, agentID int64, key, value string) error {
 	return err
 }
 
-func ListAgentConfig(db *sql.DB, agentID int64) ([]AgentConfigEntry, error) {
+func ListAgentConfig(db *sql.DB, agentID string) ([]AgentConfigEntry, error) {
 	rows, err := db.Query(`SELECT user_id, key, value FROM agent_config WHERE user_id = ? ORDER BY key`, agentID)
 	if err != nil {
 		return nil, err
@@ -351,7 +339,7 @@ func ListAgentConfig(db *sql.DB, agentID int64) ([]AgentConfigEntry, error) {
 	return entries, rows.Err()
 }
 
-func DeleteAgentConfig(db *sql.DB, agentID int64, key string) error {
+func DeleteAgentConfig(db *sql.DB, agentID string, key string) error {
 	result, err := db.Exec(`DELETE FROM agent_config WHERE user_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
 	if err != nil {
 		return err
@@ -364,7 +352,7 @@ func DeleteAgentConfig(db *sql.DB, agentID int64, key string) error {
 }
 
 // GetAgentConfigMap returns agent config as a map[string]string.
-func GetAgentConfigMap(db *sql.DB, agentID int64) (map[string]string, error) {
+func GetAgentConfigMap(db *sql.DB, agentID string) (map[string]string, error) {
 	entries, err := ListAgentConfig(db, agentID)
 	if err != nil {
 		return nil, err
@@ -378,7 +366,7 @@ func GetAgentConfigMap(db *sql.DB, agentID int64) (map[string]string, error) {
 
 // GetAgentConfigUpdatedAt returns the most recent updated_at timestamp from agent_config.
 // Returns empty string if no config exists.
-func GetAgentConfigUpdatedAt(db *sql.DB, agentID int64) (string, error) {
+func GetAgentConfigUpdatedAt(db *sql.DB, agentID string) (string, error) {
 	var updatedAt sql.NullString
 	err := db.QueryRow(`
 		SELECT MAX(updated_at) FROM agent_config WHERE user_id = ?

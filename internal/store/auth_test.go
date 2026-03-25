@@ -107,3 +107,13 @@ func testDB(t *testing.T) *sql.DB {
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
+
+// testAdminID returns the user_id of the admin user created by testDB.
+func testAdminID(t *testing.T, db *sql.DB) string {
+	t.Helper()
+	user, err := GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	return user.ID
+}

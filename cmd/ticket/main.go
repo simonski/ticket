@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -925,19 +924,26 @@ func seedExampleData(db *sql.DB) error {
 		},
 	}
 
+	// Look up admin user for CreatedBy
+	adminUser, err := store.GetUserByUsername(db, "admin")
+	if err != nil {
+		return fmt.Errorf("seed: admin user not found: %w", err)
+	}
+	seedCreatedBy := adminUser.ID
+
 	for _, projectSeed := range projects {
 		project, err := store.CreateProjectWithParams(db, store.ProjectCreateParams{
 			Prefix:      projectSeed.prefix,
 			Title:       projectSeed.title,
 			Description: projectSeed.description,
-			CreatedBy:   1,
+			CreatedBy:   seedCreatedBy,
 			Visibility:  store.ProjectVisibilityPublic,
 		})
 		if err != nil {
 			return err
 		}
 		for _, storySeed := range projectSeed.stories {
-			story, err := store.CreateStory(db, project.ID, storySeed.title, storySeed.description, 1)
+			story, err := store.CreateStory(db, project.ID, storySeed.title, storySeed.description, seedCreatedBy)
 			if err != nil {
 				return err
 			}
@@ -945,7 +951,7 @@ func seedExampleData(db *sql.DB) error {
 				ProjectID: project.ID,
 				Type:      "epic",
 				Title:     storySeed.epicTitle,
-				CreatedBy: 1,
+				CreatedBy: seedCreatedBy,
 			})
 			if err != nil {
 				return err
@@ -967,7 +973,7 @@ func seedExampleData(db *sql.DB) error {
 					ParentID:  &parentID,
 					Type:      child.ticketType,
 					Title:     child.title,
-					CreatedBy: 1,
+					CreatedBy: seedCreatedBy,
 				})
 				if err != nil {
 					return err
@@ -1409,7 +1415,7 @@ func runWhoami(args []string) error {
 	if currentUser != nil {
 		fmt.Printf("  username : %s\n", currentUser.Username)
 		fmt.Printf("  role     : %s\n", currentUser.Role)
-		fmt.Printf("  user_id  : %d\n", currentUser.ID)
+		fmt.Printf("  user_id  : %s\n", currentUser.ID)
 	} else {
 		fmt.Printf("  username : %s\n", username)
 	}
@@ -1592,8 +1598,17 @@ func runAgent(args []string) error {
 		return err
 	}
 
+	// resolveAgentID validates and returns the agent UUID string as the ID.
+	resolveAgentID := func(uuid string) (string, error) {
+		uuid = strings.TrimSpace(uuid)
+		if uuid == "" {
+			return "", errors.New("agent UUID is required")
+		}
+		return uuid, nil
+	}
+
 	switch args[0] {
-	case "create":
+	case "create", "new":
 		fs := flag.NewFlagSet("agent create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		password := fs.String("password", "", "agent password")
@@ -1609,7 +1624,7 @@ func runAgent(args []string) error {
 		if outputJSON {
 			return printJSON(map[string]any{"agent": agent, "password": generatedPassword})
 		}
-		fmt.Printf("agent_id: %s\n", agent.UUID)
+		fmt.Printf("agent_id: %s\n", agent.ID)
 		fmt.Printf("password: %s\n", generatedPassword)
 		return nil
 	case "ls", "list":
@@ -1625,19 +1640,20 @@ func runAgent(args []string) error {
 	case "udpate", "update":
 		fs := flag.NewFlagSet("agent update", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		id := fs.Int64("id", 0, "agent id")
+		id := fs.String("id", "", "agent UUID")
 		password := fs.String("password", "", "agent password")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *id == 0 {
-			return errors.New("agent update requires -id")
+		dbID, err := resolveAgentID(*id)
+		if err != nil {
+			return err
 		}
 		trimmed := strings.TrimSpace(*password)
 		if trimmed == "" {
 			return errors.New("agent update requires -password")
 		}
-		agent, err := svc.UpdateAgent(*id, libticket.AgentUpdateRequest{
+		agent, err := svc.UpdateAgent(dbID, libticket.AgentUpdateRequest{
 			Password: &trimmed,
 		})
 		if err != nil {
@@ -1646,44 +1662,46 @@ func runAgent(args []string) error {
 		if outputJSON {
 			return printJSON(agent)
 		}
-		fmt.Printf("updated agent %s\n", agent.UUID)
+		fmt.Printf("updated agent %s\n", agent.ID)
 		return nil
 	case "rm", "delete":
 		fs := flag.NewFlagSet("agent "+args[0], flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		id := fs.Int64("id", 0, "agent id")
+		id := fs.String("id", "", "agent UUID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *id == 0 {
-			return errors.New("agent rm/delete requires -id")
+		dbID, err := resolveAgentID(*id)
+		if err != nil {
+			return err
 		}
-		if err := svc.DeleteAgent(*id); err != nil {
+		if err := svc.DeleteAgent(dbID); err != nil {
 			return err
 		}
 		if outputJSON {
 			return printJSON(map[string]any{"status": "deleted", "agent_id": *id})
 		}
-		fmt.Printf("deleted agent %d\n", *id)
+		fmt.Printf("deleted agent %s\n", *id)
 		return nil
 	case "enable", "disable":
 		fs := flag.NewFlagSet("agent "+args[0], flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		id := fs.Int64("id", 0, "agent id")
+		id := fs.String("id", "", "agent UUID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *id == 0 {
-			return errors.New("agent enable/disable requires -id")
+		dbID, err := resolveAgentID(*id)
+		if err != nil {
+			return err
 		}
-		agent, err := svc.SetAgentEnabled(*id, args[0] == "enable")
+		agent, err := svc.SetAgentEnabled(dbID, args[0] == "enable")
 		if err != nil {
 			return err
 		}
 		if outputJSON {
 			return printJSON(agent)
 		}
-		fmt.Printf("%sd agent %s\n", args[0], agent.UUID)
+		fmt.Printf("%sd agent %s\n", args[0], agent.ID)
 		return nil
 	case "run":
 		fs := flag.NewFlagSet("agent run", flag.ContinueOnError)
@@ -1754,7 +1772,7 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("[agent] REGISTER response: agent_id=%d username=%s status=%s enabled=%v\n", agent.ID, agent.Username, agent.Status, agent.Enabled)
+		fmt.Printf("[agent] REGISTER response: agent_id=%s username=%s status=%s enabled=%v\n", agent.ID, agent.Username, agent.Status, agent.Enabled)
 		if !outputJSON {
 			fmt.Printf("agent %s registered\n", agentIDVal)
 		}
@@ -1842,7 +1860,30 @@ func runAgent(args []string) error {
 				fmt.Printf("[agent] processing %s %q\n", ticketLabel(*ticket), ticket.Title)
 			}
 			prompt := buildAgentPrompt(response)
+
+			// Start a background heartbeat while the LLM is working.
+			heartbeatStop := make(chan struct{})
+			go func() {
+				ticker := time.NewTicker(30 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						if err := svc.HeartbeatAgent(agentIDVal, agentPassword, "working"); err != nil {
+							if agentVerbose {
+								fmt.Printf("[agent] heartbeat error: %v\n", err)
+							}
+						} else if agentVerbose {
+							fmt.Printf("[agent] heartbeat sent (working)\n")
+						}
+					case <-heartbeatStop:
+						return
+					}
+				}
+			}()
+
 			result, err := runAgentCommand(modelCommand, prompt, agentVerbose, ticket.Key)
+			close(heartbeatStop)
 			if err != nil {
 				fmt.Printf("failed %s: %v\n", ticketLabel(*ticket), err)
 				return fmt.Errorf("agent llm processing failed for ticket %s: %w", ticketLabel(*ticket), err)
@@ -1946,13 +1987,14 @@ func runAgent(args []string) error {
 	case "reset-password":
 		fs := flag.NewFlagSet("agent reset-password", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		id := fs.Int64("id", 0, "agent id")
+		id := fs.String("id", "", "agent UUID")
 		newPassword := fs.String("password", "", "new password (generated if omitted)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *id == 0 {
-			return errors.New("usage: ticket agent reset-password -id <agent-id> [-password <new-password>]")
+		dbID, err := resolveAgentID(*id)
+		if err != nil {
+			return err
 		}
 		pw := strings.TrimSpace(*newPassword)
 		if pw == "" {
@@ -1962,30 +2004,34 @@ func runAgent(args []string) error {
 			}
 			pw = generated
 		}
-		agent, err := svc.UpdateAgent(*id, libticket.AgentUpdateRequest{Password: &pw})
+		agent, err := svc.UpdateAgent(dbID, libticket.AgentUpdateRequest{Password: &pw})
 		if err != nil {
 			return err
 		}
 		if outputJSON {
-			return printJSON(map[string]any{"agent_id": agent.UUID, "password": pw})
+			return printJSON(map[string]any{"agent_id": agent.ID, "password": pw})
 		}
-		fmt.Printf("agent    : %s (%s)\n", agent.Username, agent.UUID)
+		fmt.Printf("agent    : %s\n", agent.ID)
 		fmt.Printf("password : %s\n", pw)
 		return nil
 	case "config-set":
 		if len(args) < 4 {
-			return errors.New("usage: ticket agent config-set -id <agent-id> <key> <value>")
+			return errors.New("usage: ticket agent config-set -id <agent-uuid> <key> <value>")
 		}
 		fs := flag.NewFlagSet("agent config-set", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		agentID := fs.Int64("id", 0, "agent id")
+		agentUUID := fs.String("id", "", "agent UUID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *agentID == 0 || fs.NArg() < 2 {
-			return errors.New("usage: ticket agent config-set -id <agent-id> <key> <value>")
+		dbID, err := resolveAgentID(*agentUUID)
+		if err != nil {
+			return err
 		}
-		if err := svc.SetAgentConfig(*agentID, fs.Arg(0), fs.Arg(1)); err != nil {
+		if fs.NArg() < 2 {
+			return errors.New("usage: ticket agent config-set -id <agent-uuid> <key> <value>")
+		}
+		if err := svc.SetAgentConfig(dbID, fs.Arg(0), fs.Arg(1)); err != nil {
 			return err
 		}
 		fmt.Printf("%s=%s\n", fs.Arg(0), fs.Arg(1))
@@ -1993,14 +2039,15 @@ func runAgent(args []string) error {
 	case "config-ls":
 		fs := flag.NewFlagSet("agent config-ls", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		agentID := fs.Int64("id", 0, "agent id")
+		agentUUID := fs.String("id", "", "agent UUID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *agentID == 0 {
-			return errors.New("usage: ticket agent config-ls -id <agent-id>")
+		dbID, err := resolveAgentID(*agentUUID)
+		if err != nil {
+			return err
 		}
-		entries, err := svc.ListAgentConfig(*agentID)
+		entries, err := svc.ListAgentConfig(dbID)
 		if err != nil {
 			return err
 		}
@@ -2018,14 +2065,18 @@ func runAgent(args []string) error {
 	case "config-rm":
 		fs := flag.NewFlagSet("agent config-rm", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		agentID := fs.Int64("id", 0, "agent id")
+		agentUUID := fs.String("id", "", "agent UUID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *agentID == 0 || fs.NArg() < 1 {
-			return errors.New("usage: ticket agent config-rm -id <agent-id> <key>")
+		dbID, err := resolveAgentID(*agentUUID)
+		if err != nil {
+			return err
 		}
-		if err := svc.DeleteAgentConfig(*agentID, fs.Arg(0)); err != nil {
+		if fs.NArg() < 1 {
+			return errors.New("usage: ticket agent config-rm -id <agent-uuid> <key>")
+		}
+		if err := svc.DeleteAgentConfig(dbID, fs.Arg(0)); err != nil {
 			return err
 		}
 		fmt.Printf("deleted %s\n", fs.Arg(0))
@@ -2131,7 +2182,7 @@ func printAgentTable(statuses []store.AgentStatus) {
 		if s.RoleTitle != "" {
 			role = s.RoleTitle
 		}
-		fmt.Fprintf(w, "%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Agent.UUID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen)
+		fmt.Fprintf(w, "%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Agent.ID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen)
 	}
 	_ = w.Flush()
 }
@@ -2609,13 +2660,13 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 func runProjectAddUser(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project add-user", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	userID := fs.Int64("user_id", 0, "user id")
+	userID := fs.String("user_id", "", "user id")
 	projectID := fs.Int64("project_id", 0, "project id")
 	role := fs.String("role", "", "project role [viewer,editor,owner]")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *userID == 0 || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+	if *userID == "" || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
 		return errors.New("usage: ticket project add-user -user_id <id> -project_id <id> -role <viewer|editor|owner>")
 	}
 	member, err := svc.AddProjectMember(*projectID, libticket.ProjectMemberRequest{
@@ -2628,19 +2679,19 @@ func runProjectAddUser(svc libticket.Service, args []string) error {
 	if outputJSON {
 		return printJSON(member)
 	}
-	fmt.Printf("added project user: project_id=%d user_id=%d role=%s\n", member.ProjectID, member.UserID, member.Role)
+	fmt.Printf("added project user: project_id=%d user_id=%s role=%s\n", member.ProjectID, member.UserID, member.Role)
 	return nil
 }
 
 func runProjectRemoveUser(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project remove-user", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	userID := fs.Int64("user_id", 0, "user id")
+	userID := fs.String("user_id", "", "user id")
 	projectID := fs.Int64("project_id", 0, "project id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *userID == 0 || *projectID == 0 || fs.NArg() != 0 {
+	if *userID == "" || *projectID == 0 || fs.NArg() != 0 {
 		return errors.New("usage: ticket project remove-user -user_id <id> -project_id <id>")
 	}
 	if err := svc.RemoveProjectMember(*projectID, *userID); err != nil {
@@ -2649,7 +2700,7 @@ func runProjectRemoveUser(svc libticket.Service, args []string) error {
 	if outputJSON {
 		return printJSON(map[string]any{"status": "deleted", "project_id": *projectID, "user_id": *userID})
 	}
-	fmt.Printf("removed project user: project_id=%d user_id=%d\n", *projectID, *userID)
+	fmt.Printf("removed project user: project_id=%d user_id=%s\n", *projectID, *userID)
 	return nil
 }
 
@@ -2804,13 +2855,13 @@ func runTeam(args []string) error {
 		fs := flag.NewFlagSet("team add-user", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		teamID := fs.Int64("team_id", 0, "team id")
-		userID := fs.Int64("user_id", 0, "user id")
+		userID := fs.String("user_id", "", "user id")
 		role := fs.String("role", "", "team role [member,owner]")
 		jobTitle := fs.String("job_title", "", "job title")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *teamID == 0 || *userID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+		if *teamID == 0 || *userID == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
 			return errors.New("usage: ticket team add-user -team_id <id> -user_id <id> -role <member|owner> [-job_title <title>]")
 		}
 		member, err := svc.AddTeamMember(*teamID, libticket.TeamMemberRequest{
@@ -2824,17 +2875,17 @@ func runTeam(args []string) error {
 		if outputJSON {
 			return printJSON(member)
 		}
-		fmt.Printf("added team user: team_id=%d user_id=%d role=%s job_title=%s\n", member.TeamID, member.UserID, member.Role, member.JobTitle)
+		fmt.Printf("added team user: team_id=%d user_id=%s role=%s job_title=%s\n", member.TeamID, member.UserID, member.Role, member.JobTitle)
 		return nil
 	case "remove-user":
 		fs := flag.NewFlagSet("team remove-user", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		teamID := fs.Int64("team_id", 0, "team id")
-		userID := fs.Int64("user_id", 0, "user id")
+		userID := fs.String("user_id", "", "user id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *teamID == 0 || *userID == 0 || fs.NArg() != 0 {
+		if *teamID == 0 || *userID == "" || fs.NArg() != 0 {
 			return errors.New("usage: ticket team remove-user -team_id <id> -user_id <id>")
 		}
 		if err := svc.RemoveTeamMember(*teamID, *userID); err != nil {
@@ -2843,7 +2894,7 @@ func runTeam(args []string) error {
 		if outputJSON {
 			return printJSON(map[string]any{"status": "deleted", "team_id": *teamID, "user_id": *userID})
 		}
-		fmt.Printf("removed team user: team_id=%d user_id=%d\n", *teamID, *userID)
+		fmt.Printf("removed team user: team_id=%d user_id=%s\n", *teamID, *userID)
 		return nil
 	case "users":
 		fs := flag.NewFlagSet("team users", flag.ContinueOnError)
@@ -2868,12 +2919,12 @@ func runTeam(args []string) error {
 		fs := flag.NewFlagSet("team add-agent", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		teamID := fs.Int64("team_id", 0, "team id")
-		agentID := fs.Int64("agent_id", 0, "agent id")
+		agentID := fs.String("agent_id", "", "agent id (UUID)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *teamID == 0 || *agentID == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket team add-agent -team_id <id> -agent_id <id>")
+		if *teamID == 0 || *agentID == "" || fs.NArg() != 0 {
+			return errors.New("usage: ticket team add-agent -team_id <id> -agent_id <uuid>")
 		}
 		item, err := svc.AddTeamAgent(*teamID, *agentID)
 		if err != nil {
@@ -2882,18 +2933,18 @@ func runTeam(args []string) error {
 		if outputJSON {
 			return printJSON(item)
 		}
-		fmt.Printf("added team agent: team_id=%d agent_id=%d\n", item.TeamID, item.AgentID)
+		fmt.Printf("added team agent: team_id=%d agent_id=%s\n", item.TeamID, item.AgentID)
 		return nil
 	case "remove-agent":
 		fs := flag.NewFlagSet("team remove-agent", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		teamID := fs.Int64("team_id", 0, "team id")
-		agentID := fs.Int64("agent_id", 0, "agent id")
+		agentID := fs.String("agent_id", "", "agent id (UUID)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *teamID == 0 || *agentID == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket team remove-agent -team_id <id> -agent_id <id>")
+		if *teamID == 0 || *agentID == "" || fs.NArg() != 0 {
+			return errors.New("usage: ticket team remove-agent -team_id <id> -agent_id <uuid>")
 		}
 		if err := svc.RemoveTeamAgent(*teamID, *agentID); err != nil {
 			return err
@@ -2901,7 +2952,7 @@ func runTeam(args []string) error {
 		if outputJSON {
 			return printJSON(map[string]any{"status": "deleted", "team_id": *teamID, "agent_id": *agentID})
 		}
-		fmt.Printf("removed team agent: team_id=%d agent_id=%d\n", *teamID, *agentID)
+		fmt.Printf("removed team agent: team_id=%d agent_id=%s\n", *teamID, *agentID)
 		return nil
 	case "agents":
 		fs := flag.NewFlagSet("team agents", flag.ContinueOnError)
@@ -2952,7 +3003,7 @@ func printTeamMemberTable(members []store.TeamMember) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TEAM_ID\tUSER_ID\tUSERNAME\tROLE\tJOB_TITLE")
 	for _, m := range members {
-		fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", m.TeamID, m.UserID, m.Username, m.Role, m.JobTitle)
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", m.TeamID, m.UserID, m.Username, m.Role, m.JobTitle)
 	}
 	_ = w.Flush()
 }
@@ -2965,7 +3016,7 @@ func printTeamAgentTable(items []store.TeamAgent) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tUUID\tENABLED\tSTATUS")
 	for _, item := range items {
-		fmt.Fprintf(w, "%d\t%d\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentUUID, item.Enabled, item.Status)
+		fmt.Fprintf(w, "%d\t%s\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentUUID, item.Enabled, item.Status)
 	}
 	_ = w.Flush()
 }
@@ -3602,7 +3653,7 @@ func runTime(args []string) error {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tMINUTES\tUSER\tNOTE\tDATE")
 		for _, e := range entries {
-			fmt.Fprintf(w, "%d\t%d\t%d\t%s\t%s\n", e.ID, e.Minutes, e.UserID, e.Note, e.CreatedAt)
+			fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\n", e.ID, e.Minutes, e.UserID, e.Note, e.CreatedAt)
 		}
 		return w.Flush()
 	case "total":
@@ -3978,32 +4029,53 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 		llmCmd = fmt.Sprintf("%s -p < %s", agent, promptFile)
 	}
 
-	// Wrap with script(1) to allocate a PTY so the LLM streams output
-	// in real time instead of buffering until exit.
-	var cmd *exec.Cmd
-	if runtime.GOOS == "darwin" {
-		cmd = exec.Command("script", "-q", "/dev/null", "sh", "-c", llmCmd)
-	} else {
-		// Linux: script -qc "cmd" /dev/null
-		cmd = exec.Command("script", "-qc", llmCmd, "/dev/null")
-	}
-
-	// Always stream stdout to the terminal so the operator can see
-	// the LLM working. With -v, add > / < prefixes.
-	var buf bytes.Buffer
+	cmd := exec.Command("sh", "-c", llmCmd)
 	if stream {
 		fmt.Printf("> %s\n\n", llmCmd)
-		cmd.Stdout = io.MultiWriter(&prefixWriter{w: os.Stdout, prefix: "< "}, &buf)
-		cmd.Stderr = &prefixWriter{w: os.Stderr, prefix: "< "}
-	} else {
-		cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
-		cmd.Stderr = os.Stderr
 	}
-	if err := cmd.Run(); err != nil {
+
+	// Use StdoutPipe + goroutine to stream output byte-by-byte as it
+	// arrives, avoiding any block-buffering in Go's cmd.Run path.
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
 		return "", err
 	}
 	if stream {
+		cmd.Stderr = &prefixWriter{w: os.Stderr, prefix: "< "}
+	} else {
+		cmd.Stderr = os.Stderr
+	}
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	small := make([]byte, 256)
+	for {
+		n, readErr := stdout.Read(small)
+		if n > 0 {
+			chunk := small[:n]
+			buf.Write(chunk)
+			if stream {
+				// Write with prefix per line
+				for _, line := range bytes.SplitAfter(chunk, []byte("\n")) {
+					if len(line) > 0 {
+						fmt.Fprintf(os.Stdout, "< %s", string(line))
+					}
+				}
+			} else {
+				os.Stdout.Write(chunk)
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	if stream {
 		fmt.Println()
+	}
+	if err := cmd.Wait(); err != nil {
+		return "", err
 	}
 	return buf.String(), nil
 }

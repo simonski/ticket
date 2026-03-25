@@ -6,11 +6,11 @@ import (
 
 func TestStoryCRUDAndLinking(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Stories Project", "", "", 1)
+	project, err := CreateProject(db, "Stories Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	story, err := CreateStory(db, project.ID, "Customer onboarding", "High-level onboarding requirement", 1)
+	story, err := CreateStory(db, project.ID, "Customer onboarding", "High-level onboarding requirement", "")
 	if err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
 	}
@@ -37,7 +37,7 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Onboarding epic",
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)

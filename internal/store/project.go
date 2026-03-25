@@ -25,7 +25,7 @@ type Project struct {
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	Visibility         string `json:"visibility"`
-	CreatedBy          int64  `json:"created_by"`
+	CreatedBy          string `json:"created_by"`
 	CreatedAt          string `json:"created_at"`
 	UpdatedAt          string `json:"updated_at"`
 	WorkflowID         *int64 `json:"workflow_id,omitempty"`
@@ -40,7 +40,7 @@ type ProjectCreateParams struct {
 	GitBranch          string
 	Notes              string
 	Visibility         string
-	CreatedBy          int64
+	CreatedBy          string
 	WorkflowID         *int64
 }
 
@@ -56,7 +56,7 @@ type ProjectUpdateParams struct {
 	WorkflowID         *int64
 }
 
-func CreateProject(db *sql.DB, title, description, acceptanceCriteria string, createdBy int64) (Project, error) {
+func CreateProject(db *sql.DB, title, description, acceptanceCriteria string, createdBy string) (Project, error) {
 	return CreateProjectWithParams(db, ProjectCreateParams{
 		Prefix:             deriveProjectPrefix(title),
 		Title:              title,
@@ -100,7 +100,7 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 	result, err := db.Exec(`
 		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, created_by, workflow_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, params.CreatedBy, workflowID)
+	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), workflowID)
 	if err != nil {
 		return Project{}, err
 	}
@@ -108,7 +108,7 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 	if err != nil {
 		return Project{}, err
 	}
-	if params.CreatedBy > 0 {
+	if params.CreatedBy != "" {
 		if _, err := AddProjectMember(db, id, params.CreatedBy, ProjectRoleOwner); err != nil {
 			return Project{}, err
 		}
@@ -118,7 +118,7 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 
 func ListProjects(db *sql.DB) ([]Project, error) {
 	rows, err := db.Query(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at, workflow_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		ORDER BY created_at, project_id
 	`)
@@ -153,7 +153,7 @@ func ListProjectsVisibleToUser(db *sql.DB, user User) ([]Project, error) {
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, COALESCE(p.created_by, 0), p.created_at, p.updated_at, p.workflow_id
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -186,7 +186,7 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 		return GetProjectByID(db, id)
 	}
 	row := db.QueryRow(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at, workflow_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
@@ -202,7 +202,7 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 
 func GetProjectByID(db *sql.DB, id int64) (Project, error) {
 	row := db.QueryRow(`
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, 0), created_at, updated_at, workflow_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		WHERE project_id = ?
 	`, id)

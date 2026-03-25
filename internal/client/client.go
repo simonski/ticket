@@ -287,7 +287,7 @@ func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, e
 	return response.Agent, response.Password, err
 }
 
-func (c *Client) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+func (c *Client) SetAgentEnabled(id string, enabled bool) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -301,7 +301,7 @@ func (c *Client) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
 		action = "enable"
 	}
 	var agent store.Agent
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%d/%s", id, action), nil, &agent)
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%s/%s", id, action), nil, &agent)
 	return agent, err
 }
 
@@ -333,7 +333,7 @@ func (c *Client) ListAgentStatuses() ([]store.AgentStatus, error) {
 	return statuses, err
 }
 
-func (c *Client) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent, error) {
+func (c *Client) UpdateAgent(id string, request AgentUpdateRequest) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -345,11 +345,11 @@ func (c *Client) UpdateAgent(id int64, request AgentUpdateRequest) (store.Agent,
 		})
 	}
 	var agent store.Agent
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/agents/%d", id), request, &agent)
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/agents/%s", id), request, &agent)
 	return agent, err
 }
 
-func (c *Client) DeleteAgent(id int64) error {
+func (c *Client) DeleteAgent(id string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -358,10 +358,10 @@ func (c *Client) DeleteAgent(id int64) error {
 		defer db.Close()
 		return store.DeleteAgent(db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%d", id), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%s", id), nil, nil)
 }
 
-func (c *Client) SetAgentConfig(agentID int64, key, value string) error {
+func (c *Client) SetAgentConfig(agentID string, key, value string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -370,10 +370,10 @@ func (c *Client) SetAgentConfig(agentID int64, key, value string) error {
 		defer db.Close()
 		return store.SetAgentConfig(db, agentID, key, value)
 	}
-	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%d/config", agentID), map[string]string{"key": key, "value": value}, nil)
+	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%s/config", agentID), map[string]string{"key": key, "value": value}, nil)
 }
 
-func (c *Client) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error) {
+func (c *Client) ListAgentConfig(agentID string) ([]store.AgentConfigEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -383,11 +383,11 @@ func (c *Client) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error
 		return store.ListAgentConfig(db, agentID)
 	}
 	var entries []store.AgentConfigEntry
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/agents/%d/config", agentID), nil, &entries)
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/agents/%s/config", agentID), nil, &entries)
 	return entries, err
 }
 
-func (c *Client) DeleteAgentConfig(agentID int64, key string) error {
+func (c *Client) DeleteAgentConfig(agentID string, key string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -396,7 +396,7 @@ func (c *Client) DeleteAgentConfig(agentID int64, key string) error {
 		defer db.Close()
 		return store.DeleteAgentConfig(db, agentID, key)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%d/config/%s", agentID, key), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%s/config/%s", agentID, key), nil, nil)
 }
 
 func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
@@ -417,6 +417,24 @@ func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error
 	}
 	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/register", request.ID, request.Password, nil, &response)
 	return response.Agent, err
+}
+
+func (c *Client) HeartbeatAgent(agentID, password, status string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		agent, err := store.AuthenticateAgent(db, agentID, password)
+		if err != nil {
+			return err
+		}
+		_, err = store.TouchAgent(db, agent.ID, status)
+		return err
+	}
+	var response struct{}
+	return c.doJSONBasicAuth(http.MethodPost, "/api/agents/heartbeat", agentID, password, map[string]string{"status": status}, &response)
 }
 
 func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
@@ -454,7 +472,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 			ProjectID: projectID,
 			TicketID:  request.TicketID,
 			Username:  agent.Username,
-			UserID:    0,
+			UserID:    "",
 			DryRun:    request.DryRun,
 		})
 		if err != nil {
@@ -527,7 +545,7 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 			Order:              current.Order,
 			EstimateEffort:     current.EstimateEffort,
 			EstimateComplete:   current.EstimateComplete,
-			UpdatedBy:          0,
+			UpdatedBy:          "",
 			ActorUsername:      agent.Username,
 			ActorRole:          "admin",
 		})
@@ -662,7 +680,7 @@ func (c *Client) AddProjectMember(projectID int64, request ProjectMemberRequest)
 	return member, err
 }
 
-func (c *Client) RemoveProjectMember(projectID, userID int64) error {
+func (c *Client) RemoveProjectMember(projectID int64, userID string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -671,7 +689,7 @@ func (c *Client) RemoveProjectMember(projectID, userID int64) error {
 		defer db.Close()
 		return store.RemoveProjectMember(db, projectID, userID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/users/%d", projectID, userID), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/users/%s", projectID, userID), nil, nil)
 }
 
 func (c *Client) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
@@ -796,7 +814,7 @@ func (c *Client) AddTeamMember(teamID int64, request TeamMemberRequest) (store.T
 	return member, err
 }
 
-func (c *Client) RemoveTeamMember(teamID, userID int64) error {
+func (c *Client) RemoveTeamMember(teamID int64, userID string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -805,7 +823,7 @@ func (c *Client) RemoveTeamMember(teamID, userID int64) error {
 		defer db.Close()
 		return store.RemoveTeamMember(db, teamID, userID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/users/%d", teamID, userID), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/users/%s", teamID, userID), nil, nil)
 }
 
 func (c *Client) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
@@ -822,7 +840,7 @@ func (c *Client) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
 	return members, err
 }
 
-func (c *Client) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+func (c *Client) AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -832,11 +850,11 @@ func (c *Client) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
 		return store.AddTeamAgent(db, teamID, agentID)
 	}
 	var item store.TeamAgent
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/agents", teamID), map[string]int64{"agent_id": agentID}, &item)
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/agents", teamID), map[string]string{"agent_id": agentID}, &item)
 	return item, err
 }
 
-func (c *Client) RemoveTeamAgent(teamID, agentID int64) error {
+func (c *Client) RemoveTeamAgent(teamID int64, agentID string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -845,7 +863,7 @@ func (c *Client) RemoveTeamAgent(teamID, agentID int64) error {
 		defer db.Close()
 		return store.RemoveTeamAgent(db, teamID, agentID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/agents/%d", teamID, agentID), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/agents/%s", teamID, agentID), nil, nil)
 }
 
 func (c *Client) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {

@@ -4,7 +4,8 @@ import "testing"
 
 func TestHistoryAndComments(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", 1)
+	adminID := testAdminID(t, db)
+	project, err := CreateProject(db, "Customer Portal", "", "", adminID)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -12,7 +13,7 @@ func TestHistoryAndComments(t *testing.T) {
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Add login",
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
@@ -30,7 +31,7 @@ func TestHistoryAndComments(t *testing.T) {
 		Title:       ticket.Title,
 		Description: "Updated description",
 		ParentID:    ticket.ParentID,
-		UpdatedBy:   1,
+		UpdatedBy:   "",
 	})
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
@@ -44,7 +45,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("history length = %d, want at least 2", len(events))
 	}
 
-	comment, err := AddComment(db, ticket.ID, 1, "Waiting on API changes.")
+	comment, err := AddComment(db, ticket.ID, adminID, "Waiting on API changes.")
 	if err != nil {
 		t.Fatalf("AddComment() error = %v", err)
 	}

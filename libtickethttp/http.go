@@ -87,7 +87,7 @@ func (s *Service) CreateAgent(request libticket.AgentCreateRequest) (store.Agent
 	return s.client.CreateAgent(client.AgentCreateRequest(request))
 }
 
-func (s *Service) SetAgentEnabled(id int64, enabled bool) (store.Agent, error) {
+func (s *Service) SetAgentEnabled(id string, enabled bool) (store.Agent, error) {
 	return s.client.SetAgentEnabled(id, enabled)
 }
 
@@ -99,28 +99,32 @@ func (s *Service) ListAgentStatuses() ([]store.AgentStatus, error) {
 	return s.client.ListAgentStatuses()
 }
 
-func (s *Service) UpdateAgent(id int64, request libticket.AgentUpdateRequest) (store.Agent, error) {
+func (s *Service) UpdateAgent(id string, request libticket.AgentUpdateRequest) (store.Agent, error) {
 	return s.client.UpdateAgent(id, client.AgentUpdateRequest(request))
 }
 
-func (s *Service) DeleteAgent(id int64) error {
+func (s *Service) DeleteAgent(id string) error {
 	return s.client.DeleteAgent(id)
 }
 
-func (s *Service) SetAgentConfig(agentID int64, key, value string) error {
+func (s *Service) SetAgentConfig(agentID string, key, value string) error {
 	return s.client.SetAgentConfig(agentID, key, value)
 }
 
-func (s *Service) ListAgentConfig(agentID int64) ([]store.AgentConfigEntry, error) {
+func (s *Service) ListAgentConfig(agentID string) ([]store.AgentConfigEntry, error) {
 	return s.client.ListAgentConfig(agentID)
 }
 
-func (s *Service) DeleteAgentConfig(agentID int64, key string) error {
+func (s *Service) DeleteAgentConfig(agentID string, key string) error {
 	return s.client.DeleteAgentConfig(agentID, key)
 }
 
 func (s *Service) RegisterAgent(request libticket.AgentRegisterRequest) (store.Agent, error) {
 	return s.client.RegisterAgent(client.AgentRegisterRequest(request))
+}
+
+func (s *Service) HeartbeatAgent(agentID, password, status string) error {
+	return s.client.HeartbeatAgent(agentID, password, status)
 }
 
 func (s *Service) RequestAgentWork(request libticket.AgentRequest) (libticket.AgentWorkResponse, error) {
@@ -163,7 +167,7 @@ func (s *Service) AddProjectMember(projectID int64, request libticket.ProjectMem
 	return s.client.AddProjectMember(projectID, client.ProjectMemberRequest(request))
 }
 
-func (s *Service) RemoveProjectMember(projectID, userID int64) error {
+func (s *Service) RemoveProjectMember(projectID int64, userID string) error {
 	return s.client.RemoveProjectMember(projectID, userID)
 }
 
@@ -203,7 +207,7 @@ func (s *Service) AddTeamMember(teamID int64, request libticket.TeamMemberReques
 	return s.client.AddTeamMember(teamID, client.TeamMemberRequest(request))
 }
 
-func (s *Service) RemoveTeamMember(teamID, userID int64) error {
+func (s *Service) RemoveTeamMember(teamID int64, userID string) error {
 	return s.client.RemoveTeamMember(teamID, userID)
 }
 
@@ -211,11 +215,11 @@ func (s *Service) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
 	return s.client.ListTeamMembers(teamID)
 }
 
-func (s *Service) AddTeamAgent(teamID, agentID int64) (store.TeamAgent, error) {
+func (s *Service) AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error) {
 	return s.client.AddTeamAgent(teamID, agentID)
 }
 
-func (s *Service) RemoveTeamAgent(teamID, agentID int64) error {
+func (s *Service) RemoveTeamAgent(teamID int64, agentID string) error {
 	return s.client.RemoveTeamAgent(teamID, agentID)
 }
 

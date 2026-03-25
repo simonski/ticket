@@ -5,7 +5,7 @@ import "testing"
 func TestCreateListAndGetProject(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Customer Portal", "Portal work", "Ship the portal safely.", 1)
+	project, err := CreateProject(db, "Customer Portal", "Portal work", "Ship the portal safely.", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -37,7 +37,7 @@ func TestCreateListAndGetProject(t *testing.T) {
 func TestUpdateAndEnableDisableProject(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Customer Portal", "Portal work", "", 1)
+	project, err := CreateProject(db, "Customer Portal", "Portal work", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}

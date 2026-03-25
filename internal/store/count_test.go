@@ -5,11 +5,11 @@ import "testing"
 func TestCountEverything(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Customer Portal", "", "", 1)
+	project, err := CreateProject(db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	otherProject, err := CreateProject(db, "Internal Tools", "", "", 1)
+	otherProject, err := CreateProject(db, "Internal Tools", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() other error = %v", err)
 	}
@@ -19,7 +19,7 @@ func TestCountEverything(t *testing.T) {
 		Type:      "task",
 		Title:     "Task A",
 		State:     StateIdle,
-		CreatedBy: 1,
+		CreatedBy: "",
 	}); err != nil {
 		t.Fatalf("CreateTicket(task design/idle) error = %v", err)
 	}
@@ -28,7 +28,7 @@ func TestCountEverything(t *testing.T) {
 		Type:      "task",
 		Title:     "Task B",
 		State:     StateSuccess,
-		CreatedBy: 1,
+		CreatedBy: "",
 	}); err != nil {
 		t.Fatalf("CreateTicket(task done/success) error = %v", err)
 	}
@@ -37,7 +37,7 @@ func TestCountEverything(t *testing.T) {
 		Type:      "epic",
 		Title:     "Epic A",
 		State:     StateSuccess,
-		CreatedBy: 1,
+		CreatedBy: "",
 	}); err != nil {
 		t.Fatalf("CreateTicket(epic done/success) error = %v", err)
 	}
@@ -47,7 +47,7 @@ func TestCountEverything(t *testing.T) {
 		Title:     "Bug A",
 		State:     StateActive,
 		Assignee:  "alice",
-		CreatedBy: 1,
+		CreatedBy: "",
 	}); err != nil {
 		t.Fatalf("CreateTicket(bug develop/active) error = %v", err)
 	}

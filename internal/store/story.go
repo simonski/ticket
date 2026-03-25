@@ -12,7 +12,7 @@ type Story struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
-	CreatedBy   int64  `json:"created_by"`
+	CreatedBy   string `json:"created_by"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -28,7 +28,7 @@ func normalizeStoryStatus(status string) string {
 	}
 }
 
-func CreateStory(db *sql.DB, projectID int64, title, description string, createdBy int64) (Story, error) {
+func CreateStory(db *sql.DB, projectID int64, title, description string, createdBy string) (Story, error) {
 	title = strings.TrimSpace(title)
 	if projectID == 0 {
 		return Story{}, errors.New("project is required")
@@ -39,7 +39,7 @@ func CreateStory(db *sql.DB, projectID int64, title, description string, created
 	result, err := db.Exec(`
 		INSERT INTO stories (project_id, title, description, status, created_by, updated_at)
 		VALUES (?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP)
-	`, projectID, title, strings.TrimSpace(description), createdBy)
+	`, projectID, title, strings.TrimSpace(description), nullableUserID(createdBy))
 	if err != nil {
 		return Story{}, err
 	}
@@ -52,7 +52,7 @@ func CreateStory(db *sql.DB, projectID int64, title, description string, created
 
 func ListStoriesByProject(db *sql.DB, projectID int64) ([]Story, error) {
 	rows, err := db.Query(`
-		SELECT story_id, project_id, title, description, status, COALESCE(created_by, 0), created_at, updated_at
+		SELECT story_id, project_id, title, description, status, COALESCE(created_by, ''), created_at, updated_at
 		FROM stories
 		WHERE project_id = ?
 		ORDER BY created_at DESC, story_id DESC
@@ -74,7 +74,7 @@ func ListStoriesByProject(db *sql.DB, projectID int64) ([]Story, error) {
 
 func GetStory(db *sql.DB, storyID int64) (Story, error) {
 	row := db.QueryRow(`
-		SELECT story_id, project_id, title, description, status, COALESCE(created_by, 0), created_at, updated_at
+		SELECT story_id, project_id, title, description, status, COALESCE(created_by, ''), created_at, updated_at
 		FROM stories
 		WHERE story_id = ?
 	`, storyID)

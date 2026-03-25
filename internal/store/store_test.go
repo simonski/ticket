@@ -141,7 +141,7 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "New ticket after migration",
-		CreatedBy: 1,
+		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket after FK migration: %v", err)
