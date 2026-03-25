@@ -523,7 +523,7 @@ Run flags:
   -llm <command>           LLM to use (default: claude)
                            Values: claude (Sonnet 4.5), codex, or path to binary
   -project-id <id>         Project ID override (default: first open project)
-  -poll-seconds <n>        Idle poll interval in seconds (default: 2)
+  -poll-seconds <n>        Idle poll interval in seconds (default: 5)
   -v                       Verbose: stream LLM I/O to terminal
 
 Password: AGENT_PASSWORD env var, or interactive prompt (input masked with *)`

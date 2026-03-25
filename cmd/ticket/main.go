@@ -1691,7 +1691,7 @@ func runAgent(args []string) error {
 		agentID := fs.String("id", "", "agent UUID")
 		url := fs.String("url", "", "ticket server url")
 		projectID := fs.Int64("project-id", 0, "project id override")
-		pollSeconds := fs.Int("poll-seconds", 2, "idle poll interval seconds")
+		pollSeconds := fs.Int("poll-seconds", 5, "idle poll interval seconds")
 		llmCommand := fs.String("llm", envValue("TICKET_AGENT_LLM"), "llm command (claude, codex, or path to binary)")
 		verbose := fs.Bool("v", false, "verbose logging")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -1745,12 +1745,16 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
+		registerRequest := libticket.AgentRegisterRequest{
 			ID:       agentIDVal,
 			Password: agentPassword,
-		}); err != nil {
+		}
+		fmt.Printf("[agent] REGISTER request: ID=%s Password=%s\n", registerRequest.ID, strings.Repeat("*", len(registerRequest.Password)))
+		agent, err := svc.RegisterAgent(registerRequest)
+		if err != nil {
 			return err
 		}
+		fmt.Printf("[agent] REGISTER response: agent_id=%d username=%s status=%s enabled=%v\n", agent.ID, agent.Username, agent.Status, agent.Enabled)
 		if !outputJSON {
 			fmt.Printf("agent %s registered\n", agentIDVal)
 		}
@@ -1799,7 +1803,7 @@ func runAgent(args []string) error {
 						}
 					}
 				}
-				if *pollSeconds == 2 {
+				if *pollSeconds == 5 {
 					if pollVal, ok := response.Config["poll_seconds"]; ok && pollVal != "" {
 						if parsed, err := strconv.Atoi(pollVal); err == nil && parsed >= 1 {
 							*pollSeconds = parsed
