@@ -4399,7 +4399,14 @@ func runList(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	printTicketTable(tickets, parentKeys, statusUnicode, *includeAll)
+	// Build agent username set so we can prefix agent assignees.
+	agentUsernames := make(map[string]bool)
+	if agents, err := api.ListAgents(); err == nil {
+		for _, a := range agents {
+			agentUsernames[a.Username] = true
+		}
+	}
+	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll)
 	return nil
 }
 

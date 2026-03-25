@@ -307,7 +307,7 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	printStatusBox(lines)
 }
 
-func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, statusUnicode bool, includeArchived bool) {
+func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, agentUsernames map[string]bool, statusUnicode bool, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
@@ -323,15 +323,22 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, statu
 		}
 	}
 
+	showOpen := includeArchived // only show OPEN column when mixed open/closed
+
 	makeHeader := func() string {
-		return "MOON\tKEY\tTYPE\tTITLE\tSTATUS\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+		if showOpen {
+			return "MOON\tKEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+		}
+		return "MOON\tKEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
 	}
 
 	makeDataRow := func(t store.Ticket, title string) string {
 		symbol := formatTicketStatusSymbol(t.Status, statusUnicode)
-		assignee := t.Assignee
-		if strings.TrimSpace(assignee) == "" {
+		assignee := strings.TrimSpace(t.Assignee)
+		if assignee == "" {
 			assignee = "-"
+		} else if agentUsernames[assignee] {
+			assignee = "agent-" + assignee
 		}
 		parent := parentKeys[t.ID]
 		key := t.Key
@@ -342,8 +349,12 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, statu
 		if t.Ready {
 			ready = "yes"
 		}
+		if showOpen {
+			return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+				symbol, key, t.Type, title, t.Stage, t.State, ready, ticketOpenLabel(t), parent, assignee, t.Priority)
+		}
 		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-			symbol, key, t.Type, title, t.Status, ready, ticketOpenLabel(t), parent, assignee, t.Priority)
+			symbol, key, t.Type, title, t.Stage, t.State, ready, parent, assignee, t.Priority)
 	}
 
 	// Pass 1: render with a sentinel title to locate where the title column

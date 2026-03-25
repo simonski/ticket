@@ -1,8 +1,8 @@
 {
-  "server_url": "http://localhost:8080",
+  "server_url": "",
   "token": "",
   "username": "admin",
-  "current_project": "TK",
+  "current_project": "1",
   "current_epic_id": 0,
   "tui_theme": "the-grey",
   "tui_mode": "projects"
