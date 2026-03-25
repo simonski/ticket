@@ -107,7 +107,7 @@ func saveTUIState(cfg config.Config, m Model) {
 	cfg.TUICursor = m.cursor
 
 	// Persist expanded epic IDs
-	var expanded []int64
+	var expanded []string
 	for id, isOpen := range m.expanded {
 		if isOpen {
 			expanded = append(expanded, id)

@@ -91,19 +91,19 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 	}
 	_, err = rawDB.Exec(`
 		PRAGMA foreign_keys = ON;
-		CREATE TABLE users (user_id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-		INSERT INTO users (username, password_hash, role, display_name) VALUES ('admin', 'hash', 'admin', 'admin');
-		CREATE TABLE projects (project_id INTEGER PRIMARY KEY AUTOINCREMENT, prefix TEXT NOT NULL DEFAULT 'TK', title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', visibility TEXT NOT NULL DEFAULT 'public', created_by INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, ticket_sequence INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(created_by) REFERENCES users(user_id));
-		INSERT INTO projects (title, created_by) VALUES ('Test', 1);
-		CREATE TABLE tasks (task_id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL DEFAULT '', project_id INTEGER NOT NULL, parent_id INTEGER, clone_of INTEGER, type TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL DEFAULT 'design', state TEXT NOT NULL DEFAULT 'idle', status TEXT NOT NULL DEFAULT 'open', priority INTEGER NOT NULL DEFAULT 3, sort_order INTEGER NOT NULL DEFAULT 0, estimate_effort INTEGER NOT NULL DEFAULT 0, estimate_complete TEXT NOT NULL DEFAULT '', health_score INTEGER NOT NULL DEFAULT 0, assignee TEXT NOT NULL DEFAULT '', open INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(parent_id) REFERENCES tasks(task_id), FOREIGN KEY(clone_of) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
-		INSERT INTO tasks (key, project_id, type, title, created_by) VALUES ('TK-T-1', 1, 'task', 'Old task', 1);
+		CREATE TABLE users (user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, user_type TEXT NOT NULL DEFAULT 'user', description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
+		INSERT INTO users (user_id, username, password_hash, role, display_name) VALUES ('u1', 'admin', 'hash', 'admin', 'admin');
+		CREATE TABLE projects (project_id INTEGER PRIMARY KEY AUTOINCREMENT, prefix TEXT NOT NULL DEFAULT 'TK', title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', visibility TEXT NOT NULL DEFAULT 'public', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, ticket_sequence INTEGER NOT NULL DEFAULT 0, workflow_id INTEGER, FOREIGN KEY(created_by) REFERENCES users(user_id));
+		INSERT INTO projects (title, created_by, ticket_sequence) VALUES ('Test', 'u1', 1);
+		CREATE TABLE tasks (task_id TEXT PRIMARY KEY, project_id INTEGER NOT NULL, parent_id TEXT, clone_of TEXT, type TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', workflow_id INTEGER, workflow_stage_id INTEGER, stage TEXT NOT NULL DEFAULT 'design', state TEXT NOT NULL DEFAULT 'idle', status TEXT NOT NULL DEFAULT 'open', priority INTEGER NOT NULL DEFAULT 3, sort_order INTEGER NOT NULL DEFAULT 0, estimate_effort INTEGER NOT NULL DEFAULT 0, estimate_complete TEXT NOT NULL DEFAULT '', health_score INTEGER NOT NULL DEFAULT 0, assignee TEXT NOT NULL DEFAULT '', ready INTEGER NOT NULL DEFAULT 0, open INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(parent_id) REFERENCES tasks(task_id), FOREIGN KEY(clone_of) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
+		INSERT INTO tasks (task_id, project_id, type, title, created_by) VALUES ('TK-1', 1, 'task', 'Old task', 'u1');
 
 		-- These tables have stale FKs referencing tasks instead of tickets
-		CREATE TABLE history_events (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id INTEGER NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
-		INSERT INTO history_events (project_id, ticket_id, event_type, created_by) VALUES (1, 1, 'created', 1);
-		CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id INTEGER NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
-		CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, user_id INTEGER NOT NULL, comment TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(item_id) REFERENCES tasks(task_id), FOREIGN KEY(user_id) REFERENCES users(user_id));
-		CREATE TABLE dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id INTEGER NOT NULL, depends_on INTEGER NOT NULL, created_by INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tasks(task_id), FOREIGN KEY(depends_on) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
+		CREATE TABLE history_events (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
+		INSERT INTO history_events (project_id, ticket_id, event_type, created_by) VALUES (1, 'TK-1', 'created', 'u1');
+		CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
+		CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, user_id TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(item_id) REFERENCES tasks(task_id), FOREIGN KEY(user_id) REFERENCES users(user_id));
+		CREATE TABLE dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, depends_on TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tasks(task_id), FOREIGN KEY(depends_on) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
 	`)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 
 	// Verify the tickets table exists (renamed from tasks) and has the old data.
 	var title string
-	if err := db.QueryRow(`SELECT title FROM tickets WHERE ticket_id = 1`).Scan(&title); err != nil {
+	if err := db.QueryRow(`SELECT title FROM tickets WHERE ticket_id = 'TK-1'`).Scan(&title); err != nil {
 		t.Fatalf("ticket not found after migration: %v", err)
 	}
 	if title != "Old task" {
@@ -146,7 +146,7 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket after FK migration: %v", err)
 	}
-	if ticket.ID == 0 {
+	if ticket.ID == "" {
 		t.Fatal("created ticket has ID 0")
 	}
 

@@ -8,13 +8,13 @@ import (
 type Dependency struct {
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`
-	TicketID  int64  `json:"ticket_id"`
-	DependsOn int64  `json:"depends_on"`
+	TicketID  string `json:"ticket_id"`
+	DependsOn string `json:"depends_on"`
 	CreatedBy string `json:"created_by"`
 	CreatedAt string `json:"created_at"`
 }
 
-func AddDependency(db *sql.DB, projectID, ticketID, dependsOn int64, createdBy string) (Dependency, error) {
+func AddDependency(db *sql.DB, projectID int64, ticketID, dependsOn string, createdBy string) (Dependency, error) {
 	ticket, err := GetTicket(db, ticketID)
 	if err != nil {
 		return Dependency{}, err
@@ -48,7 +48,7 @@ func AddDependency(db *sql.DB, projectID, ticketID, dependsOn int64, createdBy s
 	return dependency, nil
 }
 
-func ListDependencies(db *sql.DB, ticketID int64) ([]Dependency, error) {
+func ListDependencies(db *sql.DB, ticketID string) ([]Dependency, error) {
 	rows, err := db.Query(`
 		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, ''), created_at
 		FROM dependencies
@@ -71,7 +71,7 @@ func ListDependencies(db *sql.DB, ticketID int64) ([]Dependency, error) {
 	return dependencies, rows.Err()
 }
 
-func DeleteDependency(db *sql.DB, projectID, ticketID, dependsOn int64) error {
+func DeleteDependency(db *sql.DB, projectID int64, ticketID, dependsOn string) error {
 	ticket, err := GetTicket(db, ticketID)
 	if err != nil {
 		return err

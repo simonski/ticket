@@ -27,7 +27,7 @@ type Config struct {
 	Token          string `json:"token"`
 	Username       string `json:"username"`
 	CurrentProject string `json:"current_project"`
-	CurrentEpicID  int64  `json:"current_epic_id"`
+	CurrentEpicID  string `json:"current_epic_id"`
 
 	// TUI state — persisted between sessions by default.
 	// Set TUIDisablePersist=true to skip save/restore.
@@ -35,7 +35,7 @@ type Config struct {
 	TUITheme          string  `json:"tui_theme,omitempty"`
 	TUIMode           string  `json:"tui_mode,omitempty"`   // "summary" | "projects" | "ideas" | "list" | "settings"
 	TUICursor         int     `json:"tui_cursor,omitempty"`
-	TUIExpandedEpics  []int64 `json:"tui_expanded_epics,omitempty"`
+	TUIExpandedEpics  []string `json:"tui_expanded_epics,omitempty"`
 
 	// Temporary delete confirmation state
 	DeleteConfirmToken   string `json:"delete_confirm_token,omitempty"`
@@ -89,8 +89,52 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	// Use a raw map to handle type migrations (e.g. current_epic_id changed from int to string).
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return Config{}, err
+	}
+	// Fix current_epic_id: if stored as a number (legacy), convert to string.
+	if v, ok := raw["current_epic_id"]; ok {
+		s := strings.TrimSpace(string(v))
+		if s != "" && s[0] != '"' {
+			// It's a number literal (e.g. 0 or 42); wrap as string. Treat 0 as empty.
+			if s == "0" {
+				raw["current_epic_id"] = json.RawMessage(`""`)
+			} else {
+				raw["current_epic_id"] = json.RawMessage(`"` + s + `"`)
+			}
+		}
+	}
+	// Fix tui_expanded_epics: if stored as int array (legacy), convert to string array.
+	if v, ok := raw["tui_expanded_epics"]; ok {
+		s := strings.TrimSpace(string(v))
+		if len(s) > 0 && s[0] == '[' {
+			var items []json.RawMessage
+			if json.Unmarshal(v, &items) == nil {
+				converted := make([]string, 0, len(items))
+				for _, item := range items {
+					is := strings.TrimSpace(string(item))
+					if len(is) > 0 && is[0] == '"' {
+						var sv string
+						json.Unmarshal(item, &sv)
+						converted = append(converted, sv)
+					} else {
+						converted = append(converted, strings.Trim(is, " "))
+					}
+				}
+				if b, err := json.Marshal(converted); err == nil {
+					raw["tui_expanded_epics"] = json.RawMessage(b)
+				}
+			}
+		}
+	}
+	fixedData, err := json.Marshal(raw)
+	if err != nil {
+		return Config{}, err
+	}
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := json.Unmarshal(fixedData, &cfg); err != nil {
 		return Config{}, err
 	}
 	creds, err := LoadCredentials()

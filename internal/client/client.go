@@ -517,7 +517,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 	return response, err
 }
 
-func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error) {
+func (c *Client) AgentUpdateTicket(id string, request AgentTicketUpdateRequest) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -552,7 +552,7 @@ func (c *Client) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (
 	}
 	var ticket store.Ticket
 	body := map[string]string{"result": request.Result}
-	err := c.doJSONBasicAuth(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%d/update", id), request.ID, request.Password, body, &ticket)
+	err := c.doJSONBasicAuth(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%s/update", id), request.ID, request.Password, body, &ticket)
 	return ticket, err
 }
 
@@ -972,7 +972,7 @@ func (c *Client) ListTicketsFiltered(projectID int64, ticketType, stage, state, 
 	return tickets, err
 }
 
-func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Ticket, error) {
+func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1004,11 +1004,11 @@ func (c *Client) UpdateTicket(id int64, request TicketUpdateRequest) (store.Tick
 		})
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/tickets/%d", id), request, &ticket)
+	err := c.doJSON(http.MethodPut, "/api/tickets/"+url.PathEscape(id), request, &ticket)
 	return ticket, err
 }
 
-func (c *Client) CloseTicket(id int64) (store.Ticket, error) {
+func (c *Client) CloseTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1022,11 +1022,11 @@ func (c *Client) CloseTicket(id int64) (store.Ticket, error) {
 		return store.SetTicketOpen(db, id, false, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/close", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/close", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) OpenTicket(id int64) (store.Ticket, error) {
+func (c *Client) OpenTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1040,11 +1040,11 @@ func (c *Client) OpenTicket(id int64) (store.Ticket, error) {
 		return store.SetTicketOpen(db, id, true, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/open", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/open", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ArchiveTicket(id int64) (store.Ticket, error) {
+func (c *Client) ArchiveTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1058,11 +1058,11 @@ func (c *Client) ArchiveTicket(id int64) (store.Ticket, error) {
 		return store.SetTicketArchived(db, id, true, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/archive", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/archive", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) UnarchiveTicket(id int64) (store.Ticket, error) {
+func (c *Client) UnarchiveTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1076,11 +1076,11 @@ func (c *Client) UnarchiveTicket(id int64) (store.Ticket, error) {
 		return store.SetTicketArchived(db, id, false, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/unarchive", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/unarchive", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ReadyTicket(id int64) (store.Ticket, error) {
+func (c *Client) ReadyTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1094,11 +1094,11 @@ func (c *Client) ReadyTicket(id int64) (store.Ticket, error) {
 		return store.SetTicketReady(db, id, true, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/ready", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/ready", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) NotReadyTicket(id int64) (store.Ticket, error) {
+func (c *Client) NotReadyTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1112,11 +1112,11 @@ func (c *Client) NotReadyTicket(id int64) (store.Ticket, error) {
 		return store.SetTicketReady(db, id, false, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/notready", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/notready", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error) {
+func (c *Client) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1126,11 +1126,11 @@ func (c *Client) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, er
 		return store.SetTicketWorkflow(db, id, workflowID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/workflow", id), map[string]int64{"workflow_id": workflowID}, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/workflow", map[string]int64{"workflow_id": workflowID}, &ticket)
 	return ticket, err
 }
 
-func (c *Client) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
+func (c *Client) UnsetTicketWorkflow(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1140,11 +1140,11 @@ func (c *Client) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
 		return store.UnsetTicketWorkflow(db, id)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodDelete, fmt.Sprintf("/api/tickets/%d/workflow", id), nil, &ticket)
+	err := c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id)+"/workflow", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) DeleteTicket(id int64) error {
+func (c *Client) DeleteTicket(id string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1153,10 +1153,10 @@ func (c *Client) DeleteTicket(id int64) error {
 		defer db.Close()
 		return store.DeleteTicket(db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/tickets/%d", id), nil, nil)
+	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id), nil, nil)
 }
 
-func (c *Client) SetTicketParent(id, parentID int64) (store.Ticket, error) {
+func (c *Client) SetTicketParent(id, parentID string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1176,7 +1176,7 @@ func (c *Client) SetTicketParent(id, parentID int64) (store.Ticket, error) {
 	})
 }
 
-func (c *Client) UnsetTicketParent(id int64) (store.Ticket, error) {
+func (c *Client) UnsetTicketParent(id string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1196,7 +1196,7 @@ func (c *Client) UnsetTicketParent(id int64) (store.Ticket, error) {
 	})
 }
 
-func (c *Client) GetTicketByID(id int64) (store.Ticket, error) {
+func (c *Client) GetTicketByID(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1206,7 +1206,7 @@ func (c *Client) GetTicketByID(id int64) (store.Ticket, error) {
 		return store.GetTicket(db, id)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d", id), nil, &ticket)
+	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id), nil, &ticket)
 	return ticket, err
 }
 
@@ -1224,7 +1224,7 @@ func (c *Client) GetTicket(ref string) (store.Ticket, error) {
 	return ticket, err
 }
 
-func (c *Client) CloneTicket(id int64) (store.Ticket, error) {
+func (c *Client) CloneTicket(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1238,11 +1238,11 @@ func (c *Client) CloneTicket(id int64) (store.Ticket, error) {
 		return store.CloneTicket(db, id, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/clone", id), nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/clone", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ListHistory(id int64) ([]store.HistoryEvent, error) {
+func (c *Client) ListHistory(id string) ([]store.HistoryEvent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1252,7 +1252,7 @@ func (c *Client) ListHistory(id int64) ([]store.HistoryEvent, error) {
 		return store.ListHistoryEvents(db, id)
 	}
 	var events []store.HistoryEvent
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/history", id), nil, &events)
+	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id)+"/history", nil, &events)
 	return events, err
 }
 
@@ -1273,7 +1273,7 @@ func (c *Client) ListProjectHistory(projectID int64, limit int) ([]store.History
 	return events, err
 }
 
-func (c *Client) AddComment(id int64, comment string) (store.Comment, error) {
+func (c *Client) AddComment(id string, comment string) (store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1287,11 +1287,11 @@ func (c *Client) AddComment(id int64, comment string) (store.Comment, error) {
 		return store.AddComment(db, id, user.ID, comment)
 	}
 	var created store.Comment
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/comments", id), CommentCreateRequest{Comment: comment}, &created)
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/comments", id), CommentCreateRequest{Comment: comment}, &created)
 	return created, err
 }
 
-func (c *Client) ListComments(id int64) ([]store.Comment, error) {
+func (c *Client) ListComments(id string) ([]store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1301,11 +1301,11 @@ func (c *Client) ListComments(id int64) ([]store.Comment, error) {
 		return store.ListComments(db, id)
 	}
 	var comments []store.Comment
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/comments", id), nil, &comments)
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%s/comments", id), nil, &comments)
 	return comments, err
 }
 
-func (c *Client) SetTicketHealth(id int64, score int) (store.Ticket, error) {
+func (c *Client) SetTicketHealth(id string, score int) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1315,7 +1315,7 @@ func (c *Client) SetTicketHealth(id int64, score int) (store.Ticket, error) {
 		return store.SetTicketHealth(db, id, score)
 	}
 	var updated store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/health", id), TicketHealthRequest{Score: score}, &updated)
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/health", id), TicketHealthRequest{Score: score}, &updated)
 	return updated, err
 }
 
@@ -1346,10 +1346,10 @@ func (c *Client) RemoveDependency(request DependencyRequest) error {
 		defer db.Close()
 		return store.DeleteDependency(db, request.ProjectID, request.TicketID, request.DependsOn)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/dependencies?project_id=%d&ticket_id=%d&depends_on=%d", request.ProjectID, request.TicketID, request.DependsOn), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/dependencies?project_id=%d&ticket_id=%s&depends_on=%s", request.ProjectID, request.TicketID, request.DependsOn), nil, nil)
 }
 
-func (c *Client) ListDependencies(id int64) ([]store.Dependency, error) {
+func (c *Client) ListDependencies(id string) ([]store.Dependency, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1359,7 +1359,7 @@ func (c *Client) ListDependencies(id int64) ([]store.Dependency, error) {
 		return store.ListDependencies(db, id)
 	}
 	var dependencies []store.Dependency
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/dependencies", id), nil, &dependencies)
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%s/dependencies", id), nil, &dependencies)
 	return dependencies, err
 }
 
@@ -1560,7 +1560,7 @@ func (c *Client) ImportWorkflow(export store.WorkflowExport) (store.Workflow, er
 	return wf, err
 }
 
-func (c *Client) LogTime(ticketID int64, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
+func (c *Client) LogTime(ticketID string, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1574,11 +1574,11 @@ func (c *Client) LogTime(ticketID int64, request libticket.TimeEntryRequest) (st
 		return store.LogTime(db, ticketID, user.ID, request.Minutes, request.Note)
 	}
 	var entry store.TimeEntry
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/time", ticketID), request, &entry)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/time", request, &entry)
 	return entry, err
 }
 
-func (c *Client) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
+func (c *Client) ListTimeEntries(ticketID string) ([]store.TimeEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1588,7 +1588,7 @@ func (c *Client) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
 		return store.ListTimeEntries(db, ticketID)
 	}
 	var entries []store.TimeEntry
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/time", ticketID), nil, &entries)
+	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time", nil, &entries)
 	return entries, err
 }
 
@@ -1604,7 +1604,7 @@ func (c *Client) DeleteTimeEntry(id int64) error {
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/time/%d", id), nil, nil)
 }
 
-func (c *Client) TotalTimeForTicket(ticketID int64) (int, error) {
+func (c *Client) TotalTimeForTicket(ticketID string) (int, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1616,7 +1616,7 @@ func (c *Client) TotalTimeForTicket(ticketID int64) (int, error) {
 	var result struct {
 		Total int `json:"total"`
 	}
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/time/total", ticketID), nil, &result)
+	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time/total", nil, &result)
 	return result.Total, err
 }
 
@@ -1660,7 +1660,7 @@ func (c *Client) DeleteLabel(id int64) error {
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/labels/%d", id), nil, nil)
 }
 
-func (c *Client) AddTicketLabel(ticketID, labelID int64) error {
+func (c *Client) AddTicketLabel(ticketID string, labelID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1669,10 +1669,10 @@ func (c *Client) AddTicketLabel(ticketID, labelID int64) error {
 		defer db.Close()
 		return store.AddTicketLabel(db, ticketID, labelID)
 	}
-	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%d/labels", ticketID), map[string]int64{"label_id": labelID}, nil)
+	return c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", map[string]int64{"label_id": labelID}, nil)
 }
 
-func (c *Client) RemoveTicketLabel(ticketID, labelID int64) error {
+func (c *Client) RemoveTicketLabel(ticketID string, labelID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1681,10 +1681,10 @@ func (c *Client) RemoveTicketLabel(ticketID, labelID int64) error {
 		defer db.Close()
 		return store.RemoveTicketLabel(db, ticketID, labelID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/tickets/%d/labels/%d", ticketID, labelID), nil, nil)
+	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(ticketID)+"/labels/"+fmt.Sprintf("%d", labelID), nil, nil)
 }
 
-func (c *Client) ListTicketLabels(ticketID int64) ([]store.Label, error) {
+func (c *Client) ListTicketLabels(ticketID string) ([]store.Label, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1694,7 +1694,7 @@ func (c *Client) ListTicketLabels(ticketID int64) ([]store.Label, error) {
 		return store.ListTicketLabels(db, ticketID)
 	}
 	var labels []store.Label
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%d/labels", ticketID), nil, &labels)
+	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", nil, &labels)
 	return labels, err
 }
 

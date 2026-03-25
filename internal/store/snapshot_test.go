@@ -111,7 +111,7 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		t.Fatalf("GetTicket(imported task) error = %v", err)
 	}
 	if importedTask.ParentID == nil || *importedTask.ParentID != epic.ID {
-		t.Fatalf("imported task parent = %#v, want %d", importedTask.ParentID, epic.ID)
+		t.Fatalf("imported task parent = %#v, want %s", importedTask.ParentID, epic.ID)
 	}
 	importedStory, err := GetStory(targetDB, story.ID)
 	if err != nil {

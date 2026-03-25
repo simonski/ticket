@@ -105,7 +105,7 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("Decode() error = %v", err)
 		}
-		if payload.ProjectID != 3 || payload.TicketID == nil || *payload.TicketID != 9 {
+		if payload.ProjectID != 3 || payload.TicketID == nil || *payload.TicketID != "9" {
 			t.Fatalf("payload = %#v", payload)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -114,7 +114,7 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 	defer server.Close()
 	t.Setenv("TICKET_URL", server.URL)
 
-	taskID := int64(9)
+	taskID := "9"
 	api := New(config.Config{ServerURL: server.URL, Token: "token-123"})
 	resp, err := api.RequestTicket(TicketRequest{ProjectID: 3, TicketID: &taskID})
 	if err != nil {
@@ -199,8 +199,8 @@ func TestLocalModeClientRejectsRemoteOnlyAuthCalls(t *testing.T) {
 
 func TestRemoteClientCRUDRoutes(t *testing.T) {
 	projectID := int64(7)
-	taskID := int64(11)
-	dependsOn := int64(12)
+	taskID := "11"
+	dependsOn := "12"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -224,9 +224,9 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/projects/7/disable":
 			_, _ = w.Write([]byte(`{"project_id":7,"title":"P2","status":"disabled"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets":
-			_, _ = w.Write([]byte(`{"ticket_id":11,"project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle"}`))
+			_, _ = w.Write([]byte(`{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11":
-			_, _ = w.Write([]byte(`{"ticket_id":11,"project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle"}`))
+			_, _ = w.Write([]byte(`{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle"}`))
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11":
 			_, _ = w.Write([]byte(`{"status":"deleted"}`))
 		case r.Method == http.MethodPut && r.URL.Path == "/api/tickets/11":
@@ -236,26 +236,26 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 			}
 			parentJSON := ""
 			if payload.ParentID != nil {
-				parentJSON = `,"parent_id":` + strconv.FormatInt(*payload.ParentID, 10)
+				parentJSON = `,"parent_id":"` + *payload.ParentID + `"`
 			}
-			_, _ = w.Write([]byte(`{"ticket_id":11,"project_id":7,"title":"T","type":"task","stage":"develop","state":"active","status":"develop/active"` + parentJSON + `}`))
+			_, _ = w.Write([]byte(`{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"develop","state":"active","status":"develop/active"` + parentJSON + `}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/clone":
-			_, _ = w.Write([]byte(`{"ticket_id":21,"project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle","clone_of":11}`))
+			_, _ = w.Write([]byte(`{"ticket_id":"21","project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle","clone_of":"11"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11/history":
-			_, _ = w.Write([]byte(`[{"id":1,"ticket_id":11,"event_type":"ticket_updated"}]`))
+			_, _ = w.Write([]byte(`[{"id":1,"ticket_id":"11","event_type":"ticket_updated"}]`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/comments":
 			_, _ = w.Write([]byte(`{"id":1,"item_id":11,"comment":"hello"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11/comments":
 			_, _ = w.Write([]byte(`[{"id":1,"item_id":11,"comment":"hello"}]`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/dependencies":
-			_, _ = w.Write([]byte(`{"id":1,"project_id":7,"ticket_id":11,"depends_on":12}`))
+			_, _ = w.Write([]byte(`{"id":1,"project_id":7,"ticket_id":"11","depends_on":"12"}`))
 		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/dependencies"):
 			if r.URL.Query().Get("project_id") != "7" || r.URL.Query().Get("ticket_id") != "11" || r.URL.Query().Get("depends_on") != "12" {
 				t.Fatalf("dependency delete query = %q", r.URL.RawQuery)
 			}
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11/dependencies":
-			_, _ = w.Write([]byte(`[{"id":1,"project_id":7,"ticket_id":11,"depends_on":12}]`))
+			_, _ = w.Write([]byte(`[{"id":1,"project_id":7,"ticket_id":"11","depends_on":"12"}]`))
 		default:
 			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
 		}

@@ -127,8 +127,8 @@ func UpdateStory(db *sql.DB, storyID int64, title, description string) (Story, e
 	return GetStory(db, storyID)
 }
 
-func LinkStoryToTicket(db *sql.DB, storyID, ticketID int64) error {
-	if storyID == 0 || ticketID == 0 {
+func LinkStoryToTicket(db *sql.DB, storyID int64, ticketID string) error {
+	if storyID == 0 || ticketID == "" {
 		return errors.New("story and ticket are required")
 	}
 	_, err := db.Exec(`
@@ -153,7 +153,7 @@ func DeleteStory(db *sql.DB, storyID int64) error {
 	return nil
 }
 
-func StoryIDForTicket(db *sql.DB, ticketID int64) (int64, bool, error) {
+func StoryIDForTicket(db *sql.DB, ticketID string) (int64, bool, error) {
 	var storyID int64
 	err := db.QueryRow(`SELECT story_id FROM story_ticket_links WHERE ticket_id = ? ORDER BY story_id LIMIT 1`, ticketID).Scan(&storyID)
 	if err != nil {

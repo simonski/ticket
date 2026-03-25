@@ -85,9 +85,9 @@ type LabelRequest struct {
 }
 
 type TicketCreateRequest struct {
-	ProjectID          int64  `json:"project_id"`
-	ParentID           *int64 `json:"parent_id,omitempty"`
-	CloneOf            *int64 `json:"clone_of,omitempty"`
+	ProjectID          int64   `json:"project_id"`
+	ParentID           *string `json:"parent_id,omitempty"`
+	CloneOf            *string `json:"clone_of,omitempty"`
 	Type               string `json:"type"`
 	Title              string `json:"title"`
 	Description        string `json:"description"`
@@ -104,12 +104,12 @@ type TicketCreateRequest struct {
 }
 
 type TicketUpdateRequest struct {
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	ParentID           *int64 `json:"parent_id,omitempty"`
+	Title              string  `json:"title"`
+	Description        string  `json:"description"`
+	AcceptanceCriteria string  `json:"acceptance_criteria"`
+	GitRepository      string  `json:"git_repository"`
+	GitBranch          string  `json:"git_branch"`
+	ParentID           *string `json:"parent_id,omitempty"`
 	Assignee           string `json:"assignee"`
 	Status             string `json:"status,omitempty"`
 	Stage              string `json:"stage,omitempty"`
@@ -125,14 +125,14 @@ type CommentCreateRequest struct {
 }
 
 type DependencyRequest struct {
-	ProjectID int64 `json:"project_id"`
-	TicketID  int64 `json:"ticket_id"`
-	DependsOn int64 `json:"depends_on"`
+	ProjectID int64  `json:"project_id"`
+	TicketID  string `json:"ticket_id"`
+	DependsOn string `json:"depends_on"`
 }
 
 type TicketRequest struct {
-	ProjectID int64  `json:"project_id,omitempty"`
-	TicketID  *int64 `json:"ticket_id,omitempty"`
+	ProjectID int64   `json:"project_id,omitempty"`
+	TicketID  *string `json:"ticket_id,omitempty"`
 	TicketRef string `json:"ticket_ref,omitempty"`
 	DryRun    bool   `json:"dry_run,omitempty"`
 }
@@ -166,10 +166,10 @@ type AgentRegisterRequest struct {
 }
 
 type AgentRequest struct {
-	ID              string `json:"id"`
-	Password        string `json:"password"`
-	ProjectID       int64  `json:"project_id,omitempty"`
-	TicketID        *int64 `json:"ticket_id,omitempty"`
+	ID              string  `json:"id"`
+	Password        string  `json:"password"`
+	ProjectID       int64   `json:"project_id,omitempty"`
+	TicketID        *string `json:"ticket_id,omitempty"`
 	DryRun          bool   `json:"dry_run,omitempty"`
 	ConfigUpdatedAt string `json:"config_updated_at,omitempty"` // timestamp of last config received
 }

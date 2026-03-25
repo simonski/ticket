@@ -199,11 +199,10 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE TABLE IF NOT EXISTS tickets (
-	ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	key TEXT NOT NULL DEFAULT '',
+	ticket_id TEXT PRIMARY KEY,
 	project_id INTEGER NOT NULL,
-	parent_id INTEGER,
-	clone_of INTEGER,
+	parent_id TEXT,
+	clone_of TEXT,
 	type TEXT NOT NULL,
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
@@ -247,7 +246,7 @@ CREATE TABLE IF NOT EXISTS stories (
 
 CREATE TABLE IF NOT EXISTS story_ticket_links (
 	story_id INTEGER NOT NULL,
-	ticket_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(story_id, ticket_id),
 	FOREIGN KEY(story_id) REFERENCES stories(story_id),
@@ -257,7 +256,7 @@ CREATE TABLE IF NOT EXISTS story_ticket_links (
 CREATE TABLE IF NOT EXISTS history_events (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	ticket_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by TEXT,
@@ -270,7 +269,7 @@ CREATE TABLE IF NOT EXISTS history_events (
 CREATE TABLE IF NOT EXISTS ticket_history (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	ticket_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by TEXT,
@@ -282,7 +281,7 @@ CREATE TABLE IF NOT EXISTS ticket_history (
 
 CREATE TABLE IF NOT EXISTS comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	item_id INTEGER NOT NULL,
+	item_id TEXT NOT NULL,
 	user_id TEXT NOT NULL,
 	comment TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -293,8 +292,8 @@ CREATE TABLE IF NOT EXISTS comments (
 CREATE TABLE IF NOT EXISTS dependencies (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	ticket_id INTEGER NOT NULL,
-	depends_on INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
+	depends_on TEXT NOT NULL,
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
@@ -377,7 +376,7 @@ CREATE TABLE IF NOT EXISTS labels (
 );
 
 CREATE TABLE IF NOT EXISTS ticket_labels (
-	ticket_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
 	label_id INTEGER NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(ticket_id, label_id),
@@ -387,7 +386,7 @@ CREATE TABLE IF NOT EXISTS ticket_labels (
 
 CREATE TABLE IF NOT EXISTS time_entries (
 	time_entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	ticket_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
 	user_id TEXT NOT NULL,
 	minutes INTEGER NOT NULL,
 	note TEXT NOT NULL DEFAULT '',
@@ -454,6 +453,12 @@ CREATE INDEX IF NOT EXISTS idx_workflow_stages_role_id ON workflow_stages(role_i
 }
 
 func migrateSchema(db *sql.DB) error {
+	// Disable FK checks for all migrations; re-enable at the end.
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer db.Exec(`PRAGMA foreign_keys = ON`) //nolint:errcheck
+
 	// Rename task_id columns to use ticket terminology.
 	if columnExists(db, "tickets", "task_id") {
 		if _, err := db.Exec(`ALTER TABLE tickets RENAME COLUMN task_id TO ticket_id`); err != nil {
@@ -535,11 +540,11 @@ func migrateSchema(db *sql.DB) error {
 		return err
 	}
 
-	if !columnExists(db, "tickets", "key") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN key TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
+	// Migrate ticket_id from INTEGER to TEXT (using the key value as the new ticket_id).
+	if err := migrateTicketIDToText(db); err != nil {
+		return err
 	}
+
 	if !columnExists(db, "tickets", "sort_order") {
 		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
@@ -627,7 +632,7 @@ func migrateSchema(db *sql.DB) error {
 		if _, err := db.Exec(`
 			CREATE TABLE IF NOT EXISTS story_ticket_links (
 				story_id INTEGER NOT NULL,
-				ticket_id INTEGER NOT NULL,
+				ticket_id TEXT NOT NULL,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				PRIMARY KEY(story_id, ticket_id),
 				FOREIGN KEY(story_id) REFERENCES stories(story_id),
@@ -1216,56 +1221,161 @@ func backfillProjectPrefixes(db *sql.DB) error {
 }
 
 func backfillTicketKeys(db *sql.DB) error {
-	rows, err := db.Query(`
-		SELECT t.ticket_id, t.project_id, t.type, t.key, p.prefix
-		FROM tickets t
-		JOIN projects p ON p.project_id = t.project_id
-		ORDER BY t.project_id, t.ticket_id
-	`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+	// ticket_id is now the key string; no separate key column to backfill.
+	return nil
+}
 
-	type row struct {
-		ticketID   int64
-		projectID  int64
-		ticketType string
-		key        string
-		prefix     string
+// migrateTicketIDToText converts ticket_id from INTEGER to TEXT PRIMARY KEY,
+// using the key column value as the new ticket_id, then drops the key column.
+// This is a one-time migration for databases created before the refactor.
+func migrateTicketIDToText(db *sql.DB) error {
+	// Detect: if the key column still exists, migration is needed.
+	if !columnExists(db, "tickets", "key") {
+		return nil
 	}
-	var tickets []row
-	maxSeq := map[int64]int64{}
+
+	// Build a mapping of old integer ticket_id → key string.
+	// Also update all FK references in dependent tables.
+	rows, err := db.Query(`SELECT ticket_id, key FROM tickets WHERE key != ''`)
+	if err != nil {
+		return fmt.Errorf("migrateTicketIDToText: read mapping: %w", err)
+	}
+	type idMapping struct {
+		oldID int64
+		key   string
+	}
+	var mappings []idMapping
 	for rows.Next() {
-		var item row
-		if err := rows.Scan(&item.ticketID, &item.projectID, &item.ticketType, &item.key, &item.prefix); err != nil {
+		var m idMapping
+		if err := rows.Scan(&m.oldID, &m.key); err != nil {
+			rows.Close()
 			return err
 		}
-		tickets = append(tickets, item)
-		if seq := parseTicketSequence(item.key); seq > maxSeq[item.projectID] {
-			maxSeq[item.projectID] = seq
+		mappings = append(mappings, m)
+	}
+	rows.Close()
+
+	// Recreate tickets table with TEXT PRIMARY KEY, without key column.
+	if _, err := db.Exec(`ALTER TABLE tickets RENAME TO tickets_old_int`); err != nil {
+		return fmt.Errorf("migrateTicketIDToText: rename tickets: %w", err)
+	}
+
+	// Get the current column list (minus key column) to build the INSERT.
+	// We know the columns from the schema.
+	if _, err := db.Exec(`
+		CREATE TABLE tickets (
+			ticket_id TEXT PRIMARY KEY,
+			project_id INTEGER NOT NULL,
+			parent_id TEXT,
+			clone_of TEXT,
+			type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			acceptance_criteria TEXT NOT NULL DEFAULT '',
+			git_repository TEXT NOT NULL DEFAULT '',
+			git_branch TEXT NOT NULL DEFAULT '',
+			workflow_id INTEGER,
+			workflow_stage_id INTEGER,
+			stage TEXT NOT NULL DEFAULT 'design',
+			state TEXT NOT NULL DEFAULT 'idle',
+			status TEXT NOT NULL DEFAULT 'open',
+			priority INTEGER NOT NULL DEFAULT 3,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			estimate_effort INTEGER NOT NULL DEFAULT 0,
+			estimate_complete TEXT NOT NULL DEFAULT '',
+			health_score INTEGER NOT NULL DEFAULT 0,
+			assignee TEXT NOT NULL DEFAULT '',
+			ready INTEGER NOT NULL DEFAULT 0,
+			open INTEGER NOT NULL DEFAULT 1,
+			archived INTEGER NOT NULL DEFAULT 0,
+			created_by TEXT,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(project_id) REFERENCES projects(project_id),
+			FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
+			FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
+			FOREIGN KEY(created_by) REFERENCES users(user_id),
+			FOREIGN KEY(workflow_stage_id) REFERENCES workflow_stages(workflow_stage_id)
+		)
+	`); err != nil {
+		return fmt.Errorf("migrateTicketIDToText: create new tickets: %w", err)
+	}
+
+	// Determine which columns exist in the old table (some may be missing in very old DBs).
+	oldCols := []string{
+		"project_id", "type", "title", "description", "acceptance_criteria",
+		"git_repository", "git_branch", "stage", "state", "status",
+		"priority", "sort_order", "estimate_effort", "estimate_complete",
+		"health_score", "assignee", "open", "archived", "created_by",
+		"created_at", "updated_at",
+	}
+	optionalCols := []string{"workflow_id", "workflow_stage_id", "ready"}
+	var presentCols []string
+	for _, c := range oldCols {
+		if columnExists(db, "tickets_old_int", c) {
+			presentCols = append(presentCols, c)
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, ticket := range tickets {
-		if strings.TrimSpace(ticket.key) == "" {
-			maxSeq[ticket.projectID]++
-			key, err := generateTicketKey(ticket.prefix, ticket.ticketType, maxSeq[ticket.projectID])
-			if err != nil {
-				return err
-			}
-			if _, err := db.Exec(`UPDATE tickets SET key = ? WHERE ticket_id = ?`, key, ticket.ticketID); err != nil {
-				return err
-			}
+	for _, c := range optionalCols {
+		if columnExists(db, "tickets_old_int", c) {
+			presentCols = append(presentCols, c)
 		}
 	}
-	for projectID, seq := range maxSeq {
-		if _, err := db.Exec(`UPDATE projects SET ticket_sequence = CASE WHEN ticket_sequence < ? THEN ? ELSE ticket_sequence END WHERE project_id = ?`, seq, seq, projectID); err != nil {
-			return err
+
+	// Copy data using key as the new ticket_id.
+	// parent_id and clone_of need to be mapped from old int to key string.
+	prefixedCols := make([]string, len(presentCols))
+	for i, c := range presentCols {
+		prefixedCols[i] = "o." + c
+	}
+	insertSQL := fmt.Sprintf(`
+		INSERT INTO tickets (ticket_id, %s, parent_id, clone_of)
+		SELECT
+			o.key,
+			%s,
+			(SELECT p.key FROM tickets_old_int p WHERE p.ticket_id = o.parent_id),
+			(SELECT c.key FROM tickets_old_int c WHERE c.ticket_id = o.clone_of)
+		FROM tickets_old_int o
+		WHERE o.key != ''
+	`, strings.Join(presentCols, ", "), strings.Join(prefixedCols, ", "))
+	if _, err := db.Exec(insertSQL); err != nil {
+		return fmt.Errorf("migrateTicketIDToText: copy data: %w", err)
+	}
+
+	// Update FK references in dependent tables: map old integer IDs to key strings.
+	fkTables := []struct {
+		table  string
+		column string
+	}{
+		{"history_events", "ticket_id"},
+		{"ticket_history", "ticket_id"},
+		{"comments", "item_id"},
+		{"dependencies", "ticket_id"},
+		{"dependencies", "depends_on"},
+		{"story_ticket_links", "ticket_id"},
+		{"ticket_labels", "ticket_id"},
+		{"time_entries", "ticket_id"},
+	}
+	for _, fk := range fkTables {
+		if !tableExists(db, fk.table) || !columnExists(db, fk.table, fk.column) {
+			continue
+		}
+		updateSQL := fmt.Sprintf(`
+			UPDATE %s SET %s = (
+				SELECT key FROM tickets_old_int WHERE ticket_id = CAST(%s.%s AS INTEGER)
+			) WHERE EXISTS (
+				SELECT 1 FROM tickets_old_int WHERE ticket_id = CAST(%s.%s AS INTEGER)
+			)
+		`, fk.table, fk.column, fk.table, fk.column, fk.table, fk.column)
+		if _, err := db.Exec(updateSQL); err != nil {
+			return fmt.Errorf("migrateTicketIDToText: update %s.%s: %w", fk.table, fk.column, err)
 		}
 	}
+
+	if _, err := db.Exec(`DROP TABLE IF EXISTS tickets_old_int`); err != nil {
+		return fmt.Errorf("migrateTicketIDToText: drop old table: %w", err)
+	}
+
 	return nil
 }
 
@@ -1313,10 +1423,10 @@ func fixStaleForeignKeys(db *sql.DB) error {
 			create: `CREATE TABLE history_events (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
-				ticket_id INTEGER NOT NULL,
+				ticket_id TEXT NOT NULL,
 				event_type TEXT NOT NULL,
 				payload TEXT NOT NULL DEFAULT '{}',
-				created_by INTEGER,
+				created_by TEXT,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(project_id) REFERENCES projects(project_id),
 				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
@@ -1328,10 +1438,10 @@ func fixStaleForeignKeys(db *sql.DB) error {
 			create: `CREATE TABLE ticket_history (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
-				ticket_id INTEGER NOT NULL,
+				ticket_id TEXT NOT NULL,
 				event_type TEXT NOT NULL,
 				payload TEXT NOT NULL DEFAULT '{}',
-				created_by INTEGER,
+				created_by TEXT,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(project_id) REFERENCES projects(project_id),
 				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
@@ -1342,8 +1452,8 @@ func fixStaleForeignKeys(db *sql.DB) error {
 			name: "comments",
 			create: `CREATE TABLE comments (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				item_id INTEGER NOT NULL,
-				user_id INTEGER NOT NULL,
+				item_id TEXT NOT NULL,
+				user_id TEXT NOT NULL,
 				comment TEXT NOT NULL,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(item_id) REFERENCES tickets(ticket_id),
@@ -1355,9 +1465,9 @@ func fixStaleForeignKeys(db *sql.DB) error {
 			create: `CREATE TABLE dependencies (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
-				ticket_id INTEGER NOT NULL,
-				depends_on INTEGER NOT NULL,
-				created_by INTEGER,
+				ticket_id TEXT NOT NULL,
+				depends_on TEXT NOT NULL,
+				created_by TEXT,
 				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				FOREIGN KEY(project_id) REFERENCES projects(project_id),
 				FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),

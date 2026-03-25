@@ -9,14 +9,14 @@ var ErrTimeEntryNotFound = errors.New("time entry not found")
 
 type TimeEntry struct {
 	ID        int64  `json:"time_entry_id"`
-	TicketID  int64  `json:"ticket_id"`
+	TicketID  string `json:"ticket_id"`
 	UserID    string `json:"user_id"`
 	Minutes   int    `json:"minutes"`
 	Note      string `json:"note"`
 	CreatedAt string `json:"created_at"`
 }
 
-func LogTime(db *sql.DB, ticketID int64, userID string, minutes int, note string) (TimeEntry, error) {
+func LogTime(db *sql.DB, ticketID string, userID string, minutes int, note string) (TimeEntry, error) {
 	if minutes <= 0 {
 		return TimeEntry{}, errors.New("minutes must be positive")
 	}
@@ -41,7 +41,7 @@ func GetTimeEntry(db *sql.DB, id int64) (TimeEntry, error) {
 	return entry, err
 }
 
-func ListTimeEntries(db *sql.DB, ticketID int64) ([]TimeEntry, error) {
+func ListTimeEntries(db *sql.DB, ticketID string) ([]TimeEntry, error) {
 	rows, err := db.Query(`SELECT time_entry_id, ticket_id, user_id, minutes, note, created_at FROM time_entries WHERE ticket_id = ? ORDER BY created_at`, ticketID)
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ func DeleteTimeEntry(db *sql.DB, id int64) error {
 	return nil
 }
 
-func TotalTimeForTicket(db *sql.DB, ticketID int64) (int, error) {
+func TotalTimeForTicket(db *sql.DB, ticketID string) (int, error) {
 	var total sql.NullInt64
 	err := db.QueryRow(`SELECT SUM(minutes) FROM time_entries WHERE ticket_id = ?`, ticketID).Scan(&total)
 	if err != nil {

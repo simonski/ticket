@@ -40,7 +40,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
 	if ticket.ParentID == nil || *ticket.ParentID != epic.ID {
-		t.Fatalf("CreateTicket().ParentID = %#v, want %d", ticket.ParentID, epic.ID)
+		t.Fatalf("CreateTicket().ParentID = %#v, want %s", ticket.ParentID, epic.ID)
 	}
 	if ticket.Stage != StageDesign || ticket.State != StateIdle {
 		t.Fatalf("CreateTicket().Lifecycle = %s/%s, want design/idle", ticket.Stage, ticket.State)
@@ -173,7 +173,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("GetTicketByProject() error = %v", err)
 	}
 	if got.ID != ticket.ID {
-		t.Fatalf("GetTicketByProject().ID = %d, want %d", got.ID, ticket.ID)
+		t.Fatalf("GetTicketByProject().ID = %s, want %s", got.ID, ticket.ID)
 	}
 }
 
@@ -214,7 +214,7 @@ func TestSetTicketHealth(t *testing.T) {
 	if _, err := SetTicketHealth(db, ticket.ID, 6); err == nil {
 		t.Fatalf("SetTicketHealth(out of range) = nil, want error")
 	}
-	if _, err := SetTicketHealth(db, 9999, 1); !errors.Is(err, ErrTicketNotFound) {
+	if _, err := SetTicketHealth(db, "9999", 1); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("SetTicketHealth(unknown task) error = %v, want %v", err, ErrTicketNotFound)
 	}
 }
@@ -377,7 +377,7 @@ func TestRequestTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestTicket(rejected) error = %v", err)
 	}
-	if status != "REJECTED" || rejected.ID != 0 {
+	if status != "REJECTED" || rejected.ID != "" {
 		t.Fatalf("RequestTicket(rejected) = %#v, %q", rejected, status)
 	}
 
@@ -403,7 +403,7 @@ func TestRequestTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestTicket(no-work) error = %v", err)
 	}
-	if status != "NO-WORK" || noWork.ID != 0 {
+	if status != "NO-WORK" || noWork.ID != "" {
 		t.Fatalf("RequestTicket(no-work) = %#v, %q", noWork, status)
 	}
 }
@@ -668,7 +668,7 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 		t.Fatalf("CloneTicket() = %#v", cloned)
 	}
 	if cloned.CloneOf == nil || *cloned.CloneOf != ticket.ID {
-		t.Fatalf("CloneTicket().CloneOf = %#v, want %d", cloned.CloneOf, ticket.ID)
+		t.Fatalf("CloneTicket().CloneOf = %#v, want %s", cloned.CloneOf, ticket.ID)
 	}
 }
 
@@ -817,7 +817,7 @@ func TestCloneEpicClonesChildren(t *testing.T) {
 		t.Fatalf("cloned child not found in %#v", tickets)
 	}
 	if clonedChild.ParentID == nil || *clonedChild.ParentID != clonedEpic.ID {
-		t.Fatalf("cloned child parent = %#v, want %d", clonedChild.ParentID, clonedEpic.ID)
+		t.Fatalf("cloned child parent = %#v, want %s", clonedChild.ParentID, clonedEpic.ID)
 	}
 }
 
@@ -927,12 +927,12 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	}
 }
 
-func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID int64, wantTransitions [][2]string) {
+func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID string, wantTransitions [][2]string) {
 	t.Helper()
 
 	events, err := ListHistoryEvents(db, taskID)
 	if err != nil {
-		t.Fatalf("ListHistoryEvents(%d) error = %v", taskID, err)
+		t.Fatalf("ListHistoryEvents(%s) error = %v", taskID, err)
 	}
 
 	var derivedTransitions [][2]string
@@ -950,11 +950,11 @@ func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID int64, wantT
 		})
 	}
 	if len(derivedTransitions) != len(wantTransitions) {
-		t.Fatalf("derived transitions for %d = %#v, want %#v", taskID, derivedTransitions, wantTransitions)
+		t.Fatalf("derived transitions for %s = %#v, want %#v", taskID, derivedTransitions, wantTransitions)
 	}
 	for i := range wantTransitions {
 		if derivedTransitions[i] != wantTransitions[i] {
-			t.Fatalf("derived transitions for %d = %#v, want %#v", taskID, derivedTransitions, wantTransitions)
+			t.Fatalf("derived transitions for %s = %#v, want %#v", taskID, derivedTransitions, wantTransitions)
 		}
 	}
 }

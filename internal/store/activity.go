@@ -8,7 +8,7 @@ import (
 type HistoryEvent struct {
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`
-	TicketID  int64  `json:"ticket_id"`
+	TicketID  string `json:"ticket_id"`
 	TicketKey string `json:"ticket_key,omitempty"`
 	EventType string `json:"event_type"`
 	Payload   string `json:"payload"`
@@ -20,7 +20,7 @@ type TicketHistoryEvent = HistoryEvent
 
 type Comment struct {
 	ID        int64  `json:"-"`
-	ItemID    int64  `json:"-"`
+	ItemID    string `json:"-"`
 	UserID    string `json:"-"`
 	Author    string `json:"author"`
 	Comment   string `json:"-"`
@@ -28,7 +28,7 @@ type Comment struct {
 	CreatedAt string `json:"date"`
 }
 
-func AddHistoryEvent(db *sql.DB, projectID, ticketID int64, eventType string, payload any, createdBy string) error {
+func AddHistoryEvent(db *sql.DB, projectID int64, ticketID string, eventType string, payload any, createdBy string) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func AddHistoryEvent(db *sql.DB, projectID, ticketID int64, eventType string, pa
 	return err
 }
 
-func ListHistoryEvents(db *sql.DB, ticketID int64) ([]HistoryEvent, error) {
+func ListHistoryEvents(db *sql.DB, ticketID string) ([]HistoryEvent, error) {
 	rows, err := db.Query(`
 		SELECT id, project_id, ticket_id, event_type, payload, COALESCE(created_by, ''), created_at
 		FROM ticket_history
@@ -77,9 +77,8 @@ func ListProjectHistory(db *sql.DB, projectID int64, limit int) ([]HistoryEvent,
 		limit = 10
 	}
 	rows, err := db.Query(`
-		SELECT h.id, h.project_id, h.ticket_id, COALESCE(t.key, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
+		SELECT h.id, h.project_id, h.ticket_id, COALESCE(h.ticket_id, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
 		FROM ticket_history h
-		LEFT JOIN tickets t ON t.ticket_id = h.ticket_id
 		WHERE h.project_id = ?
 		ORDER BY h.id DESC
 		LIMIT ?
@@ -100,7 +99,7 @@ func ListProjectHistory(db *sql.DB, projectID int64, limit int) ([]HistoryEvent,
 	return events, rows.Err()
 }
 
-func AddComment(db *sql.DB, ticketID int64, userID string, comment string) (Comment, error) {
+func AddComment(db *sql.DB, ticketID string, userID string, comment string) (Comment, error) {
 	ticket, err := GetTicket(db, ticketID)
 	if err != nil {
 		return Comment{}, err
@@ -136,7 +135,7 @@ func AddComment(db *sql.DB, ticketID int64, userID string, comment string) (Comm
 	return c, nil
 }
 
-func ListComments(db *sql.DB, ticketID int64) ([]Comment, error) {
+func ListComments(db *sql.DB, ticketID string) ([]Comment, error) {
 	rows, err := db.Query(`
 		SELECT c.id, c.item_id, c.user_id, u.username, c.comment, c.created_at
 		FROM comments c

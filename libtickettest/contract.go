@@ -47,7 +47,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
-		if ticket.ID == 0 {
+		if ticket.ID == "" {
 			t.Fatalf("CreateTicket() = %#v", ticket)
 		}
 
@@ -339,7 +339,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err := svc.RemoveDependency(libticket.DependencyRequest{
 			ProjectID: project.ID,
 			TicketID:  ticket.ID,
-			DependsOn: 424242,
+			DependsOn: "NONEXISTENT-42",
 		}); err == nil {
 			t.Fatal("RemoveDependency(missing) error = nil")
 		}
@@ -668,7 +668,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("SetTicketParent() error = %v", err)
 		}
 		if parented.ParentID == nil || *parented.ParentID != ticket.ID {
-			t.Fatalf("SetTicketParent().ParentID = %v, want %d", parented.ParentID, ticket.ID)
+			t.Fatalf("SetTicketParent().ParentID = %v, want %s", parented.ParentID, ticket.ID)
 		}
 
 		unparented, err := svc.UnsetTicketParent(child.ID)
@@ -883,7 +883,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddTeamMember() error = %v", err)
 		}
 		if member.UserID != user.ID {
-			t.Fatalf("AddTeamMember().UserID = %d", member.UserID)
+			t.Fatalf("AddTeamMember().UserID = %s", member.UserID)
 		}
 
 		members, err := svc.ListTeamMembers(team.ID)
@@ -973,7 +973,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			}
 		}
 		if !found {
-			t.Fatalf("ListAgents() did not include created agent %d", agent.ID)
+			t.Fatalf("ListAgents() did not include created agent %s", agent.ID)
 		}
 
 		// Update agent password
@@ -1029,7 +1029,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RegisterAgent() error = %v", err)
 		}
 		if registered.ID != agent.ID {
-			t.Fatalf("registered.ID = %d, want %d", registered.ID, agent.ID)
+			t.Fatalf("registered.ID = %s, want %s", registered.ID, agent.ID)
 		}
 
 		// Request work (no tickets — expect NONE)
@@ -1081,7 +1081,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddProjectMember() error = %v", err)
 		}
 		if member.UserID != user.ID {
-			t.Fatalf("member.UserID = %d, want %d", member.UserID, user.ID)
+			t.Fatalf("member.UserID = %s, want %s", member.UserID, user.ID)
 		}
 
 		// List members (should have one more)
@@ -1182,7 +1182,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddTeamAgent() error = %v", err)
 		}
 		if ta.AgentID != agent.ID {
-			t.Fatalf("ta.AgentID = %d, want %d", ta.AgentID, agent.ID)
+			t.Fatalf("ta.AgentID = %s, want %s", ta.AgentID, agent.ID)
 		}
 
 		// List team agents

@@ -365,7 +365,7 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 	return response, nil
 }
 
-func (s *LocalService) AgentUpdateTicket(id int64, request AgentTicketUpdateRequest) (store.Ticket, error) {
+func (s *LocalService) AgentUpdateTicket(id string, request AgentTicketUpdateRequest) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -679,7 +679,7 @@ func (s *LocalService) ListTicketsFiltered(projectID int64, ticketType, stage, s
 	})
 }
 
-func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (store.Ticket, error) {
+func (s *LocalService) UpdateTicket(id string, request TicketUpdateRequest) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -711,7 +711,7 @@ func (s *LocalService) UpdateTicket(id int64, request TicketUpdateRequest) (stor
 	})
 }
 
-func (s *LocalService) CloseTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) CloseTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -724,7 +724,7 @@ func (s *LocalService) CloseTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketOpen(db, id, false, user.Username, user.ID)
 }
 
-func (s *LocalService) OpenTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) OpenTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -737,7 +737,7 @@ func (s *LocalService) OpenTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketOpen(db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) ArchiveTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) ArchiveTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -750,7 +750,7 @@ func (s *LocalService) ArchiveTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketArchived(db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) UnarchiveTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) UnarchiveTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -763,7 +763,7 @@ func (s *LocalService) UnarchiveTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketArchived(db, id, false, user.Username, user.ID)
 }
 
-func (s *LocalService) ReadyTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) ReadyTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -776,7 +776,7 @@ func (s *LocalService) ReadyTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketReady(db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) NotReadyTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) NotReadyTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -789,7 +789,7 @@ func (s *LocalService) NotReadyTicket(id int64) (store.Ticket, error) {
 	return store.SetTicketReady(db, id, false, user.Username, user.ID)
 }
 
-func (s *LocalService) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error) {
+func (s *LocalService) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -798,7 +798,7 @@ func (s *LocalService) SetTicketWorkflow(id int64, workflowID int64) (store.Tick
 	return store.SetTicketWorkflow(db, id, workflowID)
 }
 
-func (s *LocalService) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
+func (s *LocalService) UnsetTicketWorkflow(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -807,7 +807,7 @@ func (s *LocalService) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
 	return store.UnsetTicketWorkflow(db, id)
 }
 
-func (s *LocalService) DeleteTicket(id int64) error {
+func (s *LocalService) DeleteTicket(id string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -816,7 +816,7 @@ func (s *LocalService) DeleteTicket(id int64) error {
 	return store.DeleteTicket(db, id)
 }
 
-func (s *LocalService) SetTicketParent(id, parentID int64) (store.Ticket, error) {
+func (s *LocalService) SetTicketParent(id string, parentID string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -836,7 +836,7 @@ func (s *LocalService) SetTicketParent(id, parentID int64) (store.Ticket, error)
 	})
 }
 
-func (s *LocalService) SetTicketHealth(id int64, score int) (store.Ticket, error) {
+func (s *LocalService) SetTicketHealth(id string, score int) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -845,7 +845,7 @@ func (s *LocalService) SetTicketHealth(id int64, score int) (store.Ticket, error
 	return store.SetTicketHealth(db, id, score)
 }
 
-func (s *LocalService) UnsetTicketParent(id int64) (store.Ticket, error) {
+func (s *LocalService) UnsetTicketParent(id string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -865,7 +865,7 @@ func (s *LocalService) UnsetTicketParent(id int64) (store.Ticket, error) {
 	})
 }
 
-func (s *LocalService) GetTicketByID(id int64) (store.Ticket, error) {
+func (s *LocalService) GetTicketByID(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -883,7 +883,7 @@ func (s *LocalService) GetTicket(ref string) (store.Ticket, error) {
 	return store.GetTicketByRef(db, ref)
 }
 
-func (s *LocalService) CloneTicket(id int64) (store.Ticket, error) {
+func (s *LocalService) CloneTicket(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -896,7 +896,7 @@ func (s *LocalService) CloneTicket(id int64) (store.Ticket, error) {
 	return store.CloneTicket(db, id, user.ID)
 }
 
-func (s *LocalService) ListHistory(id int64) ([]store.HistoryEvent, error) {
+func (s *LocalService) ListHistory(id string) ([]store.HistoryEvent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -914,7 +914,7 @@ func (s *LocalService) ListProjectHistory(projectID int64, limit int) ([]store.H
 	return store.ListProjectHistory(db, projectID, limit)
 }
 
-func (s *LocalService) AddComment(id int64, comment string) (store.Comment, error) {
+func (s *LocalService) AddComment(id string, comment string) (store.Comment, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Comment{}, err
@@ -927,7 +927,7 @@ func (s *LocalService) AddComment(id int64, comment string) (store.Comment, erro
 	return store.AddComment(db, id, user.ID, comment)
 }
 
-func (s *LocalService) ListComments(id int64) ([]store.Comment, error) {
+func (s *LocalService) ListComments(id string) ([]store.Comment, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -958,7 +958,7 @@ func (s *LocalService) RemoveDependency(request DependencyRequest) error {
 	return store.DeleteDependency(db, request.ProjectID, request.TicketID, request.DependsOn)
 }
 
-func (s *LocalService) ListDependencies(id int64) ([]store.Dependency, error) {
+func (s *LocalService) ListDependencies(id string) ([]store.Dependency, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -1109,7 +1109,7 @@ func (s *LocalService) ImportWorkflow(export store.WorkflowExport) (store.Workfl
 	return store.ImportWorkflow(db, export)
 }
 
-func (s *LocalService) LogTime(ticketID int64, request TimeEntryRequest) (store.TimeEntry, error) {
+func (s *LocalService) LogTime(ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.TimeEntry{}, err
@@ -1122,7 +1122,7 @@ func (s *LocalService) LogTime(ticketID int64, request TimeEntryRequest) (store.
 	return store.LogTime(db, ticketID, user.ID, request.Minutes, request.Note)
 }
 
-func (s *LocalService) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
+func (s *LocalService) ListTimeEntries(ticketID string) ([]store.TimeEntry, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
@@ -1140,7 +1140,7 @@ func (s *LocalService) DeleteTimeEntry(id int64) error {
 	return store.DeleteTimeEntry(db, id)
 }
 
-func (s *LocalService) TotalTimeForTicket(ticketID int64) (int, error) {
+func (s *LocalService) TotalTimeForTicket(ticketID string) (int, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return 0, err
@@ -1176,7 +1176,7 @@ func (s *LocalService) DeleteLabel(id int64) error {
 	return store.DeleteLabel(db, id)
 }
 
-func (s *LocalService) AddTicketLabel(ticketID, labelID int64) error {
+func (s *LocalService) AddTicketLabel(ticketID string, labelID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -1185,7 +1185,7 @@ func (s *LocalService) AddTicketLabel(ticketID, labelID int64) error {
 	return store.AddTicketLabel(db, ticketID, labelID)
 }
 
-func (s *LocalService) RemoveTicketLabel(ticketID, labelID int64) error {
+func (s *LocalService) RemoveTicketLabel(ticketID string, labelID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -1194,7 +1194,7 @@ func (s *LocalService) RemoveTicketLabel(ticketID, labelID int64) error {
 	return store.RemoveTicketLabel(db, ticketID, labelID)
 }
 
-func (s *LocalService) ListTicketLabels(ticketID int64) ([]store.Label, error) {
+func (s *LocalService) ListTicketLabels(ticketID string) ([]store.Label, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err

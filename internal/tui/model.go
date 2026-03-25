@@ -370,7 +370,7 @@ type Model struct {
 	// tree / list
 	nodes    []treeNode
 	toplevel []store.Ticket
-	expanded map[int64]bool
+	expanded map[string]bool
 	items    []listItem
 	cursor   int
 	offset   int
@@ -438,7 +438,7 @@ func newModel(svc libticket.Service, cfg config.Config, th Theme) Model {
 		mode:     modeIntro,
 		intro:    newIntroState(),
 		lastTick: time.Now(),
-		expanded:   map[int64]bool{},
+		expanded:   map[string]bool{},
 		wfExpanded: map[int64]bool{},
 		cmdInput:   ci,
 		ecg:      ecgState{params: th.ECGStyle},
@@ -509,7 +509,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case ticketCreatedMsg:
-		m.statusMsg = "created: " + store.Ticket(msg).Key
+		m.statusMsg = "created: " + store.Ticket(msg).ID
 		m.mode = modeList
 		m.newForm = nil
 		return m, loadTickets(m.svc, m.cfg)
@@ -546,7 +546,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodes = msg.tickets.nodes
 		m.toplevel = msg.tickets.toplevel
 		m.ideas = filterRequirements(msg.tickets.toplevel)
-		m.expanded = map[int64]bool{} // reset expand state for new project
+		m.expanded = map[string]bool{} // reset expand state for new project
 		m.items = flattenTree(m.nodes, m.toplevel, m.expanded)
 		m.cursor = 0
 		m.offset = 0
@@ -1549,7 +1549,7 @@ func (m Model) overlayPopup(lines []string) []string {
 	if m.cursor < len(m.items) {
 		t := m.items[m.cursor].ticket
 		actions = []string{
-			fmt.Sprintf("  %s %s", typeIcon(t.Type), t.Key),
+			fmt.Sprintf("  %s %s", typeIcon(t.Type), t.ID),
 			"  ──────────────────",
 			"  enter  detail view",
 			"  e      edit ticket",
@@ -1717,7 +1717,7 @@ func (m Model) viewList() []string {
 		icon := typeIcon(t.Type)
 		si := stateIcon(t.State, t.Open)
 		title := truncate(t.Title, inner-len(prefix)-12)
-		keyStr := lipgloss.NewStyle().Foreground(th.Muted).Render(t.Key)
+		keyStr := lipgloss.NewStyle().Foreground(th.Muted).Render(t.ID)
 		row := fmt.Sprintf("%s%s%s %s  %s", prefix, si, icon, title, keyStr)
 
 		style := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
@@ -1759,7 +1759,7 @@ func (m Model) viewDetail() []string {
 	title := fmt.Sprintf(" %s%s  %s", typeIcon(t.Type), stateIcon(t.State, t.Open), t.Title)
 	lines = append(lines, headerStyle.Render(padRight(title, inner)))
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
-	add("key", t.Key)
+	add("key", t.ID)
 	add("type", t.Type)
 	add("status", t.Status)
 	add("state", t.State)
@@ -1795,7 +1795,7 @@ func (m Model) viewDetail() []string {
 func (m Model) viewEdit() []string {
 	title := " edit ticket"
 	if m.selected != nil {
-		title = " edit  " + m.selected.Key
+		title = " edit  " + m.selected.ID
 	}
 	return m.viewForm(title)
 }
@@ -2460,7 +2460,7 @@ func (m Model) viewIdeas() []string {
 			si := stateIcon(t.State, t.Open)
 			icon := typeIcon(t.Type)
 			title := truncate(t.Title, inner-12)
-			keyStr := lipgloss.NewStyle().Foreground(th.Muted).Render(t.Key)
+			keyStr := lipgloss.NewStyle().Foreground(th.Muted).Render(t.ID)
 			row := fmt.Sprintf("   %s%s %s  %s", si, icon, title, keyStr)
 
 			style := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
@@ -2571,7 +2571,7 @@ func loadTicketsSync(svc libticket.Service, cfg config.Config) treeLoadedMsg {
 		return treeLoadedMsg{}
 	}
 
-	epicMap := map[int64][]store.Ticket{}
+	epicMap := map[string][]store.Ticket{}
 	var epics []store.Ticket
 	var toplevel []store.Ticket
 	for _, t := range all {
@@ -2606,7 +2606,7 @@ func filterRequirements(tickets []store.Ticket) []store.Ticket {
 	return out
 }
 
-func flattenTree(nodes []treeNode, toplevel []store.Ticket, expanded map[int64]bool) []listItem {
+func flattenTree(nodes []treeNode, toplevel []store.Ticket, expanded map[string]bool) []listItem {
 	var items []listItem
 	for _, n := range nodes {
 		hasKids := len(n.children) > 0
@@ -2792,7 +2792,7 @@ func (m Model) saveExpandedState() tea.Cmd {
 	if m.cfg.TUIDisablePersist {
 		return nil
 	}
-	var ids []int64
+	var ids []string
 	for id, exp := range m.expanded {
 		if exp {
 			ids = append(ids, id)

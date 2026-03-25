@@ -396,7 +396,7 @@ func runSummary(_ []string) error {
 				assignee = "unassigned"
 			}
 			val := fmt.Sprintf("%-*s  %s  %s", 30, t.Title, t.Stage, assignee)
-			lines = append(lines, statusLine{key: "  " + t.Key, value: val, color: "\x1b[32m"})
+			lines = append(lines, statusLine{key: "  " + t.ID, value: val, color: "\x1b[32m"})
 		}
 	}
 
@@ -409,7 +409,7 @@ func runSummary(_ []string) error {
 			sym := formatTicketStatusSymbol(t.Status, true)
 			ago := timeAgo(t.UpdatedAt, now)
 			val := fmt.Sprintf("%s  %-*s  %s  %s", sym, 30, t.Title, t.Status, ago)
-			lines = append(lines, statusLine{key: "  " + t.Key, value: val})
+			lines = append(lines, statusLine{key: "  " + t.ID, value: val})
 		}
 	}
 
@@ -1844,7 +1844,7 @@ func runAgent(args []string) error {
 			if agentVerbose {
 				fmt.Printf("[agent] response status=%s", response.Status)
 				if response.Ticket != nil {
-					fmt.Printf(" ticket=%s type=%s title=%q", response.Ticket.Key, response.Ticket.Type, response.Ticket.Title)
+					fmt.Printf(" ticket=%s type=%s title=%q", response.Ticket.ID, response.Ticket.Type, response.Ticket.Title)
 				}
 				fmt.Println()
 			}
@@ -1882,7 +1882,7 @@ func runAgent(args []string) error {
 				}
 			}()
 
-			result, err := runAgentCommand(modelCommand, prompt, agentVerbose, ticket.Key)
+			result, err := runAgentCommand(modelCommand, prompt, agentVerbose, ticket.ID)
 			close(heartbeatStop)
 			if err != nil {
 				fmt.Printf("failed %s: %v\n", ticketLabel(*ticket), err)
@@ -1913,7 +1913,7 @@ func runAgent(args []string) error {
 		reqAgentID := fs.String("agent-id", "", "agent UUID")
 		password := fs.String("password", "", "agent password")
 		url := fs.String("url", "", "ticket server url")
-		id := fs.Int64("id", 0, "specific ticket id")
+		id := fs.String("id", "", "specific ticket id")
 		dryRun := fs.Bool("dryrun", false, "simulate assignment only")
 		loop := fs.Int("loop", 1, "number of request loops")
 		sleepSeconds := fs.Int("sleep", 1, "sleep seconds between loops")
@@ -1962,8 +1962,8 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		var requestedID *int64
-		if *id > 0 {
+		var requestedID *string
+		if *id != "" {
 			requestedID = id
 		}
 		for i := 0; *loop == 0 || i < *loop; i++ {
@@ -2144,7 +2144,7 @@ func buildAgentPrompt(resp libticket.AgentWorkResponse) string {
 	if len(resp.Parents) > 0 {
 		b.WriteString("\nParents:\n")
 		for _, p := range resp.Parents {
-			b.WriteString(fmt.Sprintf("  %s [%s] %s\n", p.Key, p.Type, p.Title))
+			b.WriteString(fmt.Sprintf("  %s [%s] %s\n", p.ID, p.Type, p.Title))
 		}
 	}
 
@@ -2364,14 +2364,14 @@ func runEpic(args []string) error {
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
-			fmt.Printf("using epic %s: %s\n", ticket.Key, ticket.Title)
+			fmt.Printf("using epic %s: %s\n", ticket.ID, ticket.Title)
 			return nil
 		case "clear":
 			cfg, err := config.Load()
 			if err != nil {
 				return err
 			}
-			cfg.CurrentEpicID = 0
+			cfg.CurrentEpicID = ""
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
@@ -2400,7 +2400,7 @@ func runEpic(args []string) error {
 				if t.ID == cfg.CurrentEpicID {
 					active = "*"
 				}
-				fmt.Fprintf(w, "%s%s\t%s\t%s\n", active, t.Key, t.Status, t.Title)
+				fmt.Fprintf(w, "%s%s\t%s\t%s\n", active, t.ID, t.Status, t.Title)
 			}
 			_ = w.Flush()
 			return nil
@@ -2476,7 +2476,7 @@ func runProject(args []string) error {
 			return err
 		}
 		cfg.CurrentProject = project.Prefix
-		cfg.CurrentEpicID = 0
+		cfg.CurrentEpicID = ""
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
@@ -2534,7 +2534,7 @@ func runProject(args []string) error {
 			return err
 		}
 		cfg.CurrentProject = project.Prefix
-		cfg.CurrentEpicID = 0
+		cfg.CurrentEpicID = ""
 		if err := config.Save(cfg); err != nil {
 			return err
 		}
@@ -2650,7 +2650,7 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	}
 
 	cfg.CurrentProject = project.Prefix
-	cfg.CurrentEpicID = 0
+	cfg.CurrentEpicID = ""
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
@@ -3364,12 +3364,12 @@ func runWorkflow(args []string) error {
 	case "set":
 		fs := flag.NewFlagSet("workflow set", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		ticketID := fs.Int64("ticket", 0, "ticket id")
+		ticketID := fs.String("ticket", "", "ticket id")
 		workflowID := fs.Int64("workflow", 0, "workflow id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *ticketID == 0 || *workflowID == 0 {
+		if *ticketID == "" || *workflowID == 0 {
 			return errors.New("usage: ticket workflow set -ticket <ticket-id> -workflow <workflow-id>")
 		}
 		ticket, err := svc.SetTicketWorkflow(*ticketID, *workflowID)
@@ -3379,16 +3379,16 @@ func runWorkflow(args []string) error {
 		if outputJSON {
 			return printJSON(ticket)
 		}
-		fmt.Printf("set workflow %d on ticket %s\n", *workflowID, ticket.Key)
+		fmt.Printf("set workflow %d on ticket %s\n", *workflowID, ticket.ID)
 		return nil
 	case "unset":
 		fs := flag.NewFlagSet("workflow unset", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		ticketID := fs.Int64("ticket", 0, "ticket id")
+		ticketID := fs.String("ticket", "", "ticket id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *ticketID == 0 {
+		if *ticketID == "" {
 			return errors.New("usage: ticket workflow unset -ticket <ticket-id>")
 		}
 		ticket, err := svc.UnsetTicketWorkflow(*ticketID)
@@ -3398,7 +3398,7 @@ func runWorkflow(args []string) error {
 		if outputJSON {
 			return printJSON(ticket)
 		}
-		fmt.Printf("cleared workflow on ticket %s (now inherits from parent/project)\n", ticket.Key)
+		fmt.Printf("cleared workflow on ticket %s (now inherits from parent/project)\n", ticket.ID)
 		return nil
 	default:
 		return fmt.Errorf("unknown workflow command %q; see: ticket workflow help", args[0])
@@ -3504,19 +3504,16 @@ func runLabel(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		var ticketID, labelID int64
+		var ticketID string
+		var labelID int64
 		if *idFlag != "" && fs.NArg() > 0 {
-			if _, err := fmt.Sscan(*idFlag, &ticketID); err != nil {
-				return errors.New("ticket id must be numeric")
-			}
+			ticketID = *idFlag
 			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
 		} else if fs.NArg() >= 2 {
 			// positional fallback
-			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
-				return errors.New("ticket id must be numeric")
-			}
+			ticketID = fs.Arg(0)
 			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
@@ -3531,18 +3528,15 @@ func runLabel(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		var ticketID, labelID int64
+		var ticketID string
+		var labelID int64
 		if *idFlag != "" && fs.NArg() > 0 {
-			if _, err := fmt.Sscan(*idFlag, &ticketID); err != nil {
-				return errors.New("ticket id must be numeric")
-			}
+			ticketID = *idFlag
 			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
 		} else if fs.NArg() >= 2 {
-			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
-				return errors.New("ticket id must be numeric")
-			}
+			ticketID = fs.Arg(0)
 			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
@@ -3564,10 +3558,7 @@ func runLabel(args []string) error {
 		if idStr == "" {
 			return errors.New("usage: ticket label show -id <ticket-id>")
 		}
-		var ticketID int64
-		if _, err := fmt.Sscan(idStr, &ticketID); err != nil {
-			return errors.New("ticket id must be numeric")
-		}
+		ticketID := idStr
 		labels, err := svc.ListTicketLabels(ticketID)
 		if err != nil {
 			return err
@@ -3605,13 +3596,13 @@ func runTime(args []string) error {
 	case "log", "add":
 		fs := flag.NewFlagSet("time log", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		ticketID := fs.Int64("id", 0, "ticket id")
+		ticketID := fs.String("id", "", "ticket id")
 		minutes := fs.Int("m", 0, "minutes spent")
 		note := fs.String("note", "", "optional note")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *ticketID == 0 || *minutes <= 0 {
+		if *ticketID == "" || *minutes <= 0 {
 			return errors.New("usage: ticket time log -id <ticket-id> -m <minutes> [-note <text>]")
 		}
 		entry, err := svc.LogTime(*ticketID, libticket.TimeEntryRequest{Minutes: *minutes, Note: *note})
@@ -3621,22 +3612,20 @@ func runTime(args []string) error {
 		if outputJSON {
 			return printJSON(entry)
 		}
-		fmt.Printf("logged %d min on ticket %d\n", entry.Minutes, entry.TicketID)
+		fmt.Printf("logged %d min on ticket %s\n", entry.Minutes, entry.TicketID)
 		return nil
 	case "list", "ls":
 		fs := flag.NewFlagSet("time list", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		idFlag := fs.Int64("id", 0, "ticket ID")
+		idFlag := fs.String("id", "", "ticket ID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		ticketID := *idFlag
-		if ticketID == 0 && fs.NArg() > 0 {
-			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
-				return errors.New("ticket id must be numeric")
-			}
+		if ticketID == "" && fs.NArg() > 0 {
+			ticketID = fs.Arg(0)
 		}
-		if ticketID == 0 {
+		if ticketID == "" {
 			return errors.New("usage: ticket time list -id <ticket-id>")
 		}
 		entries, err := svc.ListTimeEntries(ticketID)
@@ -3659,17 +3648,15 @@ func runTime(args []string) error {
 	case "total":
 		fs := flag.NewFlagSet("time total", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		idFlag := fs.Int64("id", 0, "ticket ID")
+		idFlag := fs.String("id", "", "ticket ID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		ticketID := *idFlag
-		if ticketID == 0 && fs.NArg() > 0 {
-			if _, err := fmt.Sscan(fs.Arg(0), &ticketID); err != nil {
-				return errors.New("ticket id must be numeric")
-			}
+		if ticketID == "" && fs.NArg() > 0 {
+			ticketID = fs.Arg(0)
 		}
-		if ticketID == 0 {
+		if ticketID == "" {
 			return errors.New("usage: ticket time total -id <ticket-id>")
 		}
 		total, err := svc.TotalTimeForTicket(ticketID)
@@ -4381,8 +4368,8 @@ func runList(args []string) error {
 	}
 	// Build parent key map: ticket ID → parent's key string.
 	// Cache lookups so shared parents are only fetched once.
-	parentKeys := make(map[int64]string, len(tickets))
-	parentCache := make(map[int64]string)
+	parentKeys := make(map[string]string, len(tickets))
+	parentCache := make(map[string]string)
 	for _, ticket := range tickets {
 		if ticket.ParentID == nil {
 			continue
@@ -4390,7 +4377,7 @@ func runList(args []string) error {
 		pid := *ticket.ParentID
 		if key, ok := parentCache[pid]; ok {
 			parentKeys[ticket.ID] = key
-		} else if p, err := api.GetTicket(strconv.FormatInt(pid, 10)); err == nil {
+		} else if p, err := api.GetTicket(pid); err == nil {
 			key := ticketLabel(p)
 			parentCache[pid] = key
 			parentKeys[ticket.ID] = key
@@ -4457,10 +4444,7 @@ func runBoard(args []string) error {
 			if strings.TrimSpace(assignee) == "" {
 				assignee = "-"
 			}
-			key := t.Key
-			if strings.TrimSpace(key) == "" {
-				key = strconv.FormatInt(t.ID, 10)
-			}
+			key := t.ID
 			stateIcon := ""
 			switch t.State {
 			case "idle":
@@ -4553,13 +4537,13 @@ func runGet(args []string) error {
 	totalTime, _ := svc.TotalTimeForTicket(ticket.ID)
 	parentKey := ""
 	if ticket.ParentID != nil {
-		if p, err := svc.GetTicket(fmt.Sprintf("%d", *ticket.ParentID)); err == nil {
+		if p, err := svc.GetTicket(*ticket.ParentID); err == nil {
 			parentKey = ticketLabel(p)
 		}
 	}
 	cloneKey := ""
 	if ticket.CloneOf != nil {
-		if c, err := svc.GetTicket(fmt.Sprintf("%d", *ticket.CloneOf)); err == nil {
+		if c, err := svc.GetTicket(*ticket.CloneOf); err == nil {
 			cloneKey = ticketLabel(c)
 		}
 	}
@@ -4988,7 +4972,7 @@ func updateTicketState(idArg, state string) error {
 	return updateTicketLifecycleRequest(svc, current.ID, current, state)
 }
 
-func updateTicketLifecycleRequest(svc libticket.Service, id int64, current store.Ticket, state string) error {
+func updateTicketLifecycleRequest(svc libticket.Service, id string, current store.Ticket, state string) error {
 	assignee := current.Assignee
 	if state == store.StateActive && strings.TrimSpace(assignee) == "" {
 		status, err := svc.Status()
@@ -5155,7 +5139,7 @@ func runUpdate(args []string) error {
 	history, _ := svc.ListHistory(updated.ID)
 	parentKey := ""
 	if updated.ParentID != nil {
-		if p, err := svc.GetTicket(fmt.Sprintf("%d", *updated.ParentID)); err == nil {
+		if p, err := svc.GetTicket(*updated.ParentID); err == nil {
 			parentKey = ticketLabel(p)
 		}
 	}
@@ -5380,7 +5364,7 @@ func runHistory(args []string) error {
 		for _, event := range events {
 			key := event.TicketKey
 			if key == "" {
-				key = fmt.Sprintf("#%d", event.TicketID)
+				key = "#" + event.TicketID
 			}
 			fmt.Printf("[%s] %-10s %s\n", event.CreatedAt, key, formatHistoryEvent(event))
 		}
@@ -5466,7 +5450,7 @@ func runHealth(args []string) error {
 			}
 			result := map[string]any{
 				"ticket_id":                  ticket.ID,
-				"ticket_key":                 ticket.Key,
+				"ticket_key":                 ticket.ID,
 				"score":                      checks.score,
 				"not_an_orphan":              checks.notOrphan,
 				"has_acceptance_criteria":    checks.hasAC,
@@ -5712,9 +5696,9 @@ Targets:
 				comments, _ := svc.ListComments(t.ID)
 				checks := ticketHealthCheck(t, comments)
 				if _, err := svc.SetTicketHealth(t.ID, checks.score); err != nil {
-					fmt.Printf("  [ERR] %s: %v\n", t.Key, err)
+					fmt.Printf("  [ERR] %s: %v\n", t.ID, err)
 				} else {
-					fmt.Printf("  %s: score %d/4\n", t.Key, checks.score)
+					fmt.Printf("  %s: score %d/4\n", t.ID, checks.score)
 				}
 			}
 		}
@@ -5736,7 +5720,7 @@ Targets:
 			return err
 		}
 
-		fmt.Printf("=== Ticket Doctor: %s — %s ===\n\n", ticket.Key, ticket.Title)
+		fmt.Printf("=== Ticket Doctor: %s — %s ===\n\n", ticket.ID, ticket.Title)
 		fmt.Printf("Type:     %s\n", ticket.Type)
 		fmt.Printf("Status:   %s\n", ticket.Status)
 		fmt.Printf("Assignee: %s\n", orDash(ticket.Assignee))
@@ -5767,7 +5751,7 @@ Targets:
 				if i > 0 {
 					fmt.Print(" → ")
 				}
-				fmt.Printf("%s", p.Key)
+				fmt.Printf("%s", p.ID)
 			}
 			fmt.Println()
 		}
@@ -6170,7 +6154,7 @@ func runDeleteTicket(args []string) error {
 		return err
 	}
 	if outputJSON {
-		return printJSON(map[string]any{"status": "deleted", "ticket_id": ticket.ID, "key": ticket.Key})
+		return printJSON(map[string]any{"status": "deleted", "ticket_id": ticket.ID})
 	}
 	fmt.Printf("deleted ticket %s\n", ticketLabel(ticket))
 	return nil
@@ -6321,7 +6305,7 @@ func runCurate(args []string) error {
 	if err != nil {
 		return err
 	}
-	var sourceIDs []int64
+	var sourceIDs []string
 	var titles []string
 	for _, arg := range args {
 		ticket, err := api.GetTicket(arg)
@@ -6547,7 +6531,7 @@ func runReqShape(args []string) error {
 		return err
 	}
 	if current.Type != "requirement" {
-		return fmt.Errorf("%s is a %s, not a requirement", current.Key, current.Type)
+		return fmt.Errorf("%s is a %s, not a requirement", current.ID, current.Type)
 	}
 	update := libticket.TicketUpdateRequest{
 		Title:              current.Title,
@@ -6627,7 +6611,7 @@ func runReqBreak(args []string) error {
 		return err
 	}
 	if req.Type != "requirement" {
-		return fmt.Errorf("%s is a %s, not a requirement", req.Key, req.Type)
+		return fmt.Errorf("%s is a %s, not a requirement", req.ID, req.Type)
 	}
 
 	// List all tickets in the project, filter to children of this requirement.
@@ -6646,9 +6630,9 @@ func runReqBreak(args []string) error {
 		// Delete all unpinned children — for now, delete all (pin not yet tracked).
 		for _, child := range children {
 			if err := svc.DeleteTicket(child.ID); err != nil {
-				return fmt.Errorf("failed to delete %s: %w", child.Key, err)
+				return fmt.Errorf("failed to delete %s: %w", child.ID, err)
 			}
-			fmt.Printf("deleted %s: %s\n", child.Key, child.Title)
+			fmt.Printf("deleted %s: %s\n", child.ID, child.Title)
 		}
 		children = nil
 	}
@@ -6656,7 +6640,7 @@ func runReqBreak(args []string) error {
 	_ = *retry // retry keeps pinned items; without pin tracking, behaves like showing current state
 
 	if len(children) == 0 {
-		fmt.Printf("no breakdown items for %s\n", req.Key)
+		fmt.Printf("no breakdown items for %s\n", req.ID)
 		fmt.Println("hint: create child tickets with `tk add -parent <id> \"title\"` then re-run `tk req break -id <id>`")
 		return nil
 	}
@@ -6665,10 +6649,10 @@ func runReqBreak(args []string) error {
 		return printJSON(children)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "Breakdown of %s: %s\n\n", req.Key, req.Title)
+	fmt.Fprintf(w, "Breakdown of %s: %s\n\n", req.ID, req.Title)
 	fmt.Fprintln(w, "KEY\tTYPE\tSTATUS\tTITLE")
 	for _, child := range children {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", child.Key, child.Type, child.Status, child.Title)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", child.ID, child.Type, child.Status, child.Title)
 	}
 	return w.Flush()
 }
@@ -6742,7 +6726,7 @@ type ticketCreateOptions struct {
 	EstimateEffort     int
 	EstimateComplete   string
 	Assignee           string
-	ParentID           *int64
+	ParentID           *string
 	Project            string
 }
 
@@ -6767,7 +6751,7 @@ func runTicketCreate(args []string) error {
 	gitRepository := fs.String("git-repository", "", "ticket git repository")
 	gitBranch := fs.String("git-branch", "", "ticket git branch")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
-	parent := fs.Int64("parent", 0, "parent ticket id")
+	parent := fs.String("parent", "", "parent ticket id")
 	project := fs.String("project", "", "project id")
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return err
@@ -6792,7 +6776,7 @@ func runTicketCreate(args []string) error {
 		Assignee:           *assignee,
 		Project:            *project,
 	}
-	if *parent != 0 {
+	if *parent != "" {
 		opts.ParentID = parent
 	}
 	return createTicket(opts)
@@ -6854,16 +6838,16 @@ func createTicket(opts ticketCreateOptions) error {
 	}
 	parentID := opts.ParentID
 	ticketType := strings.TrimSpace(strings.ToLower(opts.TicketType))
-	if parentID == nil && cfg.CurrentEpicID > 0 && (ticketType == "task" || ticketType == "bug" || ticketType == "chore") {
-		epic, err := api.GetTicket(strconv.FormatInt(cfg.CurrentEpicID, 10))
+	if parentID == nil && cfg.CurrentEpicID != "" && (ticketType == "task" || ticketType == "bug" || ticketType == "chore") {
+		epic, err := api.GetTicket(cfg.CurrentEpicID)
 		if err != nil {
-			return fmt.Errorf("current epic id %d is invalid: %w", cfg.CurrentEpicID, err)
+			return fmt.Errorf("current epic id %s is invalid: %w", cfg.CurrentEpicID, err)
 		}
 		if strings.TrimSpace(strings.ToLower(epic.Type)) != "epic" {
-			return fmt.Errorf("current epic id %d is not an epic", cfg.CurrentEpicID)
+			return fmt.Errorf("current epic id %s is not an epic", cfg.CurrentEpicID)
 		}
 		if epic.ProjectID != project.ID {
-			return fmt.Errorf("current epic id %d belongs to project %d, active project is %d", cfg.CurrentEpicID, epic.ProjectID, project.ID)
+			return fmt.Errorf("current epic id %s belongs to project %d, active project is %d", cfg.CurrentEpicID, epic.ProjectID, project.ID)
 		}
 		parentID = &epic.ID
 	}
@@ -6988,7 +6972,7 @@ func runConfig(args []string) error {
 		fmt.Printf("server=%s\n", serverURL)
 		fmt.Printf("username=%s\n", cfg.Username)
 		fmt.Printf("current_project=%s\n", cfg.CurrentProject)
-		fmt.Printf("current_epic_id=%d\n", cfg.CurrentEpicID)
+		fmt.Printf("current_epic_id=%s\n", cfg.CurrentEpicID)
 		return nil
 	case "rm", "delete":
 		if len(args) != 2 {
@@ -7002,7 +6986,7 @@ func runConfig(args []string) error {
 		case "current_project":
 			cfg.CurrentProject = ""
 		case "current_epic_id":
-			cfg.CurrentEpicID = 0
+			cfg.CurrentEpicID = ""
 		default:
 			return fmt.Errorf("unknown config key %q", args[1])
 		}

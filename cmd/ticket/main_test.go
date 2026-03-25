@@ -135,10 +135,10 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 		t.Fatalf("snapshot file missing: %v", err)
 	}
 
-	if err := run([]string{"rm", "-id", strconv.FormatInt(ticketID, 10)}); err != nil {
+	if err := run([]string{"rm", "-id", ticketID}); err != nil {
 		t.Fatalf("run(rm) error = %v", err)
 	}
-	if err := run([]string{"get", "-id", strconv.FormatInt(ticketID, 10)}); err == nil || err.Error() != "ticket not found" {
+	if err := run([]string{"get", "-id", ticketID}); err == nil || err.Error() != "ticket not found" {
 		t.Fatalf("run(get deleted) error = %v, want ticket not found", err)
 	}
 
@@ -152,7 +152,7 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(ticketID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", ticketID}); err != nil {
 			t.Fatalf("run(get restored) error = %v", err)
 		}
 	})
@@ -178,13 +178,13 @@ func TestRunHealthReportsTicketHealthSection(t *testing.T) {
 	setupLocalCLI(t)
 
 	parentID := createLocalTask(t, []string{"epic", "Parent Epic", "-ac", "Epic must launch"})
-	taskID := createLocalTask(t, []string{"add", "-parent", strconv.FormatInt(parentID, 10), "-ac", "Child has AC", "-title", "Child Task"})
+	taskID := createLocalTask(t, []string{"add", "-parent", parentID, "-ac", "Child has AC", "-title", "Child Task"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "Reviewer approved this ticket."}); err != nil {
+		if err := run([]string{"comment", "add", "-id", taskID, "Reviewer approved this ticket."}); err != nil {
 			t.Fatalf("comment add error = %v", err)
 		}
-		if err := run([]string{"health", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"health", taskID}); err != nil {
 			t.Fatalf("health error = %v", err)
 		}
 	})
@@ -211,7 +211,7 @@ func TestRunHealthSupportsJSONOutput(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "Not Reviewed"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"health", strconv.FormatInt(taskID, 10), "-json"}); err != nil {
+		if err := run([]string{"health", taskID, "-json"}); err != nil {
 			t.Fatalf("health -json error = %v", err)
 		}
 	})
@@ -248,8 +248,8 @@ func TestRunHealthExecutePersistsScores(t *testing.T) {
 	setupLocalCLI(t)
 
 	firstID := createLocalTask(t, []string{"add", "Task One"})
-	secondID := createLocalTask(t, []string{"add", "Task Two", "-ac", "criteria", "-parent", strconv.FormatInt(firstID, 10)})
-	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(secondID, 10), "Approved by reviewer"}); err != nil {
+	secondID := createLocalTask(t, []string{"add", "Task Two", "-ac", "criteria", "-parent", firstID})
+	if err := run([]string{"comment", "add", "-id", secondID, "Approved by reviewer"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
@@ -270,14 +270,14 @@ func TestRunHealthExecutePersistsScores(t *testing.T) {
 		t.Fatalf("health execute ticket count = %#v", execSection["tickets"])
 	}
 
-	tasks := []int64{firstID, secondID}
+	tasks := []string{firstID, secondID}
 	for _, id := range tasks {
-		task, err := svcGetTicket(t, strconv.FormatInt(id, 10))
+		task, err := svcGetTicket(t, id)
 		if err != nil {
-			t.Fatalf("svc.GetTicket(%d) error = %v", id, err)
+			t.Fatalf("svc.GetTicket(%s) error = %v", id, err)
 		}
 		if task.HealthScore == 0 {
-			t.Fatalf("ticket %d health score = %d", id, task.HealthScore)
+			t.Fatalf("ticket %s health score = %d", id, task.HealthScore)
 		}
 	}
 }
@@ -1073,7 +1073,7 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 	output := captureStdout(t, func() {
 		printTicketDetails(store.Ticket{
-			ID:                 42,
+			ID:                 "TK-42",
 			Title:              "Example Task",
 			Type:               "task",
 			Status:             "design/idle",
@@ -1142,7 +1142,7 @@ func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "-ac", "criteria", "Ticket Beta"})
-	idArg := strconv.FormatInt(taskID, 10)
+	idArg := taskID
 
 	// Stage names are now valid arguments to tk state/stage
 	stageOutput := captureStdout(t, func() {
@@ -1299,14 +1299,14 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 	inProgressID := createLocalTask(t, []string{"add", "Moon Inprogress Task"})
 	completeID := createLocalTask(t, []string{"add", "Moon Complete Task"})
 	// Claim to assign, then set active (stays at design stage)
-	if err := run([]string{"claim", strconv.FormatInt(inProgressID, 10)}); err != nil {
+	if err := run([]string{"claim", inProgressID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
-	if err := run([]string{"active", "-id", strconv.FormatInt(inProgressID, 10)}); err != nil {
+	if err := run([]string{"active", "-id", inProgressID}); err != nil {
 		t.Fatalf("active error = %v", err)
 	}
 	// complete auto-advances from design to develop/idle
-	if err := run([]string{"complete", "-id", strconv.FormatInt(completeID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", completeID}); err != nil {
 		t.Fatalf("complete error = %v", err)
 	}
 
@@ -1319,7 +1319,7 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 		found := false
 		for _, line := range strings.Split(unicodeOutput, "\n") {
 			fields := strings.Fields(line)
-			// fields[0]=MOON fields[1]=KEY fields[2]=TYPE fields[3+]=TITLE... STAGE STATE ...
+			// KEY column is "symbol key", so fields[0]=symbol fields[1]=key fields[2]=TYPE fields[3+]=TITLE...
 			// Stage/state may not be at a fixed index due to multi-word titles, so check
 			// that the row has the right symbol+type and contains both stage and state.
 			if len(fields) >= 4 && fields[0] == statusSymbol && fields[2] == "task" && strings.Contains(line, stage) && strings.Contains(line, state) {
@@ -1355,7 +1355,7 @@ func TestRunListShowsHealthDecimalFraction(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "Task With Health"})
-	if err := run([]string{"health", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"health", taskID}); err != nil {
 		t.Fatalf("health error = %v", err)
 	}
 
@@ -1375,7 +1375,7 @@ func TestRunListArchivedVisibilityAndColumn(t *testing.T) {
 
 	openID := createLocalTask(t, []string{"add", "Open Task"})
 	archivedID := createLocalTask(t, []string{"add", "Archived Task"})
-	if err := run([]string{"archive", "-id", strconv.FormatInt(archivedID, 10)}); err != nil {
+	if err := run([]string{"archive", "-id", archivedID}); err != nil {
 		t.Fatalf("archive error = %v", err)
 	}
 
@@ -1449,12 +1449,12 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "-d", "findable description", "-ac", "ship it", "-estimate_effort", "8", "-estimate_complete", "2026-04-20T17:00:00Z", "Ticket Alpha"})
 	depID := createLocalTask(t, []string{"add", "Ticket Beta"})
-	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "latest note"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", taskID, "latest note"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1474,7 +1474,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	dependencyOutput := captureStdout(t, func() {
-		if err := run([]string{"dependency", "add", "-id", strconv.FormatInt(taskID, 10), strconv.FormatInt(depID, 10)}); err != nil {
+		if err := run([]string{"dependency", "add", "-id", taskID, depID}); err != nil {
 			t.Fatalf("dependency add error = %v", err)
 		}
 	})
@@ -1492,12 +1492,12 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	// Advance ticket to develop/idle so it's claimable via specific request
-	if err := run([]string{"complete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", taskID}); err != nil {
 		t.Fatalf("complete (advance to develop) error = %v", err)
 	}
 
 	requestOutput := captureStdout(t, func() {
-		if err := run([]string{"request", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"request", taskID}); err != nil {
 			t.Fatalf("request error = %v", err)
 		}
 	})
@@ -1515,12 +1515,12 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	// Advance depID to develop/idle so it's claimable
-	if err := run([]string{"complete", "-id", strconv.FormatInt(depID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", depID}); err != nil {
 		t.Fatalf("complete (advance dep to develop) error = %v", err)
 	}
 
 	claimOutput := captureStdout(t, func() {
-		if err := run([]string{"claim", strconv.FormatInt(depID, 10)}); err != nil {
+		if err := run([]string{"claim", depID}); err != nil {
 			t.Fatalf("claim error = %v", err)
 		}
 	})
@@ -1529,7 +1529,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	unclaimOutput := captureStdout(t, func() {
-		if err := run([]string{"unclaim", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"unclaim", taskID}); err != nil {
 			t.Fatalf("unclaim error = %v", err)
 		}
 	})
@@ -1538,7 +1538,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	cloneOutput := captureStdout(t, func() {
-		if err := run([]string{"clone", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"clone", taskID}); err != nil {
 			t.Fatalf("clone error = %v", err)
 		}
 	})
@@ -1547,7 +1547,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	commentOutput := captureStdout(t, func() {
-		if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "hello"}); err != nil {
+		if err := run([]string{"comment", "add", "-id", taskID, "hello"}); err != nil {
 			t.Fatalf("comment error = %v", err)
 		}
 	})
@@ -1556,7 +1556,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	setParentOutput := captureStdout(t, func() {
-		if err := run([]string{"set-parent", "-id", strconv.FormatInt(depID, 10), strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"set-parent", "-id", depID, taskID}); err != nil {
 			t.Fatalf("set-parent error = %v", err)
 		}
 	})
@@ -1565,7 +1565,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	unsetParentOutput := captureStdout(t, func() {
-		if err := run([]string{"unset-parent", "-id", strconv.FormatInt(depID, 10)}); err != nil {
+		if err := run([]string{"unset-parent", "-id", depID}); err != nil {
 			t.Fatalf("unset-parent error = %v", err)
 		}
 	})
@@ -1582,9 +1582,9 @@ func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
 	bugID := createLocalTask(t, []string{"bug", "Auto Parented Bug"})
 	choreID := createLocalTask(t, []string{"add", "-t", "chore", "Auto Parented Chore"})
 
-	for _, id := range []int64{taskID, bugID, choreID} {
+	for _, id := range []string{taskID, bugID, choreID} {
 		getOutput := captureStdout(t, func() {
-			if err := run([]string{"get", "-id", strconv.FormatInt(id, 10)}); err != nil {
+			if err := run([]string{"get", "-id", id}); err != nil {
 				t.Fatalf("get error = %v", err)
 			}
 		})
@@ -1616,16 +1616,16 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	}
 
 	// Advance to develop/idle so ticket is claimable
-	if err := run([]string{"complete", "-id", strconv.FormatInt(matchingID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", matchingID}); err != nil {
 		t.Fatalf("complete (advance to develop) error = %v", err)
 	}
-	if err := run([]string{"claim", strconv.FormatInt(matchingID, 10)}); err != nil {
+	if err := run([]string{"claim", matchingID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
-	if err := run([]string{"update", "-id", strconv.FormatInt(matchingID, 10), "-state", "active", "-priority", "4"}); err != nil {
+	if err := run([]string{"update", "-id", matchingID, "-state", "active", "-priority", "4"}); err != nil {
 		t.Fatalf("update matching task error = %v", err)
 	}
-	if err := run([]string{"update", "-id", strconv.FormatInt(otherID, 10), "-priority", "2"}); err != nil {
+	if err := run([]string{"update", "-id", otherID, "-priority", "2"}); err != nil {
 		t.Fatalf("update other task error = %v", err)
 	}
 
@@ -1679,10 +1679,10 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	parentID := createLocalTask(t, []string{"add", "-type", "epic", "Parent Epic"})
 	taskID := createLocalTask(t, []string{"add", "-d", "old description", "-ac", "old ac", "Ticket Alpha"})
 	// Advance to develop/idle so ticket is claimable
-	if err := run([]string{"complete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", taskID}); err != nil {
 		t.Fatalf("complete (advance to develop) error = %v", err)
 	}
-	if err := run([]string{"claim", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"claim", taskID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
 
@@ -1690,7 +1690,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 		if err := run([]string{
 			"update",
 			"-id",
-			strconv.FormatInt(taskID, 10),
+			taskID,
 			"-title", "Ticket Beta",
 			"-desc", "new description",
 			"-ac", "new ac",
@@ -1699,7 +1699,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 			"-estimate_effort", "5",
 			"-estimate_complete", "2026-04-15T12:00:00Z",
 			"-status", "develop/active",
-			"-parent_id", strconv.FormatInt(parentID, 10),
+			"-parent_id", parentID,
 		}); err != nil {
 			t.Fatalf("update error = %v", err)
 		}
@@ -1721,7 +1721,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1747,12 +1747,12 @@ func TestRunUpdateSupportsDescriptionAlias(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "-d", "old description", "Ticket Alpha"})
 
-	if err := run([]string{"update", "-id", strconv.FormatInt(taskID, 10), "-description", "updated description"}); err != nil {
+	if err := run([]string{"update", "-id", taskID, "-description", "updated description"}); err != nil {
 		t.Fatalf("update with -description error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1765,7 +1765,7 @@ func TestRunUpdateRequiresIDFlag(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Needs ID Update"})
 
-	if err := run([]string{"update", strconv.FormatInt(taskID, 10), "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: ticket update -id") {
+	if err := run([]string{"update", taskID, "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: ticket update -id") {
 		t.Fatalf("expected usage error for positional id, got %v", err)
 	}
 
@@ -1779,7 +1779,7 @@ func TestRunGetAcceptsPositionalID(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "Positional ID Get"})
 
 	// positional arg should work the same as -id
-	if err := run([]string{"get", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"get", taskID}); err != nil {
 		t.Fatalf("expected positional id to work, got %v", err)
 	}
 
@@ -1795,7 +1795,7 @@ func TestRunTaskCreateSupportsInterspersedFlags(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "the", "thing", "-type", "epic"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1815,7 +1815,7 @@ func TestRunTypedTaskCreateSupportsEstimateFlags(t *testing.T) {
 	taskID := createLocalTask(t, []string{"epic", "-estimate_effort", "8", "-estimate_complete", "2026-04-20T17:00:00Z", "Estimated Epic"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1850,7 +1850,7 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"create", "-t", "epic", "-title", "foo"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -1882,7 +1882,7 @@ func TestRunAssignAndUnassignInLocalMode(t *testing.T) {
 	}
 
 	assignOutput := captureStdout(t, func() {
-		if err := run([]string{"assign", strconv.FormatInt(taskID, 10), "alice"}); err != nil {
+		if err := run([]string{"assign", taskID, "alice"}); err != nil {
 			t.Fatalf("assign error = %v", err)
 		}
 	})
@@ -1891,7 +1891,7 @@ func TestRunAssignAndUnassignInLocalMode(t *testing.T) {
 	}
 
 	unassignOutput := captureStdout(t, func() {
-		if err := run([]string{"unassign", strconv.FormatInt(taskID, 10), "alice"}); err != nil {
+		if err := run([]string{"unassign", taskID, "alice"}); err != nil {
 			t.Fatalf("unassign error = %v", err)
 		}
 	})
@@ -1900,7 +1900,7 @@ func TestRunAssignAndUnassignInLocalMode(t *testing.T) {
 	}
 
 	cloneOutput := captureStdout(t, func() {
-		if err := run([]string{"clone", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"clone", taskID}); err != nil {
 			t.Fatalf("clone error = %v", err)
 		}
 	})
@@ -1917,7 +1917,7 @@ func TestRunStatusChangeInLocalModeDoesNotRequireOwnership(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "Ownership-free local task"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"complete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"complete", "-id", taskID}); err != nil {
 			t.Fatalf("complete error = %v", err)
 		}
 	})
@@ -1932,14 +1932,14 @@ func TestRunDeleteTicketInLocalMode(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "Delete me"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"delete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"delete", "-id", taskID}); err != nil {
 			t.Fatalf("delete error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "deleted ticket ") {
 		t.Fatalf("delete output = %q", output)
 	}
-	if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err == nil || err.Error() != "ticket not found" {
+	if err := run([]string{"get", "-id", taskID}); err == nil || err.Error() != "ticket not found" {
 		t.Fatalf("get deleted task error = %v, want ticket not found", err)
 	}
 }
@@ -1948,11 +1948,11 @@ func TestRunDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 	setupLocalCLI(t)
 
 	parentID := createLocalTask(t, []string{"add", "-t", "epic", "Parent"})
-	childID := createLocalTask(t, []string{"add", "-parent", strconv.FormatInt(parentID, 10), "Child"})
-	if childID == 0 {
-		t.Fatal("child task id = 0")
+	childID := createLocalTask(t, []string{"add", "-parent", parentID, "Child"})
+	if childID == "" {
+		t.Fatal("child task id is empty")
 	}
-	if err := run([]string{"rm", "-id", strconv.FormatInt(parentID, 10)}); err == nil || err.Error() != "ticket has child tickets" {
+	if err := run([]string{"rm", "-id", parentID}); err == nil || err.Error() != "ticket has child tickets" {
 		t.Fatalf("delete parent error = %v, want ticket has child tickets", err)
 	}
 }
@@ -1962,7 +1962,7 @@ func TestRunDeleteRequiresIDFlag(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "Needs ID Delete"})
 
 	// Positional ID should now work (no error).
-	if err := run([]string{"delete", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"delete", taskID}); err != nil {
 		t.Fatalf("positional delete should succeed, got %v", err)
 	}
 	// No ID at all should still fail.
@@ -1975,15 +1975,15 @@ func TestRunGetJSONUsesCommentAuthorDateTextShape(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "JSON Task"})
-	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "first"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", taskID, "first"}); err != nil {
 		t.Fatalf("comment add first error = %v", err)
 	}
-	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "second"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", taskID, "second"}); err != nil {
 		t.Fatalf("comment add second error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-json", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-json", "-id", taskID}); err != nil {
 			t.Fatalf("get -json error = %v", err)
 		}
 	})
@@ -2066,7 +2066,7 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	epicID := createLocalTask(t, []string{"epic", "Parent Epic"})
 	clearCurrentEpicID(t)
-	taskID := createLocalTask(t, []string{"add", "-parent", strconv.FormatInt(epicID, 10), "Child Task"})
+	taskID := createLocalTask(t, []string{"add", "-parent", epicID, "Child Task"})
 	orphanID := createLocalTask(t, []string{"add", "Orphan Task"})
 
 	countOutput := captureStdout(t, func() {
@@ -2079,7 +2079,7 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	}
 
 	historyOutput := captureStdout(t, func() {
-		if err := run([]string{"history", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"history", taskID}); err != nil {
 			t.Fatalf("history error = %v", err)
 		}
 	})
@@ -2088,7 +2088,7 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
 			t.Fatalf("get error = %v", err)
 		}
 	})
@@ -2183,7 +2183,7 @@ func TestRunSetParentDisallowsEpicUnderTask(t *testing.T) {
 	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
 	taskID := createLocalTask(t, []string{"add", "Task Parent"})
 
-	if err := run([]string{"set-parent", "-id", strconv.FormatInt(epicID, 10), strconv.FormatInt(taskID, 10)}); err == nil {
+	if err := run([]string{"set-parent", "-id", epicID, taskID}); err == nil {
 		t.Fatalf("set-parent should reject epic parenting by task")
 	} else if !strings.Contains(err.Error(), "task cannot parent epic") {
 		t.Fatalf("set-parent error = %v", err)
@@ -2412,7 +2412,7 @@ func testAdminUserID(t *testing.T) string {
 	return user.ID
 }
 
-func createLocalTask(t *testing.T, args []string) int64 {
+func createLocalTask(t *testing.T, args []string) string {
 	t.Helper()
 	output := captureStdout(t, func() {
 		if err := run(args); err != nil {
@@ -2430,7 +2430,7 @@ func createLocalTask(t *testing.T, args []string) int64 {
 	return id
 }
 
-func ticketLabelByID(t *testing.T, id int64) string {
+func ticketLabelByID(t *testing.T, id string) string {
 	t.Helper()
 	cfg, err := config.Load()
 	if err != nil {
@@ -2440,14 +2440,11 @@ func ticketLabelByID(t *testing.T, id int64) string {
 	if err != nil {
 		t.Fatalf("resolveService() error = %v", err)
 	}
-	task, err := svc.GetTicket(strconv.FormatInt(id, 10))
+	task, err := svc.GetTicket(id)
 	if err != nil {
-		t.Fatalf("svc.GetTicket(%d) error = %v", id, err)
+		t.Fatalf("svc.GetTicket(%s) error = %v", id, err)
 	}
-	if task.Key != "" {
-		return task.Key
-	}
-	return strconv.FormatInt(id, 10)
+	return task.ID
 }
 
 func clearCurrentEpicID(t *testing.T) {
@@ -2456,7 +2453,7 @@ func clearCurrentEpicID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	cfg.CurrentEpicID = 0
+	cfg.CurrentEpicID = ""
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
 	}
@@ -2475,22 +2472,22 @@ func svcGetTicket(t *testing.T, ref string) (store.Ticket, error) {
 	return svc.GetTicket(ref)
 }
 
-func parseTicketReferenceToID(ref string) (int64, error) {
+func parseTicketReferenceToID(ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return 0, errors.New("empty ticket reference")
+		return "", errors.New("empty ticket reference")
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	svc, err := resolveService(cfg)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	task, err := svc.GetTicket(ref)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	return task.ID, nil
 }
@@ -2573,7 +2570,7 @@ func TestHasReviewerAgentComment(t *testing.T) {
 
 func TestBuildAgentPrompt(t *testing.T) {
 	ticket := store.Ticket{
-		Key:                "TK-1",
+		ID:                 "TK-1",
 		Title:              "Test Task",
 		Description:        "Some description",
 		AcceptanceCriteria: "Must pass",
@@ -2670,14 +2667,14 @@ func TestRunLabelCRUD(t *testing.T) {
 
 	// Add label to ticket
 	captureStdout(t, func() {
-		if err := run([]string{"label", "add", strconv.FormatInt(taskID, 10), "1"}); err != nil {
+		if err := run([]string{"label", "add", taskID, "1"}); err != nil {
 			t.Fatalf("label add error = %v", err)
 		}
 	})
 
 	// Show ticket labels
 	output = captureStdout(t, func() {
-		if err := run([]string{"label", "show", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"label", "show", taskID}); err != nil {
 			t.Fatalf("label show error = %v", err)
 		}
 	})
@@ -2687,7 +2684,7 @@ func TestRunLabelCRUD(t *testing.T) {
 
 	// Remove label from ticket
 	captureStdout(t, func() {
-		if err := run([]string{"label", "remove", strconv.FormatInt(taskID, 10), "1"}); err != nil {
+		if err := run([]string{"label", "remove", taskID, "1"}); err != nil {
 			t.Fatalf("label remove error = %v", err)
 		}
 	})
@@ -2703,7 +2700,7 @@ func TestRunLabelCRUD(t *testing.T) {
 func TestRunTimeCRUD(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Time Test"})
-	idStr := strconv.FormatInt(taskID, 10)
+	idStr := taskID
 
 	// Log time
 	output := captureStdout(t, func() {
@@ -2765,7 +2762,7 @@ func TestRunEpicUseSetsCurrent(t *testing.T) {
 	setupLocalCLI(t)
 
 	epicID := createLocalTask(t, []string{"epic", "My Epic"})
-	epicRef := strconv.FormatInt(epicID, 10)
+	epicRef := epicID
 
 	if err := run([]string{"epic", "use", epicRef}); err != nil {
 		t.Fatalf("epic use error = %v", err)
@@ -2776,7 +2773,7 @@ func TestRunEpicUseSetsCurrent(t *testing.T) {
 		t.Fatalf("config.Load() error = %v", err)
 	}
 	if cfg.CurrentEpicID != epicID {
-		t.Fatalf("CurrentEpicID = %d, want %d", cfg.CurrentEpicID, epicID)
+		t.Fatalf("CurrentEpicID = %s, want %s", cfg.CurrentEpicID, epicID)
 	}
 }
 
@@ -2784,7 +2781,7 @@ func TestRunEpicUseRejectsNonEpic(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "Just a task"})
-	if err := run([]string{"epic", "use", strconv.FormatInt(taskID, 10)}); err == nil {
+	if err := run([]string{"epic", "use", taskID}); err == nil {
 		t.Fatal("expected error when using a non-epic ticket, got nil")
 	}
 }
@@ -2793,7 +2790,7 @@ func TestRunEpicClearResetsEpicID(t *testing.T) {
 	setupLocalCLI(t)
 
 	epicID := createLocalTask(t, []string{"epic", "Clearable Epic"})
-	if err := run([]string{"epic", "use", strconv.FormatInt(epicID, 10)}); err != nil {
+	if err := run([]string{"epic", "use", epicID}); err != nil {
 		t.Fatalf("epic use error = %v", err)
 	}
 
@@ -2805,8 +2802,8 @@ func TestRunEpicClearResetsEpicID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if cfg.CurrentEpicID != 0 {
-		t.Fatalf("CurrentEpicID = %d after clear, want 0", cfg.CurrentEpicID)
+	if cfg.CurrentEpicID != "" {
+		t.Fatalf("CurrentEpicID = %s after clear, want empty", cfg.CurrentEpicID)
 	}
 }
 
@@ -2814,7 +2811,7 @@ func TestRunEpicListShowsActiveMarker(t *testing.T) {
 	setupLocalCLI(t)
 
 	epicID := createLocalTask(t, []string{"epic", "Listed Epic"})
-	epicRef := strconv.FormatInt(epicID, 10)
+	epicRef := epicID
 
 	// Clear active epic so we can test the "no marker" state
 	clearCurrentEpicID(t)
@@ -2853,12 +2850,12 @@ func TestRunUnclaimRejectsNonOwner(t *testing.T) {
 	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
 		t.Fatalf("user create error = %v", err)
 	}
-	if err := run([]string{"assign", strconv.FormatInt(taskID, 10), "alice"}); err != nil {
+	if err := run([]string{"assign", taskID, "alice"}); err != nil {
 		t.Fatalf("assign error = %v", err)
 	}
 
 	// Admin (local mode user) is not alice; unclaim should fail
-	err := run([]string{"unclaim", strconv.FormatInt(taskID, 10)})
+	err := run([]string{"unclaim", taskID})
 	if err == nil {
 		t.Fatal("expected error when unclaiming a ticket not owned by the caller")
 	}
@@ -2875,18 +2872,18 @@ func TestRunClaimRejectsAlreadyAssigned(t *testing.T) {
 	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
 		t.Fatalf("user create error = %v", err)
 	}
-	if err := run([]string{"assign", strconv.FormatInt(taskID, 10), "alice"}); err != nil {
+	if err := run([]string{"assign", taskID, "alice"}); err != nil {
 		t.Fatalf("assign error = %v", err)
 	}
 
 	// Advance to develop/idle so it is "claimable" stage-wise
-	if err := run([]string{"complete", "-id", strconv.FormatInt(taskID, 10)}); err != nil {
+	if err := run([]string{"complete", "-id", taskID}); err != nil {
 		t.Fatalf("complete error = %v", err)
 	}
 
 	// claim as admin (already assigned to alice) — runRequest returns nil and prints REJECTED
 	output := captureStdout(t, func() {
-		if err := run([]string{"claim", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"claim", taskID}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2906,7 +2903,7 @@ func TestRunAssignDisabledUserFails(t *testing.T) {
 		t.Fatalf("user disable error = %v", err)
 	}
 
-	err := run([]string{"assign", strconv.FormatInt(taskID, 10), "carol"})
+	err := run([]string{"assign", taskID, "carol"})
 	if err == nil {
 		t.Fatal("expected error when assigning to a disabled user")
 	}
@@ -2919,7 +2916,7 @@ func TestRunAssignNonExistentUserFails(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "No User Task"})
-	err := run([]string{"assign", strconv.FormatInt(taskID, 10), "nobody"})
+	err := run([]string{"assign", taskID, "nobody"})
 	if err == nil {
 		t.Fatal("expected error when assigning to a non-existent user")
 	}
@@ -3028,7 +3025,7 @@ func TestRunCurateCreatesRequirement(t *testing.T) {
 	sourceID := createLocalTask(t, []string{"add", "Implement login"})
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"curate", strconv.FormatInt(sourceID, 10)}); err != nil {
+		if err := run([]string{"curate", sourceID}); err != nil {
 			t.Fatalf("curate error = %v", err)
 		}
 	})
@@ -3051,7 +3048,7 @@ func TestRunReviewListsRequirements(t *testing.T) {
 	setupLocalCLI(t)
 
 	sourceID := createLocalTask(t, []string{"add", "Login feature"})
-	if err := run([]string{"curate", strconv.FormatInt(sourceID, 10)}); err != nil {
+	if err := run([]string{"curate", sourceID}); err != nil {
 		t.Fatalf("curate error = %v", err)
 	}
 
@@ -3071,7 +3068,7 @@ func TestRunReviewFiltersByStatus(t *testing.T) {
 	sourceID := createLocalTask(t, []string{"add", "Filter source"})
 	var reqKey string
 	captureStdout(t, func() {
-		if err := run([]string{"curate", strconv.FormatInt(sourceID, 10)}); err != nil {
+		if err := run([]string{"curate", sourceID}); err != nil {
 			t.Fatalf("curate error = %v", err)
 		}
 	})
@@ -3126,12 +3123,12 @@ func TestRunAcceptAndRejectRequirement(t *testing.T) {
 
 	var req1Key, req2Key string
 	captureStdout(t, func() {
-		if err := run([]string{"curate", strconv.FormatInt(src1, 10)}); err != nil {
+		if err := run([]string{"curate", src1}); err != nil {
 			t.Fatalf("curate error = %v", err)
 		}
 	})
 	captureStdout(t, func() {
-		if err := run([]string{"curate", strconv.FormatInt(src2, 10)}); err != nil {
+		if err := run([]string{"curate", src2}); err != nil {
 			t.Fatalf("curate error = %v", err)
 		}
 	})
@@ -3180,7 +3177,7 @@ func TestRunReviseRequirement(t *testing.T) {
 	srcID := createLocalTask(t, []string{"add", "Revise source"})
 	var reqKey string
 	captureStdout(t, func() {
-		if err := run([]string{"curate", strconv.FormatInt(srcID, 10)}); err != nil {
+		if err := run([]string{"curate", srcID}); err != nil {
 			t.Fatalf("curate error = %v", err)
 		}
 	})
@@ -3235,12 +3232,12 @@ func TestRunConversationShow(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "Conversation ticket"})
-	if err := run([]string{"comment", "add", "-id", strconv.FormatInt(taskID, 10), "First comment"}); err != nil {
+	if err := run([]string{"comment", "add", "-id", taskID, "First comment"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
 
 	out := captureStdout(t, func() {
-		if err := run([]string{"conversation", "show", strconv.FormatInt(taskID, 10)}); err != nil {
+		if err := run([]string{"conversation", "show", taskID}); err != nil {
 			t.Fatalf("conversation show error = %v", err)
 		}
 	})
@@ -3317,7 +3314,6 @@ func TestRunTeamCreateListUpdateDelete(t *testing.T) {
 	}
 
 	// update
-	id, _ := strconv.ParseInt(teamID, 10, 64)
 	updateOut := captureStdout(t, func() {
 		if err := run([]string{"team", "update", "-id", teamID, "-name", "Beta Team"}); err != nil {
 			t.Fatalf("team update error = %v", err)
@@ -3329,7 +3325,7 @@ func TestRunTeamCreateListUpdateDelete(t *testing.T) {
 
 	// delete
 	captureStdout(t, func() {
-		if err := run([]string{"team", "delete", "-id", strconv.FormatInt(id, 10)}); err != nil {
+		if err := run([]string{"team", "delete", "-id", teamID}); err != nil {
 			t.Fatalf("team delete error = %v", err)
 		}
 	})
@@ -3363,15 +3359,15 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 		}
 	})
 	// output format: "created team #<id> <name>"
-	var teamID int64
+	var teamID string
 	for _, f := range strings.Fields(createOut) {
 		clean := strings.TrimPrefix(f, "#")
 		if n, err := strconv.ParseInt(clean, 10, 64); err == nil && n > 0 {
-			teamID = n
+			teamID = clean
 			break
 		}
 	}
-	if teamID == 0 {
+	if teamID == "" {
 		t.Fatalf("could not extract team id from: %s", createOut)
 	}
 
@@ -3379,7 +3375,7 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 	adminUserID := testAdminUserID(t)
 	addOut := captureStdout(t, func() {
 		if err := run([]string{"team", "add-user",
-			"-team_id", strconv.FormatInt(teamID, 10),
+			"-team_id", teamID,
 			"-user_id", adminUserID,
 			"-role", "owner",
 			"-job_title", "Tech Lead",
@@ -3393,7 +3389,7 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 
 	// list users
 	usersOut := captureStdout(t, func() {
-		if err := run([]string{"team", "users", "-team_id", strconv.FormatInt(teamID, 10)}); err != nil {
+		if err := run([]string{"team", "users", "-team_id", teamID}); err != nil {
 			t.Fatalf("team users error = %v", err)
 		}
 	})
@@ -3404,7 +3400,7 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 	// remove user
 	captureStdout(t, func() {
 		if err := run([]string{"team", "remove-user",
-			"-team_id", strconv.FormatInt(teamID, 10),
+			"-team_id", teamID,
 			"-user_id", adminUserID,
 		}); err != nil {
 			t.Fatalf("team remove-user error = %v", err)
@@ -3413,7 +3409,7 @@ func TestRunTeamAddAndRemoveUser(t *testing.T) {
 
 	// verify removed
 	afterRemove := captureStdout(t, func() {
-		if err := run([]string{"team", "users", "-team_id", strconv.FormatInt(teamID, 10)}); err != nil {
+		if err := run([]string{"team", "users", "-team_id", teamID}); err != nil {
 			t.Fatalf("team users after remove error = %v", err)
 		}
 	})
@@ -3436,8 +3432,8 @@ func TestRunDependencyAddAndRemove(t *testing.T) {
 	// create two tickets
 	id1 := createLocalTask(t, []string{"add", "Ticket Alpha"})
 	id2 := createLocalTask(t, []string{"add", "Ticket Beta"})
-	ref1 := strconv.FormatInt(id1, 10)
-	ref2 := strconv.FormatInt(id2, 10)
+	ref1 := id1
+	ref2 := id2
 
 	// add dependency: alpha depends on beta
 	addOut := captureStdout(t, func() {
@@ -3488,8 +3484,8 @@ func TestRunDependencyShorthandForm(t *testing.T) {
 
 	id1 := createLocalTask(t, []string{"add", "Ticket X"})
 	id2 := createLocalTask(t, []string{"add", "Ticket Y"})
-	ref1 := strconv.FormatInt(id1, 10)
-	ref2 := strconv.FormatInt(id2, 10)
+	ref1 := id1
+	ref2 := id2
 
 	// shorthand: add-dependency <id> <dep-id>
 	addOut := captureStdout(t, func() {
@@ -3530,7 +3526,7 @@ func TestRunDependencyInvalidID(t *testing.T) {
 	setupLocalCLI(t)
 
 	id1 := createLocalTask(t, []string{"add", "Ticket Z"})
-	ref1 := strconv.FormatInt(id1, 10)
+	ref1 := id1
 
 	err := run([]string{"dependency", "add", "-id", ref1, "99999"})
 	if err == nil {
@@ -3542,7 +3538,7 @@ func TestRunArchiveAndUnarchive(t *testing.T) {
 	setupLocalCLI(t)
 
 	id := createLocalTask(t, []string{"add", "Archive me"})
-	ref := strconv.FormatInt(id, 10)
+	ref := id
 
 	// archive
 	archiveOut := captureStdout(t, func() {
@@ -3597,7 +3593,7 @@ func TestRunCommentAddAndList(t *testing.T) {
 	setupLocalCLI(t)
 
 	id := createLocalTask(t, []string{"add", "Commented ticket"})
-	ref := strconv.FormatInt(id, 10)
+	ref := id
 
 	// add comment
 	addOut := captureStdout(t, func() {
@@ -3632,7 +3628,7 @@ func TestRunCloneTicket(t *testing.T) {
 	setupLocalCLI(t)
 
 	id := createLocalTask(t, []string{"add", "Original ticket"})
-	ref := strconv.FormatInt(id, 10)
+	ref := id
 
 	// clone
 	cloneOut := captureStdout(t, func() {
@@ -3663,7 +3659,7 @@ func TestRunRequestAssignsNextTicket(t *testing.T) {
 	// create a task in develop/idle (requestable state)
 	id := createLocalTask(t, []string{"add", "Requestable ticket"})
 	// advance to develop stage so it's requestable
-	ref := strconv.FormatInt(id, 10)
+	ref := id
 	captureStdout(t, func() {
 		_ = run([]string{"complete", "-id", ref})
 	})

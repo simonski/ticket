@@ -265,15 +265,14 @@ func ListAgentStatuses(db *sql.DB) ([]AgentStatus, error) {
 	statuses := make([]AgentStatus, 0, len(agents))
 	for _, a := range agents {
 		as := AgentStatus{Agent: a}
-		var ticketID int64
-		var key string
+		var ticketID string
 		err := db.QueryRow(`
-			SELECT t.ticket_id, t.key FROM tickets t
+			SELECT t.ticket_id FROM tickets t
 			WHERE t.assignee = ? AND t.state = 'active' AND t.open = 1
 			LIMIT 1
-		`, a.Username).Scan(&ticketID, &key)
+		`, a.Username).Scan(&ticketID)
 		if err == nil {
-			as.TicketKey = &key
+			as.TicketKey = &ticketID
 			ticket, err := GetTicket(db, ticketID)
 			if err == nil {
 				ctx := EnrichTicketContext(db, ticket)

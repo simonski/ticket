@@ -64,8 +64,8 @@ type storyRequest struct {
 }
 
 type ticketRequest struct {
-	ProjectID          int64  `json:"project_id"`
-	ParentID           *int64 `json:"parent_id"`
+	ProjectID          int64   `json:"project_id"`
+	ParentID           *string `json:"parent_id"`
 	Type               string `json:"type"`
 	Title              string `json:"title"`
 	Description        string `json:"description"`
@@ -91,14 +91,14 @@ type commentRequest struct {
 }
 
 type dependencyRequest struct {
-	ProjectID int64 `json:"project_id"`
-	TicketID  int64 `json:"ticket_id"`
-	DependsOn int64 `json:"depends_on"`
+	ProjectID int64  `json:"project_id"`
+	TicketID  string `json:"ticket_id"`
+	DependsOn string `json:"depends_on"`
 }
 
 type ticketClaimRequest struct {
 	ProjectID int64  `json:"project_id"`
-	TicketID  *int64 `json:"ticket_id,omitempty"`
+	TicketID  *string `json:"ticket_id,omitempty"`
 	TicketRef string `json:"ticket_ref,omitempty"`
 	DryRun    bool   `json:"dry_run"`
 }

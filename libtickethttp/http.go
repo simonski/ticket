@@ -135,7 +135,7 @@ func (s *Service) RequestAgentWork(request libticket.AgentRequest) (libticket.Ag
 	return libticket.AgentWorkResponse(resp), nil
 }
 
-func (s *Service) AgentUpdateTicket(id int64, request libticket.AgentTicketUpdateRequest) (store.Ticket, error) {
+func (s *Service) AgentUpdateTicket(id string, request libticket.AgentTicketUpdateRequest) (store.Ticket, error) {
 	return s.client.AgentUpdateTicket(id, client.AgentTicketUpdateRequest(request))
 }
 
@@ -239,55 +239,55 @@ func (s *Service) ListTicketsFiltered(projectID int64, taskType, stage, state, s
 	return s.client.ListTicketsFiltered(projectID, taskType, stage, state, status, search, assignee, limit, includeArchived)
 }
 
-func (s *Service) UpdateTicket(id int64, request libticket.TicketUpdateRequest) (store.Ticket, error) {
+func (s *Service) UpdateTicket(id string, request libticket.TicketUpdateRequest) (store.Ticket, error) {
 	return s.client.UpdateTicket(id, client.TicketUpdateRequest(request))
 }
 
-func (s *Service) CloseTicket(id int64) (store.Ticket, error) {
+func (s *Service) CloseTicket(id string) (store.Ticket, error) {
 	return s.client.CloseTicket(id)
 }
 
-func (s *Service) OpenTicket(id int64) (store.Ticket, error) {
+func (s *Service) OpenTicket(id string) (store.Ticket, error) {
 	return s.client.OpenTicket(id)
 }
 
-func (s *Service) ArchiveTicket(id int64) (store.Ticket, error) {
+func (s *Service) ArchiveTicket(id string) (store.Ticket, error) {
 	return s.client.ArchiveTicket(id)
 }
 
-func (s *Service) UnarchiveTicket(id int64) (store.Ticket, error) {
+func (s *Service) UnarchiveTicket(id string) (store.Ticket, error) {
 	return s.client.UnarchiveTicket(id)
 }
 
-func (s *Service) ReadyTicket(id int64) (store.Ticket, error) {
+func (s *Service) ReadyTicket(id string) (store.Ticket, error) {
 	return s.client.ReadyTicket(id)
 }
 
-func (s *Service) NotReadyTicket(id int64) (store.Ticket, error) {
+func (s *Service) NotReadyTicket(id string) (store.Ticket, error) {
 	return s.client.NotReadyTicket(id)
 }
 
-func (s *Service) SetTicketWorkflow(id int64, workflowID int64) (store.Ticket, error) {
+func (s *Service) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
 	return s.client.SetTicketWorkflow(id, workflowID)
 }
 
-func (s *Service) UnsetTicketWorkflow(id int64) (store.Ticket, error) {
+func (s *Service) UnsetTicketWorkflow(id string) (store.Ticket, error) {
 	return s.client.UnsetTicketWorkflow(id)
 }
 
-func (s *Service) DeleteTicket(id int64) error {
+func (s *Service) DeleteTicket(id string) error {
 	return s.client.DeleteTicket(id)
 }
 
-func (s *Service) SetTicketParent(id, parentID int64) (store.Ticket, error) {
+func (s *Service) SetTicketParent(id string, parentID string) (store.Ticket, error) {
 	return s.client.SetTicketParent(id, parentID)
 }
 
-func (s *Service) UnsetTicketParent(id int64) (store.Ticket, error) {
+func (s *Service) UnsetTicketParent(id string) (store.Ticket, error) {
 	return s.client.UnsetTicketParent(id)
 }
 
-func (s *Service) GetTicketByID(id int64) (store.Ticket, error) {
+func (s *Service) GetTicketByID(id string) (store.Ticket, error) {
 	return s.client.GetTicketByID(id)
 }
 
@@ -295,11 +295,11 @@ func (s *Service) GetTicket(ref string) (store.Ticket, error) {
 	return s.client.GetTicket(ref)
 }
 
-func (s *Service) CloneTicket(id int64) (store.Ticket, error) {
+func (s *Service) CloneTicket(id string) (store.Ticket, error) {
 	return s.client.CloneTicket(id)
 }
 
-func (s *Service) ListHistory(id int64) ([]store.HistoryEvent, error) {
+func (s *Service) ListHistory(id string) ([]store.HistoryEvent, error) {
 	return s.client.ListHistory(id)
 }
 
@@ -307,15 +307,15 @@ func (s *Service) ListProjectHistory(projectID int64, limit int) ([]store.Histor
 	return s.client.ListProjectHistory(projectID, limit)
 }
 
-func (s *Service) AddComment(id int64, comment string) (store.Comment, error) {
+func (s *Service) AddComment(id string, comment string) (store.Comment, error) {
 	return s.client.AddComment(id, comment)
 }
 
-func (s *Service) ListComments(id int64) ([]store.Comment, error) {
+func (s *Service) ListComments(id string) ([]store.Comment, error) {
 	return s.client.ListComments(id)
 }
 
-func (s *Service) SetTicketHealth(id int64, score int) (store.Ticket, error) {
+func (s *Service) SetTicketHealth(id string, score int) (store.Ticket, error) {
 	return s.client.SetTicketHealth(id, score)
 }
 
@@ -327,7 +327,7 @@ func (s *Service) RemoveDependency(request libticket.DependencyRequest) error {
 	return s.client.RemoveDependency(client.DependencyRequest(request))
 }
 
-func (s *Service) ListDependencies(id int64) ([]store.Dependency, error) {
+func (s *Service) ListDependencies(id string) ([]store.Dependency, error) {
 	return s.client.ListDependencies(id)
 }
 
@@ -375,11 +375,11 @@ func (s *Service) ImportWorkflow(export store.WorkflowExport) (store.Workflow, e
 	return s.client.ImportWorkflow(export)
 }
 
-func (s *Service) LogTime(ticketID int64, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
+func (s *Service) LogTime(ticketID string, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
 	return s.client.LogTime(ticketID, request)
 }
 
-func (s *Service) ListTimeEntries(ticketID int64) ([]store.TimeEntry, error) {
+func (s *Service) ListTimeEntries(ticketID string) ([]store.TimeEntry, error) {
 	return s.client.ListTimeEntries(ticketID)
 }
 
@@ -387,7 +387,7 @@ func (s *Service) DeleteTimeEntry(id int64) error {
 	return s.client.DeleteTimeEntry(id)
 }
 
-func (s *Service) TotalTimeForTicket(ticketID int64) (int, error) {
+func (s *Service) TotalTimeForTicket(ticketID string) (int, error) {
 	return s.client.TotalTimeForTicket(ticketID)
 }
 
@@ -403,15 +403,15 @@ func (s *Service) DeleteLabel(id int64) error {
 	return s.client.DeleteLabel(id)
 }
 
-func (s *Service) AddTicketLabel(ticketID, labelID int64) error {
+func (s *Service) AddTicketLabel(ticketID string, labelID int64) error {
 	return s.client.AddTicketLabel(ticketID, labelID)
 }
 
-func (s *Service) RemoveTicketLabel(ticketID, labelID int64) error {
+func (s *Service) RemoveTicketLabel(ticketID string, labelID int64) error {
 	return s.client.RemoveTicketLabel(ticketID, labelID)
 }
 
-func (s *Service) ListTicketLabels(ticketID int64) ([]store.Label, error) {
+func (s *Service) ListTicketLabels(ticketID string) ([]store.Label, error) {
 	return s.client.ListTicketLabels(ticketID)
 }
 

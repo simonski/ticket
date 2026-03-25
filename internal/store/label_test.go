@@ -110,7 +110,7 @@ func TestTicketLabels(t *testing.T) {
 		t.Fatalf("ListTicketsByLabel() error = %v", err)
 	}
 	if len(ids) != 1 || ids[0] != ticket.ID {
-		t.Fatalf("ListTicketsByLabel() = %v, want [%d]", ids, ticket.ID)
+		t.Fatalf("ListTicketsByLabel() = %v, want [%s]", ids, ticket.ID)
 	}
 
 	// Remove label

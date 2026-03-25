@@ -2,11 +2,11 @@ package server
 
 import "strings"
 
-func buildLiveChangeEvent(eventType string, projectID, ticketID int64) liveEvent {
+func buildLiveChangeEvent(eventType string, projectID int64, ticketID string) liveEvent {
 	eventType = strings.TrimSpace(eventType)
 	changeType := ""
 	entityType := ""
-	entityID := int64(0)
+	var entityID any
 
 	switch eventType {
 	case "ticket_created":

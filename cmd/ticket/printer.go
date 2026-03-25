@@ -100,10 +100,7 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 }
 
 func ticketLabel(ticket store.Ticket) string {
-	if strings.TrimSpace(ticket.Key) != "" {
-		return ticket.Key
-	}
-	return strconv.FormatInt(ticket.ID, 10)
+	return ticket.ID
 }
 
 func printTicket(ticket store.Ticket) {
@@ -112,7 +109,7 @@ func printTicket(ticket store.Ticket) {
 		return
 	}
 	fmt.Printf("ticket: %s\n", ticket.Title)
-	fmt.Printf("key: %s\n", ticket.Key)
+	fmt.Printf("key: %s\n", ticket.ID)
 	fmt.Printf("type: %s\n", ticket.Type)
 	fmt.Printf("status: %s\n", ticket.Status)
 	fmt.Printf("ready: %t\n", ticket.Ready)
@@ -157,7 +154,7 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 		fmt.Println()
 		fmt.Println("parents:")
 		for _, p := range resp.Parents {
-			fmt.Printf("  %s [%s] %s\n", p.Key, p.Type, p.Title)
+			fmt.Printf("  %s [%s] %s\n", p.ID, p.Type, p.Title)
 		}
 	}
 	if resp.Workflow != nil {
@@ -189,7 +186,7 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 
 func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string) {
 	dependsOn := formatDependsOn(dependencies)
-	fmt.Printf("Key          : %s\n", ticket.Key)
+	fmt.Printf("Key          : %s\n", ticket.ID)
 	fmt.Printf("Type         : %s\n", ticket.Type)
 	fmt.Printf("Description  : %s\n", ticket.Description)
 	if parentKey != "" {
@@ -252,11 +249,7 @@ func printTicketChildren(children []store.Ticket) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, c := range children {
 		symbol := formatTicketStatusSymbol(c.Status, true)
-		key := c.Key
-		if key == "" {
-			key = strconv.FormatInt(c.ID, 10)
-		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, key, c.Type, c.Status, c.Title)
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, c.ID, c.Type, c.Status, c.Title)
 	}
 	_ = w.Flush()
 }
@@ -280,7 +273,7 @@ func renderWorkflowProgress(currentStage string, stages []store.WorkflowStage) s
 func formatDependsOn(dependencies []store.Dependency) string {
 	var ids []string
 	for _, dependency := range dependencies {
-		ids = append(ids, strconv.FormatInt(dependency.DependsOn, 10))
+		ids = append(ids, dependency.DependsOn)
 	}
 	if len(ids) == 0 {
 		return "[]"
@@ -307,7 +300,7 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	printStatusBox(lines)
 }
 
-func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, agentUsernames map[string]bool, statusUnicode bool, includeArchived bool) {
+func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode bool, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
@@ -327,9 +320,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, agent
 
 	makeHeader := func() string {
 		if showOpen {
-			return "MOON\tKEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+			return "KEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
 		}
-		return "MOON\tKEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
+		return "KEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
 	}
 
 	makeDataRow := func(t store.Ticket, title string) string {
@@ -341,20 +334,17 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[int64]string, agent
 			assignee = "agent-" + assignee
 		}
 		parent := parentKeys[t.ID]
-		key := t.Key
-		if strings.TrimSpace(key) == "" {
-			key = strconv.FormatInt(t.ID, 10)
-		}
+		key := symbol + " " + t.ID
 		ready := "no"
 		if t.Ready {
 			ready = "yes"
 		}
 		if showOpen {
-			return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-				symbol, key, t.Type, title, t.Stage, t.State, ready, ticketOpenLabel(t), parent, assignee, t.Priority)
+			return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+				key, t.Type, title, t.Stage, t.State, ready, ticketOpenLabel(t), parent, assignee, t.Priority)
 		}
-		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-			symbol, key, t.Type, title, t.Stage, t.State, ready, parent, assignee, t.Priority)
+		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+			key, t.Type, title, t.Stage, t.State, ready, parent, assignee, t.Priority)
 	}
 
 	// Pass 1: render with a sentinel title to locate where the title column

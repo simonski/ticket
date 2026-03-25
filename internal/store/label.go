@@ -78,17 +78,17 @@ func DeleteLabel(db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddTicketLabel(db *sql.DB, ticketID, labelID int64) error {
+func AddTicketLabel(db *sql.DB, ticketID string, labelID int64) error {
 	_, err := db.Exec(`INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)`, ticketID, labelID)
 	return err
 }
 
-func RemoveTicketLabel(db *sql.DB, ticketID, labelID int64) error {
+func RemoveTicketLabel(db *sql.DB, ticketID string, labelID int64) error {
 	_, err := db.Exec(`DELETE FROM ticket_labels WHERE ticket_id = ? AND label_id = ?`, ticketID, labelID)
 	return err
 }
 
-func ListTicketLabels(db *sql.DB, ticketID int64) ([]Label, error) {
+func ListTicketLabels(db *sql.DB, ticketID string) ([]Label, error) {
 	rows, err := db.Query(`
 		SELECT l.label_id, l.project_id, l.name, l.color, l.created_at
 		FROM labels l
@@ -111,15 +111,15 @@ func ListTicketLabels(db *sql.DB, ticketID int64) ([]Label, error) {
 	return labels, rows.Err()
 }
 
-func ListTicketsByLabel(db *sql.DB, labelID int64) ([]int64, error) {
+func ListTicketsByLabel(db *sql.DB, labelID int64) ([]string, error) {
 	rows, err := db.Query(`SELECT ticket_id FROM ticket_labels WHERE label_id = ? ORDER BY ticket_id`, labelID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var ids []int64
+	var ids []string
 	for rows.Next() {
-		var id int64
+		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}

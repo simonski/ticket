@@ -27,7 +27,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 		}
 	}
 
-	notify := func(eventType string, projectID, ticketID int64) {
+	notify := func(eventType string, projectID int64, ticketID string) {
 		if live == nil {
 			return
 		}
@@ -577,8 +577,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				return
 			}
 			var payload struct {
-				ProjectID       int64  `json:"project_id,omitempty"`
-				TicketID        *int64 `json:"ticket_id,omitempty"`
+				ProjectID       int64   `json:"project_id,omitempty"`
+				TicketID        *string `json:"ticket_id,omitempty"`
 				DryRun          bool   `json:"dry_run,omitempty"`
 				ConfigUpdatedAt string `json:"config_updated_at,omitempty"`
 			}
@@ -625,7 +625,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				return
 			}
 			if hadCurrent {
-				vlog("agent has current assignment: %s %q (status=%s)", currentAssigned.Key, currentAssigned.Title, currentAssigned.Status)
+				vlog("agent has current assignment: %s %q (status=%s)", currentAssigned.ID, currentAssigned.Title, currentAssigned.Status)
 			} else {
 				vlog("agent has no current assignment")
 			}
@@ -641,7 +641,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			vlog("RequestTicket result: status=%s ticket_id=%d key=%s", status, ticket.ID, ticket.Key)
+			vlog("RequestTicket result: status=%s ticket_id=%s", status, ticket.ID)
 			if status == "NO-WORK" {
 				// Explain why no work was found.
 				vlog("explaining NO-WORK decision for project=%d:", projectID)
@@ -661,10 +661,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			case "ASSIGNED", "AVAILABLE":
 				if hadCurrent && currentAssigned.ID == ticket.ID {
 					agentStatus = "CURRENT"
-					vlog("returning current assignment %s", ticket.Key)
+					vlog("returning current assignment %s", ticket.ID)
 				} else {
 					agentStatus = "NEW"
-					vlog("assigned new ticket %s %q to agent", ticket.Key, ticket.Title)
+					vlog("assigned new ticket %s %q to agent", ticket.ID, ticket.Title)
 				}
 			default:
 				agentStatus = status
@@ -723,8 +723,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
-			var ticketID int64
-			if _, err := fmt.Sscan(parts[1], &ticketID); err != nil {
+			ticketID := strings.TrimSpace(parts[1])
+			if ticketID == "" {
 				writeError(w, http.StatusBadRequest, "invalid ticket id")
 				return
 			}
@@ -775,7 +775,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				return
 			}
 			_ = store.AddHistoryEvent(db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
-				"key":       updated.Key,
+				"key":       updated.ID,
 				"agent":     agent.Username,
 				"result":    payload.Result,
 				"new_stage": updated.Stage,
@@ -1407,7 +1407,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			notify("project_created", project.ID, 0)
+			notify("project_created", project.ID, "")
 			writeJSON(w, http.StatusCreated, project)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1543,7 +1543,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
-				notify("project_users_updated", project.ID, 0)
+				notify("project_users_updated", project.ID, "")
 				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 				return
 			case http.MethodPost:
@@ -1564,7 +1564,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
-				notify("project_users_updated", project.ID, 0)
+				notify("project_users_updated", project.ID, "")
 				writeJSON(w, http.StatusOK, member)
 				return
 			case http.MethodGet:
@@ -1624,7 +1624,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
-				notify("project_users_updated", project.ID, 0)
+				notify("project_users_updated", project.ID, "")
 				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 				return
 			case http.MethodPost:
@@ -1645,7 +1645,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
-				notify("project_users_updated", project.ID, 0)
+				notify("project_users_updated", project.ID, "")
 				writeJSON(w, http.StatusOK, member)
 				return
 			case http.MethodGet:
@@ -1767,7 +1767,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			notify("project_updated", project.ID, 0)
+			notify("project_updated", project.ID, "")
 			writeJSON(w, http.StatusOK, project)
 			return
 		}
@@ -1845,7 +1845,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			notify("project_updated", project.ID, 0)
+			notify("project_updated", project.ID, "")
 			writeJSON(w, http.StatusOK, project)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -2011,7 +2011,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		beforeIDs := make(map[int64]struct{}, len(beforeTickets))
+		beforeIDs := make(map[string]struct{}, len(beforeTickets))
 		for _, ticket := range beforeTickets {
 			beforeIDs[ticket.ID] = struct{}{}
 		}
@@ -2357,7 +2357,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					ticket, err := store.GetTicket(db, id)
 					if err == nil {
 						_ = store.AddHistoryEvent(db, ticket.ProjectID, id, "comment_added", map[string]any{
-							"key":        ticket.Key,
+							"key":        ticket.ID,
 							"comment_id": comment.ID,
 						}, user.ID)
 						notify("ticket_updated", ticket.ProjectID, ticket.ID)
@@ -2784,17 +2784,19 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			notify("ticket_updated", dependencyPayload.ProjectID, dependencyPayload.TicketID)
 			writeJSON(w, http.StatusCreated, dependency)
 		case http.MethodDelete:
-			var projectID, ticketID, dependsOn int64
+			var projectID int64
 			if _, err := fmt.Sscan(strings.TrimSpace(r.URL.Query().Get("project_id")), &projectID); err != nil {
 				writeError(w, http.StatusBadRequest, "project_id must be numeric")
 				return
 			}
-			if _, err := fmt.Sscan(strings.TrimSpace(r.URL.Query().Get("ticket_id")), &ticketID); err != nil {
-				writeError(w, http.StatusBadRequest, "ticket_id must be numeric")
+			ticketID := strings.TrimSpace(r.URL.Query().Get("ticket_id"))
+			if ticketID == "" {
+				writeError(w, http.StatusBadRequest, "ticket_id is required")
 				return
 			}
-			if _, err := fmt.Sscan(strings.TrimSpace(r.URL.Query().Get("depends_on")), &dependsOn); err != nil {
-				writeError(w, http.StatusBadRequest, "depends_on must be numeric")
+			dependsOn := strings.TrimSpace(r.URL.Query().Get("depends_on"))
+			if dependsOn == "" {
+				writeError(w, http.StatusBadRequest, "depends_on is required")
 				return
 			}
 			role, err := projectRoleForUser(db, projectID, user)
