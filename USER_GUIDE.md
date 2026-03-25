@@ -128,14 +128,14 @@ ticket agent run -id <uuid> -url http://localhost:8080
 ```bash
 ticket agent create [-password <p>]  # UUID auto-generated
 ticket agent ls
-ticket agent update -id 1 -password <p>
-ticket agent disable -id 1
-ticket agent enable -id 1
-ticket agent delete -id 1
-ticket agent reset-password -id 1 [-password <p>]
-ticket agent config-set -id 1 <key> <value>
-ticket agent config-ls -id 1
-ticket agent config-rm -id 1 <key>
+ticket agent update -id <uuid> -password <p>
+ticket agent disable -id <uuid>
+ticket agent enable -id <uuid>
+ticket agent delete -id <uuid>
+ticket agent reset-password -id <uuid> [-password <p>]
+ticket agent config-set -id <uuid> <key> <value>
+ticket agent config-ls -id <uuid>
+ticket agent config-rm -id <uuid> <key>
 ```
 
 Run an agent worker process:
@@ -699,14 +699,14 @@ ticket agent run -id <uuid> -url <server-url>  # password from AGENT_PASSWORD en
 # Agent Admin Commands
 ticket agent create [-password <password>]  # UUID auto-generated
 ticket agent list
-ticket agent update -id <id> -password <password>
-ticket agent delete -id <id>
-ticket agent enable -id <id>
-ticket agent disable -id <id>
-ticket agent reset-password -id <id> [-password <password>]
-ticket agent config-set -id <id> <key> <value>
-ticket agent config-ls -id <id>
-ticket agent config-rm -id <id> <key>
+ticket agent update -id <uuid> -password <password>
+ticket agent delete -id <uuid>
+ticket agent enable -id <uuid>
+ticket agent disable -id <uuid>
+ticket agent reset-password -id <uuid> [-password <password>]
+ticket agent config-set -id <uuid> <key> <value>
+ticket agent config-ls -id <uuid>
+ticket agent config-rm -id <uuid> <key>
 
 ticket project create -prefix ABC -title "..."
 ticket project init

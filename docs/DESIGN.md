@@ -51,13 +51,20 @@ The first release must support these workflows end to end:
 
 ### User
 
-- `user_id`
+- `user_id` (UUID string, primary key)
 - `username`
+- `email`
+- `email_confirmed_at`
 - `password_hash`
 - `role`
 - `display_name`
 - `enabled`
+- `user_type` (`user` or `agent`)
+- `description`
+- `status`
+- `last_seen`
 - `created_at`
+- `updated_at`
 
 Roles in the first release:
 
@@ -71,10 +78,11 @@ Notes:
 
 ### Agent
 
-- `agent_id`
-- `name`
-- `description`
+Agents are stored in the `users` table with `user_type='agent'`. They share the User schema:
+
+- `user_id` (UUID string, also used as the agent's username and display name)
 - `password_hash`
+- `role` (always `agent`)
 - `enabled`
 - `status`
 - `last_seen`
@@ -84,8 +92,9 @@ Notes:
 Notes:
 
 - agents represent autonomous worker processes that authenticate to the API
+- agents are identified solely by their UUID — there is no separate name or description
 - agent credentials are stored as hashes and never persisted in plaintext
-- lifecycle status is tracked as `online`, `working`, `soliciting`, `idle`, or `disabled`
+- lifecycle status is tracked as `idle`, `working`, or `disabled`
 
 ### Role
 
@@ -374,14 +383,14 @@ ticket agent run -id <uuid> -url http://localhost:8080  # password from AGENT_PA
 # Agent Admin Commands
 ticket agent create [-password <p>]  # UUID auto-generated
 ticket agent ls
-ticket agent update -id 1 -password <p>
-ticket agent enable -id 1
-ticket agent disable -id 1
-ticket agent delete -id 1
-ticket agent reset-password -id 1 [-password <p>]
-ticket agent config-set -id 1 <key> <value>
-ticket agent config-ls -id 1
-ticket agent config-rm -id 1 <key>
+ticket agent update -id <uuid> -password <p>
+ticket agent enable -id <uuid>
+ticket agent disable -id <uuid>
+ticket agent delete -id <uuid>
+ticket agent reset-password -id <uuid> [-password <p>]
+ticket agent config-set -id <uuid> <key> <value>
+ticket agent config-ls -id <uuid>
+ticket agent config-rm -id <uuid> <key>
 
 ticket register
 ticket login
@@ -776,9 +785,9 @@ The web UI should make these activities easy:
 - SQLite is the only database in the first release.
 - SQLite remains the persistence layer behind the server data model; local mode uses the same data model and validation rules as the server-backed flow.
 
-Storage areas (23 tables):
+Storage areas (22 tables):
 
-1. users
+1. users (includes agents with `user_type='agent'`)
 2. sessions
 3. projects
 4. project_members
@@ -791,16 +800,15 @@ Storage areas (23 tables):
 11. ticket_labels
 12. time_entries
 13. roles
-14. agents
-15. teams
-16. team_members
-17. team_agents
-18. project_teams
-19. dependencies
-20. stories
-21. story_ticket_links
-22. history_events
-23. app_settings
+14. teams
+15. team_members
+16. team_agents
+17. project_teams
+18. dependencies
+19. stories
+20. story_ticket_links
+21. history_events
+22. app_settings
 
 ### Application Shape
 

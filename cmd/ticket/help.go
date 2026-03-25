@@ -85,8 +85,8 @@ var helpIndex = map[string]commandHelp{
 	},
 	"req": {
 		usage:   "ticket req <verb> [flags]",
-		details: []string{"Namespace for requirements: capture ideas, shape them, accept/reject/revise.", "Shortcuts: `ticket idea \"title\"` = `ticket req add \"title\"`, `ticket ideas` = `ticket req list`.", "Run `ticket req help` for the full verb list."},
-		example: "ticket req add \"offline mode\" -d \"the app should work without network\"",
+		details: []string{"Legacy alias for `ticket idea`. Namespace for requirements: capture ideas, shape them, accept/reject.", "Run `ticket idea help` for the full verb list."},
+		example: "ticket idea new \"offline mode\" -d \"the app should work without network\"",
 	},
 	"dep": {
 		usage:   "ticket dep <add|remove> -id <id> <dependency-id>",
@@ -99,9 +99,9 @@ var helpIndex = map[string]commandHelp{
 		example: "ticket idea \"dark mode support\"",
 	},
 	"ideas": {
-		usage:   "ticket ideas [-status raw|shaping|accepted|rejected]",
-		details: []string{"Shortcut for `ticket req list`. Lists all requirements."},
-		example: "ticket ideas -status proposed",
+		usage:   "ticket idea ls [-status raw|shaping|accepted|rejected]",
+		details: []string{"Use `ticket idea ls` instead. The `ticket ideas` shortcut has been removed."},
+		example: "ticket idea ls -status proposed",
 	},
 	"health": {
 		usage:   "ticket health [-id] <id>|execute",

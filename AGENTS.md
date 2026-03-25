@@ -1,4 +1,4 @@
-- read docs/TICKETS.md
+- read cmd/ticket/TICKETS.md
 - read docs/RULES.md
 
 **MANDATORY WORKFLOW:**

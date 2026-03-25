@@ -1315,27 +1315,27 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 			t.Fatalf("list error = %v", err)
 		}
 	})
-	checkRow := func(statusSymbol, statusText string) {
+	checkRow := func(statusSymbol, stage, state string) {
 		found := false
 		for _, line := range strings.Split(unicodeOutput, "\n") {
 			fields := strings.Fields(line)
-			// fields[0]=MOON fields[1]=KEY fields[2]=TYPE fields[3+]=TITLE... STATUS ...
-			// Status may not be at a fixed index due to multi-word titles, so check
-			// that the row has the right symbol+type and contains the status text.
-			if len(fields) >= 4 && fields[0] == statusSymbol && fields[2] == "task" && strings.Contains(line, statusText) {
+			// fields[0]=MOON fields[1]=KEY fields[2]=TYPE fields[3+]=TITLE... STAGE STATE ...
+			// Stage/state may not be at a fixed index due to multi-word titles, so check
+			// that the row has the right symbol+type and contains both stage and state.
+			if len(fields) >= 4 && fields[0] == statusSymbol && fields[2] == "task" && strings.Contains(line, stage) && strings.Contains(line, state) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Fatalf("list unicode row missing symbol=%q status=%q:\n%s", statusSymbol, statusText, unicodeOutput)
+			t.Fatalf("list unicode row missing symbol=%q stage=%q state=%q:\n%s", statusSymbol, stage, state, unicodeOutput)
 		}
 	}
-	checkRow("◑", "design/active")
-	checkRow("○", "develop/idle")
-	checkRow("○", "design/idle")
+	checkRow("◑", "design", "active")
+	checkRow("○", "develop", "idle")
+	checkRow("○", "design", "idle")
 
-	for _, want := range []string{"design/active", "develop/idle", "design/idle"} {
+	for _, want := range []string{"design", "develop", "active", "idle"} {
 		if !strings.Contains(unicodeOutput, want) {
 			t.Fatalf("list unicode output missing %q:\n%s", want, unicodeOutput)
 		}

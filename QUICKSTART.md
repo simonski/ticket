@@ -52,8 +52,8 @@ ticket epic "Authentication"
 Or capture lightweight ideas first:
 
 ```bash
-ticket idea "Add dark mode"
-ticket ideas          # list all ideas
+ticket idea new "Add dark mode"
+ticket idea ls          # list all ideas
 ```
 
 ## 5. Inspect and organise

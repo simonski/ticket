@@ -6,7 +6,7 @@
 ## Principles
 
 1. **`tk <noun> <verb> [-id <id>] [flags]`** — every command follows this pattern
-2. **12 nouns** — `ticket`, `req`, `dep`, `label`, `time`, `project`, `role`, `workflow`, `decision`, `team`, `agent`, `user`
+2. **13 nouns** — `ticket`, `idea` (alias: `req`), `dep`, `label`, `time`, `project`, `role`, `workflow`, `decision`, `story`, `team`, `agent`, `user`
 3. **Top-level shortcuts** for the highest-frequency actions
 4. **Hidden aliases** for all old command forms during migration
 
@@ -17,8 +17,8 @@ tk                              # alias for: tk ticket list
 tk add "title"                  # alias for: tk ticket add "title"
 tk bug "title"                  # alias for: tk ticket add -type bug "title"
 tk epic "title"                 # alias for: tk ticket add -type epic "title"
-tk idea "title"                 # alias for: tk req add "title"
-tk ideas                        # alias for: tk req list
+tk idea new "title"              # capture a requirement
+tk idea ls                      # list requirements
 ```
 
 ## ticket
@@ -82,26 +82,19 @@ tk ticket clone -id <id>
 tk ticket delete -id <id>
 ```
 
-## req
+## idea
+
+The primary noun for requirements/ideas. `tk req` is a legacy alias that routes to the same commands.
 
 ```bash
-tk req add "offline mode"               # capture an idea
-tk req add "dark mode" -d "details"     # with description
-tk req list                             # all requirements
-tk req list -status raw                 # by review status
-tk req get -id <id>                     # view detail
-tk req shape -id <id> -d "more detail"  # refine
-tk req break -id <id>                   # show breakdown (child tickets)
-tk req break -id <id> --retry           # regenerate, keep pinned
-tk req break -id <id> --reset           # discard all children, regenerate
-tk req pin -id <id>                     # pin a breakdown item (not yet implemented)
-tk req accept -id <id>                  # approve
-tk req reject -id <id>                  # reject
-tk req revise -id <id>                  # send back for rethinking
-
-# Shorthand
-tk idea "offline mode"                  # alias for tk req add
-tk ideas                                # alias for tk req list
+tk idea new "offline mode"              # capture an idea
+tk idea new "dark mode" -d "details"    # with description
+tk idea ls                              # all requirements
+tk idea ls -status raw                  # by review status
+tk idea get -id <id>                    # view detail
+tk idea shape -id <id> -d "more detail" # refine
+tk idea accept -id <id>                 # approve
+tk idea reject -id <id>                 # reject
 ```
 
 ## dep
@@ -213,16 +206,16 @@ tk agent run -id <id> [-url u]                      # run agent worker loop (pas
 
 ### Admin Commands
 ```bash
-tk agent list                                       # list all agents
-tk agent create [-password <p>]                     # create an agent (UUID auto-generated)
-tk agent update -id <id> -password <p>              # update an agent password
-tk agent delete -id <id>                            # delete an agent
-tk agent enable -id <id>                            # enable an agent
-tk agent disable -id <id>                           # disable an agent
-tk agent reset-password -id <id> [-password <p>]    # reset an agent's password
-tk agent config-set -id <id> <key> <value>         # set agent config
-tk agent config-ls -id <id>                        # list agent config
-tk agent config-rm -id <id> <key>                  # remove agent config
+tk agent ls                                             # list all agents
+tk agent new [-password <p>]                            # create an agent (UUID auto-generated)
+tk agent update -id <uuid> -password <p>                # update an agent password
+tk agent rm -id <uuid>                                  # delete an agent
+tk agent enable -id <uuid>                              # enable an agent
+tk agent disable -id <uuid>                             # disable an agent
+tk agent reset-password -id <uuid> [-password <p>]      # reset an agent's password
+tk agent config-set -id <uuid> <key> <value>           # set agent config
+tk agent config-ls -id <uuid>                          # list agent config
+tk agent config-rm -id <uuid> <key>                    # remove agent config
 ```
 
 ## user
@@ -258,7 +251,7 @@ tk health
 | Noun       | What it covers                                              |
 |------------|-------------------------------------------------------------|
 | `ticket`   | All ticket CRUD, state, ownership, hierarchy, comments      |
-| `req`      | Requirements lifecycle — capture, shape, break down, review |
+| `idea`     | Requirements lifecycle — capture, shape, accept, reject (alias: `req`) |
 | `dep`      | Dependencies between tickets                                |
 | `label`    | Label management and tagging                                |
 | `time`     | Time tracking                                               |
