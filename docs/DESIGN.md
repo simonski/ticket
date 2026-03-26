@@ -129,8 +129,7 @@ Projects are the top-level container for work items.
 
 `Ticket` is the main work artifact. All item types share one core model.
 
-- `ticket_id`
-- `key`
+- `ticket_id` (TEXT PRIMARY KEY — the human-readable key, e.g. `TK-1`, `CUS-T-42`)
 - `project_id`
 - `parent_id`
 - `clone_of`

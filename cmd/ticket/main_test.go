@@ -2134,10 +2134,11 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"server=http://example.test",
-		"username=",
-		"current_project=",
-		"current_epic_id=",
+		"server",
+		"http://example.test",
+		"username",
+		"current_project",
+		"current_epic_id",
 	} {
 		if !strings.Contains(listOutput, want) {
 			t.Fatalf("config ls output missing %q:\n%s", want, listOutput)

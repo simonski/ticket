@@ -2159,8 +2159,7 @@ func printAgentTable(statuses []store.AgentStatus) {
 	sort.SliceStable(statuses, func(i, j int) bool {
 		return strings.ToLower(statuses[i].Agent.Username) < strings.ToLower(statuses[j].Agent.Username)
 	})
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tWORKFLOW\tROLE\tLAST_SEEN")
+	rows := make([]string, 0, len(statuses))
 	for _, s := range statuses {
 		lastSeen := strings.TrimSpace(s.Agent.LastSeen)
 		if lastSeen == "" {
@@ -2182,9 +2181,9 @@ func printAgentTable(statuses []store.AgentStatus) {
 		if s.RoleTitle != "" {
 			role = s.RoleTitle
 		}
-		fmt.Fprintf(w, "%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Agent.ID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen)
+		rows = append(rows, fmt.Sprintf("%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s", s.Agent.ID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen))
 	}
-	_ = w.Flush()
+	printBoxTable("UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tWORKFLOW\tROLE\tLAST_SEEN", rows)
 }
 
 func printUserTable(users []store.User) {
@@ -2192,16 +2191,15 @@ func printUserTable(users []store.User) {
 		fmt.Println("no users")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "USERNAME\tROLE\tENABLED\tCREATED")
+	rows := make([]string, 0, len(users))
 	for _, user := range users {
 		created := user.CreatedAt
 		if len(created) > 10 {
 			created = created[:10]
 		}
-		fmt.Fprintf(w, "%s\t%s\t%t\t%s\n", user.Username, user.Role, user.Enabled, created)
+		rows = append(rows, fmt.Sprintf("%s\t%s\t%t\t%s", user.Username, user.Role, user.Enabled, created))
 	}
-	_ = w.Flush()
+	printBoxTable("USERNAME\tROLE\tENABLED\tCREATED", rows)
 }
 
 func runStory(args []string) error {
@@ -2983,16 +2981,15 @@ func printTeamTable(teams []store.Team) {
 		fmt.Println("no teams")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tPARENT_TEAM_ID")
+	rows := make([]string, 0, len(teams))
 	for _, team := range teams {
 		parent := "-"
 		if team.ParentTeamID != nil {
 			parent = fmt.Sprintf("%d", *team.ParentTeamID)
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\n", team.ID, team.Name, parent)
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s", team.ID, team.Name, parent))
 	}
-	_ = w.Flush()
+	printBoxTable("ID\tNAME\tPARENT_TEAM_ID", rows)
 }
 
 func printTeamMemberTable(members []store.TeamMember) {
@@ -3000,12 +2997,11 @@ func printTeamMemberTable(members []store.TeamMember) {
 		fmt.Println("no team members")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TEAM_ID\tUSER_ID\tUSERNAME\tROLE\tJOB_TITLE")
+	rows := make([]string, 0, len(members))
 	for _, m := range members {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", m.TeamID, m.UserID, m.Username, m.Role, m.JobTitle)
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s\t%s\t%s", m.TeamID, m.UserID, m.Username, m.Role, m.JobTitle))
 	}
-	_ = w.Flush()
+	printBoxTable("TEAM_ID\tUSER_ID\tUSERNAME\tROLE\tJOB_TITLE", rows)
 }
 
 func printTeamAgentTable(items []store.TeamAgent) {
@@ -3013,12 +3009,11 @@ func printTeamAgentTable(items []store.TeamAgent) {
 		fmt.Println("no team agents")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TEAM_ID\tAGENT_ID\tUUID\tENABLED\tSTATUS")
+	rows := make([]string, 0, len(items))
 	for _, item := range items {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%t\t%s\n", item.TeamID, item.AgentID, item.AgentUUID, item.Enabled, item.Status)
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s\t%t\t%s", item.TeamID, item.AgentID, item.AgentUUID, item.Enabled, item.Status))
 	}
-	_ = w.Flush()
+	printBoxTable("TEAM_ID\tAGENT_ID\tUUID\tENABLED\tSTATUS", rows)
 }
 
 func runRole(args []string) error {
@@ -3406,12 +3401,11 @@ func runWorkflow(args []string) error {
 }
 
 func printWorkflowTable(workflows []store.Workflow) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tDESCRIPTION")
+	rows := make([]string, 0, len(workflows))
 	for _, wf := range workflows {
-		fmt.Fprintf(w, "%d\t%s\t%s\n", wf.ID, wf.Name, wf.Description)
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s", wf.ID, wf.Name, wf.Description))
 	}
-	_ = w.Flush()
+	printBoxTable("ID\tNAME\tDESCRIPTION", rows)
 }
 
 func printWorkflowDetail(wf store.WorkflowWithStages) {
@@ -6967,12 +6961,14 @@ func runConfig(args []string) error {
 		if serverURL == "" {
 			serverURL = cfg.ServerURL
 		}
-		fmt.Printf("url=%s\n", envValue("TICKET_URL"))
-		fmt.Printf("mode=%s\n", r.Mode)
-		fmt.Printf("server=%s\n", serverURL)
-		fmt.Printf("username=%s\n", cfg.Username)
-		fmt.Printf("current_project=%s\n", cfg.CurrentProject)
-		fmt.Printf("current_epic_id=%s\n", cfg.CurrentEpicID)
+		printBoxTable("KEY\tVALUE", []string{
+			fmt.Sprintf("url\t%s", envValue("TICKET_URL")),
+			fmt.Sprintf("mode\t%s", r.Mode),
+			fmt.Sprintf("server\t%s", serverURL),
+			fmt.Sprintf("username\t%s", cfg.Username),
+			fmt.Sprintf("current_project\t%s", cfg.CurrentProject),
+			fmt.Sprintf("current_epic_id\t%s", cfg.CurrentEpicID),
+		})
 		return nil
 	case "rm", "delete":
 		if len(args) != 2 {

@@ -462,7 +462,7 @@ ticket list -u alice
 ticket ls -u alice
 ```
 
-`ticket list` prints a table with the ticket key, type, rendered `status` (`stage/state`), assignee, priority, and title.
+`ticket list` prints a table with ID (key with status icon), type, title, stage, state, ready, parent, assignee, and priority.
 
 Search within the active project:
 
@@ -484,7 +484,7 @@ ticket get CUS-T-42
 ticket get -json CUS-T-42
 ```
 
-`ticket get` accepts either a ticket key or an internal numeric id. It prints the ticket fields directly, including `DependsOn`, the acceptance criteria, `EstimateEffort`, `EstimateComplete`, `CloneOf` when the ticket is a clone, and comments ordered most recent first.
+`ticket get` accepts a ticket ID (key such as `CUS-T-42`). It prints the ticket fields directly, including `DependsOn`, the acceptance criteria, `EstimateEffort`, `EstimateComplete`, `CloneOf` when the ticket is a clone, and comments ordered most recent first.
 
 Show orphaned items with no parent:
 
@@ -527,7 +527,7 @@ Only ready tickets are eligible for automatic assignment. You can still explicit
 
 `ticket rm` and `ticket delete` remove a ticket permanently. They fail if the ticket still has child tickets.
 
-`ticket request` is the lower-level form of `ticket claim`. It accepts either a ticket key or an internal numeric id. If no work can be assigned, the JSON response status is `NO-WORK`. If a specific ticket is requested and cannot be assigned, the JSON response status is `REJECTED`.
+`ticket request` is the lower-level form of `ticket claim`. It accepts a ticket ID (key such as `CUS-T-42`). If no work can be assigned, the JSON response status is `NO-WORK`. If a specific ticket is requested and cannot be assigned, the JSON response status is `REJECTED`.
 
 Lifecycle commands:
 

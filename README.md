@@ -147,8 +147,7 @@ See [QUICKSTART.md](./QUICKSTART.md#using-with-claude-code) for setup details.
 ## Notes
 
 - The CLI and web app use the same HTTP API.
-- Ticket refs accept human keys such as `CUS-T-42` and internal numeric ids
-  where supported, but keys are preferred.
+- Ticket IDs are human-readable keys such as `CUS-T-42`.
 - `tk ls` hides closed and archived tickets by default; use `-a` to include closed, `-d` to also include archived.
 - The HTTP API exposes resource families under `/api/` including tickets, projects,
   users, agents, teams, roles, workflows, and more.

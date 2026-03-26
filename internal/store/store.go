@@ -544,6 +544,10 @@ func migrateSchema(db *sql.DB) error {
 	if err := migrateTicketIDToText(db); err != nil {
 		return err
 	}
+	// Fix dependent tables whose FK constraints still reference tickets_old_int.
+	if err := fixStaleFKsAfterTicketIDMigration(db); err != nil {
+		return err
+	}
 
 	if !columnExists(db, "tickets", "sort_order") {
 		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
@@ -1376,6 +1380,54 @@ func migrateTicketIDToText(db *sql.DB) error {
 		return fmt.Errorf("migrateTicketIDToText: drop old table: %w", err)
 	}
 
+	// Recreate dependent tables so FK constraints point at tickets(ticket_id) instead of tickets_old_int.
+	if err := fixStaleFKsAfterTicketIDMigration(db); err != nil {
+		return fmt.Errorf("migrateTicketIDToText: fix dependent FKs: %w", err)
+	}
+
+	return nil
+}
+
+// fixStaleFKsAfterTicketIDMigration recreates tables whose FK constraints still
+// reference tickets_old_int after the ticket_id TEXT migration.
+func fixStaleFKsAfterTicketIDMigration(db *sql.DB) error {
+	if !tableHsFKTo(db, "history_events", "tickets_old_int") {
+		return nil // already fixed
+	}
+	type tableMigration struct {
+		name   string
+		create string
+	}
+	migrations := []tableMigration{
+		{name: "history_events", create: `CREATE TABLE history_events (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
+		{name: "ticket_history", create: `CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
+		{name: "comments", create: `CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, user_id TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(item_id) REFERENCES tickets(ticket_id), FOREIGN KEY(user_id) REFERENCES users(user_id))`},
+		{name: "dependencies", create: `CREATE TABLE dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, depends_on TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
+		{name: "story_ticket_links", create: `CREATE TABLE story_ticket_links (story_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(story_id, ticket_id), FOREIGN KEY(story_id) REFERENCES stories(story_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id))`},
+		{name: "ticket_labels", create: `CREATE TABLE ticket_labels (ticket_id TEXT NOT NULL, label_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(ticket_id, label_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(label_id) REFERENCES labels(label_id))`},
+		{name: "time_entries", create: `CREATE TABLE time_entries (time_entry_id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, minutes INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(user_id) REFERENCES users(user_id))`},
+	}
+	for _, m := range migrations {
+		if !tableExists(db, m.name) {
+			continue
+		}
+		if !tableHsFKTo(db, m.name, "tickets_old_int") {
+			continue
+		}
+		tmp := m.name + "_fk_tmp"
+		if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmp)); err != nil {
+			return fmt.Errorf("rename %s: %w", m.name, err)
+		}
+		if _, err := db.Exec(m.create); err != nil {
+			return fmt.Errorf("create %s: %w", m.name, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmp)); err != nil {
+			return fmt.Errorf("copy %s: %w", m.name, err)
+		}
+		if _, err := db.Exec(fmt.Sprintf(`DROP TABLE %s`, tmp)); err != nil {
+			return fmt.Errorf("drop %s: %w", tmp, err)
+		}
+	}
 	return nil
 }
 

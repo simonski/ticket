@@ -18,6 +18,7 @@ import (
 
 const (
 	ansiReset  = "\033[0m"
+	ansiBold   = "\033[1m"
 	ansiGreen  = "\033[32m"
 	ansiRed    = "\033[31m"
 	ansiGray   = "\033[90m"
@@ -76,9 +77,8 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 		fmt.Println("no projects")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, " \tID\tPREFIX\tTITLE\tSTATUS\tWORKFLOW\tDESCRIPTION")
 	currentID := strings.TrimSpace(currentProjectID)
+	rows := make([]string, 0, len(projects))
 	for _, project := range projects {
 		marker := " "
 		if strconv.FormatInt(project.ID, 10) == currentID || strings.EqualFold(project.Prefix, currentID) {
@@ -94,9 +94,9 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 				workflow = name
 			}
 		}
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\t%s\n", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, desc)
+		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, desc))
 	}
-	_ = w.Flush()
+	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWORKFLOW\tDESCRIPTION", rows)
 }
 
 func ticketLabel(ticket store.Ticket) string {
@@ -320,9 +320,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 
 	makeHeader := func() string {
 		if showOpen {
-			return "KEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+			return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
 		}
-		return "KEY\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
+		return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
 	}
 
 	makeDataRow := func(t store.Ticket, title string) string {
@@ -477,6 +477,48 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	fmt.Println("╰" + border + "╯")
 }
 
+// printBoxTable renders tabwriter-formatted lines inside a rounded Unicode box.
+// If the terminal is not a TTY, plain text is printed instead.
+func printBoxTable(header string, rows []string) {
+	lines := make([]string, 0, 1+len(rows))
+	lines = append(lines, header)
+	lines = append(lines, rows...)
+
+	// Render via tabwriter to align columns.
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	for _, l := range lines {
+		fmt.Fprintln(w, l)
+	}
+	_ = w.Flush()
+	formatted := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	if !isTerminal() {
+		for _, l := range formatted {
+			fmt.Println(l)
+		}
+		return
+	}
+
+	maxW := 0
+	for _, l := range formatted {
+		if n := utf8.RuneCountInString(l); n > maxW {
+			maxW = n
+		}
+	}
+	border := strings.Repeat("─", maxW+2)
+	fmt.Println("╭" + border + "╮")
+	for i, l := range formatted {
+		pad := strings.Repeat(" ", maxW-utf8.RuneCountInString(l))
+		text := l
+		if i == 0 && isTerminal() {
+			text = ansiBold + l + ansiReset
+		}
+		fmt.Printf("│ %s%s │\n", text, pad)
+	}
+	fmt.Println("╰" + border + "╯")
+}
+
 func ticketOpenLabel(ticket store.Ticket) string {
 	if !ticket.Open {
 		return "closed"
@@ -572,17 +614,16 @@ func printRoleTable(roles []store.Role) {
 		return string(r[:n-3]) + "..."
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tTITLE\tMOTIVATION\tGOALS")
+	rows := make([]string, 0, len(roles))
 	for _, role := range roles {
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n",
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s\t%s",
 			role.ID,
 			truncRune(role.Title, titleW),
 			truncRune(role.Motivation, motW),
 			truncRune(role.Goals, goalW),
-		)
+		))
 	}
-	_ = w.Flush()
+	printBoxTable("ID\tTITLE\tMOTIVATION\tGOALS", rows)
 }
 
 func formatHistoryEvent(event store.HistoryEvent) string {
