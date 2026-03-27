@@ -40,7 +40,7 @@ alias tk=ticket
 cd $CODE
 git clone github.com/simonski/ticket
 cd ticket
-make install
+make build
 alias tk=ticket
 ```
 

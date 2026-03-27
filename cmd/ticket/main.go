@@ -120,7 +120,7 @@ func run(args []string) error {
 		return runSummary(trimmedArgs[1:])
 	case "onboard":
 		return runOnboard(trimmedArgs[1:])
-	case "init", "setup":
+	case "init":
 		return runSetup(trimmedArgs[1:])
 	case "initdb":
 		return runInitDB(trimmedArgs[1:])
@@ -526,7 +526,19 @@ func runSetup(args []string) error {
 		return err
 	}
 
-	fmt.Println("tk setup — singleplayer local database")
+	resolved, _ := config.ResolveURL()
+	if resolved.Mode == config.ModeRemote {
+		fmt.Println("tk init — remote server")
+		fmt.Printf("server     : %s\n", resolved.ServerURL)
+		cfg, _ := config.Load()
+		if cfg.Username == "" {
+			fmt.Println("warning    : no username configured — run `tk login` or `tk register` first")
+		} else {
+			fmt.Printf("user       : %s\n", cfg.Username)
+		}
+	} else {
+		fmt.Println("tk init — singleplayer local database")
+	}
 	fmt.Println()
 
 	// Check existing DB
@@ -566,6 +578,19 @@ func runSetup(args []string) error {
 		}
 		projectName := prompt(reader, "project name", filepath.Base(cwd))
 
+		// Detect git origin on first run
+		var gitRepo string
+		gitOrigin, gitErr := exec.Command("git", "remote", "get-url", "origin").Output()
+		if gitErr == nil {
+			origin := strings.TrimSpace(string(gitOrigin))
+			if origin != "" {
+				fmt.Printf("detected   : git origin %s\n", origin)
+				if promptYN(reader, "set as project git repository?", true) {
+					gitRepo = origin
+				}
+			}
+		}
+
 		password, err := generatePassword(24)
 		if err != nil {
 			return err
@@ -582,8 +607,9 @@ func runSetup(args []string) error {
 			return err
 		}
 		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
-			Prefix: projectPrefix,
-			Title:  projectName,
+			Prefix:        projectPrefix,
+			Title:         projectName,
+			GitRepository: gitRepo,
 		})
 		if err != nil {
 			return err
@@ -619,28 +645,57 @@ func runSetup(args []string) error {
 
 	if claudePath != "" {
 		fmt.Println()
-		if promptYN(reader, "install tk skill for Claude Code?", true) {
-			cwd, _ := os.Getwd()
-			localSkillDir := filepath.Join(cwd, ".claude", "skills", "tk")
-			globalSkillDir := filepath.Join(os.Getenv("HOME"), ".claude", "skills", "tk")
-			fmt.Printf("  [1] local   %s\n", localSkillDir+"/SKILL.md")
-			fmt.Printf("  [2] global  %s\n", globalSkillDir+"/SKILL.md")
-			choice := prompt(reader, "install location", "1")
-			var skillDir string
-			switch strings.TrimSpace(choice) {
-			case "2", "global":
-				skillDir = globalSkillDir
-			default:
-				skillDir = localSkillDir
+		cwd, _ := os.Getwd()
+		localSkillPath := filepath.Join(cwd, ".claude", "skills", "tk", "SKILL.md")
+		globalSkillPath := filepath.Join(os.Getenv("HOME"), ".claude", "skills", "tk", "SKILL.md")
+
+		// Check both locations for an existing skill
+		var existingPath string
+		var existingContent []byte
+		for _, p := range []string{localSkillPath, globalSkillPath} {
+			if data, readErr := os.ReadFile(p); readErr == nil {
+				existingPath = p
+				existingContent = data
+				break
 			}
-			if err := os.MkdirAll(skillDir, 0o755); err != nil {
-				fmt.Printf("  warning: could not create skill dir: %v\n", err)
+		}
+
+		if existingPath != "" {
+			if string(existingContent) == tkSkillContent {
+				fmt.Printf("skill      : %s (up to date)\n", existingPath)
 			} else {
-				skillPath := filepath.Join(skillDir, "SKILL.md")
-				if err := os.WriteFile(skillPath, []byte(tkSkillContent), 0o644); err != nil {
-					fmt.Printf("  warning: could not write skill: %v\n", err)
+				fmt.Printf("skill      : %s (out of date)\n", existingPath)
+				if promptYN(reader, "update tk skill to latest version?", true) {
+					if err := os.WriteFile(existingPath, []byte(tkSkillContent), 0o644); err != nil {
+						fmt.Printf("  warning: could not update skill: %v\n", err)
+					} else {
+						fmt.Printf("  updated: %s\n", existingPath)
+					}
+				}
+			}
+		} else {
+			localSkillDir := filepath.Dir(localSkillPath)
+			globalSkillDir := filepath.Dir(globalSkillPath)
+			if promptYN(reader, "install tk skill for Claude Code?", true) {
+				fmt.Printf("  [1] local   %s\n", localSkillPath)
+				fmt.Printf("  [2] global  %s\n", globalSkillPath)
+				choice := prompt(reader, "install location", "1")
+				var skillDir string
+				switch strings.TrimSpace(choice) {
+				case "2", "global":
+					skillDir = globalSkillDir
+				default:
+					skillDir = localSkillDir
+				}
+				if err := os.MkdirAll(skillDir, 0o755); err != nil {
+					fmt.Printf("  warning: could not create skill dir: %v\n", err)
 				} else {
-					fmt.Printf("  installed: %s\n", skillPath)
+					skillPath := filepath.Join(skillDir, "SKILL.md")
+					if err := os.WriteFile(skillPath, []byte(tkSkillContent), 0o644); err != nil {
+						fmt.Printf("  warning: could not write skill: %v\n", err)
+					} else {
+						fmt.Printf("  installed: %s\n", skillPath)
+					}
 				}
 			}
 		}
@@ -675,6 +730,33 @@ func runSetup(args []string) error {
 		}
 	} else {
 		fmt.Printf("detected   : %s\n", agentsMD)
+	}
+
+	// Check .gitignore for credentials file
+	gitignorePath := filepath.Join(cwd, ".gitignore")
+	credEntry := ".ticket/credentials.json"
+	if data, readErr := os.ReadFile(gitignorePath); readErr == nil {
+		if !strings.Contains(string(data), credEntry) {
+			fmt.Println()
+			fmt.Printf("warning    : %s is not in .gitignore\n", credEntry)
+			if promptYN(reader, "add .ticket/credentials.json to .gitignore?", true) {
+				f, appendErr := os.OpenFile(gitignorePath, os.O_APPEND|os.O_WRONLY, 0o644)
+				if appendErr != nil {
+					fmt.Printf("  warning: could not open .gitignore: %v\n", appendErr)
+				} else {
+					// Ensure we start on a new line
+					if len(data) > 0 && data[len(data)-1] != '\n' {
+						_, _ = f.WriteString("\n")
+					}
+					_, _ = f.WriteString(credEntry + "\n")
+					_ = f.Close()
+					fmt.Printf("  added: %s to .gitignore\n", credEntry)
+				}
+			}
+		}
+	} else if os.IsNotExist(readErr) {
+		fmt.Println()
+		fmt.Printf("warning    : no .gitignore found — consider adding %s\n", credEntry)
 	}
 
 	fmt.Println()

@@ -6,18 +6,10 @@
 brew install simonski/tap/ticket
 ```
 
-Or build from source:
-
-```bash
-git clone https://github.com/simonski/ticket
-cd ticket
-make build
-```
-
 ## 1. Initialise a local workspace
 
 ```bash
-ticket init
+tk init
 ```
 
 Creates a SQLite database at `<TICKET_HOME>/ticket.db` (defaults to `.ticket/ticket.db`
@@ -28,7 +20,7 @@ Prints the generated `admin` password on first run.
 ## 2. Start the server (optional)
 
 ```bash
-ticket server
+tk server
 ```
 
 The web UI is available at `http://localhost:8080`. The CLI works against the
@@ -37,47 +29,47 @@ same database whether the server is running or not.
 ## 3. Create a project
 
 ```bash
-ticket project create -prefix CUS -title "Customer Portal"
-ticket project use CUS
+tk project create -prefix CUS -title "Customer Portal"
+tk project use CUS
 ```
 
 ## 4. Capture work
 
 ```bash
-ticket add "Customers can reset their password"
-ticket bug "Reset token expires immediately"
-ticket epic "Authentication"
+titk add "Customers can reset their password"
+tk bug "Reset token expires immediately"
+tk epic "Authentication"
 ```
 
 Or capture lightweight ideas first:
 
 ```bash
-ticket idea new "Add dark mode"
-ticket idea ls          # list all ideas
+tk idea new "Add dark mode"
+tk idea ls          # list all ideas
 ```
 
 ## 5. Inspect and organise
 
 ```bash
-ticket list
-ticket get -id CUS-T-1
-ticket attach -id CUS-T-1 CUS-E-1   # set parent epic
+tk list
+tk get -id CUS-T-1
+tk attach -id CUS-T-1 CUS-E-1   # set parent epic
 ```
 
 ## 6. Move work through the lifecycle
 
 ```bash
-ticket active -id CUS-T-1       # start work (sets state=active)
-ticket complete -id CUS-T-1     # finish stage, auto-advance
-ticket idle -id CUS-T-1         # pause
+tk active -id CUS-T-1       # start work (sets state=active)
+tk complete -id CUS-T-1     # finish stage, auto-advance
+tk idle -id CUS-T-1         # pause
 ```
 
 ## 7. Assign and claim
 
 ```bash
-ticket assign CUS-T-1 alice
-ticket claim -id CUS-T-1        # assign to yourself
-ticket request                  # get the next available ticket
+tk assign CUS-T-1 alice
+tk claim -id CUS-T-1        # assign to yourself
+tk request                  # get the next available ticket
 ```
 
 ## 8. Run an agent (optional)
@@ -85,15 +77,15 @@ ticket request                  # get the next available ticket
 Create an agent and run it against a server:
 
 ```bash
-ticket agent create
+tk agent create
 # prints agent_id (UUID) and password
 
 export TICKET_URL=http://localhost:8080
 export AGENT_ID=<agent-uuid>
 export AGENT_PASSWORD=<generated-password>
-ticket agent run                  # default LLM: claude (Sonnet 4.5)
-ticket agent run -llm codex       # use codex instead
-ticket agent run -v               # stream LLM I/O to terminal
+tk agent run                  # default LLM: claude (Sonnet 4.5)
+tk agent run -llm codex       # use codex instead
+tk agent run -v               # stream LLM I/O to terminal
 ```
 
 Only tickets marked as `ready` are eligible for automatic assignment. Use

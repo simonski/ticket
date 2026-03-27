@@ -91,7 +91,7 @@ I want a robust CLAUDE skill created so you can type
 I want to a have a robust singleplayer database available locally via a single command the queries the user.  It should also review the current if present
 
 ```bash
-tk setup / init
+tk init
 ```
 
 > database exists? Y/N
@@ -101,7 +101,7 @@ Auto-detect claude etc.
 > install claude skill in ~/.claude/skills/tk ?
 > install codex? in ~/.claude/skills/tk ?
 
-I have put a SKILL.md file into the docs folder.  This should be rehomed so it is a go:embed artifact that can then be installed locally during hte setup/init call.
+I have put a SKILL.md file into the docs folder.  This should be rehomed so it is a go:embed artifact that can then be installed locally during the init call.
 
 ## DB/Query Performance
 

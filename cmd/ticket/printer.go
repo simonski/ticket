@@ -94,9 +94,9 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 				workflow = name
 			}
 		}
-		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, desc))
+		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, project.GitRepository, desc))
 	}
-	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWORKFLOW\tDESCRIPTION", rows)
+	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWORKFLOW\tGIT\tDESCRIPTION", rows)
 }
 
 func ticketLabel(ticket store.Ticket) string {
@@ -394,20 +394,28 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		return s + strings.Repeat(" ", n-len(r))
 	}
 
-	// wrapRunes splits s into chunks of at most w runes.
+	// wrapRunes splits s into lines of at most w runes, breaking at word
+	// boundaries so words are never cut in half.
 	wrapRunes := func(s string, w int) []string {
-		r := []rune(s)
-		if len(r) == 0 {
+		words := strings.Fields(s)
+		if len(words) == 0 {
 			return []string{""}
 		}
 		var out []string
-		for len(r) > 0 {
-			n := w
-			if n > len(r) {
-				n = len(r)
+		var line []rune
+		for _, word := range words {
+			wr := []rune(word)
+			if len(line) > 0 && len(line)+1+len(wr) > w {
+				out = append(out, string(line))
+				line = nil
 			}
-			out = append(out, string(r[:n]))
-			r = r[n:]
+			if len(line) > 0 {
+				line = append(line, ' ')
+			}
+			line = append(line, wr...)
+		}
+		if len(line) > 0 {
+			out = append(out, string(line))
 		}
 		return out
 	}

@@ -101,17 +101,17 @@ export TICKET_URL=http://your-server:8080
 As an admin create users:
 
 ```bash
-ticket user create --username XXXX --password YYYY
+ticket user create -username XXXX -password YYYY
 created user xxxxx
 ```
 
 As an admin enable/disable users:
 
 ```bash
-ticket user enable --username XXXX
-ticket user disable --username XXXX
+ticket user enable -username XXXX
+ticket user disable -username XXXX
 ticket user ls|list
-ticket user rm|delete --username XXXX
+ticket user rm|delete -username XXXX
 ```
 
 These commands are admin-only. If a logged-in non-admin user runs them, the server returns `403` and the CLI prints `user is not an admin`.
@@ -160,7 +160,7 @@ The `-llm` flag selects the LLM: `claude` (default, uses Sonnet 4.5), `codex`, o
 Create an account:
 
 ```bash
-ticket register --username name --password '*******'
+ticket register -username name -password '*******'
 ```
 
 Log in:
@@ -242,7 +242,7 @@ Then it opens the database if present and verifies the schema is usable. It prin
 
 If the database does not exist in LOCAL mode, it also prints:
 
-- `hint: run tk setup`
+- `hint: run tk init`
 
 If `-nocolor` is set, the same output is printed without ANSI colors.
 
@@ -679,18 +679,18 @@ ticket import -i ./ticket-snapshot.json
 ticket server -v
 ticket version
 
-ticket register --username <name> --password <password>
-ticket login --username <name> --password <password>
+ticket register -username <name> -password <password>
+ticket login -username <name> -password <password>
 ticket status
 ticket config ls
 ticket config rm server
 ticket logout
 
-ticket user create --username <name> --password <password>
+ticket user create -username <name> -password <password>
 ticket user ls
-ticket user delete --username <name>
-ticket user enable --username <name>
-ticket user disable --username <name>
+ticket user delete -username <name>
+ticket user enable -username <name>
+ticket user disable -username <name>
 ticket user reset-password -username <name> [-password <password>]
 # Agent Commands
 ticket agent request [flags]

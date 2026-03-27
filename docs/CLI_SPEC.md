@@ -26,8 +26,8 @@ tk idea ls                      # list requirements
 ```bash
 # List & search
 tk ticket list                          # list tickets
-tk ticket list --type bug               # filtered by type
-tk ticket list --status develop/active  # filtered by status
+tk ticket list -type bug                # filtered by type
+tk ticket list -status develop/active   # filtered by status
 tk ticket list -u alice                 # filtered by assignee
 tk ticket search "query"                # full-text search
 tk ticket board                         # kanban view
@@ -95,6 +95,7 @@ tk idea get -id <id>                    # view detail
 tk idea shape -id <id> -d "more detail" # refine
 tk idea accept -id <id>                 # approve
 tk idea reject -id <id>                 # reject
+tk idea revise -id <id>                 # revert to shaping
 ```
 
 ## dep
@@ -108,9 +109,9 @@ tk dep remove -id <id> <depends-on-id>  # remove dependency
 
 ```bash
 # Project-wide
-tk label list
-tk label create -name "bug" -color "red"
-tk label delete -id <id>
+tk label ls
+tk label new -name "bug" -color "red"
+tk label rm -id <id>
 
 # Per-ticket
 tk label add -id <ticket-id> <label-id>
@@ -130,8 +131,8 @@ tk time delete -id <entry-id>
 ## project
 
 ```bash
-tk project list
-tk project create -title "Name" -prefix "PRJ"
+tk project ls
+tk project new -title "Name" -prefix "PRJ"
 tk project get <id>
 tk project use <id>
 tk project init
@@ -144,19 +145,19 @@ tk project remove-team -id <project-id> -team_id <team-id>
 ## role
 
 ```bash
-tk role list
-tk role create -title "Security Lead" -motivation "..." -goals "..."
+tk role ls
+tk role new -title "Security Lead" -motivation "..." -goals "..."
 tk role update -id <id> -title "New Title"
-tk role delete -id <id>
+tk role rm -id <id>
 ```
 
 ## workflow
 
 ```bash
-tk workflow list                                    # list all workflows
-tk workflow create -name <n> [-d desc]              # create a workflow
+tk workflow ls                                      # list all workflows
+tk workflow new -name <n> [-d desc]                 # create a workflow
 tk workflow get -id <id>                            # show workflow details
-tk workflow delete -id <id>                         # delete a workflow
+tk workflow rm -id <id>                             # delete a workflow
 tk workflow add-stage -id <wf-id> -name <n>         # add a stage
 tk workflow remove-stage -stage-id <id>             # remove a stage
 tk workflow reorder-stages -id <wf-id> <ids>        # reorder stages
@@ -167,33 +168,33 @@ tk workflow import -file <file>                     # import from JSON
 ## decision
 
 ```bash
-tk decision add "Use Postgres for production"
-tk decision list
+tk decision new "Use Postgres for production"
+tk decision ls
 ```
 
 ## story
 
 ```bash
-tk story create -title "Story title" [-d desc]     # create a story
-tk story list                                       # list stories in project
+tk story new -title "Story title" [-d desc]         # create a story
+tk story ls                                         # list stories in project
 tk story get <id>                                   # show story detail
 tk story update <id> -title "New title"             # update a story
-tk story delete <id>                                # delete a story
+tk story rm <id>                                    # delete a story
 ```
 
 ## team
 
 ```bash
-tk team list                                        # list all teams
-tk team create -name "Platform"                     # create a team
+tk team ls                                          # list all teams
+tk team new -name "Platform"                        # create a team
 tk team update -id <id> -name "New Name"            # update a team
-tk team delete -id <id>                             # delete a team
+tk team rm -id <id>                                 # delete a team
 tk team add-user -team_id <id> -user_id <id> -role <member|owner>
 tk team remove-user -team_id <id> -user_id <id>
-tk team users -team_id <id>                         # list team members
+tk team users -id <id>                              # list team members
 tk team add-agent -team_id <id> -agent_id <id>
 tk team remove-agent -team_id <id> -agent_id <id>
-tk team agents -team_id <id>                        # list team agents
+tk team agents -id <id>                             # list team agents
 ```
 
 ## agent
@@ -221,17 +222,21 @@ tk agent config-rm -id <uuid> <key>                    # remove agent config
 ## user
 
 ```bash
-tk user list                                        # list all users (admin)
-tk user create --username <u> --password <p>        # create a user (admin)
-tk user delete -id <id>                             # delete a user (admin)
+tk user ls                                          # list all users (admin)
+tk user new -username <u> -password <p>             # create a user (admin)
+tk user rm -id <id>                                 # delete a user (admin)
 tk user enable -id <id>                             # enable a user (admin)
 tk user disable -id <id>                            # disable a user (admin)
+tk user reset-password -username <u> [-password <p>] # reset password (admin)
 ```
 
 ## System commands
 
 ```bash
 tk status
+tk summary
+tk whoami
+tk doctor
 tk version
 tk server
 tk login

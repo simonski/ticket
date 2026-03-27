@@ -224,7 +224,7 @@ func runLocalStatus() error {
 	}
 	printStatusBox(lines)
 	if !dbExists {
-		fmt.Println("hint: run tk setup")
+		fmt.Println("hint: run tk init")
 	}
 	return connErr
 }

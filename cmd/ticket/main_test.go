@@ -303,10 +303,10 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 
 	for _, want := range []string{
 		"USAGE",
-		"ticket initdb",
+		"tk initdb",
 		"DETAILS",
 		"EXAMPLE",
-		"ticket initdb -f /path/to/ticket.db --force -password secret --populate",
+		"tk initdb -f /path/to/ticket.db -force -password secret -populate",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("command help missing %q:\n%s", want, help)
@@ -343,9 +343,9 @@ func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{
-		"ticket server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
+		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
 		"the server uses the database path from TICKET_HOME",
-		"ticket server -f /path/to/ticket.db -p 9999 -v",
+		"tk server -f /path/to/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("server help missing %q:\n%s", want, help)
@@ -356,9 +356,9 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 	help := renderCommandHelp("user")
 	for _, want := range []string{
-		"ticket user <create|ls|list|rm|delete|enable|disable>",
+		"tk user <create|ls|list|rm|delete|enable|disable>",
 		"user is not an admin",
-		"ticket user create --username alice --password secret",
+		"tk user create -username alice -password secret",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("user help missing %q:\n%s", want, help)
@@ -369,8 +369,8 @@ func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 func TestRenderConfigHelpIncludesListAndDelete(t *testing.T) {
 	help := renderCommandHelp("config")
 	for _, want := range []string{
-		"ticket config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
-		"ticket config ls",
+		"tk config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
+		"tk config ls",
 		"current_project",
 	} {
 		if !strings.Contains(help, want) {
@@ -1033,7 +1033,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	for _, want := range []string{
 		"db_exists        : false",
 		"failure",
-		"hint: run tk setup",
+		"hint: run tk init",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
