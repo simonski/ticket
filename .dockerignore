@@ -1,0 +1,37 @@
+# Build artifacts
+bin/
+dist/
+coverage.out
+
+# Development files
+.git
+.gitignore
+.beads
+node_modules/
+playwright-report/
+test-results/
+
+# Documentation
+*.md
+LICENSE
+
+# IDE / editor
+.vscode/
+.idea/
+
+# Local data
+.ticket/
+*.db
+*.db-shm
+*.db-wal
+backup.json
+config.json
+commands.sh
+commands2.sh
+
+# Homebrew
+homebrew/
+
+# Docker
+Dockerfile
+.dockerignore
