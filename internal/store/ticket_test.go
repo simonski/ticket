@@ -739,7 +739,7 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	cloned, err := CloneTicket(db, ticket.ID, "")
+	cloned, err := CloneTicket(db, ticket.ID, "", "")
 	if err != nil {
 		t.Fatalf("CloneTicket() error = %v", err)
 	}
@@ -876,7 +876,7 @@ func TestCloneEpicClonesChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
-	clonedEpic, err := CloneTicket(db, epic.ID, "")
+	clonedEpic, err := CloneTicket(db, epic.ID, "", "")
 	if err != nil {
 		t.Fatalf("CloneTicket(epic) error = %v", err)
 	}
