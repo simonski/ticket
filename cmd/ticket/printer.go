@@ -20,7 +20,7 @@ const (
 	ansiReset  = "\033[0m"
 	ansiBold   = "\033[1m"
 	ansiGreen  = "\033[32m"
-	ansiRed    = "\033[31m"
+	ansiRed = "\033[31m"
 	ansiGray   = "\033[90m"
 )
 
@@ -436,7 +436,8 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// immediately after each ticket row that has a title longer than titleW.
 	type displayLine struct {
 		text   string
-		status string // non-empty on ticket rows, enables row coloring
+		status string // non-empty on ticket rows, enables column coloring
+		ready  bool   // ticket ready flag, for coloring the READY column
 	}
 
 	display := make([]displayLine, 0, len(rawLines))
@@ -446,11 +447,11 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		if i+1 >= len(rawLines) {
 			break
 		}
-		display = append(display, displayLine{text: rawLines[i+1], status: t.Status})
+		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, ready: t.Ready})
 		chunks := wrapRunes(t.Title, titleW)
 		for _, chunk := range chunks[1:] {
 			cont := strings.Repeat(" ", preWidth) + chunk
-			display = append(display, displayLine{text: cont, status: t.Status})
+			display = append(display, displayLine{text: cont, status: t.Status, ready: t.Ready})
 		}
 	}
 
@@ -469,16 +470,88 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		return
 	}
 
-	// Render inside a rounded Unicode box with optional row coloring.
+	// Locate STAGE, STATE, READY column positions from the header line.
+	header := display[0].text
+	type colSpan struct{ start, end int }
+	findCol := func(name string) colSpan {
+		idx := strings.Index(header, name)
+		if idx < 0 {
+			return colSpan{-1, -1}
+		}
+		// Column extends from idx to the start of next column (or end of line).
+		// Find next column by looking for the next non-space after trailing spaces.
+		end := idx + len(name)
+		for end < len(header) && header[end] == ' ' {
+			end++
+		}
+		return colSpan{idx, end}
+	}
+	stageCol := findCol("STAGE")
+	stateCol := findCol("STATE")
+	readyCol := findCol("READY")
+
+	// colorizeColumns applies ANSI color to specific column ranges in a line,
+	// leaving the rest of the text uncolored (white).
+	colorizeColumns := func(line string, status string, ready bool) string {
+		runes := []rune(line)
+		lineLen := len(runes)
+		stateColor := rowColor(status)
+		readyColor := ansiGray
+		if ready {
+			readyColor = ansiGreen
+		}
+
+		type span struct {
+			start, end int
+			color      string
+		}
+		spans := []span{}
+		if stageCol.start >= 0 && stateColor != "" {
+			spans = append(spans, span{stageCol.start, stageCol.end, stateColor})
+		}
+		if stateCol.start >= 0 && stateColor != "" {
+			spans = append(spans, span{stateCol.start, stateCol.end, stateColor})
+		}
+		if readyCol.start >= 0 {
+			spans = append(spans, span{readyCol.start, readyCol.end, readyColor})
+		}
+		if len(spans) == 0 {
+			return line
+		}
+
+		var b strings.Builder
+		pos := 0
+		for _, s := range spans {
+			start := s.start
+			end := s.end
+			if start >= lineLen {
+				continue
+			}
+			if end > lineLen {
+				end = lineLen
+			}
+			if pos < start {
+				b.WriteString(string(runes[pos:start]))
+			}
+			b.WriteString(s.color)
+			b.WriteString(string(runes[start:end]))
+			b.WriteString(ansiReset)
+			pos = end
+		}
+		if pos < lineLen {
+			b.WriteString(string(runes[pos:]))
+		}
+		return b.String()
+	}
+
+	// Render inside a rounded Unicode box with per-column coloring.
 	border := strings.Repeat("─", maxW+2)
 	fmt.Println("╭" + border + "╮")
 	for _, l := range display {
 		pad := strings.Repeat(" ", maxW-runeCount(l.text))
 		text := l.text
 		if l.status != "" {
-			if c := rowColor(l.status); c != "" {
-				text = c + l.text + ansiReset
-			}
+			text = colorizeColumns(l.text, l.status, l.ready)
 		}
 		fmt.Printf("│ %s%s │\n", text, pad)
 	}
