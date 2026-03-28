@@ -1487,6 +1487,54 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeJSON(w, http.StatusOK, tasks)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			limit := 10
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if _, err := fmt.Sscan(raw, &limit); err != nil {
+					writeError(w, http.StatusBadRequest, "limit must be numeric")
+					return
+				}
+			}
+			var filter store.HistoryFilter
+			filter.UserID = r.URL.Query().Get("user_id")
+			filter.AgentID = r.URL.Query().Get("agent_id")
+			if raw := strings.TrimSpace(r.URL.Query().Get("team_id")); raw != "" {
+				if _, err := fmt.Sscan(raw, &filter.TeamID); err != nil {
+					writeError(w, http.StatusBadRequest, "team_id must be numeric")
+					return
+				}
+			}
+			events, err := store.ListProjectHistoryFiltered(db, project.ID, limit, filter)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, events)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "stories" && r.Method == http.MethodGet {
 			project, err := store.GetProject(db, parts[0])
 			if err != nil {

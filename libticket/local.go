@@ -906,12 +906,16 @@ func (s *LocalService) ListHistory(id string) ([]store.HistoryEvent, error) {
 }
 
 func (s *LocalService) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
+	return s.ListProjectHistoryFiltered(projectID, limit, store.HistoryFilter{})
+}
+
+func (s *LocalService) ListProjectHistoryFiltered(projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListProjectHistory(db, projectID, limit)
+	return store.ListProjectHistoryFiltered(db, projectID, limit, filter)
 }
 
 func (s *LocalService) AddComment(id string, comment string) (store.Comment, error) {

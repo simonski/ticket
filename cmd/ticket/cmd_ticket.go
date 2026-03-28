@@ -148,7 +148,7 @@ Commands:
   detach   -id <id>                           Remove parent
 
   comment  add -id <id> "text"                Add comment
-  history  <id>                               Activity log
+  history  [<id>] [-user_id ID] [-agent_id ID] [-team_id ID]  Activity log
   conversation show <id>                      Full thread
 
   close    -id <id>                           Close ticket
@@ -1365,6 +1365,9 @@ func runHistory(args []string) error {
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	limit := fs.Int("n", 10, "maximum number of events to show; 0 means all")
+	userID := fs.String("user_id", "", "filter by user id")
+	agentID := fs.String("agent_id", "", "filter by agent id")
+	teamID := fs.Int64("team_id", 0, "filter by team id")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1374,13 +1377,19 @@ func runHistory(args []string) error {
 		remaining = append([]string{strings.TrimSpace(*id)}, remaining...)
 	}
 
+	filter := store.HistoryFilter{
+		UserID:  *userID,
+		AgentID: *agentID,
+		TeamID:  *teamID,
+	}
+
 	// No positional args: show recent events for the active project.
 	if len(remaining) == 0 {
 		_, svc, project, err := resolveCurrentProjectClient()
 		if err != nil {
 			return err
 		}
-		events, err := svc.ListProjectHistory(project.ID, *limit)
+		events, err := svc.ListProjectHistoryFiltered(project.ID, *limit, filter)
 		if err != nil {
 			return err
 		}
@@ -1402,7 +1411,7 @@ func runHistory(args []string) error {
 	}
 
 	if len(remaining) != 1 {
-		return errors.New("usage: ticket history [-n <limit>] [<id>]")
+		return errors.New("usage: ticket history [-n <limit>] [-user_id ID] [-agent_id ID] [-team_id ID] [<id>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {

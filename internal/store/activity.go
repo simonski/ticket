@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 )
 
 type HistoryEvent struct {
@@ -70,19 +72,55 @@ func ListHistoryEvents(db *sql.DB, ticketID string) ([]HistoryEvent, error) {
 	return events, rows.Err()
 }
 
+// HistoryFilter holds optional filter criteria for history queries.
+type HistoryFilter struct {
+	UserID  string // filter by exact user_id (created_by)
+	AgentID string // filter by agent user_id (created_by)
+	TeamID  int64  // filter by team membership (team_members)
+}
+
 // ListProjectHistory returns the most recent history events for all tickets in
 // a project, ordered newest first, limited to limit rows.
 func ListProjectHistory(db *sql.DB, projectID int64, limit int) ([]HistoryEvent, error) {
+	return ListProjectHistoryFiltered(db, projectID, limit, HistoryFilter{})
+}
+
+// ListProjectHistoryFiltered returns the most recent history events for all
+// tickets in a project, applying optional actor filters.
+func ListProjectHistoryFiltered(db *sql.DB, projectID int64, limit int, filter HistoryFilter) ([]HistoryEvent, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	rows, err := db.Query(`
+
+	var clauses []string
+	var args []any
+
+	clauses = append(clauses, "h.project_id = ?")
+	args = append(args, projectID)
+
+	if filter.UserID != "" {
+		clauses = append(clauses, "h.created_by = ?")
+		args = append(args, filter.UserID)
+	}
+	if filter.AgentID != "" {
+		clauses = append(clauses, "h.created_by = ?")
+		args = append(args, filter.AgentID)
+	}
+	if filter.TeamID > 0 {
+		clauses = append(clauses, "h.created_by IN (SELECT user_id FROM team_members WHERE team_id = ?)")
+		args = append(args, filter.TeamID)
+	}
+
+	query := fmt.Sprintf(`
 		SELECT h.id, h.project_id, h.ticket_id, COALESCE(h.ticket_id, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
 		FROM ticket_history h
-		WHERE h.project_id = ?
+		WHERE %s
 		ORDER BY h.id DESC
 		LIMIT ?
-	`, projectID, limit)
+	`, strings.Join(clauses, " AND "))
+	args = append(args, limit)
+
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

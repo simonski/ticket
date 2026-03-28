@@ -93,6 +93,7 @@ type Service interface {
 	CloneTicket(id string) (store.Ticket, error)
 	ListHistory(id string) ([]store.HistoryEvent, error)
 	ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error)
+	ListProjectHistoryFiltered(projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error)
 	AddComment(id string, comment string) (store.Comment, error)
 	ListComments(id string) ([]store.Comment, error)
 	AddDependency(request DependencyRequest) (store.Dependency, error)

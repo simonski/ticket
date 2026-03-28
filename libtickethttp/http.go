@@ -307,6 +307,10 @@ func (s *Service) ListProjectHistory(projectID int64, limit int) ([]store.Histor
 	return s.client.ListProjectHistory(projectID, limit)
 }
 
+func (s *Service) ListProjectHistoryFiltered(projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
+	return s.client.ListProjectHistoryFiltered(projectID, limit, filter)
+}
+
 func (s *Service) AddComment(id string, comment string) (store.Comment, error) {
 	return s.client.AddComment(id, comment)
 }

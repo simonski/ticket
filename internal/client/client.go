@@ -1257,19 +1257,34 @@ func (c *Client) ListHistory(id string) ([]store.HistoryEvent, error) {
 }
 
 func (c *Client) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
+	return c.ListProjectHistoryFiltered(projectID, limit, store.HistoryFilter{})
+}
+
+func (c *Client) ListProjectHistoryFiltered(projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListProjectHistory(db, projectID, limit)
+		return store.ListProjectHistoryFiltered(db, projectID, limit, filter)
 	}
 	if limit <= 0 {
 		limit = 10
 	}
+	params := url.Values{}
+	params.Set("limit", fmt.Sprintf("%d", limit))
+	if filter.UserID != "" {
+		params.Set("user_id", filter.UserID)
+	}
+	if filter.AgentID != "" {
+		params.Set("agent_id", filter.AgentID)
+	}
+	if filter.TeamID > 0 {
+		params.Set("team_id", fmt.Sprintf("%d", filter.TeamID))
+	}
 	var events []store.HistoryEvent
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/history?limit=%d", projectID, limit), nil, &events)
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/history?%s", projectID, params.Encode()), nil, &events)
 	return events, err
 }
 
