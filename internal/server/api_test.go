@@ -1728,6 +1728,566 @@ func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
 	}
 }
 
+func TestTicketStateOpsAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a ticket to exercise state operations on.
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "State ops ticket",
+	}, token)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	// POST /api/tickets/{ref}/close
+	closeResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/close", nil, token)
+	if closeResp.Code != http.StatusOK {
+		t.Fatalf("close ticket status = %d body=%s", closeResp.Code, closeResp.Body.String())
+	}
+
+	// POST /api/tickets/{ref}/open
+	openResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/open", nil, token)
+	if openResp.Code != http.StatusOK {
+		t.Fatalf("open ticket status = %d body=%s", openResp.Code, openResp.Body.String())
+	}
+
+	// POST /api/tickets/{ref}/archive
+	archiveResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/archive", nil, token)
+	if archiveResp.Code != http.StatusOK {
+		t.Fatalf("archive ticket status = %d body=%s", archiveResp.Code, archiveResp.Body.String())
+	}
+
+	// POST /api/tickets/{ref}/unarchive
+	unarchiveResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/unarchive", nil, token)
+	if unarchiveResp.Code != http.StatusOK {
+		t.Fatalf("unarchive ticket status = %d body=%s", unarchiveResp.Code, unarchiveResp.Body.String())
+	}
+
+	// POST /api/tickets/{ref}/notready
+	notreadyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/notready", nil, token)
+	if notreadyResp.Code != http.StatusOK {
+		t.Fatalf("notready ticket status = %d body=%s", notreadyResp.Code, notreadyResp.Body.String())
+	}
+
+	// POST /api/tickets/{ref}/health
+	healthResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/health", map[string]any{
+		"score": 3,
+	}, token)
+	if healthResp.Code != http.StatusOK {
+		t.Fatalf("health ticket status = %d body=%s", healthResp.Code, healthResp.Body.String())
+	}
+	var healthTicket store.Ticket
+	decodeResponse(t, healthResp, &healthTicket)
+	if healthTicket.HealthScore != 3 {
+		t.Fatalf("health score = %d, want 3", healthTicket.HealthScore)
+	}
+
+	// Create a workflow to assign to the ticket.
+	wfResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
+		"name":        "Test WF",
+		"description": "for ticket workflow test",
+	}, token)
+	if wfResp.Code != http.StatusCreated {
+		t.Fatalf("create workflow status = %d body=%s", wfResp.Code, wfResp.Body.String())
+	}
+	var wf store.Workflow
+	decodeResponse(t, wfResp, &wf)
+
+	// POST /api/tickets/{ref}/workflow
+	setWfResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/workflow", map[string]any{
+		"workflow_id": wf.ID,
+	}, token)
+	if setWfResp.Code != http.StatusOK {
+		t.Fatalf("set ticket workflow status = %d body=%s", setWfResp.Code, setWfResp.Body.String())
+	}
+
+	// DELETE /api/tickets/{ref}/workflow
+	unsetWfResp := doJSONRequest(t, handler, http.MethodDelete, "/api/tickets/"+ticket.ID+"/workflow", nil, token)
+	if unsetWfResp.Code != http.StatusOK {
+		t.Fatalf("unset ticket workflow status = %d body=%s", unsetWfResp.Code, unsetWfResp.Body.String())
+	}
+}
+
+func TestRegistrationConfigAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Disable registration
+	disableResp := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]bool{
+		"enabled": false,
+	}, token)
+	if disableResp.Code != http.StatusOK {
+		t.Fatalf("disable registration status = %d body=%s", disableResp.Code, disableResp.Body.String())
+	}
+	var disablePayload map[string]any
+	decodeResponse(t, disableResp, &disablePayload)
+	if got, ok := disablePayload["registration_enabled"].(bool); !ok || got {
+		t.Fatalf("registration_enabled = %v, want false", disablePayload["registration_enabled"])
+	}
+
+	// Enable registration
+	enableResp := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]bool{
+		"enabled": true,
+	}, token)
+	if enableResp.Code != http.StatusOK {
+		t.Fatalf("enable registration status = %d body=%s", enableResp.Code, enableResp.Body.String())
+	}
+	var enablePayload map[string]any
+	decodeResponse(t, enableResp, &enablePayload)
+	if got, ok := enablePayload["registration_enabled"].(bool); !ok || !got {
+		t.Fatalf("registration_enabled = %v, want true", enablePayload["registration_enabled"])
+	}
+}
+
+func TestAgentWorkflowAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create an agent and extract credentials.
+	createAgentResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents", map[string]string{
+		"description": "Test agent",
+	}, token)
+	if createAgentResp.Code != http.StatusCreated {
+		t.Fatalf("create agent status = %d body=%s", createAgentResp.Code, createAgentResp.Body.String())
+	}
+	var agentPayload struct {
+		Agent    store.Agent `json:"agent"`
+		Password string     `json:"password"`
+	}
+	decodeResponse(t, createAgentResp, &agentPayload)
+	agentID := agentPayload.Agent.ID
+	agentPass := agentPayload.Password
+
+	// GET /api/agents/statuses
+	statusesResp := doJSONRequest(t, handler, http.MethodGet, "/api/agents/statuses", nil, token)
+	if statusesResp.Code != http.StatusOK {
+		t.Fatalf("agent statuses status = %d body=%s", statusesResp.Code, statusesResp.Body.String())
+	}
+
+	// POST /api/agents/register (basic auth)
+	registerResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/register", agentID, agentPass, nil)
+	if registerResp.Code != http.StatusOK {
+		t.Fatalf("agent register status = %d body=%s", registerResp.Code, registerResp.Body.String())
+	}
+
+	// POST /api/agents/heartbeat (basic auth)
+	heartbeatResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/heartbeat", agentID, agentPass, map[string]string{
+		"status": "online",
+	})
+	if heartbeatResp.Code != http.StatusOK {
+		t.Fatalf("agent heartbeat status = %d body=%s", heartbeatResp.Code, heartbeatResp.Body.String())
+	}
+
+	// Create a ticket for the agent to request.
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "Agent work item",
+	}, token)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	// Mark ticket ready so it can be claimed.
+	readyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/ready", nil, token)
+	if readyResp.Code != http.StatusOK {
+		t.Fatalf("ready ticket status = %d body=%s", readyResp.Code, readyResp.Body.String())
+	}
+
+	// POST /api/agents/request (basic auth)
+	requestResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/request", agentID, agentPass, map[string]any{
+		"project_id": 1,
+	})
+	if requestResp.Code != http.StatusOK {
+		t.Fatalf("agent request status = %d body=%s", requestResp.Code, requestResp.Body.String())
+	}
+	var requestPayload map[string]any
+	decodeResponse(t, requestResp, &requestPayload)
+	if requestPayload["status"] != "NEW" {
+		t.Fatalf("agent request status = %v, want NEW", requestPayload["status"])
+	}
+
+	// POST /api/agents/{id}/tickets/{ticket_id}/update (basic auth)
+	updateResp := doBasicAuthRequest(t, handler, http.MethodPost, "/api/agents/tickets/"+ticket.ID+"/update", agentID, agentPass, map[string]string{
+		"result": "done",
+	})
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("agent ticket update status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+}
+
+func TestWorkflowImportExportReorderAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a workflow with two stages.
+	wfResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
+		"name":        "Import Export WF",
+		"description": "workflow for import/export test",
+	}, token)
+	if wfResp.Code != http.StatusCreated {
+		t.Fatalf("create workflow status = %d body=%s", wfResp.Code, wfResp.Body.String())
+	}
+	var wf store.Workflow
+	decodeResponse(t, wfResp, &wf)
+
+	stage1Resp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/stages", map[string]any{
+		"stage_name":  "build",
+		"description": "compile step",
+		"sort_order":  0,
+	}, token)
+	if stage1Resp.Code != http.StatusCreated {
+		t.Fatalf("add stage1 status = %d body=%s", stage1Resp.Code, stage1Resp.Body.String())
+	}
+	var stage1 store.WorkflowStage
+	decodeResponse(t, stage1Resp, &stage1)
+
+	stage2Resp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/stages", map[string]any{
+		"stage_name":  "deploy",
+		"description": "deploy step",
+		"sort_order":  1,
+	}, token)
+	if stage2Resp.Code != http.StatusCreated {
+		t.Fatalf("add stage2 status = %d body=%s", stage2Resp.Code, stage2Resp.Body.String())
+	}
+	var stage2 store.WorkflowStage
+	decodeResponse(t, stage2Resp, &stage2)
+
+	// GET /api/workflows/{id}/export
+	exportResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/export", nil, token)
+	if exportResp.Code != http.StatusOK {
+		t.Fatalf("export workflow status = %d body=%s", exportResp.Code, exportResp.Body.String())
+	}
+	var export store.WorkflowExport
+	decodeResponse(t, exportResp, &export)
+	if export.Name != "Import Export WF" {
+		t.Fatalf("export name = %q, want 'Import Export WF'", export.Name)
+	}
+
+	// POST /api/workflows/import (change name to avoid unique constraint)
+	export.Name = "Imported WF Copy"
+	importResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/import", export, token)
+	if importResp.Code != http.StatusCreated {
+		t.Fatalf("import workflow status = %d body=%s", importResp.Code, importResp.Body.String())
+	}
+
+	// PUT /api/workflows/{id}/reorder
+	reorderResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/reorder", map[string]any{
+		"stage_ids": []int64{stage2.ID, stage1.ID},
+	}, token)
+	if reorderResp.Code != http.StatusOK {
+		t.Fatalf("reorder workflow status = %d body=%s", reorderResp.Code, reorderResp.Body.String())
+	}
+}
+
+func TestProjectMembershipAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a project.
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]string{
+		"title": "Membership Test Project",
+	}, token)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+	pid := strconv.FormatInt(project.ID, 10)
+
+	// POST /api/projects/{id}/enable
+	enableResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+pid+"/enable", nil, token)
+	if enableResp.Code != http.StatusOK {
+		t.Fatalf("enable project status = %d body=%s", enableResp.Code, enableResp.Body.String())
+	}
+
+	// POST /api/projects/{id}/disable
+	disableResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+pid+"/disable", nil, token)
+	if disableResp.Code != http.StatusOK {
+		t.Fatalf("disable project status = %d body=%s", disableResp.Code, disableResp.Body.String())
+	}
+
+	// Re-enable for further testing.
+	doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+pid+"/enable", nil, token)
+
+	// Create a user to add as member.
+	doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "memberuser",
+		"password": "password123",
+	}, token)
+	memberUser, err := store.GetUserByUsername(db, "memberuser")
+	if err != nil {
+		t.Fatalf("get memberuser error = %v", err)
+	}
+
+	// GET /api/projects/{id}/users (empty initially)
+	usersResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+pid+"/users", nil, token)
+	if usersResp.Code != http.StatusOK {
+		t.Fatalf("list project users status = %d body=%s", usersResp.Code, usersResp.Body.String())
+	}
+
+	// POST /api/projects/{id}/users
+	addUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+pid+"/users", map[string]any{
+		"user_id": memberUser.ID,
+		"role":    "editor",
+	}, token)
+	if addUserResp.Code != http.StatusOK {
+		t.Fatalf("add project user status = %d body=%s", addUserResp.Code, addUserResp.Body.String())
+	}
+
+	// DELETE /api/projects/{id}/users/{user_id}
+	removeUserResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/"+pid+"/users/"+memberUser.ID, nil, token)
+	if removeUserResp.Code != http.StatusOK {
+		t.Fatalf("remove project user status = %d body=%s", removeUserResp.Code, removeUserResp.Body.String())
+	}
+
+	// Create a team.
+	teamResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams", map[string]any{
+		"name": "Membership Team",
+	}, token)
+	if teamResp.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d body=%s", teamResp.Code, teamResp.Body.String())
+	}
+	var team store.Team
+	decodeResponse(t, teamResp, &team)
+
+	// GET /api/projects/{id}/teams
+	teamsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+pid+"/teams", nil, token)
+	if teamsResp.Code != http.StatusOK {
+		t.Fatalf("list project teams status = %d body=%s", teamsResp.Code, teamsResp.Body.String())
+	}
+
+	// POST /api/projects/{id}/teams
+	addTeamResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+pid+"/teams", map[string]any{
+		"team_id": team.ID,
+		"role":    "editor",
+	}, token)
+	if addTeamResp.Code != http.StatusOK {
+		t.Fatalf("add project team status = %d body=%s", addTeamResp.Code, addTeamResp.Body.String())
+	}
+
+	// DELETE /api/projects/{id}/teams/{team_id}
+	removeTeamResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/"+pid+"/teams/"+strconv.FormatInt(team.ID, 10), nil, token)
+	if removeTeamResp.Code != http.StatusOK {
+		t.Fatalf("remove project team status = %d body=%s", removeTeamResp.Code, removeTeamResp.Body.String())
+	}
+
+	// GET /api/projects/{id}/stories (empty list is fine)
+	storiesResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+pid+"/stories", nil, token)
+	if storiesResp.Code != http.StatusOK {
+		t.Fatalf("list project stories status = %d body=%s", storiesResp.Code, storiesResp.Body.String())
+	}
+
+	// GET /api/projects/{id}/history
+	historyResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+pid+"/history", nil, token)
+	if historyResp.Code != http.StatusOK {
+		t.Fatalf("project history status = %d body=%s", historyResp.Code, historyResp.Body.String())
+	}
+}
+
+func TestTeamCRUDAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a team.
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams", map[string]any{
+		"name": "CRUD Team",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var team store.Team
+	decodeResponse(t, createResp, &team)
+	tid := strconv.FormatInt(team.ID, 10)
+
+	// PUT /api/teams/{id}
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/teams/"+tid, map[string]any{
+		"name": "Updated CRUD Team",
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update team status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var updatedTeam store.Team
+	decodeResponse(t, updateResp, &updatedTeam)
+	if updatedTeam.Name != "Updated CRUD Team" {
+		t.Fatalf("updated team name = %q, want 'Updated CRUD Team'", updatedTeam.Name)
+	}
+
+	// Create a user and add to team.
+	doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "teamuser",
+		"password": "password123",
+	}, token)
+	teamUser, err := store.GetUserByUsername(db, "teamuser")
+	if err != nil {
+		t.Fatalf("get teamuser error = %v", err)
+	}
+
+	// POST /api/teams/{id}/users (add member) - admin is already owner from create
+	addMemberResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams/"+tid+"/users", map[string]any{
+		"user_id":   teamUser.ID,
+		"role":      "member",
+		"job_title": "Developer",
+	}, token)
+	if addMemberResp.Code != http.StatusOK {
+		t.Fatalf("add team member status = %d body=%s", addMemberResp.Code, addMemberResp.Body.String())
+	}
+
+	// GET /api/teams/{id}/users
+	membersResp := doJSONRequest(t, handler, http.MethodGet, "/api/teams/"+tid+"/users", nil, token)
+	if membersResp.Code != http.StatusOK {
+		t.Fatalf("list team members status = %d body=%s", membersResp.Code, membersResp.Body.String())
+	}
+
+	// DELETE /api/teams/{id}/users/{user_id}
+	removeMemberResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+tid+"/users/"+teamUser.ID, nil, token)
+	if removeMemberResp.Code != http.StatusOK {
+		t.Fatalf("remove team member status = %d body=%s", removeMemberResp.Code, removeMemberResp.Body.String())
+	}
+
+	// Create an agent and add to team.
+	agentResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents", map[string]string{
+		"description": "Team agent",
+	}, token)
+	if agentResp.Code != http.StatusCreated {
+		t.Fatalf("create agent status = %d body=%s", agentResp.Code, agentResp.Body.String())
+	}
+	var agentPayload struct {
+		Agent    store.Agent `json:"agent"`
+		Password string     `json:"password"`
+	}
+	decodeResponse(t, agentResp, &agentPayload)
+
+	// POST /api/teams/{id}/agents
+	addAgentResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams/"+tid+"/agents", map[string]any{
+		"agent_id": agentPayload.Agent.ID,
+	}, token)
+	if addAgentResp.Code != http.StatusOK {
+		t.Fatalf("add team agent status = %d body=%s", addAgentResp.Code, addAgentResp.Body.String())
+	}
+
+	// GET /api/teams/{id}/agents
+	agentsResp := doJSONRequest(t, handler, http.MethodGet, "/api/teams/"+tid+"/agents", nil, token)
+	if agentsResp.Code != http.StatusOK {
+		t.Fatalf("list team agents status = %d body=%s", agentsResp.Code, agentsResp.Body.String())
+	}
+
+	// DELETE /api/teams/{id}/agents/{agent_id}
+	removeAgentResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+tid+"/agents/"+agentPayload.Agent.ID, nil, token)
+	if removeAgentResp.Code != http.StatusOK {
+		t.Fatalf("remove team agent status = %d body=%s", removeAgentResp.Code, removeAgentResp.Body.String())
+	}
+
+	// Remove the admin owner membership before deleting the team.
+	adminUser, err := store.GetUserByUsername(db, "admin")
+	if err != nil {
+		t.Fatalf("get admin user error = %v", err)
+	}
+	removeOwnerResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+tid+"/users/"+adminUser.ID, nil, token)
+	if removeOwnerResp.Code != http.StatusOK {
+		t.Fatalf("remove team owner status = %d body=%s", removeOwnerResp.Code, removeOwnerResp.Body.String())
+	}
+
+	// DELETE /api/teams/{id}
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+tid, nil, token)
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete team status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+}
+
+func TestStoryCRUDAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a story.
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories", map[string]any{
+		"project_id":  1,
+		"title":       "CRUD Story",
+		"description": "A story for CRUD testing",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create story status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var story store.Story
+	decodeResponse(t, createResp, &story)
+	sid := strconv.FormatInt(story.ID, 10)
+
+	// GET /api/stories/{id}
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/stories/"+sid, nil, token)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get story status = %d body=%s", getResp.Code, getResp.Body.String())
+	}
+	var fetched store.Story
+	decodeResponse(t, getResp, &fetched)
+	if fetched.Title != "CRUD Story" {
+		t.Fatalf("story title = %q, want 'CRUD Story'", fetched.Title)
+	}
+
+	// PUT /api/stories/{id}
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/stories/"+sid, map[string]any{
+		"project_id":  1,
+		"title":       "Updated Story",
+		"description": "Updated description",
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update story status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var updated store.Story
+	decodeResponse(t, updateResp, &updated)
+	if updated.Title != "Updated Story" {
+		t.Fatalf("updated story title = %q, want 'Updated Story'", updated.Title)
+	}
+
+	// DELETE /api/stories/{id}
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/stories/"+sid, nil, token)
+	if deleteResp.Code != http.StatusNoContent {
+		t.Fatalf("delete story status = %d, want %d body=%s", deleteResp.Code, http.StatusNoContent, deleteResp.Body.String())
+	}
+
+	// Verify story is gone.
+	getGoneResp := doJSONRequest(t, handler, http.MethodGet, "/api/stories/"+sid, nil, token)
+	if getGoneResp.Code != http.StatusNotFound {
+		t.Fatalf("get deleted story status = %d, want %d", getGoneResp.Code, http.StatusNotFound)
+	}
+}
+
+func TestDeleteLabelByIDAPI(t *testing.T) {
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	// Create a label on project 1.
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/labels", map[string]string{
+		"name":  "deleteme",
+		"color": "blue",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create label status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var label store.Label
+	decodeResponse(t, createResp, &label)
+
+	// DELETE /api/labels/{id}
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/labels/"+strconv.FormatInt(label.ID, 10), nil, token)
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete label status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+}
+
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 

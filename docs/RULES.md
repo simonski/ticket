@@ -7,7 +7,7 @@
 - externalise strings to constants.go where possible
 - assess the drift between code and design and explain where you believe you are
 
-- `spec` means rebuild the SPEC.md file to be a full representation of this project requirement such that it can be given to an agent to build the project codebase, docs and design from scratch.
+- `spec` means rebuild the SPEC.md file to be a full representation of this project requirement such that it can be given to an agent to build the project codebase, docs and design from scratch, create an up-to-date openapi specification also, fully documented with each api call
 - `sdlc` means check red/green, review versions of software dependencies, general SDLC process, SAST, cyber, threat modelling, quality of code, documentation, setup and installation guides, conssitency wiht a professional delivered and robust piece of software and make recommendations on improvements
 - `drift` means check for drift between documentation and implementation, verify the README and QUICKSTART top-level documentation
 - `next` means pickup the next ticket or keep working on the currently assigned ticket

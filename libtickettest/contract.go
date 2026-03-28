@@ -1,9 +1,11 @@
 package libtickettest
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -1233,5 +1235,271 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListTickets() error = %v", err)
 		}
 		_ = tickets // may be empty, just verify no error
+	})
+
+	t.Run("story-crud", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Stories"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		story, err := svc.CreateStory(project.ID, "User Login", "As a user I want to log in")
+		if err != nil {
+			t.Fatalf("CreateStory() error = %v", err)
+		}
+		if story.Title != "User Login" || story.Description != "As a user I want to log in" {
+			t.Fatalf("CreateStory() = %#v", story)
+		}
+
+		story2, err := svc.CreateStory(project.ID, "User Logout", "As a user I want to log out")
+		if err != nil {
+			t.Fatalf("CreateStory(2) error = %v", err)
+		}
+
+		stories, err := svc.ListStories(project.ID)
+		if err != nil {
+			t.Fatalf("ListStories() error = %v", err)
+		}
+		if len(stories) != 2 {
+			t.Fatalf("ListStories() len = %d, want 2", len(stories))
+		}
+
+		got, err := svc.GetStory(story.ID)
+		if err != nil {
+			t.Fatalf("GetStory() error = %v", err)
+		}
+		if got.Title != "User Login" {
+			t.Fatalf("GetStory().Title = %q, want User Login", got.Title)
+		}
+
+		updated, err := svc.UpdateStory(story.ID, "User Login V2", "Updated description")
+		if err != nil {
+			t.Fatalf("UpdateStory() error = %v", err)
+		}
+		if updated.Title != "User Login V2" || updated.Description != "Updated description" {
+			t.Fatalf("UpdateStory() = %#v", updated)
+		}
+
+		if err := svc.DeleteStory(story2.ID); err != nil {
+			t.Fatalf("DeleteStory() error = %v", err)
+		}
+
+		storiesAfter, err := svc.ListStories(project.ID)
+		if err != nil {
+			t.Fatalf("ListStories() after delete error = %v", err)
+		}
+		if len(storiesAfter) != 1 {
+			t.Fatalf("ListStories() after delete len = %d, want 1", len(storiesAfter))
+		}
+	})
+
+	t.Run("delete-project", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+			Title:       "To Delete",
+			Description: "Will be deleted",
+		})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		if err := svc.DeleteProject(project.ID); err != nil {
+			t.Fatalf("DeleteProject() error = %v", err)
+		}
+
+		if _, err := svc.GetProject(strconv.FormatInt(project.ID, 10)); err == nil {
+			t.Fatal("GetProject(deleted) error = nil")
+		}
+	})
+
+	t.Run("not-ready-ticket", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "NotReady"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Ready Then Not",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		readied, err := svc.ReadyTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("ReadyTicket() error = %v", err)
+		}
+		if !readied.Ready {
+			t.Fatal("ReadyTicket().Ready = false, want true")
+		}
+
+		unreadied, err := svc.NotReadyTicket(ticket.ID)
+		if err != nil {
+			t.Fatalf("NotReadyTicket() error = %v", err)
+		}
+		if unreadied.Ready {
+			t.Fatal("NotReadyTicket().Ready = true, want false")
+		}
+	})
+
+	t.Run("set-unset-ticket-workflow", func(t *testing.T) {
+		svc := factory(t)
+
+		wf, err := svc.CreateWorkflow(libticket.WorkflowRequest{
+			Name:        "ticket-wf",
+			Description: "For ticket workflow test",
+		})
+		if err != nil {
+			t.Fatalf("CreateWorkflow() error = %v", err)
+		}
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "WF Ticket"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "Workflow Task",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+
+		withWF, err := svc.SetTicketWorkflow(ticket.ID, wf.ID)
+		if err != nil {
+			t.Fatalf("SetTicketWorkflow() error = %v", err)
+		}
+		if withWF.WorkflowID == nil || *withWF.WorkflowID != wf.ID {
+			t.Fatalf("SetTicketWorkflow().WorkflowID = %v, want %d", withWF.WorkflowID, wf.ID)
+		}
+
+		withoutWF, err := svc.UnsetTicketWorkflow(ticket.ID)
+		if err != nil {
+			t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+		}
+		if withoutWF.WorkflowID != nil {
+			t.Fatalf("UnsetTicketWorkflow().WorkflowID = %v, want nil", withoutWF.WorkflowID)
+		}
+
+		// Cleanup
+		_ = svc.DeleteWorkflow(wf.ID)
+	})
+
+	t.Run("agent-config", func(t *testing.T) {
+		svc := factory(t)
+
+		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{})
+		if err != nil {
+			t.Fatalf("CreateAgent() error = %v", err)
+		}
+
+		if err := svc.SetAgentConfig(agent.ID, "model", "gpt-4"); err != nil {
+			t.Fatalf("SetAgentConfig() error = %v", err)
+		}
+
+		if err := svc.SetAgentConfig(agent.ID, "temperature", "0.7"); err != nil {
+			t.Fatalf("SetAgentConfig(temperature) error = %v", err)
+		}
+
+		configs, err := svc.ListAgentConfig(agent.ID)
+		if err != nil {
+			t.Fatalf("ListAgentConfig() error = %v", err)
+		}
+		if len(configs) != 2 {
+			t.Fatalf("ListAgentConfig() len = %d, want 2", len(configs))
+		}
+
+		if err := svc.DeleteAgentConfig(agent.ID, "model"); err != nil {
+			t.Fatalf("DeleteAgentConfig() error = %v", err)
+		}
+
+		configsAfter, err := svc.ListAgentConfig(agent.ID)
+		if err != nil {
+			t.Fatalf("ListAgentConfig() after delete error = %v", err)
+		}
+		if len(configsAfter) != 1 {
+			t.Fatalf("ListAgentConfig() after delete len = %d, want 1", len(configsAfter))
+		}
+
+		// Cleanup
+		_ = svc.DeleteAgent(agent.ID)
+	})
+
+	t.Run("agent-statuses", func(t *testing.T) {
+		svc := factory(t)
+
+		statuses, err := svc.ListAgentStatuses()
+		if err != nil {
+			t.Fatalf("ListAgentStatuses() error = %v", err)
+		}
+		_ = statuses // may be empty, just verify no error
+	})
+
+	t.Run("project-history", func(t *testing.T) {
+		svc := factory(t)
+
+		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "History"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		// Create a ticket to generate history events
+		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     "History Task",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+		_ = ticket
+
+		history, err := svc.ListProjectHistory(project.ID, 10)
+		if err != nil {
+			t.Fatalf("ListProjectHistory() error = %v", err)
+		}
+		if len(history) == 0 {
+			t.Fatal("ListProjectHistory() returned no history")
+		}
+
+		filtered, err := svc.ListProjectHistoryFiltered(project.ID, 10, store.HistoryFilter{})
+		if err != nil {
+			t.Fatalf("ListProjectHistoryFiltered() error = %v", err)
+		}
+		if len(filtered) == 0 {
+			t.Fatal("ListProjectHistoryFiltered() returned no history")
+		}
+	})
+
+	t.Run("reset-user-password", func(t *testing.T) {
+		svc := factory(t)
+
+		user, err := svc.CreateUser("resetme", "oldpass")
+		if err != nil {
+			t.Fatalf("CreateUser() error = %v", err)
+		}
+		if user.Username != "resetme" {
+			t.Fatalf("CreateUser().Username = %q", user.Username)
+		}
+
+		updated, err := svc.ResetUserPassword("resetme", "newpass")
+		if err != nil {
+			t.Fatalf("ResetUserPassword() error = %v", err)
+		}
+		if updated.Username != "resetme" {
+			t.Fatalf("ResetUserPassword().Username = %q", updated.Username)
+		}
+
+		// Cleanup
+		_ = svc.DeleteUser("resetme")
 	})
 }

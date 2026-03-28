@@ -440,6 +440,25 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			enabled = true
 		case "disable":
 			enabled = false
+		case "reset-password":
+			var payload struct {
+				Password string `json:"password"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			user, err := store.ResetUserPassword(db, username, payload.Password)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "user not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, user)
+			return
 		default:
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -834,6 +853,44 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 						writeError(w, http.StatusNotFound, "agent not found")
 						return
 					}
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			}
+			return
+		}
+		if (len(parts) == 2 || len(parts) == 3) && parts[1] == "config" {
+			switch r.Method {
+			case http.MethodGet:
+				entries, err := store.ListAgentConfig(db, id)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, entries)
+			case http.MethodPost:
+				var payload struct {
+					Key   string `json:"key"`
+					Value string `json:"value"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				if err := store.SetAgentConfig(db, id, payload.Key, payload.Value); err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			case http.MethodDelete:
+				if len(parts) != 3 {
+					writeError(w, http.StatusBadRequest, "usage: /api/agents/{id}/config/{key}")
+					return
+				}
+				if err := store.DeleteAgentConfig(db, id, parts[2]); err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
@@ -1907,6 +1964,25 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			}
 			notify("project_updated", project.ID, "")
 			writeJSON(w, http.StatusOK, project)
+		case http.MethodDelete:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(db, parts[0])
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if err := store.DeleteProject(db, project.ID); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}

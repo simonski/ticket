@@ -40,7 +40,7 @@ tk idea ls          # list all ideas
 ```bash
 tk list
 tk get -id CUS-T-1
-tk attach -id CUS-T-1 CUS-E-1   # set parent epic
+tk attach -id CUS-T-1 CUS-E-3   # set parent epic
 ```
 
 ## 5. Move work through the lifecycle

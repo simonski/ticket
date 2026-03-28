@@ -1,0 +1,3401 @@
+openapi: 3.1.0
+info:
+  title: Ticket API
+  description: |
+    RESTful API for the Ticket project and issue management system.
+    All endpoints are under `/api/`. Authentication uses Bearer tokens,
+    cookies (`ticket_token`), or query parameter (`?token=`).
+    Agent endpoints use HTTP Basic Auth (agent UUID + password).
+  version: 0.1.708
+  contact:
+    name: Simon Gauld
+    url: https://github.com/simonski/ticket
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check and server status
+  - name: Auth
+    description: User registration, login, and logout
+  - name: Config
+    description: System configuration (admin only)
+  - name: Users
+    description: User management (admin only)
+  - name: Agents
+    description: Agent lifecycle and work assignment
+  - name: Roles
+    description: Role management (admin only)
+  - name: Workflows
+    description: Workflow and stage management
+  - name: Teams
+    description: Team management
+  - name: Projects
+    description: Project CRUD and membership
+  - name: Tickets
+    description: Ticket CRUD, lifecycle, and operations
+  - name: Stories
+    description: User story management
+  - name: Dependencies
+    description: Ticket dependency links
+  - name: Labels
+    description: Label management
+  - name: Time
+    description: Time tracking
+  - name: WebSocket
+    description: Real-time WebSocket endpoints
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Session token from /api/login
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: ticket_token
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: Agent UUID as username, agent password as password
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+        display_name:
+          type: string
+        enabled:
+          type: boolean
+        user_type:
+          type: string
+          enum: [user, agent]
+        email:
+          type: string
+        status:
+          type: string
+        description:
+          type: string
+        last_seen:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Agent:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            uuid:
+              type: string
+              format: uuid
+
+    Project:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          format: int64
+        prefix:
+          type: string
+          description: 3-5 uppercase ASCII letters
+          pattern: '^[A-Z]{3,5}$'
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: string
+        git_repository:
+          type: string
+        git_branch:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [open, closed]
+        visibility:
+          type: string
+          enum: [public, private]
+        workflow_id:
+          type: integer
+          format: int64
+          nullable: true
+        ticket_sequence:
+          type: integer
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Ticket:
+      type: object
+      properties:
+        ticket_id:
+          type: string
+          description: "Human key, e.g. CUS-T-42"
+        project_id:
+          type: integer
+          format: int64
+        parent_id:
+          type: string
+          nullable: true
+        clone_of:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [epic, task, bug, spike, chore, story, note, question, requirement, decision]
+        title:
+          type: string
+        description:
+          type: string
+        acceptance_criteria:
+          type: string
+        git_repository:
+          type: string
+        git_branch:
+          type: string
+        workflow_stage_id:
+          type: integer
+          format: int64
+          nullable: true
+        stage:
+          type: string
+          enum: [design, develop, test, done]
+        state:
+          type: string
+          enum: [idle, active, success, fail]
+        status:
+          type: string
+          description: "Rendered as stage/state, e.g. develop/active"
+        priority:
+          type: integer
+        sort_order:
+          type: integer
+        estimate_effort:
+          type: integer
+        estimate_complete:
+          type: string
+        health_score:
+          type: integer
+        assignee:
+          type: string
+        open:
+          type: boolean
+        archived:
+          type: boolean
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Workflow:
+      type: object
+      properties:
+        workflow_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowStage'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WorkflowStage:
+      type: object
+      properties:
+        workflow_stage_id:
+          type: integer
+          format: int64
+        workflow_id:
+          type: integer
+          format: int64
+        stage_name:
+          type: string
+        description:
+          type: string
+        role_id:
+          type: integer
+          format: int64
+          nullable: true
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Team:
+      type: object
+      properties:
+        team_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        parent_team_id:
+          type: integer
+          format: int64
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TeamMember:
+      type: object
+      properties:
+        team_id:
+          type: integer
+          format: int64
+        user_id:
+          type: string
+        role:
+          type: string
+        job_title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Role:
+      type: object
+      properties:
+        role_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        motivation:
+          type: string
+        goals:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Label:
+      type: object
+      properties:
+        label_id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        color:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Comment:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        item_id:
+          type: string
+          description: Ticket ID
+        user_id:
+          type: string
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Dependency:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        ticket_id:
+          type: string
+        depends_on:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TimeEntry:
+      type: object
+      properties:
+        time_entry_id:
+          type: integer
+          format: int64
+        ticket_id:
+          type: string
+        user_id:
+          type: string
+        minutes:
+          type: integer
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Story:
+      type: object
+      properties:
+        story_id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HistoryEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        ticket_id:
+          type: string
+        event_type:
+          type: string
+        payload:
+          type: string
+          description: JSON string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectMember:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          format: int64
+        user_id:
+          type: string
+        role:
+          type: string
+          enum: [viewer, editor, owner]
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectTeamMember:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          format: int64
+        team_id:
+          type: integer
+          format: int64
+        role:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CountSummary:
+      type: object
+      description: Aggregate counts by type and status
+
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        authenticated:
+          type: boolean
+        registration_enabled:
+          type: boolean
+        chat_enabled:
+          type: boolean
+        chat_max_connections:
+          type: integer
+        chat_max_duration_minutes:
+          type: integer
+        chat_running_processes:
+          type: integer
+        server_version:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    AgentWorkResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [NONE, NEW, CURRENT, REJECTED, ASSIGNED, AVAILABLE]
+        project:
+          $ref: '#/components/schemas/Project'
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+        parents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        workflow:
+          $ref: '#/components/schemas/Workflow'
+        role:
+          $ref: '#/components/schemas/Role'
+        config:
+          type: object
+          additionalProperties:
+            type: string
+        config_updated_at:
+          type: string
+
+    TicketRequestResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [NONE, ASSIGNED, AVAILABLE, NO-WORK, REJECTED]
+        ticket:
+          $ref: '#/components/schemas/Ticket'
+        project:
+          $ref: '#/components/schemas/Project'
+        parents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        workflow:
+          $ref: '#/components/schemas/Workflow'
+        role:
+          $ref: '#/components/schemas/Role'
+
+paths:
+  # ── Health ──────────────────────────────────────────────────────────
+  /api/healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+
+  /api/status:
+    get:
+      tags: [Health]
+      summary: Server status and feature flags
+      operationId: getStatus
+      description: Returns server status. Includes user info if authenticated.
+      responses:
+        '200':
+          description: Status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  # ── Authentication ──────────────────────────────────────────────────
+  /api/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user account
+      operationId: register
+      description: Registration must be enabled via system settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Registration disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+
+  /api/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate and receive a session token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+          headers:
+            Set-Cookie:
+              description: "ticket_token session cookie (HttpOnly, SameSite=Lax, 30-day expiry)"
+              schema:
+                type: string
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+
+  /api/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and clear session
+      operationId: logout
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: logged_out
+
+  # ── Configuration ───────────────────────────────────────────────────
+  /api/config/registration:
+    post:
+      tags: [Config]
+      summary: Enable or disable user registration
+      operationId: setRegistration
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Registration setting updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registration_enabled:
+                    type: boolean
+        '403':
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/config/chat_enabled:
+    post:
+      tags: [Config]
+      summary: Enable or disable chat feature
+      operationId: setChatEnabled
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Chat setting updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_enabled:
+                    type: boolean
+
+  /api/config/chat_limits:
+    post:
+      tags: [Config]
+      summary: Set chat connection and duration limits
+      operationId: setChatLimits
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_connections:
+                  type: integer
+                  default: 10
+                max_duration_minutes:
+                  type: integer
+                  default: 30
+      responses:
+        '200':
+          description: Chat limits updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_max_connections:
+                    type: integer
+                  chat_max_duration_minutes:
+                    type: integer
+
+  # ── Users ───────────────────────────────────────────────────────────
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List all users
+      operationId: listUsers
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags: [Users]
+      summary: Create a user (admin only)
+      operationId: createUser
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /api/users/{username}/enable:
+    post:
+      tags: [Users]
+      summary: Enable a user account
+      operationId: enableUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/users/{username}/disable:
+    post:
+      tags: [Users]
+      summary: Disable a user account
+      operationId: disableUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/users/{username}:
+    delete:
+      tags: [Users]
+      summary: Delete a user
+      operationId: deleteUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Agents ──────────────────────────────────────────────────────────
+  /api/agents:
+    get:
+      tags: [Agents]
+      summary: List all agents
+      operationId: listAgents
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Agent'
+    post:
+      tags: [Agents]
+      summary: Create a new agent
+      operationId: createAgent
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Optional; auto-generated if omitted
+      responses:
+        '201':
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+                  password:
+                    type: string
+
+  /api/agents/statuses:
+    get:
+      tags: [Agents]
+      summary: Get agent status enumerations
+      operationId: getAgentStatuses
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Status enum list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+  /api/agents/register:
+    post:
+      tags: [Agents]
+      summary: Register an agent (agent auth)
+      operationId: registerAgent
+      security:
+        - BasicAuth: []
+      responses:
+        '200':
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  agent:
+                    $ref: '#/components/schemas/Agent'
+
+  /api/agents/heartbeat:
+    post:
+      tags: [Agents]
+      summary: Send agent heartbeat
+      operationId: agentHeartbeat
+      security:
+        - BasicAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+      responses:
+        '200':
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/agents/request:
+    post:
+      tags: [Agents]
+      summary: Request work assignment for agent
+      operationId: agentRequestWork
+      description: |
+        Agent requests a ticket to work on. Can specify a project or ticket.
+        Returns status indicating whether work was assigned.
+      security:
+        - BasicAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: integer
+                  format: int64
+                ticket_id:
+                  type: string
+                dry_run:
+                  type: boolean
+                config_updated_at:
+                  type: string
+      responses:
+        '200':
+          description: Work assignment result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWorkResponse'
+
+  /api/agents/{agent_id}/tickets/{ticket_id}/update:
+    post:
+      tags: [Agents]
+      summary: Agent completes a ticket
+      operationId: agentCompleteTicket
+      security:
+        - BasicAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result]
+              properties:
+                result:
+                  type: string
+      responses:
+        '200':
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/agents/{agent_id}:
+    put:
+      tags: [Agents]
+      summary: Update agent (e.g. password)
+      operationId: updateAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+    delete:
+      tags: [Agents]
+      summary: Delete an agent
+      operationId: deleteAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/agents/{agent_id}/enable:
+    post:
+      tags: [Agents]
+      summary: Enable an agent
+      operationId: enableAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+  /api/agents/{agent_id}/disable:
+    post:
+      tags: [Agents]
+      summary: Disable an agent
+      operationId: disableAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+
+  # ── Roles ───────────────────────────────────────────────────────────
+  /api/roles:
+    get:
+      tags: [Roles]
+      summary: List all roles
+      operationId: listRoles
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Role list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+    post:
+      tags: [Roles]
+      summary: Create a role
+      operationId: createRole
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                motivation:
+                  type: string
+                goals:
+                  type: string
+      responses:
+        '201':
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+
+  /api/roles/{role_id}:
+    put:
+      tags: [Roles]
+      summary: Update a role
+      operationId: updateRole
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: role_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                motivation:
+                  type: string
+                goals:
+                  type: string
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+    delete:
+      tags: [Roles]
+      summary: Delete a role
+      operationId: deleteRole
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: role_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Role deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Workflows ───────────────────────────────────────────────────────
+  /api/workflows:
+    get:
+      tags: [Workflows]
+      summary: List all workflows
+      operationId: listWorkflows
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Workflow list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workflow'
+    post:
+      tags: [Workflows]
+      summary: Create a workflow
+      operationId: createWorkflow
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Workflow created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  /api/workflows/import:
+    post:
+      tags: [Workflows]
+      summary: Import a workflow from export format
+      operationId: importWorkflow
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: WorkflowExport object with stages array
+      responses:
+        '201':
+          description: Workflow imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+
+  /api/workflows/{workflow_id}:
+    get:
+      tags: [Workflows]
+      summary: Get workflow with stages
+      operationId: getWorkflow
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Workflow details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+    delete:
+      tags: [Workflows]
+      summary: Delete a workflow
+      operationId: deleteWorkflow
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Workflow deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/workflows/{workflow_id}/stages:
+    post:
+      tags: [Workflows]
+      summary: Add a stage to a workflow
+      operationId: addWorkflowStage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage_name, sort_order]
+              properties:
+                stage_name:
+                  type: string
+                description:
+                  type: string
+                role_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+                sort_order:
+                  type: integer
+      responses:
+        '201':
+          description: Stage added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStage'
+
+  /api/workflows/{workflow_id}/reorder:
+    put:
+      tags: [Workflows]
+      summary: Reorder workflow stages
+      operationId: reorderWorkflowStages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage_ids]
+              properties:
+                stage_ids:
+                  type: array
+                  items:
+                    type: integer
+                    format: int64
+      responses:
+        '200':
+          description: Stages reordered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/workflows/{workflow_id}/export:
+    get:
+      tags: [Workflows]
+      summary: Export workflow configuration
+      operationId: exportWorkflow
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Workflow export
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/workflows/stages/{stage_id}:
+    delete:
+      tags: [Workflows]
+      summary: Delete a workflow stage
+      operationId: deleteWorkflowStage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: stage_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Stage deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Teams ───────────────────────────────────────────────────────────
+  /api/teams:
+    get:
+      tags: [Teams]
+      summary: List all teams
+      operationId: listTeams
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Team list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Team'
+    post:
+      tags: [Teams]
+      summary: Create a team
+      operationId: createTeam
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                parent_team_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+      responses:
+        '201':
+          description: Team created (creator added as owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+
+  /api/teams/{team_id}:
+    get:
+      tags: [Teams]
+      summary: Get team details
+      operationId: getTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+    put:
+      tags: [Teams]
+      summary: Update a team
+      operationId: updateTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                parent_team_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+      responses:
+        '200':
+          description: Team updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+    delete:
+      tags: [Teams]
+      summary: Delete a team
+      operationId: deleteTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Team deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/teams/{team_id}/users:
+    get:
+      tags: [Teams]
+      summary: List team members
+      operationId: listTeamMembers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Team member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamMember'
+    post:
+      tags: [Teams]
+      summary: Add a member to a team
+      operationId: addTeamMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role]
+              properties:
+                user_id:
+                  type: string
+                role:
+                  type: string
+                job_title:
+                  type: string
+      responses:
+        '200':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+
+  /api/teams/{team_id}/users/{user_id}:
+    delete:
+      tags: [Teams]
+      summary: Remove a member from a team
+      operationId: removeTeamMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Member removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/teams/{team_id}/agents:
+    get:
+      tags: [Teams]
+      summary: List team agents
+      operationId: listTeamAgents
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Team agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      tags: [Teams]
+      summary: Add an agent to a team
+      operationId: addTeamAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id]
+              properties:
+                agent_id:
+                  type: string
+      responses:
+        '200':
+          description: Agent added
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/teams/{team_id}/agents/{agent_id}:
+    delete:
+      tags: [Teams]
+      summary: Remove an agent from a team
+      operationId: removeTeamAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Projects ────────────────────────────────────────────────────────
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: List projects visible to the authenticated user
+      operationId: listProjects
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Project list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      tags: [Projects]
+      summary: Create a project
+      operationId: createProject
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prefix, title]
+              properties:
+                prefix:
+                  type: string
+                  description: 3-5 uppercase ASCII letters
+                title:
+                  type: string
+                description:
+                  type: string
+                acceptance_criteria:
+                  type: string
+                git_repository:
+                  type: string
+                git_branch:
+                  type: string
+                notes:
+                  type: string
+                visibility:
+                  type: string
+                  enum: [public, private]
+                workflow_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /api/projects/{project_id}:
+    get:
+      tags: [Projects]
+      summary: Get project details
+      operationId: getProject
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    put:
+      tags: [Projects]
+      summary: Update a project
+      operationId: updateProject
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                acceptance_criteria:
+                  type: string
+                git_repository:
+                  type: string
+                git_branch:
+                  type: string
+                notes:
+                  type: string
+                status:
+                  type: string
+                  enum: [open, closed]
+                visibility:
+                  type: string
+                  enum: [public, private]
+                workflow_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /api/projects/{project_id}/enable:
+    post:
+      tags: [Projects]
+      summary: Enable (reopen) a project
+      operationId: enableProject
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Project enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /api/projects/{project_id}/disable:
+    post:
+      tags: [Projects]
+      summary: Disable (close) a project
+      operationId: disableProject
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Project disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /api/projects/{project_id}/tickets:
+    get:
+      tags: [Projects]
+      summary: List project tickets with filtering
+      operationId: listProjectTickets
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by ticket type
+        - name: stage
+          in: query
+          schema:
+            type: string
+          description: Filter by stage
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: Filter by state
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Filter by stage/state status
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search title and description
+        - name: assignee
+          in: query
+          schema:
+            type: string
+          description: Filter by assignee username
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Limit results (0=unlimited)
+        - name: include_archived
+          in: query
+          schema:
+            type: string
+          description: Include archived tickets (1/true/yes)
+      responses:
+        '200':
+          description: Ticket list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+
+  /api/projects/{project_id}/history:
+    get:
+      tags: [Projects]
+      summary: List project history events
+      operationId: listProjectHistory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: user_id
+          in: query
+          schema:
+            type: string
+          description: Filter by user
+        - name: agent_id
+          in: query
+          schema:
+            type: string
+          description: Filter by agent
+        - name: team_id
+          in: query
+          schema:
+            type: string
+          description: Filter by team
+      responses:
+        '200':
+          description: History event list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoryEvent'
+
+  /api/projects/{project_id}/stories:
+    get:
+      tags: [Projects]
+      summary: List project stories
+      operationId: listProjectStories
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Story list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Story'
+
+  /api/projects/{project_id}/users:
+    get:
+      tags: [Projects]
+      summary: List project members
+      operationId: listProjectMembers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Project member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectMember'
+    post:
+      tags: [Projects]
+      summary: Add a user to a project
+      operationId: addProjectMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role]
+              properties:
+                user_id:
+                  type: string
+                role:
+                  type: string
+                  enum: [viewer, editor, owner]
+      responses:
+        '200':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectMember'
+
+  /api/projects/{project_id}/users/{user_id}:
+    delete:
+      tags: [Projects]
+      summary: Remove a user from a project
+      operationId: removeProjectMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Member removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/projects/{project_id}/teams:
+    get:
+      tags: [Projects]
+      summary: List project teams
+      operationId: listProjectTeams
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Project team list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectTeamMember'
+    post:
+      tags: [Projects]
+      summary: Add a team to a project
+      operationId: addProjectTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [team_id, role]
+              properties:
+                team_id:
+                  type: integer
+                  format: int64
+                role:
+                  type: string
+      responses:
+        '200':
+          description: Team added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTeamMember'
+
+  /api/projects/{project_id}/teams/{team_id}:
+    delete:
+      tags: [Projects]
+      summary: Remove a team from a project
+      operationId: removeProjectTeam
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: team_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Team removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/projects/{project_id}/labels:
+    get:
+      tags: [Projects]
+      summary: List project labels
+      operationId: listProjectLabels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Label list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Label'
+    post:
+      tags: [Projects]
+      summary: Create a label in a project
+      operationId: createProjectLabel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                color:
+                  type: string
+      responses:
+        '201':
+          description: Label created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Label'
+
+  /api/projects/{project_id}/labels/{label_id}:
+    delete:
+      tags: [Projects]
+      summary: Delete a label from a project
+      operationId: deleteProjectLabel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: label_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Label deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Tickets ─────────────────────────────────────────────────────────
+  /api/tickets:
+    post:
+      tags: [Tickets]
+      summary: Create a ticket
+      operationId: createTicket
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, type, title]
+              properties:
+                project_id:
+                  type: integer
+                  format: int64
+                parent_id:
+                  type: string
+                  nullable: true
+                type:
+                  type: string
+                  enum: [epic, task, bug, spike, chore, story, note, question, requirement, decision]
+                title:
+                  type: string
+                description:
+                  type: string
+                acceptance_criteria:
+                  type: string
+                git_repository:
+                  type: string
+                git_branch:
+                  type: string
+                priority:
+                  type: integer
+                estimate_effort:
+                  type: integer
+                estimate_complete:
+                  type: string
+                assignee:
+                  type: string
+                status:
+                  type: string
+                stage:
+                  type: string
+                state:
+                  type: string
+      responses:
+        '201':
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/tickets/claim:
+    post:
+      tags: [Tickets]
+      summary: Claim or request a ticket for the authenticated user
+      operationId: claimTicket
+      description: |
+        If ticket_id/ticket_ref is provided, claims that specific ticket.
+        Otherwise, returns the user's current active ticket or assigns the next eligible one.
+        Use dry_run=true to preview without changing state.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: integer
+                  format: int64
+                ticket_id:
+                  type: string
+                  nullable: true
+                ticket_ref:
+                  type: string
+                dry_run:
+                  type: boolean
+      responses:
+        '200':
+          description: Claim result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketRequestResponse'
+
+  /api/tickets/{ticket_ref}:
+    get:
+      tags: [Tickets]
+      summary: Get a ticket by reference (human key or ID)
+      operationId: getTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: "Ticket human key (e.g. CUS-T-42) or internal ID"
+      responses:
+        '200':
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '404':
+          description: Ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Tickets]
+      summary: Update a ticket
+      operationId: updateTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                acceptance_criteria:
+                  type: string
+                git_repository:
+                  type: string
+                git_branch:
+                  type: string
+                parent_id:
+                  type: string
+                  nullable: true
+                assignee:
+                  type: string
+                status:
+                  type: string
+                stage:
+                  type: string
+                state:
+                  type: string
+                priority:
+                  type: integer
+                order:
+                  type: integer
+                estimate_effort:
+                  type: integer
+                estimate_complete:
+                  type: string
+      responses:
+        '200':
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+    delete:
+      tags: [Tickets]
+      summary: Delete a ticket (must have no children)
+      operationId: deleteTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/tickets/{ticket_ref}/history:
+    get:
+      tags: [Tickets]
+      summary: Get ticket history (audit trail)
+      operationId: getTicketHistory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: History events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoryEvent'
+
+  /api/tickets/{ticket_ref}/health:
+    post:
+      tags: [Tickets]
+      summary: Set ticket health score
+      operationId: setTicketHealth
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score]
+              properties:
+                score:
+                  type: integer
+      responses:
+        '200':
+          description: Health score updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/labels:
+    get:
+      tags: [Tickets]
+      summary: List labels on a ticket
+      operationId: listTicketLabels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Label list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Label'
+    post:
+      tags: [Tickets]
+      summary: Add a label to a ticket
+      operationId: addTicketLabel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label_id]
+              properties:
+                label_id:
+                  type: integer
+                  format: int64
+      responses:
+        '200':
+          description: Label added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/tickets/{ticket_ref}/labels/{label_id}:
+    delete:
+      tags: [Tickets]
+      summary: Remove a label from a ticket
+      operationId: removeTicketLabel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: label_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Label removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/tickets/{ticket_ref}/time:
+    get:
+      tags: [Time]
+      summary: List time entries for a ticket
+      operationId: listTimeEntries
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Time entry list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimeEntry'
+    post:
+      tags: [Time]
+      summary: Log time against a ticket
+      operationId: logTime
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [minutes]
+              properties:
+                minutes:
+                  type: integer
+                note:
+                  type: string
+      responses:
+        '201':
+          description: Time entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeEntry'
+
+  /api/tickets/{ticket_ref}/time/total:
+    get:
+      tags: [Time]
+      summary: Get total time logged for a ticket
+      operationId: getTotalTime
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Total minutes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+
+  /api/tickets/{ticket_ref}/comments:
+    get:
+      tags: [Tickets]
+      summary: List comments on a ticket
+      operationId: listComments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Comment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comment'
+    post:
+      tags: [Tickets]
+      summary: Add a comment to a ticket
+      operationId: addComment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment:
+                  type: string
+      responses:
+        '201':
+          description: Comment added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+
+  /api/tickets/{ticket_ref}/dependencies:
+    get:
+      tags: [Dependencies]
+      summary: List ticket dependencies
+      operationId: listTicketDependencies
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dependency list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Dependency'
+
+  /api/tickets/{ticket_ref}/clone:
+    post:
+      tags: [Tickets]
+      summary: Clone a ticket and its children
+      operationId: cloneTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Cloned ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/close:
+    post:
+      tags: [Tickets]
+      summary: Close a ticket
+      operationId: closeTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/open:
+    post:
+      tags: [Tickets]
+      summary: Reopen a ticket
+      operationId: openTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket reopened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/archive:
+    post:
+      tags: [Tickets]
+      summary: Archive a ticket
+      operationId: archiveTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/unarchive:
+    post:
+      tags: [Tickets]
+      summary: Unarchive a ticket
+      operationId: unarchiveTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket unarchived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/ready:
+    post:
+      tags: [Tickets]
+      summary: Mark a ticket as ready
+      operationId: markTicketReady
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket marked ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/notready:
+    post:
+      tags: [Tickets]
+      summary: Mark a ticket as not ready
+      operationId: markTicketNotReady
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ticket marked not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/workflow:
+    post:
+      tags: [Tickets]
+      summary: Set workflow on a ticket
+      operationId: setTicketWorkflow
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workflow_id]
+              properties:
+                workflow_id:
+                  type: integer
+                  format: int64
+      responses:
+        '200':
+          description: Workflow set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+    delete:
+      tags: [Tickets]
+      summary: Remove workflow from a ticket
+      operationId: removeTicketWorkflow
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+  /api/tickets/{ticket_ref}/analyse:
+    post:
+      tags: [Tickets]
+      summary: Analyse an epic and generate implementation tasks via LLM
+      operationId: analyseTicket
+      description: Ticket must be of type "epic" and linked to a story.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  epic_id:
+                    type: string
+                  story_id:
+                    type: integer
+                    format: int64
+                  created_tickets:
+                    type: integer
+
+  # ── Stories ─────────────────────────────────────────────────────────
+  /api/stories:
+    post:
+      tags: [Stories]
+      summary: Create a story
+      operationId: createStory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, title]
+              properties:
+                project_id:
+                  type: integer
+                  format: int64
+                title:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Story created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Story'
+
+  /api/stories/{story_id}:
+    get:
+      tags: [Stories]
+      summary: Get a story
+      operationId: getStory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Story details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Story'
+    put:
+      tags: [Stories]
+      summary: Update a story
+      operationId: updateStory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: integer
+                  format: int64
+                title:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Story updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Story'
+    delete:
+      tags: [Stories]
+      summary: Delete a story
+      operationId: deleteStory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Story deleted
+
+  /api/stories/{story_id}/analyse:
+    post:
+      tags: [Stories]
+      summary: Analyse a story and generate epics/tasks via LLM
+      operationId: analyseStory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  story:
+                    $ref: '#/components/schemas/Story'
+                  created_epics:
+                    type: integer
+                  created_tasks:
+                    type: integer
+
+  # ── Dependencies ────────────────────────────────────────────────────
+  /api/dependencies:
+    post:
+      tags: [Dependencies]
+      summary: Create a dependency between tickets
+      operationId: createDependency
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, ticket_id, depends_on]
+              properties:
+                project_id:
+                  type: integer
+                  format: int64
+                ticket_id:
+                  type: string
+                depends_on:
+                  type: string
+      responses:
+        '201':
+          description: Dependency created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dependency'
+    delete:
+      tags: [Dependencies]
+      summary: Delete a dependency
+      operationId: deleteDependency
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: ticket_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: depends_on
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dependency deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Utility ─────────────────────────────────────────────────────────
+  /api/count:
+    get:
+      tags: [Tickets]
+      summary: Get aggregate counts by type and status
+      operationId: getCountSummary
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: Filter to a specific project
+      responses:
+        '200':
+          description: Count summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountSummary'
+
+  /api/labels/{label_id}:
+    delete:
+      tags: [Labels]
+      summary: Delete a label by ID
+      operationId: deleteLabelById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: label_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Label deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/time/{time_entry_id}:
+    delete:
+      tags: [Time]
+      summary: Delete a time entry
+      operationId: deleteTimeEntry
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: time_entry_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Time entry deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── WebSocket ───────────────────────────────────────────────────────
+  /api/ws:
+    get:
+      tags: [WebSocket]
+      summary: Live update WebSocket
+      operationId: liveUpdates
+      description: |
+        WebSocket endpoint for real-time ticket and project change events.
+        Authenticate via Bearer token, cookie, or ?token= query parameter.
+      parameters:
+        - name: token
+          in: query
+          schema:
+            type: string
+          description: Optional auth token
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+  /api/chat/ws:
+    get:
+      tags: [WebSocket]
+      summary: Chat/AI streaming WebSocket
+      operationId: chatWebSocket
+      description: |
+        WebSocket endpoint for streaming LLM chat sessions.
+        Chat must be enabled. Messages are JSON with type, text, stream, and error fields.
+      parameters:
+        - name: token
+          in: query
+          schema:
+            type: string
+          description: Optional auth token
+      responses:
+        '101':
+          description: WebSocket upgrade

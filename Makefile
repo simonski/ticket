@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright tools bump-version test test-go test-go-cover test-unit test-integration test-playwright clean release release-build release-checksums release-formula release-publish release-clean
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright clean release release-build release-checksums release-formula release-publish release-clean docker-build docker-up docker-down
 
 VERSION_FILE  := cmd/ticket/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -12,7 +12,6 @@ help:
 	@printf "Available targets:\n\n"
 	@printf "  make build           Build ticket into ./bin/ticket and symlink ./tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
-	@printf "  make tools           Build helper binaries in the repo root.\n"
 	@printf "  make setup           Install development dependencies (Go + Node).\n"
 	@printf "  make setup-go        Download and cache Go module dependencies.\n"
 	@printf "  make setup-node      Install Node dependencies.\n"
@@ -24,6 +23,11 @@ help:
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
 	@printf "  make clean           Remove built binaries from ./bin.\n"
+	@printf "\n"
+	@printf "Docker targets:\n\n"
+	@printf "  make docker-build    Build the Docker image.\n"
+	@printf "  make docker-up       Start the service via Docker Compose.\n"
+	@printf "  make docker-down     Stop the service via Docker Compose.\n"
 	@printf "\n"
 	@printf "Release targets:\n\n"
 	@printf "  make release         Full release: build → checksums → formula → instructions.\n"
@@ -51,11 +55,6 @@ setup-node:
 setup-playwright:
 	npx playwright install chromium
 
-tools:
-	@mkdir -p bin
-	go build -o bin/parser ./tools/parser
-	go build -o bin/wiggum ./tools/wiggum
-
 bump-version:
 	@if [ ! -f "$(VERSION_FILE)" ]; then \
 		printf "0.1.0\n" > "$(VERSION_FILE)"; \
@@ -69,7 +68,7 @@ bump-version:
 		printf "%s.%s.%s\n" "$$major" "$$minor" "$$patch" > "$(VERSION_FILE)"; \
 	fi
 
-UNIT_TEST_PKGS := ./internal/config ./internal/password ./tools/parser ./tools/wiggum ./web
+UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
 INTEGRATION_TEST_PKGS := ./cmd/ticket ./internal/client ./internal/server ./internal/store ./libticket ./libtickethttp
 
 test: test-unit test-integration test-playwright
@@ -91,8 +90,7 @@ test-go-cover:
 		"./libtickethttp 75" \
 		"./internal/client 55" \
 		"./internal/store 70" \
-		"./internal/config 70" \
-		"./tools/parser 75"; do \
+		"./internal/config 70"; do \
 		pkg=$${entry% *}; \
 		min=$${entry#* }; \
 		out=$$(go test "$$pkg" -cover | tail -n 1); \
@@ -211,12 +209,22 @@ release: release-build release-checksums release-formula
 	@echo "    brew install simonski/tap/ticket"
 	@echo ""
 
+# ─── docker ───────────────────────────────────────────────────────────────────
+
+docker-build:
+	docker build -t ticket:$(VERSION) -t ticket:latest .
+
+docker-up:
+	VERSION=$(VERSION) docker compose up -d
+
+docker-down:
+	VERSION=$(VERSION) docker compose down
+
 # ─── clean ────────────────────────────────────────────────────────────────────
 
 clean:
 	@rm -rf bin
 	@rm -f tk
-	@rm -f parser
 
 install: clean build
 	go install ./cmd/ticket

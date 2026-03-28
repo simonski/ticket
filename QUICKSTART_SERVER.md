@@ -39,13 +39,14 @@ tk epic "Authentication"
 tk list
 ```
 
-## 5. Assign and claim
+## 5. Claim and request
 
 ```bash
-tk assign CUS-T-1 alice
 tk claim -id CUS-T-1        # assign to yourself
 tk request                   # get the next available ticket
 ```
+
+Admins can also assign tickets to other users with `tk assign <id> <username>`.
 
 ## 6. Run an agent
 

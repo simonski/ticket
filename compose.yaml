@@ -1,0 +1,14 @@
+services:
+  ticket:
+    image: ticket:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ticket-data:/home/ticket
+    restart: unless-stopped
+
+volumes:
+  ticket-data:
