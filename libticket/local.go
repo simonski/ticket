@@ -652,6 +652,7 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		EstimateComplete:   request.EstimateComplete,
 		Assignee:           request.Assignee,
 		State:              state,
+		Author:             user.Username,
 		CreatedBy:          user.ID,
 	})
 }
@@ -893,7 +894,7 @@ func (s *LocalService) CloneTicket(id string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.CloneTicket(db, id, user.ID)
+	return store.CloneTicket(db, id, user.Username, user.ID)
 }
 
 func (s *LocalService) ListHistory(id string) ([]store.HistoryEvent, error) {

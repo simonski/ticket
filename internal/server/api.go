@@ -1951,6 +1951,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			EstimateComplete:   ticketPayload.EstimateComplete,
 			Assignee:           ticketPayload.Assignee,
 			State:              state,
+			Author:             user.Username,
 			CreatedBy:          user.ID,
 		})
 		if err != nil {
@@ -2096,6 +2097,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					Type:        "epic",
 					Title:       epicTitle,
 					Description: strings.TrimSpace(epicSpec.Description),
+					Author:      user.Username,
 					CreatedBy:   user.ID,
 					State:       store.StateIdle,
 				})
@@ -2115,6 +2117,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 						Type:        "task",
 						Title:       taskTitle,
 						Description: strings.TrimSpace(taskSpec.Description),
+						Author:      user.Username,
 						CreatedBy:   user.ID,
 						State:       store.StateIdle,
 					})
@@ -2448,7 +2451,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
-				cloned, err := store.CloneTicket(db, id, user.ID)
+				cloned, err := store.CloneTicket(db, id, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
@@ -2654,6 +2657,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 						Type:        "task",
 						Title:       taskTitle,
 						Description: strings.TrimSpace(taskSpec.Description),
+						Author:      user.Username,
 						CreatedBy:   user.ID,
 						State:       store.StateIdle,
 					})

@@ -944,6 +944,16 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
+	// Add author column to store the username of who created the ticket
+	if !columnExists(db, "tickets", "author") {
+		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN author TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+		// Backfill author from created_by user ID
+		if _, err := db.Exec(`UPDATE tickets SET author = COALESCE((SELECT u.username FROM users u WHERE u.user_id = tickets.created_by), '') WHERE author = ''`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
