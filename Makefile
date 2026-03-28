@@ -43,6 +43,7 @@ setup: setup-go setup-node setup-playwright
 
 setup-go:
 	go mod download
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 setup-node:
 	npm install

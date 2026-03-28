@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -145,6 +146,25 @@ func runProject(args []string) error {
 		fmt.Printf("using project %s\n", project.Prefix)
 		return nil
 	case "update":
+		if containsFlag(args[1:], "-id") {
+			// Parse -id from args so we don't require a current project
+			fs := flag.NewFlagSet("project update id", flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			idFlag := fs.Int64("id", 0, "")
+			// Absorb all other flags so Parse doesn't fail on them
+			fs.String("title", "", "")
+			fs.String("description", "", "")
+			fs.String("ac", "", "")
+			fs.String("git-repository", "", "")
+			fs.String("git", "", "")
+			fs.String("git-branch", "", "")
+			fs.String("status", "", "")
+			fs.Int64("workflow", 0, "")
+			_ = fs.Parse(args[1:])
+			if *idFlag > 0 {
+				return runProjectByID(svc, *idFlag, args)
+			}
+		}
 		if cfg.CurrentProject == "" {
 			return errors.New("no current project set; use: tk project use <id>")
 		}
@@ -379,15 +399,23 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 	case "update":
 		fs := flag.NewFlagSet("project update", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
+		idFlag := fs.Int64("id", 0, "project ID (overrides positional ID)")
 		title := fs.String("title", "", "project title")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		gitRepository := fs.String("git-repository", "", "project git repository")
+		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
 		gitBranch := fs.String("git-branch", "", "project git branch")
 		status := fs.String("status", "", "project status (open|closed)")
 		workflowID := fs.Int64("workflow", 0, "workflow ID to associate with project")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
+		}
+		if *idFlag > 0 {
+			projectID = *idFlag
+		}
+		if containsFlag(args[1:], "-git") && !containsFlag(args[1:], "-git-repository") {
+			gitRepository = gitShort
 		}
 		current, err := svc.GetProject(strconv.FormatInt(projectID, 10))
 		if err != nil {
@@ -404,7 +432,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		if containsFlag(args[1:], "-ac") {
 			nextAC = *acceptanceCriteria
 		}
-		if containsFlag(args[1:], "-git-repository") {
+		if containsFlag(args[1:], "-git-repository") || containsFlag(args[1:], "-git") {
 			nextRepo = strings.TrimSpace(*gitRepository)
 		}
 		if containsFlag(args[1:], "-git-branch") {
