@@ -175,3 +175,33 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 		t.Fatalf("private project should be visible once membership exists")
 	}
 }
+
+func TestDeleteProject(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Delete Me", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Create a ticket with comments, time entries, labels, dependencies
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID, Type: "task", Title: "Task to delete",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	adminID := testAdminID(t, db)
+	if _, err := AddComment(db, ticket.ID, adminID, "test comment"); err != nil {
+		t.Fatalf("AddComment() error = %v", err)
+	}
+	if _, err := LogTime(db, ticket.ID, adminID, 30, "work"); err != nil {
+		t.Fatalf("LogTime() error = %v", err)
+	}
+
+	if err := DeleteProject(db, project.ID); err != nil {
+		t.Fatalf("DeleteProject() error = %v", err)
+	}
+	if _, err := GetProjectByID(db, project.ID); err == nil {
+		t.Fatal("GetProjectByID after delete should fail")
+	}
+}

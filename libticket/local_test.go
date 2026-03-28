@@ -281,6 +281,19 @@ func newLocalSvc(t *testing.T) libticket.Service {
 	}
 	return libticket.NewLocal(config.Config{})
 }
+func TestLocalServiceDeleteProject(t *testing.T) {
+	svc := newLocalSvc(t)
+	projects, err := svc.ListProjects()
+	if err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+	if len(projects) == 0 {
+		t.Fatal("no projects to delete")
+	}
+	if err := svc.DeleteProject(projects[0].ID); err != nil {
+		t.Fatalf("DeleteProject() error = %v", err)
+	}
+}
 
 func TestLocalServiceResetUserPassword(t *testing.T) {
 	svc := newLocalSvc(t)

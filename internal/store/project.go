@@ -324,7 +324,7 @@ func DeleteProject(db *sql.DB, id int64) error {
 	defer tx.Rollback()
 
 	// Delete child data that references tickets in this project
-	if _, err := tx.Exec(`DELETE FROM comments WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM comments WHERE item_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM time_entries WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
