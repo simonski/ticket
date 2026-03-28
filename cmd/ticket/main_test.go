@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
@@ -4406,4 +4407,251 @@ func TestRunProjectRemoveTeamRequiresArgs(t *testing.T) {
 	if err == nil {
 		t.Fatal("project remove-team with no args should error")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Quickstart verification tests
+// ---------------------------------------------------------------------------
+
+// TestQuickstartClient exercises every command documented in QUICKSTART_CLIENT.md
+// using local mode (no server).
+func TestQuickstartClient(t *testing.T) {
+	setupLocalCLI(t)
+
+	// Step 1: Create a project
+	out := captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "CUS", "-title", "Customer Portal"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "CUS") {
+		t.Fatalf("project create output missing prefix:\n%s", out)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "use", "CUS"}); err != nil {
+			t.Fatalf("project use error = %v", err)
+		}
+	})
+
+	// Step 2: Capture work — add, bug, epic
+	taskID := createLocalTask(t, []string{"add", "Customers can reset their password"})
+	_ = createLocalTask(t, []string{"bug", "Reset token expires immediately"})
+	epicID := createLocalTask(t, []string{"epic", "Authentication"})
+
+	// Step 3: Ideas
+	captureStdout(t, func() {
+		if err := run([]string{"idea", "new", "Add dark mode"}); err != nil {
+			t.Fatalf("idea new error = %v", err)
+		}
+	})
+
+	ideaOut := captureStdout(t, func() {
+		if err := run([]string{"idea", "ls"}); err != nil {
+			t.Fatalf("idea ls error = %v", err)
+		}
+	})
+	if !strings.Contains(ideaOut, "dark mode") {
+		t.Fatalf("idea ls output missing 'dark mode':\n%s", ideaOut)
+	}
+
+	// Step 4: Inspect — list, get, attach
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "reset") {
+		t.Fatalf("list output missing ticket:\n%s", listOut)
+	}
+
+	getOut := captureStdout(t, func() {
+		if err := run([]string{"get", taskID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOut, "reset") {
+		t.Fatalf("get output missing title:\n%s", getOut)
+	}
+
+	// Attach task to epic (use internal IDs since sequence is shared across types)
+	captureStdout(t, func() {
+		if err := run([]string{"attach", "-id", taskID, epicID}); err != nil {
+			t.Fatalf("attach error = %v", err)
+		}
+	})
+
+	// Verify parent was set
+	ticket, err := svcGetTicket(t, taskID)
+	if err != nil {
+		t.Fatalf("svcGetTicket() error = %v", err)
+	}
+	if ticket.ParentID == nil {
+		t.Fatal("attach did not set parent")
+	}
+
+	// Step 5: Lifecycle — active, complete, idle
+	captureStdout(t, func() {
+		if err := run([]string{"active", "-id", taskID}); err != nil {
+			t.Fatalf("active error = %v", err)
+		}
+	})
+	ticket, _ = svcGetTicket(t, taskID)
+	if ticket.State != "active" {
+		t.Fatalf("active: state = %q, want active", ticket.State)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"complete", "-id", taskID}); err != nil {
+			t.Fatalf("complete error = %v", err)
+		}
+	})
+	ticket, _ = svcGetTicket(t, taskID)
+	// complete auto-advances to next stage
+	if ticket.Stage == "design" {
+		t.Fatalf("complete did not advance stage, still design")
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"idle", "-id", taskID}); err != nil {
+			t.Fatalf("idle error = %v", err)
+		}
+	})
+	ticket, _ = svcGetTicket(t, taskID)
+	if ticket.State != "idle" {
+		t.Fatalf("idle: state = %q, want idle", ticket.State)
+	}
+}
+
+// TestQuickstartServer exercises key commands from QUICKSTART_SERVER.md
+// using a real httptest server with full API.
+func TestQuickstartServer(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	// Initialize database and start test server
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "adminpass"); err != nil {
+		t.Fatalf("store.Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	handler, err := server.Handler(db, "test", false, nil, "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	t.Setenv("TICKET_URL", ts.URL)
+
+	// Enable registration
+	if err := store.SetRegistrationEnabled(db, true); err != nil {
+		t.Fatalf("SetRegistrationEnabled() error = %v", err)
+	}
+
+	// Step 1: Register a user
+	captureStdout(t, func() {
+		if err := run([]string{"register", "-username", "alice", "-password", "secret"}); err != nil {
+			t.Fatalf("register error = %v", err)
+		}
+	})
+
+	// Step 2: Login as alice, verify it works
+	loginOut := captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "alice", "-password", "secret"}); err != nil {
+			t.Fatalf("login alice error = %v", err)
+		}
+	})
+	if !strings.Contains(loginOut, "alice") {
+		t.Fatalf("login output missing username:\n%s", loginOut)
+	}
+
+	// Clear credentials and saved username, then login as admin
+	if err := config.ClearCredentials(); err != nil {
+		t.Fatalf("ClearCredentials() error = %v", err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.Username = ""
+	cfg.Token = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "admin", "-password", "adminpass"}); err != nil {
+			t.Fatalf("admin login error = %v", err)
+		}
+	})
+
+	// Step 4: Create project
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "SRV", "-title", "Server Project"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	captureStdout(t, func() {
+		if err := run([]string{"project", "use", "SRV"}); err != nil {
+			t.Fatalf("project use error = %v", err)
+		}
+	})
+
+	// Step 5: Create tickets
+	taskOut := captureStdout(t, func() {
+		if err := run([]string{"add", "Server task"}); err != nil {
+			t.Fatalf("add error = %v", err)
+		}
+	})
+	taskKey := strings.Fields(taskOut)[0]
+
+	captureStdout(t, func() {
+		if err := run([]string{"bug", "Server bug"}); err != nil {
+			t.Fatalf("bug error = %v", err)
+		}
+	})
+
+	// Step 6: List tickets
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "Server task") {
+		t.Fatalf("list output missing ticket:\n%s", listOut)
+	}
+
+	// Step 7: Create user bob and assign (admin required)
+	captureStdout(t, func() {
+		if err := run([]string{"user", "create", "-username", "bob", "-password", "bobpass"}); err != nil {
+			t.Fatalf("user create bob error = %v", err)
+		}
+	})
+	captureStdout(t, func() {
+		if err := run([]string{"assign", taskKey, "bob"}); err != nil {
+			t.Fatalf("assign error = %v", err)
+		}
+	})
+
+	// Step 8: Agent create
+	agentOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "create"}); err != nil {
+			t.Fatalf("agent create error = %v", err)
+		}
+	})
+	if !strings.Contains(agentOut, "agent_id") || !strings.Contains(agentOut, "password") {
+		t.Fatalf("agent create output missing credentials:\n%s", agentOut)
+	}
+
+	// Step 9: Ready a ticket
+	captureStdout(t, func() {
+		if err := run([]string{"ready", taskKey}); err != nil {
+			t.Fatalf("ready error = %v", err)
+		}
+	})
 }
