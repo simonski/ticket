@@ -906,6 +906,7 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			EstimateEffort:     request.EstimateEffort,
 			EstimateComplete:   request.EstimateComplete,
 			Assignee:           request.Assignee,
+			Author:             user.Username,
 			State:              state,
 			CreatedBy:          user.ID,
 		})
@@ -1235,7 +1236,7 @@ func (c *Client) CloneTicket(id string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.CloneTicket(db, id, user.ID)
+		return store.CloneTicket(db, id, user.Username, user.ID)
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/clone", nil, &ticket)

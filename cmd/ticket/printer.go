@@ -115,6 +115,9 @@ func printTicket(ticket store.Ticket) {
 	fmt.Printf("ready: %t\n", ticket.Ready)
 	fmt.Printf("open: %s\n", ticketOpenLabel(ticket))
 	fmt.Printf("archived: %t\n", ticket.Archived)
+	if ticket.Author != "" {
+		fmt.Printf("author: %s\n", ticket.Author)
+	}
 	if ticket.Description != "" {
 		fmt.Printf("description: %s\n", ticket.Description)
 	}
@@ -126,6 +129,9 @@ func printTicket(ticket store.Ticket) {
 	}
 	if ticket.GitBranch != "" {
 		fmt.Printf("git_branch: %s\n", ticket.GitBranch)
+	}
+	if ticket.Author != "" {
+		fmt.Printf("author: %s\n", ticket.Author)
 	}
 	if ticket.EstimateEffort != 0 {
 		fmt.Printf("estimate_effort: %d\n", ticket.EstimateEffort)
@@ -196,6 +202,7 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		fmt.Printf("CloneOf      : %s\n", cloneKey)
 	}
 	fmt.Printf("Title        : %s\n", ticket.Title)
+	fmt.Printf("Author       : %s\n", ticket.Author)
 	fmt.Printf("Assignee     : %s\n", ticket.Assignee)
 	fmt.Printf("Order        : %d\n", ticket.Order)
 	fmt.Printf("EstimateEffort   : %d\n", ticket.EstimateEffort)
