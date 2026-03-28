@@ -36,7 +36,7 @@ tk project use CUS
 ## 4. Capture work
 
 ```bash
-titk add "Customers can reset their password"
+tk add "Customers can reset their password"
 tk bug "Reset token expires immediately"
 tk epic "Authentication"
 ```

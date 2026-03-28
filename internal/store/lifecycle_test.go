@@ -56,4 +56,36 @@ func TestRenderLifecycleStatus(t *testing.T) {
 	}
 }
 
-
+func TestParseLifecycleStatus(t *testing.T) {
+	cases := []struct {
+		input     string
+		wantStage string
+		wantState string
+		wantErr   bool
+	}{
+		{"design/idle", StageDesign, StateIdle, false},
+		{"develop/active", StageDevelop, StateActive, false},
+		{"test/success", StageTest, StateSuccess, false},
+		{"done/complete", StageDone, StateSuccess, false},
+		{"DESIGN/IDLE", StageDesign, StateIdle, false},
+		{"", "", "", true},
+		{"noslash", "", "", true},
+		{"bad/open", "", "", true},
+		{"open/idle", "", "", true},
+	}
+	for _, tc := range cases {
+		stage, state, err := ParseLifecycleStatus(tc.input)
+		if tc.wantErr {
+			if err == nil {
+				t.Fatalf("ParseLifecycleStatus(%q) error = nil, want error", tc.input)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("ParseLifecycleStatus(%q) error = %v", tc.input, err)
+		}
+		if stage != tc.wantStage || state != tc.wantState {
+			t.Fatalf("ParseLifecycleStatus(%q) = (%q, %q), want (%q, %q)", tc.input, stage, state, tc.wantStage, tc.wantState)
+		}
+	}
+}

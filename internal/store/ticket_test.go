@@ -408,6 +408,85 @@ func TestRequestTicket(t *testing.T) {
 	}
 }
 
+func TestRequestTicketDryRun(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "DryRun Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "DryRun task",
+		State:     StateIdle,
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := SetTicketReady(db, ticket.ID, true, "admin", ""); err != nil {
+		t.Fatalf("SetTicketReady() error = %v", err)
+	}
+
+	// DryRun should return AVAILABLE without actually claiming
+	preview, status, err := RequestTicket(db, TicketRequestParams{
+		ProjectID: project.ID,
+		Username:  "alice",
+		DryRun:    true,
+	})
+	if err != nil {
+		t.Fatalf("RequestTicket(DryRun) error = %v", err)
+	}
+	if status != "AVAILABLE" {
+		t.Fatalf("RequestTicket(DryRun) status = %q, want AVAILABLE", status)
+	}
+	if preview.Assignee != "alice" {
+		t.Fatalf("RequestTicket(DryRun).Assignee = %q, want alice", preview.Assignee)
+	}
+	if preview.State != StateActive {
+		t.Fatalf("RequestTicket(DryRun).State = %q, want active", preview.State)
+	}
+
+}
+
+func TestRequestTicketByRef(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Ref Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Ref task",
+		State:     StateIdle,
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	// Request by TicketRef (resolved via GetTicketByRef -> GetTicket)
+	// The ticket is not claimable (wrong stage), so this will be REJECTED
+	_, status, err := RequestTicket(db, TicketRequestParams{
+		ProjectID: project.ID,
+		TicketRef: ticket.ID,
+		Username:  "alice",
+	})
+	if err != nil {
+		t.Fatalf("RequestTicket(TicketRef) error = %v", err)
+	}
+	if status != "REJECTED" {
+		t.Fatalf("RequestTicket(TicketRef non-claimable) status = %q, want REJECTED", status)
+	}
+}
+
 func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 	db := testDB(t)
 	project, err := CreateProject(db, "Customer Portal", "", "", "")
@@ -924,6 +1003,399 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	}
 	if reloadedEpic.Status != "done/success" {
 		t.Fatalf("epic status after complete = %q, want done/success", reloadedEpic.Status)
+	}
+}
+
+func TestSetTicketOpenAndArchived(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Open/Archive Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Toggle ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	// Close ticket
+	closed, err := SetTicketOpen(db, ticket.ID, false, "admin", "")
+	if err != nil {
+		t.Fatalf("SetTicketOpen(false) error = %v", err)
+	}
+	if closed.Open {
+		t.Fatal("SetTicketOpen(false).Open = true, want false")
+	}
+
+	// Reopen ticket
+	reopened, err := SetTicketOpen(db, ticket.ID, true, "admin", "")
+	if err != nil {
+		t.Fatalf("SetTicketOpen(true) error = %v", err)
+	}
+	if !reopened.Open {
+		t.Fatal("SetTicketOpen(true).Open = false, want true")
+	}
+
+	// Idempotent: already open
+	same, err := SetTicketOpen(db, ticket.ID, true, "admin", "")
+	if err != nil {
+		t.Fatalf("SetTicketOpen(noop) error = %v", err)
+	}
+	if same.ID != ticket.ID {
+		t.Fatalf("SetTicketOpen(noop) ID mismatch")
+	}
+
+	// Archive ticket
+	archived, err := SetTicketArchived(db, ticket.ID, true, "admin", "")
+	if err != nil {
+		t.Fatalf("SetTicketArchived(true) error = %v", err)
+	}
+	if !archived.Archived {
+		t.Fatal("SetTicketArchived(true).Archived = false, want true")
+	}
+
+	// Unarchive ticket
+	unarchived, err := SetTicketArchived(db, ticket.ID, false, "admin", "")
+	if err != nil {
+		t.Fatalf("SetTicketArchived(false) error = %v", err)
+	}
+	if unarchived.Archived {
+		t.Fatal("SetTicketArchived(false).Archived = true, want false")
+	}
+}
+
+func TestGetTicketByRefAndSearchTickets(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Search Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Find me please",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	// GetTicketByRef
+	found, err := GetTicketByRef(db, ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicketByRef() error = %v", err)
+	}
+	if found.ID != ticket.ID {
+		t.Fatalf("GetTicketByRef().ID = %q, want %q", found.ID, ticket.ID)
+	}
+
+	// GetTicketByRef with empty string
+	if _, err := GetTicketByRef(db, ""); !errors.Is(err, ErrTicketNotFound) {
+		t.Fatalf("GetTicketByRef(empty) error = %v, want ErrTicketNotFound", err)
+	}
+
+	// SearchTickets
+	results, err := SearchTickets(db, project.ID, "Find me")
+	if err != nil {
+		t.Fatalf("SearchTickets() error = %v", err)
+	}
+	if len(results) != 1 || results[0].ID != ticket.ID {
+		t.Fatalf("SearchTickets() = %#v, want 1 result with ID %q", results, ticket.ID)
+	}
+}
+
+func TestListTicketParents(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Parents Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	epic, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "epic",
+		Title:     "Grand Epic",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(epic) error = %v", err)
+	}
+	task, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		ParentID:  &epic.ID,
+		Type:      "task",
+		Title:     "Child Task",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(task) error = %v", err)
+	}
+	bug, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		ParentID:  &task.ID,
+		Type:      "bug",
+		Title:     "Leaf Bug",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(bug) error = %v", err)
+	}
+
+	parents, err := ListTicketParents(db, bug.ID)
+	if err != nil {
+		t.Fatalf("ListTicketParents() error = %v", err)
+	}
+	if len(parents) != 2 {
+		t.Fatalf("ListTicketParents() len = %d, want 2", len(parents))
+	}
+	if parents[0].ID != task.ID || parents[1].ID != epic.ID {
+		t.Fatalf("ListTicketParents() = [%s, %s], want [%s, %s]", parents[0].ID, parents[1].ID, task.ID, epic.ID)
+	}
+}
+
+func TestCurrentAssignedTicketForUser(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Assign Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+
+	// No assigned ticket yet
+	_, found, err := CurrentAssignedTicketForUser(db, project.ID, "alice")
+	if err != nil {
+		t.Fatalf("CurrentAssignedTicketForUser() error = %v", err)
+	}
+	if found {
+		t.Fatal("CurrentAssignedTicketForUser() found = true, want false")
+	}
+
+	// Create and assign a ticket
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Assigned task",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+		Title:         ticket.Title,
+		Description:   ticket.Description,
+		ParentID:      ticket.ParentID,
+		Assignee:      "alice",
+		State:         StateActive,
+		ActorUsername: "admin",
+		ActorRole:     "admin",
+	}); err != nil {
+		t.Fatalf("UpdateTicket(assign) error = %v", err)
+	}
+
+	assigned, found, err := CurrentAssignedTicketForUser(db, project.ID, "alice")
+	if err != nil {
+		t.Fatalf("CurrentAssignedTicketForUser() error = %v", err)
+	}
+	if !found {
+		t.Fatal("CurrentAssignedTicketForUser() found = false, want true")
+	}
+	if assigned.ID != ticket.ID {
+		t.Fatalf("CurrentAssignedTicketForUser().ID = %q, want %q", assigned.ID, ticket.ID)
+	}
+}
+
+func TestExplainNoWork(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "NoWork Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Create various ticket states to get better coverage of all code paths
+	if _, err := CreateUser(db, "someone", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	// Idle unassigned not-ready ticket
+	if _, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Not ready",
+		CreatedBy: "",
+	}); err != nil {
+		t.Fatalf("CreateTicket(not ready) error = %v", err)
+	}
+	// Idle assigned ticket
+	assigned, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Assigned idle",
+		Assignee:  "someone",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(assigned) error = %v", err)
+	}
+	_ = assigned
+	// Closed ticket
+	closed, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Closed one",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(closed) error = %v", err)
+	}
+	if _, err := SetTicketOpen(db, closed.ID, false, "admin", ""); err != nil {
+		t.Fatalf("SetTicketOpen(false) error = %v", err)
+	}
+	// Parent ticket with children (non-leaf)
+	parent, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "epic",
+		Title:     "Parent",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(parent) error = %v", err)
+	}
+	if _, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		ParentID:  &parent.ID,
+		Type:      "task",
+		Title:     "Child",
+		CreatedBy: "",
+	}); err != nil {
+		t.Fatalf("CreateTicket(child) error = %v", err)
+	}
+
+	reasons, err := ExplainNoWork(db, project.ID, "alice")
+	if err != nil {
+		t.Fatalf("ExplainNoWork() error = %v", err)
+	}
+	if len(reasons) < 3 {
+		t.Fatalf("ExplainNoWork() returned %d reasons, want >= 3", len(reasons))
+	}
+}
+
+func TestSetAndUnsetTicketWorkflow(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Workflow Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	wfBase, err := CreateWorkflow(db, "Custom Flow", "")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	if _, err := AddWorkflowStage(db, wfBase.ID, "Review", "", nil, 1); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
+	}
+	wf, err := GetWorkflow(db, wfBase.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflow() error = %v", err)
+	}
+
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Workflow ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	// Set workflow
+	updated, err := SetTicketWorkflow(db, ticket.ID, wf.ID)
+	if err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	}
+	if updated.WorkflowID == nil || *updated.WorkflowID != wf.ID {
+		t.Fatalf("SetTicketWorkflow().WorkflowID = %v, want %d", updated.WorkflowID, wf.ID)
+	}
+
+	// Unset workflow
+	unset, err := UnsetTicketWorkflow(db, ticket.ID)
+	if err != nil {
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+	}
+	if unset.WorkflowID != nil {
+		t.Fatalf("UnsetTicketWorkflow().WorkflowID = %v, want nil", unset.WorkflowID)
+	}
+}
+
+func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Context Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	// Create a workflow and set it on a parent ticket
+	wfBase, err := CreateWorkflow(db, "Context WF", "")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	if _, err := AddWorkflowStage(db, wfBase.ID, "step1", "", nil, 0); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
+	}
+
+	epic, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "epic",
+		Title:     "Context epic",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(epic) error = %v", err)
+	}
+
+	// Set workflow on the epic
+	epic, err = SetTicketWorkflow(db, epic.ID, wfBase.ID)
+	if err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	}
+
+	// Create child ticket under the epic (no workflow set directly)
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		ParentID:  &epic.ID,
+		Type:      "task",
+		Title:     "Context ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	// ResolveWorkflowID should inherit from parent
+	wfID := ResolveWorkflowID(db, ticket)
+	if wfID == nil {
+		t.Fatal("ResolveWorkflowID() = nil, want inherited from parent")
+	}
+	if *wfID != wfBase.ID {
+		t.Fatalf("ResolveWorkflowID() = %d, want %d", *wfID, wfBase.ID)
+	}
+
+	// EnrichTicketContext
+	ctx := EnrichTicketContext(db, ticket)
+	if ctx.Project == nil {
+		t.Fatal("EnrichTicketContext().Project = nil, want non-nil")
+	}
+	if ctx.Project.ID != project.ID {
+		t.Fatalf("EnrichTicketContext().Project.ID = %d, want %d", ctx.Project.ID, project.ID)
+	}
+	if ctx.Workflow == nil {
+		t.Fatal("EnrichTicketContext().Workflow = nil, want non-nil")
+	}
+	if len(ctx.Parents) == 0 {
+		t.Fatal("EnrichTicketContext().Parents = empty, want non-empty")
 	}
 }
 

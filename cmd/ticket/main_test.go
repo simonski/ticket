@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
@@ -3751,4 +3752,658 @@ func TestRunUserCreateRequiresUsername(t *testing.T) {
 	// resolve a username, so just verify the command doesn't panic.
 	// The main thing is the create path is exercisable.
 	_ = run([]string{"user", "create", "-username", "testonly", "-password", "p"})
+}
+
+// ---------------------------------------------------------------------------
+// timeAgo
+// ---------------------------------------------------------------------------
+
+func TestTimeAgoJustNow(t *testing.T) {
+	now := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	got := timeAgo("2025-01-01T12:00:00Z", now)
+	if got != "just now" {
+		t.Fatalf("timeAgo() = %q, want %q", got, "just now")
+	}
+}
+
+func TestTimeAgoMinutes(t *testing.T) {
+	now := time.Date(2025, 1, 1, 12, 30, 0, 0, time.UTC)
+	got := timeAgo("2025-01-01T12:00:00Z", now)
+	if got != "30m ago" {
+		t.Fatalf("timeAgo() = %q, want %q", got, "30m ago")
+	}
+}
+
+func TestTimeAgoHours(t *testing.T) {
+	now := time.Date(2025, 1, 1, 18, 0, 0, 0, time.UTC)
+	got := timeAgo("2025-01-01T12:00:00Z", now)
+	if got != "6h ago" {
+		t.Fatalf("timeAgo() = %q, want %q", got, "6h ago")
+	}
+}
+
+func TestTimeAgoDays(t *testing.T) {
+	now := time.Date(2025, 1, 4, 12, 0, 0, 0, time.UTC)
+	got := timeAgo("2025-01-01T12:00:00Z", now)
+	if got != "3d ago" {
+		t.Fatalf("timeAgo() = %q, want %q", got, "3d ago")
+	}
+}
+
+func TestTimeAgoDate(t *testing.T) {
+	now := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	got := timeAgo("2025-01-01T12:00:00Z", now)
+	if got != "2025-01-01" {
+		t.Fatalf("timeAgo() = %q, want %q", got, "2025-01-01")
+	}
+}
+
+func TestTimeAgoUnparseable(t *testing.T) {
+	now := time.Now()
+	got := timeAgo("not-a-date", now)
+	if got != "not-a-date" {
+		t.Fatalf("timeAgo() = %q, want original string", got)
+	}
+}
+
+func TestTimeAgoAlternateLayouts(t *testing.T) {
+	now := time.Date(2025, 1, 1, 12, 30, 0, 0, time.UTC)
+	for _, ts := range []string{
+		"2025-01-01 12:00:00",
+		"2025-01-01T12:00:00",
+	} {
+		got := timeAgo(ts, now)
+		if got != "30m ago" {
+			t.Fatalf("timeAgo(%q) = %q, want %q", ts, got, "30m ago")
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// orDash
+// ---------------------------------------------------------------------------
+
+func TestOrDashEmpty(t *testing.T) {
+	if got := orDash(""); got != "-" {
+		t.Fatalf("orDash(%q) = %q, want %q", "", got, "-")
+	}
+}
+
+func TestOrDashWhitespace(t *testing.T) {
+	if got := orDash("   "); got != "-" {
+		t.Fatalf("orDash(%q) = %q, want %q", "   ", got, "-")
+	}
+}
+
+func TestOrDashNonEmpty(t *testing.T) {
+	if got := orDash("hello"); got != "hello" {
+		t.Fatalf("orDash(%q) = %q, want %q", "hello", got, "hello")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// rowColor
+// ---------------------------------------------------------------------------
+
+func TestRowColorActive(t *testing.T) {
+	got := rowColor("design/active")
+	if got != "\033[32m" {
+		t.Fatalf("rowColor(design/active) = %q, want ansiGreen", got)
+	}
+}
+
+func TestRowColorFail(t *testing.T) {
+	got := rowColor("design/fail")
+	if got != "\033[31m" {
+		t.Fatalf("rowColor(design/fail) = %q, want ansiRed", got)
+	}
+}
+
+func TestRowColorIdle(t *testing.T) {
+	got := rowColor("design/idle")
+	if got != "\033[90m" {
+		t.Fatalf("rowColor(design/idle) = %q, want ansiGray", got)
+	}
+}
+
+func TestRowColorInvalid(t *testing.T) {
+	got := rowColor("garbage")
+	if got != "" {
+		t.Fatalf("rowColor(garbage) = %q, want empty", got)
+	}
+}
+
+func TestRowColorSuccess(t *testing.T) {
+	got := rowColor("design/success")
+	if got != "" {
+		t.Fatalf("rowColor(design/success) = %q, want empty (no special color)", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// formatPayloadKeyValues
+// ---------------------------------------------------------------------------
+
+func TestFormatPayloadKeyValuesBasic(t *testing.T) {
+	data := map[string]interface{}{
+		"title": "hello",
+	}
+	got := formatPayloadKeyValues(data)
+	if got != "title=hello" {
+		t.Fatalf("formatPayloadKeyValues() = %q, want %q", got, "title=hello")
+	}
+}
+
+func TestFormatPayloadKeyValuesEmptyString(t *testing.T) {
+	data := map[string]interface{}{
+		"title": "",
+	}
+	got := formatPayloadKeyValues(data)
+	if got != "" {
+		t.Fatalf("formatPayloadKeyValues() = %q, want empty", got)
+	}
+}
+
+func TestFormatPayloadKeyValuesNonString(t *testing.T) {
+	data := map[string]interface{}{
+		"count": 42,
+	}
+	got := formatPayloadKeyValues(data)
+	if got != "count=42" {
+		t.Fatalf("formatPayloadKeyValues() = %q, want %q", got, "count=42")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// generateConfirmToken
+// ---------------------------------------------------------------------------
+
+func TestGenerateConfirmTokenLength(t *testing.T) {
+	token, err := generateConfirmToken()
+	if err != nil {
+		t.Fatalf("generateConfirmToken() error = %v", err)
+	}
+	// 16 bytes -> 32 hex chars
+	if len(token) != 32 {
+		t.Fatalf("generateConfirmToken() len = %d, want 32", len(token))
+	}
+}
+
+func TestGenerateConfirmTokenUniqueness(t *testing.T) {
+	a, _ := generateConfirmToken()
+	b, _ := generateConfirmToken()
+	if a == b {
+		t.Fatalf("generateConfirmToken() produced identical tokens")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// prefixWriter
+// ---------------------------------------------------------------------------
+
+func TestPrefixWriterSingleLine(t *testing.T) {
+	var buf bytes.Buffer
+	pw := &prefixWriter{w: &buf, prefix: ">> "}
+	n, err := pw.Write([]byte("hello"))
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("Write() = %d, want 5", n)
+	}
+	if buf.String() != ">> hello" {
+		t.Fatalf("Write() output = %q, want %q", buf.String(), ">> hello")
+	}
+}
+
+func TestPrefixWriterMultiLine(t *testing.T) {
+	var buf bytes.Buffer
+	pw := &prefixWriter{w: &buf, prefix: "| "}
+	_, err := pw.Write([]byte("line1\nline2\n"))
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	want := "| line1\n| line2\n"
+	if buf.String() != want {
+		t.Fatalf("Write() output = %q, want %q", buf.String(), want)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// prefixReader
+// ---------------------------------------------------------------------------
+
+func TestPrefixReaderEchoesWithPrefix(t *testing.T) {
+	var echo bytes.Buffer
+	pr := &prefixReader{
+		r:      strings.NewReader("data"),
+		prefix: "<< ",
+		w:      &echo,
+	}
+	p := make([]byte, 64)
+	n, err := pr.Read(p)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if string(p[:n]) != "data" {
+		t.Fatalf("Read() data = %q, want %q", string(p[:n]), "data")
+	}
+	if !strings.Contains(echo.String(), "<< data") {
+		t.Fatalf("echo = %q, want prefix echo", echo.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// printAgentTable
+// ---------------------------------------------------------------------------
+
+func TestPrintAgentTableEmpty(t *testing.T) {
+	out := captureStdout(t, func() {
+		printAgentTable(nil)
+	})
+	if !strings.Contains(out, "no agents") {
+		t.Fatalf("printAgentTable(nil) = %q, want 'no agents'", out)
+	}
+}
+
+func TestPrintAgentTableNonEmpty(t *testing.T) {
+	tk := "PROJ-1"
+	statuses := []store.AgentStatus{
+		{
+			Agent:        store.Agent{ID: "uuid-1", Username: "bot-a", Enabled: true, Status: "idle", LastSeen: "2025-01-01T00:00:00Z"},
+			TicketKey:    &tk,
+			ProjectName:  "MyProject",
+			WorkflowName: "default",
+			RoleTitle:    "developer",
+		},
+		{
+			Agent: store.Agent{ID: "uuid-2", Username: "bot-b", Enabled: false, Status: "disabled"},
+		},
+	}
+	out := captureStdout(t, func() {
+		printAgentTable(statuses)
+	})
+	for _, want := range []string{"uuid-1", "uuid-2", "PROJ-1", "MyProject", "developer"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("printAgentTable output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// printTeamAgentTable
+// ---------------------------------------------------------------------------
+
+func TestPrintTeamAgentTableEmpty(t *testing.T) {
+	out := captureStdout(t, func() {
+		printTeamAgentTable(nil)
+	})
+	if !strings.Contains(out, "no team agents") {
+		t.Fatalf("printTeamAgentTable(nil) = %q, want 'no team agents'", out)
+	}
+}
+
+func TestPrintTeamAgentTableNonEmpty(t *testing.T) {
+	items := []store.TeamAgent{
+		{TeamID: 1, AgentID: "a1", AgentUUID: "uuid-1", Enabled: true, Status: "idle"},
+	}
+	out := captureStdout(t, func() {
+		printTeamAgentTable(items)
+	})
+	for _, want := range []string{"uuid-1", "a1", "idle"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("printTeamAgentTable output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// printTicketChildren
+// ---------------------------------------------------------------------------
+
+func TestPrintTicketChildrenOutput(t *testing.T) {
+	children := []store.Ticket{
+		{ID: "PROJ-1", Type: "task", Status: "design/idle", Title: "Child One"},
+		{ID: "PROJ-2", Type: "bug", Status: "develop/active", Title: "Child Two"},
+	}
+	out := captureStdout(t, func() {
+		printTicketChildren(children)
+	})
+	if !strings.Contains(out, "Children") {
+		t.Fatalf("printTicketChildren missing header:\n%s", out)
+	}
+	for _, want := range []string{"PROJ-1", "PROJ-2", "Child One", "Child Two"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("printTicketChildren missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// fallbackCommandUsername in local mode
+// ---------------------------------------------------------------------------
+
+func TestFallbackCommandUsernameLocalMode(t *testing.T) {
+	setupLocalCLI(t)
+	got := fallbackCommandUsername()
+	if got != "admin" {
+		t.Fatalf("fallbackCommandUsername() = %q, want %q", got, "admin")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runWhoami
+// ---------------------------------------------------------------------------
+
+func TestRunWhoamiLocalMode(t *testing.T) {
+	setupLocalCLI(t)
+	out := captureStdout(t, func() {
+		if err := run([]string{"whoami"}); err != nil {
+			t.Fatalf("whoami error = %v", err)
+		}
+	})
+	for _, want := range []string{"USER", "username", "admin", "CONNECTION", "local"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("whoami output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runSummary
+// ---------------------------------------------------------------------------
+
+func TestRunSummaryLocalMode(t *testing.T) {
+	setupLocalCLI(t)
+
+	// Create a project first
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "SUM", "-title", "Summary Test"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+
+	// Create a ticket so summary has data
+	createLocalTask(t, []string{"add", "Summary task one"})
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"summary"}); err != nil {
+			t.Fatalf("summary error = %v", err)
+		}
+	})
+	for _, want := range []string{"project", "SUM", "open tickets", "database"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("summary output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runTicketNS help
+// ---------------------------------------------------------------------------
+
+func TestRunTicketNSHelp(t *testing.T) {
+	setupLocalCLI(t)
+	out := captureStdout(t, func() {
+		if err := run([]string{"ticket", "help"}); err != nil {
+			t.Fatalf("ticket help error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "ticket") {
+		t.Fatalf("ticket help output missing usage info:\n%s", out)
+	}
+}
+
+func TestRunTicketNSUnknown(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"ticket", "nonexistent-subcommand-xyz"})
+	if err == nil || !strings.Contains(err.Error(), "unknown ticket command") {
+		t.Fatalf("ticket unknown = %v, want unknown ticket command error", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runSetTicketClosed (close/open)
+// ---------------------------------------------------------------------------
+
+func TestRunTicketCloseAndOpen(t *testing.T) {
+	setupLocalCLI(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "CLS", "-title", "Close Test"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+
+	taskID := createLocalTask(t, []string{"add", "Closable task"})
+
+	// Close the ticket
+	captureStdout(t, func() {
+		if err := run([]string{"close", taskID}); err != nil {
+			t.Fatalf("close error = %v", err)
+		}
+	})
+
+	// Verify it is closed (get should show closed)
+	getOut := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOut, "closed") {
+		t.Fatalf("ticket should be closed:\n%s", getOut)
+	}
+
+	// Re-open the ticket
+	captureStdout(t, func() {
+		if err := run([]string{"open", taskID}); err != nil {
+			t.Fatalf("open error = %v", err)
+		}
+	})
+
+	getOut2 := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOut2, "open") {
+		t.Fatalf("ticket should be open:\n%s", getOut2)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ticket NS subcommands via runTicketNS: search, board, count, orphans, clone
+// ---------------------------------------------------------------------------
+
+func TestRunTicketNSSearchBoardCountOrphans(t *testing.T) {
+	setupLocalCLI(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "TNS", "-title", "NS Test"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+
+	createLocalTask(t, []string{"add", "NS searchable task"})
+
+	// ticket search
+	searchOut := captureStdout(t, func() {
+		_ = run([]string{"ticket", "search", "searchable"})
+	})
+	if !strings.Contains(searchOut, "searchable") {
+		t.Fatalf("ticket search missing expected result:\n%s", searchOut)
+	}
+
+	// ticket count
+	countOut := captureStdout(t, func() {
+		if err := run([]string{"ticket", "count"}); err != nil {
+			t.Fatalf("ticket count error = %v", err)
+		}
+	})
+	// count output should exist (even if just a number)
+	if len(strings.TrimSpace(countOut)) == 0 {
+		t.Fatalf("ticket count output empty")
+	}
+
+	// ticket orphans
+	orphanOut := captureStdout(t, func() {
+		_ = run([]string{"ticket", "orphans"})
+	})
+	if !strings.Contains(orphanOut, "searchable") {
+		t.Fatalf("ticket orphans missing orphan ticket:\n%s", orphanOut)
+	}
+
+	// ticket list
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"ticket", "list"}); err != nil {
+			t.Fatalf("ticket list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "searchable") {
+		t.Fatalf("ticket list missing task:\n%s", listOut)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ticket NS state subcommands: active, idle, complete, fail
+// ---------------------------------------------------------------------------
+
+func TestRunTicketNSStateCommands(t *testing.T) {
+	setupLocalCLI(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "STA", "-title", "State Test"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+
+	taskID := createLocalTask(t, []string{"add", "State task"})
+
+	// active
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "active", "-id", taskID}); err != nil {
+			t.Fatalf("ticket active error = %v", err)
+		}
+	})
+
+	// idle
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "idle", "-id", taskID}); err != nil {
+			t.Fatalf("ticket idle error = %v", err)
+		}
+	})
+
+	// fail
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "fail", "-id", taskID}); err != nil {
+			t.Fatalf("ticket fail error = %v", err)
+		}
+	})
+
+	// complete
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "complete", "-id", taskID}); err != nil {
+			t.Fatalf("ticket complete error = %v", err)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// ticket NS hierarchy: attach/detach
+// ---------------------------------------------------------------------------
+
+func TestRunTicketNSAttachDetach(t *testing.T) {
+	setupLocalCLI(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "ATT", "-title", "Attach Test"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+
+	parentID := createLocalTask(t, []string{"add", "Parent task"})
+	childID := createLocalTask(t, []string{"add", "Child task"})
+
+	// attach child to parent
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "attach", "-id", childID, parentID}); err != nil {
+			t.Fatalf("ticket attach error = %v", err)
+		}
+	})
+
+	// detach
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "detach", "-id", childID}); err != nil {
+			t.Fatalf("ticket detach error = %v", err)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// ticket NS clone and delete
+// ---------------------------------------------------------------------------
+
+func TestRunTicketNSCloneAndDelete(t *testing.T) {
+	setupLocalCLI(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "CLN", "-title", "Clone Test"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+
+	taskID := createLocalTask(t, []string{"add", "Clonable task"})
+
+	// clone
+	cloneOut := captureStdout(t, func() {
+		if err := run([]string{"ticket", "clone", taskID}); err != nil {
+			t.Fatalf("ticket clone error = %v", err)
+		}
+	})
+	if strings.TrimSpace(cloneOut) == "" {
+		t.Fatalf("ticket clone output empty")
+	}
+
+	// delete original via ticket NS
+	captureStdout(t, func() {
+		if err := run([]string{"ticket", "rm", taskID}); err != nil {
+			t.Fatalf("ticket rm error = %v", err)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// project add-user / remove-user (error paths)
+// ---------------------------------------------------------------------------
+
+func TestRunProjectAddUserRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"project", "add-user"})
+	if err == nil {
+		t.Fatal("project add-user with no args should error")
+	}
+}
+
+func TestRunProjectRemoveUserRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"project", "remove-user"})
+	if err == nil {
+		t.Fatal("project remove-user with no args should error")
+	}
+}
+
+func TestRunProjectAddTeamRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"project", "add-team"})
+	if err == nil {
+		t.Fatal("project add-team with no args should error")
+	}
+}
+
+func TestRunProjectRemoveTeamRequiresArgs(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"project", "remove-team"})
+	if err == nil {
+		t.Fatal("project remove-team with no args should error")
+	}
 }

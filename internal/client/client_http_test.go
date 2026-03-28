@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
@@ -330,5 +332,501 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 	}
 	if _, err := api.ListDependencies(taskID); err != nil {
 		t.Fatalf("ListDependencies() error = %v", err)
+	}
+}
+
+func TestRemoteClientRolesCRUD(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/roles":
+			_, _ = w.Write([]byte(`{"id":1,"title":"dev","motivation":"build","goals":"ship"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/roles":
+			_, _ = w.Write([]byte(`[{"id":1,"title":"dev","motivation":"build","goals":"ship"}]`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/roles/1":
+			_, _ = w.Write([]byte(`{"id":1,"title":"dev2","motivation":"build","goals":"ship"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/roles/1":
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if _, err := api.CreateRole(RoleRequest{Title: "dev", Motivation: "build", Goals: "ship"}); err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+	if _, err := api.ListRoles(); err != nil {
+		t.Fatalf("ListRoles() error = %v", err)
+	}
+	if _, err := api.UpdateRole(1, RoleRequest{Title: "dev2", Motivation: "build", Goals: "ship"}); err != nil {
+		t.Fatalf("UpdateRole() error = %v", err)
+	}
+	if err := api.DeleteRole(1); err != nil {
+		t.Fatalf("DeleteRole() error = %v", err)
+	}
+}
+
+func TestRemoteClientAgentsCRUD(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents":
+			_, _ = w.Write([]byte(`{"agent":{"id":"a1","username":"agent-a1","enabled":true},"password":"secret"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/a1/enable":
+			_, _ = w.Write([]byte(`{"id":"a1","username":"agent-a1","enabled":true}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/a1/disable":
+			_, _ = w.Write([]byte(`{"id":"a1","username":"agent-a1","enabled":false}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/agents":
+			_, _ = w.Write([]byte(`[{"id":"a1","username":"agent-a1","enabled":true}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/agents/statuses":
+			_, _ = w.Write([]byte(`[{"agent_id":"a1","status":"online"}]`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/agents/a1":
+			_, _ = w.Write([]byte(`{"id":"a1","username":"agent-a1","enabled":true}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/agents/a1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/a1/config":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/agents/a1/config":
+			_, _ = w.Write([]byte(`[{"agent_id":"a1","key":"k","value":"v"}]`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/agents/a1/config/k":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/register":
+			_, _ = w.Write([]byte(`{"agent":{"id":"a1","username":"agent-a1","enabled":true}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/heartbeat":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/request":
+			_, _ = w.Write([]byte(`{"status":"NONE"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/tickets/11/update":
+			_, _ = w.Write([]byte(`{"ticket_id":"11","project_id":7,"title":"T","type":"task"}`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if _, _, err := api.CreateAgent(AgentCreateRequest{Password: "secret"}); err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	if _, err := api.SetAgentEnabled("a1", true); err != nil {
+		t.Fatalf("SetAgentEnabled(true) error = %v", err)
+	}
+	if _, err := api.SetAgentEnabled("a1", false); err != nil {
+		t.Fatalf("SetAgentEnabled(false) error = %v", err)
+	}
+	if _, err := api.ListAgents(); err != nil {
+		t.Fatalf("ListAgents() error = %v", err)
+	}
+	if _, err := api.ListAgentStatuses(); err != nil {
+		t.Fatalf("ListAgentStatuses() error = %v", err)
+	}
+	pw := "newpw"
+	if _, err := api.UpdateAgent("a1", AgentUpdateRequest{Password: &pw}); err != nil {
+		t.Fatalf("UpdateAgent() error = %v", err)
+	}
+	if err := api.DeleteAgent("a1"); err != nil {
+		t.Fatalf("DeleteAgent() error = %v", err)
+	}
+	if err := api.SetAgentConfig("a1", "k", "v"); err != nil {
+		t.Fatalf("SetAgentConfig() error = %v", err)
+	}
+	if _, err := api.ListAgentConfig("a1"); err != nil {
+		t.Fatalf("ListAgentConfig() error = %v", err)
+	}
+	if err := api.DeleteAgentConfig("a1", "k"); err != nil {
+		t.Fatalf("DeleteAgentConfig() error = %v", err)
+	}
+	if _, err := api.RegisterAgent(AgentRegisterRequest{ID: "a1", Password: "secret"}); err != nil {
+		t.Fatalf("RegisterAgent() error = %v", err)
+	}
+	if err := api.HeartbeatAgent("a1", "secret", "online"); err != nil {
+		t.Fatalf("HeartbeatAgent() error = %v", err)
+	}
+	if _, err := api.RequestAgentWork(AgentRequest{ID: "a1", Password: "secret", ProjectID: 7}); err != nil {
+		t.Fatalf("RequestAgentWork() error = %v", err)
+	}
+	if _, err := api.AgentUpdateTicket("11", AgentTicketUpdateRequest{ID: "a1", Password: "secret", Result: "done"}); err != nil {
+		t.Fatalf("AgentUpdateTicket() error = %v", err)
+	}
+}
+
+func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/projects/7":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/projects/7/users":
+			_, _ = w.Write([]byte(`{"project_id":7,"user_id":"u1","role":"member"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/projects/7/users/u1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/users":
+			_, _ = w.Write([]byte(`[{"project_id":7,"user_id":"u1","role":"member"}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/projects/7/teams":
+			_, _ = w.Write([]byte(`{"project_id":7,"team_id":1,"role":"member"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/projects/7/teams/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/teams":
+			_, _ = w.Write([]byte(`[{"project_id":7,"team_id":1,"role":"member"}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/teams":
+			_, _ = w.Write([]byte(`{"id":1,"name":"alpha"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/teams":
+			_, _ = w.Write([]byte(`[{"id":1,"name":"alpha"}]`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/teams/1":
+			_, _ = w.Write([]byte(`{"id":1,"name":"beta"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/teams/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/teams/1/users":
+			_, _ = w.Write([]byte(`{"team_id":1,"user_id":"u1","role":"member"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/teams/1/users/u1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/teams/1/users":
+			_, _ = w.Write([]byte(`[{"team_id":1,"user_id":"u1","role":"member"}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/teams/1/agents":
+			_, _ = w.Write([]byte(`{"team_id":1,"agent_id":"a1"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/teams/1/agents/a1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/teams/1/agents":
+			_, _ = w.Write([]byte(`[{"team_id":1,"agent_id":"a1"}]`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if err := api.DeleteProject(7); err != nil {
+		t.Fatalf("DeleteProject() error = %v", err)
+	}
+	if _, err := api.AddProjectMember(7, ProjectMemberRequest{UserID: "u1", Role: "member"}); err != nil {
+		t.Fatalf("AddProjectMember() error = %v", err)
+	}
+	if err := api.RemoveProjectMember(7, "u1"); err != nil {
+		t.Fatalf("RemoveProjectMember() error = %v", err)
+	}
+	if _, err := api.ListProjectMembers(7); err != nil {
+		t.Fatalf("ListProjectMembers() error = %v", err)
+	}
+	if _, err := api.AddProjectTeamMember(7, ProjectTeamMemberRequest{TeamID: 1, Role: "member"}); err != nil {
+		t.Fatalf("AddProjectTeamMember() error = %v", err)
+	}
+	if err := api.RemoveProjectTeamMember(7, 1); err != nil {
+		t.Fatalf("RemoveProjectTeamMember() error = %v", err)
+	}
+	if _, err := api.ListProjectTeamMembers(7); err != nil {
+		t.Fatalf("ListProjectTeamMembers() error = %v", err)
+	}
+	if _, err := api.CreateTeam(TeamRequest{Name: "alpha"}); err != nil {
+		t.Fatalf("CreateTeam() error = %v", err)
+	}
+	if _, err := api.ListTeams(); err != nil {
+		t.Fatalf("ListTeams() error = %v", err)
+	}
+	if _, err := api.UpdateTeam(1, TeamRequest{Name: "beta"}); err != nil {
+		t.Fatalf("UpdateTeam() error = %v", err)
+	}
+	if err := api.DeleteTeam(1); err != nil {
+		t.Fatalf("DeleteTeam() error = %v", err)
+	}
+	if _, err := api.AddTeamMember(1, TeamMemberRequest{UserID: "u1", Role: "member"}); err != nil {
+		t.Fatalf("AddTeamMember() error = %v", err)
+	}
+	if err := api.RemoveTeamMember(1, "u1"); err != nil {
+		t.Fatalf("RemoveTeamMember() error = %v", err)
+	}
+	if _, err := api.ListTeamMembers(1); err != nil {
+		t.Fatalf("ListTeamMembers() error = %v", err)
+	}
+	if _, err := api.AddTeamAgent(1, "a1"); err != nil {
+		t.Fatalf("AddTeamAgent() error = %v", err)
+	}
+	if err := api.RemoveTeamAgent(1, "a1"); err != nil {
+		t.Fatalf("RemoveTeamAgent() error = %v", err)
+	}
+	if _, err := api.ListTeamAgents(1); err != nil {
+		t.Fatalf("ListTeamAgents() error = %v", err)
+	}
+}
+
+func TestRemoteClientTicketLifecycle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		ticketJSON := `{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle"}`
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/tickets":
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/close":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/open":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/archive":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/unarchive":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/notready":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/workflow":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11/workflow":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/health":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/history":
+			_, _ = w.Write([]byte(`[{"id":1,"ticket_id":"11","event_type":"ticket_updated"}]`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if _, err := api.ListTickets(7); err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if _, err := api.CloseTicket("11"); err != nil {
+		t.Fatalf("CloseTicket() error = %v", err)
+	}
+	if _, err := api.OpenTicket("11"); err != nil {
+		t.Fatalf("OpenTicket() error = %v", err)
+	}
+	if _, err := api.ArchiveTicket("11"); err != nil {
+		t.Fatalf("ArchiveTicket() error = %v", err)
+	}
+	if _, err := api.UnarchiveTicket("11"); err != nil {
+		t.Fatalf("UnarchiveTicket() error = %v", err)
+	}
+	if _, err := api.NotReadyTicket("11"); err != nil {
+		t.Fatalf("NotReadyTicket() error = %v", err)
+	}
+	if _, err := api.SetTicketWorkflow("11", 1); err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	}
+	if _, err := api.UnsetTicketWorkflow("11"); err != nil {
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+	}
+	if _, err := api.GetTicket("11"); err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if _, err := api.SetTicketHealth("11", 80); err != nil {
+		t.Fatalf("SetTicketHealth() error = %v", err)
+	}
+	if _, err := api.ListProjectHistory(7, 5); err != nil {
+		t.Fatalf("ListProjectHistory() error = %v", err)
+	}
+}
+
+func TestRemoteClientWorkflowsCRUD(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows":
+			_, _ = w.Write([]byte(`{"id":1,"name":"wf1","description":"d"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows":
+			_, _ = w.Write([]byte(`[{"id":1,"name":"wf1","description":"d"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/1":
+			_, _ = w.Write([]byte(`{"workflow":{"id":1,"name":"wf1"},"stages":[]}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/1/stages":
+			_, _ = w.Write([]byte(`{"id":1,"workflow_id":1,"stage_name":"design","sort_order":0}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/stages/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/workflows/1/reorder":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/1/export":
+			_, _ = w.Write([]byte(`{"name":"wf1","description":"d","stages":[]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/import":
+			_, _ = w.Write([]byte(`{"id":2,"name":"wf1","description":"d"}`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if _, err := api.CreateWorkflow(WorkflowRequest{Name: "wf1", Description: "d"}); err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	if _, err := api.ListWorkflows(); err != nil {
+		t.Fatalf("ListWorkflows() error = %v", err)
+	}
+	if _, err := api.GetWorkflow(1); err != nil {
+		t.Fatalf("GetWorkflow() error = %v", err)
+	}
+	if err := api.DeleteWorkflow(1); err != nil {
+		t.Fatalf("DeleteWorkflow() error = %v", err)
+	}
+	if _, err := api.AddWorkflowStage(1, WorkflowStageRequest{StageName: "design", SortOrder: 0}); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
+	}
+	if err := api.RemoveWorkflowStage(1); err != nil {
+		t.Fatalf("RemoveWorkflowStage() error = %v", err)
+	}
+	if err := api.ReorderWorkflowStages(1, []int64{1, 2}); err != nil {
+		t.Fatalf("ReorderWorkflowStages() error = %v", err)
+	}
+	if _, err := api.ExportWorkflow(1); err != nil {
+		t.Fatalf("ExportWorkflow() error = %v", err)
+	}
+	if _, err := api.ImportWorkflow(store.WorkflowExport{Name: "wf1", Description: "d"}); err != nil {
+		t.Fatalf("ImportWorkflow() error = %v", err)
+	}
+}
+
+func TestRemoteClientTimeTrackingAndLabels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/time":
+			_, _ = w.Write([]byte(`{"id":1,"ticket_id":"11","user_id":"u1","minutes":30,"note":"work"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11/time":
+			_, _ = w.Write([]byte(`[{"id":1,"ticket_id":"11","user_id":"u1","minutes":30,"note":"work"}]`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/time/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11/time/total":
+			_, _ = w.Write([]byte(`{"total":30}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/projects/7/labels":
+			_, _ = w.Write([]byte(`{"id":1,"project_id":7,"name":"bug","color":"red"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/labels":
+			_, _ = w.Write([]byte(`[{"id":1,"project_id":7,"name":"bug","color":"red"}]`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/labels/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/labels":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11/labels/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11/labels":
+			_, _ = w.Write([]byte(`[{"id":1,"project_id":7,"name":"bug","color":"red"}]`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if _, err := api.LogTime("11", libticket.TimeEntryRequest{Minutes: 30, Note: "work"}); err != nil {
+		t.Fatalf("LogTime() error = %v", err)
+	}
+	if _, err := api.ListTimeEntries("11"); err != nil {
+		t.Fatalf("ListTimeEntries() error = %v", err)
+	}
+	if err := api.DeleteTimeEntry(1); err != nil {
+		t.Fatalf("DeleteTimeEntry() error = %v", err)
+	}
+	if total, err := api.TotalTimeForTicket("11"); err != nil {
+		t.Fatalf("TotalTimeForTicket() error = %v", err)
+	} else if total != 30 {
+		t.Fatalf("TotalTimeForTicket() = %d, want 30", total)
+	}
+	if _, err := api.CreateLabel(7, libticket.LabelRequest{Name: "bug", Color: "red"}); err != nil {
+		t.Fatalf("CreateLabel() error = %v", err)
+	}
+	if _, err := api.ListLabels(7); err != nil {
+		t.Fatalf("ListLabels() error = %v", err)
+	}
+	if err := api.DeleteLabel(1); err != nil {
+		t.Fatalf("DeleteLabel() error = %v", err)
+	}
+	if err := api.AddTicketLabel("11", 1); err != nil {
+		t.Fatalf("AddTicketLabel() error = %v", err)
+	}
+	if err := api.RemoveTicketLabel("11", 1); err != nil {
+		t.Fatalf("RemoveTicketLabel() error = %v", err)
+	}
+	if _, err := api.ListTicketLabels("11"); err != nil {
+		t.Fatalf("ListTicketLabels() error = %v", err)
+	}
+}
+
+func TestRemoteClientStoriesCRUD(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/stories":
+			_, _ = w.Write([]byte(`{"id":1,"project_id":7,"title":"S","description":"desc"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/stories":
+			_, _ = w.Write([]byte(`[{"id":1,"project_id":7,"title":"S","description":"desc"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/stories/1":
+			_, _ = w.Write([]byte(`{"id":1,"project_id":7,"title":"S","description":"desc"}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/stories/1":
+			_, _ = w.Write([]byte(`{"id":1,"project_id":7,"title":"S2","description":"desc2"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/stories/1":
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if _, err := api.CreateStory(7, "S", "desc"); err != nil {
+		t.Fatalf("CreateStory() error = %v", err)
+	}
+	if _, err := api.ListStories(7); err != nil {
+		t.Fatalf("ListStories() error = %v", err)
+	}
+	if _, err := api.GetStory(1); err != nil {
+		t.Fatalf("GetStory() error = %v", err)
+	}
+	if _, err := api.UpdateStory(1, "S2", "desc2"); err != nil {
+		t.Fatalf("UpdateStory() error = %v", err)
+	}
+	if err := api.DeleteStory(1); err != nil {
+		t.Fatalf("DeleteStory() error = %v", err)
+	}
+}
+
+func TestRemoteClientRegistrationAndPasswordReset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/config/registration":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/users/alice/reset-password":
+			_, _ = w.Write([]byte(`{"user_id":"u1","username":"alice","role":"user","enabled":true}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/register":
+			_, _ = w.Write([]byte(`{"user_id":"u1","username":"alice","role":"user","enabled":true}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/login":
+			_, _ = w.Write([]byte(`{"token":"tok","user":{"user_id":"u1","username":"alice","role":"user","enabled":true}}`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
+
+	api := New(config.Config{ServerURL: server.URL})
+
+	if err := api.SetRegistrationEnabled(true); err != nil {
+		t.Fatalf("SetRegistrationEnabled() error = %v", err)
+	}
+	if _, err := api.ResetUserPassword("alice", "newpw"); err != nil {
+		t.Fatalf("ResetUserPassword() error = %v", err)
+	}
+	if _, err := api.Register("alice", "secret"); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if resp, err := api.Login("alice", "secret"); err != nil {
+		t.Fatalf("Login() error = %v", err)
+	} else if resp.Token != "tok" {
+		t.Fatalf("Login() token = %q, want tok", resp.Token)
 	}
 }

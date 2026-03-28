@@ -54,7 +54,7 @@ func Init(path, adminUsername, adminPassword string) error {
 			return err
 		}
 
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && filepath.Dir(path) != "." {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil && filepath.Dir(path) != "." {
 			return err
 		}
 	}

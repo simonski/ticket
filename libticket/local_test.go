@@ -269,3 +269,166 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 		t.Fatalf("GetTicket(deleted) error = %v, want ErrTicketNotFound", err)
 	}
 }
+
+func newLocalSvc(t *testing.T) libticket.Service {
+	t.Helper()
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_URL", "")
+	t.Setenv("TICKET_HOME", tempDir)
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+		t.Fatalf("store.Init() error = %v", err)
+	}
+	return libticket.NewLocal(config.Config{})
+}
+
+func TestLocalServiceResetUserPassword(t *testing.T) {
+	svc := newLocalSvc(t)
+	user, err := svc.ResetUserPassword("admin", "newsecret")
+	if err != nil {
+		t.Fatalf("ResetUserPassword() error = %v", err)
+	}
+	if user.Username != "admin" {
+		t.Fatalf("ResetUserPassword().Username = %q, want admin", user.Username)
+	}
+}
+
+
+func TestLocalServiceNotReadyTicket(t *testing.T) {
+	svc := newLocalSvc(t)
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "Ready test"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	_, err = svc.ReadyTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("ReadyTicket() error = %v", err)
+	}
+	updated, err := svc.NotReadyTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("NotReadyTicket() error = %v", err)
+	}
+	if updated.Ready {
+		t.Fatal("NotReadyTicket() did not clear ready flag")
+	}
+}
+
+func TestLocalServiceSetUnsetTicketWorkflow(t *testing.T) {
+	svc := newLocalSvc(t)
+	wf, err := svc.CreateWorkflow(libticket.WorkflowRequest{Name: "Test WF"})
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "WF test"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	updated, err := svc.SetTicketWorkflow(ticket.ID, wf.ID)
+	if err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	}
+	if updated.WorkflowID == nil || *updated.WorkflowID != wf.ID {
+		t.Fatalf("SetTicketWorkflow() workflow_id = %v, want %d", updated.WorkflowID, wf.ID)
+	}
+	unset, err := svc.UnsetTicketWorkflow(ticket.ID)
+	if err != nil {
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+	}
+	if unset.WorkflowID != nil {
+		t.Fatalf("UnsetTicketWorkflow() workflow_id = %v, want nil", unset.WorkflowID)
+	}
+}
+
+func TestLocalServiceListAgentStatuses(t *testing.T) {
+	svc := newLocalSvc(t)
+	statuses, err := svc.ListAgentStatuses()
+	if err != nil {
+		t.Fatalf("ListAgentStatuses() error = %v", err)
+	}
+	// No agents yet, should return empty.
+	if statuses == nil {
+		t.Fatal("ListAgentStatuses() returned nil, want empty slice")
+	}
+}
+
+func TestLocalServiceAgentConfig(t *testing.T) {
+	svc := newLocalSvc(t)
+	agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	if err := svc.SetAgentConfig(agent.ID, "poll_interval", "5"); err != nil {
+		t.Fatalf("SetAgentConfig() error = %v", err)
+	}
+	entries, err := svc.ListAgentConfig(agent.ID)
+	if err != nil {
+		t.Fatalf("ListAgentConfig() error = %v", err)
+	}
+	if len(entries) != 1 || entries[0].Key != "poll_interval" || entries[0].Value != "5" {
+		t.Fatalf("ListAgentConfig() = %v, want [{poll_interval 5}]", entries)
+	}
+	if err := svc.DeleteAgentConfig(agent.ID, "poll_interval"); err != nil {
+		t.Fatalf("DeleteAgentConfig() error = %v", err)
+	}
+	entries, err = svc.ListAgentConfig(agent.ID)
+	if err != nil {
+		t.Fatalf("ListAgentConfig() after delete error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("ListAgentConfig() after delete = %v, want empty", entries)
+	}
+}
+
+func TestLocalServiceStoryCRUD(t *testing.T) {
+	svc := newLocalSvc(t)
+	story, err := svc.CreateStory(1, "Test Story", "Story description")
+	if err != nil {
+		t.Fatalf("CreateStory() error = %v", err)
+	}
+	if story.Title != "Test Story" {
+		t.Fatalf("CreateStory().Title = %q, want %q", story.Title, "Test Story")
+	}
+
+	stories, err := svc.ListStories(1)
+	if err != nil {
+		t.Fatalf("ListStories() error = %v", err)
+	}
+	if len(stories) != 1 {
+		t.Fatalf("ListStories() len = %d, want 1", len(stories))
+	}
+
+	got, err := svc.GetStory(story.ID)
+	if err != nil {
+		t.Fatalf("GetStory() error = %v", err)
+	}
+	if got.Title != "Test Story" {
+		t.Fatalf("GetStory().Title = %q, want %q", got.Title, "Test Story")
+	}
+
+	updated, err := svc.UpdateStory(story.ID, "Updated Story", "New desc")
+	if err != nil {
+		t.Fatalf("UpdateStory() error = %v", err)
+	}
+	if updated.Title != "Updated Story" {
+		t.Fatalf("UpdateStory().Title = %q, want %q", updated.Title, "Updated Story")
+	}
+
+	if err := svc.DeleteStory(story.ID); err != nil {
+		t.Fatalf("DeleteStory() error = %v", err)
+	}
+	stories, err = svc.ListStories(1)
+	if err != nil {
+		t.Fatalf("ListStories() after delete error = %v", err)
+	}
+	if len(stories) != 0 {
+		t.Fatalf("ListStories() after delete len = %d, want 0", len(stories))
+	}
+}
+
+func TestLocalServiceListProjectHistory(t *testing.T) {
+	svc := newLocalSvc(t)
+	_, err := svc.ListProjectHistory(1, 100)
+	if err != nil {
+		t.Fatalf("ListProjectHistory() error = %v", err)
+	}
+}

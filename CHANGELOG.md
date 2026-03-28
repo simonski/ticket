@@ -2,6 +2,56 @@
 
 All notable changes to the Ticket project are documented here.
 
+## [0.1.697] - 2026-03-28
+
+### Added
+- **TUI** — full-screen terminal UI (`tk -g`) with Home, Projects, Ideas, Tickets, Workflows, and Config panels
+- **Ideas panel** — capture lightweight ideas (`tk idea new`, `tk idea ls`) with TUI panel
+- **Hierarchy perspective** — web UI hierarchy view for epic/story/task trees (TK-11)
+- **Epic CLI** — `tk epic use/clear/ls` subcommands (TK-12)
+- **Story CLI** — create, list, get, update, delete story tickets (TK-15)
+- **Setup wizard** — `tk setup` interactive singleplayer onboarding with skill install
+- **Summary command** — `tk summary` shows open ticket counts and project overview
+- **Agent streaming** — `tk agent run -v` streams LLM stdin/stdout in real time
+- **Agent auto-assignment** — agents can be assigned to tickets; `tk ready <id>` marks eligibility
+- **Noun-verb CLI** — reorganised CLI under `tk req`, `tk ticket` namespaces
+- **Status box** — `tk status` and `tk count` rendered in rounded Unicode box with env vars and config path
+- **Drag-and-drop** — kanban board supports drag-drop stage changes and reopening closed tickets
+- **Server `-path` flag** — serve static files from filesystem instead of embedded assets
+- **Email encryption** and schema additions for user management
+- **Goals** and user list improvements
+- **Homebrew formula** — distribution via `brew install simonski/tap/ticket`
+- **Security hardening** — security headers (CSP, X-Frame-Options, nosniff), Secure cookie flag for HTTPS, rate limiting on login/register, tightened DB directory permissions
+- **SAST in CI** — added `govulncheck` and `gosec` to GitHub Actions pipeline
+- **CLI test coverage** — boosted `cmd/ticket` above 55% threshold with tests for timeAgo, orDash, rowColor, formatPayloadKeyValues, generateConfirmToken, prefixWriter/Reader, printAgentTable, printTeamAgentTable, runWhoami, runSummary, runTicketNS, runSetTicketClosed, project user/team commands, clone, request, archive, comment, dependency, team, and requirements/decisions workflows
+
+### Changed
+- **TICKET_CONFIG_DIR → TICKET_HOME** — env var renamed; `.ticket/` auto-located by walking up from CWD
+- **Per-project config** moved from `.ticket.json` to `$TICKET_HOME/config.json`
+- **Agents merged into users** — agents table consolidated into users with `user_type` column
+- **Agent credentials** moved from request body to HTTP Basic Auth
+- **Agent default LLM** set to `claude` (Sonnet 4.5); prompt written to file and piped via stdin
+- **Agent poll interval** default 5s, config-driven (TK-157)
+- **Agent name optional** — auto-generates UUID when omitted (TK-152)
+- **History output** formatted as human-readable text instead of raw JSON
+- **Consistent `-id` flags** across all commands; title-with-dash bug fixed
+- **Argon2id iterations** increased from 3 to 4
+- **Dependencies bumped** — golang.org/x/crypto v0.49.0, modernc.org/sqlite v1.48.0, and all transitive deps
+
+### Fixed
+- Right panel selector active state (TK-9)
+- Stale FK migration index bug (TK-9)
+- Suppressed redundant WS reload after local autosave; stopped WS reconnect after logout (TK-4)
+- Documentation drift: CLI syntax, state names, ticket types, init command, stage aliases, agent setup
+- REQUIREMENTS.md aligned with stage/state lifecycle model (TK-13)
+- `TestSaveLoadRoundTrip` chdir to temp dir to avoid local config override
+- `tk get` and `tk ls` heuristics for positional args and children
+- Status box padding alignment
+- Setup wizard continuation when user declines reinitialise
+- Summary scoped to current project, filtered to open tickets only
+- Friendly connection errors; removed Go network errors from client output
+- QUICKSTART.md typo (`titk` → `tk`)
+
 ## [0.1.538] - 2026-03-17
 
 ### Added

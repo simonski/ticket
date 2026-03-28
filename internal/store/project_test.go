@@ -67,6 +67,46 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 	}
 }
 
+func TestGetProjectByPrefix(t *testing.T) {
+	db := testDB(t)
+
+	project, err := CreateProjectWithParams(db, ProjectCreateParams{
+		Prefix: "ABC",
+		Title:  "Prefix Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+
+	// Get by prefix
+	byPrefix, err := GetProject(db, "ABC")
+	if err != nil {
+		t.Fatalf("GetProject(prefix) error = %v", err)
+	}
+	if byPrefix.ID != project.ID {
+		t.Fatalf("GetProject(prefix).ID = %d, want %d", byPrefix.ID, project.ID)
+	}
+
+	// Get by prefix lowercase
+	byLower, err := GetProject(db, "abc")
+	if err != nil {
+		t.Fatalf("GetProject(lower prefix) error = %v", err)
+	}
+	if byLower.ID != project.ID {
+		t.Fatalf("GetProject(lower prefix).ID = %d, want %d", byLower.ID, project.ID)
+	}
+
+	// Get with empty string
+	if _, err := GetProject(db, ""); err == nil {
+		t.Fatal("GetProject(empty) error = nil, want error")
+	}
+
+	// Get nonexistent prefix
+	if _, err := GetProject(db, "ZZZ"); err == nil {
+		t.Fatal("GetProject(nonexistent) error = nil, want error")
+	}
+}
+
 func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	db := testDB(t)
 

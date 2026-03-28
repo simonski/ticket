@@ -158,6 +158,27 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 	}
 }
 
+func TestParseTicketSequence(t *testing.T) {
+	cases := []struct {
+		input string
+		want  int64
+	}{
+		{"TK-1", 1},
+		{"TK-42", 42},
+		{"PRJ-T-3", 3},
+		{"PRJ-E-100", 100},
+		{"", 0},
+		{"invalid", 0},
+		{"TK--1", 1}, // splits to 3 parts: ["TK","","1"], parses parts[2]
+		{"A-B-C-D", 0},
+	}
+	for _, tc := range cases {
+		if got := parseTicketSequence(tc.input); got != tc.want {
+			t.Fatalf("parseTicketSequence(%q) = %d, want %d", tc.input, got, tc.want)
+		}
+	}
+}
+
 func assertTableExists(t *testing.T, db *sql.DB, name string) {
 	t.Helper()
 

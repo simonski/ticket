@@ -93,6 +93,60 @@ func TestAdminUserManagement(t *testing.T) {
 	}
 }
 
+func TestResetUserPassword(t *testing.T) {
+	db := testDB(t)
+
+	user, err := CreateUser(db, "carol", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+
+	// Create a session so we can verify it gets invalidated
+	token, err := CreateSession(db, user.ID)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	// Reset password
+	updated, err := ResetUserPassword(db, "carol", "newpassword456")
+	if err != nil {
+		t.Fatalf("ResetUserPassword() error = %v", err)
+	}
+	if updated.Username != "carol" {
+		t.Fatalf("ResetUserPassword().Username = %q, want carol", updated.Username)
+	}
+
+	// Old password should fail
+	if _, err := AuthenticateUser(db, "carol", "password123"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("AuthenticateUser(old password) error = %v, want ErrInvalidCredentials", err)
+	}
+
+	// New password should work
+	if _, err := AuthenticateUser(db, "carol", "newpassword456"); err != nil {
+		t.Fatalf("AuthenticateUser(new password) error = %v", err)
+	}
+
+	// Session should be invalidated
+	if _, err := GetUserByToken(db, token); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("GetUserByToken(after reset) error = %v, want ErrUnauthorized", err)
+	}
+
+	// Reset with empty username should fail
+	if _, err := ResetUserPassword(db, "", "password"); err == nil {
+		t.Fatal("ResetUserPassword(empty username) error = nil, want error")
+	}
+
+	// Reset with empty password should fail
+	if _, err := ResetUserPassword(db, "carol", ""); err == nil {
+		t.Fatal("ResetUserPassword(empty password) error = nil, want error")
+	}
+
+	// Reset for non-existent user should fail
+	if _, err := ResetUserPassword(db, "nobody", "password"); err == nil {
+		t.Fatal("ResetUserPassword(non-existent) error = nil, want error")
+	}
+}
+
 func testDB(t *testing.T) *sql.DB {
 	t.Helper()
 

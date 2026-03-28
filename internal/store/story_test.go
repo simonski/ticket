@@ -53,3 +53,38 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 		t.Fatalf("StoryIDForTicket() = (%d,%v), want (%d,true)", storyID, ok, story.ID)
 	}
 }
+
+func TestStoryUpdateAndDelete(t *testing.T) {
+	db := testDB(t)
+	project, err := CreateProject(db, "Story Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	story, err := CreateStory(db, project.ID, "Original title", "Original description", "")
+	if err != nil {
+		t.Fatalf("CreateStory() error = %v", err)
+	}
+
+	updated, err := UpdateStory(db, story.ID, "New title", "New description")
+	if err != nil {
+		t.Fatalf("UpdateStory() error = %v", err)
+	}
+	if updated.Title != "New title" || updated.Description != "New description" {
+		t.Fatalf("UpdateStory() = %q / %q, want New title / New description", updated.Title, updated.Description)
+	}
+
+	// UpdateStory with empty title should fail
+	if _, err := UpdateStory(db, story.ID, "", "desc"); err == nil {
+		t.Fatal("UpdateStory(empty title) error = nil, want error")
+	}
+
+	// Delete
+	if err := DeleteStory(db, story.ID); err != nil {
+		t.Fatalf("DeleteStory() error = %v", err)
+	}
+
+	// Delete again should fail
+	if err := DeleteStory(db, story.ID); err == nil {
+		t.Fatal("DeleteStory(deleted) error = nil, want error")
+	}
+}

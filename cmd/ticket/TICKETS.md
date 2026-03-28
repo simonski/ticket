@@ -1,6 +1,6 @@
 # Ticket — Issue Tracking for Agents
 
-This project uses `ticket` (aliased as `tk`) for issue tracking. All work is managed through CLI commands using a workflow.
+This project uses `tk` for issue tracking. All work is managed through CLI commands using a workflow.
 
 ## Setup
 
@@ -19,15 +19,14 @@ tk project use <id>
 
 ```bash
 # List tickets in the active project
-tk list
 tk ls
 
 # Filter by type, status, or assignee
-tk list --type task
-tk list --type epic
-tk list --type bug
-tk list --status develop/idle
-tk list -u alice
+tk ls --type task
+tk ls --type epic
+tk ls --type bug
+tk ls --status develop/idle
+tk ls -user alice
 
 # Search titles and descriptions
 tk search "password reset"
@@ -47,15 +46,15 @@ tk count
 
 ```bash
 # Create tickets (title as positional arg or -title flag)
-tk add "Implement password reset"
+tk new "Implement password reset"
 tk bug "Login fails on Safari"
 tk epic "Authentication overhaul"
 
 # With full options
-tk create -t task -title "Fix signup" -d "Description here" -ac "Acceptance criteria" -p <project-id> -parent <epic-id>
+tk new -t task -title "Fix signup" -d "Description here" -ac "Acceptance criteria" -p <project-id> -parent <epic-id>
 
 # Create and specify priority/estimates
-tk add -title "Urgent fix" -priority 1 -estimate_effort 3
+tk new -title "Urgent fix" -priority 1 -estimate_effort 3
 
 # Shorthand typed creation
 tk note "Meeting notes from standup"

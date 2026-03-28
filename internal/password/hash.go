@@ -15,7 +15,7 @@ import (
 const (
 	saltLength  = 16
 	memory      = 64 * 1024
-	iterations  = 3
+	iterations  = 4
 	parallelism = 2
 	keyLength   = 32
 )

@@ -88,10 +88,20 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 	mux.Handle("/", spaHandler(fileServer, staticFS))
 
 	var handler http.Handler = mux
+	handler = securityHeadersHandler(handler)
 	if verbose {
 		handler = loggingHandler(handler, output)
 	}
 	return handler, nil
+}
+
+func securityHeadersHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) ListenAndServe() error {

@@ -100,6 +100,60 @@ func TestChatEnabledDefaultsToTrue(t *testing.T) {
 	}
 }
 
+func TestRegistrationEnabledDefaultsToTrue(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := Init(dbPath, "admin", "password"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	enabled, err := RegistrationEnabled(db)
+	if err != nil {
+		t.Fatalf("RegistrationEnabled() error = %v", err)
+	}
+	if !enabled {
+		t.Fatalf("RegistrationEnabled() = false, want true")
+	}
+}
+
+func TestSetRegistrationEnabledPersistsValues(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := Init(dbPath, "admin", "password"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	if err := SetRegistrationEnabled(db, false); err != nil {
+		t.Fatalf("SetRegistrationEnabled(false) error = %v", err)
+	}
+	enabled, err := RegistrationEnabled(db)
+	if err != nil {
+		t.Fatalf("RegistrationEnabled() error = %v", err)
+	}
+	if enabled {
+		t.Fatalf("RegistrationEnabled() = true, want false")
+	}
+
+	if err := SetRegistrationEnabled(db, true); err != nil {
+		t.Fatalf("SetRegistrationEnabled(true) error = %v", err)
+	}
+	enabled, err = RegistrationEnabled(db)
+	if err != nil {
+		t.Fatalf("RegistrationEnabled() error = %v", err)
+	}
+	if !enabled {
+		t.Fatalf("RegistrationEnabled() = false, want true")
+	}
+}
+
 func TestSetChatEnabledPersistsValues(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {

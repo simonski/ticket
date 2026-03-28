@@ -72,3 +72,48 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("GetTicket().Comments = %#v", taskWithComments.Comments)
 	}
 }
+
+func TestListProjectHistory(t *testing.T) {
+	db := testDB(t)
+	adminID := testAdminID(t, db)
+	project, err := CreateProject(db, "History Project", "", "", adminID)
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "History task",
+		CreatedBy: adminID,
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	// Update ticket to create more history
+	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+		Title:       "Updated history task",
+		Description: "desc",
+		ParentID:    ticket.ParentID,
+		UpdatedBy:   adminID,
+	}); err != nil {
+		t.Fatalf("UpdateTicket() error = %v", err)
+	}
+
+	events, err := ListProjectHistory(db, project.ID, 10)
+	if err != nil {
+		t.Fatalf("ListProjectHistory() error = %v", err)
+	}
+	if len(events) < 1 {
+		t.Fatalf("ListProjectHistory() len = %d, want >= 1", len(events))
+	}
+
+	// Test with default limit (0)
+	events, err = ListProjectHistory(db, project.ID, 0)
+	if err != nil {
+		t.Fatalf("ListProjectHistory(limit=0) error = %v", err)
+	}
+	if len(events) < 1 {
+		t.Fatalf("ListProjectHistory(limit=0) len = %d, want >= 1", len(events))
+	}
+}

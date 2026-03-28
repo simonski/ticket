@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/simonski/ticket/internal/store"
 )
 
 func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, verbose bool, output io.Writer) {
+	authLimiter := newRateLimiter(10, 1*time.Minute)
 	var chatLog func(string)
 	if verbose {
 		if output == nil {
@@ -114,6 +116,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !authLimiter.allow(clientIP(r)) {
+			writeError(w, http.StatusTooManyRequests, "too many requests")
+			return
+		}
 		enabled, err := store.RegistrationEnabled(db)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -139,6 +145,10 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !authLimiter.allow(clientIP(r)) {
+			writeError(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
 		var credentials credentialsRequest
@@ -168,6 +178,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   r.TLS != nil,
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   60 * 60 * 24 * 30,
 		})
@@ -189,6 +200,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   r.TLS != nil,
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   -1,
 		})

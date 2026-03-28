@@ -1,8 +1,10 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSnapshotExportImportPreservesIDs(t *testing.T) {
@@ -129,5 +131,46 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 	}
 	if _, err := GetUserByUsername(targetDB, "member1"); err != nil {
 		t.Fatalf("GetUserByUsername(member1) error = %v", err)
+	}
+}
+
+func TestNormalizeExportValue(t *testing.T) {
+	// []byte -> string
+	if got := normalizeExportValue([]byte("hello")); got != "hello" {
+		t.Fatalf("normalizeExportValue([]byte) = %v, want hello", got)
+	}
+	// time.Time -> RFC3339
+	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	if got, ok := normalizeExportValue(ts).(string); !ok || got == "" {
+		t.Fatalf("normalizeExportValue(time.Time) = %v", got)
+	}
+	// string passes through
+	if got := normalizeExportValue("foo"); got != "foo" {
+		t.Fatalf("normalizeExportValue(string) = %v, want foo", got)
+	}
+}
+
+func TestNormalizeImportValue(t *testing.T) {
+	// json.Number integer
+	n := json.Number("42")
+	if got := normalizeImportValue(n); got != int64(42) {
+		t.Fatalf("normalizeImportValue(json.Number int) = %v (%T)", got, got)
+	}
+	// json.Number float
+	f := json.Number("3.14")
+	if got := normalizeImportValue(f); got != 3.14 {
+		t.Fatalf("normalizeImportValue(json.Number float) = %v (%T)", got, got)
+	}
+	// float64 that is integer
+	if got := normalizeImportValue(float64(5.0)); got != int64(5) {
+		t.Fatalf("normalizeImportValue(float64 int) = %v (%T)", got, got)
+	}
+	// float64 that is not integer
+	if got := normalizeImportValue(float64(3.14)); got != float64(3.14) {
+		t.Fatalf("normalizeImportValue(float64) = %v (%T)", got, got)
+	}
+	// string passes through
+	if got := normalizeImportValue("foo"); got != "foo" {
+		t.Fatalf("normalizeImportValue(string) = %v", got)
 	}
 }
