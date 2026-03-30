@@ -5,12 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build and Test
 
 ```bash
+make setup                # Install all dev dependencies (Go modules + Node + Playwright)
 make build                # Build binary to ./bin/ticket, increments patch version
 make test                 # Run all tests (unit + integration + playwright)
 make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, client, server, store, libticket, libtickethttp)
 make test-go-cover        # Tests with per-package coverage thresholds
 go test ./internal/store/ -run TestTicketLifecycle  # Run a single test
+make dev                  # Print env vars for local development mode
 ```
 
 Coverage thresholds enforced: cmd/ticket 55%, libticket 65%, libtickethttp 75%, internal/client 55%, internal/store 70%, internal/config 70%.
@@ -32,6 +34,8 @@ Single Go binary (`cmd/ticket/main.go`) providing four interfaces to the same da
 - **Remote mode** (`TICKET_URL` set) — HTTP client via `internal/client` to a running server.
 
 Mode is resolved by `internal/config.ResolveURL()`. The CLI, `libticket.LocalService`, and `libtickethttp.Service` all implement the same `libticket.Service` interface (108 methods).
+
+`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for an existing `.ticket` directory; if none is found, `.ticket` in the current directory is the default. The `-f /path` flag overrides `TICKET_HOME` and `-url` overrides `TICKET_URL`.
 
 ### Key Packages
 
@@ -87,3 +91,4 @@ These words as user input trigger specific workflows defined in `docs/RULES.md`:
 - `review` — Read TODO/DESIGN/USER_GUIDE and propose next steps
 - `continue` — Read TODO/DESIGN/USER_GUIDE and continue implementation
 - `pr` — File a PR containing the ticket ID
+- `linear` / `walkthrough` — Generate a code walkthrough using showboat
