@@ -1961,7 +1961,25 @@
           };
         }
 
-        const renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
+        let renderer;
+        try {
+          renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
+        } catch {
+          return {
+            ctx,
+            render() {
+              const out = canvas.getContext("2d");
+              out.imageSmoothingEnabled = false;
+              out.clearRect(0, 0, canvas.width, canvas.height);
+              out.drawImage(off, 0, 0, canvas.width, canvas.height);
+            },
+            resize() {
+              const rect = canvas.getBoundingClientRect();
+              canvas.width = Math.max(1, Math.floor(rect.width || canvas.width));
+              canvas.height = Math.max(1, Math.floor(rect.height || canvas.height));
+            },
+          };
+        }
         renderer.setPixelRatio(1);
         if (typeof renderer.outputColorSpace !== "undefined" && window.THREE.SRGBColorSpace) {
           renderer.outputColorSpace = window.THREE.SRGBColorSpace;
@@ -2670,7 +2688,11 @@
 
       function ensureTicketVision() {
         if (tvGraph.initialized || !window.THREE || !tvCanvas) return;
-        tvGraph.renderer = new window.THREE.WebGLRenderer({ canvas: tvCanvas, alpha: true, antialias: true });
+        try {
+          tvGraph.renderer = new window.THREE.WebGLRenderer({ canvas: tvCanvas, alpha: true, antialias: true });
+        } catch {
+          return;
+        }
         tvGraph.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         tvGraph.scene = new window.THREE.Scene();
         tvGraph.camera = new window.THREE.OrthographicCamera(0, 100, 100, 0, -1000, 1000);
