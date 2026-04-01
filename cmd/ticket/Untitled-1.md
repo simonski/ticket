@@ -65,6 +65,3 @@ IF NOT present and remote:
     It shoul send hte folder name and git remote origin during the check to see if there is a project
     The server should either return the project_id this is, or create a project for the user
     
-
-
-At that point the user can decide to either put the tk folder locally at that location, or to choose a remote location.  If they choose a remote location, the git remote origin should be the hint that is used to explain which project to use (The server will decide) - or, if it is not present, the server would create a project based on the git origin remote.

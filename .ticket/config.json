@@ -1,5 +1,6 @@
 {
   "location": "ticket.db",
+  "token": "",
   "username": "admin",
   "project_id": "1",
   "current_epic_id": "TK-180",
