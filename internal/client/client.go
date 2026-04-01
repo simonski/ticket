@@ -26,14 +26,11 @@ type Client struct {
 
 
 func New(cfg config.Config) *Client {
-	resolved, err := config.ResolveURL()
+	resolved, err := config.ResolveLocation(cfg.Location)
 	if err != nil {
 		resolved = config.Resolved{Mode: config.ModeLocal}
 	}
 	baseURL := strings.TrimRight(resolved.ServerURL, "/")
-	if baseURL == "" && cfg.ServerURL != "" {
-		baseURL = strings.TrimRight(cfg.ServerURL, "/")
-	}
 	return &Client{
 		baseURL: baseURL,
 		token:   cfg.Token,
@@ -44,7 +41,7 @@ func New(cfg config.Config) *Client {
 
 func (c *Client) Register(username, password string) (store.User, error) {
 	if c.mode == config.ModeLocal {
-		return store.User{}, errors.New("ticket register requires TICKET_URL=http(s)://...")
+		return store.User{}, errors.New("ticket register requires remote mode (run tk init to configure)")
 	}
 	var user store.User
 	err := c.doJSON(http.MethodPost, "/api/register", map[string]string{
@@ -56,7 +53,7 @@ func (c *Client) Register(username, password string) (store.User, error) {
 
 func (c *Client) Login(username, password string) (AuthResponse, error) {
 	if c.mode == config.ModeLocal {
-		return AuthResponse{}, errors.New("ticket login requires TICKET_URL=http(s)://...")
+		return AuthResponse{}, errors.New("ticket login requires remote mode (run tk init to configure)")
 	}
 	var response AuthResponse
 	err := c.doJSON(http.MethodPost, "/api/login", map[string]string{
@@ -68,7 +65,7 @@ func (c *Client) Login(username, password string) (AuthResponse, error) {
 
 func (c *Client) Logout() error {
 	if c.mode == config.ModeLocal {
-		return errors.New("ticket logout requires TICKET_URL=http(s)://...")
+		return errors.New("ticket logout requires remote mode (run tk init to configure)")
 	}
 	return c.doJSON(http.MethodPost, "/api/logout", nil, nil)
 }
@@ -892,7 +889,7 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			return store.Ticket{}, err
 		}
 		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		return store.CreateTicket(db, store.TicketCreateParams{
+		ticket, err := store.CreateTicket(db, store.TicketCreateParams{
 			ProjectID:          request.ProjectID,
 			ParentID:           request.ParentID,
 			CloneOf:            request.CloneOf,
@@ -910,6 +907,15 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			State:              state,
 			CreatedBy:          user.ID,
 		})
+		if err != nil {
+			return ticket, err
+		}
+		if request.Message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, request.Message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodPost, "/api/tickets", request, &ticket)
@@ -985,7 +991,7 @@ func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Tic
 			return store.Ticket{}, err
 		}
 		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		return store.UpdateTicket(db, id, store.TicketUpdateParams{
+		ticket, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
@@ -1003,13 +1009,22 @@ func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Tic
 			// Local mode bypasses server-side ownership restrictions.
 			ActorRole: "admin",
 		})
+		if err != nil {
+			return ticket, err
+		}
+		if request.Message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, request.Message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodPut, "/api/tickets/"+url.PathEscape(id), request, &ticket)
 	return ticket, err
 }
 
-func (c *Client) CloseTicket(id string) (store.Ticket, error) {
+func (c *Client) CloseTicket(id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1019,33 +1034,24 @@ func (c *Client) CloseTicket(id string) (store.Ticket, error) {
 		user, err := c.localUser(db)
 		if err != nil {
 			return store.Ticket{}, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, id, user.ID, message); err != nil {
+				return store.Ticket{}, err
+			}
 		}
 		return store.SetTicketOpen(db, id, false, user.Username, user.ID)
 	}
-	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/close", nil, &ticket)
-	return ticket, err
-}
-
-func (c *Client) OpenTicket(id string) (store.Ticket, error) {
-	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return store.Ticket{}, err
-		}
-		defer db.Close()
-		user, err := c.localUser(db)
-		if err != nil {
-			return store.Ticket{}, err
-		}
-		return store.SetTicketOpen(db, id, true, user.Username, user.ID)
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/open", nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/close", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ArchiveTicket(id string) (store.Ticket, error) {
+func (c *Client) OpenTicket(id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1055,15 +1061,55 @@ func (c *Client) ArchiveTicket(id string) (store.Ticket, error) {
 		user, err := c.localUser(db)
 		if err != nil {
 			return store.Ticket{}, err
+		}
+		ticket, err := store.SetTicketOpen(db, id, true, user.Username, user.ID)
+		if err != nil {
+			return ticket, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
+	}
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/open", body, &ticket)
+	return ticket, err
+}
+
+func (c *Client) ArchiveTicket(id string, message string) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, err := c.localUser(db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, id, user.ID, message); err != nil {
+				return store.Ticket{}, err
+			}
 		}
 		return store.SetTicketArchived(db, id, true, user.Username, user.ID)
 	}
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
+	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/archive", nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/archive", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) UnarchiveTicket(id string) (store.Ticket, error) {
+func (c *Client) UnarchiveTicket(id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1074,14 +1120,27 @@ func (c *Client) UnarchiveTicket(id string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.SetTicketArchived(db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketArchived(db, id, false, user.Username, user.ID)
+		if err != nil {
+			return ticket, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
+	}
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/unarchive", nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/unarchive", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ReadyTicket(id string) (store.Ticket, error) {
+func (c *Client) ReadyTicket(id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1092,14 +1151,27 @@ func (c *Client) ReadyTicket(id string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.SetTicketReady(db, id, true, user.Username, user.ID)
+		ticket, err := store.SetTicketReady(db, id, true, user.Username, user.ID)
+		if err != nil {
+			return ticket, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
+	}
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/ready", nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/ready", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) NotReadyTicket(id string) (store.Ticket, error) {
+func (c *Client) NotReadyTicket(id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1110,10 +1182,23 @@ func (c *Client) NotReadyTicket(id string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.SetTicketReady(db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketReady(db, id, false, user.Username, user.ID)
+		if err != nil {
+			return ticket, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
+	}
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/notready", nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/notready", body, &ticket)
 	return ticket, err
 }
 
@@ -1157,7 +1242,7 @@ func (c *Client) DeleteTicket(id string) error {
 	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id), nil, nil)
 }
 
-func (c *Client) SetTicketParent(id, parentID string) (store.Ticket, error) {
+func (c *Client) SetTicketParent(id, parentID string, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1174,10 +1259,11 @@ func (c *Client) SetTicketParent(id, parentID string) (store.Ticket, error) {
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            message,
 	})
 }
 
-func (c *Client) UnsetTicketParent(id string) (store.Ticket, error) {
+func (c *Client) UnsetTicketParent(id string, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1194,6 +1280,7 @@ func (c *Client) UnsetTicketParent(id string) (store.Ticket, error) {
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            message,
 	})
 }
 
@@ -1225,7 +1312,7 @@ func (c *Client) GetTicket(ref string) (store.Ticket, error) {
 	return ticket, err
 }
 
-func (c *Client) CloneTicket(id string) (store.Ticket, error) {
+func (c *Client) CloneTicket(id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1236,10 +1323,23 @@ func (c *Client) CloneTicket(id string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.CloneTicket(db, id, user.Username, user.ID)
+		ticket, err := store.CloneTicket(db, id, user.Username, user.ID)
+		if err != nil {
+			return ticket, err
+		}
+		if message != "" {
+			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+				return ticket, err
+			}
+		}
+		return ticket, nil
+	}
+	var body any
+	if message != "" {
+		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/clone", nil, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/clone", body, &ticket)
 	return ticket, err
 }
 

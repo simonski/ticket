@@ -1,9 +1,8 @@
 {
-  "server_url": "",
-  "token": "",
+  "location": "ticket.db",
   "username": "admin",
-  "current_project": "TK",
-  "current_epic_id": "TK-166",
+  "project_id": "1",
+  "current_epic_id": "TK-180",
   "tui_theme": "the-grey",
   "tui_mode": "projects"
 }

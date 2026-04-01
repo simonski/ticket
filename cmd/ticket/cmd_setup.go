@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"net/http"
+
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
@@ -69,120 +71,417 @@ func promptYN(reader *bufio.Reader, question string, defaultYes bool) bool {
 }
 
 func runSetup(args []string) error {
-	_ = args // no flags for interactive setup
+	_ = args
 	reader := bufio.NewReader(os.Stdin)
 
+	fmt.Println("tk init")
+	fmt.Println()
+
+	// Require a git repository — walk up from cwd looking for .git
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	gitRoot, hasGit := config.FindGitRoot(cwd)
+	if !hasGit {
+		return fmt.Errorf("no .git directory found.\n  tk requires a git repository. Run `git init` first, then re-run `tk init`")
+	}
+	ticketDir := filepath.Join(gitRoot, ".ticket")
+	fmt.Printf("git root   : %s\n", gitRoot)
+	fmt.Printf("config dir : %s\n", ticketDir)
+	fmt.Println()
+
+	if existingSetup() {
+		return runSetupExisting(reader)
+	}
+	return runSetupNew(reader)
+}
+
+func existingSetup() bool {
+	home, err := config.Home()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(home, "config.json"))
+	return err == nil
+}
+
+func detectGitOrigin() string {
+	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func matchProjectByGitOrigin(projects []store.Project, gitOrigin string) *store.Project {
+	if gitOrigin == "" {
+		return nil
+	}
+	for i := range projects {
+		if projects[i].GitRepository == gitOrigin {
+			return &projects[i]
+		}
+	}
+	return nil
+}
+
+func runSetupExisting(reader *bufio.Reader) error {
+	cfg, _ := config.Load()
+	resolved, _ := config.ResolveURL()
+
+	// Show current state
+	fmt.Println("Current configuration:")
+	fmt.Printf("  location : %s\n", cfg.Location)
+	if resolved.Mode == config.ModeRemote {
+		fmt.Printf("  mode     : remote (%s)\n", resolved.ServerURL)
+		if u := envValue("TICKET_USERNAME"); u != "" {
+			fmt.Printf("  TICKET_USERNAME : %s\n", u)
+		}
+		if envValue("TICKET_PASSWORD") != "" {
+			fmt.Printf("  TICKET_PASSWORD : ***\n")
+		}
+	} else {
+		fmt.Printf("  mode     : local\n")
+		fmt.Printf("  database : %s\n", resolved.DBPath)
+	}
+	fmt.Printf("  user     : %s\n", cfg.Username)
+	fmt.Printf("  project  : %s\n", cfg.ProjectID)
+	fmt.Println()
+
+	if resolved.Mode == config.ModeRemote {
+		if promptYN(reader, "verify remote connection?", true) {
+			fmt.Printf("connecting : %s ... ", resolved.ServerURL)
+			resp, err := http.Get(resolved.ServerURL + "/api/healthz")
+			if err != nil {
+				fmt.Println("FAILED")
+				fmt.Printf("  error: %v\n", err)
+			} else {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					fmt.Println("OK")
+				} else {
+					fmt.Printf("FAILED (status %d)\n", resp.StatusCode)
+				}
+			}
+			fmt.Println()
+		}
+	}
+
+	choice := promptChoice(reader, "What would you like to do?", []string{
+		"Review current setup (no changes)",
+		"Reinitialise local database (deletes all data)",
+		"Connect to a remote server",
+		"Switch to local mode",
+	})
+
+	switch choice {
+	case 0:
+		fmt.Println()
+		fmt.Println("no changes made.")
+		return nil
+	case 1:
+		dbPath, err := defaultDatabasePath()
+		if err != nil {
+			return err
+		}
+		if err := removeDBFiles(dbPath); err != nil {
+			return err
+		}
+		return runSetupLocal(reader)
+	case 2:
+		return runSetupRemote(reader)
+	case 3:
+		return runSetupLocal(reader)
+	}
+	return nil
+}
+
+func runSetupNew(reader *bufio.Reader) error {
+	home, _ := config.Home()
+	fmt.Printf("config     : %s/config.json\n", home)
+	fmt.Println()
+
+	choice := promptChoice(reader, "How do you want to use ticket?", []string{
+		"Local mode — standalone SQLite, no server needed",
+		"Remote server — connect to a running ticket server",
+	})
+	fmt.Println()
+
+	switch choice {
+	case 0:
+		return runSetupLocal(reader)
+	case 1:
+		return runSetupRemote(reader)
+	}
+	return nil
+}
+
+func runSetupLocal(reader *bufio.Reader) error {
 	dbPath, err := defaultDatabasePath()
 	if err != nil {
 		return err
 	}
 
-	resolved, _ := config.ResolveURL()
-	if resolved.Mode == config.ModeRemote {
-		fmt.Println("tk init — remote server")
-		fmt.Printf("server     : %s\n", resolved.ServerURL)
-		cfg, _ := config.Load()
-		if cfg.Username == "" {
-			fmt.Println("warning    : no username configured — run `tk login` or `tk register` first")
-		} else {
-			fmt.Printf("user       : %s\n", cfg.Username)
-		}
-	} else {
-		fmt.Println("tk init — singleplayer local database")
-	}
-	fmt.Println()
-
-	// Check existing DB
-	_, statErr := os.Stat(dbPath)
-	dbExists := statErr == nil
-	if dbExists {
-		fmt.Printf("database   : %s (exists)\n", dbPath)
-	} else {
-		fmt.Printf("database   : %s (not found)\n", dbPath)
-	}
-
-	// Derive defaults from cwd
 	cwd, _ := os.Getwd()
 	dirName := strings.ToUpper(filepath.Base(cwd))
 	if len(dirName) > 4 {
 		dirName = dirName[:4]
 	}
 
+	projectPrefix := prompt(reader, "project prefix", dirName)
+	projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
+	if projectPrefix == "" {
+		projectPrefix = dirName
+	}
+	projectName := prompt(reader, "project name", filepath.Base(cwd))
+
+	var gitRepo string
+	if origin := detectGitOrigin(); origin != "" {
+		fmt.Printf("detected   : git origin %s\n", origin)
+		if promptYN(reader, "set as project git repository?", true) {
+			gitRepo = origin
+		}
+	}
+
+	password, err := generatePassword(24)
+	if err != nil {
+		return err
+	}
+	if err := store.Init(dbPath, "admin", password); err != nil {
+		return err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	cfg.Location = "ticket.db"
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		Prefix:        projectPrefix,
+		Title:         projectName,
+		GitRepository: gitRepo,
+	})
+	if err != nil {
+		return err
+	}
+	cfg.ProjectID = fmt.Sprintf("%d", project.ID)
+	cfg.Username = "admin"
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("  database : %s\n", dbPath)
+	fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
+	fmt.Printf("  user     : admin\n")
+	fmt.Printf("  password : %s\n", password)
 	fmt.Println()
 
-	reinit := !dbExists
-	if dbExists {
-		reinit = promptYN(reader, "database already exists — reinitialise? this will delete all data", false)
-		if reinit {
-			if err := removeDBFiles(dbPath); err != nil {
+	return runSetupPostInit(reader)
+}
+
+func runSetupRemote(reader *bufio.Reader) error {
+	// 1. Server URL
+	defaultURL := "http://localhost:8080"
+	serverURL := prompt(reader, "server URL", defaultURL)
+	serverURL = strings.TrimRight(strings.TrimSpace(serverURL), "/")
+	if serverURL == "" {
+		return errors.New("server URL is required")
+	}
+
+	// 2. Verify connectivity
+	fmt.Printf("connecting : %s ... ", serverURL)
+	resp, err := http.Get(serverURL + "/api/healthz")
+	if err != nil {
+		fmt.Println("FAILED")
+		return fmt.Errorf("could not reach server: %w", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("FAILED")
+		return fmt.Errorf("server returned status %d", resp.StatusCode)
+	}
+	fmt.Println("OK")
+
+	// 3. Save server URL to config now so resolveService picks it up
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	cfg.Location = serverURL
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+
+	// 4. Authentication
+	fmt.Println()
+
+	// Pick up defaults from env vars
+	defaultUsername := cfg.Username
+	if defaultUsername == "" {
+		defaultUsername = envValue("TICKET_USERNAME")
+	}
+	defaultPassword := envValue("TICKET_PASSWORD")
+
+	if defaultUsername != "" {
+		fmt.Printf("  TICKET_USERNAME : %s\n", defaultUsername)
+	}
+	if defaultPassword != "" {
+		fmt.Printf("  TICKET_PASSWORD : ***\n")
+	}
+
+	hasAccount := promptYN(reader, "do you have an account on this server?", true)
+
+	username, password, err := promptForCredentials(os.Stdin, os.Stdout, defaultUsername, defaultPassword)
+	if err != nil {
+		return err
+	}
+
+	cfg, _ = config.Load()
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	if !hasAccount {
+		if _, err := svc.Register(username, password); err != nil {
+			return fmt.Errorf("registration failed: %w", err)
+		}
+		fmt.Printf("  registered user: %s\n", username)
+	}
+	_, token, err := svc.Login(username, password)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	cfg.Username = username
+	cfg.Token = token
+
+	// Save credentials
+	if err := config.SaveCredentials(config.Credentials{Token: cfg.Token}); err != nil {
+		return err
+	}
+	fmt.Printf("  user     : %s\n", cfg.Username)
+	fmt.Println()
+
+	// 5. Project selection
+	// Reload service with token
+	cfg.Location = serverURL
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	cfg, _ = config.Load()
+	svc, err = resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	projects, err := svc.ListProjects()
+	if err != nil {
+		return fmt.Errorf("could not list projects: %w", err)
+	}
+
+	// Try git-origin matching first
+	gitOrigin := detectGitOrigin()
+	if gitOrigin != "" {
+		fmt.Printf("detected   : git origin %s\n", gitOrigin)
+	}
+
+	if match := matchProjectByGitOrigin(projects, gitOrigin); match != nil {
+		fmt.Printf("  matches  : %s (%s)\n", match.Prefix, match.Title)
+		if promptYN(reader, "use this project?", true) {
+			cfg.ProjectID = fmt.Sprintf("%d", match.ID)
+			if err := config.Save(cfg); err != nil {
 				return err
 			}
+			fmt.Printf("  project  : %s (%s)\n", match.Prefix, match.Title)
+			fmt.Println()
+			return runSetupPostInit(reader)
+		}
+	} else if gitOrigin != "" {
+		// No matching project on server — offer to create one based on git origin
+		fmt.Println("  no matching project found on server.")
+		if promptYN(reader, "create a project for this repository?", true) {
+			return setupCreateRemoteProject(reader, svc, cfg)
 		}
 	}
 
-	fmt.Println()
-	if reinit {
-		projectPrefix := prompt(reader, "project prefix", dirName)
-		projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
-		if projectPrefix == "" {
-			projectPrefix = dirName
+	if len(projects) == 0 {
+		fmt.Println("no projects found on server.")
+		if promptYN(reader, "create a new project?", true) {
+			return setupCreateRemoteProject(reader, svc, cfg)
 		}
-		projectName := prompt(reader, "project name", filepath.Base(cwd))
-
-		// Detect git origin on first run
-		var gitRepo string
-		gitOrigin, gitErr := exec.Command("git", "remote", "get-url", "origin").Output()
-		if gitErr == nil {
-			origin := strings.TrimSpace(string(gitOrigin))
-			if origin != "" {
-				fmt.Printf("detected   : git origin %s\n", origin)
-				if promptYN(reader, "set as project git repository?", true) {
-					gitRepo = origin
-				}
-			}
-		}
-
-		password, err := generatePassword(24)
-		if err != nil {
-			return err
-		}
-		if err := store.Init(dbPath, "admin", password); err != nil {
-			return err
-		}
-		cfg, err := config.Load()
-		if err != nil {
-			return err
-		}
-		svc, err := resolveService(cfg)
-		if err != nil {
-			return err
-		}
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
-			Prefix:        projectPrefix,
-			Title:         projectName,
-			GitRepository: gitRepo,
-		})
-		if err != nil {
-			return err
-		}
-		cfg.CurrentProject = fmt.Sprintf("%d", project.ID)
-		cfg.Username = "admin"
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Printf("  database : %s\n", dbPath)
-		fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
-		fmt.Printf("  user     : admin\n")
-		fmt.Printf("  password : %s\n", password)
-	} else {
-		// Existing DB — show current state without touching any config
-		cfg, _ := config.Load()
-		fmt.Printf("  database : %s (unchanged)\n", dbPath)
-		fmt.Printf("  project  : %s\n", cfg.CurrentProject)
-		fmt.Printf("  user     : %s\n", cfg.Username)
+		fmt.Println("no project selected.")
+		return runSetupPostInit(reader)
 	}
-	fmt.Println()
 
+	// Show project list
+	fmt.Println()
+	options := make([]string, len(projects)+1)
+	for i, p := range projects {
+		options[i] = fmt.Sprintf("%s — %s", p.Prefix, p.Title)
+	}
+	options[len(projects)] = "Create a new project"
+
+	choice := promptChoice(reader, "Select a project:", options)
+
+	if choice == len(projects) {
+		return setupCreateRemoteProject(reader, svc, cfg)
+	}
+
+	selected := projects[choice]
+	cfg.ProjectID = fmt.Sprintf("%d", selected.ID)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Printf("  project  : %s (%s)\n", selected.Prefix, selected.Title)
+	fmt.Println()
+	return runSetupPostInit(reader)
+}
+
+func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg config.Config) error {
+	cwd, _ := os.Getwd()
+	dirName := strings.ToUpper(filepath.Base(cwd))
+	if len(dirName) > 4 {
+		dirName = dirName[:4]
+	}
+
+	prefix := prompt(reader, "project prefix", dirName)
+	prefix = strings.ToUpper(strings.TrimSpace(prefix))
+	if prefix == "" {
+		prefix = dirName
+	}
+	title := prompt(reader, "project name", filepath.Base(cwd))
+
+	var gitRepo string
+	if origin := detectGitOrigin(); origin != "" {
+		fmt.Printf("detected   : git origin %s\n", origin)
+		if promptYN(reader, "set as project git repository?", true) {
+			gitRepo = origin
+		}
+	}
+
+	project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		Prefix:        prefix,
+		Title:         title,
+		GitRepository: gitRepo,
+	})
+	if err != nil {
+		return err
+	}
+	cfg.ProjectID = fmt.Sprintf("%d", project.ID)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
+	fmt.Println()
+	return runSetupPostInit(reader)
+}
+
+func runSetupPostInit(reader *bufio.Reader) error {
 	// Detect claude / codex
 	claudePath, _ := exec.LookPath("claude")
 	codexPath, _ := exec.LookPath("codex")
@@ -200,7 +499,6 @@ func runSetup(args []string) error {
 		localSkillPath := filepath.Join(cwd, ".claude", "skills", "tk", "SKILL.md")
 		globalSkillPath := filepath.Join(os.Getenv("HOME"), ".claude", "skills", "tk", "SKILL.md")
 
-		// Check both locations for an existing skill
 		var existingPath string
 		var existingContent []byte
 		for _, p := range []string{localSkillPath, globalSkillPath} {
@@ -253,9 +551,9 @@ func runSetup(args []string) error {
 	}
 
 	// Check for CLAUDE.md and AGENTS.md
-	cwd2, _ := os.Getwd()
-	claudeMD := filepath.Join(cwd2, "CLAUDE.md")
-	agentsMD := filepath.Join(cwd2, "AGENTS.md")
+	cwd, _ := os.Getwd()
+	claudeMD := filepath.Join(cwd, "CLAUDE.md")
+	agentsMD := filepath.Join(cwd, "AGENTS.md")
 
 	if _, err := os.Stat(claudeMD); os.IsNotExist(err) {
 		fmt.Println()
@@ -295,7 +593,6 @@ func runSetup(args []string) error {
 				if appendErr != nil {
 					fmt.Printf("  warning: could not open .gitignore: %v\n", appendErr)
 				} else {
-					// Ensure we start on a new line
 					if len(data) > 0 && data[len(data)-1] != '\n' {
 						_, _ = f.WriteString("\n")
 					}
@@ -370,10 +667,13 @@ func runInitDB(args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg.CurrentProject = "1"
+	cfg.ProjectID = "1"
 	cfg.Username = "admin"
-	if r, rErr := config.ResolveURL(); rErr == nil {
-		cfg.ServerURL = r.ServerURL
+	// If the db is in the .ticket dir, use a relative path; otherwise file:// URI.
+	if home, hErr := config.Home(); hErr == nil && filepath.Dir(*dbPath) == home {
+		cfg.Location = filepath.Base(*dbPath)
+	} else {
+		cfg.Location = "file://" + *dbPath
 	}
 	if err := config.Save(cfg); err != nil {
 		return err

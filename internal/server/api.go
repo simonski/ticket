@@ -2034,6 +2034,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if ticketPayload.Message != "" {
+			store.AddComment(db, ticket.ID, user.ID, ticketPayload.Message)
+		}
 		notify("ticket_created", ticket.ProjectID, ticket.ID)
 		writeJSON(w, http.StatusCreated, ticket)
 	}
@@ -2527,6 +2530,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
 				cloned, err := store.CloneTicket(db, id, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -2536,6 +2541,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				if msg.Message != "" {
+					store.AddComment(db, cloned.ID, user.ID, msg.Message)
+				}
 				notify("ticket_created", cloned.ProjectID, cloned.ID)
 				writeJSON(w, http.StatusCreated, cloned)
 				return
@@ -2544,6 +2552,12 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
+				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
+				// Add comment before close — AddComment rejects closed tickets.
+				if msg.Message != "" {
+					store.AddComment(db, id, user.ID, msg.Message)
 				}
 				ticket, err := store.SetTicketOpen(db, id, false, user.Username, user.ID)
 				if err != nil {
@@ -2563,6 +2577,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
 				ticket, err := store.SetTicketOpen(db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -2572,6 +2588,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				if msg.Message != "" {
+					store.AddComment(db, ticket.ID, user.ID, msg.Message)
+				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
 				return
@@ -2580,6 +2599,12 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
+				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
+				// Add comment before archive — AddComment rejects archived tickets.
+				if msg.Message != "" {
+					store.AddComment(db, id, user.ID, msg.Message)
 				}
 				ticket, err := store.SetTicketArchived(db, id, true, user.Username, user.ID)
 				if err != nil {
@@ -2599,6 +2624,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
 				ticket, err := store.SetTicketArchived(db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -2607,6 +2634,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					}
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
+				}
+				if msg.Message != "" {
+					store.AddComment(db, ticket.ID, user.ID, msg.Message)
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -2617,6 +2647,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
 				ticket, err := store.SetTicketReady(db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -2625,6 +2657,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					}
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
+				}
+				if msg.Message != "" {
+					store.AddComment(db, ticket.ID, user.ID, msg.Message)
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -2635,6 +2670,8 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
 				ticket, err := store.SetTicketReady(db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -2643,6 +2680,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					}
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
+				}
+				if msg.Message != "" {
+					store.AddComment(db, ticket.ID, user.ID, msg.Message)
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -2819,6 +2859,9 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 					}
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
+				}
+				if ticketPayload.Message != "" {
+					store.AddComment(db, ticket.ID, user.ID, ticketPayload.Message)
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)

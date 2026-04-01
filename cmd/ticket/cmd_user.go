@@ -75,9 +75,6 @@ func runLogin(args []string) error {
 		status, err := svc.Status()
 		if err == nil && status.Authenticated && status.User != nil {
 			cfg.Username = status.User.Username
-			if r, rErr := config.ResolveURL(); rErr == nil {
-				cfg.ServerURL = r.ServerURL
-			}
 			if err := config.Save(cfg); err != nil {
 				return err
 			}
@@ -116,9 +113,6 @@ func runLogin(args []string) error {
 
 func finishLogin(cfg config.Config, user store.User, token string) error {
 	cfg.Username = user.Username
-	if r, rErr := config.ResolveURL(); rErr == nil {
-		cfg.ServerURL = r.ServerURL
-	}
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
@@ -284,7 +278,7 @@ func runWhoami(args []string) error {
 	}
 	for _, p := range projects {
 		marker := "  "
-		if p.Prefix == cfg.CurrentProject || fmt.Sprintf("%d", p.ID) == cfg.CurrentProject {
+		if p.Prefix == cfg.ProjectID || fmt.Sprintf("%d", p.ID) == cfg.ProjectID {
 			marker = "* "
 		}
 		role := ""

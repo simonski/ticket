@@ -22,8 +22,8 @@ func runGUI(themeID string) error {
 	}
 
 	var project store.Project
-	if cfg.CurrentProject != "" {
-		project, _ = svc.GetProject(cfg.CurrentProject)
+	if cfg.ProjectID != "" {
+		project, _ = svc.GetProject(cfg.ProjectID)
 	}
 
 	return tui.Run(svc, cfg, project, themeID)

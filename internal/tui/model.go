@@ -525,7 +525,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = []store.Project(msg)
 		// pre-select current project
 		for i, p := range m.projects {
-			if fmt.Sprintf("%d", p.ID) == m.cfg.CurrentProject {
+			if fmt.Sprintf("%d", p.ID) == m.cfg.ProjectID {
 				m.projectCursor = i
 				break
 			}
@@ -542,7 +542,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectSwitchedMsg:
 		m.project = msg.project
-		m.cfg.CurrentProject = fmt.Sprintf("%d", msg.project.ID)
+		m.cfg.ProjectID = fmt.Sprintf("%d", msg.project.ID)
 		m.nodes = msg.tickets.nodes
 		m.toplevel = msg.tickets.toplevel
 		m.ideas = filterRequirements(msg.tickets.toplevel)
@@ -845,6 +845,11 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		f.prevField()
 		f.applyFocus(m.width - 2)
 	case "enter", " ":
+		// Space must reach text input fields, not trigger picker/save actions
+		if key == " " && (f.focus == efTitle || f.focus == efDesc || f.focus == efAC) {
+			cmd := f.update(msg)
+			return m, cmd
+		}
 		switch f.focus {
 		case efType:
 			f.picker = &pickerPopup{items: ticketTypes, cursor: indexOf(ticketTypes, f.ticketType), forField: "type"}
@@ -1085,6 +1090,11 @@ func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		f.prevField()
 		f.applyFocus(m.width - 2)
 	case "enter", " ":
+		// Space must reach text input fields, not trigger save action
+		if key == " " && f.focus != pfSave {
+			cmd := f.update(msg)
+			return m, cmd
+		}
 		if f.focus == pfSave {
 			return m, m.saveProject()
 		}
@@ -1447,7 +1457,7 @@ func (m Model) switchProject(p store.Project) tea.Cmd {
 	newID := fmt.Sprintf("%d", p.ID)
 	svc := m.svc
 	cfg := m.cfg
-	cfg.CurrentProject = newID
+	cfg.ProjectID = newID
 	return func() tea.Msg {
 		if err := config.Save(cfg); err != nil {
 			return errMsg{err}
@@ -1687,7 +1697,7 @@ func (m Model) viewList() []string {
 
 	projectName := m.project.Title
 	if projectName == "" {
-		projectName = m.cfg.CurrentProject
+		projectName = m.cfg.ProjectID
 	}
 	headerStyle := lipgloss.NewStyle().Foreground(th.Header).Bold(true).Background(th.Bg)
 	sepStyle := lipgloss.NewStyle().Foreground(th.Border).Background(th.Bg)
@@ -2108,7 +2118,7 @@ func (m Model) viewSummary() []string {
 
 	projectName := m.project.Title
 	if projectName == "" {
-		projectName = m.cfg.CurrentProject
+		projectName = m.cfg.ProjectID
 	}
 
 	var lines []string
@@ -2257,7 +2267,7 @@ func (m Model) viewProjectPicker() []string {
 
 	for i, p := range m.projects {
 		marker := "  "
-		if fmt.Sprintf("%d", p.ID) == m.cfg.CurrentProject {
+		if fmt.Sprintf("%d", p.ID) == m.cfg.ProjectID {
 			marker = "● "
 		}
 		style := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
@@ -2304,7 +2314,7 @@ func (m Model) viewProjects() []string {
 	} else {
 		for i, p := range m.projects {
 			marker := "  "
-			if fmt.Sprintf("%d", p.ID) == m.cfg.CurrentProject {
+			if fmt.Sprintf("%d", p.ID) == m.cfg.ProjectID {
 				marker = "● "
 			}
 			style := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
@@ -2562,7 +2572,7 @@ func loadTickets(svc libticket.Service, cfg config.Config) tea.Cmd {
 }
 
 func loadTicketsSync(svc libticket.Service, cfg config.Config) treeLoadedMsg {
-	project, err := svc.GetProject(cfg.CurrentProject)
+	project, err := svc.GetProject(cfg.ProjectID)
 	if err != nil {
 		return treeLoadedMsg{}
 	}

@@ -14,7 +14,6 @@ import (
 func TestLocalServiceContract(t *testing.T) {
 	libtickettest.RunServiceContractTests(t, func(t *testing.T) libticket.Service {
 		tempDir := t.TempDir()
-		t.Setenv("TICKET_URL", "")
 		t.Setenv("TICKET_HOME", tempDir)
 		dbPath := filepath.Join(tempDir, "ticket.db")
 		if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -26,7 +25,6 @@ func TestLocalServiceContract(t *testing.T) {
 
 func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -62,7 +60,6 @@ func TestLocalServiceRemoteAuthCommandsFail(t *testing.T) {
 
 func TestLocalServiceStatusFailsWhenDatabaseMissing(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	svc := libticket.NewLocal(config.Config{})
@@ -83,7 +80,6 @@ func TestLocalUsernameUsesEnvironmentFallbacks(t *testing.T) {
 
 func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -103,7 +99,6 @@ func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
 
 func TestLocalServiceSetTicketParent(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -120,7 +115,7 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
 
-	updated, err := svc.SetTicketParent(child.ID, parent.ID)
+	updated, err := svc.SetTicketParent(child.ID, parent.ID, "")
 	if err != nil {
 		t.Fatalf("SetTicketParent() error = %v", err)
 	}
@@ -128,7 +123,7 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("SetTicketParent() = %#v", updated)
 	}
 
-	detached, err := svc.UnsetTicketParent(child.ID)
+	detached, err := svc.UnsetTicketParent(child.ID, "")
 	if err != nil {
 		t.Fatalf("UnsetTicketParent() error = %v", err)
 	}
@@ -139,7 +134,6 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 
 func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -204,7 +198,6 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 
 func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -246,7 +239,6 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 
 func TestLocalServiceDeleteTicket(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -273,7 +265,6 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 func newLocalSvc(t *testing.T) libticket.Service {
 	t.Helper()
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -313,11 +304,11 @@ func TestLocalServiceNotReadyTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	_, err = svc.ReadyTicket(ticket.ID)
+	_, err = svc.ReadyTicket(ticket.ID, "")
 	if err != nil {
 		t.Fatalf("ReadyTicket() error = %v", err)
 	}
-	updated, err := svc.NotReadyTicket(ticket.ID)
+	updated, err := svc.NotReadyTicket(ticket.ID, "")
 	if err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}

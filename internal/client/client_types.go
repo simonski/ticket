@@ -96,6 +96,7 @@ type TicketCreateRequest struct {
 	Status             string `json:"status,omitempty"`
 	Stage              string `json:"stage,omitempty"`
 	State              string `json:"state,omitempty"`
+	Message            string `json:"message,omitempty"`
 }
 
 type TicketUpdateRequest struct {
@@ -113,10 +114,15 @@ type TicketUpdateRequest struct {
 	Order              int    `json:"order"`
 	EstimateEffort     int    `json:"estimate_effort"`
 	EstimateComplete   string `json:"estimate_complete,omitempty"`
+	Message            string `json:"message,omitempty"`
 }
 
 type TicketHealthRequest struct {
 	Score int `json:"score"`
+}
+
+type messageRequest struct {
+	Message string `json:"message,omitempty"`
 }
 
 type CommentCreateRequest struct {

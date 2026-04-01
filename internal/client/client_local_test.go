@@ -14,7 +14,6 @@ import (
 
 func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -43,7 +42,7 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		t.Fatalf("CreateTicket() = %#v", ticket)
 	}
 
-	if _, err := api.ReadyTicket(ticket.ID); err != nil {
+	if _, err := api.ReadyTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("ReadyTicket() error = %v", err)
 	}
 
@@ -77,7 +76,7 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	reparented, err := api.SetTicketParent(ticket.ID, parent.ID)
+	reparented, err := api.SetTicketParent(ticket.ID, parent.ID, "")
 	if err != nil {
 		t.Fatalf("SetTicketParent() error = %v", err)
 	}
@@ -85,7 +84,7 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		t.Fatalf("SetTicketParent() = %#v", reparented)
 	}
 
-	detached, err := api.UnsetTicketParent(ticket.ID)
+	detached, err := api.UnsetTicketParent(ticket.ID, "")
 	if err != nil {
 		t.Fatalf("UnsetTicketParent() error = %v", err)
 	}
@@ -104,7 +103,6 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 
 func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -149,7 +147,6 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 
 func TestLocalModeClientDeleteTicket(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -176,7 +173,6 @@ func TestLocalModeClientDeleteTicket(t *testing.T) {
 
 func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -202,7 +198,6 @@ func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 
 func TestLocalModeClientStatusFailsWhenDatabaseMissing(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 
 	api := New(config.Config{})
@@ -213,7 +208,6 @@ func TestLocalModeClientStatusFailsWhenDatabaseMissing(t *testing.T) {
 
 func TestLocalModeClientRolesCRUD(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -249,7 +243,6 @@ func TestLocalModeClientRolesCRUD(t *testing.T) {
 
 func TestLocalModeClientUserOps(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -288,7 +281,6 @@ func TestLocalModeClientUserOps(t *testing.T) {
 
 func TestLocalModeClientRegistrationToggle(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -306,7 +298,6 @@ func TestLocalModeClientRegistrationToggle(t *testing.T) {
 
 func TestLocalModeClientCount(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -325,7 +316,6 @@ func TestLocalModeClientCount(t *testing.T) {
 
 func TestLocalModeClientProjectOps(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -360,7 +350,6 @@ func TestLocalModeClientProjectOps(t *testing.T) {
 
 func TestLocalModeClientTicketLifecycle(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -372,25 +361,25 @@ func TestLocalModeClientTicketLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.CloseTicket(ticket.ID); err != nil {
+	if _, err := api.CloseTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("CloseTicket() error = %v", err)
 	}
-	if _, err := api.OpenTicket(ticket.ID); err != nil {
+	if _, err := api.OpenTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("OpenTicket() error = %v", err)
 	}
-	if _, err := api.ArchiveTicket(ticket.ID); err != nil {
+	if _, err := api.ArchiveTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("ArchiveTicket() error = %v", err)
 	}
-	if _, err := api.UnarchiveTicket(ticket.ID); err != nil {
+	if _, err := api.UnarchiveTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("UnarchiveTicket() error = %v", err)
 	}
-	if _, err := api.NotReadyTicket(ticket.ID); err != nil {
+	if _, err := api.NotReadyTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}
 	if _, err := api.GetTicket(ticket.ID); err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
-	clone, err := api.CloneTicket(ticket.ID)
+	clone, err := api.CloneTicket(ticket.ID, "")
 	if err != nil {
 		t.Fatalf("CloneTicket() error = %v", err)
 	}
@@ -416,7 +405,6 @@ func TestLocalModeClientTicketLifecycle(t *testing.T) {
 
 func TestLocalModeClientDependencies(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -449,7 +437,6 @@ func TestLocalModeClientDependencies(t *testing.T) {
 
 func TestLocalModeClientWorkflows(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -505,7 +492,6 @@ func TestLocalModeClientWorkflows(t *testing.T) {
 
 func TestLocalModeClientTimeAndLabels(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -571,7 +557,6 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 
 func TestLocalModeClientStories(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -611,7 +596,6 @@ func TestLocalModeClientStories(t *testing.T) {
 
 func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -702,7 +686,6 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 
 func TestLocalModeClientAgents(t *testing.T) {
 	tempDir := t.TempDir()
-	t.Setenv("TICKET_URL", "")
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	if err := store.Init(dbPath, "admin", "secret"); err != nil {
@@ -794,7 +777,7 @@ func TestLocalModeClientAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.ReadyTicket(ticket.ID); err != nil {
+	if _, err := api.ReadyTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("ReadyTicket() error = %v", err)
 	}
 	resp, err := api.RequestAgentWork(AgentRequest{ID: agent.ID, Password: newpw, ProjectID: 1})

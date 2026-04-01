@@ -1,8 +1,9 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright clean release release-build release-checksums release-formula release-publish release-clean docker-build docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright clean release release-build release-checksums release-formula release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/ticket/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
 GITHUB_REPO   := simonski/ticket
+GHCR_IMAGE    := ghcr.io/simonski/ticket
 DIST_DIR      := dist
 HOMEBREW_TAP  := ../homebrew-tap  # local checkout of simonski/homebrew-tap (optional)
 
@@ -214,6 +215,12 @@ release: release-build release-checksums release-formula
 docker-build:
 	docker build -t ticket:$(VERSION) -t ticket:latest .
 
+docker-push: docker-build
+	docker tag ticket:$(VERSION) $(GHCR_IMAGE):$(VERSION)
+	docker tag ticket:latest $(GHCR_IMAGE):latest
+	docker push $(GHCR_IMAGE):$(VERSION)
+	docker push $(GHCR_IMAGE):latest
+
 docker-up:
 	VERSION=$(VERSION) docker compose up -d
 
@@ -228,6 +235,7 @@ clean:
 
 install: clean build
 	go install ./cmd/ticket
+	alias tk=ticket
 
 dev:
     # prints out the env vars I need to set to go into a ticket dev mode

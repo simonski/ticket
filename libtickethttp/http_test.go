@@ -27,7 +27,7 @@ func TestHTTPServiceContract(t *testing.T) {
 func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
-	svc := New(config.Config{ServerURL: fixture.server.URL})
+	svc := New(config.Config{Location: fixture.server.URL})
 	status, err := svc.Status()
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
@@ -40,7 +40,7 @@ func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
 func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
-	svc := New(config.Config{ServerURL: fixture.server.URL})
+	svc := New(config.Config{Location: fixture.server.URL})
 	user, err := svc.Register("alice", "secret")
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
@@ -57,7 +57,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 		t.Fatalf("Login() = %#v, token=%q", loggedIn, token)
 	}
 
-	authed := New(config.Config{ServerURL: fixture.server.URL, Token: token, Username: "alice"})
+	authed := New(config.Config{Location: fixture.server.URL, Token: token, Username: "alice"})
 	status, err := authed.Status()
 	if err != nil {
 		t.Fatalf("Status(authenticated) error = %v", err)
@@ -91,7 +91,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
 
-	updated, err := svc.SetTicketParent(child.ID, parent.ID)
+	updated, err := svc.SetTicketParent(child.ID, parent.ID, "")
 	if err != nil {
 		t.Fatalf("SetTicketParent() error = %v", err)
 	}
@@ -99,7 +99,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("SetTicketParent() = %#v", updated)
 	}
 
-	detached, err := svc.UnsetTicketParent(child.ID)
+	detached, err := svc.UnsetTicketParent(child.ID, "")
 	if err != nil {
 		t.Fatalf("UnsetTicketParent() error = %v", err)
 	}
@@ -192,7 +192,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 func TestHTTPServiceCountRequiresAuth(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
-	svc := New(config.Config{ServerURL: fixture.server.URL})
+	svc := New(config.Config{Location: fixture.server.URL})
 	if _, err := svc.Count(nil); err == nil {
 		t.Fatal("Count() error = nil, want auth error")
 	}
@@ -204,9 +204,9 @@ func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
 		_, _ = w.Write([]byte("{not-json"))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	svc := New(config.Config{ServerURL: server.URL})
+	svc := New(config.Config{Location: server.URL})
 	if _, err := svc.Status(); err == nil {
 		t.Fatal("Status() error = nil, want JSON decode error")
 	}
@@ -217,9 +217,9 @@ func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
 		http.Error(w, "plain failure", http.StatusForbidden)
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	svc := New(config.Config{ServerURL: server.URL})
+	svc := New(config.Config{Location: server.URL})
 	if _, err := svc.Count(nil); err == nil {
 		t.Fatal("Count() error = nil, want HTTP status error")
 	}
@@ -232,9 +232,8 @@ func TestHTTPServiceHandlesNetworkFailure(t *testing.T) {
 	}
 	addr := listener.Addr().String()
 	_ = listener.Close()
-	t.Setenv("TICKET_URL", "http://"+addr)
 
-	svc := New(config.Config{ServerURL: "http://" + addr})
+	svc := New(config.Config{Location: "http://" + addr})
 	if _, err := svc.Status(); err == nil {
 		t.Fatal("Status() error = nil, want network error")
 	}
@@ -268,15 +267,14 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	httpServer := httptest.NewServer(handler)
 	t.Cleanup(httpServer.Close)
 
-	t.Setenv("TICKET_URL", httpServer.URL)
-	raw := client.New(config.Config{ServerURL: httpServer.URL})
+	raw := client.New(config.Config{Location: httpServer.URL})
 	auth, err := raw.Login("admin", "secret")
 	if err != nil {
 		t.Fatalf("raw Login() error = %v", err)
 	}
 
 	svc := New(config.Config{
-		ServerURL: httpServer.URL,
+		Location: httpServer.URL,
 		Token:     auth.Token,
 		Username:  auth.User.Username,
 	})

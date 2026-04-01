@@ -616,8 +616,8 @@ func runEdit(args []string) error {
 			return err
 		}
 		var project store.Project
-		if cfg.CurrentProject != "" {
-			project, err = svc.GetProject(cfg.CurrentProject)
+		if cfg.ProjectID != "" {
+			project, err = svc.GetProject(cfg.ProjectID)
 			if err != nil {
 				return err
 			}
@@ -656,8 +656,8 @@ func runEdit(args []string) error {
 		return err
 	}
 	var project store.Project
-	if cfg.CurrentProject != "" {
-		project, _ = svc.GetProject(cfg.CurrentProject)
+	if cfg.ProjectID != "" {
+		project, _ = svc.GetProject(cfg.ProjectID)
 	}
 	return tui.RunEdit(svc, cfg, project, ticket)
 }
@@ -834,10 +834,11 @@ func ticketMatchesSearch(ticket store.Ticket, query, stage, state, status, title
 }
 
 func runSetParent(args []string, command string) error {
-	usage := fmt.Sprintf("ticket %s [-id] <id> <parent-id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id> <parent-id> [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -861,7 +862,7 @@ func runSetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
-	updated, err := svc.SetTicketParent(child.ID, parent.ID)
+	updated, err := svc.SetTicketParent(child.ID, parent.ID, *message)
 	if err != nil {
 		return err
 	}
@@ -873,10 +874,11 @@ func runSetParent(args []string, command string) error {
 }
 
 func runUnsetParent(args []string, command string) error {
-	usage := fmt.Sprintf("ticket %s [-id] <id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id> [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -896,7 +898,7 @@ func runUnsetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
-	updated, err := svc.UnsetTicketParent(ticket.ID)
+	updated, err := svc.UnsetTicketParent(ticket.ID, *message)
 	if err != nil {
 		return err
 	}
@@ -911,21 +913,23 @@ func runTicketStateAlias(args []string, state, command string) error {
 	fs := flag.NewFlagSet("ticket "+command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return fmt.Errorf("usage: ticket %s [-id] <id>", command)
+		return fmt.Errorf("usage: ticket %s [-id] <id> [-m comment]", command)
 	}
-	return updateTicketState(idVal, state)
+	return updateTicketState(idVal, state, *message)
 }
 
 func runTicketState(args []string) error {
-	usage := "ticket state <id> <idle|active|success|fail|design|develop|test|done>"
+	usage := "ticket state <id> <idle|active|success|fail|design|develop|test|done> [-m comment]"
 	fs := flag.NewFlagSet("ticket state", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -943,15 +947,15 @@ func runTicketState(args []string) error {
 	normalized := strings.ToLower(strings.TrimSpace(stateArg))
 	switch {
 	case store.ValidState(normalized):
-		return updateTicketState(idVal, normalized)
+		return updateTicketState(idVal, normalized, *message)
 	case store.ValidStage(normalized):
-		return updateTicketStage(idVal, normalized)
+		return updateTicketStage(idVal, normalized, *message)
 	default:
 		return errors.New("usage: " + usage)
 	}
 }
 
-func updateTicketStage(idArg, stage string) error {
+func updateTicketStage(idArg, stage string, message ...string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -963,6 +967,10 @@ func updateTicketStage(idArg, stage string) error {
 	current, err := svc.GetTicket(idArg)
 	if err != nil {
 		return err
+	}
+	var msg string
+	if len(message) > 0 {
+		msg = message[0]
 	}
 	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title,
@@ -975,6 +983,7 @@ func updateTicketStage(idArg, stage string) error {
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            msg,
 	})
 	if err != nil {
 		return err
@@ -986,7 +995,7 @@ func updateTicketStage(idArg, stage string) error {
 	return nil
 }
 
-func updateTicketState(idArg, state string) error {
+func updateTicketState(idArg, state string, message ...string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -999,10 +1008,14 @@ func updateTicketState(idArg, state string) error {
 	if err != nil {
 		return err
 	}
-	return updateTicketLifecycleRequest(svc, current.ID, current, state)
+	var msg string
+	if len(message) > 0 {
+		msg = message[0]
+	}
+	return updateTicketLifecycleRequest(svc, current.ID, current, state, msg)
 }
 
-func updateTicketLifecycleRequest(svc libticket.Service, id string, current store.Ticket, state string) error {
+func updateTicketLifecycleRequest(svc libticket.Service, id string, current store.Ticket, state string, message ...string) error {
 	assignee := current.Assignee
 	if state == store.StateActive && strings.TrimSpace(assignee) == "" {
 		status, err := svc.Status()
@@ -1011,6 +1024,10 @@ func updateTicketLifecycleRequest(svc libticket.Service, id string, current stor
 		} else {
 			assignee = fallbackCommandUsername()
 		}
+	}
+	var msg string
+	if len(message) > 0 {
+		msg = message[0]
 	}
 	updated, err := svc.UpdateTicket(id, libticket.TicketUpdateRequest{
 		Title:              current.Title,
@@ -1023,6 +1040,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id string, current stor
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            msg,
 	})
 	if err != nil {
 		return err
@@ -1052,6 +1070,7 @@ func runUpdate(args []string) error {
 	status := fs.String("status", "", "rendered ticket status (<stage>/<state>)")
 	state := fs.String("state", "", "ticket state")
 	parentIDRaw := fs.String("parent_id", "", "ticket parent id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1158,6 +1177,7 @@ func runUpdate(args []string) error {
 		}
 		next.ParentID = &parent.ID
 	}
+	next.Message = strings.TrimSpace(*message)
 	updated, err := svc.UpdateTicket(current.ID, next)
 	if err != nil {
 		return err
@@ -1181,28 +1201,30 @@ func runAssign(args []string) error {
 	fs := flag.NewFlagSet("assign", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 1 {
-		return errors.New("usage: ticket assign [-id] <id> <name>")
+		return errors.New("usage: ticket assign [-id] <id> <name> [-m comment]")
 	}
-	return assignTicket(idVal, rest[0], true)
+	return assignTicket(idVal, rest[0], true, *message)
 }
 
 func runUnassign(args []string) error {
 	fs := flag.NewFlagSet("unassign", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 1 {
-		return errors.New("usage: ticket unassign [-id] <id> <name>")
+		return errors.New("usage: ticket unassign [-id] <id> <name> [-m comment]")
 	}
-	return unassignTicket(idVal, rest[0], true)
+	return unassignTicket(idVal, rest[0], true, *message)
 }
 
 func runClaim(args []string) error {
@@ -1228,12 +1250,13 @@ func runUnclaim(args []string) error {
 	fs := flag.NewFlagSet("unclaim", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket unclaim [-id] <id>")
+		return errors.New("usage: ticket unclaim [-id] <id> [-m comment]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1246,10 +1269,10 @@ func runUnclaim(args []string) error {
 	if strings.TrimSpace(username) == "" {
 		return errors.New("no current username; log in first")
 	}
-	return unassignTicket(idVal, username, false)
+	return unassignTicket(idVal, username, false, *message)
 }
 
-func assignTicket(idArg, assignee string, requireAdmin bool) error {
+func assignTicket(idArg, assignee string, requireAdmin bool, message ...string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -1269,6 +1292,10 @@ func assignTicket(idArg, assignee string, requireAdmin bool) error {
 	if err != nil {
 		return err
 	}
+	var msg string
+	if len(message) > 0 {
+		msg = message[0]
+	}
 	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
@@ -1280,6 +1307,7 @@ func assignTicket(idArg, assignee string, requireAdmin bool) error {
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            msg,
 	})
 	if err != nil {
 		return err
@@ -1295,7 +1323,7 @@ func assignTicket(idArg, assignee string, requireAdmin bool) error {
 	return nil
 }
 
-func unassignTicket(idArg, expectedAssignee string, requireAdmin bool) error {
+func unassignTicket(idArg, expectedAssignee string, requireAdmin bool, message ...string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -1337,6 +1365,10 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool) error {
 	if strings.TrimSpace(current.Assignee) != strings.TrimSpace(expectedAssignee) {
 		return fmt.Errorf("ticket is not assigned to %s", expectedAssignee)
 	}
+	var msg string
+	if len(message) > 0 {
+		msg = message[0]
+	}
 	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
@@ -1349,6 +1381,7 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool) error {
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            msg,
 	})
 	if err != nil {
 		return err
@@ -1854,7 +1887,7 @@ Targets:
 		}
 		if !ticket.Ready && ticket.State == store.StateIdle {
 			if promptYN(reader, "Mark ticket as ready?", false) {
-				if _, err := svc.ReadyTicket(ticket.ID); err != nil {
+				if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
 					fmt.Printf("  [ERR] %v\n", err)
 				} else {
 					fmt.Println("  Marked ready.")
@@ -2134,12 +2167,13 @@ func runClone(args []string) error {
 	fs := flag.NewFlagSet("clone", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket clone|cp [-id] <id>")
+		return errors.New("usage: ticket clone|cp [-id] <id> [-m comment]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -2153,7 +2187,7 @@ func runClone(args []string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.CloneTicket(taskRef.ID)
+	ticket, err := svc.CloneTicket(taskRef.ID, *message)
 	if err != nil {
 		return err
 	}
@@ -2204,10 +2238,11 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if closed {
 		command = "close"
 	}
-	usage := fmt.Sprintf("ticket %s <id>", command)
+	usage := fmt.Sprintf("ticket %s <id> [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2234,9 +2269,9 @@ func runSetTicketClosed(args []string, closed bool) error {
 	}
 	var updated store.Ticket
 	if closed {
-		updated, err = svc.CloseTicket(ticket.ID)
+		updated, err = svc.CloseTicket(ticket.ID, *message)
 	} else {
-		updated, err = svc.OpenTicket(ticket.ID)
+		updated, err = svc.OpenTicket(ticket.ID, *message)
 	}
 	if err != nil {
 		return err
@@ -2253,10 +2288,11 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if archived {
 		command = "archive"
 	}
-	usage := fmt.Sprintf("ticket %s [-id] <id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id> [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2278,9 +2314,9 @@ func runSetTicketArchived(args []string, archived bool) error {
 	}
 	var updated store.Ticket
 	if archived {
-		updated, err = svc.ArchiveTicket(ticket.ID)
+		updated, err = svc.ArchiveTicket(ticket.ID, *message)
 	} else {
-		updated, err = svc.UnarchiveTicket(ticket.ID)
+		updated, err = svc.UnarchiveTicket(ticket.ID, *message)
 	}
 	if err != nil {
 		return err
@@ -2297,10 +2333,11 @@ func runSetTicketReady(args []string, ready bool) error {
 	if ready {
 		command = "ready"
 	}
-	usage := fmt.Sprintf("ticket %s [-id] <id>", command)
+	usage := fmt.Sprintf("ticket %s [-id] <id> [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2322,9 +2359,9 @@ func runSetTicketReady(args []string, ready bool) error {
 	}
 	var updated store.Ticket
 	if ready {
-		updated, err = svc.ReadyTicket(ticket.ID)
+		updated, err = svc.ReadyTicket(ticket.ID, *message)
 	} else {
-		updated, err = svc.NotReadyTicket(ticket.ID)
+		updated, err = svc.NotReadyTicket(ticket.ID, *message)
 	}
 	if err != nil {
 		return err
@@ -2353,6 +2390,7 @@ type ticketCreateOptions struct {
 	Assignee           string
 	ParentID           *string
 	Project            string
+	Message            string
 }
 
 func runTicketCreate(args []string) error {
@@ -2378,6 +2416,7 @@ func runTicketCreate(args []string) error {
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
 	parent := fs.String("parent", "", "parent ticket id")
 	project := fs.String("project", "", "project id")
+	message := fs.String("m", "", "comment to attach")
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return err
 	}
@@ -2400,6 +2439,7 @@ func runTicketCreate(args []string) error {
 		EstimateComplete:   *estimateComplete,
 		Assignee:           *assignee,
 		Project:            *project,
+		Message:            strings.TrimSpace(*message),
 	}
 	if *parent != "" {
 		opts.ParentID = parent
@@ -2425,6 +2465,7 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		"-estimate_complete": true,
 		"-parent":            true,
 		"-project":           true,
+		"-m":                 true,
 	}
 
 	var flagArgs []string
@@ -2489,6 +2530,7 @@ func createTicket(opts ticketCreateOptions) error {
 		EstimateEffort:     opts.EstimateEffort,
 		EstimateComplete:   opts.EstimateComplete,
 		Assignee:           opts.Assignee,
+		Message:            opts.Message,
 	})
 	if err != nil {
 		return err

@@ -80,6 +80,11 @@ type ticketRequest struct {
 	EstimateEffort     int    `json:"estimate_effort"`
 	EstimateComplete   string `json:"estimate_complete,omitempty"`
 	Assignee           string `json:"assignee"`
+	Message            string `json:"message,omitempty"`
+}
+
+type messageRequest struct {
+	Message string `json:"message,omitempty"`
 }
 
 type ticketHealthRequest struct {

@@ -1,6 +1,12 @@
 
 TODO.md
 
+test
+    verify the test harness calls every single call in the openapi spec
+    verift the test harness uses every single method in the library
+    verify the http library calls every single method in the api
+
+
 SKILLS.md/TICKETS.md
     merge the two into a SKILL.md for Claude
     QUICKSTART_CLIENT

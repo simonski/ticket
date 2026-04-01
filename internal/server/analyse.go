@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 )
 
@@ -57,9 +58,9 @@ func resolveAnalyseCommandArgs() []string {
 }
 
 func storyAnalyseProcessEnv() []string {
-	url := strings.TrimSpace(os.Getenv("TICKET_URL"))
-	if url == "" {
-		url = "http://localhost:8080"
+	url := "http://localhost:8080"
+	if r, err := config.ResolveURL(); err == nil && r.Mode == config.ModeRemote {
+		url = r.ServerURL
 	}
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	if username == "" {

@@ -16,7 +16,7 @@ import (
 // statusEnvVars returns the relevant environment variable names and their
 // current values (empty string when unset).
 func statusEnvVars() map[string]string {
-	vars := []string{"TICKET_HOME", "TICKET_URL", "TICKET_USERNAME"}
+	vars := []string{"TICKET_HOME", "TICKET_USERNAME"}
 	out := make(map[string]string, len(vars))
 	for _, k := range vars {
 		out[k] = os.Getenv(k)
@@ -26,9 +26,9 @@ func statusEnvVars() map[string]string {
 
 // resolveCurrentProject returns the active project key and where it came from.
 func resolveCurrentProject(cfg config.Config) (project, source string) {
-	if cfg.CurrentProject != "" {
+	if cfg.ProjectID != "" {
 		cfgPath, _ := config.Path()
-		return cfg.CurrentProject, cfgPath
+		return cfg.ProjectID, cfgPath
 	}
 	return "", ""
 }
@@ -143,7 +143,7 @@ func runRemoteStatus(cfg config.Config) error {
 	}
 	serverURL := strings.TrimSpace(resolved.ServerURL)
 	if serverURL == "" {
-		return errors.New("TICKET_URL is required for remote mode")
+		return errors.New("remote mode requires a location (run tk init to configure)")
 	}
 	svc, err := resolveService(cfg)
 	if err != nil {
@@ -160,20 +160,19 @@ func runRemoteStatus(cfg config.Config) error {
 	project, projectSource := resolveCurrentProject(cfg)
 	if outputJSON {
 		return printJSON(map[string]any{
-			"TICKET_URL":      serverURL,
-			"TICKET_HOME":     envVars["TICKET_HOME"],
-			"TICKET_USERNAME": envVars["TICKET_USERNAME"],
-			"config_file":     cfgPath,
-			"current_project": project,
-			"project_source":  projectSource,
-			"username":        username,
-			"authenticated":   authenticated,
-			"connection":      map[bool]string{true: "success", false: "failure"}[err == nil],
+			"location":       cfg.Location,
+			"TICKET_HOME":    envVars["TICKET_HOME"],
+			"config_file":    cfgPath,
+			"project_id":     project,
+			"project_source": projectSource,
+			"username":       username,
+			"authenticated":  authenticated,
+			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
 		})
 	}
 	lines := []statusLine{
 		envStatusLine("TICKET_HOME", envVars["TICKET_HOME"]),
-		envStatusLine("TICKET_URL", serverURL),
+		{key: "location", value: cfg.Location},
 		envStatusLine("TICKET_USERNAME", envVars["TICKET_USERNAME"]),
 		{},
 		{key: "config_file", value: cfgPath},
@@ -213,7 +212,7 @@ func runLocalStatus() error {
 	}
 	lines := []statusLine{
 		envStatusLine("TICKET_HOME", envVars["TICKET_HOME"]),
-		envStatusLine("TICKET_URL", "(not set — local mode)"),
+		{key: "location", value: cfg.Location},
 		envStatusLine("TICKET_USERNAME", envVars["TICKET_USERNAME"]),
 		{},
 		{key: "db_path", value: dbPath},

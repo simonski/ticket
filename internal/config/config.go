@@ -15,7 +15,7 @@ const (
 	ModeRemote = "remote"
 )
 
-// Resolved holds the parsed result of TICKET_URL.
+// Resolved holds the parsed result of config.Location.
 type Resolved struct {
 	Mode      string // "local" or "remote"
 	DBPath    string // populated when Mode == "local"
@@ -23,10 +23,10 @@ type Resolved struct {
 }
 
 type Config struct {
-	ServerURL      string `json:"server_url"`
-	Token          string `json:"token"`
-	Username       string `json:"username"`
-	CurrentProject string `json:"current_project"`
+	Location  string `json:"location"`
+	Token     string `json:"token"`
+	Username  string `json:"username"`
+	ProjectID string `json:"project_id"`
 	CurrentEpicID  string `json:"current_epic_id"`
 
 	// TUI state — persisted between sessions by default.
@@ -50,28 +50,46 @@ func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
-// ResolveURL determines mode and target from environment.
+// ResolveURL determines mode and target from the Location field in config.json.
 //
-//	TICKET_URL=http(s)://host  → remote mode
-//	(unset)                    → local mode, DBPath = <Home()>/ticket.db
+//	file:///path/to/ticket.db  → local mode
+//	http(s)://host             → remote mode
+//	(empty)                    → local mode, DBPath = <Home()>/ticket.db
 func ResolveURL() (Resolved, error) {
-	raw := envValue("TICKET_URL")
-	if raw == "" {
+	cfg, _ := Load()
+	return ResolveLocation(cfg.Location)
+}
+
+// ResolveLocation parses a location string into a Resolved struct.
+// This is the core logic, separated so callers with an already-loaded config
+// can avoid re-reading the file.
+func ResolveLocation(location string) (Resolved, error) {
+	location = strings.TrimSpace(location)
+	if location == "" {
 		home, err := Home()
 		if err != nil {
 			return Resolved{}, err
 		}
 		return Resolved{Mode: ModeLocal, DBPath: filepath.Join(home, "ticket.db")}, nil
 	}
-	u, err := url.Parse(raw)
+	u, err := url.Parse(location)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("invalid TICKET_URL %q: %w", raw, err)
+		return Resolved{}, fmt.Errorf("invalid location %q: %w", location, err)
 	}
 	switch u.Scheme {
+	case "file":
+		return Resolved{Mode: ModeLocal, DBPath: u.Path}, nil
 	case "http", "https":
-		return Resolved{Mode: ModeRemote, ServerURL: raw}, nil
+		return Resolved{Mode: ModeRemote, ServerURL: location}, nil
+	case "":
+		// No scheme — treat as a path relative to the .ticket/ directory.
+		home, err := Home()
+		if err != nil {
+			return Resolved{}, err
+		}
+		return Resolved{Mode: ModeLocal, DBPath: filepath.Join(home, location)}, nil
 	default:
-		return Resolved{}, fmt.Errorf("TICKET_URL scheme %q not supported (use http:// or https://)", u.Scheme)
+		return Resolved{}, fmt.Errorf("location scheme %q not supported (use file://, http://, or https://)", u.Scheme)
 	}
 }
 
@@ -232,8 +250,8 @@ func CredentialsPath() (string, error) {
 // Home returns the ticket home directory used for config and (in local mode) the database.
 // Resolution order:
 //  1. $TICKET_HOME if set
-//  2. Walk up from CWD looking for an existing .ticket directory
-//  3. ${CWD}/.ticket (default, may not yet exist)
+//  2. Walk up from CWD looking for .git/, then use .ticket/ as a sibling
+//  3. ${CWD}/.ticket (default fallback, may not yet exist)
 func Home() (string, error) {
 	if dir := envValue("TICKET_HOME"); dir != "" {
 		return dir, nil
@@ -242,20 +260,21 @@ func Home() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if found, ok := findTicketHome(cwd); ok {
-		return found, nil
+	if gitRoot, ok := FindGitRoot(cwd); ok {
+		return filepath.Join(gitRoot, ".ticket"), nil
 	}
 	return filepath.Join(cwd, ".ticket"), nil
 }
 
-// findTicketHome walks up the directory tree from startDir looking for an
-// existing .ticket directory. Stops at the filesystem root.
-func findTicketHome(startDir string) (string, bool) {
+// FindGitRoot walks up the directory tree from startDir looking for a .git
+// directory. Returns the parent of .git/ (the project root). Stops at the
+// filesystem root.
+func FindGitRoot(startDir string) (string, bool) {
 	dir := startDir
 	for {
-		candidate := filepath.Join(dir, ".ticket")
+		candidate := filepath.Join(dir, ".git")
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate, true
+			return dir, true
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

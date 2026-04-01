@@ -25,12 +25,12 @@ var helpIndex = map[string]commandHelp{
 	},
 	"export": {
 		usage:   "tk export [-o <snapshot-file>]",
-		details: []string{"Local mode only (no TICKET_URL set). Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
+		details: []string{"Local mode only. Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
 		example: "tk export -o ./ticket-snapshot.json",
 	},
 	"import": {
 		usage:   "tk import -i <snapshot-file>",
-		details: []string{"Local mode only (no TICKET_URL set). Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
+		details: []string{"Local mode only. Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
 		example: "tk import -i ./ticket-snapshot.json",
 	},
 	"server": {
@@ -50,17 +50,17 @@ var helpIndex = map[string]commandHelp{
 	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs into the server and stores the session token in $TICKET_HOME/credentials.json.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults.", "Server resolution: `-url`, then `TICKET_URL`, then configured URL, then `http://localhost:8080`."},
+		details: []string{"Remote mode only (run tk init to configure). Logs into the server and stores the session token in $TICKET_HOME/credentials.json.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults.", "Server URL is read from .ticket/config.json (set via tk init)."},
 		example: "tk login -username simon -password secret -url http://localhost:8080",
 	},
 	"register": {
 		usage:   "tk register [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then `TICKET_USERNAME`, then OS `whoami`; `-password`, then `TICKET_PASSWORD`, then `password`."},
+		details: []string{"Remote mode only (run tk init to configure). Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then `TICKET_USERNAME`, then OS `whoami`; `-password`, then `TICKET_PASSWORD`, then `password`."},
 		example: "tk register -username simon -password secret",
 	},
 	"logout": {
 		usage:   "tk logout [-url <server-url>]",
-		details: []string{"Remote mode only (TICKET_URL=http(s)://...). Logs out from the configured server and removes $TICKET_HOME/credentials.json."},
+		details: []string{"Remote mode only (run tk init to configure). Logs out from the configured server and removes $TICKET_HOME/credentials.json."},
 		example: "tk logout",
 	},
 	"status": {
@@ -567,7 +567,7 @@ Admin Commands:
 
 Run flags:
   -id <uuid>               Agent UUID (or AGENT_ID env)
-  -url <url>               Server URL (or TICKET_URL env)
+  
   -llm <command>           LLM to use (default: claude)
                            Values: claude (Sonnet 4.5), codex, or path to binary
   -project-id <id>         Project ID override (default: first open project)
@@ -633,7 +633,6 @@ func renderCommandHelp(command string) string {
 
 func printTicketEnvironment() {
 	variableNames := []string{
-		"TICKET_URL",
 		"TICKET_HOME",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",

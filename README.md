@@ -19,6 +19,194 @@ The authoritative system contract is in [SPEC.md](./SPEC.md). User-facing
 workflow details are in [USER_GUIDE.md](./USER_GUIDE.md). Implementation and
 architecture notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
+## Architecture
+
+A single Go binary provides four interfaces to the same data:
+
+```mermaid
+graph TB
+    subgraph Interfaces
+        CLI["CLI<br/>70+ commands"]
+        TUI["TUI<br/>BubbleTea terminal UI"]
+        WEB["Web UI<br/>Embedded SPA"]
+        API["HTTP API<br/>REST + WebSocket"]
+    end
+
+    subgraph Core
+        SVC["libticket.Service<br/>107-method interface"]
+        LOCAL["LocalService<br/>Direct DB access"]
+        REMOTE["HTTP Client<br/>Remote access"]
+    end
+
+    subgraph Storage
+        DB[(SQLite<br/>ticket.db)]
+    end
+
+    CLI --> LOCAL
+    CLI --> REMOTE
+    TUI --> REMOTE
+    WEB -->|"/api/*"| API
+    API --> LOCAL
+    REMOTE -->|"HTTP"| API
+    LOCAL --> DB
+```
+
+### Package Dependencies
+
+```mermaid
+graph LR
+    CMD["cmd/ticket<br/>CLI entry point"] --> CLIENT["internal/client"]
+    CMD --> CONFIG["internal/config"]
+    CMD --> STORE["internal/store"]
+    CMD --> LIB["libticket"]
+
+    SERVER["internal/server<br/>HTTP API"] --> STORE
+    SERVER --> STATIC["web/static<br/>Embedded SPA"]
+
+    TUI_PKG["internal/tui"] --> CLIENT
+    TUI_PKG --> CONFIG
+    TUI_PKG --> LIB
+
+    CLIENT --> STORE
+    CLIENT --> CONFIG
+    CLIENT --> LIB
+
+    LIBHTTP["libtickethttp"] --> LIB
+    LIB --> STORE
+
+    LIBTEST["libtickettest<br/>Contract tests"] --> LIB
+```
+
+### Data Model
+
+```mermaid
+erDiagram
+    Project ||--o{ Ticket : contains
+    Project ||--o{ ProjectMember : has
+    Project }o--o| Workflow : uses
+    Ticket ||--o{ Ticket : "parent-child"
+    Ticket ||--o{ Dependency : blocks
+    Ticket ||--o{ Label : tagged
+    Ticket ||--o{ TimeEntry : tracks
+    Ticket ||--o{ Comment : has
+    Ticket ||--o{ HistoryEvent : logs
+    Team ||--o{ User : members
+    Team ||--o{ Agent : agents
+    Workflow ||--o{ WorkflowStage : stages
+    User ||--o{ Ticket : assigned
+    Agent ||--o{ Ticket : works
+```
+
+### Ticket Lifecycle
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    state "design" as D {
+        [*] --> d_idle
+        d_idle --> d_active
+        d_active --> d_success
+        d_active --> d_fail
+        d_fail --> d_active
+    }
+
+    state "develop" as DEV {
+        [*] --> dev_idle
+        dev_idle --> dev_active
+        dev_active --> dev_success
+        dev_active --> dev_fail
+        dev_fail --> dev_active
+    }
+
+    state "test" as T {
+        [*] --> t_idle
+        t_idle --> t_active
+        t_active --> t_success
+        t_active --> t_fail
+        t_fail --> t_active
+    }
+
+    state "done" as DONE {
+        [*] --> done_idle
+        done_idle --> done_success
+    }
+
+    D --> DEV : success auto-advances
+    DEV --> T : success auto-advances
+    T --> DONE : success auto-advances
+```
+
+## Use Cases
+
+### Developer
+
+```mermaid
+graph LR
+    DEV((Developer))
+    DEV --> CREATE["Create tickets<br/>add, bug, epic, story"]
+    DEV --> TRACK["Track work<br/>active, complete, claim"]
+    DEV --> VIEW["View progress<br/>list, board, summary"]
+    DEV --> RELATE["Manage relations<br/>set-parent, add-dependency"]
+    DEV --> TIME["Log time"]
+    DEV --> COMMENT["Add comments"]
+    DEV --> SEARCH["Search tickets"]
+```
+
+### Agent
+
+```mermaid
+graph LR
+    AGENT((Agent))
+    AGENT --> REG["Register & authenticate"]
+    AGENT --> HB["Send heartbeat"]
+    AGENT --> REQ["Request work"]
+    AGENT --> UPD["Update ticket state"]
+    AGENT --> CFG["Read configuration"]
+```
+
+### Admin
+
+```mermaid
+graph LR
+    ADMIN((Admin))
+    ADMIN --> USERS["Manage users<br/>create, enable, disable"]
+    ADMIN --> AGENTS["Manage agents<br/>create, configure"]
+    ADMIN --> TEAMS["Manage teams<br/>create, add members"]
+    ADMIN --> PROJECTS["Manage projects<br/>create, set workflow"]
+    ADMIN --> ROLES["Manage roles"]
+    ADMIN --> WF["Define workflows<br/>stages, ordering"]
+    ADMIN --> SYS["System config<br/>registration, features"]
+```
+
+### Web User
+
+```mermaid
+graph LR
+    USER((Web User))
+    USER --> LOGIN["Register & login"]
+    USER --> BOARD["View Kanban board"]
+    USER --> EDIT["Edit tickets inline"]
+    USER --> LIVE["Live updates<br/>via WebSocket"]
+    USER --> CHAT["Chat / comments"]
+```
+
+### Deployment Modes
+
+```mermaid
+graph TB
+    subgraph "Local Mode (default)"
+        CLI_L["CLI / TUI"] -->|direct| DB_L[(SQLite)]
+    end
+
+    subgraph "Remote Mode (TICKET_URL set)"
+        CLI_R["CLI / TUI"] -->|HTTP| SRV["Server"]
+        SPA["Web UI"] -->|HTTP + WS| SRV
+        AGENT_R["Agents"] -->|HTTP| SRV
+        SRV --> DB_R[(SQLite)]
+    end
+```
+
 ## Install
 
 ```bash
@@ -40,8 +228,7 @@ alias tk=ticket
 cd $CODE
 git clone github.com/simonski/ticket
 cd ticket
-make build
-alias tk=ticket
+make install
 ```
 
 ## Test

@@ -76,7 +76,7 @@ func friendlyConnectionError(err error, baseURL string) error {
 	if errors.As(err, &urlErr) {
 		var netErr *net.OpError
 		if errors.As(urlErr.Err, &netErr) {
-			return fmt.Errorf("cannot connect to %s\nhint: is the server running? check TICKET_URL", baseURL)
+			return fmt.Errorf("cannot connect to %s\nhint: is the server running? check your config location", baseURL)
 		}
 	}
 	return fmt.Errorf("cannot connect to %s", baseURL)

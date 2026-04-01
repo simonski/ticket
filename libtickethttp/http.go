@@ -243,28 +243,28 @@ func (s *Service) UpdateTicket(id string, request libticket.TicketUpdateRequest)
 	return s.client.UpdateTicket(id, client.TicketUpdateRequest(request))
 }
 
-func (s *Service) CloseTicket(id string) (store.Ticket, error) {
-	return s.client.CloseTicket(id)
+func (s *Service) CloseTicket(id string, message string) (store.Ticket, error) {
+	return s.client.CloseTicket(id, message)
 }
 
-func (s *Service) OpenTicket(id string) (store.Ticket, error) {
-	return s.client.OpenTicket(id)
+func (s *Service) OpenTicket(id string, message string) (store.Ticket, error) {
+	return s.client.OpenTicket(id, message)
 }
 
-func (s *Service) ArchiveTicket(id string) (store.Ticket, error) {
-	return s.client.ArchiveTicket(id)
+func (s *Service) ArchiveTicket(id string, message string) (store.Ticket, error) {
+	return s.client.ArchiveTicket(id, message)
 }
 
-func (s *Service) UnarchiveTicket(id string) (store.Ticket, error) {
-	return s.client.UnarchiveTicket(id)
+func (s *Service) UnarchiveTicket(id string, message string) (store.Ticket, error) {
+	return s.client.UnarchiveTicket(id, message)
 }
 
-func (s *Service) ReadyTicket(id string) (store.Ticket, error) {
-	return s.client.ReadyTicket(id)
+func (s *Service) ReadyTicket(id string, message string) (store.Ticket, error) {
+	return s.client.ReadyTicket(id, message)
 }
 
-func (s *Service) NotReadyTicket(id string) (store.Ticket, error) {
-	return s.client.NotReadyTicket(id)
+func (s *Service) NotReadyTicket(id string, message string) (store.Ticket, error) {
+	return s.client.NotReadyTicket(id, message)
 }
 
 func (s *Service) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
@@ -279,12 +279,12 @@ func (s *Service) DeleteTicket(id string) error {
 	return s.client.DeleteTicket(id)
 }
 
-func (s *Service) SetTicketParent(id string, parentID string) (store.Ticket, error) {
-	return s.client.SetTicketParent(id, parentID)
+func (s *Service) SetTicketParent(id string, parentID string, message string) (store.Ticket, error) {
+	return s.client.SetTicketParent(id, parentID, message)
 }
 
-func (s *Service) UnsetTicketParent(id string) (store.Ticket, error) {
-	return s.client.UnsetTicketParent(id)
+func (s *Service) UnsetTicketParent(id string, message string) (store.Ticket, error) {
+	return s.client.UnsetTicketParent(id, message)
 }
 
 func (s *Service) GetTicketByID(id string) (store.Ticket, error) {
@@ -295,8 +295,8 @@ func (s *Service) GetTicket(ref string) (store.Ticket, error) {
 	return s.client.GetTicket(ref)
 }
 
-func (s *Service) CloneTicket(id string) (store.Ticket, error) {
-	return s.client.CloneTicket(id)
+func (s *Service) CloneTicket(id string, message string) (store.Ticket, error) {
+	return s.client.CloneTicket(id, message)
 }
 
 func (s *Service) ListHistory(id string) ([]store.HistoryEvent, error) {

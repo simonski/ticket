@@ -48,8 +48,8 @@ func runConfig(args []string) error {
 			return errors.New("usage: ticket config set <key> <value>")
 		}
 		switch args[1] {
-		case "server":
-			cfg.ServerURL = args[2]
+		case "location":
+			cfg.Location = args[2]
 		default:
 			return fmt.Errorf("unknown config key %q", args[1])
 		}
@@ -63,11 +63,9 @@ func runConfig(args []string) error {
 			return errors.New("usage: ticket config get <key>")
 		}
 		switch args[1] {
-		case "server":
-			if r, rErr := config.ResolveURL(); rErr == nil && r.ServerURL != "" {
-				fmt.Println(r.ServerURL)
-			} else if cfg.ServerURL != "" {
-				fmt.Println(cfg.ServerURL)
+		case "location":
+			if cfg.Location != "" {
+				fmt.Println(cfg.Location)
 			}
 			return nil
 		case "registration_enabled":
@@ -89,16 +87,11 @@ func runConfig(args []string) error {
 			return errors.New("usage: ticket config ls")
 		}
 		r, _ := config.ResolveURL()
-		serverURL := r.ServerURL
-		if serverURL == "" {
-			serverURL = cfg.ServerURL
-		}
 		printBoxTable("KEY\tVALUE", []string{
-			fmt.Sprintf("url\t%s", envValue("TICKET_URL")),
+			fmt.Sprintf("location\t%s", cfg.Location),
 			fmt.Sprintf("mode\t%s", r.Mode),
-			fmt.Sprintf("server\t%s", serverURL),
 			fmt.Sprintf("username\t%s", cfg.Username),
-			fmt.Sprintf("current_project\t%s", cfg.CurrentProject),
+			fmt.Sprintf("project_id\t%s", cfg.ProjectID),
 			fmt.Sprintf("current_epic_id\t%s", cfg.CurrentEpicID),
 		})
 		return nil
@@ -107,12 +100,12 @@ func runConfig(args []string) error {
 			return errors.New("usage: ticket config rm|delete <key>")
 		}
 		switch args[1] {
-		case "server":
-			cfg.ServerURL = ""
+		case "location":
+			cfg.Location = ""
 		case "username":
 			cfg.Username = ""
-		case "current_project":
-			cfg.CurrentProject = ""
+		case "project_id":
+			cfg.ProjectID = ""
 		case "current_epic_id":
 			cfg.CurrentEpicID = ""
 		default:

@@ -25,7 +25,7 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 		return config.Config{}, nil, store.Project{}, err
 	}
 
-	projectID := strings.TrimSpace(cfg.CurrentProject)
+	projectID := strings.TrimSpace(cfg.ProjectID)
 	if projectID == "" {
 		projectID = "1"
 	}
@@ -38,14 +38,14 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 		}
 	}
 	if err != nil {
-		if strings.TrimSpace(cfg.CurrentProject) == "" {
+		if strings.TrimSpace(cfg.ProjectID) == "" {
 			return config.Config{}, nil, store.Project{}, errors.New("no active project; use `ticket project create` or `ticket project use <id>` first")
 		}
 		return config.Config{}, nil, store.Project{}, err
 	}
 
-	if cfg.CurrentProject != projectID {
-		cfg.CurrentProject = projectID
+	if cfg.ProjectID != projectID {
+		cfg.ProjectID = projectID
 		if saveErr := config.Save(cfg); saveErr != nil {
 			return config.Config{}, nil, store.Project{}, saveErr
 		}
@@ -63,7 +63,7 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		return libticket.NewLocal(cfg), nil
 	case config.ModeRemote:
 		if resolved.ServerURL == "" {
-			return nil, errors.New("TICKET_URL is required for remote mode")
+			return nil, errors.New("remote mode requires a location (run tk init to configure)")
 		}
 		return libtickethttp.New(cfg), nil
 	default:
@@ -126,26 +126,6 @@ func fallbackCommandUsername() string {
 		return localModeUsername()
 	}
 	return currentOSUser()
-}
-
-func extractURLOverride(args []string) ([]string, string, error) {
-	if len(args) == 0 {
-		return args, "", nil
-	}
-	var out []string
-	var override string
-	for i := 0; i < len(args); i++ {
-		if args[i] == "-url" {
-			if i+1 >= len(args) {
-				return nil, "", errors.New("missing value for -url")
-			}
-			override = args[i+1]
-			i++
-			continue
-		}
-		out = append(out, args[i])
-	}
-	return out, override, nil
 }
 
 func extractDBOverride(args []string) ([]string, string, error) {

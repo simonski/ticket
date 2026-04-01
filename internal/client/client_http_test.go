@@ -35,9 +35,9 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL, Token: "token-123"})
+	api := New(config.Config{Location: server.URL, Token: "token-123"})
 	status, err := api.Status()
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
@@ -63,9 +63,9 @@ func TestRemoteClientListTicketsFilteredBuildsQuery(t *testing.T) {
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 	if _, err := api.ListTicketsFiltered(7, "bug", "", "", "develop/idle", "needle", "alice", 25, false); err != nil {
 		t.Fatalf("ListTicketsFiltered() error = %v", err)
 	}
@@ -87,9 +87,9 @@ func TestRemoteClientListTicketsFilteredIncludesArchived(t *testing.T) {
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 	if _, err := api.ListTicketsFiltered(7, "", "", "", "", "", "", 0, true); err != nil {
 		t.Fatalf("ListTicketsFiltered() error = %v", err)
 	}
@@ -114,10 +114,10 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":"REJECTED"}`))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
 	taskID := "9"
-	api := New(config.Config{ServerURL: server.URL, Token: "token-123"})
+	api := New(config.Config{Location: server.URL, Token: "token-123"})
 	resp, err := api.RequestTicket(TicketRequest{ProjectID: 3, TicketID: &taskID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)
@@ -134,9 +134,9 @@ func TestRemoteClientReturnsAPIErrorMessage(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":"denied"}`))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 	if _, err := api.Count(nil); err == nil || err.Error() != "denied" {
 		t.Fatalf("Count() error = %v, want denied", err)
 	}
@@ -147,9 +147,9 @@ func TestRemoteClientReturnsStatusErrorForNonJSONFailures(t *testing.T) {
 		http.Error(w, "plain failure", http.StatusBadGateway)
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 	if _, err := api.Count(nil); err == nil || !strings.Contains(err.Error(), "502") {
 		t.Fatalf("Count() error = %v, want status error containing 502", err)
 	}
@@ -161,9 +161,9 @@ func TestRemoteClientReturnsDecodeErrorOnMalformedJSON(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":`))
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 	if _, err := api.Status(); err == nil {
 		t.Fatal("Status() error = nil, want decode error")
 	}
@@ -176,16 +176,14 @@ func TestRemoteClientHandlesNetworkFailure(t *testing.T) {
 	}
 	addr := listener.Addr().String()
 	_ = listener.Close()
-	t.Setenv("TICKET_URL", "http://"+addr)
 
-	api := New(config.Config{ServerURL: "http://" + addr})
+	api := New(config.Config{Location: "http://" + addr})
 	if _, err := api.Status(); err == nil {
 		t.Fatal("Status() error = nil, want network error")
 	}
 }
 
 func TestLocalModeClientRejectsRemoteOnlyAuthCalls(t *testing.T) {
-	t.Setenv("TICKET_URL", "")
 
 	api := New(config.Config{})
 	if _, err := api.Register("alice", "secret"); err == nil {
@@ -263,9 +261,9 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, err := api.CreateUser("alice", "secret"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
@@ -306,13 +304,13 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 	if _, err := api.UpdateTicket(taskID, TicketUpdateRequest{Title: "T", Stage: "develop", State: "active"}); err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
-	if _, err := api.SetTicketParent(taskID, dependsOn); err != nil {
+	if _, err := api.SetTicketParent(taskID, dependsOn, ""); err != nil {
 		t.Fatalf("SetTicketParent() error = %v", err)
 	}
-	if _, err := api.UnsetTicketParent(taskID); err != nil {
+	if _, err := api.UnsetTicketParent(taskID, ""); err != nil {
 		t.Fatalf("UnsetTicketParent() error = %v", err)
 	}
-	if _, err := api.CloneTicket(taskID); err != nil {
+	if _, err := api.CloneTicket(taskID, ""); err != nil {
 		t.Fatalf("CloneTicket() error = %v", err)
 	}
 	if _, err := api.ListHistory(taskID); err != nil {
@@ -352,9 +350,9 @@ func TestRemoteClientRolesCRUD(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, err := api.CreateRole(RoleRequest{Title: "dev", Motivation: "build", Goals: "ship"}); err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
@@ -407,9 +405,9 @@ func TestRemoteClientAgentsCRUD(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, _, err := api.CreateAgent(AgentCreateRequest{Password: "secret"}); err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
@@ -499,9 +497,9 @@ func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if err := api.DeleteProject(7); err != nil {
 		t.Fatalf("DeleteProject() error = %v", err)
@@ -588,26 +586,26 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, err := api.ListTickets(7); err != nil {
 		t.Fatalf("ListTickets() error = %v", err)
 	}
-	if _, err := api.CloseTicket("11"); err != nil {
+	if _, err := api.CloseTicket("11", ""); err != nil {
 		t.Fatalf("CloseTicket() error = %v", err)
 	}
-	if _, err := api.OpenTicket("11"); err != nil {
+	if _, err := api.OpenTicket("11", ""); err != nil {
 		t.Fatalf("OpenTicket() error = %v", err)
 	}
-	if _, err := api.ArchiveTicket("11"); err != nil {
+	if _, err := api.ArchiveTicket("11", ""); err != nil {
 		t.Fatalf("ArchiveTicket() error = %v", err)
 	}
-	if _, err := api.UnarchiveTicket("11"); err != nil {
+	if _, err := api.UnarchiveTicket("11", ""); err != nil {
 		t.Fatalf("UnarchiveTicket() error = %v", err)
 	}
-	if _, err := api.NotReadyTicket("11"); err != nil {
+	if _, err := api.NotReadyTicket("11", ""); err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}
 	if _, err := api.SetTicketWorkflow("11", 1); err != nil {
@@ -654,9 +652,9 @@ func TestRemoteClientWorkflowsCRUD(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, err := api.CreateWorkflow(WorkflowRequest{Name: "wf1", Description: "d"}); err != nil {
 		t.Fatalf("CreateWorkflow() error = %v", err)
@@ -716,9 +714,9 @@ func TestRemoteClientTimeTrackingAndLabels(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, err := api.LogTime("11", libticket.TimeEntryRequest{Minutes: 30, Note: "work"}); err != nil {
 		t.Fatalf("LogTime() error = %v", err)
@@ -773,9 +771,9 @@ func TestRemoteClientStoriesCRUD(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if _, err := api.CreateStory(7, "S", "desc"); err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
@@ -811,9 +809,9 @@ func TestRemoteClientRegistrationAndPasswordReset(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("TICKET_URL", server.URL)
+	
 
-	api := New(config.Config{ServerURL: server.URL})
+	api := New(config.Config{Location: server.URL})
 
 	if err := api.SetRegistrationEnabled(true); err != nil {
 		t.Fatalf("SetRegistrationEnabled() error = %v", err)

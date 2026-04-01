@@ -80,7 +80,7 @@ func runProject(args []string) error {
 		if err != nil {
 			return err
 		}
-		cfg.CurrentProject = project.Prefix
+		cfg.ProjectID = project.Prefix
 		cfg.CurrentEpicID = ""
 		if err := config.Save(cfg); err != nil {
 			return err
@@ -104,7 +104,7 @@ func runProject(args []string) error {
 				workflowNames[wf.ID] = wf.Name
 			}
 		}
-		printProjectTable(projects, cfg.CurrentProject, workflowNames)
+		printProjectTable(projects, cfg.ProjectID, workflowNames)
 		return nil
 	case "get":
 		if len(args) != 2 {
@@ -122,13 +122,13 @@ func runProject(args []string) error {
 	case "use", "default":
 		if len(args) < 2 {
 			// No ID: print the current project
-			if cfg.CurrentProject == "" {
+			if cfg.ProjectID == "" {
 				fmt.Println("no project set")
 				return nil
 			}
-			project, err := svc.GetProject(cfg.CurrentProject)
+			project, err := svc.GetProject(cfg.ProjectID)
 			if err != nil {
-				fmt.Println(cfg.CurrentProject)
+				fmt.Println(cfg.ProjectID)
 				return nil
 			}
 			fmt.Printf("%s — %s\n", project.Prefix, project.Title)
@@ -138,7 +138,7 @@ func runProject(args []string) error {
 		if err != nil {
 			return err
 		}
-		cfg.CurrentProject = project.Prefix
+		cfg.ProjectID = project.Prefix
 		cfg.CurrentEpicID = ""
 		if err := config.Save(cfg); err != nil {
 			return err
@@ -165,10 +165,10 @@ func runProject(args []string) error {
 				return runProjectByID(svc, *idFlag, args)
 			}
 		}
-		if cfg.CurrentProject == "" {
+		if cfg.ProjectID == "" {
 			return errors.New("no current project set; use: tk project use <id>")
 		}
-		project, err := svc.GetProject(cfg.CurrentProject)
+		project, err := svc.GetProject(cfg.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -221,8 +221,8 @@ func runProject(args []string) error {
 		// Clear stored token and switch project if needed
 		cfg.DeleteConfirmToken = ""
 		cfg.DeleteConfirmProject = ""
-		if cfg.CurrentProject == project.Prefix || cfg.CurrentProject == fmt.Sprintf("%d", project.ID) {
-			cfg.CurrentProject = ""
+		if cfg.ProjectID == project.Prefix || cfg.ProjectID == fmt.Sprintf("%d", project.ID) {
+			cfg.ProjectID = ""
 		}
 		if err := config.Save(cfg); err != nil {
 			return err
@@ -251,9 +251,9 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	}
 
 	// Check if a project is already initialised
-	if cfg.CurrentProject != "" {
+	if cfg.ProjectID != "" {
 		cfgPath, _ := config.Path()
-		return fmt.Errorf("project already initialised: %s (in %s)", cfg.CurrentProject, cfgPath)
+		return fmt.Errorf("project already initialised: %s (in %s)", cfg.ProjectID, cfgPath)
 	}
 
 	// Try to find existing project by prefix
@@ -273,7 +273,7 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
 	}
 
-	cfg.CurrentProject = project.Prefix
+	cfg.ProjectID = project.Prefix
 	cfg.CurrentEpicID = ""
 	if err := config.Save(cfg); err != nil {
 		return err
@@ -516,7 +516,7 @@ func guardProjectClose(svc libticket.Service, projectID int64) error {
 			openCount++
 		}
 		if p.ID == projectID {
-			if strings.EqualFold(p.Prefix, cfg.CurrentProject) || strconv.FormatInt(p.ID, 10) == cfg.CurrentProject {
+			if strings.EqualFold(p.Prefix, cfg.ProjectID) || strconv.FormatInt(p.ID, 10) == cfg.ProjectID {
 				isCurrent = true
 			}
 		}

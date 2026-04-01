@@ -81,15 +81,15 @@ func (s *LocalService) SetRegistrationEnabled(enabled bool) error {
 }
 
 func (s *LocalService) Register(username, password string) (store.User, error) {
-	return store.User{}, errors.New("ticket register requires TICKET_URL=http(s)://...")
+	return store.User{}, errors.New("ticket register requires remote mode (run tk init to configure)")
 }
 
 func (s *LocalService) Login(username, password string) (store.User, string, error) {
-	return store.User{}, "", errors.New("ticket login requires TICKET_URL=http(s)://...")
+	return store.User{}, "", errors.New("ticket login requires remote mode (run tk init to configure)")
 }
 
 func (s *LocalService) Logout() error {
-	return errors.New("ticket logout requires TICKET_URL=http(s)://...")
+	return errors.New("ticket logout requires remote mode (run tk init to configure)")
 }
 
 func (s *LocalService) Count(projectID *int64) (CountSummary, error) {
@@ -637,7 +637,7 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		return store.Ticket{}, err
 	}
 	_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-	return store.CreateTicket(db, store.TicketCreateParams{
+	ticket, err := store.CreateTicket(db, store.TicketCreateParams{
 		ProjectID:          request.ProjectID,
 		ParentID:           request.ParentID,
 		CloneOf:            request.CloneOf,
@@ -655,6 +655,15 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		Author:             user.Username,
 		CreatedBy:          user.ID,
 	})
+	if err != nil {
+		return ticket, err
+	}
+	if request.Message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, request.Message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
 func (s *LocalService) ListTickets(projectID int64) ([]store.Ticket, error) {
@@ -691,7 +700,7 @@ func (s *LocalService) UpdateTicket(id string, request TicketUpdateRequest) (sto
 		return store.Ticket{}, err
 	}
 	stage, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-	return store.UpdateTicket(db, id, store.TicketUpdateParams{
+	ticket, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
@@ -710,9 +719,18 @@ func (s *LocalService) UpdateTicket(id string, request TicketUpdateRequest) (sto
 		// Local mode bypasses server-side ownership restrictions.
 		ActorRole: "admin",
 	})
+	if err != nil {
+		return ticket, err
+	}
+	if request.Message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, request.Message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
-func (s *LocalService) CloseTicket(id string) (store.Ticket, error) {
+func (s *LocalService) CloseTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -721,11 +739,17 @@ func (s *LocalService) CloseTicket(id string) (store.Ticket, error) {
 	user, err := s.localUser(db)
 	if err != nil {
 		return store.Ticket{}, err
+	}
+	// Add comment before close — AddComment rejects closed tickets.
+	if message != "" {
+		if _, err := store.AddComment(db, id, user.ID, message); err != nil {
+			return store.Ticket{}, err
+		}
 	}
 	return store.SetTicketOpen(db, id, false, user.Username, user.ID)
 }
 
-func (s *LocalService) OpenTicket(id string) (store.Ticket, error) {
+func (s *LocalService) OpenTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -735,10 +759,19 @@ func (s *LocalService) OpenTicket(id string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.SetTicketOpen(db, id, true, user.Username, user.ID)
+	ticket, err := store.SetTicketOpen(db, id, true, user.Username, user.ID)
+	if err != nil {
+		return ticket, err
+	}
+	if message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
-func (s *LocalService) ArchiveTicket(id string) (store.Ticket, error) {
+func (s *LocalService) ArchiveTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -747,11 +780,17 @@ func (s *LocalService) ArchiveTicket(id string) (store.Ticket, error) {
 	user, err := s.localUser(db)
 	if err != nil {
 		return store.Ticket{}, err
+	}
+	// Add comment before archive — AddComment rejects archived tickets.
+	if message != "" {
+		if _, err := store.AddComment(db, id, user.ID, message); err != nil {
+			return store.Ticket{}, err
+		}
 	}
 	return store.SetTicketArchived(db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) UnarchiveTicket(id string) (store.Ticket, error) {
+func (s *LocalService) UnarchiveTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -761,10 +800,19 @@ func (s *LocalService) UnarchiveTicket(id string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.SetTicketArchived(db, id, false, user.Username, user.ID)
+	ticket, err := store.SetTicketArchived(db, id, false, user.Username, user.ID)
+	if err != nil {
+		return ticket, err
+	}
+	if message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
-func (s *LocalService) ReadyTicket(id string) (store.Ticket, error) {
+func (s *LocalService) ReadyTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -774,10 +822,19 @@ func (s *LocalService) ReadyTicket(id string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.SetTicketReady(db, id, true, user.Username, user.ID)
+	ticket, err := store.SetTicketReady(db, id, true, user.Username, user.ID)
+	if err != nil {
+		return ticket, err
+	}
+	if message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
-func (s *LocalService) NotReadyTicket(id string) (store.Ticket, error) {
+func (s *LocalService) NotReadyTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -787,7 +844,16 @@ func (s *LocalService) NotReadyTicket(id string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.SetTicketReady(db, id, false, user.Username, user.ID)
+	ticket, err := store.SetTicketReady(db, id, false, user.Username, user.ID)
+	if err != nil {
+		return ticket, err
+	}
+	if message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
 func (s *LocalService) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
@@ -817,7 +883,7 @@ func (s *LocalService) DeleteTicket(id string) error {
 	return store.DeleteTicket(db, id)
 }
 
-func (s *LocalService) SetTicketParent(id string, parentID string) (store.Ticket, error) {
+func (s *LocalService) SetTicketParent(id string, parentID string, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -834,6 +900,7 @@ func (s *LocalService) SetTicketParent(id string, parentID string) (store.Ticket
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            message,
 	})
 }
 
@@ -846,7 +913,7 @@ func (s *LocalService) SetTicketHealth(id string, score int) (store.Ticket, erro
 	return store.SetTicketHealth(db, id, score)
 }
 
-func (s *LocalService) UnsetTicketParent(id string) (store.Ticket, error) {
+func (s *LocalService) UnsetTicketParent(id string, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -863,6 +930,7 @@ func (s *LocalService) UnsetTicketParent(id string) (store.Ticket, error) {
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
 		EstimateComplete:   current.EstimateComplete,
+		Message:            message,
 	})
 }
 
@@ -884,7 +952,7 @@ func (s *LocalService) GetTicket(ref string) (store.Ticket, error) {
 	return store.GetTicketByRef(db, ref)
 }
 
-func (s *LocalService) CloneTicket(id string) (store.Ticket, error) {
+func (s *LocalService) CloneTicket(id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -894,7 +962,16 @@ func (s *LocalService) CloneTicket(id string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.CloneTicket(db, id, user.Username, user.ID)
+	ticket, err := store.CloneTicket(db, id, user.Username, user.ID)
+	if err != nil {
+		return ticket, err
+	}
+	if message != "" {
+		if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			return ticket, err
+		}
+	}
+	return ticket, nil
 }
 
 func (s *LocalService) ListHistory(id string) ([]store.HistoryEvent, error) {

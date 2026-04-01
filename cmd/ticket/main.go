@@ -49,11 +49,7 @@ func main() {
 }
 
 func run(args []string) error {
-	trimmedArgs, urlOverride, err := extractURLOverride(args)
-	if err != nil {
-		return err
-	}
-	trimmedArgs, dbOverride, err := extractDBOverride(trimmedArgs)
+	trimmedArgs, dbOverride, err := extractDBOverride(args)
 	if err != nil {
 		return err
 	}
@@ -75,11 +71,6 @@ func run(args []string) error {
 			dir = filepath.Dir(absPath)
 		}
 		if err := os.Setenv("TICKET_HOME", dir); err != nil {
-			return err
-		}
-	}
-	if urlOverride != "" {
-		if err := os.Setenv("TICKET_URL", urlOverride); err != nil {
 			return err
 		}
 	}
@@ -115,12 +106,12 @@ func run(args []string) error {
 		return runServer(trimmedArgs[1:])
 	case "export":
 		if resolved.Mode != config.ModeLocal {
-			return errors.New("ticket export requires local mode (no TICKET_URL set)")
+			return errors.New("ticket export requires local mode")
 		}
 		return runExportSnapshot(trimmedArgs[1:])
 	case "import":
 		if resolved.Mode != config.ModeLocal {
-			return errors.New("ticket import requires local mode (no TICKET_URL set)")
+			return errors.New("ticket import requires local mode")
 		}
 		return runImportSnapshot(trimmedArgs[1:])
 	case "version":
@@ -129,17 +120,17 @@ func run(args []string) error {
 		return runUpgrade(trimmedArgs[1:])
 	case "register":
 		if resolved.Mode != config.ModeRemote {
-			return errors.New("ticket register requires TICKET_URL=http(s)://...")
+			return errors.New("ticket register requires remote mode (run tk init to configure)")
 		}
 		return runRegister(trimmedArgs[1:])
 	case "login":
 		if resolved.Mode != config.ModeRemote {
-			return errors.New("ticket login requires TICKET_URL=http(s)://...")
+			return errors.New("ticket login requires remote mode (run tk init to configure)")
 		}
 		return runLogin(trimmedArgs[1:])
 	case "logout":
 		if resolved.Mode != config.ModeRemote {
-			return errors.New("ticket logout requires TICKET_URL=http(s)://...")
+			return errors.New("ticket logout requires remote mode (run tk init to configure)")
 		}
 		return runLogout(trimmedArgs[1:])
 	case "status":

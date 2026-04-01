@@ -53,7 +53,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() = %#v", ticket)
 		}
 
-		if _, err := svc.ReadyTicket(ticket.ID); err != nil {
+		if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
 
@@ -135,7 +135,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RemoveDependency() error = %v", err)
 		}
 
-		cloned, err := svc.CloneTicket(ticket.ID)
+		cloned, err := svc.CloneTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("CloneTicket() error = %v", err)
 		}
@@ -613,7 +613,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Close/Open
-		closed, err := svc.CloseTicket(ticket.ID)
+		closed, err := svc.CloseTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("CloseTicket() error = %v", err)
 		}
@@ -621,7 +621,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("CloseTicket().Open = true, want false")
 		}
 
-		opened, err := svc.OpenTicket(ticket.ID)
+		opened, err := svc.OpenTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("OpenTicket() error = %v", err)
 		}
@@ -630,7 +630,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Archive/Unarchive
-		archived, err := svc.ArchiveTicket(ticket.ID)
+		archived, err := svc.ArchiveTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("ArchiveTicket() error = %v", err)
 		}
@@ -638,7 +638,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ArchiveTicket().Archived = false, want true")
 		}
 
-		unarchived, err := svc.UnarchiveTicket(ticket.ID)
+		unarchived, err := svc.UnarchiveTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("UnarchiveTicket() error = %v", err)
 		}
@@ -665,7 +665,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket(child) error = %v", err)
 		}
 
-		parented, err := svc.SetTicketParent(child.ID, ticket.ID)
+		parented, err := svc.SetTicketParent(child.ID, ticket.ID, "")
 		if err != nil {
 			t.Fatalf("SetTicketParent() error = %v", err)
 		}
@@ -673,7 +673,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("SetTicketParent().ParentID = %v, want %s", parented.ParentID, ticket.ID)
 		}
 
-		unparented, err := svc.UnsetTicketParent(child.ID)
+		unparented, err := svc.UnsetTicketParent(child.ID, "")
 		if err != nil {
 			t.Fatalf("UnsetTicketParent() error = %v", err)
 		}
@@ -1332,7 +1332,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		readied, err := svc.ReadyTicket(ticket.ID)
+		readied, err := svc.ReadyTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
@@ -1340,7 +1340,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ReadyTicket().Ready = false, want true")
 		}
 
-		unreadied, err := svc.NotReadyTicket(ticket.ID)
+		unreadied, err := svc.NotReadyTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("NotReadyTicket() error = %v", err)
 		}

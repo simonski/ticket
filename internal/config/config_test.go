@@ -10,9 +10,8 @@ import (
 func TestSaveLoadRoundTrip(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
-	cfg := Config{ServerURL: "http://example.test:9000"}
+	cfg := Config{Location: "http://example.test:9000"}
 	if err := Save(cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -21,8 +20,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got.ServerURL != cfg.ServerURL {
-		t.Fatalf("Load().ServerURL = %q, want %q", got.ServerURL, cfg.ServerURL)
+	if got.Location != cfg.Location {
+		t.Fatalf("Load().Location = %q, want %q", got.Location, cfg.Location)
 	}
 
 	path := filepath.Join(tempDir, "config.json")
@@ -34,7 +33,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Load().Token = %q, want empty because credentials are stored separately", got.Token)
 	}
 
-	got.CurrentProject = "2"
+	got.ProjectID = "2"
 	if err := Save(got); err != nil {
 		t.Fatalf("Save(updated) error = %v", err)
 	}
@@ -42,15 +41,14 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load(reloaded) error = %v", err)
 	}
-	if reloaded.CurrentProject != "2" {
-		t.Fatalf("Load().CurrentProject = %q, want 2", reloaded.CurrentProject)
+	if reloaded.ProjectID != "2" {
+		t.Fatalf("Load().ProjectID = %q, want 2", reloaded.ProjectID)
 	}
 }
 
 func TestLoadMigratesLegacyEpicID(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
 	// Write config with numeric current_epic_id (legacy format)
 	configPath := filepath.Join(tempDir, "config.json")
@@ -69,7 +67,6 @@ func TestLoadMigratesLegacyEpicID(t *testing.T) {
 func TestLoadMigratesLegacyEpicIDZero(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
 	configPath := filepath.Join(tempDir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{"current_epic_id": 0}`), 0o644); err != nil {
@@ -87,7 +84,6 @@ func TestLoadMigratesLegacyEpicIDZero(t *testing.T) {
 func TestLoadMigratesLegacyExpandedEpics(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
 	configPath := filepath.Join(tempDir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{"tui_expanded_epics": [1, 2, 3]}`), 0o644); err != nil {
@@ -105,21 +101,19 @@ func TestLoadMigratesLegacyExpandedEpics(t *testing.T) {
 func TestLoadMissingFile(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil for missing file", err)
 	}
-	if cfg.ServerURL != "" {
-		t.Fatalf("Load().ServerURL = %q, want empty", cfg.ServerURL)
+	if cfg.Location != "" {
+		t.Fatalf("Load().Location = %q, want empty", cfg.Location)
 	}
 }
 
 func TestResolveURLDefaultsToLocal(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -133,9 +127,11 @@ func TestResolveURLDefaultsToLocal(t *testing.T) {
 	}
 }
 
-
 func TestResolveURLHTTPScheme(t *testing.T) {
-	t.Setenv("TICKET_URL", "http://localhost:8080")
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"http://localhost:8080"}`), 0o600)
+
 	resolved, err := ResolveURL()
 	if err != nil {
 		t.Fatalf("ResolveURL() error = %v", err)
@@ -149,7 +145,10 @@ func TestResolveURLHTTPScheme(t *testing.T) {
 }
 
 func TestResolveURLHTTPSScheme(t *testing.T) {
-	t.Setenv("TICKET_URL", "https://tickets.example.com")
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com"}`), 0o600)
+
 	resolved, err := ResolveURL()
 	if err != nil {
 		t.Fatalf("ResolveURL() error = %v", err)
@@ -162,8 +161,28 @@ func TestResolveURLHTTPSScheme(t *testing.T) {
 	}
 }
 
+func TestResolveURLFileScheme(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/test.db"}`), 0o600)
+
+	resolved, err := ResolveURL()
+	if err != nil {
+		t.Fatalf("ResolveURL() error = %v", err)
+	}
+	if resolved.Mode != ModeLocal {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeLocal)
+	}
+	if resolved.DBPath != "/tmp/test.db" {
+		t.Fatalf("DBPath = %q, want /tmp/test.db", resolved.DBPath)
+	}
+}
+
 func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
-	t.Setenv("TICKET_URL", "ftp://example.com")
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"ftp://example.com"}`), 0o600)
+
 	if _, err := ResolveURL(); err == nil {
 		t.Fatal("ResolveURL() error = nil, want unsupported scheme error")
 	}
@@ -195,11 +214,12 @@ func TestHomeWalksUpToFindDotTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
 	root := t.TempDir()
 
-	// Create root/.ticket/
-	ticketHome := filepath.Join(root, ".ticket")
-	if err := os.Mkdir(ticketHome, 0o755); err != nil {
+	// Create root/.git/ so Home() anchors on the project root
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// .ticket/ should be resolved as sibling of .git/
+	ticketHome := filepath.Join(root, ".ticket")
 	// Chdir to a deep subdirectory
 	deep := filepath.Join(root, "a", "b", "c")
 	if err := os.MkdirAll(deep, 0o755); err != nil {
@@ -263,9 +283,8 @@ func TestHomeUsesTicketHome(t *testing.T) {
 func TestCredentialsStoredSeparately(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	t.Setenv("TICKET_URL", "")
 
-	cfg := Config{ServerURL: "http://example.test:9000", Username: "alice", Token: "sensitive"}
+	cfg := Config{Location: "http://example.test:9000", Username: "alice", Token: "sensitive"}
 	if err := Save(cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

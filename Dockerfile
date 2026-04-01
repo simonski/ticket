@@ -18,12 +18,14 @@ RUN apk add --no-cache ca-certificates
 
 # Non-root user for the runtime container
 RUN adduser -D -h /home/ticket ticket
+RUN mkdir -p /home/ticket/.ticket && chown ticket:ticket /home/ticket/.ticket
 USER ticket
 WORKDIR /home/ticket
 
 COPY --from=builder /out/ticket /usr/local/bin/ticket
+COPY --chmod=755 deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 EXPOSE 8080
 
-ENTRYPOINT ["ticket"]
-CMD ["server"]
+ENTRYPOINT ["entrypoint.sh"]
+CMD []

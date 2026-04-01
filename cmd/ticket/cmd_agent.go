@@ -142,7 +142,6 @@ func runAgent(args []string) error {
 		fs := flag.NewFlagSet("agent run", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		agentID := fs.String("id", "", "agent UUID")
-		url := fs.String("url", "", "ticket server url")
 		projectID := fs.Int64("project-id", 0, "project id override")
 		pollSeconds := fs.Int("poll-seconds", 5, "idle poll interval seconds")
 		llmCommand := fs.String("llm", envValue("TICKET_AGENT_LLM"), "llm command (claude, codex, or path to binary)")
@@ -164,31 +163,22 @@ func runAgent(args []string) error {
 			}
 			agentPassword = strings.TrimSpace(agentPassword)
 		}
-		serverURL := strings.TrimSpace(*url)
-		if serverURL == "" {
-			serverURL = envValue("TICKET_URL")
+		resolved, rErr := config.ResolveURL()
+		if rErr != nil || resolved.Mode != config.ModeRemote {
+			return errors.New("agent run requires remote mode (run tk init to configure)")
 		}
-		missing := make([]string, 0, 3)
+		missing := make([]string, 0, 2)
 		if agentIDVal == "" {
 			missing = append(missing, "AGENT_ID or -id")
 		}
 		if agentPassword == "" {
 			missing = append(missing, "AGENT_PASSWORD (or prompt)")
 		}
-		if serverURL == "" {
-			missing = append(missing, "TICKET_URL or -url")
-		}
 		if len(missing) > 0 {
 			return fmt.Errorf("missing required values: %s", strings.Join(missing, ", "))
 		}
 		if *pollSeconds < 1 {
 			return errors.New("poll-seconds must be >= 1")
-		}
-		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
-			return err
-		}
-		if resolved, rErr := config.ResolveURL(); rErr != nil || resolved.Mode != config.ModeRemote {
-			return errors.New("agent run requires a remote server (TICKET_URL must be set to an http(s) URL)")
 		}
 		cfg, err := config.Load()
 		if err != nil {
@@ -347,7 +337,6 @@ func runAgent(args []string) error {
 		fs.SetOutput(os.Stderr)
 		reqAgentID := fs.String("agent-id", "", "agent UUID")
 		password := fs.String("password", "", "agent password")
-		url := fs.String("url", "", "ticket server url")
 		id := fs.String("id", "", "specific ticket id")
 		dryRun := fs.Bool("dryrun", false, "simulate assignment only")
 		loop := fs.Int("loop", 1, "number of request loops")
@@ -363,19 +352,16 @@ func runAgent(args []string) error {
 		if agentPassword == "" {
 			agentPassword = envValue("AGENT_PASSWORD")
 		}
-		serverURL := strings.TrimSpace(*url)
-		if serverURL == "" {
-			serverURL = envValue("TICKET_URL")
+		resolved, rErr := config.ResolveURL()
+		if rErr != nil || resolved.Mode != config.ModeRemote {
+			return errors.New("agent request requires remote mode (run tk init to configure)")
 		}
-		missing := make([]string, 0, 3)
+		missing := make([]string, 0, 2)
 		if reqAgentIDVal == "" {
 			missing = append(missing, "AGENT_ID or -agent-id")
 		}
 		if agentPassword == "" {
 			missing = append(missing, "AGENT_PASSWORD or -password")
-		}
-		if serverURL == "" {
-			missing = append(missing, "TICKET_URL or -url")
 		}
 		if len(missing) > 0 {
 			return fmt.Errorf("missing required values: %s", strings.Join(missing, ", "))
@@ -385,9 +371,6 @@ func runAgent(args []string) error {
 		}
 		if *sleepSeconds < 0 {
 			return errors.New("sleep must be >= 0")
-		}
-		if err := os.Setenv("TICKET_URL", serverURL); err != nil {
-			return err
 		}
 		cfg, err := config.Load()
 		if err != nil {
