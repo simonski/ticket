@@ -11,13 +11,16 @@ make test                 # Run all tests (unit + integration + playwright)
 make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, client, server, store, libticket, libtickethttp)
 make test-go-cover        # Tests with per-package coverage thresholds
-go test ./internal/store/ -run TestTicketLifecycle  # Run a single test
 make dev                  # Print env vars for local development mode
 ```
+
+Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 
 Coverage thresholds enforced: cmd/ticket 55%, libticket 65%, libtickethttp 75%, internal/client 55%, internal/store 70%, internal/config 70%.
 
 Docker: `make docker-build`, `make docker-up`, `make docker-down`.
+
+Playwright browser tests are in `tests/playwright/` (11 spec files). Run with `make test-playwright`.
 
 ## Architecture
 
@@ -31,11 +34,11 @@ Single Go binary (`cmd/ticket/main.go`) providing four interfaces to the same da
 ### Two Modes
 
 - **Local mode** (default) — Direct SQLite via `internal/store`. No server needed.
-- **Remote mode** (`TICKET_URL` set) — HTTP client via `internal/client` to a running server.
+- **Remote mode** — HTTP client via `internal/client` to a running server.
 
-Mode is resolved by `internal/config.ResolveURL()`. The CLI, `libticket.LocalService`, and `libtickethttp.Service` all implement the same `libticket.Service` interface (108 methods).
+Mode is determined by the `location` field in `.ticket/config.json`: a path or `file://` URI means local; an `http(s)://` URL means remote. Resolved by `internal/config.ResolveLocation()`. The CLI, `libticket.LocalService`, and `libtickethttp.Service` all implement the same `libticket.Service` interface (108 methods).
 
-`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for an existing `.ticket` directory; if none is found, `.ticket` in the current directory is the default. The `-f /path` flag overrides `TICKET_HOME` and `-url` overrides `TICKET_URL`.
+`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. The `-f /path` flag overrides `TICKET_HOME`. Environment variables `TICKET_USERNAME` and `TICKET_PASSWORD` supply credentials for remote mode.
 
 ### Key Packages
 

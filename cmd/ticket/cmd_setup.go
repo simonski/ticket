@@ -178,8 +178,7 @@ func runSetupExisting(reader *bufio.Reader) error {
 	switch choice {
 	case 0:
 		fmt.Println()
-		fmt.Println("no changes made.")
-		return nil
+		return runSetupPostInit(reader)
 	case 1:
 		dbPath, err := defaultDatabasePath()
 		if err != nil {
