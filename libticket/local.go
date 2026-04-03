@@ -473,6 +473,15 @@ func (s *LocalService) DeleteProject(id int64) error {
 	return store.DeleteProject(db, id)
 }
 
+func (s *LocalService) RenameProjectPrefix(id int64, newPrefix string) (int, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	return store.RenameProjectPrefix(db, id, newPrefix)
+}
+
 func (s *LocalService) SetProjectEnabled(id int64, enabled bool) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {

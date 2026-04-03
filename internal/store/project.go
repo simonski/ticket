@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -361,4 +362,146 @@ func DeleteProject(db *sql.DB, id int64) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// RenameProjectPrefix changes a project's prefix and re-keys every ticket
+// in that project. All foreign-key references (parent_id, clone_of,
+// dependencies, comments, history, labels, time entries, story links) are
+// updated in a single transaction.
+func RenameProjectPrefix(db *sql.DB, projectID int64, newPrefix string) (int, error) {
+	newPrefix = normalizeProjectPrefix(newPrefix)
+	if err := validateProjectPrefix(newPrefix); err != nil {
+		return 0, err
+	}
+
+	// Check the new prefix isn't already used by another project.
+	var existingID int64
+	err := db.QueryRow(`SELECT project_id FROM projects WHERE prefix = ?`, newPrefix).Scan(&existingID)
+	if err == nil && existingID != projectID {
+		return 0, fmt.Errorf("prefix %q is already used by another project", newPrefix)
+	}
+
+	// Load project to get current prefix.
+	project, err := GetProjectByID(db, projectID)
+	if err != nil {
+		return 0, err
+	}
+	if project.Prefix == newPrefix {
+		return 0, nil // nothing to do
+	}
+
+	// Load all tickets for this project and compute new keys.
+	rows, err := db.Query(`SELECT ticket_id, type FROM tickets WHERE project_id = ?`, projectID)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	type keyMapping struct {
+		oldKey     string
+		newKey     string
+		ticketType string
+	}
+	var mappings []keyMapping
+	for rows.Next() {
+		var oldKey, ticketType string
+		if err := rows.Scan(&oldKey, &ticketType); err != nil {
+			return 0, err
+		}
+		// Extract the sequence number from the old key.
+		seq := extractSequence(oldKey)
+		if seq <= 0 {
+			return 0, fmt.Errorf("could not extract sequence from key %q", oldKey)
+		}
+		newKey, err := generateTicketKey(newPrefix, ticketType, seq)
+		if err != nil {
+			return 0, fmt.Errorf("generating new key for %q: %w", oldKey, err)
+		}
+		mappings = append(mappings, keyMapping{oldKey: oldKey, newKey: newKey, ticketType: ticketType})
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	// PRAGMA foreign_keys must be set outside a transaction in SQLite.
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return 0, err
+	}
+	defer db.Exec(`PRAGMA foreign_keys = ON`) //nolint:errcheck
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	// Update each ticket key and all references.
+	for _, m := range mappings {
+		// Primary key
+		if _, err := tx.Exec(`UPDATE tickets SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, fmt.Errorf("renaming %s → %s: %w", m.oldKey, m.newKey, err)
+		}
+		// Parent references
+		if _, err := tx.Exec(`UPDATE tickets SET parent_id = ? WHERE parent_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// Clone references
+		if _, err := tx.Exec(`UPDATE tickets SET clone_of = ? WHERE clone_of = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// Dependencies
+		if _, err := tx.Exec(`UPDATE dependencies SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(`UPDATE dependencies SET depends_on = ? WHERE depends_on = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// Story links
+		if _, err := tx.Exec(`UPDATE story_ticket_links SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// History
+		if _, err := tx.Exec(`UPDATE history_events SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(`UPDATE ticket_history SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// Comments
+		if _, err := tx.Exec(`UPDATE comments SET item_id = ? WHERE item_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// Labels
+		if _, err := tx.Exec(`UPDATE ticket_labels SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+		// Time entries
+		if _, err := tx.Exec(`UPDATE time_entries SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+			return 0, err
+		}
+	}
+
+	// Update the project prefix.
+	if _, err := tx.Exec(`UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, newPrefix, projectID); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(mappings), nil
+}
+
+// extractSequence pulls the numeric suffix from a ticket key.
+// E.g. "CUS-T-42" → 42, "TK-7" → 7.
+func extractSequence(key string) int64 {
+	idx := strings.LastIndex(key, "-")
+	if idx < 0 {
+		return 0
+	}
+	n, err := strconv.ParseInt(key[idx+1:], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }

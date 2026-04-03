@@ -332,6 +332,21 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
 	}
 
+	// Maximum display width for the assignee column.
+	const maxAssigneeW = 16
+
+	// truncateRunes truncates s to at most n runes, appending "…" if truncated.
+	truncateRunes := func(s string, n int) string {
+		r := []rune(s)
+		if len(r) <= n {
+			return s
+		}
+		if n <= 1 {
+			return "…"
+		}
+		return string(r[:n-1]) + "…"
+	}
+
 	makeDataRow := func(t store.Ticket, title string) string {
 		symbol := formatTicketStatusSymbol(t.Status, statusUnicode)
 		assignee := strings.TrimSpace(t.Assignee)
@@ -340,6 +355,7 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		} else if agentUsernames[assignee] {
 			assignee = "agent-" + assignee
 		}
+		assignee = truncateRunes(assignee, maxAssigneeW)
 		parent := parentKeys[t.ID]
 		key := symbol + " " + t.ID
 		ready := "no"
@@ -462,17 +478,29 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		}
 	}
 
-	// Compute max visible width across all display lines.
+	// Compute max visible width across all display lines, clamped to terminal.
 	maxW := 0
 	for _, l := range display {
 		if n := runeCount(l.text); n > maxW {
 			maxW = n
 		}
 	}
+	// Clamp to terminal width minus box borders ("│ " + " │" = 4 chars).
+	if maxW > termW-4 {
+		maxW = termW - 4
+	}
+	if maxW < 10 {
+		maxW = 10
+	}
 
 	if !useColor {
 		for _, l := range display {
-			fmt.Println(l.text)
+			r := []rune(l.text)
+			if len(r) > maxW {
+				fmt.Println(string(r[:maxW]))
+			} else {
+				fmt.Println(l.text)
+			}
 		}
 		return
 	}
@@ -555,10 +583,16 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	border := strings.Repeat("─", maxW+2)
 	fmt.Println("╭" + border + "╮")
 	for _, l := range display {
-		pad := strings.Repeat(" ", maxW-runeCount(l.text))
-		text := l.text
+		lineText := l.text
+		lineRunes := []rune(lineText)
+		// Truncate lines that exceed maxW to prevent overdraw.
+		if len(lineRunes) > maxW {
+			lineText = string(lineRunes[:maxW])
+		}
+		pad := strings.Repeat(" ", maxW-runeCount(lineText))
+		text := lineText
 		if l.status != "" {
-			text = colorizeColumns(l.text, l.status, l.ready)
+			text = colorizeColumns(lineText, l.status, l.ready)
 		}
 		fmt.Printf("│ %s%s │\n", text, pad)
 	}

@@ -485,6 +485,7 @@ Commands:
   get      <id>                       Show project details
   use      [<id>]                     Switch active project (or show current)
   rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
+  rename-prefix <new-prefix>          Rename prefix and re-key all tickets
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project

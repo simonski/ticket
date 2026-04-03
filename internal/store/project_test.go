@@ -176,6 +176,108 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	}
 }
 
+func TestRenameProjectPrefix(t *testing.T) {
+	db := testDB(t)
+
+	project, err := CreateProjectWithParams(db, ProjectCreateParams{
+		Prefix: "OLD",
+		Title:  "Rename Me",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject error = %v", err)
+	}
+
+	// Create tickets of different types.
+	epic, err := CreateTicket(db, TicketCreateParams{ProjectID: project.ID, Type: "epic", Title: "Epic"})
+	if err != nil {
+		t.Fatalf("CreateTicket(epic) error = %v", err)
+	}
+	parentID := epic.ID
+	task, err := CreateTicket(db, TicketCreateParams{ProjectID: project.ID, Type: "task", Title: "Task", ParentID: &parentID})
+	if err != nil {
+		t.Fatalf("CreateTicket(task) error = %v", err)
+	}
+	bug, err := CreateTicket(db, TicketCreateParams{ProjectID: project.ID, Type: "bug", Title: "Bug"})
+	if err != nil {
+		t.Fatalf("CreateTicket(bug) error = %v", err)
+	}
+
+	// Add a dependency, comment, and time entry.
+	adminID := testAdminID(t, db)
+	if _, err := AddDependency(db, project.ID, task.ID, bug.ID, adminID); err != nil {
+		t.Fatalf("AddDependency error = %v", err)
+	}
+	if _, err := AddComment(db, task.ID, adminID, "a comment"); err != nil {
+		t.Fatalf("AddComment error = %v", err)
+	}
+	if _, err := LogTime(db, task.ID, adminID, 30, "work"); err != nil {
+		t.Fatalf("LogTime error = %v", err)
+	}
+
+	// Rename.
+	count, err := RenameProjectPrefix(db, project.ID, "NEW")
+	if err != nil {
+		t.Fatalf("RenameProjectPrefix error = %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("RenameProjectPrefix count = %d, want 3", count)
+	}
+
+	// Verify project prefix updated.
+	updated, err := GetProjectByID(db, project.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByID error = %v", err)
+	}
+	if updated.Prefix != "NEW" {
+		t.Fatalf("project prefix = %q, want NEW", updated.Prefix)
+	}
+
+	// Verify tickets have new keys.
+	newEpic, err := GetTicket(db, "NEW-E-1")
+	if err != nil {
+		t.Fatalf("GetTicket(NEW-E-1) error = %v", err)
+	}
+	if newEpic.Title != "Epic" {
+		t.Fatalf("epic title = %q", newEpic.Title)
+	}
+
+	newTask, err := GetTicket(db, "NEW-T-2")
+	if err != nil {
+		t.Fatalf("GetTicket(NEW-T-2) error = %v", err)
+	}
+	if newTask.ParentID == nil || *newTask.ParentID != "NEW-E-1" {
+		t.Fatalf("task parent = %v, want NEW-E-1", newTask.ParentID)
+	}
+
+	// Verify dependency updated.
+	deps, err := ListDependencies(db, "NEW-T-2")
+	if err != nil {
+		t.Fatalf("ListDependencies error = %v", err)
+	}
+	if len(deps) != 1 || deps[0].DependsOn != "NEW-B-3" {
+		t.Fatalf("dependency = %v, want [NEW-B-3]", deps)
+	}
+
+	// Verify old keys are gone.
+	if _, err := GetTicket(db, "OLD-E-1"); err == nil {
+		t.Fatal("old key OLD-E-1 should not exist")
+	}
+
+	// Renaming to same prefix is a no-op.
+	count, err = RenameProjectPrefix(db, project.ID, "NEW")
+	if err != nil {
+		t.Fatalf("RenameProjectPrefix(same) error = %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("RenameProjectPrefix(same) count = %d, want 0", count)
+	}
+
+	// Renaming to an invalid prefix fails.
+	if _, err := RenameProjectPrefix(db, project.ID, "x"); err == nil {
+		t.Fatal("RenameProjectPrefix(invalid) should fail")
+	}
+}
+
 func TestDeleteProject(t *testing.T) {
 	db := testDB(t)
 	project, err := CreateProject(db, "Delete Me", "", "", "")

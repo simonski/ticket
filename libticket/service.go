@@ -36,6 +36,7 @@ type Service interface {
 	GetProject(id string) (store.Project, error)
 	UpdateProject(id int64, request ProjectUpdateRequest) (store.Project, error)
 	DeleteProject(id int64) error
+	RenameProjectPrefix(id int64, newPrefix string) (int, error)
 	SetProjectEnabled(id int64, enabled bool) (store.Project, error)
 	AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
 	RemoveProjectMember(projectID int64, userID string) error

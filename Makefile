@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright clean release release-build release-checksums release-formula release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test clean release release-build release-checksums release-formula release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/ticket/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -23,6 +23,7 @@ help:
 	@printf "  make test-integration Run integration-oriented Go test packages.\n"
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
+	@printf "  make test-tk-test    Run executable documentation tests.\n"
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
 	@printf "Docker targets:\n\n"
@@ -111,6 +112,9 @@ test-playwright:
 	npm install
 	npx playwright install chromium
 	npx playwright test
+
+test-tk-test: build
+	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
 # ─── release ──────────────────────────────────────────────────────────────────
 # Produces cross-platform tarballs in ./dist and updates homebrew/ticket.rb.

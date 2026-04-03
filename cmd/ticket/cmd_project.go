@@ -175,6 +175,37 @@ func runProject(args []string) error {
 		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
+	case "rename-prefix":
+		if len(args) < 2 {
+			return errors.New("usage: ticket project rename-prefix <new-prefix>")
+		}
+		newPrefix := strings.ToUpper(strings.TrimSpace(args[1]))
+		if newPrefix == "" {
+			return errors.New("new prefix is required")
+		}
+		if cfg.ProjectID == "" {
+			return errors.New("no current project set; use: tk project use <id>")
+		}
+		project, err := svc.GetProject(cfg.ProjectID)
+		if err != nil {
+			return err
+		}
+		oldPrefix := project.Prefix
+		count, err := svc.RenameProjectPrefix(project.ID, newPrefix)
+		if err != nil {
+			return err
+		}
+		// Update config to point to the new prefix.
+		cfg.ProjectID = newPrefix
+		// Update current_epic_id if it references the old prefix.
+		if strings.HasPrefix(cfg.CurrentEpicID, oldPrefix+"-") {
+			cfg.CurrentEpicID = newPrefix + cfg.CurrentEpicID[len(oldPrefix):]
+		}
+		if err := config.Save(cfg); err != nil {
+			return err
+		}
+		fmt.Printf("renamed %s → %s (%d tickets updated)\n", oldPrefix, newPrefix, count)
+		return nil
 	case "rm", "delete":
 		fs := flag.NewFlagSet("project rm", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)

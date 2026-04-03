@@ -310,6 +310,16 @@ Select the active project for subsequent commands:
 ticket project use CUS
 ```
 
+Rename a project's prefix (re-keys all tickets, updates all references):
+
+```bash
+ticket project rename-prefix NEW
+```
+
+This changes every ticket key in the active project (e.g. `CUS-T-1` → `NEW-T-1`),
+including parent references, dependencies, comments, history, and time entries.
+The config is updated automatically. Local mode only.
+
 ### Per-directory project binding
 
 `tk` automatically locates the right workspace by walking up the directory tree
@@ -723,6 +733,7 @@ ticket project <prefix-or-id> update -git-repository "https://github.com/org/rep
 ticket project <prefix-or-id> update -git-branch "main"
 ticket project <prefix-or-id> enable
 ticket project <prefix-or-id> disable
+ticket project rename-prefix <new-prefix>
 ticket project rm [-id] <prefix-or-id> [--confirm <token>]
 
 ticket ticket <verb> [flags]                              # namespace for all ticket verbs

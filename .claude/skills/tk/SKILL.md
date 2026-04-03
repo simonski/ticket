@@ -16,11 +16,21 @@ description: Use this skill when working on tasks within a codebase that uses `t
 # Check current project and connection
 tk status
 
-# check a summary of this project
+# Check a summary of this project
 tk summary
 
-# List open tickets (shorthand)
+# List open tickets
 tk list
+```
+
+## Workflow Stages
+
+The default workflow has four stages: `design`, `develop`, `test`, `done`. Each ticket also has a state (e.g. `idle`, `active`, `success`, `failed`). Together these form the ticket's status as `stage/state` (e.g. `develop/active`).
+
+Always check the project's available workflow stages before transitioning — don't assume stage names:
+```bash
+tk workflow list
+tk workflow get -id <workflow-id>
 ```
 
 ## Starting Work
@@ -33,10 +43,12 @@ tk list
 # View a specific ticket
 tk show <id>
 
-# Move to in-progress (check available workflow stages first)
-tk workflow list
-tk state <id> <stage>
+# Move ticket to develop stage and set it active
+tk state <id> develop
+tk state <id> active
 ```
+
+**Important:** Always move tickets to `develop/active` when you begin implementation. Do not leave tickets in `design/idle` while actively working on them.
 
 ## Creating Tickets
 ```bash
@@ -46,34 +58,17 @@ tk add "Title of work"
 # Bug
 tk bug "Description of the bug"
 
-# Epic
+# Epic (with child tasks)
 tk epic "Name of epic"
+tk add "Child task" --parent <epic-id>
 
 # Capture a requirement or idea
 tk idea "The requirement"
 ```
 
-## Failing Work
-
-When a task fails and cannot be completed, **always** close the ticket by setting it to `failed` state and adding a comment:
-
-```bash
-# Mark ticket as successfully completed
-tk state <id> failed
-
-# Add a completion comment summarising what was done
-tk comment <id> "What was done and any relevant notes"
-
-# Log time if the user mentioned duration
-tk time log <id> <duration> "description"
-
-tk close <id> 
-```
-
-
 ## Completing Work
 
-When a task is done, **always** close the ticket by setting it to `success` state and adding a comment:
+When a task is done, **always** set it to `success` state and close it:
 
 ```bash
 # Mark ticket as successfully completed
@@ -85,11 +80,26 @@ tk comment <id> "What was done and any relevant notes"
 # Log time if the user mentioned duration
 tk time log <id> <duration> "description"
 
-tk close <id> 
-
+# Close the ticket
+tk close <id>
 ```
 
-**Important:** Do not leave tickets in `active` state after work is complete. Always transition to `success` (or `fail` if the work was abandoned/unsuccessful) before ending the session.
+**Important:** Do not leave tickets in `active` state after work is complete. Always transition to `success` before closing. For epics, close all child tasks first — the epic's state derives from its children.
+
+## Failing Work
+
+When a task fails and cannot be completed:
+
+```bash
+# Mark ticket as failed
+tk state <id> failed
+
+# Add a comment explaining what happened
+tk comment <id> "What was attempted and why it failed"
+
+# Close the ticket
+tk close <id>
+```
 
 ## Recording Decisions
 
@@ -120,13 +130,6 @@ tk dep add <from-id> <to-id>
 tk dep list <id>
 ```
 
-## Workflow
-
-Always check the project's workflow stages before transitioning state — don't assume stage names:
-```bash
-tk workflow list
-```
-
 ## Labels
 ```bash
 tk label list
@@ -135,9 +138,9 @@ tk label <id> <label>
 
 ## Key Habits
 
-1. **On session start** — run `tk` to see the current ticket list and orient yourself
-2. **Before implementing** — run `tk ticket show <id>` to read the full ticket
-3. **On completion** — update ticket state and add a comment summarising what changed
+1. **On session start** — run `tk list` to see open tickets and orient yourself
+2. **Before implementing** — run `tk show <id>` to read the full ticket, then `tk state <id> develop` and `tk state <id> active`
+3. **On completion** — `tk state <id> success`, add a comment, then `tk close <id>`
 4. **On decisions** — always `tk decision add` rather than leaving decisions implicit in code
 5. **On new bugs found during work** — `tk bug "..."` immediately so nothing is lost
-6. Only work on 1 ticket at a time — don't switch between tasks without updating ticket state to reflect what you're doing.  Only have 1 active ticket in "in-progress" state at a time.
+6. Only work on 1 ticket at a time — only have 1 active ticket in `develop/active` state at a time
