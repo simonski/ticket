@@ -3851,8 +3851,8 @@ func TestRowColorFail(t *testing.T) {
 
 func TestRowColorIdle(t *testing.T) {
 	got := rowColor("design/idle")
-	if got != "\033[90m" {
-		t.Fatalf("rowColor(design/idle) = %q, want ansiGray", got)
+	if got != ansiWhite {
+		t.Fatalf("rowColor(design/idle) = %q, want ansiWhite", got)
 	}
 }
 
@@ -3865,8 +3865,8 @@ func TestRowColorInvalid(t *testing.T) {
 
 func TestRowColorSuccess(t *testing.T) {
 	got := rowColor("design/success")
-	if got != "" {
-		t.Fatalf("rowColor(design/success) = %q, want empty (no special color)", got)
+	if got != ansiGray {
+		t.Fatalf("rowColor(design/success) = %q, want ansiGray", got)
 	}
 }
 
@@ -4643,4 +4643,76 @@ func TestQuickstartServer(t *testing.T) {
 			t.Fatalf("ready error = %v", err)
 		}
 	})
+}
+
+func TestBuildTreeDisplayOrdersChildrenUnderParents(t *testing.T) {
+// Three tickets: epic (no parent), and two tasks under it.
+epicID := "TK-1"
+childAID := "TK-2"
+childBID := "TK-3"
+tickets := []store.Ticket{
+{ID: childAID, ParentID: &epicID},
+{ID: epicID},
+{ID: childBID, ParentID: &epicID},
+}
+
+ordered, prefix := buildTreeDisplay(tickets)
+
+if len(ordered) != 3 {
+t.Fatalf("expected 3 tickets, got %d", len(ordered))
+}
+// Epic must be first.
+if ordered[0].ID != epicID {
+t.Errorf("expected epic %s first, got %s", epicID, ordered[0].ID)
+}
+// Both children must follow.
+childIDs := map[string]bool{ordered[1].ID: true, ordered[2].ID: true}
+if !childIDs[childAID] || !childIDs[childBID] {
+t.Errorf("expected children %s and %s after epic, got %s and %s", childAID, childBID, ordered[1].ID, ordered[2].ID)
+}
+// Epic has no prefix.
+if prefix[epicID] != "" {
+t.Errorf("epic should have empty prefix, got %q", prefix[epicID])
+}
+// Last child uses └─.
+lastID := ordered[2].ID
+if !strings.HasPrefix(prefix[lastID], "└─") {
+t.Errorf("last child should have └─ prefix, got %q", prefix[lastID])
+}
+// Non-last child uses ├─.
+firstChildID := ordered[1].ID
+if !strings.HasPrefix(prefix[firstChildID], "├─") {
+t.Errorf("non-last child should have ├─ prefix, got %q", prefix[firstChildID])
+}
+}
+
+func TestBuildTreeDisplayOrphansTreatedAsRoots(t *testing.T) {
+// Child whose parent is NOT in the list → appears as root with no prefix.
+outsideParent := "TK-99"
+childID := "TK-2"
+tickets := []store.Ticket{
+{ID: childID, ParentID: &outsideParent},
+}
+
+ordered, prefix := buildTreeDisplay(tickets)
+
+if len(ordered) != 1 || ordered[0].ID != childID {
+t.Fatalf("expected single orphan ticket, got %v", ordered)
+}
+if prefix[childID] != "" {
+t.Errorf("orphan should have empty prefix, got %q", prefix[childID])
+}
+}
+
+func TestTicketSortKeyCompleteTicketsSinkToBottom(t *testing.T) {
+active := store.Ticket{Stage: store.StageDesign, State: store.StateActive}
+idle := store.Ticket{Stage: store.StageDesign, State: store.StateIdle}
+done := store.Ticket{Stage: store.StageDone, State: store.StateSuccess}
+
+if ticketSortKey(active) >= ticketSortKey(idle) {
+t.Error("active should sort before idle")
+}
+if ticketSortKey(idle) >= ticketSortKey(done) {
+t.Error("idle should sort before done")
+}
 }
