@@ -40,6 +40,7 @@ type Config struct {
 	// Temporary delete confirmation state
 	DeleteConfirmToken   string `json:"delete_confirm_token,omitempty"`
 	DeleteConfirmProject string `json:"delete_confirm_project,omitempty"`
+	DeleteConfirmTicket  string `json:"delete_confirm_ticket,omitempty"`
 }
 
 type Credentials struct {

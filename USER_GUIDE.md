@@ -603,6 +603,19 @@ The TUI has six top-level panels, navigated with **Tab** (forward) or
 - **←** / **→** on the ticket tree — collapse / expand an epic
 - **q** or **Ctrl-C** — quit
 
+### Ticket editor (TUI)
+
+Open a ticket in the TUI editor directly from the CLI:
+
+```bash
+tk ticket edit TK-42
+# or shorthand:
+tk edit TK-42
+```
+
+The editor opens the full-screen TUI pre-focused on the selected ticket,
+allowing you to update all fields inline without leaving the terminal.
+
 ### Themes
 
 The Config panel lists available themes. Arrowing up/down immediately applies
@@ -614,7 +627,34 @@ The TUI saves the last active panel, cursor position, expanded epics, and
 selected theme on exit. These are restored on next launch. Set
 `tui_disable_persist: true` in your config to opt out.
 
-## Web Interface
+## CLI Kanban Board (`tk board`)
+
+`tk board` renders a stage-based kanban view of all tickets in the current
+project directly in the terminal — no browser or server required.
+
+```bash
+tk board          # Current project, open tickets
+tk board -a       # Include archived tickets
+```
+
+Tickets are grouped into columns by their **stage** (design → develop → test
+→ done). Within each column, tickets are sorted by priority and last-modified
+time.
+
+Example output:
+
+```
+DESIGN (4)           DEVELOP (7)          TEST (2)             DONE (12)
+──────────────────   ──────────────────   ──────────────────   ──────────────────
+TK-42  Fix login     TK-38  Add labels    TK-51  Regression     TK-29  Auth
+TK-44  Add search    TK-39  Pagination    TK-52  Perf test       TK-30  Register
+TK-45  Dark mode     TK-40  Export CSV                           ...
+...
+```
+
+`tk board -json` returns the same data as a JSON array for scripting.
+
+
 
 The embedded web app is the easiest way to work visually across many related items.
 

@@ -36,13 +36,6 @@ func AddHistoryEvent(db *sql.DB, projectID int64, ticketID string, eventType str
 		return err
 	}
 	_, err = db.Exec(`
-		INSERT INTO history_events (project_id, ticket_id, event_type, payload, created_by)
-		VALUES (?, ?, ?, ?, ?)
-	`, projectID, ticketID, eventType, string(data), nullableUserID(createdBy))
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`
 		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
 		VALUES (?, ?, ?, ?, ?)
 	`, projectID, ticketID, eventType, string(data), nullableUserID(createdBy))

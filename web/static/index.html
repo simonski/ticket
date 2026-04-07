@@ -5653,6 +5653,9 @@
 
       document.getElementById("ticket-delete").addEventListener("click", async () => {
         if (!draft || !draft.ticket) return;
+        const title = draft.ticket.title || draft.ticket.ticket_id;
+        const ok = await uiConfirm(`Delete ticket "${title}"?\n\nThis will permanently delete the ticket and all associated data.`, "Delete");
+        if (!ok) return;
         await call(`/api/tickets/${draft.ticket.ticket_id}`, { method: "DELETE", headers: headers() });
         closeModal();
         await loadTickets();

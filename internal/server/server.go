@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"database/sql"
-	"fmt"
+	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -45,11 +46,11 @@ func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
 
 	reap := func() {
 		n, err := store.ReapStaleAgents(db, thresholdMinutes)
-		if err != nil && verbose && output != nil {
-			fmt.Fprintf(output, "REAPER error: %v\n", err)
+		if err != nil && verbose {
+			slog.Error("agent reaper error", "error", err)
 		}
-		if n > 0 && verbose && output != nil {
-			fmt.Fprintf(output, "REAPER reaped %d stale agent(s)\n", n)
+		if n > 0 && verbose {
+			slog.Info("agent reaper reaped stale agents", "count", n)
 		}
 	}
 
@@ -90,7 +91,12 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 	var handler http.Handler = mux
 	handler = securityHeadersHandler(handler)
 	if verbose {
-		handler = loggingHandler(handler, output)
+		logOutput := output
+		if logOutput == nil {
+			logOutput = os.Stderr
+		}
+		logger := slog.New(slog.NewTextHandler(logOutput, nil))
+		handler = loggingHandler(handler, logger)
 	}
 	return handler, nil
 }
@@ -147,13 +153,10 @@ func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if h, ok := w.ResponseWriter.(http.Hijacker); ok {
 		return h.Hijack()
 	}
-	return nil, nil, fmt.Errorf("response writer does not support hijacking")
+	return nil, nil, errors.New("response writer does not support hijacking")
 }
 
-func loggingHandler(next http.Handler, output io.Writer) http.Handler {
-	if output == nil {
-		output = io.Discard
-	}
+func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
@@ -165,19 +168,32 @@ func loggingHandler(next http.Handler, output io.Writer) http.Handler {
 			r.Body = io.NopCloser(bytes.NewReader(requestBody))
 		}
 
+		start := time.Now()
 		lw := &loggingResponseWriter{ResponseWriter: w}
 		next.ServeHTTP(lw, r)
 		if lw.status == 0 {
 			lw.status = http.StatusOK
 		}
 
-		fmt.Fprintf(output, "REQUEST %s %s\n", r.Method, r.URL.String())
-		if len(requestBody) > 0 {
-			fmt.Fprintf(output, "request body: %s\n", string(requestBody))
+		attrs := []any{
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", lw.status,
+			"duration_ms", time.Since(start).Milliseconds(),
 		}
-		fmt.Fprintf(output, "RESPONSE %d\n", lw.status)
+		if q := r.URL.RawQuery; q != "" {
+			attrs = append(attrs, "query", q)
+		}
+		if len(requestBody) > 0 {
+			attrs = append(attrs, "request_body", string(requestBody))
+		}
 		if lw.body.Len() > 0 {
-			fmt.Fprintf(output, "response body: %s\n", lw.body.String())
+			attrs = append(attrs, "response_body", lw.body.String())
+		}
+		if lw.status >= 500 {
+			logger.Error("api request", attrs...)
+		} else {
+			logger.Info("api request", attrs...)
 		}
 	})
 }

@@ -138,7 +138,10 @@ func CreateSession(db *sql.DB, userID string) (string, error) {
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 
-	if _, err := db.Exec(`INSERT INTO sessions (user_id, token) VALUES (?, ?)`, userID, token); err != nil {
+	if _, err := db.Exec(`
+		INSERT INTO sessions (user_id, token, expires_at)
+		VALUES (?, ?, datetime('now', '+30 days'))
+	`, userID, token); err != nil {
 		return "", err
 	}
 	return token, nil
@@ -162,6 +165,7 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
 		WHERE s.token = ?
+		  AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)
 	`, token)
 
 	user, err := scanUser(row.Scan)
@@ -203,12 +207,12 @@ func ListUsers(db *sql.DB) ([]User, error) {
 		FROM users
 		WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL
 		ORDER BY username
+		LIMIT 1000
 	`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	var users []User
 	for rows.Next() {
 		user, err := scanUser(rows.Scan)
@@ -236,13 +240,61 @@ func SetUserEnabled(db *sql.DB, username string, enabled bool) error {
 }
 
 func DeleteUser(db *sql.DB, username string) error {
-	result, err := db.Exec(`DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE username = ?)`, username)
+	// Fetch the user_id before deleting so we can cascade cleanup.
+	var userID string
+	err := db.QueryRow(`SELECT user_id FROM users WHERE username = ?`, username).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	_ = result
+	defer tx.Rollback() //nolint:errcheck
 
-	result, err = db.Exec(`DELETE FROM users WHERE username = ?`, username)
+	// Anonymise audit trail records so history is preserved without PII.
+	// history_events.created_by and ticket_history.created_by are nullable.
+	if _, err := tx.Exec(`UPDATE history_events SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE ticket_history SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+		return err
+	}	// Nullify ticket creator reference (nullable FK).
+	if _, err := tx.Exec(`UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+		return err
+	}
+	// Remove personal data: sessions, memberships, time entries, messages, agent config.
+	tables := []struct {
+		table  string
+		column string
+	}{
+		{"sessions", "user_id"},
+		{"project_members", "user_id"},
+		{"team_members", "user_id"},
+		{"team_agents", "user_id"},
+		{"time_entries", "user_id"},
+		{"agent_config", "user_id"},
+	}
+	for _, t := range tables {
+		if _, err := tx.Exec(`DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); err != nil {
+			return err
+		}
+	}
+	// Delete messages to/from the user.
+	if _, err := tx.Exec(`DELETE FROM messages WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); err != nil {
+		return err
+	}
+	// Delete comments authored by the user (personal content, not anonymisable
+	// because user_id is NOT NULL and the FK references users).
+	if _, err := tx.Exec(`DELETE FROM comments WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	// Finally remove the user record.
+	result, err := tx.Exec(`DELETE FROM users WHERE user_id = ?`, userID)
 	if err != nil {
 		return err
 	}
@@ -253,7 +305,7 @@ func DeleteUser(db *sql.DB, username string) error {
 	if affected == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	return tx.Commit()
 }
 
 // ResetUserPassword changes the password and invalidates all sessions.

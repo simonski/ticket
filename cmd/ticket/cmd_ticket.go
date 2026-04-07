@@ -2235,10 +2235,11 @@ func runClone(args []string) error {
 }
 
 func runDeleteTicket(args []string) error {
-	usage := "ticket rm|delete [-id] <id>"
+	usage := "ticket rm|delete [-id] <id> [--confirm <token>]"
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	confirm := fs.String("confirm", "", "confirmation token from first run")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2258,7 +2259,31 @@ func runDeleteTicket(args []string) error {
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(*confirm) == "" {
+		// Phase 1: generate confirmation token
+		token, err := generateConfirmToken()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("ticket   : %s — %s\n", ticket.ID, ticket.Title)
+		fmt.Printf("type     : %s\n", ticket.Type)
+		fmt.Printf("\nThis will permanently delete the ticket and all associated data.\n")
+		fmt.Printf("To confirm, run:\n\n")
+		fmt.Printf("  ticket rm -id %s --confirm %s\n\n", ticket.ID, token)
+		cfg.DeleteConfirmToken = token
+		cfg.DeleteConfirmTicket = ticket.ID
+		return config.Save(cfg)
+	}
+	// Phase 2: verify token and delete
+	if *confirm != cfg.DeleteConfirmToken || ticket.ID != cfg.DeleteConfirmTicket {
+		return errors.New("invalid confirmation token")
+	}
 	if err := svc.DeleteTicket(ticket.ID); err != nil {
+		return err
+	}
+	cfg.DeleteConfirmToken = ""
+	cfg.DeleteConfirmTicket = ""
+	if err := config.Save(cfg); err != nil {
 		return err
 	}
 	if outputJSON {

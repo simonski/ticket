@@ -1,0 +1,43 @@
+run:
+  timeout: 5m
+  go: "1.23"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gocritic
+    - misspell
+    - gofmt
+    - noctx
+
+linters-settings:
+  errcheck:
+    # Report on assignment of errors to blank identifier (e.g. _ = f()).
+    check-blank: false
+  govet:
+    enable:
+      - shadow
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+    disabled-checks:
+      - commentedOutCode
+      - hugeParam
+
+issues:
+  # Don't fail on generated files.
+  exclude-rules:
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+        - gocritic
+  # Increase issue limit so the full list is visible on first run.
+  max-issues-per-linter: 50
+  max-same-issues: 10

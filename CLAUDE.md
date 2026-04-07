@@ -11,8 +11,13 @@ make test                 # Run all tests (unit + integration + playwright)
 make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, client, server, store, libticket, libtickethttp)
 make test-go-cover        # Tests with per-package coverage thresholds
+make lint                 # Run golangci-lint on all packages
 make dev                  # Print env vars for local development mode
 ```
+
+> **⚠️ `make build` increments the patch version** in `cmd/ticket/VERSION` on
+> every invocation. Use `go build -o ./bin/ticket ./cmd/ticket` for day-to-day
+> development. Reserve `make build` for cutting releases.
 
 Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 

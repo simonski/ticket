@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test clean release release-build release-checksums release-formula release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/ticket/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -24,6 +24,7 @@ help:
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
 	@printf "  make test-tk-test    Run executable documentation tests.\n"
+	@printf "  make lint            Run golangci-lint on all packages.\n"
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
 	@printf "Docker targets:\n\n"
@@ -50,6 +51,11 @@ setup: setup-go setup-node setup-playwright
 setup-go:
 	go mod download
 	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+lint:
+	golangci-lint run ./...
 
 setup-node:
 	npm install
@@ -155,6 +161,11 @@ release-checksums:
 		done | tee checksums.txt
 	@echo "Checksums written to $(DIST_DIR)/checksums.txt"
 
+release-sbom:
+	@echo "Generating CycloneDX SBOM..."
+	@cyclonedx-gomod mod -json -output $(DIST_DIR)/sbom.cdx.json .
+	@echo "SBOM written to $(DIST_DIR)/sbom.cdx.json"
+
 release-formula:
 	@echo "Generating homebrew/ticket.rb for v$(VERSION)..."
 	@darwin_arm64=$$(shasum -a 256 $(DIST_DIR)/ticket_$(VERSION)_darwin_arm64.tar.gz | cut -d' ' -f1); \
@@ -180,10 +191,11 @@ release-publish:
 		$(DIST_DIR)/ticket_$(VERSION)_darwin_amd64.tar.gz \
 		$(DIST_DIR)/ticket_$(VERSION)_linux_amd64.tar.gz \
 		$(DIST_DIR)/ticket_$(VERSION)_linux_arm64.tar.gz \
-		$(DIST_DIR)/checksums.txt
+		$(DIST_DIR)/checksums.txt \
+		$(DIST_DIR)/sbom.cdx.json
 	@echo "Release v$(VERSION) published."
 
-release: release-build release-checksums release-formula
+release: release-build release-checksums release-sbom release-formula
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  Release v$(VERSION) ready"

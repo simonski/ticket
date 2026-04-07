@@ -752,19 +752,66 @@ func GetTicketByRef(db *sql.DB, raw string) (Ticket, error) {
 }
 
 func ListTicketParents(db *sql.DB, id string) ([]Ticket, error) {
-	current, err := GetTicket(db, id)
+	// Load the full ancestor chain in one recursive CTE query instead of
+	// making one GetTicket() call per ancestor level (O(depth) queries).
+	rows, err := db.Query(`
+		WITH RECURSIVE ancestors(ticket_id, project_id, parent_id, clone_of, type, title,
+		  description, acceptance_criteria, git_repository, git_branch,
+		  workflow_id, workflow_stage_id, stage, state, status, priority, sort_order,
+		  estimate_effort, estimate_complete, health_score, assignee, author,
+		  ready, open, archived, created_by, created_at, updated_at) AS (
+			SELECT ticket_id, project_id, parent_id, clone_of, type, title,
+			  description, acceptance_criteria, git_repository, git_branch,
+			  workflow_id, workflow_stage_id, stage, state, status, priority, sort_order,
+			  estimate_effort, estimate_complete, health_score, assignee, COALESCE(author,''),
+			  ready, open, archived, COALESCE(created_by,''), created_at, updated_at
+			FROM tickets WHERE ticket_id = ?
+			UNION ALL
+			SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title,
+			  t.description, t.acceptance_criteria, t.git_repository, t.git_branch,
+			  t.workflow_id, t.workflow_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order,
+			  t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author,''),
+			  t.ready, t.open, t.archived, COALESCE(t.created_by,''), t.created_at, t.updated_at
+			FROM tickets t
+			JOIN ancestors a ON t.ticket_id = a.parent_id
+		)
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title,
+		  description, acceptance_criteria, git_repository, git_branch,
+		  workflow_id, workflow_stage_id, stage, state, status, priority, sort_order,
+		  estimate_effort, estimate_complete, health_score, assignee, author,
+		  ready, open, archived, created_by, created_at, updated_at
+		FROM ancestors
+		WHERE ticket_id != ?
+	`, id, id)
 	if err != nil {
 		return nil, err
 	}
-	parents := make([]Ticket, 0)
-	parentID := current.ParentID
-	for parentID != nil {
-		parent, err := GetTicket(db, *parentID)
+	defer rows.Close()
+
+	var parents []Ticket
+	for rows.Next() {
+		t, err := scanTicket(rows)
 		if err != nil {
 			return nil, err
 		}
-		parents = append(parents, parent)
-		parentID = parent.ParentID
+		parents = append(parents, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Batch-fetch comments for all ancestor tickets in one query.
+	if len(parents) > 0 {
+		ids := make([]string, len(parents))
+		for i, p := range parents {
+			ids[i] = p.ID
+		}
+		commentMap, err := batchFetchComments(db, ids)
+		if err != nil {
+			return nil, err
+		}
+		for i := range parents {
+			parents[i].Comments = commentMap[parents[i].ID]
+		}
 	}
 	return parents, nil
 }
@@ -841,6 +888,40 @@ func hydrateTicket(db *sql.DB, ticket Ticket) (Ticket, error) {
 	}
 	ticket.Comments = comments
 	return ticket, nil
+}
+
+func batchFetchComments(db *sql.DB, ids []string) (map[string][]Comment, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.Repeat("?,", len(ids))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := db.Query(`
+		SELECT c.id, c.item_id, c.user_id, u.username, c.comment, c.created_at
+		FROM comments c
+		JOIN users u ON u.user_id = c.user_id
+		WHERE c.item_id IN (`+placeholders+`)
+		ORDER BY c.created_at DESC, c.id DESC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]Comment, len(ids))
+	for rows.Next() {
+		var c Comment
+		if err := rows.Scan(&c.ID, &c.ItemID, &c.UserID, &c.Author, &c.Comment, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		c.Text = c.Comment
+		result[c.ItemID] = append(result[c.ItemID], c)
+	}
+	return result, rows.Err()
 }
 
 func ticketHasChildren(db *sql.DB, id string) (bool, error) {

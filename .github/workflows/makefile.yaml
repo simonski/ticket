@@ -21,7 +21,7 @@ jobs:
       run: make tools
 
     - name: Run test
-      run: make test
+      run: make test-go-cover
 
     - name: Run build
       run: make build
@@ -30,3 +30,6 @@ jobs:
       run: |
         go install github.com/securego/gosec/v2/cmd/gosec@latest
         gosec ./...
+
+    - name: Run govulncheck
+      run: govulncheck ./...

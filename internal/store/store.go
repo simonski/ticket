@@ -437,6 +437,18 @@ CREATE INDEX IF NOT EXISTS idx_dependencies_depends_on ON dependencies(depends_o
 CREATE INDEX IF NOT EXISTS idx_labels_project_id ON labels(project_id);
 
 CREATE INDEX IF NOT EXISTS idx_ticket_labels_label_id ON ticket_labels(label_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open);
+CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type);
+
+CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
@@ -951,6 +963,23 @@ func migrateSchema(db *sql.DB) error {
 		}
 		// Backfill author from created_by user ID
 		if _, err := db.Exec(`UPDATE tickets SET author = COALESCE((SELECT u.username FROM users u WHERE u.user_id = tickets.created_by), '') WHERE author = ''`); err != nil {
+			return err
+		}
+	}
+	// Add missing indexes for frequently-queried columns.
+	missingIndexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open)`,
+		`CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived)`,
+		`CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type)`,
+		`CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
+	}
+	for _, stmt := range missingIndexes {
+		if _, err := db.Exec(stmt); err != nil {
 			return err
 		}
 	}

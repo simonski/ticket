@@ -106,6 +106,7 @@ func ListTeams(db *sql.DB) ([]Team, error) {
 		SELECT team_id, name, parent_team_id, created_at, updated_at
 		FROM teams
 		ORDER BY name, team_id
+		LIMIT 1000
 	`)
 	if err != nil {
 		return nil, err

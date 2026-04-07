@@ -130,6 +130,31 @@ func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request) error 
 }
 
 func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
+	// Validate Origin header to prevent cross-origin WebSocket hijacking.
+	// Browsers always send Origin on WebSocket upgrades; reject if it doesn't
+	// match the Host the server is serving.
+	if origin := r.Header.Get("Origin"); origin != "" {
+		originHost := origin
+		if idx := strings.Index(origin, "://"); idx >= 0 {
+			originHost = origin[idx+3:]
+		}
+		// Strip any path component from the origin host.
+		if idx := strings.Index(originHost, "/"); idx >= 0 {
+			originHost = originHost[:idx]
+		}
+		requestHost := r.Host
+		// Strip port from requestHost if originHost has no port, to allow
+		// browser connections where the port is implied by the scheme.
+		if !strings.Contains(originHost, ":") {
+			if idx := strings.LastIndex(requestHost, ":"); idx >= 0 {
+				requestHost = requestHost[:idx]
+			}
+		}
+		if !strings.EqualFold(originHost, requestHost) {
+			http.Error(w, "forbidden: cross-origin WebSocket not allowed", http.StatusForbidden)
+			return nil, fmt.Errorf("websocket origin %q does not match host %q", origin, r.Host)
+		}
+	}
 	if !headerContainsToken(r.Header, "Connection", "upgrade") || !strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket") {
 		return nil, errors.New("not a websocket upgrade request")
 	}

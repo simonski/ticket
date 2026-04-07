@@ -73,6 +73,7 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 		FROM users
 		WHERE user_type = 'agent'
 		ORDER BY username
+		LIMIT 1000
 	`)
 	if err != nil {
 		return nil, err

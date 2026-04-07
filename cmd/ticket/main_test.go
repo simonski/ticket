@@ -152,7 +152,7 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 		t.Fatalf("snapshot file missing: %v", err)
 	}
 
-	if err := run([]string{"rm", "-id", ticketID}); err != nil {
+	if err := deleteTicketConfirmed(t, ticketID); err != nil {
 		t.Fatalf("run(rm) error = %v", err)
 	}
 	if err := run([]string{"get", "-id", ticketID}); err == nil || err.Error() != "ticket not found" {
@@ -1925,7 +1925,7 @@ func TestRunDeleteTicketInLocalMode(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "Delete me"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"delete", "-id", taskID}); err != nil {
+		if err := deleteTicketConfirmed(t, taskID); err != nil {
 			t.Fatalf("delete error = %v", err)
 		}
 	})
@@ -1945,7 +1945,8 @@ func TestRunDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 	if childID == "" {
 		t.Fatal("child task id is empty")
 	}
-	if err := run([]string{"rm", "-id", parentID}); err == nil || err.Error() != "ticket has child tickets" {
+	// Two-step deletion: the children check happens on the final confirm step.
+	if err := deleteTicketConfirmed(t, parentID); err == nil || err.Error() != "ticket has child tickets" {
 		t.Fatalf("delete parent error = %v, want ticket has child tickets", err)
 	}
 }
@@ -2420,6 +2421,28 @@ func createLocalTask(t *testing.T, args []string) string {
 		t.Fatalf("ParseInt(%q) error = %v", lines[0], err)
 	}
 	return id
+}
+
+// deleteTicketConfirmed performs the two-step ticket deletion: first call generates
+// the confirmation token (saved in config), second call with the token deletes the ticket.
+// Returns the error from the second (delete) call so callers can assert on it.
+func deleteTicketConfirmed(t *testing.T, id string) error {
+	t.Helper()
+	// Phase 1: generate token (outputs prompt, saves token in config).
+	if err := run([]string{"rm", "-id", id}); err != nil {
+		t.Fatalf("rm phase 1 error = %v", err)
+	}
+	// Read token directly from config.
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	token := cfg.DeleteConfirmToken
+	if token == "" {
+		t.Fatal("no confirmation token in config after phase 1")
+	}
+	// Phase 2: delete with token.
+	return run([]string{"rm", "-id", id, "--confirm", token})
 }
 
 func ticketLabelByID(t *testing.T, id string) string {

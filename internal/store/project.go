@@ -122,6 +122,7 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		ORDER BY created_at, project_id
+		LIMIT 1000
 	`)
 	if err != nil {
 		return nil, err
