@@ -235,8 +235,21 @@ tk project init                    # Write .ticket.json in current dir
 
 ## Workflow Guidelines
 
-1. **Pick up work**: `tk list --status design/idle`, then `tk claim -id <id>` and `tk state -id <id> active`
-2. **Track progress**: `tk complete -id <id>` when stage work is done — auto-advances to next stage
-3. **File new issues**: create tickets for anything discovered during work
-4. **Comment**: leave context on tickets for future sessions
-5. **Complete work**: keep completing stages until the ticket reaches the final stage with `success`
+1. **Pick up work**: `tk ls --status design/idle`, then `tk claim -id <id>` and `tk state -id <id> active`
+2. **Advance to develop before coding**: Once design is done and you are about to write code, run `tk complete -id <id>` to advance the ticket from design → develop, then `tk state -id <id> active` to set it to develop/active. **Never start coding on a ticket that is still in design/active.**
+3. **Mark ready when in development**: Once the ticket is in develop/active and coding has begun, mark it ready: `tk ready -id <id>`. This signals the ticket is in active development.
+4. **Track progress**: `tk complete -id <id>` when a stage's work is done — auto-advances to the next stage
+5. **File new issues**: create tickets for anything discovered during work
+6. **Comment**: leave context on tickets for future sessions
+7. **Complete work**: keep completing stages until the ticket reaches the final stage (`done`) with `success`
+
+### Stage Lifecycle Reference
+
+```
+design/idle  →  design/active  →  [complete]  →  develop/idle  →  develop/active  →  [complete]  →  test/idle  → ...  →  done/success
+```
+
+- **design**: Understand the problem, design the solution
+- **develop**: Write the code (ticket should be develop/active and `ready=yes` while coding)
+- **test**: Verify the solution works, run tests
+- **done**: Work is fully complete

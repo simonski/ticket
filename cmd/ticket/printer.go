@@ -307,11 +307,73 @@ func printCountSummary(summary store.CountSummary, scopedToProject bool) {
 	printStatusBox(lines)
 }
 
+// buildTreeDisplay reorders tickets for tree display so that parent tickets appear
+// before their children, and returns a tree-connector prefix string for each ticket ID.
+// Tickets whose parent is not in the list are treated as roots (empty prefix).
+func buildTreeDisplay(tickets []store.Ticket) (ordered []store.Ticket, treePrefix map[string]string) {
+	inList := make(map[string]bool, len(tickets))
+	for _, t := range tickets {
+		inList[t.ID] = true
+	}
+
+	children := make(map[string][]store.Ticket, len(tickets))
+	var roots []store.Ticket
+	for _, t := range tickets {
+		if t.ParentID != nil && inList[*t.ParentID] {
+			children[*t.ParentID] = append(children[*t.ParentID], t)
+		} else {
+			roots = append(roots, t)
+		}
+	}
+
+	ordered = make([]store.Ticket, 0, len(tickets))
+	treePrefix = make(map[string]string, len(tickets))
+
+	// visit processes t and its subtree.
+	// ancestorBars is the accumulated bar/space prefix from ancestor nodes.
+	// isRoot indicates no connector is rendered for this node.
+	// isLast indicates this is the last child among its siblings.
+	var visit func(t store.Ticket, ancestorBars string, isRoot, isLast bool)
+	visit = func(t store.Ticket, ancestorBars string, isRoot, isLast bool) {
+		if isRoot {
+			treePrefix[t.ID] = ""
+		} else if isLast {
+			treePrefix[t.ID] = ancestorBars + "└─ "
+		} else {
+			treePrefix[t.ID] = ancestorBars + "├─ "
+		}
+		ordered = append(ordered, t)
+
+		// Compute the ancestor bar prefix that children of t will inherit.
+		// Root nodes contribute no bar; non-last nodes contribute "│  "; last nodes contribute "   ".
+		var childAncestorBars string
+		if isRoot {
+			childAncestorBars = ancestorBars
+		} else if isLast {
+			childAncestorBars = ancestorBars + "   "
+		} else {
+			childAncestorBars = ancestorBars + "│  "
+		}
+		kids := children[t.ID]
+		for i, kid := range kids {
+			visit(kid, childAncestorBars, false, i == len(kids)-1)
+		}
+	}
+
+	for _, root := range roots {
+		visit(root, "", true, false)
+	}
+	return ordered, treePrefix
+}
+
 func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode bool, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
 	}
+
+	// Reorder tickets into tree (parent-before-children) order and get per-ticket prefixes.
+	tickets, treePfx := buildTreeDisplay(tickets)
 
 	useColor := isTerminal()
 
@@ -357,7 +419,12 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		}
 		assignee = truncateRunes(assignee, maxAssigneeW)
 		parent := parentKeys[t.ID]
-		key := symbol + " " + t.ID
+		// If this ticket has a tree prefix, the PARENT column becomes redundant;
+		// suppress it so the row is less noisy when the hierarchy is already visible.
+		if treePfx[t.ID] != "" {
+			parent = ""
+		}
+		key := treePfx[t.ID] + symbol + " " + t.ID
 		ready := "no"
 		if t.Ready {
 			ready = "yes"

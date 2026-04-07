@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,27 @@ import (
 	"github.com/simonski/ticket/internal/tui"
 	"github.com/simonski/ticket/libticket"
 )
+
+// ticketSortKey returns a numeric sort key so that complete/late-stage tickets
+// sink to the bottom of the list while active work stays at the top (TK-189).
+// Lower values appear first.
+func ticketSortKey(t store.Ticket) int {
+	stageOrd := map[string]int{
+		store.StageDesign:  0,
+		store.StageDevelop: 1,
+		store.StageTest:    2,
+		store.StageDone:    3,
+	}
+	stateOrd := map[string]int{
+		store.StateActive:  0,
+		store.StateIdle:    1,
+		store.StateFail:    2,
+		store.StateSuccess: 3,
+	}
+	s := stageOrd[t.Stage] * 10
+	s += stateOrd[t.State]
+	return s
+}
 
 func runTicketNS(args []string) error {
 	if len(args) == 0 {
@@ -416,6 +438,11 @@ func runList(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
+	// Sort: tickets in later stages or with success/fail state sink to the bottom
+	// so in-progress work is visible first (TK-189).
+	sort.SliceStable(tickets, func(i, j int) bool {
+		return ticketSortKey(tickets[i]) < ticketSortKey(tickets[j])
+	})
 	// Build agent username set so we can prefix agent assignees.
 	agentUsernames := make(map[string]bool)
 	if agents, err := api.ListAgents(); err == nil {
@@ -1049,6 +1076,14 @@ func updateTicketLifecycleRequest(svc libticket.Service, id string, current stor
 		return printJSON(updated)
 	}
 	printTicket(updated)
+	// Show a clear visual transition summary for lifecycle changes (TK-186).
+	if state == store.StateSuccess {
+		if updated.Stage != current.Stage {
+			fmt.Printf("\n◉ %s advanced: %s → %s/%s\n", updated.ID, current.Status, updated.Stage, updated.State)
+		} else if !updated.Open && current.Open {
+			fmt.Printf("\n✓ %s is complete.\n", updated.ID)
+		}
+	}
 	return nil
 }
 
