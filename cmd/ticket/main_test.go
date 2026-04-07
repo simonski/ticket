@@ -3851,8 +3851,8 @@ func TestRowColorFail(t *testing.T) {
 
 func TestRowColorIdle(t *testing.T) {
 	got := rowColor("design/idle")
-	if got != "\033[90m" {
-		t.Fatalf("rowColor(design/idle) = %q, want ansiGray", got)
+	if got != ansiWhite {
+		t.Fatalf("rowColor(design/idle) = %q, want ansiWhite", got)
 	}
 }
 
@@ -3865,8 +3865,8 @@ func TestRowColorInvalid(t *testing.T) {
 
 func TestRowColorSuccess(t *testing.T) {
 	got := rowColor("design/success")
-	if got != "" {
-		t.Fatalf("rowColor(design/success) = %q, want empty (no special color)", got)
+	if got != ansiGray {
+		t.Fatalf("rowColor(design/success) = %q, want ansiGray", got)
 	}
 }
 

@@ -17,19 +17,20 @@ import (
 )
 
 const (
-	ansiReset  = "\033[0m"
-	ansiBold   = "\033[1m"
-	ansiGreen  = "\033[32m"
-	ansiRed = "\033[31m"
-	ansiGray   = "\033[90m"
+	ansiReset = "\033[0m"
+	ansiBold  = "\033[1m"
+	ansiGreen = "\033[32m"
+	ansiRed   = "\033[31m"
+	ansiGray  = "\033[90m"
+	ansiWhite = "\033[97m"
 )
 
 func isTerminal() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-// rowColor returns an ANSI color code based on the ticket state embedded in the status string
-// (e.g. "design/active" → green, "design/fail" → red, "design/idle" → gray).
+// rowColor returns an ANSI color code based on the ticket state embedded in the status string.
+// active → green, fail → red, idle → white (normal), success → gray (dimmed).
 func rowColor(status string) string {
 	_, state, err := store.ParseLifecycleStatus(status)
 	if err != nil {
@@ -41,6 +42,8 @@ func rowColor(status string) string {
 	case store.StateFail:
 		return ansiRed
 	case store.StateIdle:
+		return ansiWhite
+	case store.StateSuccess:
 		return ansiGray
 	}
 	return ""
@@ -389,9 +392,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 
 	makeHeader := func() string {
 		if showOpen {
-			return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tPARENT\tASSIGNEE\tPRIORITY"
+			return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tOPEN\tASSIGNEE\tPRIORITY"
 		}
-		return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tPARENT\tASSIGNEE\tPRIORITY"
+		return "ID\tTYPE\tTITLE\tSTAGE\tSTATE\tREADY\tASSIGNEE\tPRIORITY"
 	}
 
 	// Maximum display width for the assignee column.
@@ -418,23 +421,17 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 			assignee = "agent-" + assignee
 		}
 		assignee = truncateRunes(assignee, maxAssigneeW)
-		parent := parentKeys[t.ID]
-		// If this ticket has a tree prefix, the PARENT column becomes redundant;
-		// suppress it so the row is less noisy when the hierarchy is already visible.
-		if treePfx[t.ID] != "" {
-			parent = ""
-		}
 		key := treePfx[t.ID] + symbol + " " + t.ID
 		ready := "no"
 		if t.Ready {
 			ready = "yes"
 		}
 		if showOpen {
-			return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-				key, t.Type, title, t.Stage, t.State, ready, ticketOpenLabel(t), parent, assignee, t.Priority)
+			return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+				key, t.Type, title, t.Stage, t.State, ready, ticketOpenLabel(t), assignee, t.Priority)
 		}
-		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
-			key, t.Type, title, t.Stage, t.State, ready, parent, assignee, t.Priority)
+		return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d",
+			key, t.Type, title, t.Stage, t.State, ready, assignee, t.Priority)
 	}
 
 	// Pass 1: render with a sentinel title to locate where the title column
@@ -523,24 +520,58 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	rawLines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
 	// Build the final list of display lines, inserting title continuation lines
-	// immediately after each ticket row that has a title longer than titleW.
+	// immediately after each ticket row that has a title longer than titleW,
+	// and blank separator lines before each new root-level group.
 	type displayLine struct {
-		text   string
-		status string // non-empty on ticket rows, enables column coloring
-		ready  bool   // ticket ready flag, for coloring the READY column
+		text    string
+		status  string // non-empty on ticket rows, enables column coloring
+		ready   bool   // ticket ready flag, for coloring the READY column
+		isBlank bool   // blank separator row between root groups
 	}
 
 	display := make([]displayLine, 0, len(rawLines))
 	display = append(display, displayLine{text: rawLines[0]}) // header
 
+	// treeContPrefix converts a connector prefix to its bar-continuation form,
+	// so that multi-line title rows keep the vertical bar aligned with the connector.
+	//   "├─ "      → "│  "    (bar continues down)
+	//   "└─ "      → "   "    (last child, no bar)
+	//   "│  ├─ "   → "│  │  "
+	//   "│  └─ "   → "│     "
+	treeContPrefix := func(pfx string) string {
+		r := []rune(pfx)
+		if len(r) < 3 {
+			return strings.Repeat(" ", len(r))
+		}
+		last3 := string(r[len(r)-3:])
+		var repl string
+		switch last3 {
+		case "├─ ":
+			repl = "│  "
+		case "└─ ":
+			repl = "   "
+		default:
+			repl = strings.Repeat(" ", 3)
+		}
+		return string(r[:len(r)-3]) + repl
+	}
+
 	for i, t := range tickets {
 		if i+1 >= len(rawLines) {
 			break
 		}
+		// Insert a blank line before each root-level ticket group (except the first).
+		if i > 0 && treePfx[t.ID] == "" {
+			display = append(display, displayLine{isBlank: true})
+		}
 		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, ready: t.Ready})
 		chunks := wrapRunes(t.Title, titleW)
 		for _, chunk := range chunks[1:] {
-			cont := strings.Repeat(" ", preWidth) + chunk
+			// Build continuation indent: tree bar continuation + spaces to title column.
+			contPfx := treeContPrefix(treePfx[t.ID])
+			contPfxW := len([]rune(contPfx))
+			indent := contPfx + strings.Repeat(" ", preWidth-contPfxW)
+			cont := indent + chunk
 			display = append(display, displayLine{text: cont, status: t.Status, ready: t.Ready})
 		}
 	}
@@ -562,6 +593,10 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 
 	if !useColor {
 		for _, l := range display {
+			if l.isBlank {
+				fmt.Println()
+				continue
+			}
 			r := []rune(l.text)
 			if len(r) > maxW {
 				fmt.Println(string(r[:maxW]))
@@ -650,6 +685,10 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	border := strings.Repeat("─", maxW+2)
 	fmt.Println("╭" + border + "╮")
 	for _, l := range display {
+		if l.isBlank {
+			fmt.Printf("│ %s │\n", strings.Repeat(" ", maxW))
+			continue
+		}
 		lineText := l.text
 		lineRunes := []rune(lineText)
 		// Truncate lines that exceed maxW to prevent overdraw.
