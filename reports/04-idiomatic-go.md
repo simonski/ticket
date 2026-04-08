@@ -1,43 +1,65 @@
 # Idiomatic Go
 
-**Score: 72/100**
+**Score: 81/100** (was 72)
 
 ## What is being assessed
 Go code quality against idiomatic patterns: error handling, context propagation, concurrency safety, package organisation, interface design, naming conventions, resource cleanup, test patterns, linting configuration, and use of modern stdlib.
 
 ## Methodology
-Reviewed all Go source files across `cmd/ticket/`, `internal/`, `libticket/`, `libtickethttp/`, and `libtickettest/`. Inspected `go.mod`, `Makefile`, and all test files. Searched for context usage, mutex patterns, defer patterns, deprecated stdlib calls, and linting configuration.
+Reviewed all Go source files across `cmd/ticket/`, `internal/`, `libticket/`, `libtickethttp/`, and `libtickettest/`. Inspected `go.mod`, `Makefile`, `.golangci.yml`, and all test files. Searched for context usage, mutex patterns, defer patterns, deprecated stdlib calls, linting configuration, and nosec annotations. Version 0.1.737.
 
 ## Findings
 
 ### Passing checks
-- Error wrapping with `%w` used consistently (`internal/store/store.go:1478`, `internal/store/auth.go:157`)
-- Sentinel errors defined and checked with `errors.Is()`: `internal/store/auth.go:15-19`, `internal/store/project.go:11`
-- Clean package DAG — no circular imports; dependencies flow `cmd → lib → internal/store`
-- `sync.RWMutex` used correctly on `liveHub` (`internal/server/realtime.go:30`), rate limiter (`internal/server/ratelimit.go:25`), and chat runtime (`internal/server/chat_ws.go:37`)
-- Buffered channels with proper select patterns (`internal/server/realtime.go:50`, `internal/server/chat_ws.go:95`)
-- `sync.Once` for resource close (`internal/server/realtime.go:83`, `internal/server/chat_ws.go:38`)
+- Error wrapping with `%w` used consistently — 127 instances (`internal/store/store.go`, `internal/store/ticket.go`, etc.)
+- Sentinel errors defined with `errors.New` and checked with `errors.Is()`: `internal/store/ticket.go:13-16`, `internal/store/auth.go:17-20`, `internal/store/project.go:12`
+- Clean package DAG — no circular imports; dependencies flow `cmd → libticket → internal/store`
+- `sync.Mutex` used correctly on `liveHub` (`internal/server/realtime.go`), rate limiter (`internal/server/ratelimit.go:11`), and chat runtime (`internal/server/chat_ws.go:38,58`)
+- Buffered channels with proper select patterns (`internal/server/realtime.go`, `internal/server/chat_ws.go`)
 - `defer rows.Close()` on all SQL queries; `defer resp.Body.Close()` on all HTTP responses
 - Idiomatic acronym casing: `ID`, `UserID`, `ProjectID`, `WorkflowID` (not `Id`, `UserId`)
-- No deprecated `ioutil.*` — uses `os.ReadAll()`, `os.WriteFile()`, `io.NopCloser()`
+- No deprecated `ioutil.*` — uses `os.ReadFile()`, `os.WriteFile()`, `io.NopCloser()`
 - No unnecessary dependencies in `go.mod`; minimal, well-chosen set
+- Store layer now accepts `context.Context` as first param on all 40+ store functions (`internal/store/ticket.go:112`, `internal/store/store.go:108`)
+- HTTP API handlers pass `r.Context()` to all store calls (`internal/server/api_tickets.go:35,44,66`)
+- `.golangci.yml` exists with solid linter set: errcheck, govet (shadow), staticcheck, unused, gosimple, ineffassign, gocritic, misspell, gofmt, noctx
+- `make lint` target present and runs `golangci-lint run ./...`
+- 75 `#nosec` annotations all carry explanatory comments; zero unadorned suppressions
+- `t.TempDir()` used in 97+ test sites — automatic cleanup without `defer os.RemoveAll`
+- Table-driven tests used in `cmd/ticket/main_test.go:688`, `cmd/ticket/main_test.go:2191`
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No `context.Context` passed to any DB calls | High | `internal/store/activity.go:38,45,53`, `internal/store/ticket.go` (all queries) | Refactor store functions to accept `ctx context.Context` as first param; use `QueryContext()`, `ExecContext()` |
-| HTTP handlers never pass request context to store | High | `internal/server/api.go:100+` | Pass `r.Context()` through to all store calls |
-| No `.golangci.yml` linting config | Medium | repo root | Add config enabling `errcheck`, `govet`, `staticcheck`, `unused`, `contextcheck` |
-| No `make lint` target | Medium | `Makefile` | Add lint target running `golangci-lint run ./...` |
-| Test helper functions lack `t.Helper()` | Low | `internal/store/store_test.go`, `internal/server/api_test.go` | Add `t.Helper()` as first line of each helper function |
-| Most tests use `defer` instead of `t.Cleanup()` | Low | `internal/store/auth_test.go`, `internal/store/workflow_test.go` | Prefer `t.Cleanup()` for parallel test safety |
-| `go.mod` declares `go 1.26.0` (pre-release) | Low | `go.mod:3` | Pin to latest stable release (1.23.x) for reproducible builds |
+| `libticket/local.go` calls `context.Background()` 125 times; `Service` interface has no ctx parameter so request context never reaches the store via the library path | High | `libticket/local.go:54,57,65,71,89` (and ~120 more) | Add `ctx context.Context` as first arg to all `Service` interface methods; `LocalService` can then forward the caller's context to store functions |
+| `analyse.go` calls `store.GetRoleByTitle(context.Background(), ...)` inside an HTTP request handler | Medium | `internal/server/analyse.go:134,176` | Use `r.Context()` instead so the request context (deadline/cancellation) is honoured |
+| `http.Get` called without a context-aware client (caught by `noctx` linter) | Low | `cmd/ticket/cmd_setup.go:298`, `cmd/tk-test/main.go:524` | Use `http.NewRequestWithContext` + `http.DefaultClient.Do()` |
+| `go.mod` declares `go 1.26.0` (unreleased as of this writing) | Low | `go.mod:3` | Pin to latest stable release (1.23.x) until 1.26 ships |
+| `r.PathValue("{id}")` not used despite go.mod requiring ≥1.22 | Low | `internal/server/api_tickets.go:338`, `api_projects.go:73`, all `*_handlers.go` | Replace 11× `strings.TrimPrefix(r.URL.Path, prefix)` with named route params in `mux.HandleFunc("/api/tickets/{id}", ...)` + `r.PathValue("id")` |
+| `_ = json.NewEncoder(w).Encode(payload)` silently swallows encode errors | Low | `internal/server/api_helpers.go:204` | Log or at least `slog.Warn` the encode error so write failures are visible |
 
 ## Verdict
-Solid Go codebase with excellent naming, resource management, and concurrency patterns. The critical gap is complete absence of `context.Context` through the storage layer, which prevents request cancellation, deadline propagation, and observability hooks. Linting infrastructure is missing entirely, which will allow regressions in code quality over time.
+A substantial jump from 72 → 81. Both previously-critical gaps are closed: the store layer is now context-aware throughout, and a credible linting pipeline (`golangci.yml` + `make lint` + `gosec` in CI) is in place. The remaining score ceiling is the `Service` interface abstraction, which still discards the caller's context at the library boundary — fixing that single issue would push the score to ≥87 and is the highest-leverage remaining change.
 
 ## Changes since last assessment
-First assessment.
+| Change | Impact |
+|--------|--------|
+| `internal/store` functions now accept `ctx context.Context` throughout | +6 — critical context propagation gap at store layer closed |
+| HTTP handlers (`internal/server/api_*.go`) now pass `r.Context()` to all store calls | +4 — server-side context propagation correct |
+| `.golangci.yml` added with 10 linters including `noctx`, `govet shadow`, `gocritic` | +3 — quality gate now enforced in CI |
+| `make lint` target added | +1 |
+| All gosec findings resolved — 75 `#nosec` annotations, every one with a justification comment | +2 |
+| `publish` CI job added to `makefile.yaml` (build → test → gosec → govulncheck → release) | +1 |
+
+## Remaining recommendations
+| Finding | Severity | Recommendation |
+|---------|----------|----------------|
+| `Service` interface takes no context; `LocalService` uses `context.Background()` 125× | High | Add `ctx context.Context` as first parameter to all 108 `Service` methods |
+| `analyse.go` HTTP handler uses `context.Background()` for store calls | Medium | Use `r.Context()` in all handler-triggered calls |
+| `http.Get` without context in 2 places | Low | Use `http.NewRequestWithContext` |
+| `go.mod` requires `go 1.26.0` (pre-release) | Low | Pin to latest stable Go |
+| `r.PathValue` not used despite Go 1.22+ required | Low | Adopt named route variables; eliminates 11× `strings.TrimPrefix` path parsing |
+| Encode error silenced in `writeJSON` | Low | Log write failures |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
