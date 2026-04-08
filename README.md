@@ -1,23 +1,196 @@
 # ticket
 
-`ticket` is a ticket and project management system for software engineering work.
+`ticket` is a local-first ticket and project management system for software engineering teams. It runs as a single Go binary that provides a CLI, a terminal UI, a web UI, and a REST API — all backed by SQLite.
 
-It models:
+```
+brew install simonski/tap/ticket
+```
 
-- projects with unique prefixes such as `CUS`
-- tickets with human keys such as `CUS-42`
-- ticket types `epic`, `task`, `bug`, `story`, `requirement`, `decision`, `question`, and `note`
-- lifecycle as `stage/state`, for example `develop/active`
-- stages: `design → develop → test → done`
-- states: `idle | active | success | fail`
-  - `idle`: ready but not currently in progress
-  - `active`: currently being worked on (requires an assignee)
-  - `success`: stage complete, auto-advances to next stage
-  - `fail`: stage did not succeed
+Both `ticket` and the short alias `tk` are installed.
 
-The authoritative system contract is in [SPEC.md](./SPEC.md). User-facing
-workflow details are in [USER_GUIDE.md](./USER_GUIDE.md). Implementation and
-architecture notes are in [docs/DESIGN.md](./docs/DESIGN.md).
+---
+
+## Introduction
+
+`ticket` tracks engineering work through a lightweight lifecycle:
+
+| Concept | Example |
+|---------|---------|
+| Project | `CUS` — Customer Portal |
+| Ticket key | `CUS-T-42` |
+| Ticket types | `epic`, `task`, `bug`, `story`, `spike`, `chore`, `note`, `question`, `requirement`, `decision` |
+| Lifecycle | `stage/state` — e.g. `develop/active` |
+| Stages | `design → develop → test → done` |
+| States | `idle`, `active`, `success`, `fail` |
+
+Setting a ticket's state to `success` automatically advances it to the next stage.
+
+It works in two modes:
+
+- **Local** — CLI and TUI operate directly on a SQLite file. No server required.
+- **Server** — HTTP server adds multi-user auth, a web Kanban board, WebSocket live updates, and AI agent support.
+
+The authoritative system contract is in [SPEC.md](./SPEC.md). Full user-facing
+documentation is in [USER_GUIDE.md](./USER_GUIDE.md). Architecture and design
+notes are in [docs/DESIGN.md](./docs/DESIGN.md).
+
+## Installation
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install simonski/tap/ticket
+```
+
+Installs both `ticket` and the alias `tk`.
+
+### Go install
+
+```bash
+go install github.com/simonski/ticket/cmd/ticket@latest
+alias tk=ticket
+```
+
+### Download a binary
+
+Download a tarball for your platform from the [releases page](https://github.com/simonski/ticket/releases), extract it, and put `ticket` on your `PATH`.
+
+---
+
+## Build from source
+
+```bash
+git clone https://github.com/simonski/ticket
+cd ticket
+make setup        # install Go tools, Node, Playwright
+go build -o ./bin/ticket ./cmd/ticket
+```
+
+> **Note:** `make build` increments the patch version on every call. Use
+> `go build -o ./bin/ticket ./cmd/ticket` for day-to-day development.
+
+Run the tests:
+
+```bash
+make test
+```
+
+---
+
+## Usage
+
+### Quick start (local)
+
+```bash
+tk init                                          # create .ticket/ workspace
+tk project create -prefix MY -title "My Work"
+tk project use MY
+tk add "First ticket"
+tk list
+```
+
+See [QUICKSTART.md](./QUICKSTART.md) for a full walkthrough.
+
+### Command structure
+
+```
+tk <noun> <verb> [flags]
+```
+
+| Noun | Common verbs |
+|------|-------------|
+| `ticket` | `ls`, `new`, `get`, `update`, `rm`, `state`, `assign`, `close` |
+| `idea` | `ls`, `new`, `get`, `shape`, `accept`, `reject` |
+| `project` | `ls`, `new`, `get`, `use`, `rm`, `init` |
+| `dep` | `add`, `remove` |
+| `label` | `ls`, `new`, `rm`, `add`, `remove` |
+| `time` | `log`, `ls`, `total`, `rm` |
+| `story` | `ls`, `new`, `get`, `update`, `rm` |
+| `decision` | `ls`, `new` |
+| `role` | `ls`, `new`, `get`, `update`, `rm` |
+| `workflow` | `ls`, `new`, `get`, `rm`, `set`, `unset` |
+| `team` | `ls`, `new`, `update`, `rm` |
+| `agent` | `ls`, `new`, `update`, `rm`, `run` |
+| `user` | `ls`, `new`, `rm`, `enable`, `disable` |
+
+**Shortcuts:**
+
+```bash
+tk add "Fix login bug"                    # create a task
+tk bug "Token expires too early"          # create a bug
+tk epic "Authentication"                  # create an epic
+tk idea new "Add dark mode"               # capture a requirement
+tk ls                                     # list open tickets
+tk summary                                # daily starting-point overview
+```
+
+### Ticket lifecycle
+
+```bash
+tk active -id MY-T-1      # begin work  (design/active)
+tk complete -id MY-T-1    # finish stage, auto-advance
+tk idle -id MY-T-1        # pause
+tk close -id MY-T-1       # close ticket
+```
+
+### TUI
+
+```bash
+tk -g
+```
+
+Launches a full-screen terminal UI. Navigate with Tab / arrow keys.  
+Tabs: **Home · Projects · Ideas · Tickets · Workflows · Config**
+
+### Web server
+
+```bash
+tk server                  # start on :8080
+```
+
+Opens a Kanban board with live WebSocket updates at `http://localhost:8080`.
+
+See [QUICKSTART_SERVER.md](./QUICKSTART_SERVER.md) for multi-user server setup.
+
+---
+
+## AI agent support
+
+`ticket` can run an AI coding agent that picks up ready tickets and works on them autonomously.
+
+```bash
+tk agent create                        # prints agent UUID and password
+export AGENT_ID=<uuid>
+export AGENT_PASSWORD=<password>
+export TICKET_URL=http://localhost:8080
+tk agent run                           # default LLM: claude (Sonnet)
+tk agent run -llm codex                # use codex
+tk agent run -v                        # stream LLM I/O to terminal
+```
+
+Only tickets marked `ready` are eligible. Use `tk ready -id <id>` to flag a ticket.
+
+### Claude Code skill
+
+A Claude Code skill ships in `.claude/skills/tk/`. Copy it into your project's
+`.claude/skills/` directory (or `~/.claude/skills/` for all projects) and Claude
+will query and update tickets automatically during coding sessions.
+
+---
+
+## Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `TICKET_HOME` | Override the config/database directory |
+| `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
+| `TICKET_USERNAME` | Default username for remote login |
+| `TICKET_PASSWORD` | Default password for remote login |
+| `AGENT_ID` | Agent UUID for `tk agent run` |
+| `AGENT_PASSWORD` | Agent password for `tk agent run` |
+| `TICKET_AGENT_LLM` | Override the LLM command (default: `claude`) |
+
+---
 
 ## Architecture
 
@@ -207,134 +380,5 @@ graph TB
     end
 ```
 
-## Install
-
-```bash
-brew install simonski/tap/ticket
-```
-
-Both `ticket` and the alias `tk` are installed.
-
-or
-
-```bash
-go install github.com/simonski/ticket/cmd/ticket@latest
-alias tk=ticket
-```
-
-## Build from source
-
-```bash
-cd $CODE
-git clone github.com/simonski/ticket
-cd ticket
-make install
-```
-
-## Test
-
-```bash
-make test
-```
-
-## Usage
-
-In your project, run
-
-```bash
-tk init
-```
-
-You can now create tickets
-
-```bash
-tk add "Create a skeleton project in go."
-```
-
-```bash
-claude -p "work on next ticket"
-```
 
 
-## Web Server
-
-Start the server and web UI:
-
-```bash
-tk server
-```
-
-The web UI is then available at `http://localhost:8080`.
-
-## CLI Quick Start
-
-Create a project:
-
-```bash
-ticket project create -prefix CUS -title "Customer Portal"
-ticket project use CUS
-```
-
-Create tickets:
-
-```bash
-ticket epic "Authentication"
-ticket add "Customers can reset their password."
-ticket bug "Reset token expires immediately."
-```
-
-Inspect and move work:
-
-```bash
-ticket list
-ticket get -id CUS-T-42
-ticket active -id CUS-T-42
-ticket complete -id CUS-T-42
-ticket claim -id CUS-T-42
-```
-
-## Running an agent
-
-Create an agent (requires a running server):
-
-```bash
-tk agent create
-```
-
-This prints the agent UUID and a generated password.
-
-Run the agent worker:
-
-```bash
-export AGENT_ID=<uuid>
-export AGENT_PASSWORD=<generated-password>
-export TICKET_URL=http://localhost:8080
-tk agent run
-```
-
-or with flags:
-
-```bash
-tk agent run -id <uuid> -url http://localhost:8080
-```
-
-The password is read from the `AGENT_PASSWORD` environment variable, or prompted interactively (input masked with `*`).
-
-Options: `-llm claude` (default, uses Sonnet 4.5), `-llm codex`, or `-llm /path/to/binary`.
-Use `-v` to stream LLM input/output to the terminal.
-
-## Claude Code integration
-
-`ticket` ships a Claude Code skill in `.claude/skills/tk/`. Copy it into your
-project's `.claude/skills/` directory (or `~/.claude/skills/` globally) and Claude
-will query and update tickets during coding sessions automatically.
-
-See [QUICKSTART.md](./QUICKSTART.md#using-with-claude-code) for setup details.
-
-## Notes
-
-- The CLI and web app use the same HTTP API.
-- Ticket IDs are human-readable keys such as `CUS-T-42`.
-- `tk ls` hides closed and archived tickets by default; use `-a` to include closed, `-d` to also include archived.
-- The HTTP API exposes resource families under `/api/` including tickets, projects,
-  users, agents, teams, roles, workflows, and more.
