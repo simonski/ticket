@@ -1,57 +1,61 @@
 # Product Owner
 
-**Score: 76/100**
+**Score: 78/100** (was 76)
 
 ## What is being assessed
 Feature completeness against stated goals, user journey assessment (setup, core workflows, team management, agent framework), error UX, missing user-facing features, and accessibility basics.
 
 ## Methodology
-Reviewed `README.md`, `SPEC.md`, `USER_GUIDE.md`, `QUICKSTART*.md`, `openapi.yaml`, and all `cmd_*.go` files to inventory implemented features. Traced the 5 primary user journeys through CLI and web UI. Assessed error messages and onboarding experience.
+Reviewed `README.md`, `SPEC.md`, `USER_GUIDE.md`, `QUICKSTART*.md`, `openapi.yaml`, `cmd/ticket/help.go`, `internal/server/api_router.go`, and `web/static/index.html`. Traced the five primary user journeys (deploy, configure, create projects, manage tickets, manage team) through CLI docs and web UI source. Assessed error messages and onboarding experience. Version under review: 0.1.737.
 
 ## Findings
 
 ### Passing checks
-- All 7 stated product goals are met: local/remote operation, project-scoped human IDs (CUS-T-42), stage+state lifecycle, hierarchy, assignment/claim rules, agent framework, simple CLI/API
-- All 10 ticket types implemented: epic, task, bug, spike, chore, story, note, question, requirement, decision
+- All stated product goals met: local/remote operation, project-scoped human IDs (CUS-T-42), stage+state lifecycle, hierarchy, assignment/claim rules, agent framework, simple CLI/API (README.md)
+- All 10 ticket types implemented: epic, task, bug, spike, chore, story, note, question, requirement, decision (internal/store/store.go:224)
 - Full CRUD on tickets, projects, users, teams, roles, workflows, labels, time entries, stories, agents
 - Dual interface coverage: all major features available in both CLI and web UI
-- Contract test suite ensures CLI and HTTP API return identical results
-- Multi-platform distribution: brew, `go install`, Docker, direct binary download
-- Real-time web UI with WebSocket-powered live ticket updates
-- Agent framework: heartbeat, LLM integration (Claude/Codex), work polling
+- Contract test suite ensures CLI and HTTP API return identical results (libtickettest/contract.go)
+- Multi-platform distribution: brew, `go install`, Docker, direct binary download (README.md)
+- Real-time web UI with WebSocket-powered live ticket updates (internal/server/api.go)
+- Agent framework: heartbeat, LLM integration (Claude/Codex), work polling (README.md)
 - Workflow builder: custom stages, role-gated transitions
 - Time tracking: log entries, totals per ticket
 - Dependency tracking: blocks/blocked-by relationships
 - Story/requirements framework: propose → review → accept/reject lifecycle
 - 11 Playwright E2E test specs covering auth, tickets, management, chat, hierarchy, workflows
+- TUI documented in USER_GUIDE.md §"Terminal UI (TUI)" with key bindings and panel descriptions (USER_GUIDE.md:573)
+- Web UI delete confirm dialog for tickets — prompts with message and permanent-warning before deleting (web/static/index.html:5657)
+- Delete confirm dialogs for agents, roles, teams, and workflows in web UI (web/static/index.html:3234,3508,3832,4084)
+- CONTRIBUTING.md added — contributor guidelines covering development setup, testing, and PR process
+- Accessibility basics present: viewport meta tag, `role="dialog"`, `aria-modal`, `aria-label` on key sections (web/static/index.html:5,962,1539)
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No delete confirmation for `tk rm` — destructive with no safety net | High | `cmd/ticket/cmd_ticket.go:2260` | Add two-step confirmation matching `tk project delete` pattern |
-| `tk board` command exists but is undocumented (not in SPEC.md or USER_GUIDE.md) | Medium | `cmd/ticket/main.go` | Document board command; add to USER_GUIDE.md |
-| No bulk operations (bulk close, bulk assign, bulk label) | Medium | repo-wide | Add `tk ticket bulk-close -stage done/success` or similar |
+| No delete confirmation for `tk rm` CLI command — destructive with no safety net | High | `cmd/ticket/cmd_ticket.go` | Add `--yes` flag and interactive prompt matching `tk project rm` pattern |
+| No bulk operations (bulk close, bulk assign, bulk label) | Medium | repo-wide | Add `tk ticket bulk-close --stage done` or `--ids` flag variants |
 | No notification system (email, Slack, webhook) — no way to alert users of changes | Medium | repo-wide | Add webhook support: `POST <url>` on ticket state changes |
-| Error messages sometimes expose internal details (database errors) | Medium | `internal/server/api.go:139` | Catch typed errors; return user-friendly messages |
+| Error messages can expose internal details (database errors returned to client) | Medium | `internal/server/api.go` | Catch typed errors; return user-friendly messages with internal errors logged only |
 | No export to CSV/JSON from CLI — only full database export | Medium | repo-wide | Add `tk list --format csv` and `tk export --tickets-only` |
-| TUI interface (`tk` / `tk gui`) exists but is undocumented | Medium | `internal/tui/` | Document TUI commands and key bindings in USER_GUIDE.md |
-| No @mentions or notification triggers in comments | Low | repo-wide | Add `@username` parsing in comments; surface in user's dashboard |
-| No markdown rendering in ticket descriptions or comments | Low | repo-wide | Render markdown in web UI; plain text in CLI is fine |
-| `tk request` command for agents undocumented | Low | `cmd/ticket/main.go` | Add to USER_GUIDE.md with example |
-| No dashboard/summary view in web UI | Low | web UI | Add a home dashboard showing open tickets by project |
+| No @mentions or notification triggers in comments | Low | repo-wide | Add `@username` parsing in comments; surface in user dashboard |
+| No markdown rendering in ticket descriptions or comments in web UI | Low | `web/static/index.html` | Render markdown client-side (e.g., marked.js) |
+| No web dashboard/summary view — no home page showing open tickets by project | Low | web UI | Add a home panel showing per-project open/active/blocked ticket counts |
 
 ## Verdict
-Feature-complete for its stated goals with excellent core ticket management, multi-user support, and agent framework. The product is pre-1.0 (v0.1.730) and the main gaps for a v1.0 release are: delete safety (no confirm prompt), documentation of board/TUI interfaces, and a basic notification mechanism. The foundation is solid enough to support these additions without architectural changes.
+Strong improvement over 0.1.730. The previous false-positive findings about undocumented TUI and missing web-UI delete confirmations are now resolved — both exist in the codebase. CONTRIBUTING.md adds governance maturity. The product is feature-complete for its stated goals. The main pre-1.0 gaps remain: CLI `tk rm` lacks a confirmation prompt, no notification/webhook mechanism, and no data export for end users.
 
 ## Changes since last assessment
-First assessment.
+- **CONTRIBUTING.md added** (0.1.731–0.1.737): establishes contributor guidelines, improving project governance (+1)
+- **TUI documented** (USER_GUIDE.md:573–628): full section covering launch, panels, key bindings, and state persistence — resolves Medium issue from previous assessment (+1)
+- **Web UI ticket delete confirm dialog confirmed** (web/static/index.html:5657): previous finding was incorrect; confirm dialog with permanent-warning message has been present — resolves prior finding
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Add delete confirmation to `tk rm` | High | Match project delete two-step pattern |
-| Document `tk board` and TUI | Medium | Add section to USER_GUIDE.md |
+| Add delete confirmation to `tk rm` CLI | High | Add `--yes` flag and interactive prompt |
 | Add webhook/notification support | Medium | POST to configured URLs on ticket state changes |
 | Bulk ticket operations | Medium | `tk ticket bulk-close`, `tk ticket bulk-assign` |
 | CSV export | Medium | `tk list --format csv > tickets.csv` |
 | User-friendly error messages | Medium | Catch DB/internal errors; return actionable messages |
+| Web dashboard | Low | Home panel with per-project open/active/blocked counts |
