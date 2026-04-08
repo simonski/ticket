@@ -26,7 +26,7 @@ const (
 )
 
 func isTerminal() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) // #nosec G115 -- uintptr→int is safe for terminal file descriptors on all supported platforms
 }
 
 // rowColor returns an ANSI color code based on the ticket state embedded in the status string.
@@ -383,7 +383,7 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	// Get terminal width; default to 120 for non-terminal output.
 	termW := 120
 	if useColor {
-		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 {
+		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 { // #nosec G115
 			termW = tw
 		}
 	}
@@ -815,7 +815,7 @@ func printRoleTable(roles []store.Role) {
 	}
 
 	termW := 120
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 { // #nosec G115
 		termW = w
 	}
 

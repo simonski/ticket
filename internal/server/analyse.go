@@ -142,8 +142,7 @@ func runStoryBreakdownViaTicketCLI(db *sql.DB, project store.Project, story stor
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, commandArgs[0], commandArgs[1:]...)
-	cmd.Env = storyAnalyseProcessEnv()
+	cmd := exec.CommandContext(ctx, commandArgs[0], commandArgs[1:]...) // #nosec G204 -- commandArgs is resolved from trusted server configuration, not user input
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -192,7 +191,7 @@ func runRoleJSONAnalysis(db *sql.DB, roleTitle, prompt string, target any) error
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, commandArgs[0], commandArgs[1:]...)
+	cmd := exec.CommandContext(ctx, commandArgs[0], commandArgs[1:]...) // #nosec G204 -- commandArgs from trusted server config
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

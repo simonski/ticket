@@ -907,7 +907,7 @@ func batchFetchComments(ctx context.Context, db *sql.DB, ids []string) (map[stri
 		JOIN users u ON u.user_id = c.user_id
 		WHERE c.item_id IN (`+placeholders+`)
 		ORDER BY c.created_at DESC, c.id DESC
-	`, args...)
+	`, args...) // #nosec G202 -- placeholders are "?" params built from len(ids), not user data
 	if err != nil {
 		return nil, err
 	}

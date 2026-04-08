@@ -100,7 +100,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from the application config directory, not user input
 	if errors.Is(err, os.ErrNotExist) {
 		return Config{}, nil
 	}
@@ -137,7 +137,7 @@ func Load() (Config, error) {
 					is := strings.TrimSpace(string(item))
 					if len(is) > 0 && is[0] == '"' {
 						var sv string
-						json.Unmarshal(item, &sv)
+						json.Unmarshal(item, &sv) // #nosec G104 -- best-effort unmarshal; invalid items are skipped
 						converted = append(converted, sv)
 					} else {
 						converted = append(converted, strings.Trim(is, " "))
@@ -208,7 +208,7 @@ func LoadCredentials() (Credentials, error) {
 		return Credentials{}, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from the application config directory, not user input
 	if errors.Is(err, os.ErrNotExist) {
 		return Credentials{}, nil
 	}
@@ -228,7 +228,7 @@ func SaveCredentials(creds Credentials) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(creds, "", "  ")

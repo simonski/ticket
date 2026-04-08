@@ -44,7 +44,7 @@ func Verify(encoded, plain string) (bool, error) {
 		return false, err
 	}
 
-	actual := argon2.IDKey([]byte(plain), salt, params.iterations, params.memory, params.parallelism, uint32(len(expected)))
+	actual := argon2.IDKey([]byte(plain), salt, params.iterations, params.memory, params.parallelism, uint32(len(expected))) // #nosec G115 -- len() is always non-negative; int→uint32 is safe
 	return subtle.ConstantTimeCompare(actual, expected) == 1, nil
 }
 
@@ -76,7 +76,7 @@ func parse(encoded string) (argonParams, []byte, []byte, error) {
 		case "t":
 			params.iterations = uint32(value)
 		case "p":
-			params.parallelism = uint8(value)
+			params.parallelism = uint8(value) // #nosec G115 -- parallelism is stored as uint8 in argon2id format; values > 255 are rejected by argon2.IDKey
 		default:
 			return argonParams{}, nil, nil, fmt.Errorf("unknown argon2id param %q", kv[0])
 		}

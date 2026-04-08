@@ -210,7 +210,7 @@ func runTicketGen(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(*outputFile, []byte(response), 0o644); err != nil {
+	if err := os.WriteFile(*outputFile, []byte(response), 0o644); err != nil { // #nosec G306 -- output file is user-specified, 0644 is intentional
 		return err
 	}
 	fmt.Print(response)
@@ -259,7 +259,7 @@ func buildTicketPrompt(files []string, outputFile string) (string, error) {
 	b.WriteString("    DEPENDS-ON: E1-S2\n\n")
 	b.WriteString("Use the following input files as source material:\n\n")
 	for _, file := range files {
-		data, err := os.ReadFile(file)
+		data, err := os.ReadFile(file) // #nosec G304 -- file is a CLI argument provided by the operator
 		if err != nil {
 			return "", err
 		}
@@ -1840,7 +1840,7 @@ Targets:
 		if resolved, err := config.ResolveURL(); err == nil && resolved.DBPath != "" {
 			if db, err := store.Open(resolved.DBPath); err == nil {
 				ctx = store.EnrichTicketContext(context.Background(), db, ticket)
-				db.Close()
+				_ = db.Close()
 			}
 		}
 

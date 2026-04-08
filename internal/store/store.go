@@ -26,19 +26,19 @@ func Open(path string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON;`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode = WAL;`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout = 5000;`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if err := createSchema(ctx, db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
@@ -792,7 +792,7 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 					agentIDs = append(agentIDs, id)
 				}
 			}
-			agentRows.Close()
+			_ = agentRows.Close()
 			for _, id := range agentIDs {
 				u := generateAgentUUID()
 				if _, err := db.ExecContext(ctx, `UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id); err != nil {

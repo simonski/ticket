@@ -105,8 +105,8 @@ func ListProjectHistoryFiltered(ctx context.Context, db *sql.DB, projectID int64
 		args = append(args, filter.TeamID)
 	}
 
-	query := fmt.Sprintf(`
-		SELECT h.id, h.project_id, h.ticket_id, COALESCE(h.ticket_id, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
+	query := fmt.Sprintf( // #nosec G201 -- clauses are built from hardcoded predicates, not raw user input
+		`SELECT h.id, h.project_id, h.ticket_id, COALESCE(h.ticket_id, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
 		FROM ticket_history h
 		WHERE %s
 		ORDER BY h.id DESC

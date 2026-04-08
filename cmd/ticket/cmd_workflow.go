@@ -187,7 +187,7 @@ func runWorkflow(args []string) error {
 			return err
 		}
 		if *outFile != "" {
-			return os.WriteFile(*outFile, append(data, '\n'), 0o644)
+			return os.WriteFile(*outFile, append(data, '\n'), 0o644) // #nosec G306 -- output file is user-specified, 0644 is intentional
 		}
 		fmt.Println(string(data))
 		return nil

@@ -99,7 +99,7 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialise a git repo so config.Home() can find .git.
-	gitInit := exec.Command("git", "init", tmpDir)
+	gitInit := exec.Command("git", "init", tmpDir) // #nosec G204 -- tmpDir is a freshly created temp directory
 	gitInit.Stdout = io.Discard
 	gitInit.Stderr = io.Discard
 	_ = gitInit.Run()
@@ -244,7 +244,7 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 
 // parseBlocks extracts fenced code blocks from a markdown file.
 func parseBlocks(file string) ([]block, error) {
-	f, err := os.Open(file)
+	f, err := os.Open(file) // #nosec G304 -- file is a CLI argument (markdown doc path), not untrusted input
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +478,7 @@ func extractExports(code string, currentEnv map[string]string) (string, map[stri
 
 // execBlock runs a code block as a shell script and returns combined output.
 func execBlock(code, workDir string, env map[string]string) (string, error) {
-	cmd := exec.Command("bash", "-e", "-c", code)
+	cmd := exec.Command("bash", "-e", "-c", code) // #nosec G204 -- code is extracted from trusted markdown documentation files
 	cmd.Dir = workDir
 	cmd.Env = buildEnv(env)
 
@@ -499,7 +499,7 @@ func freePort() (int, error) {
 
 // startServerOnPort runs the ticket server on a specific port in the background.
 func startServerOnPort(ticketBin, workDir string, env map[string]string, port int) (*exec.Cmd, error) {
-	cmd := exec.Command(ticketBin, "server", "-p", fmt.Sprintf("%d", port))
+	cmd := exec.Command(ticketBin, "server", "-p", fmt.Sprintf("%d", port)) // #nosec G204 -- ticketBin is a resolved binary path from the build
 	cmd.Dir = workDir
 	cmd.Env = buildEnv(env)
 	cmd.Stdout = io.Discard
@@ -523,7 +523,7 @@ func waitHealthz(env map[string]string, timeout time.Duration) bool {
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(serverURL + "/api/healthz")
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				return true
 			}
@@ -538,7 +538,7 @@ func waitHealthz(env map[string]string, timeout time.Duration) bool {
 // `export TICKET_URL=...` and the actual config-driven mode resolution.
 func updateConfigLocation(ticketHome, location string) {
 	configPath := filepath.Join(ticketHome, "config.json")
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is derived from a controlled temp directory
 	if err != nil {
 		// Config doesn't exist yet — create a minimal one.
 		data = []byte("{}")
@@ -551,7 +551,7 @@ func updateConfigLocation(ticketHome, location string) {
 	}
 	m["location"] = location
 	if out, err := json.MarshalIndent(m, "", "  "); err == nil {
-		_ = os.MkdirAll(ticketHome, 0o755)
+		_ = os.MkdirAll(ticketHome, 0o755) // #nosec G301 -- ticketHome is a temp directory; world-readable is intentional for test isolation
 		_ = os.WriteFile(configPath, out, 0o600)
 	}
 }

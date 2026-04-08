@@ -67,7 +67,7 @@ func ExportSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
 		for _, column := range columns {
 			selectCols = append(selectCols, quoteIdentifier(column))
 		}
-		rows, err := db.QueryContext(ctx, `SELECT ` + strings.Join(selectCols, ", ") + ` FROM ` + quoteIdentifier(table))
+		rows, err := db.QueryContext(ctx, `SELECT `+strings.Join(selectCols, ", ")+` FROM `+quoteIdentifier(table)) // #nosec G202 -- column and table names from live schema via quoteIdentifier
 		if err != nil {
 			return Snapshot{}, err
 		}
@@ -124,7 +124,7 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 	}
 	for i := len(snapshotTableOrder) - 1; i >= 0; i-- {
 		table := snapshotTableOrder[i]
-		if _, err := tx.ExecContext(ctx, `DELETE FROM ` + quoteIdentifier(table)); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+quoteIdentifier(table)); err != nil { // #nosec G202 -- table name from hardcoded snapshotTableOrder via quoteIdentifier
 			return rollback(err)
 		}
 	}
@@ -148,7 +148,7 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 			insertCols = append(insertCols, quoteIdentifier(column))
 			placeholders = append(placeholders, "?")
 		}
-		query := `INSERT INTO ` + quoteIdentifier(table) + ` (` + strings.Join(insertCols, ", ") + `) VALUES (` + strings.Join(placeholders, ", ") + `)`
+		query := `INSERT INTO ` + quoteIdentifier(table) + ` (` + strings.Join(insertCols, ", ") + `) VALUES (` + strings.Join(placeholders, ", ") + `)` // #nosec G202 -- table/column names from snapshot schema via quoteIdentifier
 		for rowIdx, row := range tableSnapshot.Rows {
 			if len(row) != len(tableSnapshot.Columns) {
 				return rollback(fmt.Errorf("snapshot row mismatch in %s at index %d: got %d values, want %d", table, rowIdx, len(row), len(tableSnapshot.Columns)))

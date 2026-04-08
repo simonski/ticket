@@ -281,7 +281,7 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 		{"agent_config", "user_id"},
 	}
 	for _, t := range tables {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); err != nil { // #nosec G202 -- table/column names come from a hardcoded internal list
 			return err
 		}
 	}

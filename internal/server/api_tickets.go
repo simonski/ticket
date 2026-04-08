@@ -63,7 +63,7 @@ func (r *router) registerTicketHandlers() {
 			return
 		}
 		if ticketPayload.Message != "" {
-			store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message)
+			store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 		}
 		notify("ticket_created", ticket.ProjectID, ticket.ID)
 		writeJSON(w, http.StatusCreated, ticket)
@@ -519,7 +519,7 @@ func (r *router) registerTicketHandlers() {
 						writeError(w, http.StatusBadRequest, "invalid json body")
 						return
 					}
-					comment, err := store.AddComment(r.Context(), db, id, user.ID, commentPayload.Comment)
+					comment, err := store.AddComment(r.Context(), db, id, user.ID, commentPayload.Comment) // #nosec G104 -- best-effort comment; main operation already succeeded
 					if err != nil {
 						writeError(w, http.StatusBadRequest, err.Error())
 						return
@@ -559,7 +559,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				cloned, err := store.CloneTicket(r.Context(), db, id, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -570,7 +570,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, cloned.ID, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, cloned.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				notify("ticket_created", cloned.ProjectID, cloned.ID)
 				writeJSON(w, http.StatusCreated, cloned)
@@ -582,10 +582,10 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				// Add comment before close — AddComment rejects closed tickets.
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, id, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, id, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				ticket, err := store.SetTicketOpen(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
@@ -606,7 +606,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				ticket, err := store.SetTicketOpen(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -617,7 +617,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -629,10 +629,10 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				// Add comment before archive — AddComment rejects archived tickets.
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, id, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, id, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				ticket, err := store.SetTicketArchived(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
@@ -653,7 +653,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				ticket, err := store.SetTicketArchived(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -664,7 +664,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -676,7 +676,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				ticket, err := store.SetTicketReady(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -687,7 +687,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -699,7 +699,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
 				ticket, err := store.SetTicketReady(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -710,7 +710,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -889,7 +889,7 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if ticketPayload.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message)
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)

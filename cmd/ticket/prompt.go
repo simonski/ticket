@@ -44,7 +44,7 @@ func promptForCredentials(in io.Reader, out io.Writer, defaultUsername, defaultP
 func readPasswordPrompt(reader *bufio.Reader, in io.Reader, out io.Writer) (string, error) {
 	inFile, inOK := in.(*os.File)
 	outFile, outOK := out.(*os.File)
-	if !inOK || !outOK || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) {
+	if !inOK || !outOK || !term.IsTerminal(int(inFile.Fd())) || !term.IsTerminal(int(outFile.Fd())) { // #nosec G115 -- uintptr→int is safe for terminal fd on all supported platforms
 		password, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
@@ -52,12 +52,12 @@ func readPasswordPrompt(reader *bufio.Reader, in io.Reader, out io.Writer) (stri
 		return strings.TrimSpace(password), nil
 	}
 
-	oldState, err := term.MakeRaw(int(inFile.Fd()))
+	oldState, err := term.MakeRaw(int(inFile.Fd())) // #nosec G115
 	if err != nil {
 		return "", err
 	}
 	defer func() {
-		_ = term.Restore(int(inFile.Fd()), oldState)
+		_ = term.Restore(int(inFile.Fd()), oldState) // #nosec G115
 	}()
 
 	var buf []byte

@@ -75,7 +75,7 @@ func printStatusBox(lines []statusLine) {
 	maxContent := 0 // 0 = unlimited
 	if isTerminal() {
 		termW := 120
-		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 {
+		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 { // #nosec G115
 			termW = tw
 		}
 		maxContent = termW - 2 - padding*2

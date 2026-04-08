@@ -141,7 +141,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		http.SetCookie(w, &http.Cookie{
+		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set when TLS is active; HttpOnly and SameSite are present
 			Name:     "ticket_token",
 			Value:    token,
 			Path:     "/",
@@ -163,7 +163,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		http.SetCookie(w, &http.Cookie{
+		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set when TLS is active; HttpOnly and SameSite are present
 			Name:     "ticket_token",
 			Value:    "",
 			Path:     "/",

@@ -2,7 +2,7 @@ package server
 
 import (
 	"bufio"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- SHA-1 is required by the WebSocket handshake spec (RFC 6455)
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -183,7 +183,7 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, error) 
 }
 
 func websocketAcceptKey(key string) string {
-	sum := sha1.Sum([]byte(strings.TrimSpace(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+	sum := sha1.Sum([]byte(strings.TrimSpace(key) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) // #nosec G401 -- SHA-1 is mandated by the WebSocket protocol (RFC 6455 §4.2.2)
 	return base64.StdEncoding.EncodeToString(sum[:])
 }
 

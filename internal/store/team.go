@@ -467,7 +467,7 @@ func HighestProjectRoleForTeams(ctx context.Context, db *sql.DB, projectID int64
 		SELECT role
 		FROM project_teams
 		WHERE project_id = ? AND team_id IN (` + strings.Join(placeholders, ",") + `)
-	`
+	` // #nosec G202 -- placeholders are "?" params, not user data
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return "", false, err

@@ -682,7 +682,7 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 		promptFile = "prompt_agent.md"
 	}
 	prompt += "\n"
-	if err := os.WriteFile(promptFile, []byte(prompt), 0644); err != nil {
+	if err := os.WriteFile(promptFile, []byte(prompt), 0o600); err != nil {
 		return "", fmt.Errorf("write prompt file: %w", err)
 	}
 	defer os.Remove(promptFile)
@@ -698,7 +698,7 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 		llmCmd = fmt.Sprintf("%s -p < %s", agent, promptFile)
 	}
 
-	cmd := exec.Command("sh", "-c", llmCmd)
+	cmd := exec.Command("sh", "-c", llmCmd) // #nosec G204 -- llmCmd is built from trusted agent configuration, not user-supplied input
 	if stream {
 		fmt.Printf("> %s\n\n", llmCmd)
 	}
@@ -733,7 +733,7 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 					}
 				}
 			} else {
-				os.Stdout.Write(chunk)
+				_, _ = os.Stdout.Write(chunk)
 			}
 		}
 		if readErr != nil {

@@ -57,6 +57,7 @@ setup-go:
 
 lint:
 	golangci-lint run ./...
+	gosec ./...
 
 setup-node:
 	npm install

@@ -224,7 +224,7 @@ func startChatBridgeWithDuration(send func(chatOutboundMessage), logf func(strin
 	if len(commandArgs) == 0 {
 		return nil, errors.New("chat command is empty")
 	}
-	cmd := exec.Command(commandArgs[0], commandArgs[1:]...)
+	cmd := exec.Command(commandArgs[0], commandArgs[1:]...) // #nosec G204 -- commandArgs resolved from trusted server configuration
 	cmd.Env = append(os.Environ(),
 		"TERM=dumb",
 		"NO_COLOR=1",

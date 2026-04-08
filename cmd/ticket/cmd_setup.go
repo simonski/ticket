@@ -158,7 +158,7 @@ func runSetupExisting(reader *bufio.Reader) error {
 				fmt.Println("FAILED")
 				fmt.Printf("  error: %v\n", err)
 			} else {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
 					fmt.Println("OK")
 				} else {
@@ -295,12 +295,12 @@ func runSetupRemote(reader *bufio.Reader) error {
 
 	// 2. Verify connectivity
 	fmt.Printf("connecting : %s ... ", serverURL)
-	resp, err := http.Get(serverURL + "/api/healthz")
+	resp, err := http.Get(serverURL + "/api/healthz") // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
 	if err != nil {
 		fmt.Println("FAILED")
 		return fmt.Errorf("could not reach server: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		fmt.Println("FAILED")
 		return fmt.Errorf("server returned status %d", resp.StatusCode)
@@ -502,7 +502,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 		var existingPath string
 		var existingContent []byte
 		for _, p := range []string{localSkillPath, globalSkillPath} {
-			if data, readErr := os.ReadFile(p); readErr == nil {
+			if data, readErr := os.ReadFile(p); readErr == nil { // #nosec G304 G703 -- p is a well-known skill path, not untrusted user input
 				existingPath = p
 				existingContent = data
 				break
@@ -515,7 +515,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 			} else {
 				fmt.Printf("skill      : %s (out of date)\n", existingPath)
 				if promptYN(reader, "update tk skill to latest version?", true) {
-					if err := os.WriteFile(existingPath, []byte(tkSkillContent), 0o644); err != nil {
+					if err := os.WriteFile(existingPath, []byte(tkSkillContent), 0o644); err != nil { // #nosec G306 G703 -- skill file is documentation, 0644 is intentional
 						fmt.Printf("  warning: could not update skill: %v\n", err)
 					} else {
 						fmt.Printf("  updated: %s\n", existingPath)
@@ -536,11 +536,11 @@ func runSetupPostInit(reader *bufio.Reader) error {
 				default:
 					skillDir = localSkillDir
 				}
-				if err := os.MkdirAll(skillDir, 0o755); err != nil {
+				if err := os.MkdirAll(skillDir, 0o755); err != nil { // #nosec G301 G703 -- skill directory is public documentation, world-readable is intentional
 					fmt.Printf("  warning: could not create skill dir: %v\n", err)
 				} else {
 					skillPath := filepath.Join(skillDir, "SKILL.md")
-					if err := os.WriteFile(skillPath, []byte(tkSkillContent), 0o644); err != nil {
+					if err := os.WriteFile(skillPath, []byte(tkSkillContent), 0o644); err != nil { // #nosec G306 G703 -- skill file is documentation, 0644 is intentional
 						fmt.Printf("  warning: could not write skill: %v\n", err)
 					} else {
 						fmt.Printf("  installed: %s\n", skillPath)
@@ -559,7 +559,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 		fmt.Println()
 		if promptYN(reader, "CLAUDE.md not found — create it?", true) {
 			content := "Read AGENTS.md\n"
-			if writeErr := os.WriteFile(claudeMD, []byte(content), 0o644); writeErr != nil {
+			if writeErr := os.WriteFile(claudeMD, []byte(content), 0o644); writeErr != nil { // #nosec G306 -- CLAUDE.md is documentation, 0644 is intentional
 				fmt.Printf("  warning: could not write CLAUDE.md: %v\n", writeErr)
 			} else {
 				fmt.Printf("  created: %s\n", claudeMD)
@@ -571,7 +571,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 
 	if _, err := os.Stat(agentsMD); os.IsNotExist(err) {
 		if promptYN(reader, "AGENTS.md not found — create it?", true) {
-			if writeErr := os.WriteFile(agentsMD, []byte(embeddedAgents), 0o644); writeErr != nil {
+			if writeErr := os.WriteFile(agentsMD, []byte(embeddedAgents), 0o644); writeErr != nil { // #nosec G306 -- AGENTS.md is documentation, 0644 is intentional
 				fmt.Printf("  warning: could not write AGENTS.md: %v\n", writeErr)
 			} else {
 				fmt.Printf("  created: %s\n", agentsMD)
@@ -583,13 +583,13 @@ func runSetupPostInit(reader *bufio.Reader) error {
 
 	// Check .gitignore for credentials file
 	gitignorePath := filepath.Join(cwd, ".gitignore")
-	credEntry := ".ticket/credentials.json"
-	if data, readErr := os.ReadFile(gitignorePath); readErr == nil {
+	credEntry := ".ticket/credentials.json" // #nosec G101 -- this is a path string, not a credential
+	if data, readErr := os.ReadFile(gitignorePath); readErr == nil { // #nosec G304 -- gitignorePath is derived from cwd, not user input
 		if !strings.Contains(string(data), credEntry) {
 			fmt.Println()
 			fmt.Printf("warning    : %s is not in .gitignore\n", credEntry)
 			if promptYN(reader, "add .ticket/credentials.json to .gitignore?", true) {
-				f, appendErr := os.OpenFile(gitignorePath, os.O_APPEND|os.O_WRONLY, 0o644)
+				f, appendErr := os.OpenFile(gitignorePath, os.O_APPEND|os.O_WRONLY, 0o644) // #nosec G302 G304 -- .gitignore is world-readable by convention
 				if appendErr != nil {
 					fmt.Printf("  warning: could not open .gitignore: %v\n", appendErr)
 				} else {
@@ -723,7 +723,7 @@ func runExportSnapshot(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, append(payload, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(path, append(payload, '\n'), 0o644); err != nil { // #nosec G306 -- snapshot export is a user-facing data file, 0644 is intentional
 		return err
 	}
 	fmt.Printf("exported snapshot to %s\n", path)
@@ -744,7 +744,7 @@ func runImportSnapshot(args []string) error {
 	if path == "" {
 		return errors.New("usage: ticket import -i <snapshot-file>")
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- path is a CLI flag provided by the operator, not untrusted input
 	if err != nil {
 		return err
 	}
