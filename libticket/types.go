@@ -2,6 +2,8 @@ package libticket
 
 import "github.com/simonski/ticket/internal/store"
 
+// StatusResponse is returned by Service.Status() and describes server health,
+// authentication state, and the currently authenticated user if applicable.
 type StatusResponse struct {
 	Status              string      `json:"status"`
 	Authenticated       bool        `json:"authenticated"`

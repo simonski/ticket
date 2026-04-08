@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -36,6 +37,7 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 		stopReaper: make(chan struct{}),
 	}
 	go s.runAgentReaper(db, verbose, output)
+	go s.runRetentionPurge(db, verbose)
 	return s, nil
 }
 
@@ -63,6 +65,44 @@ func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
 		select {
 		case <-ticker.C:
 			reap()
+		case <-s.stopReaper:
+			return
+		}
+	}
+}
+
+// runRetentionPurge periodically deletes expired sessions and old history events.
+// Retention period for history is controlled by the TICKET_HISTORY_RETENTION_DAYS
+// environment variable (default: 0 = keep forever).
+func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
+	purge := func() {
+		if n, err := store.PurgeExpiredSessions(db); err != nil {
+			slog.Error("session purge error", "error", err)
+		} else if n > 0 && verbose {
+			slog.Info("purged expired sessions", "count", n)
+		}
+
+		retentionDays := 0
+		if v := os.Getenv("TICKET_HISTORY_RETENTION_DAYS"); v != "" {
+			if _, err := fmt.Sscan(v, &retentionDays); err != nil {
+				slog.Error("invalid TICKET_HISTORY_RETENTION_DAYS", "value", v)
+			}
+		}
+		if n, err := store.PurgeOldHistory(db, retentionDays); err != nil {
+			slog.Error("history purge error", "error", err)
+		} else if n > 0 && verbose {
+			slog.Info("purged old history events", "count", n, "retention_days", retentionDays)
+		}
+	}
+
+	// Run once at startup, then daily.
+	purge()
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			purge()
 		case <-s.stopReaper:
 			return
 		}

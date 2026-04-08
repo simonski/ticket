@@ -197,3 +197,30 @@ func nullableUserID(userID string) any {
 	}
 	return userID
 }
+
+// PurgeExpiredSessions deletes sessions whose expires_at is in the past.
+// Returns the number of rows deleted.
+func PurgeExpiredSessions(db *sql.DB) (int64, error) {
+	result, err := db.Exec(`DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP`)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// PurgeOldHistory deletes ticket_history events older than retentionDays days.
+// Returns the number of rows deleted.
+func PurgeOldHistory(db *sql.DB, retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, nil
+	}
+	result, err := db.Exec(
+		`DELETE FROM ticket_history WHERE created_at <= datetime('now', ? || ' days')`,
+		fmt.Sprintf("-%d", retentionDays),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+

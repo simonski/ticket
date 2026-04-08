@@ -1,29 +1,37 @@
+// Package libticket provides the core service interface and LocalService implementation
+// for interacting with ticket data. Both local (SQLite) and remote (HTTP) implementations
+// satisfy the Service interface, enabling identical behaviour regardless of deployment mode.
 package libticket
 
 import (
 	"database/sql"
 	"errors"
 	"os"
-	"strings"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 )
 
+// LocalService implements Service directly against a local SQLite database.
+// Obtain one via NewLocal after loading a config with a local location.
+type LocalService struct {
+	cfg config.Config
+}
+
+// resolveRequestLifecycle derives the canonical stage+state pair from the three
+// possible ways a caller may express lifecycle: explicit stage/state flags, a
+// rendered status string (e.g. "design/active"), or nothing (no-op).
 func resolveRequestLifecycle(status, stage, state string) (string, string, error) {
-	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
+	if stage != "" || state != "" {
 		return stage, state, nil
 	}
-	if strings.TrimSpace(status) == "" {
+	if status == "" {
 		return stage, state, nil
 	}
 	return store.ParseLifecycleStatus(status)
 }
 
-type LocalService struct {
-	cfg config.Config
-}
-
+// NewLocal returns a LocalService bound to the given configuration.
 func NewLocal(cfg config.Config) *LocalService {
 	return &LocalService{cfg: cfg}
 }

@@ -1,3 +1,6 @@
+// Package libtickethttp implements the libticket.Service interface over HTTP,
+// delegating all calls to a running ticket server via the internal/client package.
+// Use New to construct a Service from a loaded configuration.
 package libtickethttp
 
 import (
@@ -9,10 +12,14 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
+// Service wraps an HTTP client and satisfies the libticket.Service interface.
+// All methods delegate to the underlying client which communicates with the
+// ticket server REST API.
 type Service struct {
 	client *client.Client
 }
 
+// New returns a Service configured to talk to the server described by cfg.
 func New(cfg config.Config) *Service {
 	return &Service{client: client.New(cfg)}
 }

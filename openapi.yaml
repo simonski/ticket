@@ -71,9 +71,18 @@ components:
       properties:
         error:
           type: string
+      example:
+        error: "ticket not found"
 
     User:
       type: object
+      example:
+        user_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        username: "alice"
+        role: "user"
+        display_name: "Alice Smith"
+        enabled: true
+        user_type: "user"
       properties:
         user_id:
           type: string
@@ -551,6 +560,126 @@ components:
         role:
           $ref: '#/components/schemas/Role'
 
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Insufficient permissions for this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Requested resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    MethodNotAllowed:
+      description: HTTP method not allowed on this endpoint
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Resource already exists or state conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  examples:
+    UserExample:
+      summary: A typical user account
+      value:
+        user_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        username: "alice"
+        role: "user"
+        display_name: "Alice Smith"
+        enabled: true
+        user_type: "user"
+        email: "alice@example.com"
+        status: "active"
+        created_at: "2025-01-15T10:00:00Z"
+        updated_at: "2025-06-20T14:30:00Z"
+
+    ProjectExample:
+      summary: A typical project
+      value:
+        project_id: 1
+        prefix: "CUS"
+        title: "Customer Portal"
+        description: "Customer-facing web portal project"
+        status: "active"
+        visibility: "private"
+        created_at: "2025-01-15T10:00:00Z"
+        updated_at: "2025-06-20T14:30:00Z"
+
+    TicketExample:
+      summary: A typical task ticket
+      value:
+        ticket_id: "CUS-T-42"
+        project_id: 1
+        type: "task"
+        title: "Implement login page"
+        description: "Build the user login page with form validation"
+        stage: "develop"
+        state: "active"
+        status: "develop/active"
+        priority: 2
+        assignee: "alice"
+        open: true
+        archived: false
+        created_by: "admin"
+        created_at: "2025-02-01T09:00:00Z"
+        updated_at: "2025-06-20T14:30:00Z"
+
+    LoginRequestExample:
+      summary: Login request body
+      value:
+        username: "alice"
+        password: "s3cr3tpassword"
+
+    LoginResponseExample:
+      summary: Successful login response
+      value:
+        token: "dGhpcyBpcyBhIGJhc2U2NHRva2Vu"
+        user:
+          user_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          username: "alice"
+          role: "user"
+
+    CreateTicketRequestExample:
+      summary: Create a task ticket
+      value:
+        type: "task"
+        title: "Implement login page"
+        description: "Build the user login page"
+        parent_id: "CUS-E-1"
+        priority: 2
+        assignee: "alice"
+
+    ErrorExample:
+      summary: A typical error response
+      value:
+        error: "ticket not found"
+
 paths:
   # ── Health ──────────────────────────────────────────────────────────
   /api/healthz:
@@ -572,6 +701,16 @@ paths:
                   version:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/status:
     get:
       tags: [Health]
@@ -586,6 +725,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Authentication ──────────────────────────────────────────────────
   /api/register:
     post:
@@ -644,13 +793,9 @@ paths:
                   type: string
                 password:
                   type: string
-      responses:
-        '200':
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
+            examples:
+              typical:
+                $ref: '#/components/examples/LoginRequestExample'
           headers:
             Set-Cookie:
               description: "ticket_token session cookie (HttpOnly, SameSite=Lax, 30-day expiry)"
@@ -685,6 +830,16 @@ paths:
                     type: string
                     example: logged_out
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Configuration ───────────────────────────────────────────────────
   /api/config/registration:
     post:
@@ -748,6 +903,16 @@ paths:
                   chat_enabled:
                     type: boolean
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/config/chat_limits:
     post:
       tags: [Config]
@@ -781,6 +946,16 @@ paths:
                   chat_max_duration_minutes:
                     type: integer
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Users ───────────────────────────────────────────────────────────
   /api/users:
     get:
@@ -798,6 +973,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Users]
       summary: Create a user (admin only)
@@ -824,6 +1009,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/users/{username}/enable:
     post:
       tags: [Users]
@@ -848,6 +1043,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/users/{username}/disable:
     post:
       tags: [Users]
@@ -872,6 +1077,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/users/{username}:
     delete:
       tags: [Users]
@@ -896,6 +1111,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Agents ──────────────────────────────────────────────────────────
   /api/agents:
     get:
@@ -913,6 +1138,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Agent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Agents]
       summary: Create a new agent
@@ -941,6 +1176,16 @@ paths:
                   password:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/statuses:
     get:
       tags: [Agents]
@@ -958,6 +1203,16 @@ paths:
                 items:
                   type: object
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/register:
     post:
       tags: [Agents]
@@ -978,6 +1233,16 @@ paths:
                   agent:
                     $ref: '#/components/schemas/Agent'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/heartbeat:
     post:
       tags: [Agents]
@@ -1004,6 +1269,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/request:
     post:
       tags: [Agents]
@@ -1037,6 +1312,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/AgentWorkResponse'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/{agent_id}/tickets/{ticket_id}/update:
     post:
       tags: [Agents]
@@ -1073,6 +1358,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/{agent_id}:
     put:
       tags: [Agents]
@@ -1101,6 +1396,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Agent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Agents]
       summary: Delete an agent
@@ -1124,6 +1429,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/{agent_id}/enable:
     post:
       tags: [Agents]
@@ -1145,6 +1460,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Agent'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/{agent_id}/disable:
     post:
       tags: [Agents]
@@ -1166,6 +1491,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Agent'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Roles ───────────────────────────────────────────────────────────
   /api/roles:
     get:
@@ -1183,6 +1518,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Roles]
       summary: Create a role
@@ -1211,6 +1556,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Role'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/roles/{role_id}:
     put:
       tags: [Roles]
@@ -1245,6 +1600,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Roles]
       summary: Delete a role
@@ -1269,6 +1634,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Workflows ───────────────────────────────────────────────────────
   /api/workflows:
     get:
@@ -1286,6 +1661,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Workflow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Workflows]
       summary: Create a workflow
@@ -1312,6 +1697,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/import:
     post:
       tags: [Workflows]
@@ -1334,6 +1729,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/{workflow_id}:
     get:
       tags: [Workflows]
@@ -1355,6 +1760,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Workflow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Workflows]
       summary: Delete a workflow
@@ -1379,6 +1794,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/{workflow_id}/stages:
     post:
       tags: [Workflows]
@@ -1419,6 +1844,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowStage'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/{workflow_id}/reorder:
     put:
       tags: [Workflows]
@@ -1457,6 +1892,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/{workflow_id}/export:
     get:
       tags: [Workflows]
@@ -1479,6 +1924,16 @@ paths:
               schema:
                 type: object
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/stages/{stage_id}:
     delete:
       tags: [Workflows]
@@ -1504,6 +1959,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Teams ───────────────────────────────────────────────────────────
   /api/teams:
     get:
@@ -1521,6 +1986,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Teams]
       summary: Create a team
@@ -1549,6 +2024,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Team'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/teams/{team_id}:
     get:
       tags: [Teams]
@@ -1570,6 +2055,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     put:
       tags: [Teams]
       summary: Update a team
@@ -1603,6 +2098,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Teams]
       summary: Delete a team
@@ -1627,6 +2132,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/teams/{team_id}/users:
     get:
       tags: [Teams]
@@ -1650,6 +2165,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TeamMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Teams]
       summary: Add a member to a team
@@ -1685,6 +2210,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/TeamMember'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/teams/{team_id}/users/{user_id}:
     delete:
       tags: [Teams]
@@ -1715,6 +2250,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/teams/{team_id}/agents:
     get:
       tags: [Teams]
@@ -1738,6 +2283,16 @@ paths:
                 type: array
                 items:
                   type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Teams]
       summary: Add an agent to a team
@@ -1769,6 +2324,16 @@ paths:
               schema:
                 type: object
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/teams/{team_id}/agents/{agent_id}:
     delete:
       tags: [Teams]
@@ -1799,6 +2364,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Projects ────────────────────────────────────────────────────────
   /api/projects:
     get:
@@ -1816,6 +2391,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Projects]
       summary: Create a project
@@ -1860,6 +2445,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}:
     get:
       tags: [Projects]
@@ -1881,6 +2476,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     put:
       tags: [Projects]
       summary: Update a project
@@ -1931,6 +2536,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/enable:
     post:
       tags: [Projects]
@@ -1953,6 +2568,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/disable:
     post:
       tags: [Projects]
@@ -1975,6 +2600,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/tickets:
     get:
       tags: [Projects]
@@ -2039,6 +2674,16 @@ paths:
                 items:
                   $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/history:
     get:
       tags: [Projects]
@@ -2083,6 +2728,16 @@ paths:
                 items:
                   $ref: '#/components/schemas/HistoryEvent'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/stories:
     get:
       tags: [Projects]
@@ -2107,6 +2762,16 @@ paths:
                 items:
                   $ref: '#/components/schemas/Story'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/users:
     get:
       tags: [Projects]
@@ -2130,6 +2795,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ProjectMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Projects]
       summary: Add a user to a project
@@ -2164,6 +2839,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProjectMember'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/users/{user_id}:
     delete:
       tags: [Projects]
@@ -2194,6 +2879,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/teams:
     get:
       tags: [Projects]
@@ -2217,6 +2912,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ProjectTeamMember'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Projects]
       summary: Add a team to a project
@@ -2251,6 +2956,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProjectTeamMember'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/teams/{team_id}:
     delete:
       tags: [Projects]
@@ -2282,6 +2997,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/labels:
     get:
       tags: [Projects]
@@ -2305,6 +3030,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Label'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Projects]
       summary: Create a label in a project
@@ -2338,6 +3073,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Label'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/labels/{label_id}:
     delete:
       tags: [Projects]
@@ -2369,6 +3114,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Tickets ─────────────────────────────────────────────────────────
   /api/tickets:
     post:
@@ -2418,6 +3173,9 @@ paths:
                   type: string
                 state:
                   type: string
+            examples:
+              task:
+                $ref: '#/components/examples/CreateTicketRequestExample'
       responses:
         '201':
           description: Ticket created
@@ -2468,6 +3226,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/TicketRequestResponse'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}:
     get:
       tags: [Tickets]
@@ -2495,6 +3263,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     put:
       tags: [Tickets]
       summary: Update a ticket
@@ -2550,6 +3328,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Tickets]
       summary: Delete a ticket (must have no children)
@@ -2573,6 +3361,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/history:
     get:
       tags: [Tickets]
@@ -2596,6 +3394,16 @@ paths:
                 items:
                   $ref: '#/components/schemas/HistoryEvent'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/health:
     post:
       tags: [Tickets]
@@ -2627,6 +3435,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/labels:
     get:
       tags: [Tickets]
@@ -2649,6 +3467,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Label'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Tickets]
       summary: Add a label to a ticket
@@ -2683,6 +3511,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/labels/{label_id}:
     delete:
       tags: [Tickets]
@@ -2713,6 +3551,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/time:
     get:
       tags: [Time]
@@ -2735,6 +3583,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TimeEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Time]
       summary: Log time against a ticket
@@ -2767,6 +3625,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/TimeEntry'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/time/total:
     get:
       tags: [Time]
@@ -2791,6 +3659,16 @@ paths:
                   total:
                     type: integer
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/comments:
     get:
       tags: [Tickets]
@@ -2813,6 +3691,16 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Comment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     post:
       tags: [Tickets]
       summary: Add a comment to a ticket
@@ -2843,6 +3731,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Comment'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/dependencies:
     get:
       tags: [Dependencies]
@@ -2866,6 +3764,16 @@ paths:
                 items:
                   $ref: '#/components/schemas/Dependency'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/clone:
     post:
       tags: [Tickets]
@@ -2887,6 +3795,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/close:
     post:
       tags: [Tickets]
@@ -2908,6 +3826,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/open:
     post:
       tags: [Tickets]
@@ -2929,6 +3857,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/archive:
     post:
       tags: [Tickets]
@@ -2950,6 +3888,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/unarchive:
     post:
       tags: [Tickets]
@@ -2971,6 +3919,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/ready:
     post:
       tags: [Tickets]
@@ -2992,6 +3950,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/notready:
     post:
       tags: [Tickets]
@@ -3013,6 +3981,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/workflow:
     post:
       tags: [Tickets]
@@ -3044,6 +4022,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Tickets]
       summary: Remove workflow from a ticket
@@ -3064,6 +4052,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/analyse:
     post:
       tags: [Tickets]
@@ -3094,6 +4092,16 @@ paths:
                   created_tickets:
                     type: integer
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Stories ─────────────────────────────────────────────────────────
   /api/stories:
     post:
@@ -3125,6 +4133,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/Story'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/stories/{story_id}:
     get:
       tags: [Stories]
@@ -3146,6 +4164,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Story'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     put:
       tags: [Stories]
       summary: Update a story
@@ -3180,6 +4208,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Story'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Stories]
       summary: Delete a story
@@ -3197,6 +4235,16 @@ paths:
         '204':
           description: Story deleted
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/stories/{story_id}/analyse:
     post:
       tags: [Stories]
@@ -3226,6 +4274,16 @@ paths:
                   created_tasks:
                     type: integer
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Dependencies ────────────────────────────────────────────────────
   /api/dependencies:
     post:
@@ -3256,6 +4314,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dependency'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Dependencies]
       summary: Delete a dependency
@@ -3290,6 +4358,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── Utility ─────────────────────────────────────────────────────────
   /api/count:
     get:
@@ -3313,6 +4391,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/CountSummary'
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/labels/{label_id}:
     delete:
       tags: [Labels]
@@ -3338,6 +4426,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/time/{time_entry_id}:
     delete:
       tags: [Time]
@@ -3363,6 +4461,16 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   # ── WebSocket ───────────────────────────────────────────────────────
   /api/ws:
     get:
@@ -3382,6 +4490,16 @@ paths:
         '101':
           description: WebSocket upgrade
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/chat/ws:
     get:
       tags: [WebSocket]
@@ -3399,3 +4517,13 @@ paths:
       responses:
         '101':
           description: WebSocket upgrade
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'

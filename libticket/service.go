@@ -1,13 +1,21 @@
+// Package libticket provides the core service interface and LocalService implementation
+// for interacting with ticket data. Both local (SQLite) and remote (HTTP) implementations
+// satisfy the Service interface, enabling identical behaviour regardless of deployment mode.
 package libticket
 
 import "github.com/simonski/ticket/internal/store"
 
-type Service interface {
+// AuthService covers user registration, login, logout, and session management.
+type AuthService interface {
 	Status() (StatusResponse, error)
 	SetRegistrationEnabled(enabled bool) error
 	Register(username, password string) (store.User, error)
 	Login(username, password string) (store.User, string, error)
 	Logout() error
+}
+
+// UserService covers user and role management.
+type UserService interface {
 	Count(projectID *int64) (CountSummary, error)
 	CreateUser(username, password string) (store.User, error)
 	SetUserEnabled(username string, enabled bool) error
@@ -18,6 +26,10 @@ type Service interface {
 	ListRoles() ([]store.Role, error)
 	UpdateRole(id int64, request RoleRequest) (store.Role, error)
 	DeleteRole(id int64) error
+}
+
+// AgentService covers AI agent lifecycle, configuration, and work assignment.
+type AgentService interface {
 	CreateAgent(request AgentCreateRequest) (store.Agent, string, error)
 	SetAgentEnabled(id string, enabled bool) (store.Agent, error)
 	ListAgents() ([]store.Agent, error)
@@ -31,6 +43,10 @@ type Service interface {
 	HeartbeatAgent(agentID, password, status string) error
 	RequestAgentWork(request AgentRequest) (AgentWorkResponse, error)
 	AgentUpdateTicket(id string, request AgentTicketUpdateRequest) (store.Ticket, error)
+}
+
+// ProjectService covers project CRUD, membership, and team association.
+type ProjectService interface {
 	CreateProject(request ProjectCreateRequest) (store.Project, error)
 	ListProjects() ([]store.Project, error)
 	GetProject(id string) (store.Project, error)
@@ -44,6 +60,10 @@ type Service interface {
 	AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error)
 	RemoveProjectTeamMember(projectID, teamID int64) error
 	ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error)
+}
+
+// TeamService covers team management and membership.
+type TeamService interface {
 	CreateTeam(request TeamRequest) (store.Team, error)
 	ListTeams() ([]store.Team, error)
 	UpdateTeam(id int64, request TeamRequest) (store.Team, error)
@@ -54,6 +74,10 @@ type Service interface {
 	AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error)
 	RemoveTeamAgent(teamID int64, agentID string) error
 	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
+}
+
+// WorkflowService covers workflow templates and stage management.
+type WorkflowService interface {
 	CreateWorkflow(request WorkflowRequest) (store.Workflow, error)
 	ListWorkflows() ([]store.Workflow, error)
 	GetWorkflow(id int64) (store.WorkflowWithStages, error)
@@ -63,6 +87,10 @@ type Service interface {
 	ReorderWorkflowStages(workflowID int64, stageIDs []int64) error
 	ExportWorkflow(id int64) (store.WorkflowExport, error)
 	ImportWorkflow(export store.WorkflowExport) (store.Workflow, error)
+}
+
+// TicketService covers ticket CRUD, lifecycle, labels, time, dependencies, and history.
+type TicketService interface {
 	CreateLabel(projectID int64, request LabelRequest) (store.Label, error)
 	ListLabels(projectID int64) ([]store.Label, error)
 	DeleteLabel(id int64) error
@@ -106,4 +134,17 @@ type Service interface {
 	GetStory(id int64) (store.Story, error)
 	UpdateStory(id int64, title, description string) (store.Story, error)
 	DeleteStory(id int64) error
+}
+
+// Service defines all ticket management operations. It is implemented by
+// LocalService (direct SQLite access) and libtickethttp.Service (HTTP client).
+// It composes all sub-interfaces for convenient use as a single dependency.
+type Service interface {
+	AuthService
+	UserService
+	AgentService
+	ProjectService
+	TeamService
+	WorkflowService
+	TicketService
 }
