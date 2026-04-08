@@ -22,7 +22,7 @@ func (r *router) registerTeamHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			teams, err := store.ListTeams(db)
+			teams, err := store.ListTeams(r.Context(), db)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -43,13 +43,13 @@ func (r *router) registerTeamHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			team, err := store.CreateTeam(db, payload.Name, payload.ParentTeamID)
+			team, err := store.CreateTeam(r.Context(), db, payload.Name, payload.ParentTeamID)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 			// The creator is always an owner of the new team.
-			if _, err := store.AddTeamMember(db, team.ID, user.ID, store.TeamRoleOwner, ""); err != nil {
+			if _, err := store.AddTeamMember(r.Context(), db, team.ID, user.ID, store.TeamRoleOwner, ""); err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
@@ -76,7 +76,7 @@ func (r *router) registerTeamHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid team id")
 			return
 		}
-		team, err := store.GetTeamByID(db, teamID)
+		team, err := store.GetTeamByID(r.Context(), db, teamID)
 		if err != nil {
 			if errors.Is(err, store.ErrTeamNotFound) {
 				writeError(w, http.StatusNotFound, "team not found")
@@ -87,7 +87,7 @@ func (r *router) registerTeamHandlers() {
 		}
 		canManageTeam := user.Role == "admin"
 		if !canManageTeam {
-			role, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+			role, ok, err := store.TeamRoleForUser(r.Context(), db, team.ID, user.ID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -107,7 +107,7 @@ func (r *router) registerTeamHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				updated, err := store.UpdateTeam(db, team.ID, payload.Name, payload.ParentTeamID)
+				updated, err := store.UpdateTeam(r.Context(), db, team.ID, payload.Name, payload.ParentTeamID)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -118,7 +118,7 @@ func (r *router) registerTeamHandlers() {
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
-				if err := store.DeleteTeam(db, team.ID); err != nil {
+				if err := store.DeleteTeam(r.Context(), db, team.ID); err != nil {
 					if errors.Is(err, store.ErrTeamNotFound) {
 						writeError(w, http.StatusNotFound, "team not found")
 						return
@@ -137,7 +137,7 @@ func (r *router) registerTeamHandlers() {
 			switch r.Method {
 			case http.MethodGet:
 				if !canManageTeam {
-					_, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+					_, ok, err := store.TeamRoleForUser(r.Context(), db, team.ID, user.ID)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, err.Error())
 						return
@@ -147,7 +147,7 @@ func (r *router) registerTeamHandlers() {
 						return
 					}
 				}
-				members, err := store.ListTeamMembers(db, team.ID)
+				members, err := store.ListTeamMembers(r.Context(), db, team.ID)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -163,7 +163,7 @@ func (r *router) registerTeamHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				member, err := store.AddTeamMember(db, team.ID, payload.UserID, payload.Role, payload.JobTitle)
+				member, err := store.AddTeamMember(r.Context(), db, team.ID, payload.UserID, payload.Role, payload.JobTitle)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -185,7 +185,7 @@ func (r *router) registerTeamHandlers() {
 				writeError(w, http.StatusBadRequest, "user_id is required")
 				return
 			}
-			if err := store.RemoveTeamMember(db, team.ID, userID); err != nil {
+			if err := store.RemoveTeamMember(r.Context(), db, team.ID, userID); err != nil {
 				if errors.Is(err, store.ErrTeamMemberNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
 					return
@@ -201,7 +201,7 @@ func (r *router) registerTeamHandlers() {
 			switch r.Method {
 			case http.MethodGet:
 				if !canManageTeam {
-					_, ok, err := store.TeamRoleForUser(db, team.ID, user.ID)
+					_, ok, err := store.TeamRoleForUser(r.Context(), db, team.ID, user.ID)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, err.Error())
 						return
@@ -211,7 +211,7 @@ func (r *router) registerTeamHandlers() {
 						return
 					}
 				}
-				items, err := store.ListTeamAgents(db, team.ID)
+				items, err := store.ListTeamAgents(r.Context(), db, team.ID)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -229,7 +229,7 @@ func (r *router) registerTeamHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				item, err := store.AddTeamAgent(db, team.ID, payload.AgentID)
+				item, err := store.AddTeamAgent(r.Context(), db, team.ID, payload.AgentID)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -251,7 +251,7 @@ func (r *router) registerTeamHandlers() {
 				writeError(w, http.StatusBadRequest, "agent_id is required")
 				return
 			}
-			if err := store.RemoveTeamAgent(db, team.ID, agentID); err != nil {
+			if err := store.RemoveTeamAgent(r.Context(), db, team.ID, agentID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "team agent assignment not found")
 					return

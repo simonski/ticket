@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestChatLimitsConfigDefaults(t *testing.T) {
 	}
 	defer db.Close()
 
-	limits, err := ChatLimitsConfig(db)
+	limits, err := ChatLimitsConfig(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ChatLimitsConfig() error = %v", err)
 	}
@@ -39,10 +40,10 @@ func TestSetChatLimitsConfigPersistsValues(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := SetChatLimitsConfig(db, 5, 12); err != nil {
+	if err := SetChatLimitsConfig(context.Background(), db, 5, 12); err != nil {
 		t.Fatalf("SetChatLimitsConfig() error = %v", err)
 	}
-	limits, err := ChatLimitsConfig(db)
+	limits, err := ChatLimitsConfig(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ChatLimitsConfig() error = %v", err)
 	}
@@ -65,10 +66,10 @@ func TestSetChatLimitsConfigFallsBackToDefaults(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := SetChatLimitsConfig(db, 0, -2); err != nil {
+	if err := SetChatLimitsConfig(context.Background(), db, 0, -2); err != nil {
 		t.Fatalf("SetChatLimitsConfig() error = %v", err)
 	}
-	limits, err := ChatLimitsConfig(db)
+	limits, err := ChatLimitsConfig(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ChatLimitsConfig() error = %v", err)
 	}
@@ -91,7 +92,7 @@ func TestChatEnabledDefaultsToTrue(t *testing.T) {
 	}
 	defer db.Close()
 
-	enabled, err := ChatEnabled(db)
+	enabled, err := ChatEnabled(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ChatEnabled() error = %v", err)
 	}
@@ -111,7 +112,7 @@ func TestRegistrationEnabledDefaultsToTrue(t *testing.T) {
 	}
 	defer db.Close()
 
-	enabled, err := RegistrationEnabled(db)
+	enabled, err := RegistrationEnabled(context.Background(), db)
 	if err != nil {
 		t.Fatalf("RegistrationEnabled() error = %v", err)
 	}
@@ -131,10 +132,10 @@ func TestSetRegistrationEnabledPersistsValues(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := SetRegistrationEnabled(db, false); err != nil {
+	if err := SetRegistrationEnabled(context.Background(), db, false); err != nil {
 		t.Fatalf("SetRegistrationEnabled(false) error = %v", err)
 	}
-	enabled, err := RegistrationEnabled(db)
+	enabled, err := RegistrationEnabled(context.Background(), db)
 	if err != nil {
 		t.Fatalf("RegistrationEnabled() error = %v", err)
 	}
@@ -142,10 +143,10 @@ func TestSetRegistrationEnabledPersistsValues(t *testing.T) {
 		t.Fatalf("RegistrationEnabled() = true, want false")
 	}
 
-	if err := SetRegistrationEnabled(db, true); err != nil {
+	if err := SetRegistrationEnabled(context.Background(), db, true); err != nil {
 		t.Fatalf("SetRegistrationEnabled(true) error = %v", err)
 	}
-	enabled, err = RegistrationEnabled(db)
+	enabled, err = RegistrationEnabled(context.Background(), db)
 	if err != nil {
 		t.Fatalf("RegistrationEnabled() error = %v", err)
 	}
@@ -165,10 +166,10 @@ func TestSetChatEnabledPersistsValues(t *testing.T) {
 	}
 	defer db.Close()
 
-	if err := SetChatEnabled(db, false); err != nil {
+	if err := SetChatEnabled(context.Background(), db, false); err != nil {
 		t.Fatalf("SetChatEnabled(false) error = %v", err)
 	}
-	enabled, err := ChatEnabled(db)
+	enabled, err := ChatEnabled(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ChatEnabled() error = %v", err)
 	}
@@ -176,10 +177,10 @@ func TestSetChatEnabledPersistsValues(t *testing.T) {
 		t.Fatalf("ChatEnabled() = true, want false")
 	}
 
-	if err := SetChatEnabled(db, true); err != nil {
+	if err := SetChatEnabled(context.Background(), db, true); err != nil {
 		t.Fatalf("SetChatEnabled(true) error = %v", err)
 	}
-	enabled, err = ChatEnabled(db)
+	enabled, err = ChatEnabled(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ChatEnabled() error = %v", err)
 	}

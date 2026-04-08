@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -768,7 +769,7 @@ func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T)
 	}
 	defer db.Close()
 
-	projects, err := store.ListProjects(db)
+	projects, err := store.ListProjects(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -2398,7 +2399,7 @@ func testAdminUserID(t *testing.T) string {
 		t.Fatalf("Open() error = %v", err)
 	}
 	defer db.Close()
-	user, err := store.GetUserByUsername(db, "admin")
+	user, err := store.GetUserByUsername(context.Background(), db, "admin")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(admin) error = %v", err)
 	}
@@ -4562,7 +4563,7 @@ func TestQuickstartServer(t *testing.T) {
 	setTestLocation(t, ts.URL)
 
 	// Enable registration
-	if err := store.SetRegistrationEnabled(db, true); err != nil {
+	if err := store.SetRegistrationEnabled(context.Background(), db, true); err != nil {
 		t.Fatalf("SetRegistrationEnabled() error = %v", err)
 	}
 

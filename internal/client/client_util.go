@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -39,18 +40,18 @@ func (c *Client) localUser(db *sql.DB) (store.User, error) {
 }
 
 func ensureLocalUser(db *sql.DB, username string) (store.User, error) {
-	if user, err := store.GetUserByUsername(db, username); err == nil {
+	if user, err := store.GetUserByUsername(context.Background(), db, username); err == nil {
 		if user.Enabled {
 			return user, nil
 		}
-		if err := store.SetUserEnabled(db, username, true); err != nil {
+		if err := store.SetUserEnabled(context.Background(), db, username, true); err != nil {
 			return store.User{}, err
 		}
-		return store.GetUserByUsername(db, username)
+		return store.GetUserByUsername(context.Background(), db, username)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.User{}, err
 	}
-	user, err := store.CreateUser(db, username, "local-mode", "admin")
+	user, err := store.CreateUser(context.Background(), db, username, "local-mode", "admin")
 	if err != nil {
 		return store.User{}, err
 	}

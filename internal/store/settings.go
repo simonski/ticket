@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 const (
 	DefaultChatMaxConnections     = 2
@@ -13,9 +16,9 @@ type ChatLimits struct {
 	MaxDurationMin int `json:"chat_max_duration_minutes"`
 }
 
-func RegistrationEnabled(db *sql.DB) (bool, error) {
+func RegistrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
 	var raw string
-	if err := db.QueryRow(`SELECT value FROM app_settings WHERE key = 'registration_enabled'`).Scan(&raw); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'registration_enabled'`).Scan(&raw); err != nil {
 		if err == sql.ErrNoRows {
 			return true, nil
 		}
@@ -24,21 +27,21 @@ func RegistrationEnabled(db *sql.DB) (bool, error) {
 	return raw == "1" || raw == "true", nil
 }
 
-func SetRegistrationEnabled(db *sql.DB, enabled bool) error {
+func SetRegistrationEnabled(ctx context.Context, db *sql.DB, enabled bool) error {
 	value := "0"
 	if enabled {
 		value = "1"
 	}
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 		INSERT INTO app_settings (key, value) VALUES ('registration_enabled', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
 	`, value)
 	return err
 }
 
-func ChatEnabled(db *sql.DB) (bool, error) {
+func ChatEnabled(ctx context.Context, db *sql.DB) (bool, error) {
 	var raw string
-	if err := db.QueryRow(`SELECT value FROM app_settings WHERE key = 'chat_enabled'`).Scan(&raw); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'chat_enabled'`).Scan(&raw); err != nil {
 		if err == sql.ErrNoRows {
 			return DefaultChatEnabled, nil
 		}
@@ -47,25 +50,25 @@ func ChatEnabled(db *sql.DB) (bool, error) {
 	return raw == "1" || raw == "true", nil
 }
 
-func SetChatEnabled(db *sql.DB, enabled bool) error {
+func SetChatEnabled(ctx context.Context, db *sql.DB, enabled bool) error {
 	value := "0"
 	if enabled {
 		value = "1"
 	}
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 		INSERT INTO app_settings (key, value) VALUES ('chat_enabled', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
 	`, value)
 	return err
 }
 
-func ChatLimitsConfig(db *sql.DB) (ChatLimits, error) {
+func ChatLimitsConfig(ctx context.Context, db *sql.DB) (ChatLimits, error) {
 	limits := ChatLimits{
 		MaxConnections: DefaultChatMaxConnections,
 		MaxDurationMin: DefaultChatMaxDurationMinutes,
 	}
 	var rawConnections string
-	if err := db.QueryRow(`SELECT value FROM app_settings WHERE key = 'chat_max_connections'`).Scan(&rawConnections); err == nil {
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'chat_max_connections'`).Scan(&rawConnections); err == nil {
 		if parsed := parsePositiveInt(rawConnections); parsed > 0 {
 			limits.MaxConnections = parsed
 		}
@@ -73,7 +76,7 @@ func ChatLimitsConfig(db *sql.DB) (ChatLimits, error) {
 		return limits, err
 	}
 	var rawDuration string
-	if err := db.QueryRow(`SELECT value FROM app_settings WHERE key = 'chat_max_duration_minutes'`).Scan(&rawDuration); err == nil {
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'chat_max_duration_minutes'`).Scan(&rawDuration); err == nil {
 		if parsed := parsePositiveInt(rawDuration); parsed > 0 {
 			limits.MaxDurationMin = parsed
 		}
@@ -83,20 +86,20 @@ func ChatLimitsConfig(db *sql.DB) (ChatLimits, error) {
 	return limits, nil
 }
 
-func SetChatLimitsConfig(db *sql.DB, maxConnections, maxDurationMin int) error {
+func SetChatLimitsConfig(ctx context.Context, db *sql.DB, maxConnections, maxDurationMin int) error {
 	if maxConnections <= 0 {
 		maxConnections = DefaultChatMaxConnections
 	}
 	if maxDurationMin <= 0 {
 		maxDurationMin = DefaultChatMaxDurationMinutes
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO app_settings (key, value) VALUES ('chat_max_connections', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
 	`, maxConnections); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO app_settings (key, value) VALUES ('chat_max_duration_minutes', ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
 	`, maxDurationMin); err != nil {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -86,15 +87,15 @@ func ParseLifecycleStatus(raw string) (string, string, error) {
 
 // getNextWorkflowStage returns the next workflow stage after the given stage ID.
 // Returns (nil, "", nil) if the given stage is the final stage.
-func getNextWorkflowStage(db *sql.DB, currentStageID int64) (*int64, string, error) {
+func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64) (*int64, string, error) {
 	var workflowID int64
 	var currentOrder int
-	if err := db.QueryRow(`SELECT workflow_id, sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder); err != nil {
 		return nil, "", err
 	}
 	var nextID int64
 	var nextName string
-	err := db.QueryRow(`SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextID, &nextName)
+	err := db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextID, &nextName)
 	if err == sql.ErrNoRows {
 		return nil, "", nil // final stage
 	}
@@ -105,8 +106,8 @@ func getNextWorkflowStage(db *sql.DB, currentStageID int64) (*int64, string, err
 }
 
 // GetWorkflowStageOrder returns the sort_order for a workflow stage by ID.
-func GetWorkflowStageOrder(db *sql.DB, stageID int64) (int, error) {
+func GetWorkflowStageOrder(ctx context.Context, db *sql.DB, stageID int64) (int, error) {
 	var order int
-	err := db.QueryRow(`SELECT sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, stageID).Scan(&order)
+	err := db.QueryRowContext(ctx, `SELECT sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, stageID).Scan(&order)
 	return order, err
 }

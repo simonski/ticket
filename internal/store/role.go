@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -15,12 +16,12 @@ type Role struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
-func CreateRole(db *sql.DB, title, motivation, goals string) (Role, error) {
+func CreateRole(ctx context.Context, db *sql.DB, title, motivation, goals string) (Role, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return Role{}, errors.New("role title is required")
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO roles (title, motivation, goals, updated_at)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 	`, title, strings.TrimSpace(motivation), strings.TrimSpace(goals))
@@ -31,11 +32,11 @@ func CreateRole(db *sql.DB, title, motivation, goals string) (Role, error) {
 	if err != nil {
 		return Role{}, err
 	}
-	return GetRoleByID(db, id)
+	return GetRoleByID(ctx, db, id)
 }
 
-func ListRoles(db *sql.DB) ([]Role, error) {
-	rows, err := db.Query(`
+func ListRoles(ctx context.Context, db *sql.DB) ([]Role, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT role_id, title, motivation, goals, created_at, updated_at
 		FROM roles
 		ORDER BY title
@@ -55,8 +56,8 @@ func ListRoles(db *sql.DB) ([]Role, error) {
 	return roles, rows.Err()
 }
 
-func GetRoleByID(db *sql.DB, id int64) (Role, error) {
-	row := db.QueryRow(`
+func GetRoleByID(ctx context.Context, db *sql.DB, id int64) (Role, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT role_id, title, motivation, goals, created_at, updated_at
 		FROM roles
 		WHERE role_id = ?
@@ -68,8 +69,8 @@ func GetRoleByID(db *sql.DB, id int64) (Role, error) {
 	return role, nil
 }
 
-func GetRoleByTitle(db *sql.DB, title string) (Role, error) {
-	row := db.QueryRow(`
+func GetRoleByTitle(ctx context.Context, db *sql.DB, title string) (Role, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT role_id, title, motivation, goals, created_at, updated_at
 		FROM roles
 		WHERE title = ?
@@ -81,12 +82,12 @@ func GetRoleByTitle(db *sql.DB, title string) (Role, error) {
 	return role, nil
 }
 
-func UpdateRole(db *sql.DB, id int64, title, motivation, goals string) (Role, error) {
+func UpdateRole(ctx context.Context, db *sql.DB, id int64, title, motivation, goals string) (Role, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return Role{}, errors.New("role title is required")
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		UPDATE roles
 		SET title = ?, motivation = ?, goals = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE role_id = ?
@@ -101,11 +102,11 @@ func UpdateRole(db *sql.DB, id int64, title, motivation, goals string) (Role, er
 	if affected == 0 {
 		return Role{}, sql.ErrNoRows
 	}
-	return GetRoleByID(db, id)
+	return GetRoleByID(ctx, db, id)
 }
 
-func DeleteRole(db *sql.DB, id int64) error {
-	result, err := db.Exec(`DELETE FROM roles WHERE role_id = ?`, id)
+func DeleteRole(ctx context.Context, db *sql.DB, id int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM roles WHERE role_id = ?`, id)
 	if err != nil {
 		return err
 	}

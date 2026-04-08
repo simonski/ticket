@@ -93,7 +93,6 @@ Contract tests in `libtickettest/contract.go` define a `Factory` pattern and ver
 These words as user input trigger specific workflows defined in `docs/RULES.md`:
 
 - `spec` — Rebuild SPEC.md and openapi.yaml from the codebase
-- `sdlc` — SDLC review (versions, SAST, quality, documentation)
 - `drift` — Check documentation vs implementation drift
 - `next` — Pick up next ticket or continue current
 - `review` — Read TODO/DESIGN/USER_GUIDE and propose next steps

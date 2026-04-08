@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -85,8 +86,8 @@ func (c *Client) Status() (StatusResponse, error) {
 		}
 		defer db.Close()
 
-		user, err := store.GetUserByUsername(db, localUsername())
-		registrationEnabled, regErr := store.RegistrationEnabled(db)
+		user, err := store.GetUserByUsername(context.Background(), db, localUsername())
+		registrationEnabled, regErr := store.RegistrationEnabled(context.Background(), db)
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
@@ -117,7 +118,7 @@ func (c *Client) Count(projectID *int64) (CountSummary, error) {
 			return CountSummary{}, err
 		}
 		defer db.Close()
-		return store.CountEverything(db, projectID)
+		return store.CountEverything(context.Background(), db, projectID)
 	}
 	var summary CountSummary
 	path := "/api/count"
@@ -135,7 +136,7 @@ func (c *Client) SetRegistrationEnabled(enabled bool) error {
 			return err
 		}
 		defer db.Close()
-		return store.SetRegistrationEnabled(db, enabled)
+		return store.SetRegistrationEnabled(context.Background(), db, enabled)
 	}
 	return c.doJSON(http.MethodPost, "/api/config/registration", map[string]any{"enabled": enabled}, nil)
 }
@@ -147,7 +148,7 @@ func (c *Client) CreateUser(username, password string) (store.User, error) {
 			return store.User{}, err
 		}
 		defer db.Close()
-		return store.CreateUser(db, username, password, "user")
+		return store.CreateUser(context.Background(), db, username, password, "user")
 	}
 	var user store.User
 	err := c.doJSON(http.MethodPost, "/api/users", map[string]string{
@@ -164,7 +165,7 @@ func (c *Client) SetUserEnabled(username string, enabled bool) error {
 			return err
 		}
 		defer db.Close()
-		return store.SetUserEnabled(db, username, enabled)
+		return store.SetUserEnabled(context.Background(), db, username, enabled)
 	}
 	action := "disable"
 	if enabled {
@@ -180,7 +181,7 @@ func (c *Client) ListUsers() ([]store.User, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListUsers(db)
+		return store.ListUsers(context.Background(), db)
 	}
 	var users []store.User
 	err := c.doJSON(http.MethodGet, "/api/users", nil, &users)
@@ -194,7 +195,7 @@ func (c *Client) DeleteUser(username string) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteUser(db, username)
+		return store.DeleteUser(context.Background(), db, username)
 	}
 	return c.doJSON(http.MethodDelete, "/api/users/"+username, nil, nil)
 }
@@ -206,7 +207,7 @@ func (c *Client) ResetUserPassword(username, newPassword string) (store.User, er
 			return store.User{}, err
 		}
 		defer db.Close()
-		return store.ResetUserPassword(db, username, newPassword)
+		return store.ResetUserPassword(context.Background(), db, username, newPassword)
 	}
 	var user store.User
 	err := c.doJSON(http.MethodPost, "/api/users/"+username+"/reset-password", map[string]string{"password": newPassword}, &user)
@@ -220,7 +221,7 @@ func (c *Client) CreateRole(request RoleRequest) (store.Role, error) {
 			return store.Role{}, err
 		}
 		defer db.Close()
-		return store.CreateRole(db, request.Title, request.Motivation, request.Goals)
+		return store.CreateRole(context.Background(), db, request.Title, request.Motivation, request.Goals)
 	}
 	var role store.Role
 	err := c.doJSON(http.MethodPost, "/api/roles", request, &role)
@@ -234,7 +235,7 @@ func (c *Client) ListRoles() ([]store.Role, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListRoles(db)
+		return store.ListRoles(context.Background(), db)
 	}
 	var roles []store.Role
 	err := c.doJSON(http.MethodGet, "/api/roles", nil, &roles)
@@ -248,7 +249,7 @@ func (c *Client) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
 			return store.Role{}, err
 		}
 		defer db.Close()
-		return store.UpdateRole(db, id, request.Title, request.Motivation, request.Goals)
+		return store.UpdateRole(context.Background(), db, id, request.Title, request.Motivation, request.Goals)
 	}
 	var role store.Role
 	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/roles/%d", id), request, &role)
@@ -262,7 +263,7 @@ func (c *Client) DeleteRole(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteRole(db, id)
+		return store.DeleteRole(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/roles/%d", id), nil, nil)
 }
@@ -274,7 +275,7 @@ func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, e
 			return store.Agent{}, "", err
 		}
 		defer db.Close()
-		return store.CreateAgent(db, request.Password)
+		return store.CreateAgent(context.Background(), db, request.Password)
 	}
 	var response struct {
 		Agent    store.Agent `json:"agent"`
@@ -291,7 +292,7 @@ func (c *Client) SetAgentEnabled(id string, enabled bool) (store.Agent, error) {
 			return store.Agent{}, err
 		}
 		defer db.Close()
-		return store.SetAgentEnabled(db, id, enabled)
+		return store.SetAgentEnabled(context.Background(), db, id, enabled)
 	}
 	action := "disable"
 	if enabled {
@@ -309,7 +310,7 @@ func (c *Client) ListAgents() ([]store.Agent, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListAgents(db)
+		return store.ListAgents(context.Background(), db)
 	}
 	var agents []store.Agent
 	err := c.doJSON(http.MethodGet, "/api/agents", nil, &agents)
@@ -323,7 +324,7 @@ func (c *Client) ListAgentStatuses() ([]store.AgentStatus, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListAgentStatuses(db)
+		return store.ListAgentStatuses(context.Background(), db)
 	}
 	var statuses []store.AgentStatus
 	err := c.doJSON(http.MethodGet, "/api/agents/statuses", nil, &statuses)
@@ -337,7 +338,7 @@ func (c *Client) UpdateAgent(id string, request AgentUpdateRequest) (store.Agent
 			return store.Agent{}, err
 		}
 		defer db.Close()
-		return store.UpdateAgent(db, id, store.AgentUpdateParams{
+		return store.UpdateAgent(context.Background(), db, id, store.AgentUpdateParams{
 			Password: request.Password,
 		})
 	}
@@ -353,7 +354,7 @@ func (c *Client) DeleteAgent(id string) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteAgent(db, id)
+		return store.DeleteAgent(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%s", id), nil, nil)
 }
@@ -365,7 +366,7 @@ func (c *Client) SetAgentConfig(agentID string, key, value string) error {
 			return err
 		}
 		defer db.Close()
-		return store.SetAgentConfig(db, agentID, key, value)
+		return store.SetAgentConfig(context.Background(), db, agentID, key, value)
 	}
 	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%s/config", agentID), map[string]string{"key": key, "value": value}, nil)
 }
@@ -377,7 +378,7 @@ func (c *Client) ListAgentConfig(agentID string) ([]store.AgentConfigEntry, erro
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListAgentConfig(db, agentID)
+		return store.ListAgentConfig(context.Background(), db, agentID)
 	}
 	var entries []store.AgentConfigEntry
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/agents/%s/config", agentID), nil, &entries)
@@ -391,7 +392,7 @@ func (c *Client) DeleteAgentConfig(agentID string, key string) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteAgentConfig(db, agentID, key)
+		return store.DeleteAgentConfig(context.Background(), db, agentID, key)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%s/config/%s", agentID, key), nil, nil)
 }
@@ -403,11 +404,11 @@ func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error
 			return store.Agent{}, err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
+		agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
 		if err != nil {
 			return store.Agent{}, err
 		}
-		return store.TouchAgent(db, agent.ID, "online")
+		return store.TouchAgent(context.Background(), db, agent.ID, "online")
 	}
 	var response struct {
 		Agent store.Agent `json:"agent"`
@@ -423,11 +424,11 @@ func (c *Client) HeartbeatAgent(agentID, password, status string) error {
 			return err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, agentID, password)
+		agent, err := store.AuthenticateAgent(context.Background(), db, agentID, password)
 		if err != nil {
 			return err
 		}
-		_, err = store.TouchAgent(db, agent.ID, status)
+		_, err = store.TouchAgent(context.Background(), db, agent.ID, status)
 		return err
 	}
 	var response struct{}
@@ -441,7 +442,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 			return AgentWorkResponse{}, err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
+		agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
@@ -450,7 +451,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 			projectID = 0
 		}
 		if projectID == 0 {
-			projects, err := store.ListProjects(db)
+			projects, err := store.ListProjects(context.Background(), db)
 			if err != nil {
 				return AgentWorkResponse{}, err
 			}
@@ -461,11 +462,11 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 				}
 			}
 		}
-		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Username)
+		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(context.Background(), db, projectID, agent.Username)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
-		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+		ticket, status, err := store.RequestTicket(context.Background(), db, store.TicketRequestParams{
 			ProjectID: projectID,
 			TicketID:  request.TicketID,
 			Username:  agent.Username,
@@ -490,12 +491,12 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 		}
 		response := AgentWorkResponse{Status: agentStatus, Parents: []store.Ticket{}}
 		if agentStatus == "NEW" || agentStatus == "CURRENT" {
-			project, err := store.GetProjectByID(db, ticket.ProjectID)
+			project, err := store.GetProjectByID(context.Background(), db, ticket.ProjectID)
 			if err == nil {
 				response.Project = &project
 			}
 			response.Ticket = &ticket
-			parents, err := store.ListTicketParents(db, ticket.ID)
+			parents, err := store.ListTicketParents(context.Background(), db, ticket.ID)
 			if err == nil {
 				response.Parents = parents
 			}
@@ -521,15 +522,15 @@ func (c *Client) AgentUpdateTicket(id string, request AgentTicketUpdateRequest) 
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		agent, err := store.AuthenticateAgent(db, request.ID, request.Password)
+		agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		current, err := store.GetTicket(db, id)
+		current, err := store.GetTicket(context.Background(), db, id)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.UpdateTicket(db, id, store.TicketUpdateParams{
+		return store.UpdateTicket(context.Background(), db, id, store.TicketUpdateParams{
 			Title:              current.Title,
 			Description:        request.Result,
 			AcceptanceCriteria: current.AcceptanceCriteria,
@@ -564,7 +565,7 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 		if err != nil {
 			return store.Project{}, err
 		}
-		return store.CreateProjectWithParams(db, store.ProjectCreateParams{
+		return store.CreateProjectWithParams(context.Background(), db, store.ProjectCreateParams{
 			Prefix:             request.Prefix,
 			Title:              request.Title,
 			Description:        request.Description,
@@ -589,7 +590,7 @@ func (c *Client) ListProjects() ([]store.Project, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListProjects(db)
+		return store.ListProjects(context.Background(), db)
 	}
 	var projects []store.Project
 	err := c.doJSON(http.MethodGet, "/api/projects", nil, &projects)
@@ -603,7 +604,7 @@ func (c *Client) GetProject(id string) (store.Project, error) {
 			return store.Project{}, err
 		}
 		defer db.Close()
-		return store.GetProject(db, id)
+		return store.GetProject(context.Background(), db, id)
 	}
 	var project store.Project
 	err := c.doJSON(http.MethodGet, "/api/projects/"+id, nil, &project)
@@ -617,7 +618,7 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 			return store.Project{}, err
 		}
 		defer db.Close()
-		return store.UpdateProjectWithParams(db, id, store.ProjectUpdateParams{
+		return store.UpdateProjectWithParams(context.Background(), db, id, store.ProjectUpdateParams{
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
@@ -640,7 +641,7 @@ func (c *Client) SetProjectEnabled(id int64, enabled bool) (store.Project, error
 			return store.Project{}, err
 		}
 		defer db.Close()
-		return store.SetProjectStatus(db, id, enabled)
+		return store.SetProjectStatus(context.Background(), db, id, enabled)
 	}
 	action := "disable"
 	if enabled {
@@ -658,7 +659,7 @@ func (c *Client) DeleteProject(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteProject(db, id)
+		return store.DeleteProject(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d", id), nil, nil)
 }
@@ -670,7 +671,7 @@ func (c *Client) AddProjectMember(projectID int64, request ProjectMemberRequest)
 			return store.ProjectMember{}, err
 		}
 		defer db.Close()
-		return store.AddProjectMember(db, projectID, request.UserID, request.Role)
+		return store.AddProjectMember(context.Background(), db, projectID, request.UserID, request.Role)
 	}
 	var member store.ProjectMember
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/users", projectID), request, &member)
@@ -684,7 +685,7 @@ func (c *Client) RemoveProjectMember(projectID int64, userID string) error {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveProjectMember(db, projectID, userID)
+		return store.RemoveProjectMember(context.Background(), db, projectID, userID)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/users/%s", projectID, userID), nil, nil)
 }
@@ -696,7 +697,7 @@ func (c *Client) ListProjectMembers(projectID int64) ([]store.ProjectMember, err
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListProjectMembers(db, projectID)
+		return store.ListProjectMembers(context.Background(), db, projectID)
 	}
 	var members []store.ProjectMember
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/users", projectID), nil, &members)
@@ -710,7 +711,7 @@ func (c *Client) AddProjectTeamMember(projectID int64, request ProjectTeamMember
 			return store.ProjectTeamMember{}, err
 		}
 		defer db.Close()
-		return store.AddProjectTeamMember(db, projectID, request.TeamID, request.Role)
+		return store.AddProjectTeamMember(context.Background(), db, projectID, request.TeamID, request.Role)
 	}
 	var member store.ProjectTeamMember
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/teams", projectID), request, &member)
@@ -724,7 +725,7 @@ func (c *Client) RemoveProjectTeamMember(projectID, teamID int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveProjectTeamMember(db, projectID, teamID)
+		return store.RemoveProjectTeamMember(context.Background(), db, projectID, teamID)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/teams/%d", projectID, teamID), nil, nil)
 }
@@ -736,7 +737,7 @@ func (c *Client) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMem
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListProjectTeamMembers(db, projectID)
+		return store.ListProjectTeamMembers(context.Background(), db, projectID)
 	}
 	var members []store.ProjectTeamMember
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/teams", projectID), nil, &members)
@@ -750,7 +751,7 @@ func (c *Client) CreateTeam(request TeamRequest) (store.Team, error) {
 			return store.Team{}, err
 		}
 		defer db.Close()
-		return store.CreateTeam(db, request.Name, request.ParentTeamID)
+		return store.CreateTeam(context.Background(), db, request.Name, request.ParentTeamID)
 	}
 	var team store.Team
 	err := c.doJSON(http.MethodPost, "/api/teams", request, &team)
@@ -764,7 +765,7 @@ func (c *Client) ListTeams() ([]store.Team, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTeams(db)
+		return store.ListTeams(context.Background(), db)
 	}
 	var teams []store.Team
 	err := c.doJSON(http.MethodGet, "/api/teams", nil, &teams)
@@ -778,7 +779,7 @@ func (c *Client) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
 			return store.Team{}, err
 		}
 		defer db.Close()
-		return store.UpdateTeam(db, id, request.Name, request.ParentTeamID)
+		return store.UpdateTeam(context.Background(), db, id, request.Name, request.ParentTeamID)
 	}
 	var team store.Team
 	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/teams/%d", id), request, &team)
@@ -792,7 +793,7 @@ func (c *Client) DeleteTeam(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteTeam(db, id)
+		return store.DeleteTeam(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d", id), nil, nil)
 }
@@ -804,7 +805,7 @@ func (c *Client) AddTeamMember(teamID int64, request TeamMemberRequest) (store.T
 			return store.TeamMember{}, err
 		}
 		defer db.Close()
-		return store.AddTeamMember(db, teamID, request.UserID, request.Role, request.JobTitle)
+		return store.AddTeamMember(context.Background(), db, teamID, request.UserID, request.Role, request.JobTitle)
 	}
 	var member store.TeamMember
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/users", teamID), request, &member)
@@ -818,7 +819,7 @@ func (c *Client) RemoveTeamMember(teamID int64, userID string) error {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveTeamMember(db, teamID, userID)
+		return store.RemoveTeamMember(context.Background(), db, teamID, userID)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/users/%s", teamID, userID), nil, nil)
 }
@@ -830,7 +831,7 @@ func (c *Client) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTeamMembers(db, teamID)
+		return store.ListTeamMembers(context.Background(), db, teamID)
 	}
 	var members []store.TeamMember
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/teams/%d/users", teamID), nil, &members)
@@ -844,7 +845,7 @@ func (c *Client) AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, er
 			return store.TeamAgent{}, err
 		}
 		defer db.Close()
-		return store.AddTeamAgent(db, teamID, agentID)
+		return store.AddTeamAgent(context.Background(), db, teamID, agentID)
 	}
 	var item store.TeamAgent
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/agents", teamID), map[string]string{"agent_id": agentID}, &item)
@@ -858,7 +859,7 @@ func (c *Client) RemoveTeamAgent(teamID int64, agentID string) error {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveTeamAgent(db, teamID, agentID)
+		return store.RemoveTeamAgent(context.Background(), db, teamID, agentID)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/agents/%s", teamID, agentID), nil, nil)
 }
@@ -870,7 +871,7 @@ func (c *Client) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTeamAgents(db, teamID)
+		return store.ListTeamAgents(context.Background(), db, teamID)
 	}
 	var items []store.TeamAgent
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/teams/%d/agents", teamID), nil, &items)
@@ -889,7 +890,7 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			return store.Ticket{}, err
 		}
 		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		ticket, err := store.CreateTicket(db, store.TicketCreateParams{
+		ticket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
 			ProjectID:          request.ProjectID,
 			ParentID:           request.ParentID,
 			CloneOf:            request.CloneOf,
@@ -911,7 +912,7 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			return ticket, err
 		}
 		if request.Message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, request.Message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, request.Message); err != nil {
 				return ticket, err
 			}
 		}
@@ -933,7 +934,7 @@ func (c *Client) ListTicketsFiltered(projectID int64, ticketType, stage, state, 
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTickets(db, store.TicketListParams{
+		return store.ListTickets(context.Background(), db, store.TicketListParams{
 			ProjectID:       projectID,
 			Type:            ticketType,
 			Stage:           stage,
@@ -991,7 +992,7 @@ func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Tic
 			return store.Ticket{}, err
 		}
 		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		ticket, err := store.UpdateTicket(db, id, store.TicketUpdateParams{
+		ticket, err := store.UpdateTicket(context.Background(), db, id, store.TicketUpdateParams{
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
@@ -1013,7 +1014,7 @@ func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Tic
 			return ticket, err
 		}
 		if request.Message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, request.Message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, request.Message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1036,11 +1037,11 @@ func (c *Client) CloseTicket(id string, message string) (store.Ticket, error) {
 			return store.Ticket{}, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, id, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, id, user.ID, message); err != nil {
 				return store.Ticket{}, err
 			}
 		}
-		return store.SetTicketOpen(db, id, false, user.Username, user.ID)
+		return store.SetTicketOpen(context.Background(), db, id, false, user.Username, user.ID)
 	}
 	var body any
 	if message != "" {
@@ -1062,12 +1063,12 @@ func (c *Client) OpenTicket(id string, message string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketOpen(db, id, true, user.Username, user.ID)
+		ticket, err := store.SetTicketOpen(context.Background(), db, id, true, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1094,11 +1095,11 @@ func (c *Client) ArchiveTicket(id string, message string) (store.Ticket, error) 
 			return store.Ticket{}, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, id, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, id, user.ID, message); err != nil {
 				return store.Ticket{}, err
 			}
 		}
-		return store.SetTicketArchived(db, id, true, user.Username, user.ID)
+		return store.SetTicketArchived(context.Background(), db, id, true, user.Username, user.ID)
 	}
 	var body any
 	if message != "" {
@@ -1120,12 +1121,12 @@ func (c *Client) UnarchiveTicket(id string, message string) (store.Ticket, error
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketArchived(db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketArchived(context.Background(), db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1151,12 +1152,12 @@ func (c *Client) ReadyTicket(id string, message string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketReady(db, id, true, user.Username, user.ID)
+		ticket, err := store.SetTicketReady(context.Background(), db, id, true, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1182,12 +1183,12 @@ func (c *Client) NotReadyTicket(id string, message string) (store.Ticket, error)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketReady(db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketReady(context.Background(), db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1209,7 +1210,7 @@ func (c *Client) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, e
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.SetTicketWorkflow(db, id, workflowID)
+		return store.SetTicketWorkflow(context.Background(), db, id, workflowID)
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/workflow", map[string]int64{"workflow_id": workflowID}, &ticket)
@@ -1223,7 +1224,7 @@ func (c *Client) UnsetTicketWorkflow(id string) (store.Ticket, error) {
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.UnsetTicketWorkflow(db, id)
+		return store.UnsetTicketWorkflow(context.Background(), db, id)
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id)+"/workflow", nil, &ticket)
@@ -1237,7 +1238,7 @@ func (c *Client) DeleteTicket(id string) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteTicket(db, id)
+		return store.DeleteTicket(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id), nil, nil)
 }
@@ -1291,7 +1292,7 @@ func (c *Client) GetTicketByID(id string) (store.Ticket, error) {
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.GetTicket(db, id)
+		return store.GetTicket(context.Background(), db, id)
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id), nil, &ticket)
@@ -1305,7 +1306,7 @@ func (c *Client) GetTicket(ref string) (store.Ticket, error) {
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.GetTicketByRef(db, ref)
+		return store.GetTicketByRef(context.Background(), db, ref)
 	}
 	var ticket store.Ticket
 	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(strings.TrimSpace(ref)), nil, &ticket)
@@ -1323,12 +1324,12 @@ func (c *Client) CloneTicket(id string, message string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.CloneTicket(db, id, user.Username, user.ID)
+		ticket, err := store.CloneTicket(context.Background(), db, id, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1350,7 +1351,7 @@ func (c *Client) ListHistory(id string) ([]store.HistoryEvent, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListHistoryEvents(db, id)
+		return store.ListHistoryEvents(context.Background(), db, id)
 	}
 	var events []store.HistoryEvent
 	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id)+"/history", nil, &events)
@@ -1368,7 +1369,7 @@ func (c *Client) ListProjectHistoryFiltered(projectID int64, limit int, filter s
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListProjectHistoryFiltered(db, projectID, limit, filter)
+		return store.ListProjectHistoryFiltered(context.Background(), db, projectID, limit, filter)
 	}
 	if limit <= 0 {
 		limit = 10
@@ -1400,7 +1401,7 @@ func (c *Client) AddComment(id string, comment string) (store.Comment, error) {
 		if err != nil {
 			return store.Comment{}, err
 		}
-		return store.AddComment(db, id, user.ID, comment)
+		return store.AddComment(context.Background(), db, id, user.ID, comment)
 	}
 	var created store.Comment
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/comments", id), CommentCreateRequest{Comment: comment}, &created)
@@ -1414,7 +1415,7 @@ func (c *Client) ListComments(id string) ([]store.Comment, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListComments(db, id)
+		return store.ListComments(context.Background(), db, id)
 	}
 	var comments []store.Comment
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%s/comments", id), nil, &comments)
@@ -1428,7 +1429,7 @@ func (c *Client) SetTicketHealth(id string, score int) (store.Ticket, error) {
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.SetTicketHealth(db, id, score)
+		return store.SetTicketHealth(context.Background(), db, id, score)
 	}
 	var updated store.Ticket
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/health", id), TicketHealthRequest{Score: score}, &updated)
@@ -1446,7 +1447,7 @@ func (c *Client) AddDependency(request DependencyRequest) (store.Dependency, err
 		if err != nil {
 			return store.Dependency{}, err
 		}
-		return store.AddDependency(db, request.ProjectID, request.TicketID, request.DependsOn, user.ID)
+		return store.AddDependency(context.Background(), db, request.ProjectID, request.TicketID, request.DependsOn, user.ID)
 	}
 	var dependency store.Dependency
 	err := c.doJSON(http.MethodPost, "/api/dependencies", request, &dependency)
@@ -1460,7 +1461,7 @@ func (c *Client) RemoveDependency(request DependencyRequest) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteDependency(db, request.ProjectID, request.TicketID, request.DependsOn)
+		return store.DeleteDependency(context.Background(), db, request.ProjectID, request.TicketID, request.DependsOn)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/dependencies?project_id=%d&ticket_id=%s&depends_on=%s", request.ProjectID, request.TicketID, request.DependsOn), nil, nil)
 }
@@ -1472,7 +1473,7 @@ func (c *Client) ListDependencies(id string) ([]store.Dependency, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListDependencies(db, id)
+		return store.ListDependencies(context.Background(), db, id)
 	}
 	var dependencies []store.Dependency
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%s/dependencies", id), nil, &dependencies)
@@ -1490,7 +1491,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 		if err != nil {
 			return TicketRequestResponse{}, err
 		}
-		ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+		ticket, status, err := store.RequestTicket(context.Background(), db, store.TicketRequestParams{
 			ProjectID: request.ProjectID,
 			TicketID:  request.TicketID,
 			TicketRef: request.TicketRef,
@@ -1504,7 +1505,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 		response := TicketRequestResponse{Status: status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
 			response.Ticket = &ticket
-			ctx := store.EnrichTicketContext(db, ticket)
+			ctx := store.EnrichTicketContext(context.Background(), db, ticket)
 			response.Project = ctx.Project
 			response.Parents = ctx.Parents
 			response.Workflow = ctx.Workflow
@@ -1563,7 +1564,7 @@ func (c *Client) CreateWorkflow(request WorkflowRequest) (store.Workflow, error)
 			return store.Workflow{}, err
 		}
 		defer db.Close()
-		return store.CreateWorkflow(db, request.Name, request.Description)
+		return store.CreateWorkflow(context.Background(), db, request.Name, request.Description)
 	}
 	var wf store.Workflow
 	err := c.doJSON(http.MethodPost, "/api/workflows", request, &wf)
@@ -1577,7 +1578,7 @@ func (c *Client) ListWorkflows() ([]store.Workflow, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListWorkflows(db)
+		return store.ListWorkflows(context.Background(), db)
 	}
 	var workflows []store.Workflow
 	err := c.doJSON(http.MethodGet, "/api/workflows", nil, &workflows)
@@ -1591,7 +1592,7 @@ func (c *Client) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
 			return store.WorkflowWithStages{}, err
 		}
 		defer db.Close()
-		return store.GetWorkflow(db, id)
+		return store.GetWorkflow(context.Background(), db, id)
 	}
 	var wf store.WorkflowWithStages
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/workflows/%d", id), nil, &wf)
@@ -1605,7 +1606,7 @@ func (c *Client) DeleteWorkflow(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteWorkflow(db, id)
+		return store.DeleteWorkflow(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/workflows/%d", id), nil, nil)
 }
@@ -1617,7 +1618,7 @@ func (c *Client) AddWorkflowStage(workflowID int64, request WorkflowStageRequest
 			return store.WorkflowStage{}, err
 		}
 		defer db.Close()
-		return store.AddWorkflowStage(db, workflowID, request.StageName, request.Description, request.RoleID, request.SortOrder)
+		return store.AddWorkflowStage(context.Background(), db, workflowID, request.StageName, request.Description, request.RoleID, request.SortOrder)
 	}
 	var stage store.WorkflowStage
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/workflows/%d/stages", workflowID), request, &stage)
@@ -1631,7 +1632,7 @@ func (c *Client) RemoveWorkflowStage(stageID int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveWorkflowStage(db, stageID)
+		return store.RemoveWorkflowStage(context.Background(), db, stageID)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/workflows/stages/%d", stageID), nil, nil)
 }
@@ -1643,7 +1644,7 @@ func (c *Client) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error
 			return err
 		}
 		defer db.Close()
-		return store.ReorderWorkflowStages(db, workflowID, stageIDs)
+		return store.ReorderWorkflowStages(context.Background(), db, workflowID, stageIDs)
 	}
 	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/workflows/%d/reorder", workflowID), WorkflowReorderRequest{StageIDs: stageIDs}, nil)
 }
@@ -1655,7 +1656,7 @@ func (c *Client) ExportWorkflow(id int64) (store.WorkflowExport, error) {
 			return store.WorkflowExport{}, err
 		}
 		defer db.Close()
-		return store.ExportWorkflow(db, id)
+		return store.ExportWorkflow(context.Background(), db, id)
 	}
 	var export store.WorkflowExport
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/workflows/%d/export", id), nil, &export)
@@ -1669,7 +1670,7 @@ func (c *Client) ImportWorkflow(export store.WorkflowExport) (store.Workflow, er
 			return store.Workflow{}, err
 		}
 		defer db.Close()
-		return store.ImportWorkflow(db, export)
+		return store.ImportWorkflow(context.Background(), db, export)
 	}
 	var wf store.Workflow
 	err := c.doJSON(http.MethodPost, "/api/workflows/import", export, &wf)
@@ -1687,7 +1688,7 @@ func (c *Client) LogTime(ticketID string, request libticket.TimeEntryRequest) (s
 		if err != nil {
 			return store.TimeEntry{}, err
 		}
-		return store.LogTime(db, ticketID, user.ID, request.Minutes, request.Note)
+		return store.LogTime(context.Background(), db, ticketID, user.ID, request.Minutes, request.Note)
 	}
 	var entry store.TimeEntry
 	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/time", request, &entry)
@@ -1701,7 +1702,7 @@ func (c *Client) ListTimeEntries(ticketID string) ([]store.TimeEntry, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTimeEntries(db, ticketID)
+		return store.ListTimeEntries(context.Background(), db, ticketID)
 	}
 	var entries []store.TimeEntry
 	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time", nil, &entries)
@@ -1715,7 +1716,7 @@ func (c *Client) DeleteTimeEntry(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteTimeEntry(db, id)
+		return store.DeleteTimeEntry(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/time/%d", id), nil, nil)
 }
@@ -1727,7 +1728,7 @@ func (c *Client) TotalTimeForTicket(ticketID string) (int, error) {
 			return 0, err
 		}
 		defer db.Close()
-		return store.TotalTimeForTicket(db, ticketID)
+		return store.TotalTimeForTicket(context.Background(), db, ticketID)
 	}
 	var result struct {
 		Total int `json:"total"`
@@ -1743,7 +1744,7 @@ func (c *Client) CreateLabel(projectID int64, request libticket.LabelRequest) (s
 			return store.Label{}, err
 		}
 		defer db.Close()
-		return store.CreateLabel(db, projectID, request.Name, request.Color)
+		return store.CreateLabel(context.Background(), db, projectID, request.Name, request.Color)
 	}
 	var label store.Label
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/labels", projectID), request, &label)
@@ -1757,7 +1758,7 @@ func (c *Client) ListLabels(projectID int64) ([]store.Label, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListLabels(db, projectID)
+		return store.ListLabels(context.Background(), db, projectID)
 	}
 	var labels []store.Label
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/labels", projectID), nil, &labels)
@@ -1771,7 +1772,7 @@ func (c *Client) DeleteLabel(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteLabel(db, id)
+		return store.DeleteLabel(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/labels/%d", id), nil, nil)
 }
@@ -1783,7 +1784,7 @@ func (c *Client) AddTicketLabel(ticketID string, labelID int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.AddTicketLabel(db, ticketID, labelID)
+		return store.AddTicketLabel(context.Background(), db, ticketID, labelID)
 	}
 	return c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", map[string]int64{"label_id": labelID}, nil)
 }
@@ -1795,7 +1796,7 @@ func (c *Client) RemoveTicketLabel(ticketID string, labelID int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveTicketLabel(db, ticketID, labelID)
+		return store.RemoveTicketLabel(context.Background(), db, ticketID, labelID)
 	}
 	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(ticketID)+"/labels/"+fmt.Sprintf("%d", labelID), nil, nil)
 }
@@ -1807,7 +1808,7 @@ func (c *Client) ListTicketLabels(ticketID string) ([]store.Label, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTicketLabels(db, ticketID)
+		return store.ListTicketLabels(context.Background(), db, ticketID)
 	}
 	var labels []store.Label
 	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", nil, &labels)
@@ -1831,7 +1832,7 @@ func (c *Client) CreateStory(projectID int64, title, description string) (store.
 		if err != nil {
 			return store.Story{}, err
 		}
-		return store.CreateStory(db, projectID, title, description, user.ID)
+		return store.CreateStory(context.Background(), db, projectID, title, description, user.ID)
 	}
 	var created store.Story
 	err := c.doJSON(http.MethodPost, "/api/stories", storyRequest{ProjectID: projectID, Title: title, Description: description}, &created)
@@ -1845,7 +1846,7 @@ func (c *Client) ListStories(projectID int64) ([]store.Story, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListStoriesByProject(db, projectID)
+		return store.ListStoriesByProject(context.Background(), db, projectID)
 	}
 	var stories []store.Story
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/stories", projectID), nil, &stories)
@@ -1859,7 +1860,7 @@ func (c *Client) GetStory(id int64) (store.Story, error) {
 			return store.Story{}, err
 		}
 		defer db.Close()
-		return store.GetStory(db, id)
+		return store.GetStory(context.Background(), db, id)
 	}
 	var story store.Story
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/stories/%d", id), nil, &story)
@@ -1873,7 +1874,7 @@ func (c *Client) UpdateStory(id int64, title, description string) (store.Story, 
 			return store.Story{}, err
 		}
 		defer db.Close()
-		return store.UpdateStory(db, id, title, description)
+		return store.UpdateStory(context.Background(), db, id, title, description)
 	}
 	var updated store.Story
 	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/stories/%d", id), storyRequest{Title: title, Description: description}, &updated)
@@ -1887,7 +1888,7 @@ func (c *Client) DeleteStory(id int64) error {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteStory(db, id)
+		return store.DeleteStory(context.Background(), db, id)
 	}
 	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
 }

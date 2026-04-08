@@ -1,17 +1,20 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestTimeEntryCRUD(t *testing.T) {
 	db := testDB(t)
 	adminID := testAdminID(t, db)
 
-	project, err := CreateProject(db, "Time Test", "", "", adminID)
+	project, err := CreateProject(context.Background(), db, "Time Test", "", "", adminID)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Timed Task",
@@ -23,7 +26,7 @@ func TestTimeEntryCRUD(t *testing.T) {
 	}
 
 	// Log time
-	entry, err := LogTime(db, ticket.ID, adminID, 30, "initial work")
+	entry, err := LogTime(context.Background(), db, ticket.ID, adminID, 30, "initial work")
 	if err != nil {
 		t.Fatalf("LogTime() error = %v", err)
 	}
@@ -32,18 +35,18 @@ func TestTimeEntryCRUD(t *testing.T) {
 	}
 
 	// Log more time
-	_, err = LogTime(db, ticket.ID, adminID, 45, "follow-up")
+	_, err = LogTime(context.Background(), db, ticket.ID, adminID, 45, "follow-up")
 	if err != nil {
 		t.Fatalf("LogTime() second error = %v", err)
 	}
 
 	// Invalid minutes
-	if _, err := LogTime(db, ticket.ID, adminID, 0, ""); err == nil {
+	if _, err := LogTime(context.Background(), db, ticket.ID, adminID, 0, ""); err == nil {
 		t.Fatal("LogTime() with 0 minutes should fail")
 	}
 
 	// List
-	entries, err := ListTimeEntries(db, ticket.ID)
+	entries, err := ListTimeEntries(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListTimeEntries() error = %v", err)
 	}
@@ -52,7 +55,7 @@ func TestTimeEntryCRUD(t *testing.T) {
 	}
 
 	// Total
-	total, err := TotalTimeForTicket(db, ticket.ID)
+	total, err := TotalTimeForTicket(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("TotalTimeForTicket() error = %v", err)
 	}
@@ -61,15 +64,15 @@ func TestTimeEntryCRUD(t *testing.T) {
 	}
 
 	// Delete
-	if err := DeleteTimeEntry(db, entry.ID); err != nil {
+	if err := DeleteTimeEntry(context.Background(), db, entry.ID); err != nil {
 		t.Fatalf("DeleteTimeEntry() error = %v", err)
 	}
-	entries, _ = ListTimeEntries(db, ticket.ID)
+	entries, _ = ListTimeEntries(context.Background(), db, ticket.ID)
 	if len(entries) != 1 {
 		t.Fatalf("ListTimeEntries() after delete len = %d, want 1", len(entries))
 	}
 
-	total, _ = TotalTimeForTicket(db, ticket.ID)
+	total, _ = TotalTimeForTicket(context.Background(), db, ticket.ID)
 	if total != 45 {
 		t.Fatalf("TotalTimeForTicket() after delete = %d, want 45", total)
 	}

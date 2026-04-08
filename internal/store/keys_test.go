@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestTicketTypeCode(t *testing.T) {
 	cases := []struct {
@@ -97,7 +100,7 @@ func TestNextUniqueProjectPrefix(t *testing.T) {
 	db := testDB(t)
 
 	// TK is already used by default project
-	prefix, err := nextUniqueProjectPrefix(db, "TK")
+	prefix, err := nextUniqueProjectPrefix(context.Background(), db, "TK")
 	if err != nil {
 		t.Fatalf("nextUniqueProjectPrefix(TK) error = %v", err)
 	}
@@ -107,7 +110,7 @@ func TestNextUniqueProjectPrefix(t *testing.T) {
 	}
 
 	// ABC should be available
-	prefix, err = nextUniqueProjectPrefix(db, "ABC")
+	prefix, err = nextUniqueProjectPrefix(context.Background(), db, "ABC")
 	if err != nil {
 		t.Fatalf("nextUniqueProjectPrefix(ABC) error = %v", err)
 	}

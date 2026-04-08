@@ -24,7 +24,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			projects, err := store.ListProjectsVisibleToUser(db, user)
+			projects, err := store.ListProjectsVisibleToUser(r.Context(), db, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -41,7 +41,7 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			project, err := store.CreateProjectWithParams(db, store.ProjectCreateParams{
+			project, err := store.CreateProjectWithParams(r.Context(), db, store.ProjectCreateParams{
 				Prefix:             projectPayload.Prefix,
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
@@ -73,7 +73,7 @@ func (r *router) registerProjectHandlers() {
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 		parts := strings.Split(trimmed, "/")
 		if len(parts) == 2 && parts[1] == "tickets" && r.Method == http.MethodGet {
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
@@ -87,7 +87,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -107,7 +107,7 @@ func (r *router) registerProjectHandlers() {
 			if raw := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("include_archived"))); raw == "1" || raw == "true" || raw == "yes" {
 				includeArchived = true
 			}
-			tasks, err := store.ListTickets(db, store.TicketListParams{
+			tasks, err := store.ListTickets(r.Context(), db, store.TicketListParams{
 				ProjectID:       project.ID,
 				Type:            r.URL.Query().Get("type"),
 				Stage:           r.URL.Query().Get("stage"),
@@ -126,7 +126,7 @@ func (r *router) registerProjectHandlers() {
 			return
 		}
 		if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
@@ -140,7 +140,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -165,7 +165,7 @@ func (r *router) registerProjectHandlers() {
 					return
 				}
 			}
-			events, err := store.ListProjectHistoryFiltered(db, project.ID, limit, filter)
+			events, err := store.ListProjectHistoryFiltered(r.Context(), db, project.ID, limit, filter)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -174,7 +174,7 @@ func (r *router) registerProjectHandlers() {
 			return
 		}
 		if len(parts) == 2 && parts[1] == "stories" && r.Method == http.MethodGet {
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
 				return
@@ -184,7 +184,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -193,7 +193,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
-			stories, err := store.ListStoriesByProject(db, project.ID)
+			stories, err := store.ListStoriesByProject(r.Context(), db, project.ID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -208,12 +208,12 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -233,7 +233,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, "user_id is required")
 					return
 				}
-				if err := store.RemoveProjectMember(db, project.ID, userID); err != nil {
+				if err := store.RemoveProjectMember(r.Context(), db, project.ID, userID); err != nil {
 					if errors.Is(err, store.ErrProjectMembershipNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
 						return
@@ -257,7 +257,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				member, err := store.AddProjectMember(db, project.ID, payload.UserID, payload.Role)
+				member, err := store.AddProjectMember(r.Context(), db, project.ID, payload.UserID, payload.Role)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -270,7 +270,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/users")
 					return
 				}
-				members, err := store.ListProjectMembers(db, project.ID)
+				members, err := store.ListProjectMembers(r.Context(), db, project.ID)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -289,12 +289,12 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -314,7 +314,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, "team_id must be numeric")
 					return
 				}
-				if err := store.RemoveProjectTeamMember(db, project.ID, teamID); err != nil {
+				if err := store.RemoveProjectTeamMember(r.Context(), db, project.ID, teamID); err != nil {
 					if errors.Is(err, sql.ErrNoRows) {
 						writeError(w, http.StatusNotFound, "project team membership not found")
 						return
@@ -338,7 +338,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				member, err := store.AddProjectTeamMember(db, project.ID, payload.TeamID, payload.Role)
+				member, err := store.AddProjectTeamMember(r.Context(), db, project.ID, payload.TeamID, payload.Role)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -351,7 +351,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/teams")
 					return
 				}
-				members, err := store.ListProjectTeamMembers(db, project.ID)
+				members, err := store.ListProjectTeamMembers(r.Context(), db, project.ID)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -382,7 +382,7 @@ func (r *router) registerProjectHandlers() {
 					return
 				}
 				if r.Method == http.MethodDelete {
-					if err := store.DeleteLabel(db, labelID); err != nil {
+					if err := store.DeleteLabel(r.Context(), db, labelID); err != nil {
 						if errors.Is(err, store.ErrLabelNotFound) {
 							writeError(w, http.StatusNotFound, "label not found")
 							return
@@ -399,7 +399,7 @@ func (r *router) registerProjectHandlers() {
 			// /api/projects/<id>/labels
 			switch r.Method {
 			case http.MethodGet:
-				labels, err := store.ListLabels(db, projectID)
+				labels, err := store.ListLabels(r.Context(), db, projectID)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -414,7 +414,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
-				label, err := store.CreateLabel(db, projectID, req.Name, req.Color)
+				label, err := store.CreateLabel(r.Context(), db, projectID, req.Name, req.Color)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -432,12 +432,12 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -456,7 +456,7 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusNotFound, "not found")
 				return
 			}
-			project, err = store.SetProjectStatus(db, project.ID, enabled)
+			project, err = store.SetProjectStatus(r.Context(), db, project.ID, enabled)
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
@@ -481,7 +481,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
@@ -490,7 +490,7 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			role, err := projectRoleForUser(db, project.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -511,12 +511,12 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			currentProject, err := store.GetProject(db, parts[0])
+			currentProject, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				writeError(w, http.StatusNotFound, "project not found")
 				return
 			}
-			role, err := projectRoleForUser(db, currentProject.ID, user)
+			role, err := projectRoleForUser(r.Context(), db, currentProject.ID, user)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -525,7 +525,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
-			project, err := store.UpdateProjectWithParams(db, currentProject.ID, store.ProjectUpdateParams{
+			project, err := store.UpdateProjectWithParams(r.Context(), db, currentProject.ID, store.ProjectUpdateParams{
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
 				AcceptanceCriteria: projectPayload.AcceptanceCriteria,
@@ -550,7 +550,7 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			project, err := store.GetProject(db, parts[0])
+			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
@@ -559,7 +559,7 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			if err := store.DeleteProject(db, project.ID); err != nil {
+			if err := store.DeleteProject(r.Context(), db, project.ID); err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}

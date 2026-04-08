@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,15 +10,15 @@ import (
 
 func TestCreateUpdateAndListTickets(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	epic, err := CreateTicket(db, TicketCreateParams{
+	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Authentication",
@@ -27,7 +28,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID:        project.ID,
 		ParentID:         &epic.ID,
 		Type:             "task",
@@ -49,7 +50,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("CreateTicket() estimates = %#v", ticket)
 	}
 
-	tickets, err := ListTicketsByProject(db, project.ID)
+	tickets, err := ListTicketsByProject(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("ListTicketsByProject() error = %v", err)
 	}
@@ -57,7 +58,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("ListTicketsByProject() len = %d, want 2", len(tickets))
 	}
 
-	updated, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	updated, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:            "Add password reset workflow",
 		Description:      "Support email-based reset",
 		ParentID:         &epic.ID,
@@ -74,7 +75,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("UpdateTicket() estimates = %#v", updated)
 	}
 
-	history, err := ListHistoryEvents(db, ticket.ID)
+	history, err := ListHistoryEvents(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -84,7 +85,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		}
 	}
 
-	statusUpdated, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	statusUpdated, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:            updated.Title,
 		Description:      updated.Description,
 		ParentID:         updated.ParentID,
@@ -105,7 +106,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want design/active", statusUpdated.Stage, statusUpdated.State)
 	}
 
-	history, err = ListHistoryEvents(db, ticket.ID)
+	history, err = ListHistoryEvents(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -144,7 +145,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("ticket lifecycle reason = %#v, want [\"manual update\"]", reasons)
 	}
 
-	filtered, err := ListTickets(db, TicketListParams{
+	filtered, err := ListTickets(context.Background(), db, TicketListParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Status:    "design/active",
@@ -157,7 +158,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("ListTickets(filtered) = %#v", filtered)
 	}
 
-	limited, err := ListTickets(db, TicketListParams{
+	limited, err := ListTickets(context.Background(), db, TicketListParams{
 		ProjectID: project.ID,
 		Limit:     1,
 	})
@@ -168,7 +169,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("ListTickets(limited) len = %d, want 1", len(limited))
 	}
 
-	got, err := GetTicketByProject(db, project.ID, ticket.ID)
+	got, err := GetTicketByProject(context.Background(), db, project.ID, ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicketByProject() error = %v", err)
 	}
@@ -179,15 +180,15 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 
 func TestSetTicketHealth(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Health check",
@@ -197,36 +198,36 @@ func TestSetTicketHealth(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	updated, err := SetTicketHealth(db, ticket.ID, 3)
+	updated, err := SetTicketHealth(context.Background(), db, ticket.ID, 3)
 	if err != nil {
 		t.Fatalf("SetTicketHealth() error = %v", err)
 	}
 	if updated.HealthScore != 3 {
 		t.Fatalf("SetTicketHealth() score = %d, want 3", updated.HealthScore)
 	}
-	reloaded, err := GetTicket(db, ticket.ID)
+	reloaded, err := GetTicket(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
 	if reloaded.HealthScore != 3 {
 		t.Fatalf("GetTicket().HealthScore = %d, want 3", reloaded.HealthScore)
 	}
-	if _, err := SetTicketHealth(db, ticket.ID, 6); err == nil {
+	if _, err := SetTicketHealth(context.Background(), db, ticket.ID, 6); err == nil {
 		t.Fatalf("SetTicketHealth(out of range) = nil, want error")
 	}
-	if _, err := SetTicketHealth(db, "9999", 1); !errors.Is(err, ErrTicketNotFound) {
+	if _, err := SetTicketHealth(context.Background(), db, "9999", 1); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("SetTicketHealth(unknown task) error = %v, want %v", err, ErrTicketNotFound)
 	}
 }
 
 func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	taskParent, err := CreateTicket(db, TicketCreateParams{
+	taskParent, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Regular task",
@@ -235,7 +236,7 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	if _, err := CreateTicket(db, TicketCreateParams{
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &taskParent.ID,
 		Type:      "epic",
@@ -245,7 +246,7 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 		t.Fatalf("CreateTicket(epic with non-epic parent) error = %v, want task cannot parent epic", err)
 	}
 
-	epicParent, err := CreateTicket(db, TicketCreateParams{
+	epicParent, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Valid epic",
@@ -255,7 +256,7 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
 
-	taskChild, err := CreateTicket(db, TicketCreateParams{
+	taskChild, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &epicParent.ID,
 		Type:      "task",
@@ -266,7 +267,7 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 		t.Fatalf("CreateTicket(task child) error = %v", err)
 	}
 
-	_, err = UpdateTicket(db, epicParent.ID, TicketUpdateParams{
+	_, err = UpdateTicket(context.Background(), db, epicParent.ID, TicketUpdateParams{
 		Title:    "Valid epic",
 		ParentID: &taskChild.ID,
 	})
@@ -277,15 +278,15 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 
 func TestRequestTicket(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	notReady, err := CreateTicket(db, TicketCreateParams{
+	notReady, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Blocked setup",
@@ -296,10 +297,10 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("CreateTicket(design/idle) error = %v", err)
 	}
 	// Mark first ticket as ready so it can be claimed.
-	if _, err := SetTicketReady(db, notReady.ID, true, "admin", ""); err != nil {
+	if _, err := SetTicketReady(context.Background(), db, notReady.ID, true, "admin", ""); err != nil {
 		t.Fatalf("SetTicketReady() error = %v", err)
 	}
-	secondTicket, err := CreateTicket(db, TicketCreateParams{
+	secondTicket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Open task",
@@ -310,11 +311,11 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("CreateTicket(develop/idle) error = %v", err)
 	}
 	// Mark second ticket as ready too.
-	if _, err := SetTicketReady(db, secondTicket.ID, true, "admin", ""); err != nil {
+	if _, err := SetTicketReady(context.Background(), db, secondTicket.ID, true, "admin", ""); err != nil {
 		t.Fatalf("SetTicketReady() error = %v", err)
 	}
 
-	assigned, status, err := RequestTicket(db, TicketRequestParams{
+	assigned, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		Username:  "alice",
 		UserID:    "",
@@ -326,7 +327,7 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("RequestTicket(any) = %#v, %q", assigned, status)
 	}
 
-	assignedAgain, status, err := RequestTicket(db, TicketRequestParams{
+	assignedAgain, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		Username:  "alice",
 		UserID:    "",
@@ -338,7 +339,7 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("RequestTicket(existing open) = %#v, %q", assignedAgain, status)
 	}
 
-	inProgress, err := UpdateTicket(db, notReady.ID, TicketUpdateParams{
+	inProgress, err := UpdateTicket(context.Background(), db, notReady.ID, TicketUpdateParams{
 		Title:         assigned.Title,
 		Description:   assigned.Description,
 		ParentID:      assigned.ParentID,
@@ -352,7 +353,7 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("UpdateTicket(develop/active) error = %v", err)
 	}
 
-	requested, status, err := RequestTicket(db, TicketRequestParams{
+	requested, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		TicketID:  &notReady.ID,
 		Username:  "alice",
@@ -365,10 +366,10 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("RequestTicket(existing inprogress) = %#v, %q", requested, status)
 	}
 
-	if _, err := CreateUser(db, "bob", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "bob", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(bob) error = %v", err)
 	}
-	rejected, status, err := RequestTicket(db, TicketRequestParams{
+	rejected, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		TicketID:  &notReady.ID,
 		Username:  "bob",
@@ -382,7 +383,7 @@ func TestRequestTicket(t *testing.T) {
 	}
 
 	// Bob gets the remaining idle ticket (openTask, ID 2)
-	bobAssigned, status, err := RequestTicket(db, TicketRequestParams{
+	bobAssigned, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		Username:  "bob",
 		UserID:    "",
@@ -394,7 +395,7 @@ func TestRequestTicket(t *testing.T) {
 		t.Fatalf("RequestTicket(bob) status = %q, want ASSIGNED", status)
 	}
 	// Now no idle tickets left — should get NO-WORK
-	noWork, status, err := RequestTicket(db, TicketRequestParams{
+	noWork, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		Username:  "charlie",
 		UserID:    "",
@@ -410,14 +411,14 @@ func TestRequestTicket(t *testing.T) {
 
 func TestRequestTicketDryRun(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "DryRun Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "DryRun Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "DryRun task",
@@ -427,12 +428,12 @@ func TestRequestTicketDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := SetTicketReady(db, ticket.ID, true, "admin", ""); err != nil {
+	if _, err := SetTicketReady(context.Background(), db, ticket.ID, true, "admin", ""); err != nil {
 		t.Fatalf("SetTicketReady() error = %v", err)
 	}
 
 	// DryRun should return AVAILABLE without actually claiming
-	preview, status, err := RequestTicket(db, TicketRequestParams{
+	preview, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		Username:  "alice",
 		DryRun:    true,
@@ -454,14 +455,14 @@ func TestRequestTicketDryRun(t *testing.T) {
 
 func TestRequestTicketByRef(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Ref Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Ref Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Ref task",
@@ -474,7 +475,7 @@ func TestRequestTicketByRef(t *testing.T) {
 
 	// Request by TicketRef (resolved via GetTicketByRef -> GetTicket)
 	// The ticket is not claimable (wrong stage), so this will be REJECTED
-	_, status, err := RequestTicket(db, TicketRequestParams{
+	_, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		TicketRef: ticket.ID,
 		Username:  "alice",
@@ -489,12 +490,12 @@ func TestRequestTicketByRef(t *testing.T) {
 
 func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Add password reset",
@@ -503,14 +504,14 @@ func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
-	if _, err := CreateUser(db, "bob", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "bob", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(bob) error = %v", err)
 	}
 
-	claimed, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	claimed, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -525,7 +526,7 @@ func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 		t.Fatalf("UpdateTicket(claim self).Assignee = %q, want alice", claimed.Assignee)
 	}
 
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         claimed.Title,
 		Description:   claimed.Description,
 		ParentID:      claimed.ParentID,
@@ -536,7 +537,7 @@ func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 		t.Fatalf("UpdateTicket(claim assigned) error = %v, want ticket is already assigned to alice", err)
 	}
 
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         claimed.Title,
 		Description:   claimed.Description,
 		ParentID:      claimed.ParentID,
@@ -550,11 +551,11 @@ func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 
 func TestUpdateTicketAssignRequiresExistingEnabledUser(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Add password reset",
@@ -563,10 +564,10 @@ func TestUpdateTicketAssignRequiresExistingEnabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -576,10 +577,10 @@ func TestUpdateTicketAssignRequiresExistingEnabledUser(t *testing.T) {
 	}); err == nil || err.Error() != "user not found" {
 		t.Fatalf("UpdateTicket(assign missing user) error = %v, want user not found", err)
 	}
-	if err := SetUserEnabled(db, "alice", false); err != nil {
+	if err := SetUserEnabled(context.Background(), db, "alice", false); err != nil {
 		t.Fatalf("SetUserEnabled(false) error = %v", err)
 	}
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -593,14 +594,14 @@ func TestUpdateTicketAssignRequiresExistingEnabledUser(t *testing.T) {
 
 func TestUpdateTicketStatusRequiresAssignee(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Status-owned task",
@@ -609,7 +610,7 @@ func TestUpdateTicketStatusRequiresAssignee(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -625,11 +626,11 @@ func TestUpdateTicketStatusRequiresAssignee(t *testing.T) {
 
 func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Admin-bypass task",
@@ -638,10 +639,10 @@ func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
-	updated, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	updated, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -661,14 +662,14 @@ func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 
 func TestClosedTaskCannotBeReopened(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Closed task",
@@ -684,7 +685,7 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 	// When we reach the final stage, success stays.
 	current := ticket
 	for {
-		updated, err := UpdateTicket(db, current.ID, TicketUpdateParams{
+		updated, err := UpdateTicket(context.Background(), db, current.ID, TicketUpdateParams{
 			Title:         current.Title,
 			Description:   current.Description,
 			ParentID:      current.ParentID,
@@ -705,7 +706,7 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 		current = updated
 	}
 	// Now try to reopen — should fail
-	if _, err := UpdateTicket(db, current.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, current.ID, TicketUpdateParams{
 		Title:         current.Title,
 		Description:   current.Description,
 		ParentID:      current.ParentID,
@@ -721,11 +722,11 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 
 func TestCloneTicketClonesSingleTask(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID:          project.ID,
 		Type:               "task",
 		Title:              "Original task",
@@ -739,7 +740,7 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	cloned, err := CloneTicket(db, ticket.ID, "", "")
+	cloned, err := CloneTicket(context.Background(), db, ticket.ID, "", "")
 	if err != nil {
 		t.Fatalf("CloneTicket() error = %v", err)
 	}
@@ -754,11 +755,11 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	db := testDB(t)
 	adminID := testAdminID(t, db)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Delete me",
@@ -767,7 +768,7 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	clone, err := CreateTicket(db, TicketCreateParams{
+	clone, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		CloneOf:   &ticket.ID,
 		Type:      "task",
@@ -777,13 +778,13 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(clone) error = %v", err)
 	}
-	if _, err := AddComment(db, ticket.ID, adminID, "hello"); err != nil {
+	if _, err := AddComment(context.Background(), db, ticket.ID, adminID, "hello"); err != nil {
 		t.Fatalf("AddComment() error = %v", err)
 	}
-	if err := AddHistoryEvent(db, project.ID, ticket.ID, "task_updated", map[string]any{"title": ticket.Title}, ""); err != nil {
+	if err := AddHistoryEvent(context.Background(), db, project.ID, ticket.ID, "task_updated", map[string]any{"title": ticket.Title}, ""); err != nil {
 		t.Fatalf("AddHistoryEvent() error = %v", err)
 	}
-	dependency, err := CreateTicket(db, TicketCreateParams{
+	dependency, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Dependency",
@@ -792,42 +793,42 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(dependency) error = %v", err)
 	}
-	if _, err := AddDependency(db, project.ID, ticket.ID, dependency.ID, ""); err != nil {
+	if _, err := AddDependency(context.Background(), db, project.ID, ticket.ID, dependency.ID, ""); err != nil {
 		t.Fatalf("AddDependency() error = %v", err)
 	}
 
-	if err := DeleteTicket(db, ticket.ID); err != nil {
+	if err := DeleteTicket(context.Background(), db, ticket.ID); err != nil {
 		t.Fatalf("DeleteTicket() error = %v", err)
 	}
-	if _, err := GetTicket(db, ticket.ID); !errors.Is(err, ErrTicketNotFound) {
+	if _, err := GetTicket(context.Background(), db, ticket.ID); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("GetTicket(deleted) error = %v, want ErrTicketNotFound", err)
 	}
 
-	clonedTask, err := GetTicket(db, clone.ID)
+	clonedTask, err := GetTicket(context.Background(), db, clone.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(clone) error = %v", err)
 	}
 	if clonedTask.CloneOf != nil {
 		t.Fatalf("CloneOf = %#v, want nil after source delete", clonedTask.CloneOf)
 	}
-	if comments, err := ListComments(db, ticket.ID); err != nil || len(comments) != 0 {
+	if comments, err := ListComments(context.Background(), db, ticket.ID); err != nil || len(comments) != 0 {
 		t.Fatalf("ListComments(deleted) = %#v, %v", comments, err)
 	}
-	if history, err := ListHistoryEvents(db, ticket.ID); err != nil || len(history) != 0 {
+	if history, err := ListHistoryEvents(context.Background(), db, ticket.ID); err != nil || len(history) != 0 {
 		t.Fatalf("ListHistoryEvents(deleted) = %#v, %v", history, err)
 	}
-	if deps, err := ListDependencies(db, ticket.ID); err != nil || len(deps) != 0 {
+	if deps, err := ListDependencies(context.Background(), db, ticket.ID); err != nil || len(deps) != 0 {
 		t.Fatalf("ListDependencies(deleted) = %#v, %v", deps, err)
 	}
 }
 
 func TestDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	parent, err := CreateTicket(db, TicketCreateParams{
+	parent, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Parent",
@@ -836,7 +837,7 @@ func TestDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	if _, err := CreateTicket(db, TicketCreateParams{
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &parent.ID,
 		Type:      "task",
@@ -846,18 +847,18 @@ func TestDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
 
-	if err := DeleteTicket(db, parent.ID); !errors.Is(err, ErrTicketHasChildren) {
+	if err := DeleteTicket(context.Background(), db, parent.ID); !errors.Is(err, ErrTicketHasChildren) {
 		t.Fatalf("DeleteTicket(parent) error = %v, want ErrTicketHasChildren", err)
 	}
 }
 
 func TestCloneEpicClonesChildren(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	epic, err := CreateTicket(db, TicketCreateParams{
+	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Epic",
@@ -866,7 +867,7 @@ func TestCloneEpicClonesChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
-	child, err := CreateTicket(db, TicketCreateParams{
+	child, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &epic.ID,
 		Type:      "task",
@@ -876,11 +877,11 @@ func TestCloneEpicClonesChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
-	clonedEpic, err := CloneTicket(db, epic.ID, "", "")
+	clonedEpic, err := CloneTicket(context.Background(), db, epic.ID, "", "")
 	if err != nil {
 		t.Fatalf("CloneTicket(epic) error = %v", err)
 	}
-	tickets, err := ListTicketsByProject(db, project.ID)
+	tickets, err := ListTicketsByProject(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("ListTicketsByProject() error = %v", err)
 	}
@@ -902,15 +903,15 @@ func TestCloneEpicClonesChildren(t *testing.T) {
 
 func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	epic, err := CreateTicket(db, TicketCreateParams{
+	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Epic",
@@ -919,7 +920,7 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if err != nil {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
-	parentTask, err := CreateTicket(db, TicketCreateParams{
+	parentTask, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &epic.ID,
 		Type:      "task",
@@ -929,7 +930,7 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	if err != nil {
 		t.Fatalf("CreateTicket(parentTask) error = %v", err)
 	}
-	leafBug, err := CreateTicket(db, TicketCreateParams{
+	leafBug, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &parentTask.ID,
 		Type:      "bug",
@@ -940,7 +941,7 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 		t.Fatalf("CreateTicket(leafBug) error = %v", err)
 	}
 
-	updatedLeaf, err := UpdateTicket(db, leafBug.ID, TicketUpdateParams{
+	updatedLeaf, err := UpdateTicket(context.Background(), db, leafBug.ID, TicketUpdateParams{
 		Title:         leafBug.Title,
 		Description:   leafBug.Description,
 		ParentID:      leafBug.ParentID,
@@ -957,14 +958,14 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 		t.Fatalf("leaf status = %q, want design/active", updatedLeaf.Status)
 	}
 
-	reloadedParent, err := GetTicket(db, parentTask.ID)
+	reloadedParent, err := GetTicket(context.Background(), db, parentTask.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(parentTask) error = %v", err)
 	}
 	if reloadedParent.Status != "design/active" {
 		t.Fatalf("parent task status = %q, want design/active", reloadedParent.Status)
 	}
-	reloadedEpic, err := GetTicket(db, epic.ID)
+	reloadedEpic, err := GetTicket(context.Background(), db, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(epic) error = %v", err)
 	}
@@ -973,9 +974,9 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 	}
 
 	// Advance leaf through all remaining stages by setting success repeatedly
-	currentLeaf, _ := GetTicket(db, leafBug.ID)
+	currentLeaf, _ := GetTicket(context.Background(), db, leafBug.ID)
 	for currentLeaf.State != StateSuccess {
-		currentLeaf, err = UpdateTicket(db, currentLeaf.ID, TicketUpdateParams{
+		currentLeaf, err = UpdateTicket(context.Background(), db, currentLeaf.ID, TicketUpdateParams{
 			Title:         currentLeaf.Title,
 			Description:   currentLeaf.Description,
 			ParentID:      currentLeaf.ParentID,
@@ -990,14 +991,14 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 		}
 	}
 
-	reloadedParent, err = GetTicket(db, parentTask.ID)
+	reloadedParent, err = GetTicket(context.Background(), db, parentTask.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(parentTask after complete) error = %v", err)
 	}
 	if reloadedParent.Status != "done/success" {
 		t.Fatalf("parent task status after complete = %q, want done/success", reloadedParent.Status)
 	}
-	reloadedEpic, err = GetTicket(db, epic.ID)
+	reloadedEpic, err = GetTicket(context.Background(), db, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(epic after complete) error = %v", err)
 	}
@@ -1008,11 +1009,11 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 
 func TestSetTicketOpenAndArchived(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Open/Archive Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Open/Archive Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Toggle ticket",
@@ -1023,7 +1024,7 @@ func TestSetTicketOpenAndArchived(t *testing.T) {
 	}
 
 	// Close ticket
-	closed, err := SetTicketOpen(db, ticket.ID, false, "admin", "")
+	closed, err := SetTicketOpen(context.Background(), db, ticket.ID, false, "admin", "")
 	if err != nil {
 		t.Fatalf("SetTicketOpen(false) error = %v", err)
 	}
@@ -1032,7 +1033,7 @@ func TestSetTicketOpenAndArchived(t *testing.T) {
 	}
 
 	// Reopen ticket
-	reopened, err := SetTicketOpen(db, ticket.ID, true, "admin", "")
+	reopened, err := SetTicketOpen(context.Background(), db, ticket.ID, true, "admin", "")
 	if err != nil {
 		t.Fatalf("SetTicketOpen(true) error = %v", err)
 	}
@@ -1041,7 +1042,7 @@ func TestSetTicketOpenAndArchived(t *testing.T) {
 	}
 
 	// Idempotent: already open
-	same, err := SetTicketOpen(db, ticket.ID, true, "admin", "")
+	same, err := SetTicketOpen(context.Background(), db, ticket.ID, true, "admin", "")
 	if err != nil {
 		t.Fatalf("SetTicketOpen(noop) error = %v", err)
 	}
@@ -1050,7 +1051,7 @@ func TestSetTicketOpenAndArchived(t *testing.T) {
 	}
 
 	// Archive ticket
-	archived, err := SetTicketArchived(db, ticket.ID, true, "admin", "")
+	archived, err := SetTicketArchived(context.Background(), db, ticket.ID, true, "admin", "")
 	if err != nil {
 		t.Fatalf("SetTicketArchived(true) error = %v", err)
 	}
@@ -1059,7 +1060,7 @@ func TestSetTicketOpenAndArchived(t *testing.T) {
 	}
 
 	// Unarchive ticket
-	unarchived, err := SetTicketArchived(db, ticket.ID, false, "admin", "")
+	unarchived, err := SetTicketArchived(context.Background(), db, ticket.ID, false, "admin", "")
 	if err != nil {
 		t.Fatalf("SetTicketArchived(false) error = %v", err)
 	}
@@ -1070,11 +1071,11 @@ func TestSetTicketOpenAndArchived(t *testing.T) {
 
 func TestGetTicketByRefAndSearchTickets(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Search Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Search Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Find me please",
@@ -1085,7 +1086,7 @@ func TestGetTicketByRefAndSearchTickets(t *testing.T) {
 	}
 
 	// GetTicketByRef
-	found, err := GetTicketByRef(db, ticket.ID)
+	found, err := GetTicketByRef(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicketByRef() error = %v", err)
 	}
@@ -1094,12 +1095,12 @@ func TestGetTicketByRefAndSearchTickets(t *testing.T) {
 	}
 
 	// GetTicketByRef with empty string
-	if _, err := GetTicketByRef(db, ""); !errors.Is(err, ErrTicketNotFound) {
+	if _, err := GetTicketByRef(context.Background(), db, ""); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("GetTicketByRef(empty) error = %v, want ErrTicketNotFound", err)
 	}
 
 	// SearchTickets
-	results, err := SearchTickets(db, project.ID, "Find me")
+	results, err := SearchTickets(context.Background(), db, project.ID, "Find me")
 	if err != nil {
 		t.Fatalf("SearchTickets() error = %v", err)
 	}
@@ -1110,11 +1111,11 @@ func TestGetTicketByRefAndSearchTickets(t *testing.T) {
 
 func TestListTicketParents(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Parents Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Parents Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	epic, err := CreateTicket(db, TicketCreateParams{
+	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Grand Epic",
@@ -1123,7 +1124,7 @@ func TestListTicketParents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
-	task, err := CreateTicket(db, TicketCreateParams{
+	task, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &epic.ID,
 		Type:      "task",
@@ -1133,7 +1134,7 @@ func TestListTicketParents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	bug, err := CreateTicket(db, TicketCreateParams{
+	bug, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &task.ID,
 		Type:      "bug",
@@ -1144,7 +1145,7 @@ func TestListTicketParents(t *testing.T) {
 		t.Fatalf("CreateTicket(bug) error = %v", err)
 	}
 
-	parents, err := ListTicketParents(db, bug.ID)
+	parents, err := ListTicketParents(context.Background(), db, bug.ID)
 	if err != nil {
 		t.Fatalf("ListTicketParents() error = %v", err)
 	}
@@ -1158,16 +1159,16 @@ func TestListTicketParents(t *testing.T) {
 
 func TestCurrentAssignedTicketForUser(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Assign Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Assign Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	if _, err := CreateUser(db, "alice", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
 	// No assigned ticket yet
-	_, found, err := CurrentAssignedTicketForUser(db, project.ID, "alice")
+	_, found, err := CurrentAssignedTicketForUser(context.Background(), db, project.ID, "alice")
 	if err != nil {
 		t.Fatalf("CurrentAssignedTicketForUser() error = %v", err)
 	}
@@ -1176,7 +1177,7 @@ func TestCurrentAssignedTicketForUser(t *testing.T) {
 	}
 
 	// Create and assign a ticket
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Assigned task",
@@ -1185,7 +1186,7 @@ func TestCurrentAssignedTicketForUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -1197,7 +1198,7 @@ func TestCurrentAssignedTicketForUser(t *testing.T) {
 		t.Fatalf("UpdateTicket(assign) error = %v", err)
 	}
 
-	assigned, found, err := CurrentAssignedTicketForUser(db, project.ID, "alice")
+	assigned, found, err := CurrentAssignedTicketForUser(context.Background(), db, project.ID, "alice")
 	if err != nil {
 		t.Fatalf("CurrentAssignedTicketForUser() error = %v", err)
 	}
@@ -1211,17 +1212,17 @@ func TestCurrentAssignedTicketForUser(t *testing.T) {
 
 func TestExplainNoWork(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "NoWork Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "NoWork Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
 	// Create various ticket states to get better coverage of all code paths
-	if _, err := CreateUser(db, "someone", "password123", "user"); err != nil {
+	if _, err := CreateUser(context.Background(), db, "someone", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 	// Idle unassigned not-ready ticket
-	if _, err := CreateTicket(db, TicketCreateParams{
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Not ready",
@@ -1230,7 +1231,7 @@ func TestExplainNoWork(t *testing.T) {
 		t.Fatalf("CreateTicket(not ready) error = %v", err)
 	}
 	// Idle assigned ticket
-	assigned, err := CreateTicket(db, TicketCreateParams{
+	assigned, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Assigned idle",
@@ -1242,7 +1243,7 @@ func TestExplainNoWork(t *testing.T) {
 	}
 	_ = assigned
 	// Closed ticket
-	closed, err := CreateTicket(db, TicketCreateParams{
+	closed, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Closed one",
@@ -1251,11 +1252,11 @@ func TestExplainNoWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(closed) error = %v", err)
 	}
-	if _, err := SetTicketOpen(db, closed.ID, false, "admin", ""); err != nil {
+	if _, err := SetTicketOpen(context.Background(), db, closed.ID, false, "admin", ""); err != nil {
 		t.Fatalf("SetTicketOpen(false) error = %v", err)
 	}
 	// Parent ticket with children (non-leaf)
-	parent, err := CreateTicket(db, TicketCreateParams{
+	parent, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Parent",
@@ -1264,7 +1265,7 @@ func TestExplainNoWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	if _, err := CreateTicket(db, TicketCreateParams{
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &parent.ID,
 		Type:      "task",
@@ -1274,7 +1275,7 @@ func TestExplainNoWork(t *testing.T) {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
 
-	reasons, err := ExplainNoWork(db, project.ID, "alice")
+	reasons, err := ExplainNoWork(context.Background(), db, project.ID, "alice")
 	if err != nil {
 		t.Fatalf("ExplainNoWork() error = %v", err)
 	}
@@ -1285,23 +1286,23 @@ func TestExplainNoWork(t *testing.T) {
 
 func TestSetAndUnsetTicketWorkflow(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Workflow Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Workflow Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	wfBase, err := CreateWorkflow(db, "Custom Flow", "")
+	wfBase, err := CreateWorkflow(context.Background(), db, "Custom Flow", "")
 	if err != nil {
 		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := AddWorkflowStage(db, wfBase.ID, "Review", "", nil, 1); err != nil {
+	if _, err := AddWorkflowStage(context.Background(), db, wfBase.ID, "Review", "", nil, 1); err != nil {
 		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	wf, err := GetWorkflow(db, wfBase.ID)
+	wf, err := GetWorkflow(context.Background(), db, wfBase.ID)
 	if err != nil {
 		t.Fatalf("GetWorkflow() error = %v", err)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Workflow ticket",
@@ -1312,7 +1313,7 @@ func TestSetAndUnsetTicketWorkflow(t *testing.T) {
 	}
 
 	// Set workflow
-	updated, err := SetTicketWorkflow(db, ticket.ID, wf.ID)
+	updated, err := SetTicketWorkflow(context.Background(), db, ticket.ID, wf.ID)
 	if err != nil {
 		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
@@ -1321,7 +1322,7 @@ func TestSetAndUnsetTicketWorkflow(t *testing.T) {
 	}
 
 	// Unset workflow
-	unset, err := UnsetTicketWorkflow(db, ticket.ID)
+	unset, err := UnsetTicketWorkflow(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
 	}
@@ -1332,21 +1333,21 @@ func TestSetAndUnsetTicketWorkflow(t *testing.T) {
 
 func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Context Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Context Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
 	// Create a workflow and set it on a parent ticket
-	wfBase, err := CreateWorkflow(db, "Context WF", "")
+	wfBase, err := CreateWorkflow(context.Background(), db, "Context WF", "")
 	if err != nil {
 		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := AddWorkflowStage(db, wfBase.ID, "step1", "", nil, 0); err != nil {
+	if _, err := AddWorkflowStage(context.Background(), db, wfBase.ID, "step1", "", nil, 0); err != nil {
 		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 
-	epic, err := CreateTicket(db, TicketCreateParams{
+	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Context epic",
@@ -1357,13 +1358,13 @@ func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
 	}
 
 	// Set workflow on the epic
-	epic, err = SetTicketWorkflow(db, epic.ID, wfBase.ID)
+	epic, err = SetTicketWorkflow(context.Background(), db, epic.ID, wfBase.ID)
 	if err != nil {
 		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
 
 	// Create child ticket under the epic (no workflow set directly)
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &epic.ID,
 		Type:      "task",
@@ -1375,7 +1376,7 @@ func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
 	}
 
 	// ResolveWorkflowID should inherit from parent
-	wfID := ResolveWorkflowID(db, ticket)
+	wfID := ResolveWorkflowID(context.Background(), db, ticket)
 	if wfID == nil {
 		t.Fatal("ResolveWorkflowID() = nil, want inherited from parent")
 	}
@@ -1384,7 +1385,7 @@ func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
 	}
 
 	// EnrichTicketContext
-	ctx := EnrichTicketContext(db, ticket)
+	ctx := EnrichTicketContext(context.Background(), db, ticket)
 	if ctx.Project == nil {
 		t.Fatal("EnrichTicketContext().Project = nil, want non-nil")
 	}
@@ -1402,7 +1403,7 @@ func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
 func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID string, wantTransitions [][2]string) {
 	t.Helper()
 
-	events, err := ListHistoryEvents(db, taskID)
+	events, err := ListHistoryEvents(context.Background(), db, taskID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents(%s) error = %v", taskID, err)
 	}

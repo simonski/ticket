@@ -1,17 +1,20 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestLabelCRUD(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Label Test", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Label Test", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
 	// Create
-	label, err := CreateLabel(db, project.ID, "bug", "#ff0000")
+	label, err := CreateLabel(context.Background(), db, project.ID, "bug", "#ff0000")
 	if err != nil {
 		t.Fatalf("CreateLabel() error = %v", err)
 	}
@@ -20,7 +23,7 @@ func TestLabelCRUD(t *testing.T) {
 	}
 
 	// Get
-	got, err := GetLabel(db, label.ID)
+	got, err := GetLabel(context.Background(), db, label.ID)
 	if err != nil {
 		t.Fatalf("GetLabel() error = %v", err)
 	}
@@ -29,8 +32,8 @@ func TestLabelCRUD(t *testing.T) {
 	}
 
 	// List
-	_, _ = CreateLabel(db, project.ID, "feature", "#00ff00")
-	labels, err := ListLabels(db, project.ID)
+	_, _ = CreateLabel(context.Background(), db, project.ID, "feature", "#00ff00")
+	labels, err := ListLabels(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("ListLabels() error = %v", err)
 	}
@@ -42,20 +45,20 @@ func TestLabelCRUD(t *testing.T) {
 	}
 
 	// Empty name
-	if _, err := CreateLabel(db, project.ID, "", ""); err == nil {
+	if _, err := CreateLabel(context.Background(), db, project.ID, "", ""); err == nil {
 		t.Fatal("CreateLabel() with empty name should fail")
 	}
 
 	// Duplicate name
-	if _, err := CreateLabel(db, project.ID, "bug", ""); err == nil {
+	if _, err := CreateLabel(context.Background(), db, project.ID, "bug", ""); err == nil {
 		t.Fatal("CreateLabel() duplicate name should fail")
 	}
 
 	// Delete
-	if err := DeleteLabel(db, label.ID); err != nil {
+	if err := DeleteLabel(context.Background(), db, label.ID); err != nil {
 		t.Fatalf("DeleteLabel() error = %v", err)
 	}
-	if _, err := GetLabel(db, label.ID); err != ErrLabelNotFound {
+	if _, err := GetLabel(context.Background(), db, label.ID); err != ErrLabelNotFound {
 		t.Fatalf("GetLabel() after delete = %v, want ErrLabelNotFound", err)
 	}
 }
@@ -63,12 +66,12 @@ func TestLabelCRUD(t *testing.T) {
 func TestTicketLabels(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Ticket Labels", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Ticket Labels", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Labeled Task",
@@ -79,24 +82,24 @@ func TestTicketLabels(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	label1, _ := CreateLabel(db, project.ID, "priority", "#ff0000")
-	label2, _ := CreateLabel(db, project.ID, "ui", "#0000ff")
+	label1, _ := CreateLabel(context.Background(), db, project.ID, "priority", "#ff0000")
+	label2, _ := CreateLabel(context.Background(), db, project.ID, "ui", "#0000ff")
 
 	// Add labels
-	if err := AddTicketLabel(db, ticket.ID, label1.ID); err != nil {
+	if err := AddTicketLabel(context.Background(), db, ticket.ID, label1.ID); err != nil {
 		t.Fatalf("AddTicketLabel() error = %v", err)
 	}
-	if err := AddTicketLabel(db, ticket.ID, label2.ID); err != nil {
+	if err := AddTicketLabel(context.Background(), db, ticket.ID, label2.ID); err != nil {
 		t.Fatalf("AddTicketLabel() error = %v", err)
 	}
 
 	// Idempotent add
-	if err := AddTicketLabel(db, ticket.ID, label1.ID); err != nil {
+	if err := AddTicketLabel(context.Background(), db, ticket.ID, label1.ID); err != nil {
 		t.Fatalf("AddTicketLabel() duplicate error = %v", err)
 	}
 
 	// List ticket labels
-	labels, err := ListTicketLabels(db, ticket.ID)
+	labels, err := ListTicketLabels(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListTicketLabels() error = %v", err)
 	}
@@ -105,7 +108,7 @@ func TestTicketLabels(t *testing.T) {
 	}
 
 	// List tickets by label
-	ids, err := ListTicketsByLabel(db, label1.ID)
+	ids, err := ListTicketsByLabel(context.Background(), db, label1.ID)
 	if err != nil {
 		t.Fatalf("ListTicketsByLabel() error = %v", err)
 	}
@@ -114,19 +117,19 @@ func TestTicketLabels(t *testing.T) {
 	}
 
 	// Remove label
-	if err := RemoveTicketLabel(db, ticket.ID, label1.ID); err != nil {
+	if err := RemoveTicketLabel(context.Background(), db, ticket.ID, label1.ID); err != nil {
 		t.Fatalf("RemoveTicketLabel() error = %v", err)
 	}
-	labels, _ = ListTicketLabels(db, ticket.ID)
+	labels, _ = ListTicketLabels(context.Background(), db, ticket.ID)
 	if len(labels) != 1 {
 		t.Fatalf("ListTicketLabels() after remove len = %d, want 1", len(labels))
 	}
 
 	// Delete label cascades from ticket_labels
-	if err := DeleteLabel(db, label2.ID); err != nil {
+	if err := DeleteLabel(context.Background(), db, label2.ID); err != nil {
 		t.Fatalf("DeleteLabel() error = %v", err)
 	}
-	labels, _ = ListTicketLabels(db, ticket.ID)
+	labels, _ = ListTicketLabels(context.Background(), db, ticket.ID)
 	if len(labels) != 0 {
 		t.Fatalf("ListTicketLabels() after label delete len = %d, want 0", len(labels))
 	}

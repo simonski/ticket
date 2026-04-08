@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 )
@@ -14,8 +15,8 @@ type Dependency struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func AddDependency(db *sql.DB, projectID int64, ticketID, dependsOn string, createdBy string) (Dependency, error) {
-	ticket, err := GetTicket(db, ticketID)
+func AddDependency(ctx context.Context, db *sql.DB, projectID int64, ticketID, dependsOn string, createdBy string) (Dependency, error) {
+	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
 		return Dependency{}, err
 	}
@@ -25,7 +26,7 @@ func AddDependency(db *sql.DB, projectID int64, ticketID, dependsOn string, crea
 	if ticket.Archived {
 		return Dependency{}, ErrTicketClosed
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO dependencies (project_id, ticket_id, depends_on, created_by)
 		VALUES (?, ?, ?, ?)
 	`, projectID, ticketID, dependsOn, nullableUserID(createdBy))
@@ -36,7 +37,7 @@ func AddDependency(db *sql.DB, projectID int64, ticketID, dependsOn string, crea
 	if err != nil {
 		return Dependency{}, err
 	}
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, ''), created_at
 		FROM dependencies
 		WHERE id = ?
@@ -48,8 +49,8 @@ func AddDependency(db *sql.DB, projectID int64, ticketID, dependsOn string, crea
 	return dependency, nil
 }
 
-func ListDependencies(db *sql.DB, ticketID string) ([]Dependency, error) {
-	rows, err := db.Query(`
+func ListDependencies(ctx context.Context, db *sql.DB, ticketID string) ([]Dependency, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT id, project_id, ticket_id, depends_on, COALESCE(created_by, ''), created_at
 		FROM dependencies
 		WHERE ticket_id = ?
@@ -71,8 +72,8 @@ func ListDependencies(db *sql.DB, ticketID string) ([]Dependency, error) {
 	return dependencies, rows.Err()
 }
 
-func DeleteDependency(db *sql.DB, projectID int64, ticketID, dependsOn string) error {
-	ticket, err := GetTicket(db, ticketID)
+func DeleteDependency(ctx context.Context, db *sql.DB, projectID int64, ticketID, dependsOn string) error {
+	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
 		return err
 	}
@@ -82,7 +83,7 @@ func DeleteDependency(db *sql.DB, projectID int64, ticketID, dependsOn string) e
 	if ticket.Archived {
 		return ErrTicketClosed
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		DELETE FROM dependencies
 		WHERE project_id = ? AND ticket_id = ? AND depends_on = ?
 	`, projectID, ticketID, dependsOn)

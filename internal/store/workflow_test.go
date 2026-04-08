@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -22,7 +23,7 @@ func setupWorkflowTestDB(t *testing.T) *sql.DB {
 
 func TestInitSeedsDefaultWorkflow(t *testing.T) {
 	db := setupWorkflowTestDB(t)
-	workflows, err := ListWorkflows(db)
+	workflows, err := ListWorkflows(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListWorkflows() error = %v", err)
 	}
@@ -43,14 +44,14 @@ func TestInitSeedsDefaultWorkflow(t *testing.T) {
 
 func TestDefaultWorkflowHasFourStages(t *testing.T) {
 	db := setupWorkflowTestDB(t)
-	workflows, _ := ListWorkflows(db)
+	workflows, _ := ListWorkflows(context.Background(), db)
 	var wfID int64
 	for _, w := range workflows {
 		if w.Name == "default" {
 			wfID = w.ID
 		}
 	}
-	wf, err := GetWorkflow(db, wfID)
+	wf, err := GetWorkflow(context.Background(), db, wfID)
 	if err != nil {
 		t.Fatalf("GetWorkflow() error = %v", err)
 	}
@@ -83,7 +84,7 @@ func TestDefaultWorkflowHasFourStages(t *testing.T) {
 func TestWorkflowCRUD(t *testing.T) {
 	db := setupWorkflowTestDB(t)
 
-	wf, err := CreateWorkflow(db, "custom", "A custom workflow")
+	wf, err := CreateWorkflow(context.Background(), db, "custom", "A custom workflow")
 	if err != nil {
 		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
@@ -92,8 +93,8 @@ func TestWorkflowCRUD(t *testing.T) {
 	}
 
 	// Add stages
-	role, _ := GetRoleByTitle(db, "BA")
-	s1, err := AddWorkflowStage(db, wf.ID, "analysis", "Analyse requirements", &role.ID, 0)
+	role, _ := GetRoleByTitle(context.Background(), db, "BA")
+	s1, err := AddWorkflowStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", &role.ID, 0)
 	if err != nil {
 		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
@@ -104,13 +105,13 @@ func TestWorkflowCRUD(t *testing.T) {
 		t.Fatalf("RoleTitle = %q, want %q", s1.RoleTitle, "BA")
 	}
 
-	s2, err := AddWorkflowStage(db, wf.ID, "build", "", nil, 1)
+	s2, err := AddWorkflowStage(context.Background(), db, wf.ID, "build", "", nil, 1)
 	if err != nil {
 		t.Fatalf("AddWorkflowStage(build) error = %v", err)
 	}
 
 	// Get workflow with stages
-	got, err := GetWorkflow(db, wf.ID)
+	got, err := GetWorkflow(context.Background(), db, wf.ID)
 	if err != nil {
 		t.Fatalf("GetWorkflow() error = %v", err)
 	}
@@ -119,10 +120,10 @@ func TestWorkflowCRUD(t *testing.T) {
 	}
 
 	// Remove stage
-	if err := RemoveWorkflowStage(db, s1.ID); err != nil {
+	if err := RemoveWorkflowStage(context.Background(), db, s1.ID); err != nil {
 		t.Fatalf("RemoveWorkflowStage() error = %v", err)
 	}
-	got, _ = GetWorkflow(db, wf.ID)
+	got, _ = GetWorkflow(context.Background(), db, wf.ID)
 	if len(got.Stages) != 1 {
 		t.Fatalf("stages after remove = %d, want 1", len(got.Stages))
 	}
@@ -131,10 +132,10 @@ func TestWorkflowCRUD(t *testing.T) {
 	}
 
 	// Delete workflow
-	if err := DeleteWorkflow(db, wf.ID); err != nil {
+	if err := DeleteWorkflow(context.Background(), db, wf.ID); err != nil {
 		t.Fatalf("DeleteWorkflow() error = %v", err)
 	}
-	_, err = GetWorkflow(db, wf.ID)
+	_, err = GetWorkflow(context.Background(), db, wf.ID)
 	if err == nil {
 		t.Fatal("expected error after delete, got nil")
 	}
@@ -142,16 +143,16 @@ func TestWorkflowCRUD(t *testing.T) {
 
 func TestReorderWorkflowStages(t *testing.T) {
 	db := setupWorkflowTestDB(t)
-	wf, _ := CreateWorkflow(db, "reorder-test", "")
-	s1, _ := AddWorkflowStage(db, wf.ID, "first", "", nil, 0)
-	s2, _ := AddWorkflowStage(db, wf.ID, "second", "", nil, 1)
-	s3, _ := AddWorkflowStage(db, wf.ID, "third", "", nil, 2)
+	wf, _ := CreateWorkflow(context.Background(), db, "reorder-test", "")
+	s1, _ := AddWorkflowStage(context.Background(), db, wf.ID, "first", "", nil, 0)
+	s2, _ := AddWorkflowStage(context.Background(), db, wf.ID, "second", "", nil, 1)
+	s3, _ := AddWorkflowStage(context.Background(), db, wf.ID, "third", "", nil, 2)
 
 	// Reverse order
-	if err := ReorderWorkflowStages(db, wf.ID, []int64{s3.ID, s2.ID, s1.ID}); err != nil {
+	if err := ReorderWorkflowStages(context.Background(), db, wf.ID, []int64{s3.ID, s2.ID, s1.ID}); err != nil {
 		t.Fatalf("ReorderWorkflowStages() error = %v", err)
 	}
-	got, _ := GetWorkflow(db, wf.ID)
+	got, _ := GetWorkflow(context.Background(), db, wf.ID)
 	if got.Stages[0].StageName != "third" {
 		t.Fatalf("first stage = %q, want %q", got.Stages[0].StageName, "third")
 	}
@@ -164,7 +165,7 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 	db := setupWorkflowTestDB(t)
 
 	// Find the default workflow
-	workflows, _ := ListWorkflows(db)
+	workflows, _ := ListWorkflows(context.Background(), db)
 	var defaultID int64
 	for _, w := range workflows {
 		if w.Name == "default" {
@@ -172,7 +173,7 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 		}
 	}
 
-	exported, err := ExportWorkflow(db, defaultID)
+	exported, err := ExportWorkflow(context.Background(), db, defaultID)
 	if err != nil {
 		t.Fatalf("ExportWorkflow() error = %v", err)
 	}
@@ -185,7 +186,7 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 
 	// Import as a new workflow with different name
 	exported.Name = "imported-copy"
-	imported, err := ImportWorkflow(db, exported)
+	imported, err := ImportWorkflow(context.Background(), db, exported)
 	if err != nil {
 		t.Fatalf("ImportWorkflow() error = %v", err)
 	}
@@ -194,7 +195,7 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 	}
 
 	// Verify stages match
-	got, _ := GetWorkflow(db, imported.ID)
+	got, _ := GetWorkflow(context.Background(), db, imported.ID)
 	if len(got.Stages) != 4 {
 		t.Fatalf("imported stages = %d, want 4", len(got.Stages))
 	}

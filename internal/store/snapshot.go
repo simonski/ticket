@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -48,7 +49,7 @@ var snapshotTableOrder = []string{
 	"project_teams",
 }
 
-func ExportSnapshot(db *sql.DB) (Snapshot, error) {
+func ExportSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
 	if db == nil {
 		return Snapshot{}, errors.New("database is required")
 	}
@@ -58,7 +59,7 @@ func ExportSnapshot(db *sql.DB) (Snapshot, error) {
 		Tables:        make(map[string]SnapshotTable, len(snapshotTableOrder)),
 	}
 	for _, table := range snapshotTableOrder {
-		columns, err := tableColumnNames(db, table)
+		columns, err := tableColumnNames(ctx, db, table)
 		if err != nil {
 			return Snapshot{}, err
 		}
@@ -66,7 +67,7 @@ func ExportSnapshot(db *sql.DB) (Snapshot, error) {
 		for _, column := range columns {
 			selectCols = append(selectCols, quoteIdentifier(column))
 		}
-		rows, err := db.Query(`SELECT ` + strings.Join(selectCols, ", ") + ` FROM ` + quoteIdentifier(table))
+		rows, err := db.QueryContext(ctx, `SELECT ` + strings.Join(selectCols, ", ") + ` FROM ` + quoteIdentifier(table))
 		if err != nil {
 			return Snapshot{}, err
 		}
@@ -100,7 +101,7 @@ func ExportSnapshot(db *sql.DB) (Snapshot, error) {
 	return snapshot, nil
 }
 
-func ImportSnapshot(db *sql.DB, snapshot Snapshot) error {
+func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 	if db == nil {
 		return errors.New("database is required")
 	}
@@ -110,7 +111,7 @@ func ImportSnapshot(db *sql.DB, snapshot Snapshot) error {
 	if snapshot.Tables == nil {
 		return errors.New("snapshot tables are required")
 	}
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -118,16 +119,16 @@ func ImportSnapshot(db *sql.DB, snapshot Snapshot) error {
 		_ = tx.Rollback()
 		return cause
 	}
-	if _, err := tx.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return rollback(err)
 	}
 	for i := len(snapshotTableOrder) - 1; i >= 0; i-- {
 		table := snapshotTableOrder[i]
-		if _, err := tx.Exec(`DELETE FROM ` + quoteIdentifier(table)); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM ` + quoteIdentifier(table)); err != nil {
 			return rollback(err)
 		}
 	}
-	if _, err := tx.Exec(`DELETE FROM sqlite_sequence`); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sqlite_sequence`); err != nil {
 		return rollback(err)
 	}
 	for _, table := range snapshotTableOrder {
@@ -156,15 +157,15 @@ func ImportSnapshot(db *sql.DB, snapshot Snapshot) error {
 			for i, value := range row {
 				args[i] = normalizeImportValue(value)
 			}
-			if _, err := tx.Exec(query, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return rollback(err)
 			}
 		}
 	}
-	if _, err := tx.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
 		return rollback(err)
 	}
-	fkRows, err := tx.Query(`PRAGMA foreign_key_check`)
+	fkRows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
 	if err != nil {
 		return rollback(err)
 	}
@@ -188,8 +189,8 @@ func ImportSnapshot(db *sql.DB, snapshot Snapshot) error {
 	return nil
 }
 
-func tableColumnNames(db *sql.DB, table string) ([]string, error) {
-	rows, err := db.Query(`PRAGMA table_info(` + quoteIdentifier(table) + `)`)
+func tableColumnNames(ctx context.Context, db *sql.DB, table string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(` + quoteIdentifier(table) + `)`)
 	if err != nil {
 		return nil, err
 	}

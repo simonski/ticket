@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	_ "embed"
 	"encoding/json"
@@ -714,7 +715,7 @@ func runExportSnapshot(args []string) error {
 		return err
 	}
 	defer db.Close()
-	snapshot, err := store.ExportSnapshot(db)
+	snapshot, err := store.ExportSnapshot(context.Background(), db)
 	if err != nil {
 		return err
 	}
@@ -762,7 +763,7 @@ func runImportSnapshot(args []string) error {
 		return err
 	}
 	defer db.Close()
-	if err := store.ImportSnapshot(db, snapshot); err != nil {
+	if err := store.ImportSnapshot(context.Background(), db, snapshot); err != nil {
 		return err
 	}
 	fmt.Printf("imported snapshot from %s\n", path)
@@ -857,14 +858,14 @@ func seedExampleData(db *sql.DB) error {
 	}
 
 	// Look up admin user for CreatedBy
-	adminUser, err := store.GetUserByUsername(db, "admin")
+	adminUser, err := store.GetUserByUsername(context.Background(), db, "admin")
 	if err != nil {
 		return fmt.Errorf("seed: admin user not found: %w", err)
 	}
 	seedCreatedBy := adminUser.ID
 
 	for _, projectSeed := range projects {
-		project, err := store.CreateProjectWithParams(db, store.ProjectCreateParams{
+		project, err := store.CreateProjectWithParams(context.Background(), db, store.ProjectCreateParams{
 			Prefix:      projectSeed.prefix,
 			Title:       projectSeed.title,
 			Description: projectSeed.description,
@@ -875,11 +876,11 @@ func seedExampleData(db *sql.DB) error {
 			return err
 		}
 		for _, storySeed := range projectSeed.stories {
-			story, err := store.CreateStory(db, project.ID, storySeed.title, storySeed.description, seedCreatedBy)
+			story, err := store.CreateStory(context.Background(), db, project.ID, storySeed.title, storySeed.description, seedCreatedBy)
 			if err != nil {
 				return err
 			}
-			epic, err := store.CreateTicket(db, store.TicketCreateParams{
+			epic, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
 				ProjectID: project.ID,
 				Type:      "epic",
 				Title:     storySeed.epicTitle,
@@ -888,7 +889,7 @@ func seedExampleData(db *sql.DB) error {
 			if err != nil {
 				return err
 			}
-			if err := store.LinkStoryToTicket(db, story.ID, epic.ID); err != nil {
+			if err := store.LinkStoryToTicket(context.Background(), db, story.ID, epic.ID); err != nil {
 				return err
 			}
 			for _, child := range []struct {
@@ -900,7 +901,7 @@ func seedExampleData(db *sql.DB) error {
 				{ticketType: "chore", title: storySeed.choreTitle},
 			} {
 				parentID := epic.ID
-				childTicket, err := store.CreateTicket(db, store.TicketCreateParams{
+				childTicket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
 					ProjectID: project.ID,
 					ParentID:  &parentID,
 					Type:      child.ticketType,
@@ -910,7 +911,7 @@ func seedExampleData(db *sql.DB) error {
 				if err != nil {
 					return err
 				}
-				if err := store.LinkStoryToTicket(db, story.ID, childTicket.ID); err != nil {
+				if err := store.LinkStoryToTicket(context.Background(), db, story.ID, childTicket.ID); err != nil {
 					return err
 				}
 			}
@@ -936,19 +937,19 @@ func seedExampleData(db *sql.DB) error {
 		if _, ok := teamsByName[item.team]; ok {
 			continue
 		}
-		team, err := store.CreateTeam(db, item.team, nil)
+		team, err := store.CreateTeam(context.Background(), db, item.team, nil)
 		if err != nil {
 			return err
 		}
 		teamsByName[item.team] = team.ID
 	}
 	for _, item := range seedUsers {
-		user, err := store.CreateUser(db, item.username, "password", "user")
+		user, err := store.CreateUser(context.Background(), db, item.username, "password", "user")
 		if err != nil {
 			return err
 		}
 		teamID := teamsByName[item.team]
-		if _, err := store.AddTeamMember(db, teamID, user.ID, item.role, item.title); err != nil {
+		if _, err := store.AddTeamMember(context.Background(), db, teamID, user.ID, item.role, item.title); err != nil {
 			return err
 		}
 	}

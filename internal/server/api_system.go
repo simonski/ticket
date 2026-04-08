@@ -89,7 +89,7 @@ func (r *router) registerSystemHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		if err := store.SetRegistrationEnabled(db, payload.Enabled); err != nil {
+		if err := store.SetRegistrationEnabled(r.Context(), db, payload.Enabled); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -120,7 +120,7 @@ func (r *router) registerSystemHandlers() {
 		if payload.MaxDurationMin <= 0 {
 			payload.MaxDurationMin = store.DefaultChatMaxDurationMinutes
 		}
-		if err := store.SetChatLimitsConfig(db, payload.MaxConnections, payload.MaxDurationMin); err != nil {
+		if err := store.SetChatLimitsConfig(r.Context(), db, payload.MaxConnections, payload.MaxDurationMin); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -145,7 +145,7 @@ func (r *router) registerSystemHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		if err := store.SetChatEnabled(db, payload.Enabled); err != nil {
+		if err := store.SetChatEnabled(r.Context(), db, payload.Enabled); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -172,7 +172,7 @@ func (r *router) registerSystemHandlers() {
 			}
 			projectID = &parsed
 		}
-		summary, err := store.CountEverything(db, projectID)
+		summary, err := store.CountEverything(r.Context(), db, projectID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return

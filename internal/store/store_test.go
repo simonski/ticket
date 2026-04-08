@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"strings"
@@ -137,7 +138,7 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 
 	// The critical test: inserting into history_events with a ticket_id that exists
 	// in the tickets table should now succeed (FK points to tickets, not tasks).
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "New ticket after migration",
@@ -152,7 +153,7 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 
 	// Verify FK references are now correct (no stale references to tasks).
 	for _, table := range []string{"history_events", "ticket_history", "comments", "dependencies"} {
-		if tableHsFKTo(db, table, "tasks") {
+		if tableHsFKTo(context.Background(), db, table, "tasks") {
 			t.Errorf("table %s still has FK referencing tasks", table)
 		}
 	}

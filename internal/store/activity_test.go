@@ -1,15 +1,18 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestHistoryAndComments(t *testing.T) {
 	db := testDB(t)
 	adminID := testAdminID(t, db)
-	project, err := CreateProject(db, "Customer Portal", "", "", adminID)
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", adminID)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Add login",
@@ -19,7 +22,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	events, err := ListHistoryEvents(db, ticket.ID)
+	events, err := ListHistoryEvents(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -27,7 +30,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("history after create = %#v", events)
 	}
 
-	_, err = UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	_, err = UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:       ticket.Title,
 		Description: "Updated description",
 		ParentID:    ticket.ParentID,
@@ -37,7 +40,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
 
-	events, err = ListHistoryEvents(db, ticket.ID)
+	events, err = ListHistoryEvents(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents(after update) error = %v", err)
 	}
@@ -45,7 +48,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("history length = %d, want at least 2", len(events))
 	}
 
-	comment, err := AddComment(db, ticket.ID, adminID, "Waiting on API changes.")
+	comment, err := AddComment(context.Background(), db, ticket.ID, adminID, "Waiting on API changes.")
 	if err != nil {
 		t.Fatalf("AddComment() error = %v", err)
 	}
@@ -53,7 +56,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("AddComment().Comment = %q", comment.Comment)
 	}
 
-	comments, err := ListComments(db, ticket.ID)
+	comments, err := ListComments(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("ListComments() error = %v", err)
 	}
@@ -64,7 +67,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("ListComments() = %#v", comments)
 	}
 
-	taskWithComments, err := GetTicket(db, ticket.ID)
+	taskWithComments, err := GetTicket(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
 	}
@@ -76,11 +79,11 @@ func TestHistoryAndComments(t *testing.T) {
 func TestListProjectHistory(t *testing.T) {
 	db := testDB(t)
 	adminID := testAdminID(t, db)
-	project, err := CreateProject(db, "History Project", "", "", adminID)
+	project, err := CreateProject(context.Background(), db, "History Project", "", "", adminID)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "History task",
@@ -91,7 +94,7 @@ func TestListProjectHistory(t *testing.T) {
 	}
 
 	// Update ticket to create more history
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:       "Updated history task",
 		Description: "desc",
 		ParentID:    ticket.ParentID,
@@ -100,7 +103,7 @@ func TestListProjectHistory(t *testing.T) {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
 
-	events, err := ListProjectHistory(db, project.ID, 10)
+	events, err := ListProjectHistory(context.Background(), db, project.ID, 10)
 	if err != nil {
 		t.Fatalf("ListProjectHistory() error = %v", err)
 	}
@@ -109,7 +112,7 @@ func TestListProjectHistory(t *testing.T) {
 	}
 
 	// Test with default limit (0)
-	events, err = ListProjectHistory(db, project.ID, 0)
+	events, err = ListProjectHistory(context.Background(), db, project.ID, 0)
 	if err != nil {
 		t.Fatalf("ListProjectHistory(limit=0) error = %v", err)
 	}

@@ -1,23 +1,24 @@
 package store
 
 import (
+	"context"
 	"testing"
 )
 
 func TestStoryCRUDAndLinking(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Stories Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Stories Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	story, err := CreateStory(db, project.ID, "Customer onboarding", "High-level onboarding requirement", "")
+	story, err := CreateStory(context.Background(), db, project.ID, "Customer onboarding", "High-level onboarding requirement", "")
 	if err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
 	}
 	if story.ID == 0 {
 		t.Fatalf("CreateStory() story id = 0")
 	}
-	list, err := ListStoriesByProject(db, project.ID)
+	list, err := ListStoriesByProject(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("ListStoriesByProject() error = %v", err)
 	}
@@ -25,7 +26,7 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 		t.Fatalf("ListStoriesByProject() = %#v", list)
 	}
 
-	updated, err := UpdateStoryStatus(db, story.ID, "ready_for_review")
+	updated, err := UpdateStoryStatus(context.Background(), db, story.ID, "ready_for_review")
 	if err != nil {
 		t.Fatalf("UpdateStoryStatus() error = %v", err)
 	}
@@ -33,7 +34,7 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 		t.Fatalf("UpdateStoryStatus() status = %q, want ready_for_review", updated.Status)
 	}
 
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Onboarding epic",
@@ -42,10 +43,10 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if err := LinkStoryToTicket(db, story.ID, ticket.ID); err != nil {
+	if err := LinkStoryToTicket(context.Background(), db, story.ID, ticket.ID); err != nil {
 		t.Fatalf("LinkStoryToTicket() error = %v", err)
 	}
-	storyID, ok, err := StoryIDForTicket(db, ticket.ID)
+	storyID, ok, err := StoryIDForTicket(context.Background(), db, ticket.ID)
 	if err != nil {
 		t.Fatalf("StoryIDForTicket() error = %v", err)
 	}
@@ -56,16 +57,16 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 
 func TestStoryUpdateAndDelete(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Story Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Story Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	story, err := CreateStory(db, project.ID, "Original title", "Original description", "")
+	story, err := CreateStory(context.Background(), db, project.ID, "Original title", "Original description", "")
 	if err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
 	}
 
-	updated, err := UpdateStory(db, story.ID, "New title", "New description")
+	updated, err := UpdateStory(context.Background(), db, story.ID, "New title", "New description")
 	if err != nil {
 		t.Fatalf("UpdateStory() error = %v", err)
 	}
@@ -74,17 +75,17 @@ func TestStoryUpdateAndDelete(t *testing.T) {
 	}
 
 	// UpdateStory with empty title should fail
-	if _, err := UpdateStory(db, story.ID, "", "desc"); err == nil {
+	if _, err := UpdateStory(context.Background(), db, story.ID, "", "desc"); err == nil {
 		t.Fatal("UpdateStory(empty title) error = nil, want error")
 	}
 
 	// Delete
-	if err := DeleteStory(db, story.ID); err != nil {
+	if err := DeleteStory(context.Background(), db, story.ID); err != nil {
 		t.Fatalf("DeleteStory() error = %v", err)
 	}
 
 	// Delete again should fail
-	if err := DeleteStory(db, story.ID); err == nil {
+	if err := DeleteStory(context.Background(), db, story.ID); err == nil {
 		t.Fatal("DeleteStory(deleted) error = nil, want error")
 	}
 }

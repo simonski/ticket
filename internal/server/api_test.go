@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -613,11 +614,11 @@ func TestTaskAPI(t *testing.T) {
 	}, auth.Token)
 	var project store.Project
 	decodeResponse(t, createProjectResp, &project)
-	aliceUser, err := store.GetUserByUsername(db, "alice")
+	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("get alice user error = %v", err)
 	}
-	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+	if _, err := store.AddProjectMember(context.Background(), db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
 		t.Fatalf("add alice editor membership error = %v", err)
 	}
 
@@ -800,11 +801,11 @@ func TestTicketRouteAliasesAPI(t *testing.T) {
 	}
 	var project store.Project
 	decodeResponse(t, createProjectResp, &project)
-	aliceUser, err := store.GetUserByUsername(db, "alice")
+	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("get alice user error = %v", err)
 	}
-	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+	if _, err := store.AddProjectMember(context.Background(), db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
 		t.Fatalf("add alice editor membership error = %v", err)
 	}
 
@@ -902,11 +903,11 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 	}, adminAuth.Token)
 	var project store.Project
 	decodeResponse(t, createProjectResp, &project)
-	aliceUser, err := store.GetUserByUsername(db, "alice")
+	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("get alice user error = %v", err)
 	}
-	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+	if _, err := store.AddProjectMember(context.Background(), db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
 		t.Fatalf("add alice editor membership error = %v", err)
 	}
 
@@ -959,11 +960,11 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 		Token string `json:"token"`
 	}
 	decodeResponse(t, bobLogin, &bobAuth)
-	bobUser, err := store.GetUserByUsername(db, "bob")
+	bobUser, err := store.GetUserByUsername(context.Background(), db, "bob")
 	if err != nil {
 		t.Fatalf("get bob user error = %v", err)
 	}
-	if _, err := store.AddProjectMember(db, project.ID, bobUser.ID, store.ProjectRoleEditor); err != nil {
+	if _, err := store.AddProjectMember(context.Background(), db, project.ID, bobUser.ID, store.ProjectRoleEditor); err != nil {
 		t.Fatalf("add bob editor membership error = %v", err)
 	}
 
@@ -1076,11 +1077,11 @@ func TestTicketRequestAPI(t *testing.T) {
 	}, adminAuth.Token)
 	var project store.Project
 	decodeResponse(t, projectResp, &project)
-	aliceUser, err := store.GetUserByUsername(db, "alice")
+	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("get alice user error = %v", err)
 	}
-	if _, err := store.AddProjectMember(db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
+	if _, err := store.AddProjectMember(context.Background(), db, project.ID, aliceUser.ID, store.ProjectRoleEditor); err != nil {
 		t.Fatalf("add alice editor membership error = %v", err)
 	}
 
@@ -1166,11 +1167,11 @@ func TestTicketRequestAPI(t *testing.T) {
 		Token string `json:"token"`
 	}
 	decodeResponse(t, bobLogin, &bobAuth)
-	bobUser, err := store.GetUserByUsername(db, "bob")
+	bobUser, err := store.GetUserByUsername(context.Background(), db, "bob")
 	if err != nil {
 		t.Fatalf("get bob user error = %v", err)
 	}
-	if _, err := store.AddProjectMember(db, project.ID, bobUser.ID, store.ProjectRoleEditor); err != nil {
+	if _, err := store.AddProjectMember(context.Background(), db, project.ID, bobUser.ID, store.ProjectRoleEditor); err != nil {
 		t.Fatalf("add bob editor membership error = %v", err)
 	}
 
@@ -1538,7 +1539,7 @@ func TestProjectVisibilityAndRolePermissions(t *testing.T) {
 		t.Fatalf("alice get private project status=%d want=%d body=%s", aliceGetPrivate.Code, http.StatusForbidden, aliceGetPrivate.Body.String())
 	}
 
-	aliceUser, err := store.GetUserByUsername(db, "alice")
+	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(alice) error=%v", err)
 	}
@@ -1682,7 +1683,7 @@ func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
 		t.Fatalf("list teams status=%d body=%s", teamsResp.Code, teamsResp.Body.String())
 	}
 
-	aliceUser, err := store.GetUserByUsername(db, "alice")
+	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(alice) error=%v", err)
 	}
@@ -2027,7 +2028,7 @@ func TestProjectMembershipAPI(t *testing.T) {
 		"username": "memberuser",
 		"password": "password123",
 	}, token)
-	memberUser, err := store.GetUserByUsername(db, "memberuser")
+	memberUser, err := store.GetUserByUsername(context.Background(), db, "memberuser")
 	if err != nil {
 		t.Fatalf("get memberuser error = %v", err)
 	}
@@ -2131,7 +2132,7 @@ func TestTeamCRUDAPI(t *testing.T) {
 		"username": "teamuser",
 		"password": "password123",
 	}, token)
-	teamUser, err := store.GetUserByUsername(db, "teamuser")
+	teamUser, err := store.GetUserByUsername(context.Background(), db, "teamuser")
 	if err != nil {
 		t.Fatalf("get teamuser error = %v", err)
 	}
@@ -2192,7 +2193,7 @@ func TestTeamCRUDAPI(t *testing.T) {
 	}
 
 	// Remove the admin owner membership before deleting the team.
-	adminUser, err := store.GetUserByUsername(db, "admin")
+	adminUser, err := store.GetUserByUsername(context.Background(), db, "admin")
 	if err != nil {
 		t.Fatalf("get admin user error = %v", err)
 	}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 func TestAuthLifecycle(t *testing.T) {
 	db := testDB(t)
 
-	user, err := RegisterUser(db, "carol", "password123")
+	user, err := RegisterUser(context.Background(), db, "carol", "password123")
 	if err != nil {
 		t.Fatalf("RegisterUser() error = %v", err)
 	}
@@ -18,7 +19,7 @@ func TestAuthLifecycle(t *testing.T) {
 		t.Fatalf("RegisterUser().Role = %q, want user", user.Role)
 	}
 
-	authenticated, err := AuthenticateUser(db, "carol", "password123")
+	authenticated, err := AuthenticateUser(context.Background(), db, "carol", "password123")
 	if err != nil {
 		t.Fatalf("AuthenticateUser() error = %v", err)
 	}
@@ -26,12 +27,12 @@ func TestAuthLifecycle(t *testing.T) {
 		t.Fatalf("AuthenticateUser().Username = %q, want carol", authenticated.Username)
 	}
 
-	token, err := CreateSession(db, authenticated.ID)
+	token, err := CreateSession(context.Background(), db, authenticated.ID)
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	sessionUser, err := GetUserByToken(db, token)
+	sessionUser, err := GetUserByToken(context.Background(), db, token)
 	if err != nil {
 		t.Fatalf("GetUserByToken() error = %v", err)
 	}
@@ -39,10 +40,10 @@ func TestAuthLifecycle(t *testing.T) {
 		t.Fatalf("GetUserByToken().Username = %q, want carol", sessionUser.Username)
 	}
 
-	if err := DeleteSession(db, token); err != nil {
+	if err := DeleteSession(context.Background(), db, token); err != nil {
 		t.Fatalf("DeleteSession() error = %v", err)
 	}
-	if _, err := GetUserByToken(db, token); !errors.Is(err, ErrUnauthorized) {
+	if _, err := GetUserByToken(context.Background(), db, token); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("GetUserByToken() after logout error = %v, want ErrUnauthorized", err)
 	}
 }
@@ -50,7 +51,7 @@ func TestAuthLifecycle(t *testing.T) {
 func TestAdminUserManagement(t *testing.T) {
 	db := testDB(t)
 
-	created, err := CreateUser(db, "bob", "password123", "user")
+	created, err := CreateUser(context.Background(), db, "bob", "password123", "user")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -58,7 +59,7 @@ func TestAdminUserManagement(t *testing.T) {
 		t.Fatalf("CreateUser().Username = %q, want bob", created.Username)
 	}
 
-	users, err := ListUsers(db)
+	users, err := ListUsers(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListUsers() error = %v", err)
 	}
@@ -66,25 +67,25 @@ func TestAdminUserManagement(t *testing.T) {
 		t.Fatalf("ListUsers() len = %d, want 2", len(users))
 	}
 
-	if err := SetUserEnabled(db, "bob", false); err != nil {
+	if err := SetUserEnabled(context.Background(), db, "bob", false); err != nil {
 		t.Fatalf("SetUserEnabled(false) error = %v", err)
 	}
-	if _, err := AuthenticateUser(db, "bob", "password123"); !errors.Is(err, ErrForbidden) {
+	if _, err := AuthenticateUser(context.Background(), db, "bob", "password123"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("AuthenticateUser(disabled) error = %v, want ErrForbidden", err)
 	}
 
-	if err := SetUserEnabled(db, "bob", true); err != nil {
+	if err := SetUserEnabled(context.Background(), db, "bob", true); err != nil {
 		t.Fatalf("SetUserEnabled(true) error = %v", err)
 	}
-	if _, err := AuthenticateUser(db, "bob", "password123"); err != nil {
+	if _, err := AuthenticateUser(context.Background(), db, "bob", "password123"); err != nil {
 		t.Fatalf("AuthenticateUser(re-enabled) error = %v", err)
 	}
 
-	if err := DeleteUser(db, "bob"); err != nil {
+	if err := DeleteUser(context.Background(), db, "bob"); err != nil {
 		t.Fatalf("DeleteUser() error = %v", err)
 	}
 
-	users, err = ListUsers(db)
+	users, err = ListUsers(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListUsers(after delete) error = %v", err)
 	}
@@ -96,19 +97,19 @@ func TestAdminUserManagement(t *testing.T) {
 func TestResetUserPassword(t *testing.T) {
 	db := testDB(t)
 
-	user, err := CreateUser(db, "carol", "password123", "user")
+	user, err := CreateUser(context.Background(), db, "carol", "password123", "user")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
 	// Create a session so we can verify it gets invalidated
-	token, err := CreateSession(db, user.ID)
+	token, err := CreateSession(context.Background(), db, user.ID)
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
 	// Reset password
-	updated, err := ResetUserPassword(db, "carol", "newpassword456")
+	updated, err := ResetUserPassword(context.Background(), db, "carol", "newpassword456")
 	if err != nil {
 		t.Fatalf("ResetUserPassword() error = %v", err)
 	}
@@ -117,32 +118,32 @@ func TestResetUserPassword(t *testing.T) {
 	}
 
 	// Old password should fail
-	if _, err := AuthenticateUser(db, "carol", "password123"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, err := AuthenticateUser(context.Background(), db, "carol", "password123"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("AuthenticateUser(old password) error = %v, want ErrInvalidCredentials", err)
 	}
 
 	// New password should work
-	if _, err := AuthenticateUser(db, "carol", "newpassword456"); err != nil {
+	if _, err := AuthenticateUser(context.Background(), db, "carol", "newpassword456"); err != nil {
 		t.Fatalf("AuthenticateUser(new password) error = %v", err)
 	}
 
 	// Session should be invalidated
-	if _, err := GetUserByToken(db, token); !errors.Is(err, ErrUnauthorized) {
+	if _, err := GetUserByToken(context.Background(), db, token); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("GetUserByToken(after reset) error = %v, want ErrUnauthorized", err)
 	}
 
 	// Reset with empty username should fail
-	if _, err := ResetUserPassword(db, "", "password"); err == nil {
+	if _, err := ResetUserPassword(context.Background(), db, "", "password"); err == nil {
 		t.Fatal("ResetUserPassword(empty username) error = nil, want error")
 	}
 
 	// Reset with empty password should fail
-	if _, err := ResetUserPassword(db, "carol", ""); err == nil {
+	if _, err := ResetUserPassword(context.Background(), db, "carol", ""); err == nil {
 		t.Fatal("ResetUserPassword(empty password) error = nil, want error")
 	}
 
 	// Reset for non-existent user should fail
-	if _, err := ResetUserPassword(db, "nobody", "password"); err == nil {
+	if _, err := ResetUserPassword(context.Background(), db, "nobody", "password"); err == nil {
 		t.Fatal("ResetUserPassword(non-existent) error = nil, want error")
 	}
 }
@@ -165,7 +166,7 @@ func testDB(t *testing.T) *sql.DB {
 // testAdminID returns the user_id of the admin user created by testDB.
 func testAdminID(t *testing.T, db *sql.DB) string {
 	t.Helper()
-	user, err := GetUserByUsername(db, "admin")
+	user, err := GetUserByUsername(context.Background(), db, "admin")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(admin) error = %v", err)
 	}

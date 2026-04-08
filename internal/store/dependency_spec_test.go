@@ -1,14 +1,17 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestDependencies(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Customer Portal", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	source, err := CreateTicket(db, TicketCreateParams{
+	source, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Prepare password reset flow",
@@ -17,7 +20,7 @@ func TestDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(source) error = %v", err)
 	}
-	blocker, err := CreateTicket(db, TicketCreateParams{
+	blocker, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "epic",
 		Title:     "Password Reset",
@@ -27,7 +30,7 @@ func TestDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(blocker) error = %v", err)
 	}
-	dependent, err := CreateTicket(db, TicketCreateParams{
+	dependent, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "bug",
 		Title:     "Reset link expires immediately.",
@@ -36,11 +39,11 @@ func TestDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(dependent) error = %v", err)
 	}
-	if _, err := AddDependency(db, project.ID, dependent.ID, blocker.ID, ""); err != nil {
+	if _, err := AddDependency(context.Background(), db, project.ID, dependent.ID, blocker.ID, ""); err != nil {
 		t.Fatalf("AddDependency() error = %v", err)
 	}
 
-	dependencies, err := ListDependencies(db, source.ID)
+	dependencies, err := ListDependencies(context.Background(), db, source.ID)
 	if err != nil {
 		t.Fatalf("ListDependencies() error = %v", err)
 	}
@@ -48,17 +51,17 @@ func TestDependencies(t *testing.T) {
 		t.Fatalf("ListDependencies(source) len = %d, want 0", len(dependencies))
 	}
 
-	dependencies, err = ListDependencies(db, dependent.ID)
+	dependencies, err = ListDependencies(context.Background(), db, dependent.ID)
 	if err != nil {
 		t.Fatalf("ListDependencies(dependent) error = %v", err)
 	}
 	if len(dependencies) != 1 {
 		t.Fatalf("ListDependencies(dependent) len = %d, want 1", len(dependencies))
 	}
-	if err := DeleteDependency(db, project.ID, dependent.ID, blocker.ID); err != nil {
+	if err := DeleteDependency(context.Background(), db, project.ID, dependent.ID, blocker.ID); err != nil {
 		t.Fatalf("DeleteDependency() error = %v", err)
 	}
-	dependencies, err = ListDependencies(db, dependent.ID)
+	dependencies, err = ListDependencies(context.Background(), db, dependent.ID)
 	if err != nil {
 		t.Fatalf("ListDependencies(dependent after delete) error = %v", err)
 	}

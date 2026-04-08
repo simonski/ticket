@@ -22,7 +22,7 @@ func (r *router) registerRoleHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			roles, err := store.ListRoles(db)
+			roles, err := store.ListRoles(r.Context(), db)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -38,7 +38,7 @@ func (r *router) registerRoleHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			role, err := store.CreateRole(db, payload.Title, payload.Motivation, payload.Goals)
+			role, err := store.CreateRole(r.Context(), db, payload.Title, payload.Motivation, payload.Goals)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
@@ -67,7 +67,7 @@ func (r *router) registerRoleHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			role, err := store.UpdateRole(db, id, payload.Title, payload.Motivation, payload.Goals)
+			role, err := store.UpdateRole(r.Context(), db, id, payload.Title, payload.Motivation, payload.Goals)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "role not found")
@@ -78,7 +78,7 @@ func (r *router) registerRoleHandlers() {
 			}
 			writeJSON(w, http.StatusOK, role)
 		case http.MethodDelete:
-			if err := store.DeleteRole(db, id); err != nil {
+			if err := store.DeleteRole(r.Context(), db, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "role not found")
 					return

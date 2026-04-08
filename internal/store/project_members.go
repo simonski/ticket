@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -35,28 +36,28 @@ func validProjectRole(role string) bool {
 	}
 }
 
-func AddProjectMember(db *sql.DB, projectID int64, userID string, role string) (ProjectMember, error) {
+func AddProjectMember(ctx context.Context, db *sql.DB, projectID int64, userID string, role string) (ProjectMember, error) {
 	role = normalizeProjectRole(role)
 	if !validProjectRole(role) {
 		return ProjectMember{}, fmt.Errorf("invalid role %q", role)
 	}
-	if _, err := GetProjectByID(db, projectID); err != nil {
+	if _, err := GetProjectByID(ctx, db, projectID); err != nil {
 		return ProjectMember{}, err
 	}
-	if _, err := GetUserByID(db, userID); err != nil {
+	if _, err := GetUserByID(ctx, db, userID); err != nil {
 		return ProjectMember{}, err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)
 		ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role
 	`, projectID, userID, role); err != nil {
 		return ProjectMember{}, err
 	}
-	return GetProjectMember(db, projectID, userID)
+	return GetProjectMember(ctx, db, projectID, userID)
 }
 
-func RemoveProjectMember(db *sql.DB, projectID int64, userID string) error {
-	result, err := db.Exec(`DELETE FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
+func RemoveProjectMember(ctx context.Context, db *sql.DB, projectID int64, userID string) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
 	if err != nil {
 		return err
 	}
@@ -70,8 +71,8 @@ func RemoveProjectMember(db *sql.DB, projectID int64, userID string) error {
 	return nil
 }
 
-func GetProjectMember(db *sql.DB, projectID int64, userID string) (ProjectMember, error) {
-	row := db.QueryRow(`
+func GetProjectMember(ctx context.Context, db *sql.DB, projectID int64, userID string) (ProjectMember, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT pm.project_id, pm.user_id, u.username, pm.role
 		FROM project_members pm
 		JOIN users u ON u.user_id = pm.user_id
@@ -87,8 +88,8 @@ func GetProjectMember(db *sql.DB, projectID int64, userID string) (ProjectMember
 	return member, nil
 }
 
-func ListProjectMembers(db *sql.DB, projectID int64) ([]ProjectMember, error) {
-	rows, err := db.Query(`
+func ListProjectMembers(ctx context.Context, db *sql.DB, projectID int64) ([]ProjectMember, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT pm.project_id, pm.user_id, u.username, pm.role
 		FROM project_members pm
 		JOIN users u ON u.user_id = pm.user_id
@@ -110,8 +111,8 @@ func ListProjectMembers(db *sql.DB, projectID int64) ([]ProjectMember, error) {
 	return members, rows.Err()
 }
 
-func ProjectRoleForUser(db *sql.DB, projectID int64, userID string) (string, bool, error) {
-	row := db.QueryRow(`SELECT role FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
+func ProjectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, userID string) (string, bool, error) {
+	row := db.QueryRowContext(ctx, `SELECT role FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
 	var role string
 	if err := row.Scan(&role); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

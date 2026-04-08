@@ -30,7 +30,7 @@ func (r *router) registerWorkflowHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		wf, err := store.ImportWorkflow(db, export)
+		wf, err := store.ImportWorkflow(r.Context(), db, export)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -53,7 +53,7 @@ func (r *router) registerWorkflowHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if err := store.RemoveWorkflowStage(db, stageID); err != nil {
+		if err := store.RemoveWorkflowStage(r.Context(), db, stageID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "workflow stage not found")
 				return
@@ -71,7 +71,7 @@ func (r *router) registerWorkflowHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			workflows, err := store.ListWorkflows(db)
+			workflows, err := store.ListWorkflows(r.Context(), db)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -87,7 +87,7 @@ func (r *router) registerWorkflowHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			wf, err := store.CreateWorkflow(db, payload.Name, payload.Description)
+			wf, err := store.CreateWorkflow(r.Context(), db, payload.Name, payload.Description)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
@@ -127,7 +127,7 @@ func (r *router) registerWorkflowHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				stage, err := store.AddWorkflowStage(db, wfID, payload.StageName, payload.Description, payload.RoleID, payload.SortOrder)
+				stage, err := store.AddWorkflowStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.RoleID, payload.SortOrder)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -144,7 +144,7 @@ func (r *router) registerWorkflowHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				if err := store.ReorderWorkflowStages(db, wfID, payload.StageIDs); err != nil {
+				if err := store.ReorderWorkflowStages(r.Context(), db, wfID, payload.StageIDs); err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
@@ -155,7 +155,7 @@ func (r *router) registerWorkflowHandlers() {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
 				}
-				export, err := store.ExportWorkflow(db, wfID)
+				export, err := store.ExportWorkflow(r.Context(), db, wfID)
 				if err != nil {
 					if errors.Is(err, sql.ErrNoRows) {
 						writeError(w, http.StatusNotFound, "workflow not found")
@@ -171,7 +171,7 @@ func (r *router) registerWorkflowHandlers() {
 		// Direct workflow resource
 		switch r.Method {
 		case http.MethodGet:
-			wf, err := store.GetWorkflow(db, wfID)
+			wf, err := store.GetWorkflow(r.Context(), db, wfID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "workflow not found")
@@ -182,7 +182,7 @@ func (r *router) registerWorkflowHandlers() {
 			}
 			writeJSON(w, http.StatusOK, wf)
 		case http.MethodDelete:
-			if err := store.DeleteWorkflow(db, wfID); err != nil {
+			if err := store.DeleteWorkflow(r.Context(), db, wfID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "workflow not found")
 					return

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -28,7 +29,7 @@ func normalizeStoryStatus(status string) string {
 	}
 }
 
-func CreateStory(db *sql.DB, projectID int64, title, description string, createdBy string) (Story, error) {
+func CreateStory(ctx context.Context, db *sql.DB, projectID int64, title, description string, createdBy string) (Story, error) {
 	title = strings.TrimSpace(title)
 	if projectID == 0 {
 		return Story{}, errors.New("project is required")
@@ -36,7 +37,7 @@ func CreateStory(db *sql.DB, projectID int64, title, description string, created
 	if title == "" {
 		return Story{}, errors.New("story title is required")
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO stories (project_id, title, description, status, created_by, updated_at)
 		VALUES (?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP)
 	`, projectID, title, strings.TrimSpace(description), nullableUserID(createdBy))
@@ -47,11 +48,11 @@ func CreateStory(db *sql.DB, projectID int64, title, description string, created
 	if err != nil {
 		return Story{}, err
 	}
-	return GetStory(db, id)
+	return GetStory(ctx, db, id)
 }
 
-func ListStoriesByProject(db *sql.DB, projectID int64) ([]Story, error) {
-	rows, err := db.Query(`
+func ListStoriesByProject(ctx context.Context, db *sql.DB, projectID int64) ([]Story, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT story_id, project_id, title, description, status, COALESCE(created_by, ''), created_at, updated_at
 		FROM stories
 		WHERE project_id = ?
@@ -72,8 +73,8 @@ func ListStoriesByProject(db *sql.DB, projectID int64) ([]Story, error) {
 	return stories, rows.Err()
 }
 
-func GetStory(db *sql.DB, storyID int64) (Story, error) {
-	row := db.QueryRow(`
+func GetStory(ctx context.Context, db *sql.DB, storyID int64) (Story, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT story_id, project_id, title, description, status, COALESCE(created_by, ''), created_at, updated_at
 		FROM stories
 		WHERE story_id = ?
@@ -85,8 +86,8 @@ func GetStory(db *sql.DB, storyID int64) (Story, error) {
 	return story, nil
 }
 
-func UpdateStoryStatus(db *sql.DB, storyID int64, status string) (Story, error) {
-	result, err := db.Exec(`
+func UpdateStoryStatus(ctx context.Context, db *sql.DB, storyID int64, status string) (Story, error) {
+	result, err := db.ExecContext(ctx, `
 		UPDATE stories
 		SET status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE story_id = ?
@@ -101,15 +102,15 @@ func UpdateStoryStatus(db *sql.DB, storyID int64, status string) (Story, error) 
 	if affected == 0 {
 		return Story{}, sql.ErrNoRows
 	}
-	return GetStory(db, storyID)
+	return GetStory(ctx, db, storyID)
 }
 
-func UpdateStory(db *sql.DB, storyID int64, title, description string) (Story, error) {
+func UpdateStory(ctx context.Context, db *sql.DB, storyID int64, title, description string) (Story, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return Story{}, errors.New("story title is required")
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		UPDATE stories
 		SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE story_id = ?
@@ -124,22 +125,22 @@ func UpdateStory(db *sql.DB, storyID int64, title, description string) (Story, e
 	if affected == 0 {
 		return Story{}, sql.ErrNoRows
 	}
-	return GetStory(db, storyID)
+	return GetStory(ctx, db, storyID)
 }
 
-func LinkStoryToTicket(db *sql.DB, storyID int64, ticketID string) error {
+func LinkStoryToTicket(ctx context.Context, db *sql.DB, storyID int64, ticketID string) error {
 	if storyID == 0 || ticketID == "" {
 		return errors.New("story and ticket are required")
 	}
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO story_ticket_links (story_id, ticket_id)
 		VALUES (?, ?)
 	`, storyID, ticketID)
 	return err
 }
 
-func DeleteStory(db *sql.DB, storyID int64) error {
-	result, err := db.Exec(`DELETE FROM stories WHERE story_id = ?`, storyID)
+func DeleteStory(ctx context.Context, db *sql.DB, storyID int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM stories WHERE story_id = ?`, storyID)
 	if err != nil {
 		return err
 	}
@@ -153,9 +154,9 @@ func DeleteStory(db *sql.DB, storyID int64) error {
 	return nil
 }
 
-func StoryIDForTicket(db *sql.DB, ticketID string) (int64, bool, error) {
+func StoryIDForTicket(ctx context.Context, db *sql.DB, ticketID string) (int64, bool, error) {
 	var storyID int64
-	err := db.QueryRow(`SELECT story_id FROM story_ticket_links WHERE ticket_id = ? ORDER BY story_id LIMIT 1`, ticketID).Scan(&storyID)
+	err := db.QueryRowContext(ctx, `SELECT story_id FROM story_ticket_links WHERE ticket_id = ? ORDER BY story_id LIMIT 1`, ticketID).Scan(&storyID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, false, nil

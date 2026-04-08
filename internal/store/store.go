@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -17,25 +18,26 @@ import (
 const defaultProjectPrefix = "TK"
 
 func Open(path string) (*sql.DB, error) {
+	ctx := context.Background()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON;`); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode = WAL;`); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(`PRAGMA busy_timeout = 5000;`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout = 5000;`); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if err := createSchema(db); err != nil {
+	if err := createSchema(ctx, db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -43,6 +45,7 @@ func Open(path string) (*sql.DB, error) {
 }
 
 func Init(path, adminUsername, adminPassword string) error {
+	ctx := context.Background()
 	if adminUsername == "" || adminPassword == "" {
 		return errors.New("admin username and password are required")
 	}
@@ -65,7 +68,7 @@ func Init(path, adminUsername, adminPassword string) error {
 	}
 	defer db.Close()
 
-	if err := createSchema(db); err != nil {
+	if err := createSchema(ctx, db); err != nil {
 		return err
 	}
 
@@ -76,7 +79,7 @@ func Init(path, adminUsername, adminPassword string) error {
 
 	adminID := generateUserID()
 
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled)
 		VALUES (?, ?, ?, 'admin', ?, 1)
 	`, adminID, adminUsername, hash, adminUsername)
@@ -86,10 +89,10 @@ func Init(path, adminUsername, adminPassword string) error {
 
 	var defaultWorkflowID *int64
 	var wfID int64
-	if err := db.QueryRow(`SELECT workflow_id FROM workflows WHERE name = 'default'`).Scan(&wfID); err == nil {
+	if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows WHERE name = 'default'`).Scan(&wfID); err == nil {
 		defaultWorkflowID = &wfID
 	}
-	if _, err := CreateProjectWithParams(db, ProjectCreateParams{
+	if _, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix:             defaultProjectPrefix,
 		Title:              "Default Project",
 		Description:        "Bootstrap project created during init.",
@@ -102,21 +105,21 @@ func Init(path, adminUsername, adminPassword string) error {
 	return nil
 }
 
-func createSchema(db *sql.DB) error {
+func createSchema(ctx context.Context, db *sql.DB) error {
 	// Pre-schema migration: rename tasks→tickets BEFORE the CREATE TABLE IF
 	// NOT EXISTS block runs, so we don't end up with both tables.
-	if tableExists(db, "tasks") && !tableExists(db, "tickets") {
-		if _, err := db.Exec(`ALTER TABLE tasks RENAME TO tickets`); err != nil {
+	if tableExists(ctx, db, "tasks") && !tableExists(ctx, db, "tickets") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tasks RENAME TO tickets`); err != nil {
 			return err
 		}
 	}
 	// If both tables exist (e.g. a previous run created an empty tickets table
 	// while tasks still held data), merge tasks data into tickets and drop tasks.
-	if tableExists(db, "tasks") && tableExists(db, "tickets") {
+	if tableExists(ctx, db, "tasks") && tableExists(ctx, db, "tickets") {
 		// Map old column names to new ones for the tasks→tickets transfer.
 		renames := map[string]string{"task_id": "ticket_id"}
-		taskCols, _ := tableColumnNames(db, "tasks")
-		ticketCols, _ := tableColumnNames(db, "tickets")
+		taskCols, _ := tableColumnNames(ctx, db, "tasks")
+		ticketCols, _ := tableColumnNames(ctx, db, "tickets")
 		ticketSet := make(map[string]bool, len(ticketCols))
 		for _, c := range ticketCols {
 			ticketSet[c] = true
@@ -133,12 +136,12 @@ func createSchema(db *sql.DB) error {
 			}
 		}
 		if len(dstCols) > 0 {
-			if _, err := db.Exec(fmt.Sprintf(`INSERT OR IGNORE INTO tickets (%s) SELECT %s FROM tasks`,
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(`INSERT OR IGNORE INTO tickets (%s) SELECT %s FROM tasks`,
 				strings.Join(dstCols, ", "), strings.Join(srcCols, ", "))); err != nil {
 				return err
 			}
 		}
-		if _, err := db.Exec(`DROP TABLE tasks`); err != nil {
+		if _, err := db.ExecContext(ctx, `DROP TABLE tasks`); err != nil {
 			return err
 		}
 	}
@@ -458,176 +461,176 @@ CREATE INDEX IF NOT EXISTS idx_workflow_stages_role_id ON workflow_stages(role_i
 
 `
 
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return err
 	}
-	return migrateSchema(db)
+	return migrateSchema(ctx, db)
 }
 
-func migrateSchema(db *sql.DB) error {
+func migrateSchema(ctx context.Context, db *sql.DB) error {
 	// Disable FK checks for all migrations; re-enable at the end.
-	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return err
 	}
-	defer db.Exec(`PRAGMA foreign_keys = ON`) //nolint:errcheck
+	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
 
 	// Rename task_id columns to use ticket terminology.
-	if columnExists(db, "tickets", "task_id") {
-		if _, err := db.Exec(`ALTER TABLE tickets RENAME COLUMN task_id TO ticket_id`); err != nil {
+	if columnExists(ctx, db, "tickets", "task_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets RENAME COLUMN task_id TO ticket_id`); err != nil {
 			return err
 		}
 	}
-	if columnExists(db, "history_events", "task_id") {
-		if _, err := db.Exec(`ALTER TABLE history_events RENAME COLUMN task_id TO ticket_id`); err != nil {
+	if columnExists(ctx, db, "history_events", "task_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE history_events RENAME COLUMN task_id TO ticket_id`); err != nil {
 			return err
 		}
 	}
-	if columnExists(db, "ticket_history", "task_id") {
-		if _, err := db.Exec(`ALTER TABLE ticket_history RENAME COLUMN task_id TO ticket_id`); err != nil {
+	if columnExists(ctx, db, "ticket_history", "task_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE ticket_history RENAME COLUMN task_id TO ticket_id`); err != nil {
 			return err
 		}
 	}
-	if columnExists(db, "dependencies", "task_id") {
-		if _, err := db.Exec(`ALTER TABLE dependencies RENAME COLUMN task_id TO ticket_id`); err != nil {
+	if columnExists(ctx, db, "dependencies", "task_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE dependencies RENAME COLUMN task_id TO ticket_id`); err != nil {
 			return err
 		}
 	}
 
 	// Fix FK references that still point at the old "tasks" table after the rename.
 	// Must run before any DML that would trigger FK checks on the affected tables.
-	if err := fixStaleForeignKeys(db); err != nil {
+	if err := fixStaleForeignKeys(ctx, db); err != nil {
 		return err
 	}
 
-	if !columnExists(db, "projects", "prefix") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN prefix TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "projects", "prefix") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN prefix TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "notes") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN notes TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "projects", "notes") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN notes TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "git_repository") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "projects", "git_repository") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "git_branch") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "projects", "git_branch") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "updated_at") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`); err != nil {
+	if !columnExists(ctx, db, "projects", "updated_at") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "ticket_sequence") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN ticket_sequence INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(ctx, db, "projects", "ticket_sequence") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN ticket_sequence INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "visibility") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`); err != nil {
+	if !columnExists(ctx, db, "projects", "visibility") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "projects", "workflow_id") {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
+	if !columnExists(ctx, db, "projects", "workflow_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
 			return err
 		}
 	}
-	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id)`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id)`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`UPDATE projects SET visibility = 'public' WHERE TRIM(COALESCE(visibility,'')) = ''`); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET visibility = 'public' WHERE TRIM(COALESCE(visibility,'')) = ''`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`UPDATE projects SET status = 'closed' WHERE status = 'disabled'`); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE projects SET status = 'closed' WHERE status = 'disabled'`); err != nil {
 		return err
 	}
 
 	// Migrate ticket_id from INTEGER to TEXT (using the key value as the new ticket_id).
-	if err := migrateTicketIDToText(db); err != nil {
+	if err := migrateTicketIDToText(ctx, db); err != nil {
 		return err
 	}
 	// Fix dependent tables whose FK constraints still reference tickets_old_int.
-	if err := fixStaleFKsAfterTicketIDMigration(db); err != nil {
+	if err := fixStaleFKsAfterTicketIDMigration(ctx, db); err != nil {
 		return err
 	}
 
-	if !columnExists(db, "tickets", "sort_order") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(ctx, db, "tickets", "sort_order") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "estimate_effort") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_effort INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(ctx, db, "tickets", "estimate_effort") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN estimate_effort INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "estimate_complete") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "tickets", "estimate_complete") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN estimate_complete TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "git_repository") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "tickets", "git_repository") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN git_repository TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "git_branch") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "tickets", "git_branch") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "health_score") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(ctx, db, "tickets", "health_score") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "open") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
+	if !columnExists(ctx, db, "tickets", "open") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN open INTEGER NOT NULL DEFAULT 1`); err != nil {
 			return err
 		}
 		// Legacy behavior used archived for close/open. Preserve closed state and reset archived.
-		if _, err := db.Exec(`UPDATE tickets SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET open = CASE WHEN archived = 1 THEN 0 ELSE 1 END`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`UPDATE tickets SET archived = 0`); err != nil {
-			return err
-		}
-	}
-	if !columnExists(db, "tickets", "stage") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET archived = 0`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "state") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'`); err != nil {
+	if !columnExists(ctx, db, "tickets", "stage") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "workflow_stage_id") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN workflow_stage_id INTEGER REFERENCES workflow_stages(workflow_stage_id)`); err != nil {
+	if !columnExists(ctx, db, "tickets", "state") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "workflow_id") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
+	if !columnExists(ctx, db, "tickets", "workflow_stage_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN workflow_stage_id INTEGER REFERENCES workflow_stages(workflow_stage_id)`); err != nil {
 			return err
 		}
 	}
-	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id)`); err != nil {
+	if !columnExists(ctx, db, "tickets", "workflow_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
+			return err
+		}
+	}
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id)`); err != nil {
 		return err
 	}
-	if !tableExists(db, "stories") {
-		if _, err := db.Exec(`
+	if !tableExists(ctx, db, "stories") {
+		if _, err := db.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS stories (
 				story_id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
@@ -644,8 +647,8 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
-	if !tableExists(db, "story_ticket_links") {
-		if _, err := db.Exec(`
+	if !tableExists(ctx, db, "story_ticket_links") {
+		if _, err := db.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS story_ticket_links (
 				story_id INTEGER NOT NULL,
 				ticket_id TEXT NOT NULL,
@@ -658,7 +661,7 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		UPDATE tickets
 		SET
 			stage = CASE
@@ -684,13 +687,13 @@ func migrateSchema(db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
-	if err := backfillProjectPrefixes(db); err != nil {
+	if err := backfillProjectPrefixes(ctx, db); err != nil {
 		return err
 	}
-	if err := backfillTicketKeys(db); err != nil {
+	if err := backfillTicketKeys(ctx, db); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO ticket_history (id, project_id, ticket_id, event_type, payload, created_by, created_at)
 		SELECT h.id, h.project_id, h.ticket_id, h.event_type, h.payload, h.created_by, h.created_at
 		FROM history_events h
@@ -698,19 +701,19 @@ func migrateSchema(db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_enabled', '1')`); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_enabled', '1')`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_connections', '2')`); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_connections', '2')`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_duration_minutes', '3')`); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_duration_minutes', '3')`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_enabled', '1')`); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_enabled', '1')`); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO project_members (project_id, user_id, role)
 		SELECT project_id, created_by, 'owner'
 		FROM projects
@@ -718,70 +721,70 @@ func migrateSchema(db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
-	if err := seedDefaultRoles(db); err != nil {
+	if err := seedDefaultRoles(ctx, db); err != nil {
 		return err
 	}
-	if err := seedDefaultWorkflow(db); err != nil {
+	if err := seedDefaultWorkflow(ctx, db); err != nil {
 		return err
 	}
-	if err := seedYoloWorkflow(db); err != nil {
+	if err := seedYoloWorkflow(ctx, db); err != nil {
 		return err
 	}
-	if err := backfillTicketWorkflowStages(db); err != nil {
+	if err := backfillTicketWorkflowStages(ctx, db); err != nil {
 		return err
 	}
 	// Add DoR/DoD to workflow stages
-	if !columnExists(db, "workflow_stages", "definition_of_ready") {
-		if _, err := db.Exec(`ALTER TABLE workflow_stages ADD COLUMN definition_of_ready TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "workflow_stages", "definition_of_ready") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages ADD COLUMN definition_of_ready TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "workflow_stages", "definition_of_done") {
-		if _, err := db.Exec(`ALTER TABLE workflow_stages ADD COLUMN definition_of_done TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "workflow_stages", "definition_of_done") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages ADD COLUMN definition_of_done TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
 	// Add new columns to users for merged agent support
-	if !columnExists(db, "users", "user_type") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN user_type TEXT NOT NULL DEFAULT 'user'`); err != nil {
+	if !columnExists(ctx, db, "users", "user_type") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN user_type TEXT NOT NULL DEFAULT 'user'`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "users", "uuid") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "uuid") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "users", "description") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN description TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "description") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN description TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "users", "status") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "status") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "users", "last_seen") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN last_seen TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "last_seen") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN last_seen TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "users", "updated_at") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "updated_at") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
 	// Migrate agents table into users if it still exists
-	if tableExists(db, "agents") {
+	if tableExists(ctx, db, "agents") {
 		// Add UUID column to agents if missing (for very old DBs)
-		if !columnExists(db, "agents", "uuid") {
-			if _, err := db.Exec(`ALTER TABLE agents ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !columnExists(ctx, db, "agents", "uuid") {
+			if _, err := db.ExecContext(ctx, `ALTER TABLE agents ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
 				return err
 			}
 		}
 		// Backfill UUIDs for agents that don't have one
-		if agentRows, err := db.Query(`SELECT agent_id FROM agents WHERE TRIM(COALESCE(uuid, '')) = ''`); err == nil {
+		if agentRows, err := db.QueryContext(ctx, `SELECT agent_id FROM agents WHERE TRIM(COALESCE(uuid, '')) = ''`); err == nil {
 			var agentIDs []int64
 			for agentRows.Next() {
 				var id int64
@@ -792,11 +795,11 @@ func migrateSchema(db *sql.DB) error {
 			agentRows.Close()
 			for _, id := range agentIDs {
 				u := generateAgentUUID()
-				db.Exec(`UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
+				db.ExecContext(ctx, `UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
 			}
 		}
 		// Migrate agent data into users table
-		if _, err := db.Exec(`
+		if _, err := db.ExecContext(ctx, `
 			INSERT OR IGNORE INTO users (username, password_hash, role, display_name, enabled, user_type, uuid, description, status, last_seen, created_at, updated_at)
 			SELECT name, password_hash, 'agent', name, enabled, 'agent', COALESCE(uuid, ''), COALESCE(description, ''), COALESCE(status, 'idle'), COALESCE(last_seen, ''), created_at, updated_at
 			FROM agents
@@ -804,12 +807,12 @@ func migrateSchema(db *sql.DB) error {
 			return err
 		}
 		// Migrate team_agents references from old agent_id to new user_id
-		if columnExists(db, "team_agents", "agent_id") {
-			if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		if columnExists(ctx, db, "team_agents", "agent_id") {
+			if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 				return err
 			}
 			// Create a mapping from old agent_id to new user_id
-			if _, err := db.Exec(`
+			if _, err := db.ExecContext(ctx, `
 				CREATE TABLE IF NOT EXISTS team_agents_new (
 					team_id INTEGER NOT NULL,
 					user_id TEXT NOT NULL,
@@ -821,7 +824,7 @@ func migrateSchema(db *sql.DB) error {
 			`); err != nil {
 				return err
 			}
-			if _, err := db.Exec(`
+			if _, err := db.ExecContext(ctx, `
 				INSERT OR IGNORE INTO team_agents_new (team_id, user_id, created_at)
 				SELECT ta.team_id, u.user_id, ta.created_at
 				FROM team_agents ta
@@ -830,35 +833,35 @@ func migrateSchema(db *sql.DB) error {
 			`); err != nil {
 				return err
 			}
-			if _, err := db.Exec(`DROP TABLE team_agents`); err != nil {
+			if _, err := db.ExecContext(ctx, `DROP TABLE team_agents`); err != nil {
 				return err
 			}
-			if _, err := db.Exec(`ALTER TABLE team_agents_new RENAME TO team_agents`); err != nil {
+			if _, err := db.ExecContext(ctx, `ALTER TABLE team_agents_new RENAME TO team_agents`); err != nil {
 				return err
 			}
-			if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+			if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
 				return err
 			}
 		}
 		// Drop the old agents table
-		if _, err := db.Exec(`DROP TABLE agents`); err != nil {
+		if _, err := db.ExecContext(ctx, `DROP TABLE agents`); err != nil {
 			return err
 		}
 	}
 	// Add email to users
-	if !columnExists(db, "users", "email") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "email") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "users", "email_confirmed_at") {
-		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN email_confirmed_at TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "users", "email_confirmed_at") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN email_confirmed_at TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
 	// Messages table
-	if !tableExists(db, "messages") {
-		if _, err := db.Exec(`
+	if !tableExists(ctx, db, "messages") {
+		if _, err := db.ExecContext(ctx, `
 			CREATE TABLE messages (
 				message_id INTEGER PRIMARY KEY AUTOINCREMENT,
 				from_user_id TEXT NOT NULL,
@@ -877,8 +880,8 @@ func migrateSchema(db *sql.DB) error {
 		}
 	}
 	// Project goals
-	if !tableExists(db, "goals") {
-		if _, err := db.Exec(`
+	if !tableExists(ctx, db, "goals") {
+		if _, err := db.ExecContext(ctx, `
 			CREATE TABLE goals (
 				goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
@@ -896,14 +899,14 @@ func migrateSchema(db *sql.DB) error {
 		}
 	}
 	// Link epics to goals
-	if !columnExists(db, "tickets", "goal_id") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN goal_id INTEGER REFERENCES goals(goal_id)`); err != nil {
+	if !columnExists(ctx, db, "tickets", "goal_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN goal_id INTEGER REFERENCES goals(goal_id)`); err != nil {
 			return err
 		}
 	}
 	// Agent config key-value store
-	if !tableExists(db, "agent_config") {
-		if _, err := db.Exec(`
+	if !tableExists(ctx, db, "agent_config") {
+		if _, err := db.ExecContext(ctx, `
 			CREATE TABLE agent_config (
 				user_id TEXT NOT NULL,
 				key TEXT NOT NULL,
@@ -918,11 +921,11 @@ func migrateSchema(db *sql.DB) error {
 		}
 	}
 	// Migrate agent_config from agent_id to user_id if needed
-	if columnExists(db, "agent_config", "agent_id") && !columnExists(db, "agent_config", "user_id") {
-		if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+	if columnExists(ctx, db, "agent_config", "agent_id") && !columnExists(ctx, db, "agent_config", "user_id") {
+		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`
+		if _, err := db.ExecContext(ctx, `
 			CREATE TABLE agent_config_new (
 				user_id TEXT NOT NULL,
 				key TEXT NOT NULL,
@@ -935,34 +938,34 @@ func migrateSchema(db *sql.DB) error {
 		`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`
+		if _, err := db.ExecContext(ctx, `
 			INSERT OR IGNORE INTO agent_config_new (user_id, key, value, created_at, updated_at)
 			SELECT agent_id, key, value, created_at, updated_at FROM agent_config
 		`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`DROP TABLE agent_config`); err != nil {
+		if _, err := db.ExecContext(ctx, `DROP TABLE agent_config`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`ALTER TABLE agent_config_new RENAME TO agent_config`); err != nil {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE agent_config_new RENAME TO agent_config`); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(db, "tickets", "ready") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN ready INTEGER NOT NULL DEFAULT 0`); err != nil {
+	if !columnExists(ctx, db, "tickets", "ready") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN ready INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
 	// Add author column to store the username of who created the ticket
-	if !columnExists(db, "tickets", "author") {
-		if _, err := db.Exec(`ALTER TABLE tickets ADD COLUMN author TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "tickets", "author") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN author TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 		// Backfill author from created_by user ID
-		if _, err := db.Exec(`UPDATE tickets SET author = COALESCE((SELECT u.username FROM users u WHERE u.user_id = tickets.created_by), '') WHERE author = ''`); err != nil {
+		if _, err := db.ExecContext(ctx, `UPDATE tickets SET author = COALESCE((SELECT u.username FROM users u WHERE u.user_id = tickets.created_by), '') WHERE author = ''`); err != nil {
 			return err
 		}
 	}
@@ -979,17 +982,17 @@ func migrateSchema(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
 	}
 	for _, stmt := range missingIndexes {
-		if _, err := db.Exec(stmt); err != nil {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func backfillTicketWorkflowStages(db *sql.DB) error {
+func backfillTicketWorkflowStages(ctx context.Context, db *sql.DB) error {
 	// For tickets that have a stage name but no workflow_stage_id,
 	// resolve the stage from the project's workflow.
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 		UPDATE tickets
 		SET workflow_stage_id = (
 			SELECT ws.workflow_stage_id
@@ -1007,8 +1010,8 @@ func backfillTicketWorkflowStages(db *sql.DB) error {
 	return err
 }
 
-func seedDefaultWorkflow(db *sql.DB) error {
-	result, err := db.Exec(`INSERT OR IGNORE INTO workflows (name, description, updated_at) VALUES ('default', 'Standard engineering lifecycle', CURRENT_TIMESTAMP)`)
+func seedDefaultWorkflow(ctx context.Context, db *sql.DB) error {
+	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO workflows (name, description, updated_at) VALUES ('default', 'Standard engineering lifecycle', CURRENT_TIMESTAMP)`)
 	if err != nil {
 		return err
 	}
@@ -1032,11 +1035,11 @@ func seedDefaultWorkflow(db *sql.DB) error {
 	}
 	for _, s := range stages {
 		var roleID *int64
-		role, err := GetRoleByTitle(db, s.roleTitle)
+		role, err := GetRoleByTitle(ctx, db, s.roleTitle)
 		if err == nil {
 			roleID = &role.ID
 		}
-		if _, err := db.Exec(`
+		if _, err := db.ExecContext(ctx, `
 			INSERT INTO workflow_stages (workflow_id, stage_name, role_id, sort_order, updated_at)
 			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		`, wfID, s.name, roleID, s.order); err != nil {
@@ -1046,8 +1049,8 @@ func seedDefaultWorkflow(db *sql.DB) error {
 	return nil
 }
 
-func seedYoloWorkflow(db *sql.DB) error {
-	result, err := db.Exec(`INSERT OR IGNORE INTO workflows (name, description, updated_at) VALUES ('yolo', 'Single-stage workflow — straight to done', CURRENT_TIMESTAMP)`)
+func seedYoloWorkflow(ctx context.Context, db *sql.DB) error {
+	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO workflows (name, description, updated_at) VALUES ('yolo', 'Single-stage workflow — straight to done', CURRENT_TIMESTAMP)`)
 	if err != nil {
 		return err
 	}
@@ -1060,18 +1063,18 @@ func seedYoloWorkflow(db *sql.DB) error {
 		return err
 	}
 	var roleID *int64
-	role, err := GetRoleByTitle(db, "Lead Engineer")
+	role, err := GetRoleByTitle(ctx, db, "Lead Engineer")
 	if err == nil {
 		roleID = &role.ID
 	}
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO workflow_stages (workflow_id, stage_name, role_id, sort_order, updated_at)
 		VALUES (?, 'done', ?, 0, CURRENT_TIMESTAMP)
 	`, wfID, roleID)
 	return err
 }
 
-func seedDefaultRoles(db *sql.DB) error {
+func seedDefaultRoles(ctx context.Context, db *sql.DB) error {
 	type defaultRole struct {
 		Title            string
 		LegacyMotivation string
@@ -1182,13 +1185,13 @@ Produce tickets that are specific enough for immediate development while maintai
 		},
 	}
 	for _, role := range defaultRoles {
-		if _, err := db.Exec(`
+		if _, err := db.ExecContext(ctx, `
 			INSERT OR IGNORE INTO roles (title, motivation, goals, updated_at)
 			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		`, role.Title, role.Motivation, role.Goals); err != nil {
 			return err
 		}
-		if _, err := db.Exec(`
+		if _, err := db.ExecContext(ctx, `
 			UPDATE roles
 			SET motivation = ?, goals = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE title = ?
@@ -1203,8 +1206,8 @@ Produce tickets that are specific enough for immediate development while maintai
 	return nil
 }
 
-func backfillProjectPrefixes(db *sql.DB) error {
-	rows, err := db.Query(`SELECT project_id, title, prefix FROM projects ORDER BY project_id`)
+func backfillProjectPrefixes(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT project_id, title, prefix FROM projects ORDER BY project_id`)
 	if err != nil {
 		return err
 	}
@@ -1230,17 +1233,17 @@ func backfillProjectPrefixes(db *sql.DB) error {
 		if strings.TrimSpace(project.prefix) != "" {
 			if project.id == 1 && strings.TrimSpace(project.title) == "Default Project" {
 				var ticketCount int
-				if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE project_id = ?`, project.id).Scan(&ticketCount); err != nil {
+				if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets WHERE project_id = ?`, project.id).Scan(&ticketCount); err != nil {
 					return err
 				}
 				if ticketCount == 0 {
 					prefix := defaultProjectPrefix
 					if prefix != strings.TrimSpace(project.prefix) {
-						prefix, err := nextUniqueProjectPrefix(db, prefix)
+						prefix, err := nextUniqueProjectPrefix(ctx, db, prefix)
 						if err != nil {
 							return err
 						}
-						if _, err := db.Exec(`UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, prefix, project.id); err != nil {
+						if _, err := db.ExecContext(ctx, `UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, prefix, project.id); err != nil {
 							return err
 						}
 					}
@@ -1252,18 +1255,18 @@ func backfillProjectPrefixes(db *sql.DB) error {
 		if project.id == 1 && strings.TrimSpace(project.title) == "Default Project" {
 			desiredPrefix = defaultProjectPrefix
 		}
-		prefix, err := nextUniqueProjectPrefix(db, desiredPrefix)
+		prefix, err := nextUniqueProjectPrefix(ctx, db, desiredPrefix)
 		if err != nil {
 			return err
 		}
-		if _, err := db.Exec(`UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, prefix, project.id); err != nil {
+		if _, err := db.ExecContext(ctx, `UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, prefix, project.id); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func backfillTicketKeys(db *sql.DB) error {
+func backfillTicketKeys(ctx context.Context, db *sql.DB) error {
 	// ticket_id is now the key string; no separate key column to backfill.
 	return nil
 }
@@ -1271,15 +1274,15 @@ func backfillTicketKeys(db *sql.DB) error {
 // migrateTicketIDToText converts ticket_id from INTEGER to TEXT PRIMARY KEY,
 // using the key column value as the new ticket_id, then drops the key column.
 // This is a one-time migration for databases created before the refactor.
-func migrateTicketIDToText(db *sql.DB) error {
+func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 	// Detect: if the key column still exists, migration is needed.
-	if !columnExists(db, "tickets", "key") {
+	if !columnExists(ctx, db, "tickets", "key") {
 		return nil
 	}
 
 	// Build a mapping of old integer ticket_id → key string.
 	// Also update all FK references in dependent tables.
-	rows, err := db.Query(`SELECT ticket_id, key FROM tickets WHERE key != ''`)
+	rows, err := db.QueryContext(ctx, `SELECT ticket_id, key FROM tickets WHERE key != ''`)
 	if err != nil {
 		return fmt.Errorf("migrateTicketIDToText: read mapping: %w", err)
 	}
@@ -1299,13 +1302,13 @@ func migrateTicketIDToText(db *sql.DB) error {
 	rows.Close()
 
 	// Recreate tickets table with TEXT PRIMARY KEY, without key column.
-	if _, err := db.Exec(`ALTER TABLE tickets RENAME TO tickets_old_int`); err != nil {
+	if _, err := db.ExecContext(ctx, `ALTER TABLE tickets RENAME TO tickets_old_int`); err != nil {
 		return fmt.Errorf("migrateTicketIDToText: rename tickets: %w", err)
 	}
 
 	// Get the current column list (minus key column) to build the INSERT.
 	// We know the columns from the schema.
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE tickets (
 			ticket_id TEXT PRIMARY KEY,
 			project_id INTEGER NOT NULL,
@@ -1355,12 +1358,12 @@ func migrateTicketIDToText(db *sql.DB) error {
 	optionalCols := []string{"workflow_id", "workflow_stage_id", "ready"}
 	var presentCols []string
 	for _, c := range oldCols {
-		if columnExists(db, "tickets_old_int", c) {
+		if columnExists(ctx, db, "tickets_old_int", c) {
 			presentCols = append(presentCols, c)
 		}
 	}
 	for _, c := range optionalCols {
-		if columnExists(db, "tickets_old_int", c) {
+		if columnExists(ctx, db, "tickets_old_int", c) {
 			presentCols = append(presentCols, c)
 		}
 	}
@@ -1381,7 +1384,7 @@ func migrateTicketIDToText(db *sql.DB) error {
 		FROM tickets_old_int o
 		WHERE o.key != ''
 	`, strings.Join(presentCols, ", "), strings.Join(prefixedCols, ", "))
-	if _, err := db.Exec(insertSQL); err != nil {
+	if _, err := db.ExecContext(ctx, insertSQL); err != nil {
 		return fmt.Errorf("migrateTicketIDToText: copy data: %w", err)
 	}
 
@@ -1400,7 +1403,7 @@ func migrateTicketIDToText(db *sql.DB) error {
 		{"time_entries", "ticket_id"},
 	}
 	for _, fk := range fkTables {
-		if !tableExists(db, fk.table) || !columnExists(db, fk.table, fk.column) {
+		if !tableExists(ctx, db, fk.table) || !columnExists(ctx, db, fk.table, fk.column) {
 			continue
 		}
 		updateSQL := fmt.Sprintf(`
@@ -1410,17 +1413,17 @@ func migrateTicketIDToText(db *sql.DB) error {
 				SELECT 1 FROM tickets_old_int WHERE ticket_id = CAST(%s.%s AS INTEGER)
 			)
 		`, fk.table, fk.column, fk.table, fk.column, fk.table, fk.column)
-		if _, err := db.Exec(updateSQL); err != nil {
+		if _, err := db.ExecContext(ctx, updateSQL); err != nil {
 			return fmt.Errorf("migrateTicketIDToText: update %s.%s: %w", fk.table, fk.column, err)
 		}
 	}
 
-	if _, err := db.Exec(`DROP TABLE IF EXISTS tickets_old_int`); err != nil {
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS tickets_old_int`); err != nil {
 		return fmt.Errorf("migrateTicketIDToText: drop old table: %w", err)
 	}
 
 	// Recreate dependent tables so FK constraints point at tickets(ticket_id) instead of tickets_old_int.
-	if err := fixStaleFKsAfterTicketIDMigration(db); err != nil {
+	if err := fixStaleFKsAfterTicketIDMigration(ctx, db); err != nil {
 		return fmt.Errorf("migrateTicketIDToText: fix dependent FKs: %w", err)
 	}
 
@@ -1429,8 +1432,8 @@ func migrateTicketIDToText(db *sql.DB) error {
 
 // fixStaleFKsAfterTicketIDMigration recreates tables whose FK constraints still
 // reference tickets_old_int after the ticket_id TEXT migration.
-func fixStaleFKsAfterTicketIDMigration(db *sql.DB) error {
-	if !tableHsFKTo(db, "history_events", "tickets_old_int") {
+func fixStaleFKsAfterTicketIDMigration(ctx context.Context, db *sql.DB) error {
+	if !tableHsFKTo(ctx, db, "history_events", "tickets_old_int") {
 		return nil // already fixed
 	}
 	type tableMigration struct {
@@ -1447,23 +1450,23 @@ func fixStaleFKsAfterTicketIDMigration(db *sql.DB) error {
 		{name: "time_entries", create: `CREATE TABLE time_entries (time_entry_id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, minutes INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(user_id) REFERENCES users(user_id))`},
 	}
 	for _, m := range migrations {
-		if !tableExists(db, m.name) {
+		if !tableExists(ctx, db, m.name) {
 			continue
 		}
-		if !tableHsFKTo(db, m.name, "tickets_old_int") {
+		if !tableHsFKTo(ctx, db, m.name, "tickets_old_int") {
 			continue
 		}
 		tmp := m.name + "_fk_tmp"
-		if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmp)); err != nil {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmp)); err != nil {
 			return fmt.Errorf("rename %s: %w", m.name, err)
 		}
-		if _, err := db.Exec(m.create); err != nil {
+		if _, err := db.ExecContext(ctx, m.create); err != nil {
 			return fmt.Errorf("create %s: %w", m.name, err)
 		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmp)); err != nil {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmp)); err != nil {
 			return fmt.Errorf("copy %s: %w", m.name, err)
 		}
-		if _, err := db.Exec(fmt.Sprintf(`DROP TABLE %s`, tmp)); err != nil {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`DROP TABLE %s`, tmp)); err != nil {
 			return fmt.Errorf("drop %s: %w", tmp, err)
 		}
 	}
@@ -1493,16 +1496,16 @@ func parseTicketSequence(key string) int64 {
 // fixStaleForeignKeys recreates tables whose FOREIGN KEY references still
 // point at the old "tasks" table after the tasks→tickets rename. SQLite does
 // not support ALTER TABLE to change FK constraints, so we must recreate.
-func fixStaleForeignKeys(db *sql.DB) error {
-	if !tableHsFKTo(db, "history_events", "tasks") {
+func fixStaleForeignKeys(ctx context.Context, db *sql.DB) error {
+	if !tableHsFKTo(ctx, db, "history_events", "tasks") {
 		return nil // already migrated
 	}
 
 	// Temporarily disable FK checks so we can drop/recreate without cascading errors.
-	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return err
 	}
-	defer db.Exec(`PRAGMA foreign_keys = ON`) //nolint:errcheck
+	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
 
 	type tableMigration struct {
 		name   string
@@ -1569,20 +1572,20 @@ func fixStaleForeignKeys(db *sql.DB) error {
 	}
 
 	for _, m := range migrations {
-		if !tableHsFKTo(db, m.name, "tasks") {
+		if !tableHsFKTo(ctx, db, m.name, "tasks") {
 			continue
 		}
 		tmpName := m.name + "_migrate_tmp"
-		if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmpName)); err != nil {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmpName)); err != nil {
 			return fmt.Errorf("rename %s: %w", m.name, err)
 		}
-		if _, err := db.Exec(m.create); err != nil {
+		if _, err := db.ExecContext(ctx, m.create); err != nil {
 			return fmt.Errorf("create %s: %w", m.name, err)
 		}
-		if _, err := db.Exec(fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmpName)); err != nil {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmpName)); err != nil {
 			return fmt.Errorf("copy %s: %w", m.name, err)
 		}
-		if _, err := db.Exec(fmt.Sprintf(`DROP TABLE %s`, tmpName)); err != nil {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`DROP TABLE %s`, tmpName)); err != nil {
 			return fmt.Errorf("drop %s: %w", tmpName, err)
 		}
 	}
@@ -1590,8 +1593,8 @@ func fixStaleForeignKeys(db *sql.DB) error {
 }
 
 // tableHsFKTo returns true if the table has a foreign key referencing the given table.
-func tableHsFKTo(db *sql.DB, tableName, refTable string) bool {
-	rows, err := db.Query(fmt.Sprintf(`PRAGMA foreign_key_list(%s)`, tableName))
+func tableHsFKTo(ctx context.Context, db *sql.DB, tableName, refTable string) bool {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`PRAGMA foreign_key_list(%s)`, tableName))
 	if err != nil {
 		return false
 	}
@@ -1614,14 +1617,14 @@ func tableHsFKTo(db *sql.DB, tableName, refTable string) bool {
 	return false
 }
 
-func tableExists(db *sql.DB, tableName string) bool {
+func tableExists(ctx context.Context, db *sql.DB, tableName string) bool {
 	var count int
-	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tableName).Scan(&count)
+	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tableName).Scan(&count)
 	return err == nil && count > 0
 }
 
-func columnExists(db *sql.DB, tableName, columnName string) bool {
-	rows, err := db.Query(`PRAGMA table_info(` + tableName + `)`)
+func columnExists(ctx context.Context, db *sql.DB, tableName, columnName string) bool {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(` + tableName + `)`)
 	if err != nil {
 		return false
 	}

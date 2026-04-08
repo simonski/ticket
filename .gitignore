@@ -14,4 +14,5 @@ node_modules/
 playwright-report/
 test-results/
 coverage.out
-config.json
+config.json*.test
+task

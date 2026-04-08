@@ -131,7 +131,7 @@ Requirements:
 }
 
 func runStoryBreakdownViaTicketCLI(db *sql.DB, project store.Project, story store.Story) error {
-	role, err := store.GetRoleByTitle(db, "StoryReview")
+	role, err := store.GetRoleByTitle(context.Background(), db, "StoryReview")
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func runStoryBreakdownViaTicketCLI(db *sql.DB, project store.Project, story stor
 }
 
 func runRoleJSONAnalysis(db *sql.DB, roleTitle, prompt string, target any) error {
-	role, err := store.GetRoleByTitle(db, roleTitle)
+	role, err := store.GetRoleByTitle(context.Background(), db, roleTitle)
 	if err != nil {
 		return err
 	}

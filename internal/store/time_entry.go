@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 )
@@ -16,11 +17,11 @@ type TimeEntry struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func LogTime(db *sql.DB, ticketID string, userID string, minutes int, note string) (TimeEntry, error) {
+func LogTime(ctx context.Context, db *sql.DB, ticketID string, userID string, minutes int, note string) (TimeEntry, error) {
 	if minutes <= 0 {
 		return TimeEntry{}, errors.New("minutes must be positive")
 	}
-	result, err := db.Exec(`INSERT INTO time_entries (ticket_id, user_id, minutes, note) VALUES (?, ?, ?, ?)`, ticketID, userID, minutes, note)
+	result, err := db.ExecContext(ctx, `INSERT INTO time_entries (ticket_id, user_id, minutes, note) VALUES (?, ?, ?, ?)`, ticketID, userID, minutes, note)
 	if err != nil {
 		return TimeEntry{}, err
 	}
@@ -28,12 +29,12 @@ func LogTime(db *sql.DB, ticketID string, userID string, minutes int, note strin
 	if err != nil {
 		return TimeEntry{}, err
 	}
-	return GetTimeEntry(db, id)
+	return GetTimeEntry(ctx, db, id)
 }
 
-func GetTimeEntry(db *sql.DB, id int64) (TimeEntry, error) {
+func GetTimeEntry(ctx context.Context, db *sql.DB, id int64) (TimeEntry, error) {
 	var entry TimeEntry
-	err := db.QueryRow(`SELECT time_entry_id, ticket_id, user_id, minutes, note, created_at FROM time_entries WHERE time_entry_id = ?`, id).
+	err := db.QueryRowContext(ctx, `SELECT time_entry_id, ticket_id, user_id, minutes, note, created_at FROM time_entries WHERE time_entry_id = ?`, id).
 		Scan(&entry.ID, &entry.TicketID, &entry.UserID, &entry.Minutes, &entry.Note, &entry.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TimeEntry{}, ErrTimeEntryNotFound
@@ -41,8 +42,8 @@ func GetTimeEntry(db *sql.DB, id int64) (TimeEntry, error) {
 	return entry, err
 }
 
-func ListTimeEntries(db *sql.DB, ticketID string) ([]TimeEntry, error) {
-	rows, err := db.Query(`SELECT time_entry_id, ticket_id, user_id, minutes, note, created_at FROM time_entries WHERE ticket_id = ? ORDER BY created_at`, ticketID)
+func ListTimeEntries(ctx context.Context, db *sql.DB, ticketID string) ([]TimeEntry, error) {
+	rows, err := db.QueryContext(ctx, `SELECT time_entry_id, ticket_id, user_id, minutes, note, created_at FROM time_entries WHERE ticket_id = ? ORDER BY created_at`, ticketID)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +59,8 @@ func ListTimeEntries(db *sql.DB, ticketID string) ([]TimeEntry, error) {
 	return entries, rows.Err()
 }
 
-func DeleteTimeEntry(db *sql.DB, id int64) error {
-	result, err := db.Exec(`DELETE FROM time_entries WHERE time_entry_id = ?`, id)
+func DeleteTimeEntry(ctx context.Context, db *sql.DB, id int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM time_entries WHERE time_entry_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -73,9 +74,9 @@ func DeleteTimeEntry(db *sql.DB, id int64) error {
 	return nil
 }
 
-func TotalTimeForTicket(db *sql.DB, ticketID string) (int, error) {
+func TotalTimeForTicket(ctx context.Context, db *sql.DB, ticketID string) (int, error) {
 	var total sql.NullInt64
-	err := db.QueryRow(`SELECT SUM(minutes) FROM time_entries WHERE ticket_id = ?`, ticketID).Scan(&total)
+	err := db.QueryRowContext(ctx, `SELECT SUM(minutes) FROM time_entries WHERE ticket_id = ?`, ticketID).Scan(&total)
 	if err != nil {
 		return 0, err
 	}

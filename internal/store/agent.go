@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
@@ -19,7 +20,7 @@ type AgentUpdateParams struct {
 	Password *string
 }
 
-func CreateAgent(db *sql.DB, plainPassword string) (Agent, string, error) {
+func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (Agent, string, error) {
 	uuid := generateAgentUUID()
 
 	passwordToSet := strings.TrimSpace(plainPassword)
@@ -35,22 +36,22 @@ func CreateAgent(db *sql.DB, plainPassword string) (Agent, string, error) {
 		return Agent{}, "", err
 	}
 	// Use the UUID as both the user_id and the username for agents
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled, user_type, uuid, status, updated_at)
 		VALUES (?, ?, ?, 'agent', ?, 1, 'agent', ?, 'idle', CURRENT_TIMESTAMP)
 	`, uuid, uuid, hash, uuid, uuid)
 	if err != nil {
 		return Agent{}, "", err
 	}
-	agent, err := GetAgentByID(db, uuid)
+	agent, err := GetAgentByID(ctx, db, uuid)
 	if err != nil {
 		return Agent{}, "", err
 	}
 	return agent, passwordToSet, nil
 }
 
-func GetAgentByID(db *sql.DB, id string) (Agent, error) {
-	row := db.QueryRow(`
+func GetAgentByID(ctx context.Context, db *sql.DB, id string) (Agent, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_id = ? AND user_type = 'agent'
@@ -58,8 +59,8 @@ func GetAgentByID(db *sql.DB, id string) (Agent, error) {
 	return scanUser(row.Scan)
 }
 
-func GetAgentByUUID(db *sql.DB, uuid string) (Agent, error) {
-	row := db.QueryRow(`
+func GetAgentByUUID(ctx context.Context, db *sql.DB, uuid string) (Agent, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE uuid = ? AND user_type = 'agent'
@@ -67,8 +68,8 @@ func GetAgentByUUID(db *sql.DB, uuid string) (Agent, error) {
 	return scanUser(row.Scan)
 }
 
-func ListAgents(db *sql.DB) ([]Agent, error) {
-	rows, err := db.Query(`
+func ListAgents(ctx context.Context, db *sql.DB) ([]Agent, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_type = 'agent'
@@ -90,7 +91,7 @@ func ListAgents(db *sql.DB) ([]Agent, error) {
 	return agents, rows.Err()
 }
 
-func UpdateAgent(db *sql.DB, id string, params AgentUpdateParams) (Agent, error) {
+func UpdateAgent(ctx context.Context, db *sql.DB, id string, params AgentUpdateParams) (Agent, error) {
 	if params.Password == nil {
 		return Agent{}, errors.New("agent update requires -password")
 	}
@@ -101,7 +102,7 @@ func UpdateAgent(db *sql.DB, id string, params AgentUpdateParams) (Agent, error)
 	if err != nil {
 		return Agent{}, err
 	}
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		UPDATE users
 		SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = ? AND user_type = 'agent'
@@ -109,15 +110,15 @@ func UpdateAgent(db *sql.DB, id string, params AgentUpdateParams) (Agent, error)
 	if err != nil {
 		return Agent{}, err
 	}
-	return GetAgentByID(db, id)
+	return GetAgentByID(ctx, db, id)
 }
 
-func DeleteAgent(db *sql.DB, id string) error {
+func DeleteAgent(ctx context.Context, db *sql.DB, id string) error {
 	// Delete sessions for this agent first
-	if _, err := db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
+	if _, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
 		return err
 	}
-	result, err := db.Exec(`DELETE FROM users WHERE user_id = ? AND user_type = 'agent'`, id)
+	result, err := db.ExecContext(ctx, `DELETE FROM users WHERE user_id = ? AND user_type = 'agent'`, id)
 	if err != nil {
 		return err
 	}
@@ -131,12 +132,12 @@ func DeleteAgent(db *sql.DB, id string) error {
 	return nil
 }
 
-func SetAgentEnabled(db *sql.DB, id string, enabled bool) (Agent, error) {
+func SetAgentEnabled(ctx context.Context, db *sql.DB, id string, enabled bool) (Agent, error) {
 	status := "disabled"
 	if enabled {
 		status = "idle"
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		UPDATE users
 		SET enabled = ?, status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = ? AND user_type = 'agent'
@@ -151,15 +152,15 @@ func SetAgentEnabled(db *sql.DB, id string, enabled bool) (Agent, error) {
 	if affected == 0 {
 		return Agent{}, sql.ErrNoRows
 	}
-	return GetAgentByID(db, id)
+	return GetAgentByID(ctx, db, id)
 }
 
-func AuthenticateAgent(db *sql.DB, agentID, plainPassword string) (Agent, error) {
+func AuthenticateAgent(ctx context.Context, db *sql.DB, agentID, plainPassword string) (Agent, error) {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" || strings.TrimSpace(plainPassword) == "" {
 		return Agent{}, ErrInvalidCredentials
 	}
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`, password_hash
 		FROM users
 		WHERE uuid = ? AND user_type = 'agent'
@@ -193,12 +194,12 @@ func AuthenticateAgent(db *sql.DB, agentID, plainPassword string) (Agent, error)
 	return a, nil
 }
 
-func TouchAgent(db *sql.DB, id string, status string) (Agent, error) {
+func TouchAgent(ctx context.Context, db *sql.DB, id string, status string) (Agent, error) {
 	status = strings.TrimSpace(status)
 	if status == "" {
 		status = "idle"
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		UPDATE users
 		SET status = ?, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = ?
@@ -213,7 +214,7 @@ func TouchAgent(db *sql.DB, id string, status string) (Agent, error) {
 	if affected == 0 {
 		return Agent{}, sql.ErrNoRows
 	}
-	return GetAgentByID(db, id)
+	return GetAgentByID(ctx, db, id)
 }
 
 func generateAgentUUID() string {
@@ -233,8 +234,8 @@ func randomSecret(n int) (string, error) {
 
 // ReapStaleAgents sets any non-idle agent to "idle" if its last_seen is older
 // than the given threshold (in minutes). Returns the number of agents reaped.
-func ReapStaleAgents(db *sql.DB, thresholdMinutes int) (int64, error) {
-	result, err := db.Exec(`
+func ReapStaleAgents(ctx context.Context, db *sql.DB, thresholdMinutes int) (int64, error) {
+	result, err := db.ExecContext(ctx, `
 		UPDATE users
 		SET status = 'idle', updated_at = CURRENT_TIMESTAMP
 		WHERE user_type = 'agent' AND enabled = 1
@@ -258,8 +259,8 @@ type AgentStatus struct {
 }
 
 // ListAgentStatuses returns all agents with their currently assigned active ticket.
-func ListAgentStatuses(db *sql.DB) ([]AgentStatus, error) {
-	agents, err := ListAgents(db)
+func ListAgentStatuses(ctx context.Context, db *sql.DB) ([]AgentStatus, error) {
+	agents, err := ListAgents(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -267,16 +268,16 @@ func ListAgentStatuses(db *sql.DB) ([]AgentStatus, error) {
 	for _, a := range agents {
 		as := AgentStatus{Agent: a}
 		var ticketID string
-		err := db.QueryRow(`
+		err := db.QueryRowContext(ctx, `
 			SELECT t.ticket_id FROM tickets t
 			WHERE t.assignee = ? AND t.state = 'active' AND t.open = 1
 			LIMIT 1
 		`, a.Username).Scan(&ticketID)
 		if err == nil {
 			as.TicketKey = &ticketID
-			ticket, err := GetTicket(db, ticketID)
+			ticket, err := GetTicket(ctx, db, ticketID)
 			if err == nil {
-				ctx := EnrichTicketContext(db, ticket)
+				ctx := EnrichTicketContext(ctx, db, ticket)
 				if ctx.Project != nil {
 					as.ProjectName = ctx.Project.Prefix
 				}
@@ -309,12 +310,12 @@ type AgentConfigEntry struct {
 	Value  string `json:"value"`
 }
 
-func SetAgentConfig(db *sql.DB, agentID string, key, value string) error {
+func SetAgentConfig(ctx context.Context, db *sql.DB, agentID string, key, value string) error {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return errors.New("config key is required")
 	}
-	_, err := db.Exec(`
+	_, err := db.ExecContext(ctx, `
 		INSERT INTO agent_config (user_id, key, value, updated_at)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
@@ -322,8 +323,8 @@ func SetAgentConfig(db *sql.DB, agentID string, key, value string) error {
 	return err
 }
 
-func ListAgentConfig(db *sql.DB, agentID string) ([]AgentConfigEntry, error) {
-	rows, err := db.Query(`SELECT user_id, key, value FROM agent_config WHERE user_id = ? ORDER BY key`, agentID)
+func ListAgentConfig(ctx context.Context, db *sql.DB, agentID string) ([]AgentConfigEntry, error) {
+	rows, err := db.QueryContext(ctx, `SELECT user_id, key, value FROM agent_config WHERE user_id = ? ORDER BY key`, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -339,8 +340,8 @@ func ListAgentConfig(db *sql.DB, agentID string) ([]AgentConfigEntry, error) {
 	return entries, rows.Err()
 }
 
-func DeleteAgentConfig(db *sql.DB, agentID string, key string) error {
-	result, err := db.Exec(`DELETE FROM agent_config WHERE user_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
+func DeleteAgentConfig(ctx context.Context, db *sql.DB, agentID string, key string) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM agent_config WHERE user_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
 	if err != nil {
 		return err
 	}
@@ -352,8 +353,8 @@ func DeleteAgentConfig(db *sql.DB, agentID string, key string) error {
 }
 
 // GetAgentConfigMap returns agent config as a map[string]string.
-func GetAgentConfigMap(db *sql.DB, agentID string) (map[string]string, error) {
-	entries, err := ListAgentConfig(db, agentID)
+func GetAgentConfigMap(ctx context.Context, db *sql.DB, agentID string) (map[string]string, error) {
+	entries, err := ListAgentConfig(ctx, db, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -366,9 +367,9 @@ func GetAgentConfigMap(db *sql.DB, agentID string) (map[string]string, error) {
 
 // GetAgentConfigUpdatedAt returns the most recent updated_at timestamp from agent_config.
 // Returns empty string if no config exists.
-func GetAgentConfigUpdatedAt(db *sql.DB, agentID string) (string, error) {
+func GetAgentConfigUpdatedAt(ctx context.Context, db *sql.DB, agentID string) (string, error) {
 	var updatedAt sql.NullString
-	err := db.QueryRow(`
+	err := db.QueryRowContext(ctx, `
 		SELECT MAX(updated_at) FROM agent_config WHERE user_id = ?
 	`, agentID).Scan(&updatedAt)
 	if err != nil {

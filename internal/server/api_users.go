@@ -21,7 +21,7 @@ func (r *router) registerUserHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			users, err := store.ListUsers(db)
+			users, err := store.ListUsers(r.Context(), db)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -37,7 +37,7 @@ func (r *router) registerUserHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			user, err := store.CreateUser(db, credentials.Username, credentials.Password, "user")
+			user, err := store.CreateUser(r.Context(), db, credentials.Username, credentials.Password, "user")
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
@@ -65,7 +65,7 @@ func (r *router) registerUserHandlers() {
 				writeError(w, http.StatusNotFound, "not found")
 				return
 			}
-			if err := store.DeleteUser(db, parts[0]); err != nil {
+			if err := store.DeleteUser(r.Context(), db, parts[0]); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "user not found")
 					return
@@ -96,7 +96,7 @@ func (r *router) registerUserHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			user, err := store.ResetUserPassword(db, username, payload.Password)
+			user, err := store.ResetUserPassword(r.Context(), db, username, payload.Password)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "user not found")
@@ -111,7 +111,7 @@ func (r *router) registerUserHandlers() {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		if err := store.SetUserEnabled(db, username, enabled); err != nil {
+		if err := store.SetUserEnabled(r.Context(), db, username, enabled); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "user not found")
 				return

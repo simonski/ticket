@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -49,12 +50,12 @@ type WorkflowExport struct {
 	Stages      []WorkflowStageExport `json:"stages"`
 }
 
-func CreateWorkflow(db *sql.DB, name, description string) (Workflow, error) {
+func CreateWorkflow(ctx context.Context, db *sql.DB, name, description string) (Workflow, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Workflow{}, errors.New("workflow name is required")
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO workflows (name, description, updated_at)
 		VALUES (?, ?, CURRENT_TIMESTAMP)
 	`, name, strings.TrimSpace(description))
@@ -65,11 +66,11 @@ func CreateWorkflow(db *sql.DB, name, description string) (Workflow, error) {
 	if err != nil {
 		return Workflow{}, err
 	}
-	return getWorkflowRow(db, id)
+	return getWorkflowRow(ctx, db, id)
 }
 
-func ListWorkflows(db *sql.DB) ([]Workflow, error) {
-	rows, err := db.Query(`
+func ListWorkflows(ctx context.Context, db *sql.DB) ([]Workflow, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT workflow_id, name, description, created_at, updated_at
 		FROM workflows
 		ORDER BY name
@@ -89,23 +90,23 @@ func ListWorkflows(db *sql.DB) ([]Workflow, error) {
 	return workflows, rows.Err()
 }
 
-func GetWorkflow(db *sql.DB, id int64) (WorkflowWithStages, error) {
-	w, err := getWorkflowRow(db, id)
+func GetWorkflow(ctx context.Context, db *sql.DB, id int64) (WorkflowWithStages, error) {
+	w, err := getWorkflowRow(ctx, db, id)
 	if err != nil {
 		return WorkflowWithStages{}, err
 	}
-	stages, err := listWorkflowStages(db, id)
+	stages, err := listWorkflowStages(ctx, db, id)
 	if err != nil {
 		return WorkflowWithStages{}, err
 	}
 	return WorkflowWithStages{Workflow: w, Stages: stages}, nil
 }
 
-func DeleteWorkflow(db *sql.DB, id int64) error {
-	if _, err := db.Exec(`DELETE FROM workflow_stages WHERE workflow_id = ?`, id); err != nil {
+func DeleteWorkflow(ctx context.Context, db *sql.DB, id int64) error {
+	if _, err := db.ExecContext(ctx, `DELETE FROM workflow_stages WHERE workflow_id = ?`, id); err != nil {
 		return err
 	}
-	result, err := db.Exec(`DELETE FROM workflows WHERE workflow_id = ?`, id)
+	result, err := db.ExecContext(ctx, `DELETE FROM workflows WHERE workflow_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -119,12 +120,12 @@ func DeleteWorkflow(db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddWorkflowStage(db *sql.DB, workflowID int64, stageName, description string, roleID *int64, sortOrder int) (WorkflowStage, error) {
+func AddWorkflowStage(ctx context.Context, db *sql.DB, workflowID int64, stageName, description string, roleID *int64, sortOrder int) (WorkflowStage, error) {
 	stageName = strings.TrimSpace(stageName)
 	if stageName == "" {
 		return WorkflowStage{}, errors.New("stage name is required")
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO workflow_stages (workflow_id, stage_name, description, role_id, sort_order, updated_at)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, workflowID, stageName, strings.TrimSpace(description), roleID, sortOrder)
@@ -135,11 +136,11 @@ func AddWorkflowStage(db *sql.DB, workflowID int64, stageName, description strin
 	if err != nil {
 		return WorkflowStage{}, err
 	}
-	return getWorkflowStageRow(db, id)
+	return getWorkflowStageRow(ctx, db, id)
 }
 
-func RemoveWorkflowStage(db *sql.DB, stageID int64) error {
-	result, err := db.Exec(`DELETE FROM workflow_stages WHERE workflow_stage_id = ?`, stageID)
+func RemoveWorkflowStage(ctx context.Context, db *sql.DB, stageID int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM workflow_stages WHERE workflow_stage_id = ?`, stageID)
 	if err != nil {
 		return err
 	}
@@ -153,9 +154,9 @@ func RemoveWorkflowStage(db *sql.DB, stageID int64) error {
 	return nil
 }
 
-func ReorderWorkflowStages(db *sql.DB, workflowID int64, orderedStageIDs []int64) error {
+func ReorderWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64, orderedStageIDs []int64) error {
 	for i, id := range orderedStageIDs {
-		result, err := db.Exec(`
+		result, err := db.ExecContext(ctx, `
 			UPDATE workflow_stages SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE workflow_stage_id = ? AND workflow_id = ?
 		`, i, id, workflowID)
@@ -173,8 +174,8 @@ func ReorderWorkflowStages(db *sql.DB, workflowID int64, orderedStageIDs []int64
 	return nil
 }
 
-func ExportWorkflow(db *sql.DB, id int64) (WorkflowExport, error) {
-	wf, err := GetWorkflow(db, id)
+func ExportWorkflow(ctx context.Context, db *sql.DB, id int64) (WorkflowExport, error) {
+	wf, err := GetWorkflow(ctx, db, id)
 	if err != nil {
 		return WorkflowExport{}, err
 	}
@@ -194,25 +195,25 @@ func ExportWorkflow(db *sql.DB, id int64) (WorkflowExport, error) {
 	return export, nil
 }
 
-func ImportWorkflow(db *sql.DB, export WorkflowExport) (Workflow, error) {
+func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Workflow, error) {
 	name := strings.TrimSpace(export.Name)
 	if name == "" {
 		return Workflow{}, errors.New("workflow name is required")
 	}
-	wf, err := CreateWorkflow(db, name, export.Description)
+	wf, err := CreateWorkflow(ctx, db, name, export.Description)
 	if err != nil {
 		return Workflow{}, err
 	}
 	for _, s := range export.Stages {
 		var roleID *int64
 		if strings.TrimSpace(s.Role) != "" {
-			role, err := GetRoleByTitle(db, s.Role)
+			role, err := GetRoleByTitle(ctx, db, s.Role)
 			if err != nil {
 				return Workflow{}, fmt.Errorf("role %q not found: %w", s.Role, err)
 			}
 			roleID = &role.ID
 		}
-		if _, err := AddWorkflowStage(db, wf.ID, s.StageName, s.Description, roleID, s.SortOrder); err != nil {
+		if _, err := AddWorkflowStage(ctx, db, wf.ID, s.StageName, s.Description, roleID, s.SortOrder); err != nil {
 			return Workflow{}, err
 		}
 	}
@@ -221,8 +222,8 @@ func ImportWorkflow(db *sql.DB, export WorkflowExport) (Workflow, error) {
 
 // internal helpers
 
-func getWorkflowRow(db *sql.DB, id int64) (Workflow, error) {
-	row := db.QueryRow(`
+func getWorkflowRow(ctx context.Context, db *sql.DB, id int64) (Workflow, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT workflow_id, name, description, created_at, updated_at
 		FROM workflows
 		WHERE workflow_id = ?
@@ -234,8 +235,8 @@ func getWorkflowRow(db *sql.DB, id int64) (Workflow, error) {
 	return w, nil
 }
 
-func getWorkflowStageRow(db *sql.DB, id int64) (WorkflowStage, error) {
-	row := db.QueryRow(`
+func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowStage, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT ws.workflow_stage_id, ws.workflow_id, ws.stage_name, ws.description,
 		       ws.definition_of_ready, ws.definition_of_done,
 		       ws.role_id, COALESCE(r.title, ''), ws.sort_order, ws.created_at, ws.updated_at
@@ -252,8 +253,8 @@ func getWorkflowStageRow(db *sql.DB, id int64) (WorkflowStage, error) {
 	return s, nil
 }
 
-func listWorkflowStages(db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
-	rows, err := db.Query(`
+func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]WorkflowStage, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT ws.workflow_stage_id, ws.workflow_id, ws.stage_name, ws.description,
 		       ws.definition_of_ready, ws.definition_of_done,
 		       ws.role_id, COALESCE(r.title, ''), ws.sort_order, ws.created_at, ws.updated_at

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -1838,7 +1839,7 @@ Targets:
 		var ctx store.TicketContext
 		if resolved, err := config.ResolveURL(); err == nil && resolved.DBPath != "" {
 			if db, err := store.Open(resolved.DBPath); err == nil {
-				ctx = store.EnrichTicketContext(db, ticket)
+				ctx = store.EnrichTicketContext(context.Background(), db, ticket)
 				db.Close()
 			}
 		}

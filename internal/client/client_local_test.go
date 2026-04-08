@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -191,7 +192,7 @@ func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 	if status.User.Username != "admin" {
 		t.Fatalf("Status().User.Username = %q, want admin", status.User.Username)
 	}
-	if _, err := store.GetUserByUsername(mustOpenDB(t, dbPath), localUsername()); err != nil {
+	if _, err := store.GetUserByUsername(context.Background(), mustOpenDB(t, dbPath), localUsername()); err != nil {
 		t.Fatalf("Status() should use existing admin user, err = %v", err)
 	}
 }

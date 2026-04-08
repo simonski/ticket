@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 )
 
@@ -16,15 +17,15 @@ type CountSummary struct {
 	Types    []TypeCount `json:"types"`
 }
 
-func CountEverything(db *sql.DB, projectID *int64) (CountSummary, error) {
+func CountEverything(ctx context.Context, db *sql.DB, projectID *int64) (CountSummary, error) {
 	var summary CountSummary
 
-	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&summary.Users); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&summary.Users); err != nil {
 		return CountSummary{}, err
 	}
 
 	if projectID == nil {
-		if err := db.QueryRow(`SELECT COUNT(*) FROM projects`).Scan(&summary.Projects); err != nil {
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM projects`).Scan(&summary.Projects); err != nil {
 			return CountSummary{}, err
 		}
 	}
@@ -37,9 +38,9 @@ func CountEverything(db *sql.DB, projectID *int64) (CountSummary, error) {
 	var err error
 	if projectID != nil {
 		query += ` WHERE project_id = ?`
-		rows, err = db.Query(query+` GROUP BY type, stage, state ORDER BY type, stage, state`, *projectID)
+		rows, err = db.QueryContext(ctx, query+` GROUP BY type, stage, state ORDER BY type, stage, state`, *projectID)
 	} else {
-		rows, err = db.Query(query + ` GROUP BY type, stage, state ORDER BY type, stage, state`)
+		rows, err = db.QueryContext(ctx, query + ` GROUP BY type, stage, state ORDER BY type, stage, state`)
 	}
 	if err != nil {
 		return CountSummary{}, err

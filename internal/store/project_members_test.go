@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -8,16 +9,16 @@ import (
 func TestProjectMemberCRUD(t *testing.T) {
 	db := testDB(t)
 
-	admin, err := GetUserByUsername(db, "admin")
+	admin, err := GetUserByUsername(context.Background(), db, "admin")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(admin) error = %v", err)
 	}
-	alice, err := CreateUser(db, "alice", "password123", "user")
+	alice, err := CreateUser(context.Background(), db, "alice", "password123", "user")
 	if err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	project, err := CreateProjectWithParams(db, ProjectCreateParams{
+	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
 		Prefix:     "PM",
 		Title:      "Members Project",
 		Visibility: ProjectVisibilityPrivate,
@@ -28,7 +29,7 @@ func TestProjectMemberCRUD(t *testing.T) {
 	}
 
 	// Add member
-	member, err := AddProjectMember(db, project.ID, alice.ID, ProjectRoleEditor)
+	member, err := AddProjectMember(context.Background(), db, project.ID, alice.ID, ProjectRoleEditor)
 	if err != nil {
 		t.Fatalf("AddProjectMember() error = %v", err)
 	}
@@ -40,7 +41,7 @@ func TestProjectMemberCRUD(t *testing.T) {
 	}
 
 	// List members (admin is auto-added as owner when creating the project)
-	members, err := ListProjectMembers(db, project.ID)
+	members, err := ListProjectMembers(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("ListProjectMembers() error = %v", err)
 	}
@@ -49,7 +50,7 @@ func TestProjectMemberCRUD(t *testing.T) {
 	}
 
 	// ProjectRoleForUser
-	role, found, err := ProjectRoleForUser(db, project.ID, alice.ID)
+	role, found, err := ProjectRoleForUser(context.Background(), db, project.ID, alice.ID)
 	if err != nil {
 		t.Fatalf("ProjectRoleForUser() error = %v", err)
 	}
@@ -61,11 +62,11 @@ func TestProjectMemberCRUD(t *testing.T) {
 	}
 
 	// ProjectRoleForUser for non-member
-	bob, err := CreateUser(db, "bob", "password123", "user")
+	bob, err := CreateUser(context.Background(), db, "bob", "password123", "user")
 	if err != nil {
 		t.Fatalf("CreateUser(bob) error = %v", err)
 	}
-	_, found, err = ProjectRoleForUser(db, project.ID, bob.ID)
+	_, found, err = ProjectRoleForUser(context.Background(), db, project.ID, bob.ID)
 	if err != nil {
 		t.Fatalf("ProjectRoleForUser(bob) error = %v", err)
 	}
@@ -74,22 +75,22 @@ func TestProjectMemberCRUD(t *testing.T) {
 	}
 
 	// Remove member
-	if err := RemoveProjectMember(db, project.ID, alice.ID); err != nil {
+	if err := RemoveProjectMember(context.Background(), db, project.ID, alice.ID); err != nil {
 		t.Fatalf("RemoveProjectMember() error = %v", err)
 	}
 
 	// Remove again should fail
-	if err := RemoveProjectMember(db, project.ID, alice.ID); !errors.Is(err, ErrProjectMembershipNotFound) {
+	if err := RemoveProjectMember(context.Background(), db, project.ID, alice.ID); !errors.Is(err, ErrProjectMembershipNotFound) {
 		t.Fatalf("RemoveProjectMember(again) error = %v, want ErrProjectMembershipNotFound", err)
 	}
 
 	// AddProjectMember with invalid role should fail
-	if _, err := AddProjectMember(db, project.ID, alice.ID, "invalid"); err == nil {
+	if _, err := AddProjectMember(context.Background(), db, project.ID, alice.ID, "invalid"); err == nil {
 		t.Fatal("AddProjectMember(invalid role) error = nil, want error")
 	}
 
 	// List should only have admin left
-	members, err = ListProjectMembers(db, project.ID)
+	members, err = ListProjectMembers(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("ListProjectMembers() after remove error = %v", err)
 	}

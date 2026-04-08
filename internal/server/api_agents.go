@@ -25,7 +25,7 @@ func (r *router) registerAgentHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			agents, err := store.ListAgents(db)
+			agents, err := store.ListAgents(r.Context(), db)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -41,7 +41,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			agent, generatedPassword, err := store.CreateAgent(db, payload.Password)
+			agent, generatedPassword, err := store.CreateAgent(r.Context(), db, payload.Password)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
@@ -71,7 +71,7 @@ func (r *router) registerAgentHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			statuses, err := store.ListAgentStatuses(db)
+			statuses, err := store.ListAgentStatuses(r.Context(), db)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -89,7 +89,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
+			agent, err := store.AuthenticateAgent(r.Context(), db, agentID, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
@@ -98,7 +98,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			agent, err = store.TouchAgent(db, agent.ID, "online")
+			agent, err = store.TouchAgent(r.Context(), db, agent.ID, "online")
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -116,7 +116,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusUnauthorized, "basic auth required")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
+			agent, err := store.AuthenticateAgent(r.Context(), db, agentID, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
@@ -133,7 +133,7 @@ func (r *router) registerAgentHandlers() {
 			if status == "" {
 				status = agent.Status // keep current status
 			}
-			agent, err = store.TouchAgent(db, agent.ID, status)
+			agent, err = store.TouchAgent(r.Context(), db, agent.ID, status)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -165,7 +165,7 @@ func (r *router) registerAgentHandlers() {
 				}
 			}
 			vlog("request from agent=%q project_id=%d", agentID, payload.ProjectID)
-			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
+			agent, err := store.AuthenticateAgent(r.Context(), db, agentID, agentPass)
 			if err != nil {
 				vlog("auth failed for agent=%q: %v", agentID, err)
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
@@ -178,7 +178,7 @@ func (r *router) registerAgentHandlers() {
 			vlog("agent=%q authenticated (id=%s)", agent.Username, agent.ID)
 			projectID := payload.ProjectID
 			if payload.TicketID == nil && projectID == 0 {
-				projects, err := store.ListProjects(db)
+				projects, err := store.ListProjects(r.Context(), db)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -194,7 +194,7 @@ func (r *router) registerAgentHandlers() {
 					vlog("no open projects found")
 				}
 			}
-			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(db, projectID, agent.Username)
+			currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(r.Context(), db, projectID, agent.Username)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -204,7 +204,7 @@ func (r *router) registerAgentHandlers() {
 			} else {
 				vlog("agent has no current assignment")
 			}
-			ticket, status, err := store.RequestTicket(db, store.TicketRequestParams{
+			ticket, status, err := store.RequestTicket(r.Context(), db, store.TicketRequestParams{
 				ProjectID: projectID,
 				TicketID:  payload.TicketID,
 				Username:  agent.Username,
@@ -220,7 +220,7 @@ func (r *router) registerAgentHandlers() {
 			if status == "NO-WORK" {
 				// Explain why no work was found.
 				vlog("explaining NO-WORK decision for project=%d:", projectID)
-				if reasons, err := store.ExplainNoWork(db, projectID, agent.Username); err == nil {
+				if reasons, err := store.ExplainNoWork(r.Context(), db, projectID, agent.Username); err == nil {
 					for _, reason := range reasons {
 						vlog("  %s", reason)
 					}
@@ -245,21 +245,21 @@ func (r *router) registerAgentHandlers() {
 				agentStatus = status
 			}
 			if status == "ASSIGNED" && agentStatus == "NEW" {
-				_, _ = store.TouchAgent(db, agent.ID, "working")
+				_, _ = store.TouchAgent(r.Context(), db, agent.ID, "working")
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 			} else {
-				_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+				_, _ = store.TouchAgent(r.Context(), db, agent.ID, "soliciting")
 			}
 			// Check if config should be included in response.
 			// Include config if: 1) it has changed since last poll, or 2) a new ticket is assigned
 			var configMap map[string]string
 			var configUpdatedAt string
-			currentConfigUpdatedAt, err := store.GetAgentConfigUpdatedAt(db, agent.ID)
+			currentConfigUpdatedAt, err := store.GetAgentConfigUpdatedAt(r.Context(), db, agent.ID)
 			if err == nil {
 				configHasChanged := payload.ConfigUpdatedAt != currentConfigUpdatedAt
 				includeConfig := configHasChanged || agentStatus == "NEW"
 				if includeConfig {
-					configMap, err = store.GetAgentConfigMap(db, agent.ID)
+					configMap, err = store.GetAgentConfigMap(r.Context(), db, agent.ID)
 					if err == nil && len(configMap) > 0 {
 						configUpdatedAt = currentConfigUpdatedAt
 						vlog("including config in response (changed=%v, new_ticket=%v)", configHasChanged, agentStatus == "NEW")
@@ -278,7 +278,7 @@ func (r *router) registerAgentHandlers() {
 			}
 			if agentStatus == "NEW" || agentStatus == "CURRENT" {
 				response["ticket"] = ticket
-				ctx := store.EnrichTicketContext(db, ticket)
+				ctx := store.EnrichTicketContext(r.Context(), db, ticket)
 				response["project"] = ctx.Project
 				response["parents"] = ctx.Parents
 				response["workflow"] = ctx.Workflow
@@ -310,7 +310,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			agent, err := store.AuthenticateAgent(db, agentID, agentPass)
+			agent, err := store.AuthenticateAgent(r.Context(), db, agentID, agentPass)
 			if err != nil {
 				if errors.Is(err, store.ErrInvalidCredentials) || errors.Is(err, store.ErrForbidden) {
 					writeAuthError(w, err)
@@ -319,7 +319,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			current, err := store.GetTicket(db, ticketID)
+			current, err := store.GetTicket(r.Context(), db, ticketID)
 			if err != nil {
 				if errors.Is(err, store.ErrTicketNotFound) {
 					writeError(w, http.StatusNotFound, "ticket not found")
@@ -328,7 +328,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			updated, err := store.UpdateTicket(db, ticketID, store.TicketUpdateParams{
+			updated, err := store.UpdateTicket(r.Context(), db, ticketID, store.TicketUpdateParams{
 				Title:              current.Title,
 				Description:        current.Description,
 				AcceptanceCriteria: current.AcceptanceCriteria,
@@ -349,14 +349,14 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			_ = store.AddHistoryEvent(db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
+			_ = store.AddHistoryEvent(r.Context(), db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
 				"key":       updated.ID,
 				"agent":     agent.Username,
 				"result":    payload.Result,
 				"new_stage": updated.Stage,
 				"new_state": updated.State,
 			}, agent.ID)
-			_, _ = store.TouchAgent(db, agent.ID, "soliciting")
+			_, _ = store.TouchAgent(r.Context(), db, agent.ID, "soliciting")
 			notify("ticket_updated", updated.ProjectID, updated.ID)
 			writeJSON(w, http.StatusOK, updated)
 			return
@@ -379,7 +379,7 @@ func (r *router) registerAgentHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				updated, err := store.UpdateAgent(db, id, store.AgentUpdateParams{
+				updated, err := store.UpdateAgent(r.Context(), db, id, store.AgentUpdateParams{
 					Password: nullableTrimmed(payload.Password),
 				})
 				if err != nil {
@@ -392,7 +392,7 @@ func (r *router) registerAgentHandlers() {
 				}
 				writeJSON(w, http.StatusOK, updated)
 			case http.MethodDelete:
-				if err := store.DeleteAgent(db, id); err != nil {
+				if err := store.DeleteAgent(r.Context(), db, id); err != nil {
 					if errors.Is(err, sql.ErrNoRows) {
 						writeError(w, http.StatusNotFound, "agent not found")
 						return
@@ -409,7 +409,7 @@ func (r *router) registerAgentHandlers() {
 		if (len(parts) == 2 || len(parts) == 3) && parts[1] == "config" {
 			switch r.Method {
 			case http.MethodGet:
-				entries, err := store.ListAgentConfig(db, id)
+				entries, err := store.ListAgentConfig(r.Context(), db, id)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return
@@ -424,7 +424,7 @@ func (r *router) registerAgentHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				if err := store.SetAgentConfig(db, id, payload.Key, payload.Value); err != nil {
+				if err := store.SetAgentConfig(r.Context(), db, id, payload.Key, payload.Value); err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
@@ -434,7 +434,7 @@ func (r *router) registerAgentHandlers() {
 					writeError(w, http.StatusBadRequest, "usage: /api/agents/{id}/config/{key}")
 					return
 				}
-				if err := store.DeleteAgentConfig(db, id, parts[2]); err != nil {
+				if err := store.DeleteAgentConfig(r.Context(), db, id, parts[2]); err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
@@ -455,7 +455,7 @@ func (r *router) registerAgentHandlers() {
 				writeError(w, http.StatusNotFound, "not found")
 				return
 			}
-			updated, err := store.SetAgentEnabled(db, id, enabled)
+			updated, err := store.SetAgentEnabled(r.Context(), db, id, enabled)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "agent not found")

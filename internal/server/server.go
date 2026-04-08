@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -47,7 +48,7 @@ func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
 	const thresholdMinutes = 10
 
 	reap := func() {
-		n, err := store.ReapStaleAgents(db, thresholdMinutes)
+		n, err := store.ReapStaleAgents(context.Background(), db, thresholdMinutes)
 		if err != nil && verbose {
 			slog.Error("agent reaper error", "error", err)
 		}
@@ -76,7 +77,7 @@ func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
 // environment variable (default: 0 = keep forever).
 func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 	purge := func() {
-		if n, err := store.PurgeExpiredSessions(db); err != nil {
+		if n, err := store.PurgeExpiredSessions(context.Background(), db); err != nil {
 			slog.Error("session purge error", "error", err)
 		} else if n > 0 && verbose {
 			slog.Info("purged expired sessions", "count", n)
@@ -88,7 +89,7 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 				slog.Error("invalid TICKET_HISTORY_RETENTION_DAYS", "value", v)
 			}
 		}
-		if n, err := store.PurgeOldHistory(db, retentionDays); err != nil {
+		if n, err := store.PurgeOldHistory(context.Background(), db, retentionDays); err != nil {
 			slog.Error("history purge error", "error", err)
 		} else if n > 0 && verbose {
 			slog.Info("purged old history events", "count", n, "retention_days", retentionDays)

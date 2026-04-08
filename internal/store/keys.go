@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -71,7 +72,7 @@ func deriveProjectPrefix(title string) string {
 	return value
 }
 
-func nextUniqueProjectPrefix(db *sql.DB, desired string) (string, error) {
+func nextUniqueProjectPrefix(ctx context.Context, db *sql.DB, desired string) (string, error) {
 	desired = normalizeProjectPrefix(desired)
 	if err := validateProjectPrefix(desired); err != nil {
 		return "", err
@@ -87,7 +88,7 @@ func nextUniqueProjectPrefix(db *sql.DB, desired string) (string, error) {
 			candidate = base + suffix
 		}
 		var count int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE prefix = ?`, candidate).Scan(&count); err != nil {
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM projects WHERE prefix = ?`, candidate).Scan(&count); err != nil {
 			return "", err
 		}
 		if count == 0 {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -24,7 +25,7 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, generatedPassword, err := CreateAgent(db, "")
+	agent, generatedPassword, err := CreateAgent(context.Background(), db, "")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -49,7 +50,7 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 	}
 
 	// Authenticate by UUID
-	authenticated, err := AuthenticateAgent(db, agent.ID, generatedPassword)
+	authenticated, err := AuthenticateAgent(context.Background(), db, agent.ID, generatedPassword)
 	if err != nil {
 		t.Fatalf("AuthenticateAgent() error = %v", err)
 	}
@@ -62,7 +63,7 @@ func TestAgentUpdateAndLifecycle(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, password, err := CreateAgent(db, "secret-1")
+	agent, password, err := CreateAgent(context.Background(), db, "secret-1")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -71,39 +72,39 @@ func TestAgentUpdateAndLifecycle(t *testing.T) {
 	}
 
 	updatedPassword := "secret-2"
-	_, err = UpdateAgent(db, agent.ID, AgentUpdateParams{
+	_, err = UpdateAgent(context.Background(), db, agent.ID, AgentUpdateParams{
 		Password: &updatedPassword,
 	})
 	if err != nil {
 		t.Fatalf("UpdateAgent() error = %v", err)
 	}
 
-	if _, err := AuthenticateAgent(db, agent.ID, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, err := AuthenticateAgent(context.Background(), db, agent.ID, "secret-1"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("AuthenticateAgent(old password) err = %v, want ErrInvalidCredentials", err)
 	}
-	if _, err := AuthenticateAgent(db, agent.ID, "secret-2"); err != nil {
+	if _, err := AuthenticateAgent(context.Background(), db, agent.ID, "secret-2"); err != nil {
 		t.Fatalf("AuthenticateAgent(new password) error = %v", err)
 	}
 
-	disabled, err := SetAgentEnabled(db, agent.ID, false)
+	disabled, err := SetAgentEnabled(context.Background(), db, agent.ID, false)
 	if err != nil {
 		t.Fatalf("SetAgentEnabled(false) error = %v", err)
 	}
 	if disabled.Enabled {
 		t.Fatalf("disabled.Enabled = true, want false")
 	}
-	if _, err := AuthenticateAgent(db, agent.ID, "secret-2"); !errors.Is(err, ErrForbidden) {
+	if _, err := AuthenticateAgent(context.Background(), db, agent.ID, "secret-2"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("AuthenticateAgent(disabled) err = %v, want ErrForbidden", err)
 	}
 
-	enabled, err := SetAgentEnabled(db, agent.ID, true)
+	enabled, err := SetAgentEnabled(context.Background(), db, agent.ID, true)
 	if err != nil {
 		t.Fatalf("SetAgentEnabled(true) error = %v", err)
 	}
 	if !enabled.Enabled {
 		t.Fatalf("enabled.Enabled = false, want true")
 	}
-	touched, err := TouchAgent(db, agent.ID, "working")
+	touched, err := TouchAgent(context.Background(), db, agent.ID, "working")
 	if err != nil {
 		t.Fatalf("TouchAgent() error = %v", err)
 	}
@@ -114,10 +115,10 @@ func TestAgentUpdateAndLifecycle(t *testing.T) {
 		t.Fatalf("touched.LastSeen empty, want timestamp")
 	}
 
-	if err := DeleteAgent(db, agent.ID); err != nil {
+	if err := DeleteAgent(context.Background(), db, agent.ID); err != nil {
 		t.Fatalf("DeleteAgent() error = %v", err)
 	}
-	if _, err := GetAgentByID(db, agent.ID); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := GetAgentByID(context.Background(), db, agent.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetAgentByID(deleted) err = %v, want sql.ErrNoRows", err)
 	}
 }
@@ -126,12 +127,12 @@ func TestAgentDoesNotAppearInListUsers(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
-	users, err := ListUsers(db)
+	users, err := ListUsers(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListUsers() error = %v", err)
 	}
@@ -146,12 +147,12 @@ func TestGetAgentByUUID(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
-	found, err := GetAgentByUUID(db, agent.ID)
+	found, err := GetAgentByUUID(context.Background(), db, agent.ID)
 	if err != nil {
 		t.Fatalf("GetAgentByUUID() error = %v", err)
 	}
@@ -164,14 +165,14 @@ func TestListAgents(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	if _, _, err := CreateAgent(db, "secret1"); err != nil {
+	if _, _, err := CreateAgent(context.Background(), db, "secret1"); err != nil {
 		t.Fatalf("CreateAgent(1) error = %v", err)
 	}
-	if _, _, err := CreateAgent(db, "secret2"); err != nil {
+	if _, _, err := CreateAgent(context.Background(), db, "secret2"); err != nil {
 		t.Fatalf("CreateAgent(2) error = %v", err)
 	}
 
-	agents, err := ListAgents(db)
+	agents, err := ListAgents(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListAgents() error = %v", err)
 	}
@@ -184,13 +185,13 @@ func TestReapStaleAgents(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
 	// Touch the agent to set last_seen and status to working
-	if _, err := TouchAgent(db, agent.ID, "working"); err != nil {
+	if _, err := TouchAgent(context.Background(), db, agent.ID, "working"); err != nil {
 		t.Fatalf("TouchAgent() error = %v", err)
 	}
 
@@ -199,7 +200,7 @@ func TestReapStaleAgents(t *testing.T) {
 		t.Fatalf("update last_seen error = %v", err)
 	}
 
-	reaped, err := ReapStaleAgents(db, 60)
+	reaped, err := ReapStaleAgents(context.Background(), db, 60)
 	if err != nil {
 		t.Fatalf("ReapStaleAgents() error = %v", err)
 	}
@@ -207,7 +208,7 @@ func TestReapStaleAgents(t *testing.T) {
 		t.Fatalf("ReapStaleAgents() = %d, want 1", reaped)
 	}
 
-	fetched, err := GetAgentByID(db, agent.ID)
+	fetched, err := GetAgentByID(context.Background(), db, agent.ID)
 	if err != nil {
 		t.Fatalf("GetAgentByID() error = %v", err)
 	}
@@ -220,17 +221,17 @@ func TestListAgentStatuses(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
 	// Create a project and ticket assigned to the agent
-	project, err := CreateProject(db, "Agent Work", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Agent Work", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Agent task",
@@ -241,7 +242,7 @@ func TestListAgentStatuses(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 	// Set ticket to active state
-	if _, err := UpdateTicket(db, ticket.ID, TicketUpdateParams{
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
 		Title:         ticket.Title,
 		Description:   ticket.Description,
 		ParentID:      ticket.ParentID,
@@ -253,7 +254,7 @@ func TestListAgentStatuses(t *testing.T) {
 		t.Fatalf("UpdateTicket(active) error = %v", err)
 	}
 
-	statuses, err := ListAgentStatuses(db)
+	statuses, err := ListAgentStatuses(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListAgentStatuses() error = %v", err)
 	}
@@ -276,21 +277,21 @@ func TestAgentConfig(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
 	// Set config
-	if err := SetAgentConfig(db, agent.ID, "llm", "gpt-4"); err != nil {
+	if err := SetAgentConfig(context.Background(), db, agent.ID, "llm", "gpt-4"); err != nil {
 		t.Fatalf("SetAgentConfig() error = %v", err)
 	}
-	if err := SetAgentConfig(db, agent.ID, "verbose", "true"); err != nil {
+	if err := SetAgentConfig(context.Background(), db, agent.ID, "verbose", "true"); err != nil {
 		t.Fatalf("SetAgentConfig(verbose) error = %v", err)
 	}
 
 	// List config
-	entries, err := ListAgentConfig(db, agent.ID)
+	entries, err := ListAgentConfig(context.Background(), db, agent.ID)
 	if err != nil {
 		t.Fatalf("ListAgentConfig() error = %v", err)
 	}
@@ -299,7 +300,7 @@ func TestAgentConfig(t *testing.T) {
 	}
 
 	// Get config map
-	configMap, err := GetAgentConfigMap(db, agent.ID)
+	configMap, err := GetAgentConfigMap(context.Background(), db, agent.ID)
 	if err != nil {
 		t.Fatalf("GetAgentConfigMap() error = %v", err)
 	}
@@ -308,7 +309,7 @@ func TestAgentConfig(t *testing.T) {
 	}
 
 	// Get config updated_at
-	updatedAt, err := GetAgentConfigUpdatedAt(db, agent.ID)
+	updatedAt, err := GetAgentConfigUpdatedAt(context.Background(), db, agent.ID)
 	if err != nil {
 		t.Fatalf("GetAgentConfigUpdatedAt() error = %v", err)
 	}
@@ -317,15 +318,15 @@ func TestAgentConfig(t *testing.T) {
 	}
 
 	// Delete config
-	if err := DeleteAgentConfig(db, agent.ID, "llm"); err != nil {
+	if err := DeleteAgentConfig(context.Background(), db, agent.ID, "llm"); err != nil {
 		t.Fatalf("DeleteAgentConfig() error = %v", err)
 	}
-	if err := DeleteAgentConfig(db, agent.ID, "llm"); err == nil {
+	if err := DeleteAgentConfig(context.Background(), db, agent.ID, "llm"); err == nil {
 		t.Fatal("DeleteAgentConfig(again) error = nil, want error")
 	}
 
 	// Set config with empty key should fail
-	if err := SetAgentConfig(db, agent.ID, "", "val"); err == nil {
+	if err := SetAgentConfig(context.Background(), db, agent.ID, "", "val"); err == nil {
 		t.Fatal("SetAgentConfig(empty key) error = nil, want error")
 	}
 }
@@ -334,12 +335,12 @@ func TestAgentFoundByGetUserByUsername(t *testing.T) {
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
-	user, err := GetUserByUsername(db, agent.ID)
+	user, err := GetUserByUsername(context.Background(), db, agent.ID)
 	if err != nil {
 		t.Fatalf("GetUserByUsername() error = %v", err)
 	}

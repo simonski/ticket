@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -18,11 +19,11 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 	}
 	defer sourceDB.Close()
 
-	member, err := CreateUser(sourceDB, "member1", "password123", "user")
+	member, err := CreateUser(context.Background(), sourceDB, "member1", "password123", "user")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
-	project, err := CreateProjectWithParams(sourceDB, ProjectCreateParams{
+	project, err := CreateProjectWithParams(context.Background(), sourceDB, ProjectCreateParams{
 		Prefix:             "EXP",
 		Title:              "Export Project",
 		Description:        "Export/import coverage",
@@ -33,10 +34,10 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProjectWithParams() error = %v", err)
 	}
-	if _, err := AddProjectMember(sourceDB, project.ID, member.ID, ProjectRoleEditor); err != nil {
+	if _, err := AddProjectMember(context.Background(), sourceDB, project.ID, member.ID, ProjectRoleEditor); err != nil {
 		t.Fatalf("AddProjectMember() error = %v", err)
 	}
-	epic, err := CreateTicket(sourceDB, TicketCreateParams{
+	epic, err := CreateTicket(context.Background(), sourceDB, TicketCreateParams{
 		ProjectID:   project.ID,
 		Type:        "epic",
 		Title:       "Export Epic",
@@ -48,7 +49,7 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
 	parentID := epic.ID
-	task, err := CreateTicket(sourceDB, TicketCreateParams{
+	task, err := CreateTicket(context.Background(), sourceDB, TicketCreateParams{
 		ProjectID:   project.ID,
 		ParentID:    &parentID,
 		Type:        "task",
@@ -61,18 +62,18 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	story, err := CreateStory(sourceDB, project.ID, "Snapshot Story", "Story description", "")
+	story, err := CreateStory(context.Background(), sourceDB, project.ID, "Snapshot Story", "Story description", "")
 	if err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
 	}
-	if err := LinkStoryToTicket(sourceDB, story.ID, epic.ID); err != nil {
+	if err := LinkStoryToTicket(context.Background(), sourceDB, story.ID, epic.ID); err != nil {
 		t.Fatalf("LinkStoryToTicket(epic) error = %v", err)
 	}
-	if err := LinkStoryToTicket(sourceDB, story.ID, task.ID); err != nil {
+	if err := LinkStoryToTicket(context.Background(), sourceDB, story.ID, task.ID); err != nil {
 		t.Fatalf("LinkStoryToTicket(task) error = %v", err)
 	}
 
-	snapshot, err := ExportSnapshot(sourceDB)
+	snapshot, err := ExportSnapshot(context.Background(), sourceDB)
 	if err != nil {
 		t.Fatalf("ExportSnapshot() error = %v", err)
 	}
@@ -90,32 +91,32 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 	}
 	defer targetDB.Close()
 
-	if err := ImportSnapshot(targetDB, snapshot); err != nil {
+	if err := ImportSnapshot(context.Background(), targetDB, snapshot); err != nil {
 		t.Fatalf("ImportSnapshot() error = %v", err)
 	}
 
-	importedProject, err := GetProjectByID(targetDB, project.ID)
+	importedProject, err := GetProjectByID(context.Background(), targetDB, project.ID)
 	if err != nil {
 		t.Fatalf("GetProjectByID(imported) error = %v", err)
 	}
 	if importedProject.Prefix != project.Prefix || importedProject.Title != project.Title {
 		t.Fatalf("imported project mismatch = %#v, want %#v", importedProject, project)
 	}
-	importedEpic, err := GetTicket(targetDB, epic.ID)
+	importedEpic, err := GetTicket(context.Background(), targetDB, epic.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(imported epic) error = %v", err)
 	}
 	if importedEpic.Type != "epic" || importedEpic.Title != epic.Title {
 		t.Fatalf("imported epic mismatch = %#v, want %#v", importedEpic, epic)
 	}
-	importedTask, err := GetTicket(targetDB, task.ID)
+	importedTask, err := GetTicket(context.Background(), targetDB, task.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(imported task) error = %v", err)
 	}
 	if importedTask.ParentID == nil || *importedTask.ParentID != epic.ID {
 		t.Fatalf("imported task parent = %#v, want %s", importedTask.ParentID, epic.ID)
 	}
-	importedStory, err := GetStory(targetDB, story.ID)
+	importedStory, err := GetStory(context.Background(), targetDB, story.ID)
 	if err != nil {
 		t.Fatalf("GetStory(imported) error = %v", err)
 	}
@@ -129,7 +130,7 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 	if links != 2 {
 		t.Fatalf("story links count = %d, want 2", links)
 	}
-	if _, err := GetUserByUsername(targetDB, "member1"); err != nil {
+	if _, err := GetUserByUsername(context.Background(), targetDB, "member1"); err != nil {
 		t.Fatalf("GetUserByUsername(member1) error = %v", err)
 	}
 }

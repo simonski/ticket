@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
@@ -59,18 +60,18 @@ func generateUserID() string {
 	return uuid.NewString()
 }
 
-func RegisterUser(db *sql.DB, username, plainPassword string) (User, error) {
-	return createUser(db, username, plainPassword, "user", true)
+func RegisterUser(ctx context.Context, db *sql.DB, username, plainPassword string) (User, error) {
+	return createUser(ctx, db, username, plainPassword, "user", true)
 }
 
-func CreateUser(db *sql.DB, username, plainPassword, role string) (User, error) {
+func CreateUser(ctx context.Context, db *sql.DB, username, plainPassword, role string) (User, error) {
 	if role == "" {
 		role = "user"
 	}
-	return createUser(db, username, plainPassword, role, true)
+	return createUser(ctx, db, username, plainPassword, role, true)
 }
 
-func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) (User, error) {
+func createUser(ctx context.Context, db *sql.DB, username, plainPassword, role string, enabled bool) (User, error) {
 	username = strings.TrimSpace(username)
 	if username == "" || plainPassword == "" {
 		return User{}, errors.New("username and password are required")
@@ -83,7 +84,7 @@ func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) 
 
 	id := generateUserID()
 
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled, user_type)
 		VALUES (?, ?, ?, ?, ?, ?, 'user')
 	`, id, username, hash, role, username, boolToInt(enabled))
@@ -91,11 +92,11 @@ func createUser(db *sql.DB, username, plainPassword, role string, enabled bool) 
 		return User{}, err
 	}
 
-	return GetUserByID(db, id)
+	return GetUserByID(ctx, db, id)
 }
 
-func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) {
-	row := db.QueryRow(`
+func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword string) (User, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`, password_hash
 		FROM users
 		WHERE username = ?
@@ -131,14 +132,14 @@ func AuthenticateUser(db *sql.DB, username, plainPassword string) (User, error) 
 	return user, nil
 }
 
-func CreateSession(db *sql.DB, userID string) (string, error) {
+func CreateSession(ctx context.Context, db *sql.DB, userID string) (string, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return "", fmt.Errorf("create session token: %w", err)
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO sessions (user_id, token, expires_at)
 		VALUES (?, ?, datetime('now', '+30 days'))
 	`, userID, token); err != nil {
@@ -147,20 +148,20 @@ func CreateSession(db *sql.DB, userID string) (string, error) {
 	return token, nil
 }
 
-func DeleteSession(db *sql.DB, token string) error {
+func DeleteSession(ctx context.Context, db *sql.DB, token string) error {
 	if token == "" {
 		return nil
 	}
-	_, err := db.Exec(`DELETE FROM sessions WHERE token = ?`, token)
+	_, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE token = ?`, token)
 	return err
 }
 
-func GetUserByToken(db *sql.DB, token string) (User, error) {
+func GetUserByToken(ctx context.Context, db *sql.DB, token string) (User, error) {
 	if token == "" {
 		return User{}, ErrUnauthorized
 	}
 
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 		SELECT u.user_id, u.username, COALESCE(u.email, ''), COALESCE(u.email_confirmed_at, ''), u.role, u.display_name, u.enabled, u.created_at, COALESCE(u.user_type, 'user'), COALESCE(u.description, ''), COALESCE(u.status, ''), COALESCE(u.last_seen, ''), COALESCE(u.updated_at, '')
 		FROM sessions s
 		JOIN users u ON u.user_id = s.user_id
@@ -181,8 +182,8 @@ func GetUserByToken(db *sql.DB, token string) (User, error) {
 	return user, nil
 }
 
-func GetUserByID(db *sql.DB, id string) (User, error) {
-	row := db.QueryRow(`
+func GetUserByID(ctx context.Context, db *sql.DB, id string) (User, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_id = ?
@@ -191,8 +192,8 @@ func GetUserByID(db *sql.DB, id string) (User, error) {
 	return scanUser(row.Scan)
 }
 
-func GetUserByUsername(db *sql.DB, username string) (User, error) {
-	row := db.QueryRow(`
+func GetUserByUsername(ctx context.Context, db *sql.DB, username string) (User, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE username = ?
@@ -201,8 +202,8 @@ func GetUserByUsername(db *sql.DB, username string) (User, error) {
 	return scanUser(row.Scan)
 }
 
-func ListUsers(db *sql.DB) ([]User, error) {
-	rows, err := db.Query(`
+func ListUsers(ctx context.Context, db *sql.DB) ([]User, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL
@@ -224,8 +225,8 @@ func ListUsers(db *sql.DB) ([]User, error) {
 	return users, rows.Err()
 }
 
-func SetUserEnabled(db *sql.DB, username string, enabled bool) error {
-	result, err := db.Exec(`UPDATE users SET enabled = ? WHERE username = ?`, boolToInt(enabled), username)
+func SetUserEnabled(ctx context.Context, db *sql.DB, username string, enabled bool) error {
+	result, err := db.ExecContext(ctx, `UPDATE users SET enabled = ? WHERE username = ?`, boolToInt(enabled), username)
 	if err != nil {
 		return err
 	}
@@ -239,10 +240,10 @@ func SetUserEnabled(db *sql.DB, username string, enabled bool) error {
 	return nil
 }
 
-func DeleteUser(db *sql.DB, username string) error {
+func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 	// Fetch the user_id before deleting so we can cascade cleanup.
 	var userID string
-	err := db.QueryRow(`SELECT user_id FROM users WHERE username = ?`, username).Scan(&userID)
+	err := db.QueryRowContext(ctx, `SELECT user_id FROM users WHERE username = ?`, username).Scan(&userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return sql.ErrNoRows
@@ -250,7 +251,7 @@ func DeleteUser(db *sql.DB, username string) error {
 		return err
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -258,13 +259,13 @@ func DeleteUser(db *sql.DB, username string) error {
 
 	// Anonymise audit trail records so history is preserved without PII.
 	// history_events.created_by and ticket_history.created_by are nullable.
-	if _, err := tx.Exec(`UPDATE history_events SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE history_events SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE ticket_history SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE ticket_history SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
 		return err
 	}	// Nullify ticket creator reference (nullable FK).
-	if _, err := tx.Exec(`UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
 		return err
 	}
 	// Remove personal data: sessions, memberships, time entries, messages, agent config.
@@ -280,21 +281,21 @@ func DeleteUser(db *sql.DB, username string) error {
 		{"agent_config", "user_id"},
 	}
 	for _, t := range tables {
-		if _, err := tx.Exec(`DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); err != nil {
 			return err
 		}
 	}
 	// Delete messages to/from the user.
-	if _, err := tx.Exec(`DELETE FROM messages WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); err != nil {
 		return err
 	}
 	// Delete comments authored by the user (personal content, not anonymisable
 	// because user_id is NOT NULL and the FK references users).
-	if _, err := tx.Exec(`DELETE FROM comments WHERE user_id = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM comments WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
 	// Finally remove the user record.
-	result, err := tx.Exec(`DELETE FROM users WHERE user_id = ?`, userID)
+	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE user_id = ?`, userID)
 	if err != nil {
 		return err
 	}
@@ -309,7 +310,7 @@ func DeleteUser(db *sql.DB, username string) error {
 }
 
 // ResetUserPassword changes the password and invalidates all sessions.
-func ResetUserPassword(db *sql.DB, username, newPlainPassword string) (User, error) {
+func ResetUserPassword(ctx context.Context, db *sql.DB, username, newPlainPassword string) (User, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
 		return User{}, errors.New("username is required")
@@ -321,7 +322,7 @@ func ResetUserPassword(db *sql.DB, username, newPlainPassword string) (User, err
 	if err != nil {
 		return User{}, err
 	}
-	result, err := db.Exec(`UPDATE users SET password_hash = ? WHERE username = ?`, hash, username)
+	result, err := db.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE username = ?`, hash, username)
 	if err != nil {
 		return User{}, err
 	}
@@ -330,10 +331,10 @@ func ResetUserPassword(db *sql.DB, username, newPlainPassword string) (User, err
 		return User{}, sql.ErrNoRows
 	}
 	// Invalidate all sessions for this user
-	if _, err := db.Exec(`DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE username = ?)`, username); err != nil {
+	if _, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE username = ?)`, username); err != nil {
 		return User{}, err
 	}
-	return GetUserByUsername(db, username)
+	return GetUserByUsername(ctx, db, username)
 }
 
 func boolToInt(v bool) int {

@@ -30,7 +30,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		if _, err := store.GetUserByToken(db, token); err != nil {
+		if _, err := store.GetUserByToken(r.Context(), db, token); err != nil {
 			writeAuthError(w, err)
 			return
 		}
@@ -56,11 +56,11 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		if _, err := store.GetUserByToken(db, token); err != nil {
+		if _, err := store.GetUserByToken(r.Context(), db, token); err != nil {
 			writeAuthError(w, err)
 			return
 		}
-		chatEnabled, err := store.ChatEnabled(db)
+		chatEnabled, err := store.ChatEnabled(r.Context(), db)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -88,7 +88,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
-		enabled, err := store.RegistrationEnabled(db)
+		enabled, err := store.RegistrationEnabled(r.Context(), db)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -102,7 +102,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		user, err := store.RegisterUser(db, credentials.Username, credentials.Password)
+		user, err := store.RegisterUser(r.Context(), db, credentials.Username, credentials.Password)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -124,7 +124,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		user, err := store.AuthenticateUser(db, credentials.Username, credentials.Password)
+		user, err := store.AuthenticateUser(r.Context(), db, credentials.Username, credentials.Password)
 		if err != nil {
 			switch {
 			case errors.Is(err, store.ErrInvalidCredentials):
@@ -136,7 +136,7 @@ func (r *router) registerAuthHandlers() {
 			}
 			return
 		}
-		token, err := store.CreateSession(db, user.ID)
+		token, err := store.CreateSession(r.Context(), db, user.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -159,7 +159,7 @@ func (r *router) registerAuthHandlers() {
 			return
 		}
 		token := bearerToken(r)
-		if err := store.DeleteSession(db, token); err != nil {
+		if err := store.DeleteSession(r.Context(), db, token); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -180,17 +180,17 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		registrationEnabled, regErr := store.RegistrationEnabled(db)
+		registrationEnabled, regErr := store.RegistrationEnabled(r.Context(), db)
 		if regErr != nil {
 			writeError(w, http.StatusInternalServerError, regErr.Error())
 			return
 		}
-		chatLimits, chatErr := store.ChatLimitsConfig(db)
+		chatLimits, chatErr := store.ChatLimitsConfig(r.Context(), db)
 		if chatErr != nil {
 			writeError(w, http.StatusInternalServerError, chatErr.Error())
 			return
 		}
-		chatEnabled, chatEnabledErr := store.ChatEnabled(db)
+		chatEnabled, chatEnabledErr := store.ChatEnabled(r.Context(), db)
 		if chatEnabledErr != nil {
 			writeError(w, http.StatusInternalServerError, chatEnabledErr.Error())
 			return

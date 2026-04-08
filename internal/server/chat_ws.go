@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -164,7 +165,7 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request, db *sql.DB, logf
 				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "chat request already running"})
 				continue
 			}
-			enabled, err := store.ChatEnabled(db)
+			enabled, err := store.ChatEnabled(context.Background(), db)
 			if err != nil {
 				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "failed to load chat settings"})
 				continue
@@ -173,7 +174,7 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request, db *sql.DB, logf
 				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "chat is disabled"})
 				continue
 			}
-			limits, err := store.ChatLimitsConfig(db)
+			limits, err := store.ChatLimitsConfig(context.Background(), db)
 			if err != nil {
 				sendJSON(chatOutboundMessage{Type: "chat_error", Error: "failed to load chat settings"})
 				continue

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -16,13 +17,13 @@ type Label struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func CreateLabel(db *sql.DB, projectID int64, name, color string) (Label, error) {
+func CreateLabel(ctx context.Context, db *sql.DB, projectID int64, name, color string) (Label, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Label{}, errors.New("label name is required")
 	}
 	color = strings.TrimSpace(color)
-	result, err := db.Exec(`INSERT INTO labels (project_id, name, color) VALUES (?, ?, ?)`, projectID, name, color)
+	result, err := db.ExecContext(ctx, `INSERT INTO labels (project_id, name, color) VALUES (?, ?, ?)`, projectID, name, color)
 	if err != nil {
 		return Label{}, err
 	}
@@ -30,12 +31,12 @@ func CreateLabel(db *sql.DB, projectID int64, name, color string) (Label, error)
 	if err != nil {
 		return Label{}, err
 	}
-	return GetLabel(db, id)
+	return GetLabel(ctx, db, id)
 }
 
-func GetLabel(db *sql.DB, id int64) (Label, error) {
+func GetLabel(ctx context.Context, db *sql.DB, id int64) (Label, error) {
 	var label Label
-	err := db.QueryRow(`SELECT label_id, project_id, name, color, created_at FROM labels WHERE label_id = ?`, id).
+	err := db.QueryRowContext(ctx, `SELECT label_id, project_id, name, color, created_at FROM labels WHERE label_id = ?`, id).
 		Scan(&label.ID, &label.ProjectID, &label.Name, &label.Color, &label.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Label{}, ErrLabelNotFound
@@ -43,8 +44,8 @@ func GetLabel(db *sql.DB, id int64) (Label, error) {
 	return label, err
 }
 
-func ListLabels(db *sql.DB, projectID int64) ([]Label, error) {
-	rows, err := db.Query(`SELECT label_id, project_id, name, color, created_at FROM labels WHERE project_id = ? ORDER BY name`, projectID)
+func ListLabels(ctx context.Context, db *sql.DB, projectID int64) ([]Label, error) {
+	rows, err := db.QueryContext(ctx, `SELECT label_id, project_id, name, color, created_at FROM labels WHERE project_id = ? ORDER BY name`, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +61,11 @@ func ListLabels(db *sql.DB, projectID int64) ([]Label, error) {
 	return labels, rows.Err()
 }
 
-func DeleteLabel(db *sql.DB, id int64) error {
-	if _, err := db.Exec(`DELETE FROM ticket_labels WHERE label_id = ?`, id); err != nil {
+func DeleteLabel(ctx context.Context, db *sql.DB, id int64) error {
+	if _, err := db.ExecContext(ctx, `DELETE FROM ticket_labels WHERE label_id = ?`, id); err != nil {
 		return err
 	}
-	result, err := db.Exec(`DELETE FROM labels WHERE label_id = ?`, id)
+	result, err := db.ExecContext(ctx, `DELETE FROM labels WHERE label_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -78,18 +79,18 @@ func DeleteLabel(db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddTicketLabel(db *sql.DB, ticketID string, labelID int64) error {
-	_, err := db.Exec(`INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)`, ticketID, labelID)
+func AddTicketLabel(ctx context.Context, db *sql.DB, ticketID string, labelID int64) error {
+	_, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO ticket_labels (ticket_id, label_id) VALUES (?, ?)`, ticketID, labelID)
 	return err
 }
 
-func RemoveTicketLabel(db *sql.DB, ticketID string, labelID int64) error {
-	_, err := db.Exec(`DELETE FROM ticket_labels WHERE ticket_id = ? AND label_id = ?`, ticketID, labelID)
+func RemoveTicketLabel(ctx context.Context, db *sql.DB, ticketID string, labelID int64) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM ticket_labels WHERE ticket_id = ? AND label_id = ?`, ticketID, labelID)
 	return err
 }
 
-func ListTicketLabels(db *sql.DB, ticketID string) ([]Label, error) {
-	rows, err := db.Query(`
+func ListTicketLabels(ctx context.Context, db *sql.DB, ticketID string) ([]Label, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT l.label_id, l.project_id, l.name, l.color, l.created_at
 		FROM labels l
 		JOIN ticket_labels tl ON tl.label_id = l.label_id
@@ -111,8 +112,8 @@ func ListTicketLabels(db *sql.DB, ticketID string) ([]Label, error) {
 	return labels, rows.Err()
 }
 
-func ListTicketsByLabel(db *sql.DB, labelID int64) ([]string, error) {
-	rows, err := db.Query(`SELECT ticket_id FROM ticket_labels WHERE label_id = ? ORDER BY ticket_id`, labelID)
+func ListTicketsByLabel(ctx context.Context, db *sql.DB, labelID int64) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT ticket_id FROM ticket_labels WHERE label_id = ? ORDER BY ticket_id`, labelID)
 	if err != nil {
 		return nil, err
 	}

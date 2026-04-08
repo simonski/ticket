@@ -1,11 +1,14 @@
 package store
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestCreateListAndGetProject(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Customer Portal", "Portal work", "Ship the portal safely.", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "Portal work", "Ship the portal safely.", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -13,7 +16,7 @@ func TestCreateListAndGetProject(t *testing.T) {
 		t.Fatalf("CreateProject().AcceptanceCriteria = %q", project.AcceptanceCriteria)
 	}
 
-	projects, err := ListProjects(db)
+	projects, err := ListProjects(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -25,7 +28,7 @@ func TestCreateListAndGetProject(t *testing.T) {
 		t.Fatalf("ListProjects()[0].Title = %q, want Default Project", projects[0].Title)
 	}
 
-	byID, err := GetProject(db, "2")
+	byID, err := GetProject(context.Background(), db, "2")
 	if err != nil {
 		t.Fatalf("GetProject(id) error = %v", err)
 	}
@@ -37,12 +40,12 @@ func TestCreateListAndGetProject(t *testing.T) {
 func TestUpdateAndEnableDisableProject(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProject(db, "Customer Portal", "Portal work", "", "")
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "Portal work", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	updated, err := UpdateProject(db, project.ID, "New Title", "New Description", "New AC")
+	updated, err := UpdateProject(context.Background(), db, project.ID, "New Title", "New Description", "New AC")
 	if err != nil {
 		t.Fatalf("UpdateProject() error = %v", err)
 	}
@@ -50,7 +53,7 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 		t.Fatalf("UpdateProject() = %#v", updated)
 	}
 
-	disabled, err := SetProjectStatus(db, project.ID, false)
+	disabled, err := SetProjectStatus(context.Background(), db, project.ID, false)
 	if err != nil {
 		t.Fatalf("SetProjectStatus(disable) error = %v", err)
 	}
@@ -58,7 +61,7 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 		t.Fatalf("SetProjectStatus(disable).Status = %q", disabled.Status)
 	}
 
-	enabled, err := SetProjectStatus(db, project.ID, true)
+	enabled, err := SetProjectStatus(context.Background(), db, project.ID, true)
 	if err != nil {
 		t.Fatalf("SetProjectStatus(enable) error = %v", err)
 	}
@@ -70,7 +73,7 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 func TestGetProjectByPrefix(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProjectWithParams(db, ProjectCreateParams{
+	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
 		Prefix: "ABC",
 		Title:  "Prefix Project",
 	})
@@ -79,7 +82,7 @@ func TestGetProjectByPrefix(t *testing.T) {
 	}
 
 	// Get by prefix
-	byPrefix, err := GetProject(db, "ABC")
+	byPrefix, err := GetProject(context.Background(), db, "ABC")
 	if err != nil {
 		t.Fatalf("GetProject(prefix) error = %v", err)
 	}
@@ -88,7 +91,7 @@ func TestGetProjectByPrefix(t *testing.T) {
 	}
 
 	// Get by prefix lowercase
-	byLower, err := GetProject(db, "abc")
+	byLower, err := GetProject(context.Background(), db, "abc")
 	if err != nil {
 		t.Fatalf("GetProject(lower prefix) error = %v", err)
 	}
@@ -97,12 +100,12 @@ func TestGetProjectByPrefix(t *testing.T) {
 	}
 
 	// Get with empty string
-	if _, err := GetProject(db, ""); err == nil {
+	if _, err := GetProject(context.Background(), db, ""); err == nil {
 		t.Fatal("GetProject(empty) error = nil, want error")
 	}
 
 	// Get nonexistent prefix
-	if _, err := GetProject(db, "ZZZ"); err == nil {
+	if _, err := GetProject(context.Background(), db, "ZZZ"); err == nil {
 		t.Fatal("GetProject(nonexistent) error = nil, want error")
 	}
 }
@@ -110,16 +113,16 @@ func TestGetProjectByPrefix(t *testing.T) {
 func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	db := testDB(t)
 
-	admin, err := GetUserByUsername(db, "admin")
+	admin, err := GetUserByUsername(context.Background(), db, "admin")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(admin) error = %v", err)
 	}
-	alice, err := CreateUser(db, "alice", "password123", "user")
+	alice, err := CreateUser(context.Background(), db, "alice", "password123", "user")
 	if err != nil {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	privateProject, err := CreateProjectWithParams(db, ProjectCreateParams{
+	privateProject, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
 		Prefix:     "PRV",
 		Title:      "Private Project",
 		Visibility: ProjectVisibilityPrivate,
@@ -128,7 +131,7 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProjectWithParams(private) error = %v", err)
 	}
-	publicProject, err := CreateProjectWithParams(db, ProjectCreateParams{
+	publicProject, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
 		Prefix:     "PUB",
 		Title:      "Public Project",
 		Visibility: ProjectVisibilityPublic,
@@ -144,7 +147,7 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 		t.Fatalf("publicProject.Visibility = %q, want %q", publicProject.Visibility, ProjectVisibilityPublic)
 	}
 
-	visible, err := ListProjectsVisibleToUser(db, alice)
+	visible, err := ListProjectsVisibleToUser(context.Background(), db, alice)
 	if err != nil {
 		t.Fatalf("ListProjectsVisibleToUser(alice) error = %v", err)
 	}
@@ -157,10 +160,10 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 		}
 	}
 
-	if _, err := AddProjectMember(db, privateProject.ID, alice.ID, ProjectRoleViewer); err != nil {
+	if _, err := AddProjectMember(context.Background(), db, privateProject.ID, alice.ID, ProjectRoleViewer); err != nil {
 		t.Fatalf("AddProjectMember(viewer) error = %v", err)
 	}
-	visible, err = ListProjectsVisibleToUser(db, alice)
+	visible, err = ListProjectsVisibleToUser(context.Background(), db, alice)
 	if err != nil {
 		t.Fatalf("ListProjectsVisibleToUser(alice, member) error = %v", err)
 	}
@@ -179,7 +182,7 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 func TestRenameProjectPrefix(t *testing.T) {
 	db := testDB(t)
 
-	project, err := CreateProjectWithParams(db, ProjectCreateParams{
+	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
 		Prefix: "OLD",
 		Title:  "Rename Me",
 	})
@@ -188,34 +191,34 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Create tickets of different types.
-	epic, err := CreateTicket(db, TicketCreateParams{ProjectID: project.ID, Type: "epic", Title: "Epic"})
+	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{ProjectID: project.ID, Type: "epic", Title: "Epic"})
 	if err != nil {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
 	parentID := epic.ID
-	task, err := CreateTicket(db, TicketCreateParams{ProjectID: project.ID, Type: "task", Title: "Task", ParentID: &parentID})
+	task, err := CreateTicket(context.Background(), db, TicketCreateParams{ProjectID: project.ID, Type: "task", Title: "Task", ParentID: &parentID})
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	bug, err := CreateTicket(db, TicketCreateParams{ProjectID: project.ID, Type: "bug", Title: "Bug"})
+	bug, err := CreateTicket(context.Background(), db, TicketCreateParams{ProjectID: project.ID, Type: "bug", Title: "Bug"})
 	if err != nil {
 		t.Fatalf("CreateTicket(bug) error = %v", err)
 	}
 
 	// Add a dependency, comment, and time entry.
 	adminID := testAdminID(t, db)
-	if _, err := AddDependency(db, project.ID, task.ID, bug.ID, adminID); err != nil {
+	if _, err := AddDependency(context.Background(), db, project.ID, task.ID, bug.ID, adminID); err != nil {
 		t.Fatalf("AddDependency error = %v", err)
 	}
-	if _, err := AddComment(db, task.ID, adminID, "a comment"); err != nil {
+	if _, err := AddComment(context.Background(), db, task.ID, adminID, "a comment"); err != nil {
 		t.Fatalf("AddComment error = %v", err)
 	}
-	if _, err := LogTime(db, task.ID, adminID, 30, "work"); err != nil {
+	if _, err := LogTime(context.Background(), db, task.ID, adminID, 30, "work"); err != nil {
 		t.Fatalf("LogTime error = %v", err)
 	}
 
 	// Rename.
-	count, err := RenameProjectPrefix(db, project.ID, "NEW")
+	count, err := RenameProjectPrefix(context.Background(), db, project.ID, "NEW")
 	if err != nil {
 		t.Fatalf("RenameProjectPrefix error = %v", err)
 	}
@@ -224,7 +227,7 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Verify project prefix updated.
-	updated, err := GetProjectByID(db, project.ID)
+	updated, err := GetProjectByID(context.Background(), db, project.ID)
 	if err != nil {
 		t.Fatalf("GetProjectByID error = %v", err)
 	}
@@ -233,7 +236,7 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Verify tickets have new keys.
-	newEpic, err := GetTicket(db, "NEW-E-1")
+	newEpic, err := GetTicket(context.Background(), db, "NEW-E-1")
 	if err != nil {
 		t.Fatalf("GetTicket(NEW-E-1) error = %v", err)
 	}
@@ -241,7 +244,7 @@ func TestRenameProjectPrefix(t *testing.T) {
 		t.Fatalf("epic title = %q", newEpic.Title)
 	}
 
-	newTask, err := GetTicket(db, "NEW-T-2")
+	newTask, err := GetTicket(context.Background(), db, "NEW-T-2")
 	if err != nil {
 		t.Fatalf("GetTicket(NEW-T-2) error = %v", err)
 	}
@@ -250,7 +253,7 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Verify dependency updated.
-	deps, err := ListDependencies(db, "NEW-T-2")
+	deps, err := ListDependencies(context.Background(), db, "NEW-T-2")
 	if err != nil {
 		t.Fatalf("ListDependencies error = %v", err)
 	}
@@ -259,12 +262,12 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Verify old keys are gone.
-	if _, err := GetTicket(db, "OLD-E-1"); err == nil {
+	if _, err := GetTicket(context.Background(), db, "OLD-E-1"); err == nil {
 		t.Fatal("old key OLD-E-1 should not exist")
 	}
 
 	// Renaming to same prefix is a no-op.
-	count, err = RenameProjectPrefix(db, project.ID, "NEW")
+	count, err = RenameProjectPrefix(context.Background(), db, project.ID, "NEW")
 	if err != nil {
 		t.Fatalf("RenameProjectPrefix(same) error = %v", err)
 	}
@@ -273,37 +276,37 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Renaming to an invalid prefix fails.
-	if _, err := RenameProjectPrefix(db, project.ID, "x"); err == nil {
+	if _, err := RenameProjectPrefix(context.Background(), db, project.ID, "x"); err == nil {
 		t.Fatal("RenameProjectPrefix(invalid) should fail")
 	}
 }
 
 func TestDeleteProject(t *testing.T) {
 	db := testDB(t)
-	project, err := CreateProject(db, "Delete Me", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Delete Me", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
 	// Create a ticket with comments, time entries, labels, dependencies
-	ticket, err := CreateTicket(db, TicketCreateParams{
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID, Type: "task", Title: "Task to delete",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 	adminID := testAdminID(t, db)
-	if _, err := AddComment(db, ticket.ID, adminID, "test comment"); err != nil {
+	if _, err := AddComment(context.Background(), db, ticket.ID, adminID, "test comment"); err != nil {
 		t.Fatalf("AddComment() error = %v", err)
 	}
-	if _, err := LogTime(db, ticket.ID, adminID, 30, "work"); err != nil {
+	if _, err := LogTime(context.Background(), db, ticket.ID, adminID, 30, "work"); err != nil {
 		t.Fatalf("LogTime() error = %v", err)
 	}
 
-	if err := DeleteProject(db, project.ID); err != nil {
+	if err := DeleteProject(context.Background(), db, project.ID); err != nil {
 		t.Fatalf("DeleteProject() error = %v", err)
 	}
-	if _, err := GetProjectByID(db, project.ID); err == nil {
+	if _, err := GetProjectByID(context.Background(), db, project.ID); err == nil {
 		t.Fatal("GetProjectByID after delete should fail")
 	}
 }

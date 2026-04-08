@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -113,7 +114,7 @@ func nullableTrimmed(value string) *string {
 }
 
 func userFromRequest(db *sql.DB, r *http.Request) (store.User, error) {
-	return store.GetUserByToken(db, bearerToken(r))
+	return store.GetUserByToken(r.Context(), db, bearerToken(r))
 }
 
 func requireUser(db *sql.DB, r *http.Request) (store.User, error) {
@@ -143,26 +144,26 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-func projectRoleForUser(db *sql.DB, projectID int64, user store.User) (string, error) {
+func projectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, user store.User) (string, error) {
 	if user.Role == "admin" {
 		return store.ProjectRoleOwner, nil
 	}
-	project, err := store.GetProjectByID(db, projectID)
+	project, err := store.GetProjectByID(ctx, db, projectID)
 	if err != nil {
 		return "", err
 	}
-	role, ok, err := store.ProjectRoleForUser(db, projectID, user.ID)
+	role, ok, err := store.ProjectRoleForUser(ctx, db, projectID, user.ID)
 	if err != nil {
 		return "", err
 	}
 	if ok {
 		return role, nil
 	}
-	teamIDs, err := store.TeamIDsForUserWithAncestors(db, user.ID)
+	teamIDs, err := store.TeamIDsForUserWithAncestors(ctx, db, user.ID)
 	if err != nil {
 		return "", err
 	}
-	teamRole, teamOK, err := store.HighestProjectRoleForTeams(db, projectID, teamIDs)
+	teamRole, teamOK, err := store.HighestProjectRoleForTeams(ctx, db, projectID, teamIDs)
 	if err != nil {
 		return "", err
 	}

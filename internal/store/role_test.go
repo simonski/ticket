@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ func TestDefaultRolesSeeded(t *testing.T) {
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	roles, err := ListRoles(db)
+	roles, err := ListRoles(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListRoles() error = %v", err)
 	}
@@ -37,7 +38,7 @@ func TestRoleCRUD(t *testing.T) {
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	created, err := CreateRole(db, "Principal QA", "Own quality", "Automate and validate")
+	created, err := CreateRole(context.Background(), db, "Principal QA", "Own quality", "Automate and validate")
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
@@ -45,7 +46,7 @@ func TestRoleCRUD(t *testing.T) {
 		t.Fatalf("CreateRole().ID = 0")
 	}
 
-	updated, err := UpdateRole(db, created.ID, "Principal QA+", "Improve quality", "Expand test strategy")
+	updated, err := UpdateRole(context.Background(), db, created.ID, "Principal QA+", "Improve quality", "Expand test strategy")
 	if err != nil {
 		t.Fatalf("UpdateRole() error = %v", err)
 	}
@@ -53,10 +54,10 @@ func TestRoleCRUD(t *testing.T) {
 		t.Fatalf("UpdateRole().Title = %q, want %q", updated.Title, "Principal QA+")
 	}
 
-	if err := DeleteRole(db, created.ID); err != nil {
+	if err := DeleteRole(context.Background(), db, created.ID); err != nil {
 		t.Fatalf("DeleteRole() error = %v", err)
 	}
-	if _, err := GetRoleByID(db, created.ID); err == nil {
+	if _, err := GetRoleByID(context.Background(), db, created.ID); err == nil {
 		t.Fatalf("GetRoleByID(deleted) error = nil, want error")
 	}
 }
@@ -65,7 +66,7 @@ func TestDefaultRoleContentIsDetailed(t *testing.T) {
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	roles, err := ListRoles(db)
+	roles, err := ListRoles(context.Background(), db)
 	if err != nil {
 		t.Fatalf("ListRoles() error = %v", err)
 	}
@@ -102,7 +103,7 @@ func TestSeedDefaultRolesBackfillsLegacyRoleText(t *testing.T) {
 		t.Fatalf("seed setup update error = %v", err)
 	}
 
-	if err := seedDefaultRoles(db); err != nil {
+	if err := seedDefaultRoles(context.Background(), db); err != nil {
 		t.Fatalf("seedDefaultRoles() error = %v", err)
 	}
 

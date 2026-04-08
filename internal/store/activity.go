@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -30,20 +31,20 @@ type Comment struct {
 	CreatedAt string `json:"date"`
 }
 
-func AddHistoryEvent(db *sql.DB, projectID int64, ticketID string, eventType string, payload any, createdBy string) error {
+func AddHistoryEvent(ctx context.Context, db *sql.DB, projectID int64, ticketID string, eventType string, payload any, createdBy string) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
 		VALUES (?, ?, ?, ?, ?)
 	`, projectID, ticketID, eventType, string(data), nullableUserID(createdBy))
 	return err
 }
 
-func ListHistoryEvents(db *sql.DB, ticketID string) ([]HistoryEvent, error) {
-	rows, err := db.Query(`
+func ListHistoryEvents(ctx context.Context, db *sql.DB, ticketID string) ([]HistoryEvent, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT id, project_id, ticket_id, event_type, payload, COALESCE(created_by, ''), created_at
 		FROM ticket_history
 		WHERE ticket_id = ?
@@ -74,13 +75,13 @@ type HistoryFilter struct {
 
 // ListProjectHistory returns the most recent history events for all tickets in
 // a project, ordered newest first, limited to limit rows.
-func ListProjectHistory(db *sql.DB, projectID int64, limit int) ([]HistoryEvent, error) {
-	return ListProjectHistoryFiltered(db, projectID, limit, HistoryFilter{})
+func ListProjectHistory(ctx context.Context, db *sql.DB, projectID int64, limit int) ([]HistoryEvent, error) {
+	return ListProjectHistoryFiltered(ctx, db, projectID, limit, HistoryFilter{})
 }
 
 // ListProjectHistoryFiltered returns the most recent history events for all
 // tickets in a project, applying optional actor filters.
-func ListProjectHistoryFiltered(db *sql.DB, projectID int64, limit int, filter HistoryFilter) ([]HistoryEvent, error) {
+func ListProjectHistoryFiltered(ctx context.Context, db *sql.DB, projectID int64, limit int, filter HistoryFilter) ([]HistoryEvent, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -113,7 +114,7 @@ func ListProjectHistoryFiltered(db *sql.DB, projectID int64, limit int, filter H
 	`, strings.Join(clauses, " AND "))
 	args = append(args, limit)
 
-	rows, err := db.Query(query, args...)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +131,8 @@ func ListProjectHistoryFiltered(db *sql.DB, projectID int64, limit int, filter H
 	return events, rows.Err()
 }
 
-func AddComment(db *sql.DB, ticketID string, userID string, comment string) (Comment, error) {
-	ticket, err := GetTicket(db, ticketID)
+func AddComment(ctx context.Context, db *sql.DB, ticketID string, userID string, comment string) (Comment, error) {
+	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
 		return Comment{}, err
 	}
@@ -141,7 +142,7 @@ func AddComment(db *sql.DB, ticketID string, userID string, comment string) (Com
 	if ticket.Archived {
 		return Comment{}, ErrTicketClosed
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO comments (item_id, user_id, comment)
 		VALUES (?, ?, ?)
 	`, ticketID, userID, comment)
@@ -152,7 +153,7 @@ func AddComment(db *sql.DB, ticketID string, userID string, comment string) (Com
 	if err != nil {
 		return Comment{}, err
 	}
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 		SELECT c.id, c.item_id, c.user_id, u.username, c.comment, c.created_at
 		FROM comments c
 		JOIN users u ON u.user_id = c.user_id
@@ -166,8 +167,8 @@ func AddComment(db *sql.DB, ticketID string, userID string, comment string) (Com
 	return c, nil
 }
 
-func ListComments(db *sql.DB, ticketID string) ([]Comment, error) {
-	rows, err := db.Query(`
+func ListComments(ctx context.Context, db *sql.DB, ticketID string) ([]Comment, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT c.id, c.item_id, c.user_id, u.username, c.comment, c.created_at
 		FROM comments c
 		JOIN users u ON u.user_id = c.user_id
@@ -200,8 +201,8 @@ func nullableUserID(userID string) any {
 
 // PurgeExpiredSessions deletes sessions whose expires_at is in the past.
 // Returns the number of rows deleted.
-func PurgeExpiredSessions(db *sql.DB) (int64, error) {
-	result, err := db.Exec(`DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP`)
+func PurgeExpiredSessions(ctx context.Context, db *sql.DB) (int64, error) {
+	result, err := db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP`)
 	if err != nil {
 		return 0, err
 	}
@@ -210,11 +211,11 @@ func PurgeExpiredSessions(db *sql.DB) (int64, error) {
 
 // PurgeOldHistory deletes ticket_history events older than retentionDays days.
 // Returns the number of rows deleted.
-func PurgeOldHistory(db *sql.DB, retentionDays int) (int64, error) {
+func PurgeOldHistory(ctx context.Context, db *sql.DB, retentionDays int) (int64, error) {
 	if retentionDays <= 0 {
 		return 0, nil
 	}
-	result, err := db.Exec(
+	result, err := db.ExecContext(ctx, 
 		`DELETE FROM ticket_history WHERE created_at <= datetime('now', ? || ' days')`,
 		fmt.Sprintf("-%d", retentionDays),
 	)

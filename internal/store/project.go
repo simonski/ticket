@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -57,8 +58,8 @@ type ProjectUpdateParams struct {
 	WorkflowID         *int64
 }
 
-func CreateProject(db *sql.DB, title, description, acceptanceCriteria string, createdBy string) (Project, error) {
-	return CreateProjectWithParams(db, ProjectCreateParams{
+func CreateProject(ctx context.Context, db *sql.DB, title, description, acceptanceCriteria string, createdBy string) (Project, error) {
+	return CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix:             deriveProjectPrefix(title),
 		Title:              title,
 		Description:        description,
@@ -67,7 +68,7 @@ func CreateProject(db *sql.DB, title, description, acceptanceCriteria string, cr
 	})
 }
 
-func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, error) {
+func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCreateParams) (Project, error) {
 	title := strings.TrimSpace(params.Title)
 	if title == "" {
 		return Project{}, errors.New("project title is required")
@@ -86,7 +87,7 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 	if !validProjectVisibility(visibility) {
 		return Project{}, fmt.Errorf("invalid project visibility %q", params.Visibility)
 	}
-	uniquePrefix, err := nextUniqueProjectPrefix(db, prefix)
+	uniquePrefix, err := nextUniqueProjectPrefix(ctx, db, prefix)
 	if err != nil {
 		return Project{}, err
 	}
@@ -94,11 +95,11 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 	workflowID := params.WorkflowID
 	if workflowID == nil {
 		var wfID int64
-		if err := db.QueryRow(`SELECT workflow_id FROM workflows WHERE name = 'default'`).Scan(&wfID); err == nil {
+		if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows WHERE name = 'default'`).Scan(&wfID); err == nil {
 			workflowID = &wfID
 		}
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, created_by, workflow_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
 	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), workflowID)
@@ -110,15 +111,15 @@ func CreateProjectWithParams(db *sql.DB, params ProjectCreateParams) (Project, e
 		return Project{}, err
 	}
 	if params.CreatedBy != "" {
-		if _, err := AddProjectMember(db, id, params.CreatedBy, ProjectRoleOwner); err != nil {
+		if _, err := AddProjectMember(ctx, db, id, params.CreatedBy, ProjectRoleOwner); err != nil {
 			return Project{}, err
 		}
 	}
-	return GetProjectByID(db, id)
+	return GetProjectByID(ctx, db, id)
 }
 
-func ListProjects(db *sql.DB) ([]Project, error) {
-	rows, err := db.Query(`
+func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		ORDER BY created_at, project_id
@@ -140,11 +141,11 @@ func ListProjects(db *sql.DB) ([]Project, error) {
 	return projects, rows.Err()
 }
 
-func ListProjectsVisibleToUser(db *sql.DB, user User) ([]Project, error) {
+func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Project, error) {
 	if user.Role == "admin" {
-		return ListProjects(db)
+		return ListProjects(ctx, db)
 	}
-	rows, err := db.Query(`
+	rows, err := db.QueryContext(ctx, `
 		WITH RECURSIVE team_scope(team_id, parent_team_id) AS (
 			SELECT t.team_id, t.parent_team_id
 			FROM teams t
@@ -178,16 +179,16 @@ func ListProjectsVisibleToUser(db *sql.DB, user User) ([]Project, error) {
 	return projects, rows.Err()
 }
 
-func GetProject(db *sql.DB, rawID string) (Project, error) {
+func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) {
 	rawID = strings.TrimSpace(rawID)
 	if rawID == "" {
 		return Project{}, ErrProjectNotFound
 	}
 	var id int64
 	if _, err := fmt.Sscan(rawID, &id); err == nil {
-		return GetProjectByID(db, id)
+		return GetProjectByID(ctx, db, id)
 	}
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		WHERE prefix = ?
@@ -202,8 +203,8 @@ func GetProject(db *sql.DB, rawID string) (Project, error) {
 	return project, nil
 }
 
-func GetProjectByID(db *sql.DB, id int64) (Project, error) {
-	row := db.QueryRow(`
+func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, workflow_id
 		FROM projects
 		WHERE project_id = ?
@@ -218,16 +219,16 @@ func GetProjectByID(db *sql.DB, id int64) (Project, error) {
 	return project, nil
 }
 
-func UpdateProject(db *sql.DB, id int64, title, description, acceptanceCriteria string) (Project, error) {
-	return UpdateProjectWithParams(db, id, ProjectUpdateParams{
+func UpdateProject(ctx context.Context, db *sql.DB, id int64, title, description, acceptanceCriteria string) (Project, error) {
+	return UpdateProjectWithParams(ctx, db, id, ProjectUpdateParams{
 		Title:              title,
 		Description:        description,
 		AcceptanceCriteria: acceptanceCriteria,
 	})
 }
 
-func UpdateProjectWithParams(db *sql.DB, id int64, params ProjectUpdateParams) (Project, error) {
-	current, err := GetProjectByID(db, id)
+func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params ProjectUpdateParams) (Project, error) {
+	current, err := GetProjectByID(ctx, db, id)
 	if err != nil {
 		return Project{}, err
 	}
@@ -270,7 +271,7 @@ func UpdateProjectWithParams(db *sql.DB, id int64, params ProjectUpdateParams) (
 	if nextWorkflowID == nil {
 		nextWorkflowID = current.WorkflowID
 	}
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 		UPDATE projects
 		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, status = ?, visibility = ?, workflow_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
@@ -278,7 +279,7 @@ func UpdateProjectWithParams(db *sql.DB, id int64, params ProjectUpdateParams) (
 	if err != nil {
 		return Project{}, err
 	}
-	return GetProjectByID(db, id)
+	return GetProjectByID(ctx, db, id)
 }
 
 func normalizeProjectVisibility(visibility string) string {
@@ -294,12 +295,12 @@ func validProjectVisibility(visibility string) bool {
 	}
 }
 
-func SetProjectStatus(db *sql.DB, id int64, enabled bool) (Project, error) {
+func SetProjectStatus(ctx context.Context, db *sql.DB, id int64, enabled bool) (Project, error) {
 	status := "closed"
 	if enabled {
 		status = "open"
 	}
-	result, err := db.Exec(`UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, status, id)
+	result, err := db.ExecContext(ctx, `UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, status, id)
 	if err != nil {
 		return Project{}, err
 	}
@@ -310,56 +311,56 @@ func SetProjectStatus(db *sql.DB, id int64, enabled bool) (Project, error) {
 	if affected == 0 {
 		return Project{}, ErrProjectNotFound
 	}
-	return GetProjectByID(db, id)
+	return GetProjectByID(ctx, db, id)
 }
 
 // DeleteProject removes a project and all associated data.
-func DeleteProject(db *sql.DB, id int64) error {
-	if _, err := GetProjectByID(db, id); err != nil {
+func DeleteProject(ctx context.Context, db *sql.DB, id int64) error {
+	if _, err := GetProjectByID(ctx, db, id); err != nil {
 		return err
 	}
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
 	// Delete child data that references tickets in this project
-	if _, err := tx.Exec(`DELETE FROM comments WHERE item_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM comments WHERE item_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM time_entries WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM time_entries WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_labels WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ticket_labels WHERE ticket_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM dependencies WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM dependencies WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM history_events WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM history_events WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_history WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ticket_history WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM story_ticket_links WHERE story_id IN (SELECT story_id FROM stories WHERE project_id = ?)`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM story_ticket_links WHERE story_id IN (SELECT story_id FROM stories WHERE project_id = ?)`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM stories WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM stories WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM tickets WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tickets WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM project_members WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM project_members WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM project_teams WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM project_teams WHERE project_id = ?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM projects WHERE project_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE project_id = ?`, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -369,7 +370,7 @@ func DeleteProject(db *sql.DB, id int64) error {
 // in that project. All foreign-key references (parent_id, clone_of,
 // dependencies, comments, history, labels, time entries, story links) are
 // updated in a single transaction.
-func RenameProjectPrefix(db *sql.DB, projectID int64, newPrefix string) (int, error) {
+func RenameProjectPrefix(ctx context.Context, db *sql.DB, projectID int64, newPrefix string) (int, error) {
 	newPrefix = normalizeProjectPrefix(newPrefix)
 	if err := validateProjectPrefix(newPrefix); err != nil {
 		return 0, err
@@ -377,13 +378,13 @@ func RenameProjectPrefix(db *sql.DB, projectID int64, newPrefix string) (int, er
 
 	// Check the new prefix isn't already used by another project.
 	var existingID int64
-	err := db.QueryRow(`SELECT project_id FROM projects WHERE prefix = ?`, newPrefix).Scan(&existingID)
+	err := db.QueryRowContext(ctx, `SELECT project_id FROM projects WHERE prefix = ?`, newPrefix).Scan(&existingID)
 	if err == nil && existingID != projectID {
 		return 0, fmt.Errorf("prefix %q is already used by another project", newPrefix)
 	}
 
 	// Load project to get current prefix.
-	project, err := GetProjectByID(db, projectID)
+	project, err := GetProjectByID(ctx, db, projectID)
 	if err != nil {
 		return 0, err
 	}
@@ -392,7 +393,7 @@ func RenameProjectPrefix(db *sql.DB, projectID int64, newPrefix string) (int, er
 	}
 
 	// Load all tickets for this project and compute new keys.
-	rows, err := db.Query(`SELECT ticket_id, type FROM tickets WHERE project_id = ?`, projectID)
+	rows, err := db.QueryContext(ctx, `SELECT ticket_id, type FROM tickets WHERE project_id = ?`, projectID)
 	if err != nil {
 		return 0, err
 	}
@@ -425,12 +426,12 @@ func RenameProjectPrefix(db *sql.DB, projectID int64, newPrefix string) (int, er
 	}
 
 	// PRAGMA foreign_keys must be set outside a transaction in SQLite.
-	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return 0, err
 	}
-	defer db.Exec(`PRAGMA foreign_keys = ON`) //nolint:errcheck
+	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
 
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -439,51 +440,51 @@ func RenameProjectPrefix(db *sql.DB, projectID int64, newPrefix string) (int, er
 	// Update each ticket key and all references.
 	for _, m := range mappings {
 		// Primary key
-		if _, err := tx.Exec(`UPDATE tickets SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE tickets SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, fmt.Errorf("renaming %s → %s: %w", m.oldKey, m.newKey, err)
 		}
 		// Parent references
-		if _, err := tx.Exec(`UPDATE tickets SET parent_id = ? WHERE parent_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE tickets SET parent_id = ? WHERE parent_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// Clone references
-		if _, err := tx.Exec(`UPDATE tickets SET clone_of = ? WHERE clone_of = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE tickets SET clone_of = ? WHERE clone_of = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// Dependencies
-		if _, err := tx.Exec(`UPDATE dependencies SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE dependencies SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
-		if _, err := tx.Exec(`UPDATE dependencies SET depends_on = ? WHERE depends_on = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE dependencies SET depends_on = ? WHERE depends_on = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// Story links
-		if _, err := tx.Exec(`UPDATE story_ticket_links SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE story_ticket_links SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// History
-		if _, err := tx.Exec(`UPDATE history_events SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE history_events SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
-		if _, err := tx.Exec(`UPDATE ticket_history SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE ticket_history SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// Comments
-		if _, err := tx.Exec(`UPDATE comments SET item_id = ? WHERE item_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE comments SET item_id = ? WHERE item_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// Labels
-		if _, err := tx.Exec(`UPDATE ticket_labels SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE ticket_labels SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 		// Time entries
-		if _, err := tx.Exec(`UPDATE time_entries SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE time_entries SET ticket_id = ? WHERE ticket_id = ?`, m.newKey, m.oldKey); err != nil {
 			return 0, err
 		}
 	}
 
 	// Update the project prefix.
-	if _, err := tx.Exec(`UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, newPrefix, projectID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, newPrefix, projectID); err != nil {
 		return 0, err
 	}
 

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -61,17 +62,17 @@ func validTeamRole(role string) bool {
 	}
 }
 
-func CreateTeam(db *sql.DB, name string, parentTeamID *int64) (Team, error) {
+func CreateTeam(ctx context.Context, db *sql.DB, name string, parentTeamID *int64) (Team, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Team{}, errors.New("team name is required")
 	}
 	if parentTeamID != nil {
-		if _, err := GetTeamByID(db, *parentTeamID); err != nil {
+		if _, err := GetTeamByID(ctx, db, *parentTeamID); err != nil {
 			return Team{}, err
 		}
 	}
-	result, err := db.Exec(`
+	result, err := db.ExecContext(ctx, `
 		INSERT INTO teams (name, parent_team_id, updated_at)
 		VALUES (?, ?, CURRENT_TIMESTAMP)
 	`, name, parentTeamID)
@@ -82,11 +83,11 @@ func CreateTeam(db *sql.DB, name string, parentTeamID *int64) (Team, error) {
 	if err != nil {
 		return Team{}, err
 	}
-	return GetTeamByID(db, id)
+	return GetTeamByID(ctx, db, id)
 }
 
-func GetTeamByID(db *sql.DB, id int64) (Team, error) {
-	row := db.QueryRow(`
+func GetTeamByID(ctx context.Context, db *sql.DB, id int64) (Team, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT team_id, name, parent_team_id, created_at, updated_at
 		FROM teams
 		WHERE team_id = ?
@@ -101,8 +102,8 @@ func GetTeamByID(db *sql.DB, id int64) (Team, error) {
 	return team, nil
 }
 
-func ListTeams(db *sql.DB) ([]Team, error) {
-	rows, err := db.Query(`
+func ListTeams(ctx context.Context, db *sql.DB) ([]Team, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT team_id, name, parent_team_id, created_at, updated_at
 		FROM teams
 		ORDER BY name, team_id
@@ -123,8 +124,8 @@ func ListTeams(db *sql.DB) ([]Team, error) {
 	return teams, rows.Err()
 }
 
-func UpdateTeam(db *sql.DB, id int64, name string, parentTeamID *int64) (Team, error) {
-	current, err := GetTeamByID(db, id)
+func UpdateTeam(ctx context.Context, db *sql.DB, id int64, name string, parentTeamID *int64) (Team, error) {
+	current, err := GetTeamByID(ctx, db, id)
 	if err != nil {
 		return Team{}, err
 	}
@@ -136,11 +137,11 @@ func UpdateTeam(db *sql.DB, id int64, name string, parentTeamID *int64) (Team, e
 		if *parentTeamID == id {
 			return Team{}, errors.New("team cannot be its own parent")
 		}
-		if _, err := GetTeamByID(db, *parentTeamID); err != nil {
+		if _, err := GetTeamByID(ctx, db, *parentTeamID); err != nil {
 			return Team{}, err
 		}
 		// Prevent cycles by ensuring the candidate parent does not descend from this team.
-		descendantIDs, err := TeamDescendantIDs(db, id)
+		descendantIDs, err := TeamDescendantIDs(ctx, db, id)
 		if err != nil {
 			return Team{}, err
 		}
@@ -150,18 +151,18 @@ func UpdateTeam(db *sql.DB, id int64, name string, parentTeamID *int64) (Team, e
 			}
 		}
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		UPDATE teams
 		SET name = ?, parent_team_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE team_id = ?
 	`, nextName, parentTeamID, id); err != nil {
 		return Team{}, err
 	}
-	return GetTeamByID(db, id)
+	return GetTeamByID(ctx, db, id)
 }
 
-func DeleteTeam(db *sql.DB, id int64) error {
-	result, err := db.Exec(`DELETE FROM teams WHERE team_id = ?`, id)
+func DeleteTeam(ctx context.Context, db *sql.DB, id int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM teams WHERE team_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -175,29 +176,29 @@ func DeleteTeam(db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddTeamMember(db *sql.DB, teamID int64, userID string, role, jobTitle string) (TeamMember, error) {
+func AddTeamMember(ctx context.Context, db *sql.DB, teamID int64, userID string, role, jobTitle string) (TeamMember, error) {
 	role = normalizeTeamRole(role)
 	if !validTeamRole(role) {
 		return TeamMember{}, fmt.Errorf("invalid team role %q", role)
 	}
-	if _, err := GetTeamByID(db, teamID); err != nil {
+	if _, err := GetTeamByID(ctx, db, teamID); err != nil {
 		return TeamMember{}, err
 	}
-	if _, err := GetUserByID(db, userID); err != nil {
+	if _, err := GetUserByID(ctx, db, userID); err != nil {
 		return TeamMember{}, err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO team_members (team_id, user_id, role, job_title, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(team_id, user_id) DO UPDATE SET role = excluded.role, job_title = excluded.job_title, updated_at = CURRENT_TIMESTAMP
 	`, teamID, userID, role, strings.TrimSpace(jobTitle)); err != nil {
 		return TeamMember{}, err
 	}
-	return GetTeamMember(db, teamID, userID)
+	return GetTeamMember(ctx, db, teamID, userID)
 }
 
-func GetTeamMember(db *sql.DB, teamID int64, userID string) (TeamMember, error) {
-	row := db.QueryRow(`
+func GetTeamMember(ctx context.Context, db *sql.DB, teamID int64, userID string) (TeamMember, error) {
+	row := db.QueryRowContext(ctx, `
 		SELECT tm.team_id, tm.user_id, u.username, tm.role, tm.job_title
 		FROM team_members tm
 		JOIN users u ON u.user_id = tm.user_id
@@ -213,8 +214,8 @@ func GetTeamMember(db *sql.DB, teamID int64, userID string) (TeamMember, error) 
 	return member, nil
 }
 
-func RemoveTeamMember(db *sql.DB, teamID int64, userID string) error {
-	result, err := db.Exec(`DELETE FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
+func RemoveTeamMember(ctx context.Context, db *sql.DB, teamID int64, userID string) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
 	if err != nil {
 		return err
 	}
@@ -228,8 +229,8 @@ func RemoveTeamMember(db *sql.DB, teamID int64, userID string) error {
 	return nil
 }
 
-func ListTeamMembers(db *sql.DB, teamID int64) ([]TeamMember, error) {
-	rows, err := db.Query(`
+func ListTeamMembers(ctx context.Context, db *sql.DB, teamID int64) ([]TeamMember, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT tm.team_id, tm.user_id, u.username, tm.role, tm.job_title
 		FROM team_members tm
 		JOIN users u ON u.user_id = tm.user_id
@@ -251,8 +252,8 @@ func ListTeamMembers(db *sql.DB, teamID int64) ([]TeamMember, error) {
 	return members, rows.Err()
 }
 
-func TeamRoleForUser(db *sql.DB, teamID int64, userID string) (string, bool, error) {
-	row := db.QueryRow(`SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
+func TeamRoleForUser(ctx context.Context, db *sql.DB, teamID int64, userID string) (string, bool, error) {
+	row := db.QueryRowContext(ctx, `SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
 	var role string
 	if err := row.Scan(&role); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -263,21 +264,21 @@ func TeamRoleForUser(db *sql.DB, teamID int64, userID string) (string, bool, err
 	return normalizeTeamRole(role), true, nil
 }
 
-func AddTeamAgent(db *sql.DB, teamID int64, agentID string) (TeamAgent, error) {
-	if _, err := GetTeamByID(db, teamID); err != nil {
+func AddTeamAgent(ctx context.Context, db *sql.DB, teamID int64, agentID string) (TeamAgent, error) {
+	if _, err := GetTeamByID(ctx, db, teamID); err != nil {
 		return TeamAgent{}, err
 	}
-	if _, err := GetAgentByID(db, agentID); err != nil {
+	if _, err := GetAgentByID(ctx, db, agentID); err != nil {
 		return TeamAgent{}, err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO team_agents (team_id, user_id)
 		VALUES (?, ?)
 		ON CONFLICT(team_id, user_id) DO NOTHING
 	`, teamID, agentID); err != nil {
 		return TeamAgent{}, err
 	}
-	row := db.QueryRow(`
+	row := db.QueryRowContext(ctx, `
 		SELECT ta.team_id, u.user_id, u.username, u.enabled, COALESCE(u.status, '')
 		FROM team_agents ta
 		JOIN users u ON u.user_id = ta.user_id
@@ -292,8 +293,8 @@ func AddTeamAgent(db *sql.DB, teamID int64, agentID string) (TeamAgent, error) {
 	return item, nil
 }
 
-func RemoveTeamAgent(db *sql.DB, teamID int64, agentID string) error {
-	result, err := db.Exec(`DELETE FROM team_agents WHERE team_id = ? AND user_id = ?`, teamID, agentID)
+func RemoveTeamAgent(ctx context.Context, db *sql.DB, teamID int64, agentID string) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM team_agents WHERE team_id = ? AND user_id = ?`, teamID, agentID)
 	if err != nil {
 		return err
 	}
@@ -307,8 +308,8 @@ func RemoveTeamAgent(db *sql.DB, teamID int64, agentID string) error {
 	return nil
 }
 
-func ListTeamAgents(db *sql.DB, teamID int64) ([]TeamAgent, error) {
-	rows, err := db.Query(`
+func ListTeamAgents(ctx context.Context, db *sql.DB, teamID int64) ([]TeamAgent, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT ta.team_id, u.user_id, u.username, u.enabled, COALESCE(u.status, '')
 		FROM team_agents ta
 		JOIN users u ON u.user_id = ta.user_id
@@ -332,19 +333,19 @@ func ListTeamAgents(db *sql.DB, teamID int64) ([]TeamAgent, error) {
 	return items, rows.Err()
 }
 
-func AddProjectTeamMember(db *sql.DB, projectID, teamID int64, role string) (ProjectTeamMember, error) {
+func AddProjectTeamMember(ctx context.Context, db *sql.DB, projectID, teamID int64, role string) (ProjectTeamMember, error) {
 	role = normalizeProjectRole(role)
 	if !validProjectRole(role) {
 		return ProjectTeamMember{}, fmt.Errorf("invalid role %q", role)
 	}
-	if _, err := GetProjectByID(db, projectID); err != nil {
+	if _, err := GetProjectByID(ctx, db, projectID); err != nil {
 		return ProjectTeamMember{}, err
 	}
-	team, err := GetTeamByID(db, teamID)
+	team, err := GetTeamByID(ctx, db, teamID)
 	if err != nil {
 		return ProjectTeamMember{}, err
 	}
-	if _, err := db.Exec(`
+	if _, err := db.ExecContext(ctx, `
 		INSERT INTO project_teams (project_id, team_id, role)
 		VALUES (?, ?, ?)
 		ON CONFLICT(project_id, team_id) DO UPDATE SET role = excluded.role
@@ -359,8 +360,8 @@ func AddProjectTeamMember(db *sql.DB, projectID, teamID int64, role string) (Pro
 	}, nil
 }
 
-func RemoveProjectTeamMember(db *sql.DB, projectID, teamID int64) error {
-	result, err := db.Exec(`DELETE FROM project_teams WHERE project_id = ? AND team_id = ?`, projectID, teamID)
+func RemoveProjectTeamMember(ctx context.Context, db *sql.DB, projectID, teamID int64) error {
+	result, err := db.ExecContext(ctx, `DELETE FROM project_teams WHERE project_id = ? AND team_id = ?`, projectID, teamID)
 	if err != nil {
 		return err
 	}
@@ -374,8 +375,8 @@ func RemoveProjectTeamMember(db *sql.DB, projectID, teamID int64) error {
 	return nil
 }
 
-func ListProjectTeamMembers(db *sql.DB, projectID int64) ([]ProjectTeamMember, error) {
-	rows, err := db.Query(`
+func ListProjectTeamMembers(ctx context.Context, db *sql.DB, projectID int64) ([]ProjectTeamMember, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT pt.project_id, t.team_id, t.name, pt.role
 		FROM project_teams pt
 		JOIN teams t ON t.team_id = pt.team_id
@@ -397,8 +398,8 @@ func ListProjectTeamMembers(db *sql.DB, projectID int64) ([]ProjectTeamMember, e
 	return items, rows.Err()
 }
 
-func TeamIDsForUserWithAncestors(db *sql.DB, userID string) ([]int64, error) {
-	rows, err := db.Query(`
+func TeamIDsForUserWithAncestors(ctx context.Context, db *sql.DB, userID string) ([]int64, error) {
+	rows, err := db.QueryContext(ctx, `
 		WITH RECURSIVE walk(team_id, parent_team_id) AS (
 			SELECT t.team_id, t.parent_team_id
 			FROM teams t
@@ -427,8 +428,8 @@ func TeamIDsForUserWithAncestors(db *sql.DB, userID string) ([]int64, error) {
 	return ids, rows.Err()
 }
 
-func TeamDescendantIDs(db *sql.DB, teamID int64) ([]int64, error) {
-	rows, err := db.Query(`
+func TeamDescendantIDs(ctx context.Context, db *sql.DB, teamID int64) ([]int64, error) {
+	rows, err := db.QueryContext(ctx, `
 		WITH RECURSIVE children(team_id) AS (
 			SELECT team_id FROM teams WHERE parent_team_id = ?
 			UNION
@@ -451,7 +452,7 @@ func TeamDescendantIDs(db *sql.DB, teamID int64) ([]int64, error) {
 	return out, rows.Err()
 }
 
-func HighestProjectRoleForTeams(db *sql.DB, projectID int64, teamIDs []int64) (string, bool, error) {
+func HighestProjectRoleForTeams(ctx context.Context, db *sql.DB, projectID int64, teamIDs []int64) (string, bool, error) {
 	if len(teamIDs) == 0 {
 		return "", false, nil
 	}
@@ -467,7 +468,7 @@ func HighestProjectRoleForTeams(db *sql.DB, projectID int64, teamIDs []int64) (s
 		FROM project_teams
 		WHERE project_id = ? AND team_id IN (` + strings.Join(placeholders, ",") + `)
 	`
-	rows, err := db.Query(query, args...)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return "", false, err
 	}
