@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make setup                # Install all dev dependencies (Go modules + Node + Playwright)
 make build                # Build binary to ./bin/ticket, increments patch version
 make test                 # Run all tests (unit + integration + playwright)
+make test-go              # Run all Go tests (unit + integration)
 make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, client, server, store, libticket, libtickethttp)
 make test-go-cover        # Tests with per-package coverage thresholds

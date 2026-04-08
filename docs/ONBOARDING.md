@@ -24,7 +24,7 @@ Read these documents in order — each one builds on the last:
 
 1. `README.md` — what the project is and why it exists
 2. `CLAUDE.md` — architecture, package table, build commands, special commands
-3. `QUICKSTART.md` — fastest path to a running server
+3. `QUICKSTART.md` — choose local or server mode, then follow the linked guide
 4. `TESTING.md` — test strategy, how to run each suite, coverage thresholds
 5. `docs/DESIGN.md` — deeper architecture, data model, design decisions
 6. `USER_GUIDE.md` — full CLI and web UI reference

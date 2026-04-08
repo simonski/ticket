@@ -135,7 +135,7 @@ Coverage thresholds (enforced in CI):
   are short (one or two letters).
 - **No magic numbers**: define named constants in `constants.go`.
 - **Lint**: run `make lint` before every commit. Fix all warnings.
-- **Interface design**: prefer small, focused interfaces over the 104-method
+- **Interface design**: prefer small, focused interfaces over the large
   `Service` monolith. New feature sets should define their own sub-interface.
 - **SQL**: always use parameterised queries (`?` placeholders). Never
   interpolate user input into SQL strings.
