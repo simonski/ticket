@@ -1,55 +1,67 @@
 # SRE / Observability
 
-**Score: 28/100**
+**Score: 44/100** (was 28)
 
 ## What is being assessed
-Production operational readiness: structured logging, metrics, distributed tracing, health checks, graceful shutdown, backup/restore, runbooks, incident response, alerting, SLOs, and capacity planning. Good SRE posture means the system can be understood, diagnosed, and recovered from in production.
+Production operational readiness: graceful shutdown (SIGTERM handling, connection draining), health/readiness endpoint quality, metrics (Prometheus), structured logging, alerting rules, backup/restore procedures, runbooks, SLOs, capacity planning, and security hardening of observability endpoints.
 
 ## Methodology
-Reviewed all server-side code (`internal/server/`, `cmd/ticket/cmd_setup.go`), deployment files (`compose.yaml`, `Dockerfile`, `deploy/`), and documentation. Checked for signal handling, metrics endpoints, structured logging libraries, and runbook existence.
+Reviewed `internal/server/server.go`, `cmd/ticket/cmd_setup.go` (`runServer`), `internal/server/api_system.go`, `compose.yaml`, `Dockerfile`, and `docs/RUNBOOKS.md`. Searched the entire codebase for `prometheus`, `slog`, `logrus`, `zap`, `signal`, `Shutdown`, and `SIGTERM`. Cross-checked findings against previous assessment recommendations.
 
 ## Findings
 
 ### Passing checks
-- Health check endpoint `GET /api/healthz` executes `SELECT 1` and returns version (`internal/server/api.go:100-112`)
-- Manual snapshot export/import available (`ticket export`, `ticket import`) with schema version validation
-- SQLite WAL mode enabled for concurrent read access (`internal/store/store.go`)
-- `busy_timeout: 5000ms` configured to handle lock contention
-- Server flags cover port, address, verbose mode, static path
-- Watchtower auto-update configured in `deploy/compose.yaml`
+- `/api/healthz` executes `SELECT 1` and returns 200+version — confirms DB is reachable before reporting healthy — `api_system.go:14-24`
+- `/metrics` endpoint returns Prometheus text format (`text/plain; version=0.0.4`) — `api_system.go:27-78`
+- `/metrics` exposes: `ticket_up`, `ticket_open_tickets_total`, `ticket_projects_total`, `ticket_users_total`, `go_goroutines`, `go_memstats_alloc_bytes`, `go_memstats_sys_bytes` — `api_system.go:39-78`
+- Structured logging with `log/slog`: request method, path, status, duration_ms, query, bodies — `server.go:161-196`
+- `slog.Error` / `slog.Info` used in background goroutines (agent reaper, purge) — `server.go:50-55`
+- `ReadHeaderTimeout: 30 * time.Second` set on `http.Server` — mitigates Slowloris — `server.go:24-29`
+- Security headers middleware: `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy` — `server.go:115-122`
+- `docs/RUNBOOKS.md` covers: cold start, crash restart, DB recovery, backup/restore, user lockout, agent reaper, high latency, WebSocket disconnections, disk full — `docs/RUNBOOKS.md`
+- Automated backup example provided (daily cron using `ticket export | gzip`) — `docs/RUNBOOKS.md:backup`
+- `ticket export` / `ticket import` provide consistent backup/restore — `cmd/ticket/main.go`
+- `TICKET_HISTORY_RETENTION_DAYS` env var for bounded history growth — `server.go:75-84`
+- `restart: unless-stopped` in `compose.yaml` — container auto-restarts on crash
+- Resource limits in compose: 512m memory, 1.0 CPU — prevents OOM runaway
+- Agent reaper runs on startup and every 60s — prevents stuck-agent accumulation — `server.go:36-68`
+- Retention purge runs on startup and daily — `server.go:70-93`
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No graceful shutdown (no SIGTERM/SIGINT handling) | Critical | `cmd/ticket/cmd_setup.go:1002` | Add `signal.NotifyContext` + `srv.Shutdown(ctx)` with 30s timeout |
-| No structured logging — only `fmt.Fprintf` | High | `internal/server/server.go:153-183` | Adopt `slog` (stdlib Go 1.21+) with fields: request_id, method, path, status, duration_ms, user_id |
-| No metrics endpoint | High | repo-wide | Add `GET /metrics` returning Prometheus format; track http_requests_total, latency histograms |
-| No tracing (OpenTelemetry) | Medium | repo-wide | Add OTEL SDK; create spans for HTTP handlers and DB queries |
-| No alerting rules defined | High | repo-wide | Define Prometheus alert rules: 5xx rate >5%, latency p99 >1s, disk <10% |
-| No SLOs defined | High | repo-wide | Define: 99.5% availability, p99 <500ms latency, <0.1% error rate |
-| No incident response process | High | repo-wide | Create `docs/RUNBOOKS.md` with severity levels, escalation paths, playbooks |
-| `MaxOpenConns: 1` — all requests serialize | High | `internal/store/store.go` | Increase to 5-10; document as SQLite concurrency limitation |
-| Session `expires_at` column exists but never checked | Medium | `internal/store/store.go:168` | Enforce TTL check in token validation code path |
-| No automated backup scheduling | Medium | repo-wide | Add cron/systemd timer for daily `ticket export` with compression |
-| No runbooks | Medium | `deploy/README.md` | Create runbooks for: cold start, DB recovery, agent reaper issues, user lockout |
-| No liveness vs readiness distinction | Low | `/api/healthz` | Add `/health` (liveness, no DB) separate from `/api/healthz` (readiness) |
-| Startup timing not measured; migrations not logged | Low | `internal/store/store.go:105-546` | Log each migration step with duration; alert if startup >30s |
+| No graceful shutdown — `runServer` calls `srv.ListenAndServe()` with no SIGTERM handler | Critical | `cmd/ticket/cmd_setup.go:1002` | Wrap with `signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)` + `srv.httpServer.Shutdown(ctx)` + close `stopReaper` channel |
+| Structured logging disabled by default — requires `-v` flag | High | `server.go:135-143` | Log at WARN/ERROR level unconditionally; gate request-body logging behind `-v`; startup and errors should always be structured |
+| `/metrics` is unauthenticated — exposes ticket/user/project counts to anonymous callers | High | `api_system.go:27` | Require bearer token or restrict to loopback/internal network; add `requireAdmin` check or IP allowlist |
+| No HTTP request rate or latency metrics — `/metrics` has only gauge snapshots | Medium | `api_system.go` | Add `http_requests_total{method,path,status}` counter and `http_request_duration_seconds` histogram using `prometheus/client_golang` |
+| `fmt.Fprintf` used for startup banner and DB path — not captured in structured log | Medium | `cmd/ticket/cmd_setup.go:999-1001` | Emit structured startup event via `slog.Info` with addr, db_path, version |
+| No alerting rules — no Prometheus alert rules file | High | repo-wide | Define: `TicketDown` (ticket_up==0), `High5xxRate` (5xx >5% of requests), `SlowAPI` (p99 latency >1s) |
+| No SLOs defined | High | repo-wide | Document: 99.5% availability, p99 latency <500ms, 5xx rate <0.1% |
+| No liveness vs readiness split — single `/api/healthz` serves both purposes | Low | `api_system.go:14` | Add `GET /healthz` (liveness, no DB check) separate from `/api/healthz` (readiness, DB ping) |
+| No distributed tracing | Low | repo-wide | Add OpenTelemetry SDK; instrument HTTP handlers and SQLite queries |
+| `/metrics` uses hand-rolled Prometheus text format instead of `prometheus/client_golang` | Low | `api_system.go:27-78` | Use official library for correctness (type/help lines, label escaping, histogram buckets) |
 
 ## Verdict
-The project is not production-ready from an SRE perspective. The most critical gap is the absence of graceful shutdown — a SIGTERM will abruptly kill all WebSocket connections and in-flight requests. Structured logging and metrics are also entirely absent, making production diagnosis nearly impossible. The snapshot mechanism provides a foundation for backup, but requires operational wrapping.
+Material progress since the previous assessment: a Prometheus `/metrics` endpoint and `slog` structured logging are both present, `docs/RUNBOOKS.md` provides comprehensive operational playbooks, and `ReadHeaderTimeout` closes the Slowloris gap. However, the most critical SRE gap remains unaddressed — there is no SIGTERM handler. A `docker compose stop` or Kubernetes pod eviction will kill all in-flight requests and WebSocket connections abruptly. Unauthenticated `/metrics` and missing alert rules keep the project in "observable but not operated" territory. Fixing graceful shutdown alone would unlock the next tier of production readiness.
 
 ## Changes since last assessment
-First assessment.
+| Change | Impact |
+|--------|--------|
+| `ReadHeaderTimeout: 30s` added to `http.Server` | Closes Slowloris (slow-header) vulnerability |
+| `/metrics` Prometheus endpoint present (7 metrics: up, tickets, projects, users, goroutines, alloc, sys) | Closes previous High finding on missing metrics |
+| `log/slog` structured logging with method/path/status/duration_ms fields | Closes previous High finding on unstructured logging |
+| Comprehensive `docs/RUNBOOKS.md` (9 scenarios including DB recovery and backup) | Closes previous High finding on missing runbooks |
+| `TICKET_HISTORY_RETENTION_DAYS` env var for history pruning | Reduces unbounded storage growth risk |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Graceful shutdown | Critical | `signal.NotifyContext` + `srv.Shutdown(ctx)` + `stopReaper` channel close |
-| Structured logging with `slog` | High | Add request_id, user_id, duration_ms to all HTTP log lines |
-| Prometheus `/metrics` endpoint | High | Track requests, latency histograms, error counts, WS connections |
-| Define and publish SLOs | High | 99.5% availability, p99 <500ms, <0.1% 5xx rate |
-| `docs/RUNBOOKS.md` | High | Cover: restart, DB recovery, agent issues, user lockout, high latency |
-| Session TTL enforcement | Medium | Check `expires_at` on every token lookup |
-| Automated daily backup | Medium | Cron: `ticket export | gzip > backup-$(date +%Y%m%d).json.gz` |
-| OpenTelemetry tracing | Medium | Span HTTP handlers and DB queries; export to OTEL collector |
-| Increase `MaxOpenConns` | Medium | Set to 5-10; document SQLite concurrency ceiling |
+| Graceful shutdown | Critical | `signal.NotifyContext` + `srv.httpServer.Shutdown(ctx)` + close `stopReaper` on SIGTERM/SIGINT |
+| Unauthenticated `/metrics` | High | Add `requireAdmin` check or IP allowlist; metrics reveal org/team size |
+| Alert rules | High | Define Prometheus rules for: server down, high 5xx rate, high latency, low disk |
+| Define SLOs | High | Document availability, latency, and error-rate targets |
+| Log unconditionally at ERROR/WARN | High | Remove `-v` requirement for error and startup logging |
+| HTTP request metrics (rate + latency histogram) | Medium | Replace gauge-only `/metrics` with full RED metrics via `prometheus/client_golang` |
+| Structured startup log | Medium | Replace `fmt.Fprintf` banner with `slog.Info("server starting", "addr", listenAddr, "db", dbPath)` |
+| Liveness vs readiness split | Low | `GET /healthz` (no DB) for liveness; keep `/api/healthz` (DB ping) for readiness |
+| OpenTelemetry tracing | Low | Span HTTP handlers and SQLite queries; export to OTEL collector |
