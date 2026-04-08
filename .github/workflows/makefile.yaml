@@ -32,3 +32,57 @@ jobs:
 
     - name: Run govulncheck
       run: govulncheck ./...
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create releases and push the version-bump commit
+      packages: write   # push images to ghcr.io
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # Use a PAT so the version-bump commit can trigger future workflows if needed.
+        # Falls back to GITHUB_TOKEN if TAP_TOKEN is not set (won't retrigger CI either way).
+        token: ${{ secrets.TAP_TOKEN || secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Install release tools
+      run: make setup-go
+
+    - name: Configure git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Bump version
+      run: make bump-version
+
+    - name: Commit and push version bump
+      run: |
+        VERSION=$(cat cmd/ticket/VERSION | tr -d '[:space:]')
+        git add cmd/ticket/VERSION
+        git commit -m "chore: bump version to ${VERSION} [skip ci]"
+        git push
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker image
+      run: make docker-push
+
+    - name: Create GitHub release and update Homebrew tap
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HOMEBREW_TAP_REPO: https://x-access-token:${{ secrets.TAP_TOKEN }}@github.com/simonski/homebrew-tap.git
+      run: make release-publish
