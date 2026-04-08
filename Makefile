@@ -5,7 +5,7 @@ VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
 GITHUB_REPO   := simonski/ticket
 GHCR_IMAGE    := ghcr.io/simonski/ticket
 DIST_DIR      := dist
-HOMEBREW_TAP  := ../homebrew-tap  # local checkout of simonski/homebrew-tap (optional)
+HOMEBREW_TAP_REPO := https://github.com/simonski/homebrew-tap.git
 
 default: help
 
@@ -33,11 +33,11 @@ help:
 	@printf "  make docker-down     Stop the service via Docker Compose.\n"
 	@printf "\n"
 	@printf "Release targets:\n\n"
-	@printf "  make release         Full release: build → checksums → formula → instructions.\n"
+	@printf "  make release         Full release: build → checksums → SBOM → formula → GitHub release → homebrew tap.\n"
+	@printf "  make release-publish Same as release (all-in-one).\n"
 	@printf "  make release-build   Cross-compile binaries and pack tarballs into ./dist.\n"
 	@printf "  make release-checksums  Write SHA256 checksums for all dist tarballs.\n"
 	@printf "  make release-formula Generate homebrew/ticket.rb from the formula template.\n"
-	@printf "  make release-publish Upload tarballs to a GitHub release via gh CLI.\n"
 	@printf "  make release-clean   Remove the ./dist directory.\n"
 	@printf "\n"
 
@@ -123,13 +123,13 @@ test-tk-test: build
 	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
 # ─── release ──────────────────────────────────────────────────────────────────
-# Produces cross-platform tarballs in ./dist and updates homebrew/ticket.rb.
-# Prerequisites: go, gh (GitHub CLI), shasum.
+# Produces cross-platform tarballs in ./dist, creates a GitHub release, and
+# pushes the updated Homebrew formula to the simonski/homebrew-tap repo.
+# Prerequisites: go, gh (GitHub CLI), shasum, cyclonedx-gomod, git.
 #
-# Workflow:
-#   make release          → build + checksums + formula
-#   make release-publish  → gh release create + upload tarballs
-#   (copy homebrew/ticket.rb → simonski/homebrew-tap/Formula/ticket.rb and push)
+# Usage:
+#   make release          → full end-to-end release (alias for release-publish)
+#   make release-publish  → build + checksums + SBOM + formula + GitHub release + tap update
 
 RELEASE_PLATFORMS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64
 
@@ -181,7 +181,7 @@ release-formula:
 		homebrew/ticket.rb.tmpl > homebrew/ticket.rb
 	@echo "Formula written to homebrew/ticket.rb"
 
-release-publish:
+release-publish: release-build release-checksums release-sbom release-formula
 	@echo "Creating GitHub release v$(VERSION)..."
 	@gh release create v$(VERSION) \
 		--repo $(GITHUB_REPO) \
@@ -194,37 +194,25 @@ release-publish:
 		$(DIST_DIR)/checksums.txt \
 		$(DIST_DIR)/sbom.cdx.json
 	@echo "Release v$(VERSION) published."
-
-release: release-build release-checksums release-sbom release-formula
+	@echo "Updating homebrew tap..."
+	@TAP_DIR=$$(mktemp -d) && \
+		trap "rm -rf $$TAP_DIR" EXIT && \
+		git clone $(HOMEBREW_TAP_REPO) "$$TAP_DIR" && \
+		cp homebrew/ticket.rb "$$TAP_DIR/Formula/ticket.rb" && \
+		git -C "$$TAP_DIR" add Formula/ticket.rb && \
+		git -C "$$TAP_DIR" commit -m "ticket $(VERSION)" && \
+		git -C "$$TAP_DIR" push
+	@echo "Homebrew tap updated."
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "  Release v$(VERSION) ready"
+	@echo "  v$(VERSION) released"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "  Artifacts:   $(DIST_DIR)/"
-	@echo "  Formula:     homebrew/ticket.rb"
-	@echo "  Tap dir:     $(HOMEBREW_TAP)"
-	@echo ""
-	@echo "  Step 1 — publish the GitHub release:"
-	@echo ""
-	@echo "    make release-publish"
-	@echo ""
-	@echo "  Step 2 — push the formula to the tap repo:"
-	@echo ""
-	@echo "    cp homebrew/ticket.rb ../homebrew-tap/Formula/ticket.rb"
-	@echo "    git -C $(HOMEBREW_TAP) add Formula/ticket.rb"
-	@echo "    git -C $(HOMEBREW_TAP) commit -m \"ticket $(VERSION)\""
-	@echo "    git -C $(HOMEBREW_TAP) push"
-	@echo ""
-	@echo "  Users then install with:"
-	@echo ""
-	@echo "    brew tap simonski/tap"
-	@echo "    brew install ticket"
-	@echo ""
-	@echo "  Or in one line:"
-	@echo ""
+	@echo "  Install with:"
 	@echo "    brew install simonski/tap/ticket"
 	@echo ""
+
+release: release-publish
 
 # ─── docker ───────────────────────────────────────────────────────────────────
 
