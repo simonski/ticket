@@ -795,7 +795,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			agentRows.Close()
 			for _, id := range agentIDs {
 				u := generateAgentUUID()
-				db.ExecContext(ctx, `UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id)
+				if _, err := db.ExecContext(ctx, `UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id); err != nil {
+					return fmt.Errorf("migrate agent uuid: %w", err)
+				}
 			}
 		}
 		// Migrate agent data into users table
@@ -1275,9 +1277,16 @@ func backfillTicketKeys(ctx context.Context, db *sql.DB) error {
 // using the key column value as the new ticket_id, then drops the key column.
 // This is a one-time migration for databases created before the refactor.
 func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
-	// Detect: if the key column still exists, migration is needed.
+	// Detect: if the key column still exists, migration is needed (or was interrupted).
 	if !columnExists(ctx, db, "tickets", "key") {
 		return nil
+	}
+
+	// If ticket_id is already TEXT the data migration completed but the key
+	// column was never dropped (interrupted run). Just drop the column and return.
+	if columnType(ctx, db, "tickets", "ticket_id") == "TEXT" {
+		_, err := db.ExecContext(ctx, `ALTER TABLE tickets DROP COLUMN key`)
+		return err
 	}
 
 	// Build a mapping of old integer ticket_id → key string.
@@ -1294,12 +1303,12 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 	for rows.Next() {
 		var m idMapping
 		if err := rows.Scan(&m.oldID, &m.key); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		mappings = append(mappings, m)
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	// Recreate tickets table with TEXT PRIMARY KEY, without key column.
 	if _, err := db.ExecContext(ctx, `ALTER TABLE tickets RENAME TO tickets_old_int`); err != nil {
@@ -1374,8 +1383,8 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 	for i, c := range presentCols {
 		prefixedCols[i] = "o." + c
 	}
-	insertSQL := fmt.Sprintf(`
-		INSERT INTO tickets (ticket_id, %s, parent_id, clone_of)
+	insertSQL := fmt.Sprintf( // #nosec G201 -- columns are enumerated from the live schema, not user input
+		`INSERT INTO tickets (ticket_id, %s, parent_id, clone_of)
 		SELECT
 			o.key,
 			%s,
@@ -1406,8 +1415,8 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 		if !tableExists(ctx, db, fk.table) || !columnExists(ctx, db, fk.table, fk.column) {
 			continue
 		}
-		updateSQL := fmt.Sprintf(`
-			UPDATE %s SET %s = (
+		updateSQL := fmt.Sprintf( // #nosec G201 -- table and column names come from a hardcoded internal list, not user input
+			`UPDATE %s SET %s = (
 				SELECT key FROM tickets_old_int WHERE ticket_id = CAST(%s.%s AS INTEGER)
 			) WHERE EXISTS (
 				SELECT 1 FROM tickets_old_int WHERE ticket_id = CAST(%s.%s AS INTEGER)
@@ -1624,7 +1633,7 @@ func tableExists(ctx context.Context, db *sql.DB, tableName string) bool {
 }
 
 func columnExists(ctx context.Context, db *sql.DB, tableName, columnName string) bool {
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(` + tableName + `)`)
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+tableName+`)`)
 	if err != nil {
 		return false
 	}
@@ -1644,4 +1653,28 @@ func columnExists(ctx context.Context, db *sql.DB, tableName, columnName string)
 		}
 	}
 	return false
+}
+
+// columnType returns the declared type of a column (e.g. "TEXT", "INTEGER").
+// Returns "" if the table or column does not exist.
+func columnType(ctx context.Context, db *sql.DB, tableName, columnName string) string {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+tableName+`)`)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return ""
+		}
+		if name == columnName {
+			return ctype
+		}
+	}
+	return ""
 }

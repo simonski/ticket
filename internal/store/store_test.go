@@ -188,3 +188,56 @@ func assertTableExists(t *testing.T, db *sql.DB, name string) {
 		t.Fatalf("table %s not found: %v", name, err)
 	}
 }
+
+// TestMigrateTicketIDToTextAlreadyTextDropsKeyColumn verifies that if the
+// migration ran previously (ticket_id is already TEXT) but the key column was
+// never dropped (interrupted run), calling migrateTicketIDToText again does
+// not try to scan TEXT ids as int64 and simply drops the key column.
+func TestMigrateTicketIDToTextAlreadyTextDropsKeyColumn(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "migrate_test.db")
+	if err := Init(dbPath, "admin", "password"); err != nil {
+		t.Fatal(err)
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// The tickets table already has TEXT ticket_id (created by Open/Init).
+	// Simulate a partially-migrated state by adding back the legacy key column.
+	if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN key TEXT NOT NULL DEFAULT ''`); err != nil {
+		t.Fatalf("add key column: %v", err)
+	}
+
+	// Insert a ticket with a TEXT ticket_id (the post-migration state).
+	// First create a project to satisfy the FK constraint.
+	proj, err := CreateProject(ctx, db, "Pixel", "", "", "")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO tickets (ticket_id, project_id, type, title, key)
+		VALUES ('PXL-E-422', ?, 'epic', 'test', 'PXL-E-422')
+	`, proj.ID); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	if err := migrateTicketIDToText(ctx, db); err != nil {
+		t.Fatalf("migrateTicketIDToText() error = %v", err)
+	}
+
+	// key column should be gone.
+	if columnExists(ctx, db, "tickets", "key") {
+		t.Fatal("key column still exists after migration")
+	}
+	// ticket_id data should be intact.
+	var id string
+	if err := db.QueryRowContext(ctx, `SELECT ticket_id FROM tickets WHERE ticket_id = 'PXL-E-422'`).Scan(&id); err != nil {
+		t.Fatalf("select ticket_id: %v", err)
+	}
+	if id != "PXL-E-422" {
+		t.Fatalf("ticket_id = %q, want PXL-E-422", id)
+	}
+}
