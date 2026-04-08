@@ -316,3 +316,53 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 	}
 }
 
+func TestLoadInvalidFieldTypeIsHealedAndSaved(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	// Write config where tui_cursor is an object instead of an int — invalid type.
+	configPath := filepath.Join(tempDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"location":"ticket.db","tui_cursor":{"bad":"value"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil for repairable config", err)
+	}
+	// Valid field should survive; invalid field should be zeroed.
+	if cfg.Location != "ticket.db" {
+		t.Fatalf("Load().Location = %q, want %q", cfg.Location, "ticket.db")
+	}
+	if cfg.TUICursor != 0 {
+		t.Fatalf("Load().TUICursor = %d, want 0 after bad value stripped", cfg.TUICursor)
+	}
+
+	// The file should have been rewritten without the bad field.
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"bad"`) {
+		t.Fatalf("config.json still contains bad value after healing: %s", data)
+	}
+}
+
+func TestLoadInvalidJSONUsesDefaults(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	configPath := filepath.Join(tempDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{not valid json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil for invalid JSON", err)
+	}
+	if cfg.Location != "" {
+		t.Fatalf("Load().Location = %q, want empty default", cfg.Location)
+	}
+}
+

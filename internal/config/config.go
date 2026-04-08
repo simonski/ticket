@@ -111,7 +111,8 @@ func Load() (Config, error) {
 	// Use a raw map to handle type migrations (e.g. current_epic_id changed from int to string).
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return Config{}, err
+		fmt.Fprintf(os.Stderr, "warning: config.json is not valid JSON (%v); using defaults\n", err)
+		return Config{}, nil
 	}
 	// Fix current_epic_id: if stored as a number (legacy), convert to string.
 	if v, ok := raw["current_epic_id"]; ok {
@@ -154,7 +155,24 @@ func Load() (Config, error) {
 	}
 	var cfg Config
 	if err := json.Unmarshal(fixedData, &cfg); err != nil {
-		return Config{}, err
+		// Some field has an unexpected type. Strip invalid fields and warn.
+		cleaned, removed := removeInvalidFields(raw)
+		if len(removed) > 0 {
+			fmt.Fprintf(os.Stderr, "warning: config.json has invalid values for %v; resetting those fields\n", removed)
+		}
+		cleanData, merr := json.Marshal(cleaned)
+		if merr != nil {
+			return Config{}, merr
+		}
+		if merr := json.Unmarshal(cleanData, &cfg); merr != nil {
+			// Still broken — return empty config rather than failing.
+			fmt.Fprintf(os.Stderr, "warning: config.json could not be parsed (%v); using defaults\n", merr)
+			cfg = Config{}
+		}
+		// Persist the fixed config so future invocations are clean.
+		if saveErr := saveRaw(path, cleaned); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not save fixed config.json: %v\n", saveErr)
+		}
 	}
 	creds, err := LoadCredentials()
 	if err != nil {
@@ -284,4 +302,48 @@ func FindGitRoot(startDir string) (string, bool) {
 		dir = parent
 	}
 	return "", false
+}
+
+// removeInvalidFields tries removing fields from raw one at a time until the
+// map can be unmarshalled into Config without error. Returns the cleaned map
+// and the names of fields that were removed.
+func removeInvalidFields(raw map[string]json.RawMessage) (map[string]json.RawMessage, []string) {
+	var removed []string
+	for key := range raw {
+		// Build a candidate map without this key.
+		candidate := make(map[string]json.RawMessage, len(raw))
+		for k, v := range raw {
+			if k != key {
+				candidate[k] = v
+			}
+		}
+		data, err := json.Marshal(candidate)
+		if err != nil {
+			continue
+		}
+		var cfg Config
+		if err := json.Unmarshal(data, &cfg); err == nil {
+			// Removing this key fixed the parse — keep it removed.
+			removed = append(removed, key)
+			raw = candidate
+		}
+	}
+	return raw, removed
+}
+
+// saveRaw writes a raw map back to the config file as indented JSON,
+// preserving only the data that's already been validated.
+func saveRaw(path string, raw map[string]json.RawMessage) error {
+	// Strip token from persisted config.
+	cleaned := make(map[string]json.RawMessage, len(raw))
+	for k, v := range raw {
+		if k != "token" {
+			cleaned[k] = v
+		}
+	}
+	data, err := json.MarshalIndent(cleaned, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }
