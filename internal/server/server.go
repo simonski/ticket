@@ -31,9 +31,10 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 		return nil, err
 	}
 	s := &Server{
-		httpServer: &http.Server{
-			Addr:    addr,
-			Handler: handler,
+		httpServer: &http.Server{ //nolint:gosec
+			Addr:              addr,
+			Handler:           handler,
+			ReadHeaderTimeout: 30 * time.Second,
 		},
 		stopReaper: make(chan struct{}),
 	}
@@ -86,7 +87,7 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 		retentionDays := 0
 		if v := os.Getenv("TICKET_HISTORY_RETENTION_DAYS"); v != "" {
 			if _, err := fmt.Sscan(v, &retentionDays); err != nil {
-				slog.Error("invalid TICKET_HISTORY_RETENTION_DAYS", "value", v)
+				slog.Error("invalid TICKET_HISTORY_RETENTION_DAYS", "value", v) // #nosec G706 -- env var is numeric config, not user-controlled log data
 			}
 		}
 		if n, err := store.PurgeOldHistory(context.Background(), db, retentionDays); err != nil {
