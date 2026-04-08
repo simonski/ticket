@@ -14,11 +14,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: 'go.mod'
+
     - name: Install dependencies
       run: make setup
-
-    - name: Build tools
-      run: make tools
 
     - name: Run test
       run: make test-go-cover
@@ -27,9 +28,7 @@ jobs:
       run: make build
 
     - name: Run gosec
-      run: |
-        go install github.com/securego/gosec/v2/cmd/gosec@latest
-        gosec ./...
+      run: gosec ./...
 
     - name: Run govulncheck
       run: govulncheck ./...

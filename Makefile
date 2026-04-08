@@ -53,6 +53,7 @@ setup-go:
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 	go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
 
 lint:
 	golangci-lint run ./...
