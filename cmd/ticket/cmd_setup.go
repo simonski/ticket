@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"net/http"
@@ -608,6 +609,15 @@ func runSetupPostInit(reader *bufio.Reader) error {
 	}
 
 	fmt.Println()
+
+	// Check that workflows and roles are populated.
+	cfg, cfgErr := config.Load()
+	if cfgErr == nil {
+		if err := runInitCheckDefaults(reader, cfg); err != nil {
+			fmt.Printf("warning: could not check defaults: %v\n", err)
+		}
+	}
+
 	fmt.Println("setup complete. run `tk` to list tickets.")
 	return nil
 }
@@ -699,6 +709,124 @@ func runInitDB(args []string) error {
 		}
 		if generated {
 			fmt.Println("admin password was generated because -password was not provided")
+		}
+	}
+
+	// Prompt to populate missing workflows and roles.
+	reader := bufio.NewReader(os.Stdin)
+	if err := runInitCheckDefaults(reader, cfg); err != nil {
+		fmt.Printf("warning: could not check defaults: %v\n", err)
+	}
+	return nil
+}
+
+// runInitCheckDefaults checks whether the current project has a workflow with
+// stages, and whether any roles exist. If not, it prompts the user to create
+// sensible defaults.
+func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	// ── Project workflow ──────────────────────────────────────────────────────
+	project, err := svc.GetProject(cfg.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	var wfID int64
+	if project.WorkflowID == nil {
+		// No workflow assigned to the project.
+		fmt.Println()
+		if promptYN(reader, "project has no workflow — create and assign a default workflow (design→develop→test→done)?", true) {
+			wf, wfErr := svc.CreateWorkflow(libticket.WorkflowRequest{
+				Name:        "default",
+				Description: "Standard engineering lifecycle",
+			})
+			if wfErr != nil {
+				fmt.Printf("  warning: could not create workflow: %v\n", wfErr)
+			} else {
+				wfID = wf.ID
+				if err := addDefaultWorkflowStages(svc, wfID); err != nil {
+					fmt.Printf("  warning: could not add stages: %v\n", err)
+				}
+				fmt.Printf("  created workflow %q (id %d) with stages: design, develop, test, done\n", wf.Name, wf.ID)
+				projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
+				if parseErr != nil {
+					fmt.Printf("  warning: could not parse project id: %v\n", parseErr)
+				} else if _, pErr := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{WorkflowID: &wfID}); pErr != nil {
+					fmt.Printf("  warning: could not assign workflow: %v\n", pErr)
+				} else {
+					fmt.Printf("  workflow assigned to project %s\n", cfg.ProjectID)
+				}
+			}
+		}
+	} else {
+		wfID = *project.WorkflowID
+
+		// ── Workflow stages ───────────────────────────────────────────────────
+		wf, wfErr := svc.GetWorkflow(wfID)
+		if wfErr == nil && len(wf.Stages) == 0 {
+			fmt.Println()
+			if promptYN(reader, fmt.Sprintf("workflow %q has no stages — add default stages (design→develop→test→done)?", wf.Name), true) {
+				if err := addDefaultWorkflowStages(svc, wfID); err != nil {
+					fmt.Printf("  warning: could not add stages: %v\n", err)
+				} else {
+					fmt.Println("  added stages: design, develop, test, done")
+				}
+			}
+		} else if wfErr == nil {
+			fmt.Printf("workflow   : %q (%d stages)\n", wf.Name, len(wf.Stages))
+		}
+	}
+
+	// ── Roles ────────────────────────────────────────────────────────────────
+	roles, err := svc.ListRoles()
+	if err != nil {
+		return err
+	}
+	if len(roles) == 0 {
+		fmt.Println()
+		if promptYN(reader, "no roles found — create default roles (engineer, tech lead, QA engineer)?", true) {
+			defaults := []libticket.RoleRequest{
+				{Title: "Engineer", Motivation: "Build reliable, well-tested software", Goals: "Ship features, fix bugs, write tests"},
+				{Title: "Tech Lead", Motivation: "Guide the technical direction of the team", Goals: "Architecture decisions, code quality, mentoring"},
+				{Title: "QA Engineer", Motivation: "Ensure quality across the product", Goals: "Test coverage, bug detection, release confidence"},
+			}
+			for _, r := range defaults {
+				if _, rErr := svc.CreateRole(r); rErr != nil {
+					fmt.Printf("  warning: could not create role %q: %v\n", r.Title, rErr)
+				} else {
+					fmt.Printf("  created role: %s\n", r.Title)
+				}
+			}
+		}
+	} else {
+		fmt.Printf("roles      : %d found\n", len(roles))
+	}
+
+	return nil
+}
+
+// addDefaultWorkflowStages adds the standard engineering lifecycle stages to a workflow.
+func addDefaultWorkflowStages(svc libticket.Service, workflowID int64) error {
+	stages := []struct {
+		name string
+		desc string
+	}{
+		{"design", "Discovery and specification"},
+		{"develop", "Implementation"},
+		{"test", "Verification and QA"},
+		{"done", "Complete and shipped"},
+	}
+	for i, s := range stages {
+		if _, err := svc.AddWorkflowStage(workflowID, libticket.WorkflowStageRequest{
+			StageName:   s.name,
+			Description: s.desc,
+			SortOrder:   i,
+		}); err != nil {
+			return fmt.Errorf("stage %q: %w", s.name, err)
 		}
 	}
 	return nil

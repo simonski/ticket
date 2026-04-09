@@ -490,31 +490,41 @@ func runBoard(args []string) error {
 		byStage[t.Stage] = append(byStage[t.Stage], t)
 	}
 
+	stateIcon := func(state string) string {
+		switch state {
+		case "idle":
+			return "○"
+		case "active":
+			return "◑"
+		case "success":
+			return "◉"
+		case "fail":
+			return "✗"
+		}
+		return " "
+	}
+
 	// Print each stage as a lane
 	for _, ws := range workflowStages {
 		stageTickets := byStage[ws.StageName]
 		fmt.Printf("── %s (%d) ──\n", strings.ToUpper(ws.StageName), len(stageTickets))
 		if len(stageTickets) == 0 {
 			fmt.Println("  (empty)")
-		}
-		for _, t := range stageTickets {
-			assignee := t.Assignee
-			if strings.TrimSpace(assignee) == "" {
-				assignee = "-"
+		} else {
+			// Sort within the lane: active work first, complete/late-stage last.
+			sort.SliceStable(stageTickets, func(i, j int) bool {
+				return ticketSortKey(stageTickets[i]) < ticketSortKey(stageTickets[j])
+			})
+			// Build tree display (epic → stories → tasks indented).
+			ordered, treePfx := buildTreeDisplay(stageTickets)
+			for _, t := range ordered {
+				assignee := strings.TrimSpace(t.Assignee)
+				if assignee == "" {
+					assignee = "-"
+				}
+				fmt.Printf("  %s%s %s  %s  [%s]  @%s\n",
+					treePfx[t.ID], stateIcon(t.State), t.ID, t.Title, t.Type, assignee)
 			}
-			key := t.ID
-			stateIcon := ""
-			switch t.State {
-			case "idle":
-				stateIcon = "○"
-			case "active":
-				stateIcon = "◑"
-			case "success":
-				stateIcon = "◉"
-			case "fail":
-				stateIcon = "✗"
-			}
-			fmt.Printf("  %s %s  %s  [%s]  @%s\n", stateIcon, key, t.Title, t.Type, assignee)
 		}
 		fmt.Println()
 	}
