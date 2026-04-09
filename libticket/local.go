@@ -732,6 +732,7 @@ func (s *LocalService) UpdateTicket(id string, request TicketUpdateRequest) (sto
 		Order:              request.Order,
 		EstimateEffort:     request.EstimateEffort,
 		EstimateComplete:   request.EstimateComplete,
+		Type:               request.Type,
 		UpdatedBy:          user.ID,
 		ActorUsername:      user.Username,
 		// Local mode bypasses server-side ownership restrictions.

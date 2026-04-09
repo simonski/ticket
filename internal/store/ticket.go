@@ -86,6 +86,7 @@ type TicketUpdateParams struct {
 	UpdatedBy          string
 	ActorUsername      string
 	ActorRole          string
+	Type               string // if non-empty, update the ticket type
 }
 
 type TicketListParams struct {
@@ -257,6 +258,14 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	if err != nil {
 		return Ticket{}, err
 	}
+	nextType := current.Type
+	if t := strings.TrimSpace(params.Type); t != "" {
+		t = normalizeTicketType(t)
+		if !validTicketType(t) {
+			return Ticket{}, fmt.Errorf("invalid ticket type %q", params.Type)
+		}
+		nextType = t
+	}
 	hasChildren, err := ticketHasChildren(ctx, db, current.ID)
 	if err != nil {
 		return Ticket{}, err
@@ -395,9 +404,9 @@ writeTicket:
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, open = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, open = ?, type = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), openVal, id)
+	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), openVal, nextType, id)
 	if err != nil {
 		return Ticket{}, err
 	}

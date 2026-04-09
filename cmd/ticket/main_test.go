@@ -746,9 +746,11 @@ func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 	if err := runInitDB([]string{"-f", dbPath, "-password", "first-pass"}); err != nil {
 		t.Fatalf("first runInitDB() error = %v", err)
 	}
-	if err := runInitDB([]string{"-f", dbPath, "-password", "second-pass"}); err == nil {
-		t.Fatal("second runInitDB() without --force = nil, want error")
+	// Second init without -force should succeed gracefully (skips DB creation, updates config)
+	if err := runInitDB([]string{"-f", dbPath, "-password", "second-pass"}); err != nil {
+		t.Fatalf("second runInitDB() without --force = %v, want nil (graceful skip)", err)
 	}
+	// Forced overwrite should also succeed
 	if err := runInitDB([]string{"-f", dbPath, "--force", "-password", "second-pass"}); err != nil {
 		t.Fatalf("forced runInitDB() error = %v", err)
 	}

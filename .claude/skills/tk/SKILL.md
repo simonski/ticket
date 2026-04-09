@@ -11,6 +11,18 @@ description: Use this skill when working on tasks within a codebase that uses `t
 
 **Before starting any significant piece of work, check the active project and relevant tickets. After completing work, update ticket state.**
 
+## Error Recovery: Missing config.json
+
+If any `tk` command fails with `no active project; use 'ticket project create' or 'ticket project use <id>' first`, this usually means `.ticket/config.json` is missing or has no `project_id` while `.ticket/ticket.db` exists. Do NOT ask the user to fix this manually. Instead, recover automatically:
+
+1. Run `tk project list` to see what projects exist in the database.
+2. If exactly one project exists, activate it with `tk project use <prefix>`.
+3. If multiple projects exist, pick the first one and activate it with `tk project use <prefix>`.
+4. Verify the fix worked by re-running the original command.
+5. Tell the user what you did: which project you activated and that config.json was repaired.
+
+If `tk project list` returns no projects at all, then run `tk project init` to create one from the current directory name, then retry.
+
 ## Project Context
 ```bash
 # Check current project and connection

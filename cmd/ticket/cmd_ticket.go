@@ -1089,7 +1089,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id string, current stor
 }
 
 func runUpdate(args []string) error {
-	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]"
+	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -1107,6 +1107,8 @@ func runUpdate(args []string) error {
 	state := fs.String("state", "", "ticket state")
 	parentIDRaw := fs.String("parent_id", "", "ticket parent id")
 	message := fs.String("m", "", "comment to attach")
+	ticketType := fs.String("type", "", "ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision)")
+	fs.StringVar(ticketType, "t", "", "ticket type (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1129,7 +1131,8 @@ func runUpdate(args []string) error {
 	hasStatus := containsFlag(args, "-status")
 	hasState := containsFlag(args, "-state")
 	hasParentID := containsFlag(args, "-parent_id")
-	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasState && !hasParentID {
+	hasType := containsFlag(args, "-type") || containsFlag(args, "-t")
+	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasState && !hasParentID && !hasType {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -1212,6 +1215,9 @@ func runUpdate(args []string) error {
 			return err
 		}
 		next.ParentID = &parent.ID
+	}
+	if hasType {
+		next.Type = strings.TrimSpace(*ticketType)
 	}
 	next.Message = strings.TrimSpace(*message)
 	updated, err := svc.UpdateTicket(current.ID, next)

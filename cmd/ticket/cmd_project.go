@@ -175,6 +175,8 @@ func runProject(args []string) error {
 		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
+	case "workflow":
+		return runProjectWorkflow(cfg, svc, args[1:])
 	case "rename-prefix":
 		if len(args) < 2 {
 			return errors.New("usage: ticket project rename-prefix <new-prefix>")
@@ -309,6 +311,51 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
+	return nil
+}
+
+func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string) error {
+	usage := "ticket project workflow <workflow-id>   (use 0 to clear)"
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(usage)
+		return nil
+	}
+	if cfg.ProjectID == "" {
+		return errors.New("no current project set; use: tk project use <id>")
+	}
+	current, err := svc.GetProject(cfg.ProjectID)
+	if err != nil {
+		return err
+	}
+	wfIDRaw, err := strconv.ParseInt(strings.TrimSpace(args[0]), 10, 64)
+	if err != nil {
+		return fmt.Errorf("usage: %s", usage)
+	}
+	var nextWorkflowID *int64
+	if wfIDRaw > 0 {
+		nextWorkflowID = &wfIDRaw
+	}
+	project, err := svc.UpdateProject(current.ID, libticket.ProjectUpdateRequest{
+		Title:              current.Title,
+		Description:        current.Description,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		GitRepository:      current.GitRepository,
+		GitBranch:          current.GitBranch,
+		Status:             current.Status,
+		WorkflowID:         nextWorkflowID,
+	})
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(project)
+	}
+	if nextWorkflowID == nil {
+		fmt.Printf("cleared workflow from project %s\n", project.Prefix)
+	} else {
+		fmt.Printf("set workflow %d on project %s\n", wfIDRaw, project.Prefix)
+	}
+	printProject(project)
 	return nil
 }
 

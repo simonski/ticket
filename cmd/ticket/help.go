@@ -144,7 +144,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage: "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]",
+		usage: "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
 		details: []string{
 			"-id <id>: required; ticket id or key",
 			"-title <title>: set title",
@@ -158,6 +158,7 @@ var helpIndex = map[string]commandHelp{
 			"-parent_id <id>: set parent ticket id",
 			"-estimate_effort <n>: set numeric estimate effort",
 			"-estimate_complete <rfc3339>: set completion timestamp (example 2026-03-31T17:00:00Z)",
+			"-t <type> / -type <type>: change the ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision)",
 		},
 		example: "tk update -id 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
 	},
@@ -366,6 +367,71 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Shortcut for `tk add -type epic`. Accepts the same flags as `tk add`."},
 		example: "tk epic \"Authentication\"",
 	},
+	"note": {
+		usage:   "tk note \"title\" [flags]",
+		details: []string{"Shortcut for `tk add -type note`. Accepts the same flags as `tk add`.", "Use notes to capture lightweight information that doesn't fit other ticket types."},
+		example: "tk note \"Remember to update the README\"",
+	},
+	"question": {
+		usage:   "tk question \"title\" [flags]",
+		details: []string{"Shortcut for `tk add -type question`. Accepts the same flags as `tk add`.", "Use questions to track open decisions that need answering."},
+		example: "tk question \"Should we use Postgres or SQLite?\"",
+	},
+	"board": {
+		usage:   "tk board [-stage <stage>] [-assignee <user>]",
+		details: []string{"Displays a kanban-style board view of tickets in the active project grouped by stage.", "Columns: design, develop, test, done. Tickets show key, title, and assignee.", "Filter by stage with `-stage` or by user with `-assignee`."},
+		example: "tk board",
+	},
+	"history": {
+		usage:   "tk history [-id] <id>",
+		details: []string{"Shows the lifecycle history of a ticket: every stage/state transition with timestamp and actor.", "Events are listed in chronological order from oldest to newest."},
+		example: "tk history TK-42",
+	},
+	"stage": {
+		usage:   "tk stage [-id] <id> <stage>",
+		details: []string{"Alias for `tk state`. Sets the lifecycle stage or state of a ticket.", "Valid stages: design, develop, test, done. Valid states: idle, active, success, fail."},
+		example: "tk stage TK-42 develop",
+	},
+	"ls": {
+		usage:   "tk ls [-t <type>] [-stage <stage>] [-state <state>] [-status <status>] [-u <user>] [-n <limit>]",
+		details: []string{"Alias for `tk list`. Lists open tickets in the active project.", "Filter by type, stage, state, rendered status, or assignee."},
+		example: "tk ls -t bug -stage develop",
+	},
+	"init": {
+		usage:   "tk init [-f <db-path>] [-force] [-password <password>] [-populate]",
+		details: []string{"Alias for `tk initdb`. Creates a new SQLite database and bootstraps the admin account.", "If the database already exists, re-initialises the config to point to it without overwriting data."},
+		example: "tk init",
+	},
+	"curate": {
+		usage:   "tk curate",
+		details: []string{"Merges and curates requirements by finding near-duplicate ideas and presenting them for consolidation.", "Runs an AI-assisted grouping step to identify overlapping requirements."},
+		example: "tk curate",
+	},
+	"review": {
+		usage:   "tk review",
+		details: []string{"Lists all requirements/ideas grouped by status (pending, accepted, rejected).", "Useful for a quick product-owner review of the current backlog of ideas."},
+		example: "tk review",
+	},
+	"accept": {
+		usage:   "tk accept requirement <id>",
+		details: []string{"Marks a requirement as accepted (state=success) in the idea pipeline.", "Requires the `requirement` sub-noun before the id."},
+		example: "tk accept requirement 3",
+	},
+	"reject": {
+		usage:   "tk reject requirement <id>",
+		details: []string{"Marks a requirement as rejected (state=fail) in the idea pipeline.", "Requires the `requirement` sub-noun before the id."},
+		example: "tk reject requirement 3",
+	},
+	"revise": {
+		usage:   "tk revise requirement <id>",
+		details: []string{"Renames a requirement by appending \"(revised)\" and resets it to the shaping state.", "Use this to reopen an accepted or rejected idea for further refinement."},
+		example: "tk revise requirement 3",
+	},
+	"conversation": {
+		usage:   "tk conversation [-id] <id>",
+		details: []string{"Shows the full comment and lifecycle conversation thread for a ticket.", "Events and comments are listed in chronological order."},
+		example: "tk conversation TK-42",
+	},
 }
 
 func renderRootUsage() string {
@@ -486,6 +552,7 @@ Commands:
   use      [<id>]                     Switch active project (or show current)
   rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
   rename-prefix <new-prefix>          Rename prefix and re-key all tickets
+  workflow <id>                       Set workflow on current project (use 0 to clear)
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
@@ -670,6 +737,8 @@ func normalizeHelpCommand(command string) string {
 		return "clone"
 	case "rm":
 		return "delete"
+	case "stage":
+		return "stage"
 	default:
 		return command
 	}

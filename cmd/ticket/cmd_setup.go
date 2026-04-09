@@ -646,20 +646,30 @@ func runInitDB(args []string) error {
 		}
 	}
 
-	if err := store.Init(*dbPath, "admin", password); err != nil {
-		return err
+	dbExists := false
+	if _, statErr := os.Stat(*dbPath); statErr == nil {
+		dbExists = true
 	}
-	if *populate {
-		db, err := store.Open(*dbPath)
-		if err != nil {
+
+	if dbExists && !*force {
+		// DB already exists — skip creation, just update the config to point at it.
+		fmt.Printf("database already exists at %s (use -force to overwrite)\n", *dbPath)
+	} else {
+		if err := store.Init(*dbPath, "admin", password); err != nil {
 			return err
 		}
-		if err := seedExampleData(db); err != nil {
-			_ = db.Close()
-			return err
-		}
-		if err := db.Close(); err != nil {
-			return err
+		if *populate {
+			db, err := store.Open(*dbPath)
+			if err != nil {
+				return err
+			}
+			if err := seedExampleData(db); err != nil {
+				_ = db.Close()
+				return err
+			}
+			if err := db.Close(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -680,14 +690,16 @@ func runInitDB(args []string) error {
 	}
 
 	fmt.Printf("initialized database at %s\n", *dbPath)
-	fmt.Printf("admin user: admin\n")
-	fmt.Printf("admin password: %s\n", password)
-	fmt.Printf("default project: 1\n")
-	if *populate {
-		fmt.Println("example data: seeded")
-	}
-	if generated {
-		fmt.Println("admin password was generated because -password was not provided")
+	if !dbExists || *force {
+		fmt.Printf("admin user: admin\n")
+		fmt.Printf("admin password: %s\n", password)
+		fmt.Printf("default project: 1\n")
+		if *populate {
+			fmt.Println("example data: seeded")
+		}
+		if generated {
+			fmt.Println("admin password was generated because -password was not provided")
+		}
 	}
 	return nil
 }

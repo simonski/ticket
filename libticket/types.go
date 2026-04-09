@@ -122,6 +122,7 @@ type TicketUpdateRequest struct {
 	EstimateEffort     int    `json:"estimate_effort"`
 	EstimateComplete   string `json:"estimate_complete,omitempty"`
 	Message            string `json:"message,omitempty"`
+	Type               string `json:"type,omitempty"`
 }
 
 type CommentCreateRequest struct {

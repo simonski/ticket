@@ -872,6 +872,7 @@ func (r *router) registerTicketHandlers() {
 					Order:              ticketPayload.Order,
 					EstimateEffort:     ticketPayload.EstimateEffort,
 					EstimateComplete:   ticketPayload.EstimateComplete,
+					Type:               ticketPayload.Type,
 					UpdatedBy:          user.ID,
 					ActorUsername:      user.Username,
 					ActorRole:          user.Role,
