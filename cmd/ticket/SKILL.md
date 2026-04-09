@@ -11,6 +11,18 @@ description: Use this skill when working on tasks within a codebase that uses `t
 
 **Before starting any significant piece of work, check the active project and relevant tickets. After completing work, update ticket state.**
 
+## Error Recovery: Missing config.json
+
+If any `tk` command fails with `no active project; use 'ticket project create' or 'ticket project use <id>' first`, this usually means `.ticket/config.json` is missing or has no `project_id` while `.ticket/ticket.db` exists. Do NOT ask the user to fix this manually. Instead, recover automatically:
+
+1. Run `tk project list` to see what projects exist in the database.
+2. If exactly one project exists, activate it with `tk project use <prefix>`.
+3. If multiple projects exist, pick the first one and activate it with `tk project use <prefix>`.
+4. Verify the fix worked by re-running the original command.
+5. Tell the user what you did: which project you activated and that config.json was repaired.
+
+If `tk project list` returns no projects at all, then run `tk project init` to create one from the current directory name, then retry.
+
 ## Project Context
 ```bash
 # Check current project and connection
@@ -43,12 +55,51 @@ tk list
 # View a specific ticket
 tk show <id>
 
-# Move ticket to develop stage and set it active
+# Move ticket to develop stage 
 tk state <id> develop
+
+# And set it to active
 tk state <id> active
 ```
+**Important:** 
+  - Always move tickets to `develop/active` when you begin implementation. 
+  - Do not leave tickets in `design/idle` while actively working on them.
 
-**Important:** Always move tickets to `develop/active` when you begin implementation. Do not leave tickets in `design/idle` while actively working on them.
+## Completing Work - Success
+
+When a task is done, **always** set it to either `success` or `failed` state and close it:
+
+```bash
+# Mark ticket as successfully completed
+tk state <id> success
+
+# Add a completion comment summarising what was done
+tk comment <id> "What was done and any relevant notes"
+
+# Log time if the user mentioned duration
+tk time log <id> <duration> "description"
+
+# Close the ticket if it was a success
+tk close <id>
+```
+
+**Important:** Do not leave tickets in `active` state after work is complete. Always transition to `success` before closing. For epics, close all child tasks first — the epic's state derives from its children.
+
+## Completing Work - Failure
+
+When a task fails and cannot be completed:
+
+```bash
+# Mark ticket as failed
+tk state <id> failed
+
+# Add a comment explaining what happened
+tk comment <id> "What was attempted and why it failed"
+
+# Close the ticket
+tk close <id>
+```
+
 
 ## Creating Tickets
 ```bash
@@ -66,40 +117,6 @@ tk add "Child task" --parent <epic-id>
 tk idea "The requirement"
 ```
 
-## Completing Work
-
-When a task is done, **always** set it to `success` state and close it:
-
-```bash
-# Mark ticket as successfully completed
-tk state <id> success
-
-# Add a completion comment summarising what was done
-tk comment <id> "What was done and any relevant notes"
-
-# Log time if the user mentioned duration
-tk time log <id> <duration> "description"
-
-# Close the ticket
-tk close <id>
-```
-
-**Important:** Do not leave tickets in `active` state after work is complete. Always transition to `success` before closing. For epics, close all child tasks first — the epic's state derives from its children.
-
-## Failing Work
-
-When a task fails and cannot be completed:
-
-```bash
-# Mark ticket as failed
-tk state <id> failed
-
-# Add a comment explaining what happened
-tk comment <id> "What was attempted and why it failed"
-
-# Close the ticket
-tk close <id>
-```
 
 ## Recording Decisions
 
