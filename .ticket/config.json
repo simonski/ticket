@@ -5,5 +5,8 @@
   "project_id": "1",
   "current_epic_id": "TK-229",
   "tui_theme": "the-grey",
-  "tui_mode": "projects"
+  "tui_mode": "list",
+  "tui_expanded_epics": [
+    "TK-229"
+  ]
 }

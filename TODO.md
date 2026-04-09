@@ -1,4 +1,51 @@
+A project is the container of work.
+A project has a title, description.
 
+A project has one SDLC (formerly called "Workflow") attached to it.
+
+An SDLC can be exported and given to "other" projects via an `sdlc_<name>.json` import/export file
+
+A project contains tickets.
+A ticket can have child tickets.
+A ticket has a type (epic, bug, story, etc)
+
+- A ticket does not care what state/stage it is in - it does not have any logic or preference.
+
+A ticket is either (active: true/false)
+    idle (no-one is working on it)
+    active (someone is working on it)
+
+A ticket is either (complete: true/false)
+    complete.  - it is totaly finished with no more work
+    incomplete - it is not yet finished
+
+A ticket is either (draft: true/false)
+    draft      - it is NOT yet ready to be worked on (a human is still curating it)
+    ready      - it is now ready to be worked on
+
+A ticket is in a stage (stage: STRING)
+    the value of which is defined in an SDLC process, which is part of the project.
+    if a ticket is marked as complete=true, then the stage is always "done"
+
+A stage
+    has a name "design", "develop", "test", "release", "done"
+
+A stage has a status
+    "idle"
+    "in progress"
+    "success"
+    "failed"
+
+A project has SDLC "yolo"
+    Which has one role: "Solo developer does it all in one."
+
+
+
+
+
+
+
+------
 TODO.md
 
 test

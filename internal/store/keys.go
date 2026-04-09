@@ -124,8 +124,8 @@ func ticketTypeCode(ticketType string) (string, error) {
 }
 
 func generateTicketKey(prefix, ticketType string, sequence int64) (string, error) {
-	code, err := ticketTypeCode(ticketType)
-	if err != nil {
+	// Validate the ticket type even though we no longer embed it in the key.
+	if _, err := ticketTypeCode(ticketType); err != nil {
 		return "", err
 	}
 	prefix = normalizeProjectPrefix(prefix)
@@ -135,8 +135,6 @@ func generateTicketKey(prefix, ticketType string, sequence int64) (string, error
 	if sequence <= 0 {
 		return "", fmt.Errorf("ticket sequence must be positive")
 	}
-	if prefix == defaultProjectPrefix {
-		return fmt.Sprintf("%s-%d", prefix, sequence), nil
-	}
-	return fmt.Sprintf("%s-%s-%d", prefix, code, sequence), nil
+	// All projects now use PREFIX-N format (no type code embedded).
+	return fmt.Sprintf("%s-%d", prefix, sequence), nil
 }

@@ -64,13 +64,13 @@ func TestGenerateTicketKey(t *testing.T) {
 		t.Fatalf("generateTicketKey(TK) = %q, want TK-1", key)
 	}
 
-	// Non-default prefix uses type code
+	// Non-default prefix also uses PREFIX-N format (no type code).
 	key, err = generateTicketKey("ABC", "epic", 5)
 	if err != nil {
 		t.Fatalf("generateTicketKey(ABC) error = %v", err)
 	}
-	if key != "ABC-E-5" {
-		t.Fatalf("generateTicketKey(ABC) = %q, want ABC-E-5", key)
+	if key != "ABC-5" {
+		t.Fatalf("generateTicketKey(ABC) = %q, want ABC-5", key)
 	}
 
 	// Invalid prefix

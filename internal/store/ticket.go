@@ -757,8 +757,80 @@ func GetTicketByRef(ctx context.Context, db *sql.DB, raw string) (Ticket, error)
 	if raw == "" {
 		return Ticket{}, ErrTicketNotFound
 	}
-	// ticket_id IS the key now; look up directly (case-insensitive with upper)
-	return GetTicket(ctx, db, strings.ToUpper(raw))
+	upper := strings.ToUpper(raw)
+
+	// 1. Try exact match first.
+	ticket, err := GetTicket(ctx, db, upper)
+	if err == nil {
+		return ticket, nil
+	}
+
+	// 2. Bare integer (e.g. "124") — try PREFIX-N for each project prefix.
+	if isDigitsOnly(upper) {
+		return resolveBySequenceNumber(ctx, db, upper)
+	}
+
+	// 3. PREFIX-N that didn't match — might be a legacy PREFIX-X-N id with
+	//    the type code stripped. Try all single-letter type codes.
+	if parts := strings.SplitN(upper, "-", 3); len(parts) == 2 && isDigitsOnly(parts[1]) {
+		for _, code := range []string{"E", "T", "B", "S", "C", "N", "Q", "R", "D"} {
+			candidate := parts[0] + "-" + code + "-" + parts[1]
+			if t, err := GetTicket(ctx, db, candidate); err == nil {
+				return t, nil
+			}
+		}
+	}
+
+	return Ticket{}, ErrTicketNotFound
+}
+
+// isDigitsOnly returns true if s is non-empty and contains only ASCII digits.
+func isDigitsOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveBySequenceNumber tries PREFIX-N for every known project prefix.
+func resolveBySequenceNumber(ctx context.Context, db *sql.DB, num string) (Ticket, error) {
+	rows, err := db.QueryContext(ctx, `SELECT prefix FROM projects ORDER BY project_id`)
+	if err != nil {
+		return Ticket{}, err
+	}
+	defer rows.Close()
+	var prefixes []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return Ticket{}, err
+		}
+		prefixes = append(prefixes, p)
+	}
+	if err := rows.Err(); err != nil {
+		return Ticket{}, err
+	}
+	// Try new-style PREFIX-N first, then legacy PREFIX-X-N.
+	for _, prefix := range prefixes {
+		candidate := prefix + "-" + num
+		if t, err := GetTicket(ctx, db, candidate); err == nil {
+			return t, nil
+		}
+	}
+	for _, prefix := range prefixes {
+		for _, code := range []string{"E", "T", "B", "S", "C", "N", "Q", "R", "D"} {
+			candidate := prefix + "-" + code + "-" + num
+			if t, err := GetTicket(ctx, db, candidate); err == nil {
+				return t, nil
+			}
+		}
+	}
+	return Ticket{}, ErrTicketNotFound
 }
 
 func ListTicketParents(ctx context.Context, db *sql.DB, id string) ([]Ticket, error) {

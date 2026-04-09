@@ -235,35 +235,35 @@ func TestRenameProjectPrefix(t *testing.T) {
 		t.Fatalf("project prefix = %q, want NEW", updated.Prefix)
 	}
 
-	// Verify tickets have new keys.
-	newEpic, err := GetTicket(context.Background(), db, "NEW-E-1")
+	// Verify tickets have new keys (PREFIX-N format, no type code).
+	newEpic, err := GetTicket(context.Background(), db, "NEW-1")
 	if err != nil {
-		t.Fatalf("GetTicket(NEW-E-1) error = %v", err)
+		t.Fatalf("GetTicket(NEW-1) error = %v", err)
 	}
 	if newEpic.Title != "Epic" {
 		t.Fatalf("epic title = %q", newEpic.Title)
 	}
 
-	newTask, err := GetTicket(context.Background(), db, "NEW-T-2")
+	newTask, err := GetTicket(context.Background(), db, "NEW-2")
 	if err != nil {
-		t.Fatalf("GetTicket(NEW-T-2) error = %v", err)
+		t.Fatalf("GetTicket(NEW-2) error = %v", err)
 	}
-	if newTask.ParentID == nil || *newTask.ParentID != "NEW-E-1" {
-		t.Fatalf("task parent = %v, want NEW-E-1", newTask.ParentID)
+	if newTask.ParentID == nil || *newTask.ParentID != "NEW-1" {
+		t.Fatalf("task parent = %v, want NEW-1", newTask.ParentID)
 	}
 
 	// Verify dependency updated.
-	deps, err := ListDependencies(context.Background(), db, "NEW-T-2")
+	deps, err := ListDependencies(context.Background(), db, "NEW-2")
 	if err != nil {
 		t.Fatalf("ListDependencies error = %v", err)
 	}
-	if len(deps) != 1 || deps[0].DependsOn != "NEW-B-3" {
-		t.Fatalf("dependency = %v, want [NEW-B-3]", deps)
+	if len(deps) != 1 || deps[0].DependsOn != "NEW-3" {
+		t.Fatalf("dependency = %v, want [NEW-3]", deps)
 	}
 
 	// Verify old keys are gone.
-	if _, err := GetTicket(context.Background(), db, "OLD-E-1"); err == nil {
-		t.Fatal("old key OLD-E-1 should not exist")
+	if _, err := GetTicket(context.Background(), db, "OLD-1"); err == nil {
+		t.Fatal("old key OLD-1 should not exist")
 	}
 
 	// Renaming to same prefix is a no-op.
