@@ -1,59 +1,47 @@
 # Performance
 
-**Score: 62/100** (was 60)
+**Score: 58/100** (was 62)
 
 ## What is being assessed
-N+1 query patterns, unbounded list queries, connection pool configuration, database indexing, SSE/WebSocket scalability, pagination on list endpoints, goroutine lifecycle management, and slow-query visibility.
+N+1 query patterns, unbounded resource usage, connection pool configuration, goroutine leak potential, SSE/WebSocket scalability, pagination on list endpoints, and algorithmic complexity of display functions.
 
 ## Methodology
-Reviewed `internal/store/store.go` for connection pool and index definitions. Inspected all `List*` functions in `internal/store/ticket.go`, `activity.go`, `agent.go`, `team.go`, `project.go` for LIMIT clauses. Checked `internal/server/api_tickets.go` and `api_projects.go` for pagination query param handling. Reviewed `internal/server/realtime.go` and `live_event.go` for SSE/WebSocket subscriber management. Checked `internal/server/chat_ws.go` for goroutine lifecycle patterns.
+Read `internal/store/ticket.go`, `internal/store/store.go` (indexes), `internal/server/api_tickets.go`. Ran grep for `CREATE INDEX`, `SELECT.*FROM messages`, `LIMIT`, `SetMaxOpenConns`. Analysed `buildTreeDisplay` algorithm in `printer.go`.
 
 ## Findings
 
 ### Passing checks
-- SQLite WAL mode: `PRAGMA journal_mode=WAL` — concurrent readers do not block writer (internal/store/store.go)
-- `busy_timeout=5000ms` — prevents immediate failure under write lock contention (internal/store/store.go)
-- `MaxOpenConns(1)`, `MaxIdleConns(1)` — correct for SQLite; prevents "database is locked" SQLITE_BUSY errors (internal/store/store.go)
-- 26+ indexes covering all primary query patterns: `project_id`, `parent_id`, `assignee`, `stage`, `state`, `ticket_id`, `item_id`, `depends_on` (internal/store/store.go:415-443)
-- `liveHub.broadcast()` uses non-blocking `select/default` — slow WebSocket clients cannot stall broadcasts (internal/server/realtime.go:77)
-- WebSocket clients have buffered send channels (`make(chan []byte, 32)` and `64`) — absorb burst events (internal/server/realtime.go:35, chat_ws.go)
-- `liveHub` uses `sync.RWMutex` — concurrent broadcast reads do not block each other (internal/server/realtime.go:30)
-- `sync.Once` for client cleanup — no goroutine leak on disconnect (internal/server/realtime.go:38)
-- `GET /api/projects/:id/tickets` accepts `?limit=` query param — unbounded fetch can be capped by callers (internal/server/api_projects.go:100)
-- `GET /api/projects/:id/history` defaults to `limit=10`, configurable via `?limit=` — history is bounded by default (internal/server/api_projects.go:153)
-- Chat process bridge reaper uses bounded goroutine with stop channel — no goroutine accumulation (internal/server/chat_ws.go)
+- 44 indexes defined covering most foreign key columns (`internal/store/store.go:427+`)
+- `idx_history_events_project_id`, `idx_history_events_ticket_id` present (`store.go:427-428`)
+- Batch comment loading: `batchFetchComments()` bulk-loads comments for multiple tickets in one query (`ticket.go:903`)
+- Recursive CTE for ancestor traversal avoids per-row parent lookups (`ticket.go:767`)
+- `buildTreeDisplay` is O(n): single-pass map build + single recursive descent (`printer.go:316-369`)
+- WebSocket goroutines cleaned up: `defer hub.remove(client)` and `defer client.close()` (`realtime.go:97`, `chat_ws.go:111`)
+- Timers properly stopped on goroutine exit (`chat_ws.go:304, 492`)
+- Pagination implemented with LIMIT/OFFSET on ticket list (`ticket.go:694`)
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `ListHistoryEvents()` has no LIMIT — fetches all history rows per ticket with no bound | High | internal/store/activity.go:46-75 | Add `LIMIT` parameter (default 100); callers rarely need full unbounded history |
-| `ListComments()` has no LIMIT — unbounded per-ticket comment fetch | High | internal/store/activity.go:170-193 | Add `LIMIT` parameter (default 50) with optional `offset` |
-| `GET /api/projects/:id/tickets` defaults to `limit=0` (unlimited) — full project scan on every list request | High | internal/server/api_projects.go:100, internal/store/ticket.go:682 | Change API default to `limit=200`; require explicit `all=true` for unbounded fetch |
-| No OFFSET support on ticket list — pagination requires full re-scan to page 2+ | Medium | internal/store/ticket.go:634-700 | Add `Offset int` to `TicketListParams`; expose via `?offset=` query param |
-| Missing indexes on `tickets.open` and `tickets.archived` — every active-ticket query does full table scan on soft-delete filter | High | internal/store/store.go (schema section) | `CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open, archived)` |
-| `ListTicketsByProject()` fetches comments separately in `hydrateTicket()` — N+1 query per list call | High | internal/store/ticket.go:886, activity.go:170 | Batch-load comments via `WHERE ticket_id IN (...)` after fetching ticket list |
-| No slow query detection or query timing instrumentation | Medium | internal/store/ | Wrap `db.QueryContext` with timing; log queries exceeding 100ms via `slog` |
-| No HTTP response caching headers on static assets | Medium | internal/server/server.go | Add `Cache-Control: public, max-age=86400` and `ETag` support for embedded static files |
-| No gzip/brotli compression on API or static responses | Low | internal/server/server.go | Wrap mux with `compress/gzip` middleware; ~60% reduction in JSON response size |
-| `MaxOpenConns=1` undocumented — not visible to operators; concurrency ceiling invisible | Low | internal/store/store.go | Add comment explaining SQLite WAL single-writer design choice |
+| `db.SetMaxOpenConns(1)` — single connection for all concurrent requests | Critical | `internal/store/store.go:26-27` | Set to 25 for server mode: `db.SetMaxOpenConns(25); db.SetMaxIdleConns(5)` |
+| `messages` table: no index on `from_user_id` or `to_user_id` | High | `internal/store/store.go:867` | `CREATE INDEX idx_messages_from_user_id ON messages(from_user_id)` |
+| `goals` table: no index on `project_id` | High | `internal/store/store.go:887` | `CREATE INDEX idx_goals_project_id ON goals(project_id)` |
+| `tickets.clone_of` FK column has no index | Medium | `internal/store/store.go:169` | `CREATE INDEX idx_tickets_clone_of ON tickets(clone_of)` |
+| Several list endpoints default to LIMIT 1000 — unbounded for large datasets | Low | `internal/store/auth.go:211`, `team.go:110` | Expose pagination params; reduce default LIMIT to 100 |
 
 ## Verdict
-The SQLite foundation is well-configured (WAL, busy_timeout, correct pool settings). Nine new indexes were confirmed added covering the hottest read paths (`tickets.open/archived/status/type`, `project_members.user_id`, `team_members.user_id`, `ticket_labels.ticket_id`, `users.username`). The main remaining performance gap is the unbounded `ListHistoryEvents` and `ListComments` per ticket (no LIMIT), the missing composite index on `(open, archived)`, the N+1 comments fetch in ticket hydration, and full-project scans in `DeleteTicket`/`cloneTicketRecursive` when `WHERE parent_id = ?` would suffice. Additionally `messages` and `goals` tables were added without FK-column indexes. Score improves to 62 (+2) reflecting the index additions while the N+1 patterns remain unfixed.
+The connection pool `SetMaxOpenConns(1)` is the dominant performance bottleneck — under any concurrent load it serialises all database access, causing cascading latency. This is likely intentional for SQLite WAL mode but is undocumented and will cause severe throughput degradation. Score drops from 62 to 58 as this finding is now confirmed.
 
 ## Changes since last assessment
-- **9 new indexes confirmed**: `idx_tickets_open`, `idx_tickets_archived`, `idx_tickets_status`, `idx_tickets_type`, `idx_project_members_user_id`, `idx_team_members_user_id`, `idx_team_agents_user_id`, `idx_ticket_labels_ticket_id`, `idx_users_username` — eliminates full-table scans on hottest read paths (+4 points)
-- **New finding**: `messages` table has no indexes on `from_user_id`/`to_user_id` FK columns; `goals` table has no index on `project_id` — new unbounded growth vectors (-2 points)
-- **N+1 patterns confirmed unfixed**: `hydrateTicket()` N+1 comments, `GetWorkflowStageOrder` loop, full-project scan in `DeleteTicket`/`cloneTicketRecursive` still present
-- **Unbounded queries confirmed unfixed**: `ListHistoryEvents` and `ListComments` still have no LIMIT clause
+- `buildTreeDisplay` now called from `runBoard` — confirmed O(n), no performance regression
+- Connection pool limit confirmed at 1 (unchanged, newly flagged as critical)
+- `messages`/`goals` index gaps carried forward
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Add LIMIT to `ListHistoryEvents()` and `ListComments()` | High | Default 100/50; expose via params |
-| Default ticket list API to `limit=200` | High | Unbounded fetch is default path today |
-| Add `idx_tickets_open_archived` composite index | High | Eliminates full table scan on active-ticket filter |
-| Fix N+1 comments in `hydrateTicket()` | High | Batch `WHERE ticket_id IN (...)` after ticket list fetch |
-| Add query timing instrumentation | Medium | Log queries >100ms; prerequisite for production diagnosis |
-| Add OFFSET to ticket list params | Medium | Enables cursor-free pagination for simple clients |
-| Add HTTP caching headers to static assets | Medium | Reduces repeat-visitor bandwidth |
-| Document `MaxOpenConns=1` rationale | Low | Add inline comment in store.go |
+| Connection pool | Critical | Increase `MaxOpenConns` to 25 for server mode; add comment explaining WAL trade-off |
+| `messages` indexes | High | Add FK indexes for `from_user_id`, `to_user_id` |
+| `goals` index | High | Add FK index for `project_id` |
+| `clone_of` index | Medium | Add index on `tickets.clone_of` |
+| Pagination defaults | Low | Reduce default LIMIT from 1000 to 100; document max-page-size |

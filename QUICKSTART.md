@@ -117,6 +117,6 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |
 
-When `TICKET_URL` is set the CLI communicates with a running `ticket server`
+When `TICKET_URL` is set the CLI communicates with a running `tk server`
 rather than opening the local database directly.
 

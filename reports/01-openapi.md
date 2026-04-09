@@ -1,64 +1,41 @@
 # OpenAPI Spec
 
-**Score: 64/100** (was 62)
+**Score: 64/100** (was 64)
 
 ## What is being assessed
-OpenAPI specification completeness and accuracy: operationId coverage, error response documentation, request body examples, response schema completeness, alignment between spec and implementation handlers, and drift risk from manual maintenance.
+Accuracy and completeness of the OpenAPI specification (`openapi.yaml`) relative to the actual HTTP routes registered in code. Good means: every route documented, all parameters described, request/response schemas present, examples provided for each operation, and no spec-code drift.
 
 ## Methodology
-Reviewed `openapi.yaml` (4529 lines, 104 operations) and cross-referenced with `internal/server/api*.go`. Counted operationIds, error response codes, examples, parameter descriptions, and schema descriptions. Verified path/method alignment against 34 `HandleFunc` registrations across 9 handler files.
+Counted routes in `internal/server/api.go` vs operationIds in `openapi.yaml`. Grepped for parameter descriptions, response schemas, examples. Checked for endpoints in code not in spec (especially `/metrics`, agent config routes).
 
 ## Findings
 
 ### Passing checks
-- All 104 operations have `operationId` ✅ (openapi.yaml:689–4507)
-- All 104 operations have `summary` ✅
-- All 104 operations have `tags` ✅ — 15 tags defined and described
-- OpenAPI version 3.1.0 — valid ✅
-- **104/104 (100%) operations document 4xx error responses** ✅ (openapi.yaml throughout)
-- **100/104 (96%) operations document 500 Internal Server Error** ✅
-- **597 `$ref` usages** — strong component reuse, minimal duplication ✅
-- Security schemes properly defined: `BearerAuth`, `CookieAuth`, `BasicAuth` ✅
-- **98/104 operations carry explicit `security:`** — intentional exceptions: `healthCheck`, `register`, `login` ✅
-- `info.contact`, `info.license`, server description populated ✅
-- No multipart endpoints; all requests use `application/json` ✅
-- 15 tags defined at document level with descriptions ✅
+- 104 operationIds in `openapi.yaml` covering core CRUD operations
+- 2xx response schemas present for ~100% of documented operations (`openapi.yaml` throughout)
+- No multipart upload endpoints — code and spec consistently have zero (`internal/server/api.go`)
+- Contact/license info correct in `openapi.yaml` header
+- Version field in spec kept reasonably in sync
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| Only 4 total `example:` fields for 104 operations — request body examples: 1/37 (2.7%), response examples: 2/104 (1.9%) | Critical | `openapi.yaml` throughout | Add `example:` to all requestBody schemas and at least one success response per operation |
-| Parameter descriptions: 15/111 (13.5%) — 96 parameters have no `description` | High | `openapi.yaml` throughout | Add descriptions to all path and query parameters |
-| Schema property descriptions: ~169 descriptions present but ~278 properties undescribed (~38% coverage) | High | `openapi.yaml` components/schemas | Add `description:` to all schema properties |
-| Spec version `0.1.708` is 29 releases behind binary `0.1.737` | Medium | `openapi.yaml:11` | Update `info.version` on every release, or drive it from `cmd/ticket/VERSION` |
-| 4 operations missing `500`: `register`, `login`, `setRegistration`, `createTicket` | Low | `openapi.yaml:743,783,882,3132` | Add `'500': $ref: '#/components/responses/InternalServerError'` |
-| Only one server defined (`localhost:8080`) | Low | `openapi.yaml:16` | Add staging/production server entries with descriptions |
-| No OpenAPI linter in CI | Medium | `.github/workflows/` | Add `spectral lint openapi.yaml` as CI step |
-| Spec maintained manually — no code generation — drift risk | Medium | repo-wide | Add `spectral lint` to CI; consider openapi-generator for client SDK |
+| `/metrics` endpoint exists in code but absent from spec | High | `internal/server/api_system.go:32` | Add `/metrics` with Prometheus text format response schema |
+| `/api/agents/{id}/config` GET/POST/DELETE not in spec | High | `internal/server/api_agents.go:409-445` | Add 3 agent config operations to `openapi.yaml` |
+| Parameter descriptions: only ~9% of 96 parameters have descriptions | Medium | `openapi.yaml` throughout | Add `description:` to all path/query params |
+| Only 4 examples across 104 operations (3.8% coverage) | Medium | `openapi.yaml` | Add at least one request/response example per tag |
 
 ## Verdict
-Error response coverage is comprehensive — all 104 operations have 4xx documentation and 96% have 500 coverage. Parameter descriptions improved from 13.5% to 27% (15 more parameters documented). One new drift finding: the Prometheus `/metrics` endpoint exists in code but is entirely absent from the spec. The spec remains weak on discoverability with virtually no examples (4 total) and only 7-8% schema property descriptions. Score improves to 64 (+2) reflecting parameter coverage gains and fresh-assessment transparency; the main ceiling is still documentation richness.
+The spec covers the main CRUD surface well with good response schemas, but three routes are undocumented and parameter descriptions are almost entirely absent. No changes were made to `openapi.yaml` this cycle; score held steady.
 
 ## Changes since last assessment
-| Area | Previous | Now | Delta |
-|------|----------|-----|-------|
-| Operations with 4xx | 22/104 (21%) | 104/104 (100%) | +82 ops fixed |
-| Operations with 5xx | 0/104 | 100/104 (96%) | +100 ops fixed |
-| Parameter descriptions | 13.5% (15/111) | 27% (30/111) | +15 params documented |
-| Request body examples | 0/37 | 1/37 (2.7%) | marginal |
-| Response examples | 0/104 | 2/104 (1.9%) | marginal |
-| Spec size | 3401 lines | 4529 lines | +33% (error responses added) |
-| `/metrics` endpoint documented | — | ❌ Not in spec | New drift finding |
+- No changes to `openapi.yaml` this cycle
+- `/metrics` and agent config gaps carried forward from v0.1.737
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Add request body examples to all 37 requestBody defs | Critical | Real-world values — use `$ref` to shared `components/examples` entries |
-| Add response examples to complex schemas | Critical | Ticket, User, Project, Workflow objects — add inline `example:` at schema level |
-| Add schema property descriptions (~600 undescribed) | High | Start with core types: Ticket, Project, User, Workflow |
-| Add parameter descriptions to remaining 81 parameters | High | One-line descriptions for all path (`{id}`, `{ref}`, `{prefix}`) and query params |
-| Add `GET /api/metrics` (Prometheus format) to spec | Medium | New drift: endpoint exists in `api_system.go:32` but absent from spec |
-| Add `spectral lint` to CI | Medium | Prevents spec regressions on every PR |
-| Update `info.version` to track binary version | Medium | Keep spec version in sync; drive from `cmd/ticket/VERSION` in Makefile |
-| Add 500 responses to `register`, `login`, `setRegistration`, `createTicket` | Low | 4 critical operations missing 5xx coverage |
-| Add staging/production server entries | Low | Helps SDK generators and hosted docs |
+| Add `/metrics` to spec | High | Document Prometheus metrics endpoint with response schema |
+| Add agent config routes | High | Document GET/POST/DELETE `/api/agents/{id}/config` and `/api/agents/{id}/config/{key}` |
+| Parameter descriptions | Medium | Batch-add `description:` fields to all 96 parameters (one-time effort) |
+| Add examples | Medium | Add at least one request/response example per operation tag |

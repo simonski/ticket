@@ -34,19 +34,19 @@ type block struct {
 }
 
 func main() {
-	ticketBin := flag.String("ticket", "", "path to the ticket binary (default: ./bin/ticket)")
+	ticketBin := flag.String("ticket", "", "path to the tk binary (default: ./bin/tk)")
 	verbose := flag.Bool("v", false, "print each command before running it")
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: tk-test [-ticket ./bin/ticket] [-v] <file.md> ...")
+		fmt.Fprintln(os.Stderr, "usage: tk-test [-ticket ./bin/tk] [-v] <file.md> ...")
 		os.Exit(1)
 	}
 
 	bin := *ticketBin
 	if bin == "" {
-		// Default: look for ./bin/ticket relative to the working directory.
-		bin = "bin/ticket"
+		// Default: look for ./bin/tk relative to the working directory.
+		bin = "bin/tk"
 	}
 	bin, err := filepath.Abs(bin)
 	if err != nil {

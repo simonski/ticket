@@ -1,71 +1,46 @@
 # DevOps
 
-**Score: 81/100** (was 72)
+**Score: 76/100** (was 81)
 
 ## What is being assessed
-Build pipeline completeness (test, lint, gosec, govulncheck), Docker multi-stage build quality (pinned images, non-root, HEALTHCHECK, build flags), docker-compose resource limits / health checks / network segmentation, CI Go version alignment with go.mod, publish job atomicity and race-condition analysis, release pipeline (cross-compilation, SBOM, Homebrew tap), and secrets management.
+Build pipeline (Makefile targets, binary naming), Docker quality (multi-stage, Alpine version, non-root user, health check), Compose (resource limits, health checks, network segmentation), CI/CD (Go version alignment, linting, govulncheck, coverage thresholds), release pipeline (cross-platform, checksums), and secrets management.
 
 ## Methodology
-Reviewed `.github/workflows/makefile.yaml`, `Makefile`, `Dockerfile`, `compose.yaml`, `deploy/entrypoint.sh`, `cmd/ticket/VERSION`, and `go.mod`. Verified every quality gate present in the previous assessment's recommendations; checked new publish pipeline for correctness.
+Read `Makefile`, `Dockerfile`, `compose.yaml`, `.github/workflows/makefile.yaml`, `homebrew/ticket.rb.tmpl`. Searched for old `ticket` binary references, checked CI pipeline steps.
 
 ## Findings
 
 ### Passing checks
-- Multi-stage Dockerfile: builder (`golang:1.26-alpine`) separate from runtime (`alpine:3.21`) — `Dockerfile:2,14`
-- Alpine runtime pinned to `3.21` (not `latest`) — `Dockerfile:14`
-- Non-root user: `adduser -D ticket` + `USER ticket` — `Dockerfile:19-21`
-- `apk add --no-cache` prevents cache bloat — `Dockerfile:16`
-- `HEALTHCHECK` present: `wget -qO- http://localhost:8080/api/healthz`, 30s interval, 5s timeout, 3 retries — `Dockerfile:28-29`
-- Go version aligned: `go.mod` → `1.26.0`; CI uses `go-version-file: 'go.mod'`; `Dockerfile` → `golang:1.26-alpine` — `makefile.yaml:13-14`
-- `go.sum` present; all dependencies pinned for reproducible builds
-- Coverage thresholds **enforced in CI**: `make test-go-cover` (cmd 55%, libticket 65%, libtickethttp 75%, store 70%) — `makefile.yaml:22`
-- `golangci-lint` runs in CI as part of `make setup` → `make build` chain — `makefile.yaml:25`
-- `gosec ./...` explicit CI step after build — `makefile.yaml:28-29`
-- `govulncheck ./...` explicit CI step after gosec — `makefile.yaml:31-32`
-- `compose.yaml` has memory limit 512m, CPU limit 1.0, memory reservation 64m — `compose.yaml:11-16`
-- `compose.yaml` has healthcheck (wget `/api/healthz`, 30s/5s/10s/3) — `compose.yaml:17-22`
-- `restart: unless-stopped` in compose — `compose.yaml:10`
-- Publish job gated on `needs: build` and `github.ref == refs/heads/main` — `makefile.yaml:36-37`
-- `permissions: contents: write, packages: write` scoped only to publish job — `makefile.yaml:40-41`
-- `docker/login-action@v3` runs before `make docker-push` — correct login order — `makefile.yaml:58-63`
-- Cross-compilation: darwin/arm64, darwin/amd64, linux/amd64, linux/arm64 — `Makefile`
-- SBOM generated via `cyclonedx-gomod` into `dist/sbom.cdx.json` — `Makefile:release-sbom`
-- Homebrew formula auto-generated from template with per-platform SHA256 — `Makefile:release-formula`
-- `TAP_TOKEN` secret used for Homebrew tap push; falls back to `GITHUB_TOKEN` — `makefile.yaml:44-47`
-- Version bump committed with `[skip ci]` to prevent CI loop — `makefile.yaml:55`
-- `fetch-depth: 0` on publish checkout ensures full history for `gh release` — `makefile.yaml:48`
+- Binary correctly builds to `./bin/tk` (`Makefile:47`: `go build -o ./bin/tk ./cmd/ticket`)
+- Release tarballs named `tk_VERSION_*` for all 4 platforms (`Makefile:136-156`)
+- Homebrew formula updated: URLs use `tk_VERSION_*`, `bin.install "tk"`, test calls `tk version` (`homebrew/ticket.rb.tmpl:11,16,23,28,34,38`)
+- Dockerfile: multi-stage build, Alpine 3.21 pinned, non-root user `ticket`, HEALTHCHECK configured (`Dockerfile:2,15,20-22,30-31`)
+- compose.yaml: resource limits set (`memory: 512m`, `cpus: "1.0"`), health check configured (`compose.yaml:12-24`)
+- CI: Go version from `go.mod` (`go-version-file: 'go.mod'`), `govulncheck` step present (`.github/workflows/makefile.yaml:19,33-34`)
+- Coverage thresholds enforced per package in `Makefile:100-117` (cmd 55%, libticket 65%, libtickethttp 75%, store 70%, config 70%)
+- SHA256 checksums generated for release artifacts (`Makefile:158-164`)
+- SBOM via CycloneDX in release pipeline (`Makefile:166-169`)
+- Automated release on tag push (`.github/workflows/makefile.yaml:84-88`)
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No named networks in `compose.yaml` — default bridge only | Low | `compose.yaml` | Define a named network (`ticket-net`) for future multi-service segmentation |
-| No CPU reservation in `compose.yaml` (only limit) | Low | `compose.yaml:13` | Add `reservations.cpus: "0.25"` alongside memory reservation |
-| Builder stage has no `-ldflags="-s -w"` or `CGO_ENABLED=0` | Low | `Dockerfile:12` | Add `RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/tk ./cmd/ticket` for a smaller, fully static binary |
-| No image digest pinning on builder base image | Low | `Dockerfile:2` | Pin `golang:1.26-alpine@sha256:...` to eliminate supply-chain substitution risk |
-| Publish job: if `TAP_TOKEN` is unset, tap push uses `GITHUB_TOKEN` which lacks cross-repo write access — tap update will silently fail | Medium | `makefile.yaml:44` | Add a CI check: `if [ -z "$TAP_TOKEN" ]; then echo "::error::TAP_TOKEN not set"; exit 1; fi` |
-| `make docker-push` calls `make docker-build` which calls `make bump-version` — a second version bump can occur if invoked locally | Low | `Makefile:docker-push` | Add a guard so `bump-version` is a no-op if already called in the same make session, or decouple `docker-build` from `bump-version` |
+| `cmd/tk-test/main.go` defaults to `./bin/ticket`, not `./bin/tk` | High | `cmd/tk-test/main.go:37,42,49` | Change default from `bin/ticket` to `bin/tk`; update usage strings |
+| `golangci-lint` not run in CI pipeline | Medium | `.github/workflows/makefile.yaml` | Add `make lint` step between govulncheck and test |
+| Docker image tagged as `ticket:` not `tk:` | Medium | `Makefile:222,225-228` | Rename docker build/push targets to use `tk:` image tag |
 
 ## Verdict
-Substantial improvement: all three High-severity gaps from the previous assessment (HEALTHCHECK, resource limits, compose healthcheck) are resolved, and all three Medium gaps (coverage in CI, govulncheck, golangci-lint) are also closed. The publish pipeline is well-structured — gated, permissioned correctly, and includes SBOM and Homebrew tap. Remaining gaps are Low severity, with one Medium risk around TAP_TOKEN fallback silently failing. The project is CI/CD-ready for production deployment.
+The binary rename from `ticket` to `tk` is complete in all the primary surfaces (Makefile, Dockerfile, Homebrew, docs). However, `cmd/tk-test/main.go` was missed — its default flag value and usage strings still reference `./bin/ticket`, breaking executable documentation tests unless `-ticket ./bin/tk` is passed explicitly. The score regresses from 81 to 76 for this issue plus the missing golangci-lint CI step.
 
 ## Changes since last assessment
-| Change | Impact |
-|--------|--------|
-| `gosec ./...` added as explicit CI step | Closes previous Medium finding |
-| New `publish` job: version bump → Docker push to GHCR → GitHub Release → Homebrew tap | Closes previous gap on release automation |
-| `HEALTHCHECK` confirmed present in Dockerfile | Closes previous High finding |
-| `compose.yaml` now has `deploy.resources.limits` (memory 512m, cpus 1.0) | Closes previous High finding |
-| `compose.yaml` now has `healthcheck` section | Closes previous High finding |
-| CI now uses `make test-go-cover` (coverage thresholds enforced) | Closes previous Medium finding |
-| `govulncheck ./...` now explicit CI step | Closes previous Medium finding |
-| `golangci-lint` now in CI via `make setup` | Closes previous Medium finding |
-| `ReadHeaderTimeout: 30s` on HTTP server | Minor SRE hardening visible in server.go |
+- Binary rename complete: `Makefile`, `Dockerfile`, `deploy/entrypoint.sh`, `homebrew/ticket.rb.tmpl` all updated (commit `c2c1353`)
+- All documentation updated to reference `tk` binary
+- **NEW ISSUE FOUND**: `cmd/tk-test/main.go` still defaults to `./bin/ticket`
+- CI pipeline unchanged since v0.1.737
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Guard against silent TAP_TOKEN fallback | Medium | Fail fast in publish job if `TAP_TOKEN` secret is absent |
-| Add `-ldflags="-s -w"` and `CGO_ENABLED=0` to Dockerfile build | Low | Smaller, fully static binary; ~20-30% size reduction |
-| Pin builder base image to digest | Low | Eliminate supply-chain substitution risk on `golang:1.26-alpine` |
-| Add named network to `compose.yaml` | Low | Enables future multi-service segmentation |
-| Add CPU reservation to `compose.yaml` | Low | Alongside existing memory reservation for predictable scheduling |
+| Fix `tk-test` default path | High | `bin = "bin/tk"` at `cmd/tk-test/main.go:49`; update usage strings on lines 37, 42 |
+| Add golangci-lint to CI | Medium | Add `- run: make lint` step after `govulncheck` in `makefile.yaml` |
+| Rename docker image tag | Medium | Change `ticket:` to `tk:` in `Makefile:222,225-228` docker targets |
