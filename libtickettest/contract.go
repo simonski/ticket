@@ -797,8 +797,8 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		role, err := svc.CreateRole(libticket.RoleRequest{
 			Title:      "Tester",
-			Motivation: "Ensure quality",
-			Goals:      "Find bugs",
+			Description: "Ensure quality",
+			AcceptanceCriteria:      "Find bugs",
 		})
 		if err != nil {
 			t.Fatalf("CreateRole() error = %v", err)
@@ -823,8 +823,8 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		updated, err := svc.UpdateRole(role.ID, libticket.RoleRequest{
 			Title:      "Senior Tester",
-			Motivation: "Lead quality",
-			Goals:      "Zero defects",
+			Description: "Lead quality",
+			AcceptanceCriteria:      "Zero defects",
 		})
 		if err != nil {
 			t.Fatalf("UpdateRole() error = %v", err)

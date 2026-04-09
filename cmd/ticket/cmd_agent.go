@@ -513,11 +513,11 @@ func buildAgentPrompt(resp libticket.AgentWorkResponse) string {
 
 	if resp.Role != nil {
 		b.WriteString(fmt.Sprintf("Role: %s\n", resp.Role.Title))
-		if resp.Role.Motivation != "" {
-			b.WriteString(fmt.Sprintf("Motivation: %s\n", strings.TrimSpace(resp.Role.Motivation)))
+		if resp.Role.Description != "" {
+			b.WriteString(fmt.Sprintf("Description: %s\n", strings.TrimSpace(resp.Role.Description)))
 		}
-		if resp.Role.Goals != "" {
-			b.WriteString(fmt.Sprintf("Goals: %s\n", strings.TrimSpace(resp.Role.Goals)))
+		if resp.Role.AcceptanceCriteria != "" {
+			b.WriteString(fmt.Sprintf("AcceptanceCriteria: %s\n", strings.TrimSpace(resp.Role.AcceptanceCriteria)))
 		}
 		b.WriteString("\n")
 	}

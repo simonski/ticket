@@ -17,35 +17,38 @@ var (
 )
 
 type Ticket struct {
-	ID                 string    `json:"ticket_id"`
-	ProjectID          int64     `json:"project_id"`
-	ParentID           *string   `json:"parent_id,omitempty"`
-	CloneOf            *string   `json:"clone_of,omitempty"`
-	Type               string    `json:"type"`
-	Title              string    `json:"title"`
-	Description        string    `json:"description"`
-	AcceptanceCriteria string    `json:"acceptance_criteria"`
-	GitRepository      string    `json:"git_repository"`
-	GitBranch          string    `json:"git_branch"`
-	SdlcID         *int64    `json:"sdlc_id,omitempty"`
-	SdlcStageID    *int64    `json:"sdlc_stage_id,omitempty"`
-	Stage              string    `json:"stage"`
-	State              string    `json:"state"`
-	Status             string    `json:"status"`
-	Priority           int       `json:"priority"`
-	Order              int       `json:"order"`
-	EstimateEffort     int       `json:"estimate_effort"`
-	EstimateComplete   string    `json:"estimate_complete,omitempty"`
-	HealthScore        int       `json:"health_score"`
-	Assignee           string    `json:"assignee"`
-	Author             string    `json:"author"`
-	Comments           []Comment `json:"comments,omitempty"`
-	Ready              bool      `json:"ready"`
-	Open               bool      `json:"open"`
-	Archived           bool      `json:"archived"`
-	CreatedBy          string    `json:"created_by"`
-	CreatedAt          string    `json:"created_at"`
-	UpdatedAt          string    `json:"updated_at"`
+	ID                    string    `json:"ticket_id"`
+	ProjectID             int64     `json:"project_id"`
+	ParentID              *string   `json:"parent_id,omitempty"`
+	CloneOf               *string   `json:"clone_of,omitempty"`
+	Type                  string    `json:"type"`
+	Title                 string    `json:"title"`
+	Description           string    `json:"description"`
+	AcceptanceCriteria    string    `json:"acceptance_criteria"`
+	GitRepository         string    `json:"git_repository"`
+	GitBranch             string    `json:"git_branch"`
+	SdlcID                *int64   `json:"sdlc_id,omitempty"`
+	SdlcStageID           *int64   `json:"sdlc_stage_id,omitempty"`
+	RoleID                *int64   `json:"role_id,omitempty"`
+	Stage                 string    `json:"stage"`
+	State                 string    `json:"state"`
+	Status                string    `json:"status"`
+	Priority              int       `json:"priority"`
+	Order                 int       `json:"order"`
+	EstimateEffort        int       `json:"estimate_effort"`
+	EstimateComplete      string    `json:"estimate_complete,omitempty"`
+	HealthScore           int       `json:"health_score"`
+	Assignee              string    `json:"assignee"`
+	Author                string    `json:"author"`
+	Comments              []Comment `json:"comments,omitempty"`
+	Draft                 bool      `json:"draft"`
+	Complete              bool      `json:"complete"`
+	Archived              bool      `json:"archived"`
+	PreviousSdlcStageID  *int64   `json:"previous_sdlc_stage_id,omitempty"`
+	PreviousRoleID        *int64   `json:"previous_role_id,omitempty"`
+	CreatedBy             string    `json:"created_by"`
+	CreatedAt             string    `json:"created_at"`
+	UpdatedAt             string    `json:"updated_at"`
 }
 
 type TicketCreateParams struct {
@@ -1687,12 +1690,15 @@ func EnrichTicketContext(ctx context.Context, db *sql.DB, ticket Ticket) TicketC
 	if wfID := ResolveSdlcID(ctx, db, ticket); wfID != nil {
 		if wf, err := GetSdlc(ctx, db, *wfID); err == nil {
 			result.Sdlc = &wf
-			if ticket.SdlcStageID != nil {
+			if ticket.RoleID != nil {
+				if role, err := GetRoleByID(ctx, db, *ticket.RoleID); err == nil {
+					result.Role = &role
+				}
+			} else if ticket.SdlcStageID != nil {
+				// Fall back to first role in the stage
 				for _, stage := range wf.Stages {
-					if stage.ID == *ticket.SdlcStageID && stage.RoleID != nil {
-						if role, err := GetRoleByID(ctx, db, *stage.RoleID); err == nil {
-							result.Role = &role
-						}
+					if stage.ID == *ticket.SdlcStageID && len(stage.Roles) > 0 {
+						result.Role = &stage.Roles[0]
 						break
 					}
 				}

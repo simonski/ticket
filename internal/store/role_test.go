@@ -38,7 +38,7 @@ func TestRoleCRUD(t *testing.T) {
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	created, err := CreateRole(context.Background(), db, "Principal QA", "Own quality", "Automate and validate")
+	created, err := CreateRole(context.Background(), db, nil, "Principal QA", "Own quality", "Automate and validate")
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
@@ -82,10 +82,10 @@ func TestDefaultRoleContentIsDetailed(t *testing.T) {
 	if !found {
 		t.Fatalf("Product Owner role not seeded")
 	}
-	if !strings.Contains(productOwner.Motivation, "\n\n") {
+	if !strings.Contains(productOwner.Description, "\n\n") {
 		t.Fatalf("Product Owner motivation should contain multiple paragraphs")
 	}
-	if !strings.Contains(productOwner.Goals, "\n\n") {
+	if !strings.Contains(productOwner.AcceptanceCriteria, "\n\n") {
 		t.Fatalf("Product Owner goals should contain multiple paragraphs")
 	}
 }
@@ -111,10 +111,10 @@ func TestSeedDefaultRolesBackfillsLegacyRoleText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getRoleByTitle() error = %v", err)
 	}
-	if !strings.Contains(role.Motivation, "\n\n") {
+	if !strings.Contains(role.Description, "\n\n") {
 		t.Fatalf("Architect motivation should be backfilled to detailed content")
 	}
-	if !strings.Contains(role.Goals, "\n\n") {
+	if !strings.Contains(role.AcceptanceCriteria, "\n\n") {
 		t.Fatalf("Architect goals should be backfilled to detailed content")
 	}
 }
@@ -126,7 +126,7 @@ func getRoleByTitle(db *sql.DB, title string) (Role, error) {
 		WHERE title = ?
 	`, title)
 	var role Role
-	if err := row.Scan(&role.ID, &role.Title, &role.Motivation, &role.Goals, &role.CreatedAt, &role.UpdatedAt); err != nil {
+	if err := row.Scan(&role.ID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
 		return Role{}, err
 	}
 	return role, nil

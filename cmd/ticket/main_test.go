@@ -2593,7 +2593,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 		Description:        "Some description",
 		AcceptanceCriteria: "Must pass",
 	}
-	role := store.Role{Title: "Developer", Motivation: "Ship features", Goals: "Quality code"}
+	role := store.Role{Title: "Developer", Description: "Ship features", AcceptanceCriteria: "Quality code"}
 	wf := store.SdlcWithStages{
 		Sdlc: store.Sdlc{Name: "Standard"},
 		Stages:  []store.SdlcStage{{StageName: "design"}, {StageName: "develop"}, {StageName: "test"}},

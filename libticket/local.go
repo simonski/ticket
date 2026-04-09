@@ -161,7 +161,7 @@ func (s *LocalService) CreateRole(request RoleRequest) (store.Role, error) {
 		return store.Role{}, err
 	}
 	defer db.Close()
-	return store.CreateRole(context.Background(), db, request.Title, request.Motivation, request.Goals)
+	return store.CreateRole(context.Background(), db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
 }
 
 func (s *LocalService) ListRoles() ([]store.Role, error) {
@@ -179,7 +179,7 @@ func (s *LocalService) UpdateRole(id int64, request RoleRequest) (store.Role, er
 		return store.Role{}, err
 	}
 	defer db.Close()
-	return store.UpdateRole(context.Background(), db, id, request.Title, request.Motivation, request.Goals)
+	return store.UpdateRole(context.Background(), db, id, request.Title, request.Description, request.AcceptanceCriteria)
 }
 
 func (s *LocalService) DeleteRole(id int64) error {

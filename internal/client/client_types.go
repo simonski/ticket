@@ -168,9 +168,10 @@ type AgentCreateRequest struct {
 }
 
 type RoleRequest struct {
-	Title      string `json:"title"`
-	Motivation string `json:"motivation"`
-	Goals      string `json:"goals"`
+	SdlcID             *int64 `json:"sdlc_id,omitempty"`
+	Title              string `json:"title"`
+	Description        string `json:"description"`
+	AcceptanceCriteria string `json:"acceptance_criteria"`
 }
 
 type AgentUpdateRequest struct {

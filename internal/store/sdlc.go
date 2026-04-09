@@ -17,17 +17,15 @@ type Sdlc struct {
 }
 
 type SdlcStage struct {
-	ID                int64  `json:"sdlc_stage_id"`
-	SdlcID        int64  `json:"sdlc_id"`
-	StageName         string `json:"stage_name"`
-	Description       string `json:"description"`
-	DefinitionOfReady string `json:"definition_of_ready"`
-	DefinitionOfDone  string `json:"definition_of_done"`
-	RoleID            *int64 `json:"role_id"`
-	RoleTitle         string `json:"role_title"`
-	SortOrder         int    `json:"sort_order"`
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at"`
+	ID                 int64  `json:"sdlc_stage_id"`
+	SdlcID             int64  `json:"sdlc_id"`
+	StageName          string `json:"stage_name"`
+	Description        string `json:"description"`
+	AcceptanceCriteria string `json:"acceptance_criteria"`
+	SortOrder          int    `json:"sort_order"`
+	Roles              []Role `json:"roles,omitempty"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
 }
 
 type SdlcWithStages struct {
@@ -38,10 +36,10 @@ type SdlcWithStages struct {
 // Export types use role title instead of ID for portability.
 
 type SdlcStageExport struct {
-	StageName   string `json:"stage_name"`
-	Description string `json:"description"`
-	Role        string `json:"role"`
-	SortOrder   int    `json:"sort_order"`
+	StageName   string   `json:"stage_name"`
+	Description string   `json:"description"`
+	Roles       []string `json:"roles,omitempty"`
+	SortOrder   int      `json:"sort_order"`
 }
 
 type SdlcExport struct {
@@ -120,15 +118,15 @@ func DeleteSdlc(ctx context.Context, db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, description string, roleID *int64, sortOrder int) (SdlcStage, error) {
+func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, description string, sortOrder int) (SdlcStage, error) {
 	stageName = strings.TrimSpace(stageName)
 	if stageName == "" {
 		return SdlcStage{}, errors.New("stage name is required")
 	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO sdlc_stages (sdlc_id, stage_name, description, role_id, sort_order, updated_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, sdlcID, stageName, strings.TrimSpace(description), roleID, sortOrder)
+		INSERT INTO sdlc_stages (sdlc_id, stage_name, description, sort_order, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, sdlcID, stageName, strings.TrimSpace(description), sortOrder)
 	if err != nil {
 		return SdlcStage{}, err
 	}
@@ -185,10 +183,14 @@ func ExportSdlc(ctx context.Context, db *sql.DB, id int64) (SdlcExport, error) {
 		Stages:      make([]SdlcStageExport, len(wf.Stages)),
 	}
 	for i, s := range wf.Stages {
+		var roleNames []string
+		for _, r := range s.Roles {
+			roleNames = append(roleNames, r.Title)
+		}
 		export.Stages[i] = SdlcStageExport{
 			StageName:   s.StageName,
 			Description: s.Description,
-			Role:        s.RoleTitle,
+			Roles:       roleNames,
 			SortOrder:   s.SortOrder,
 		}
 	}
@@ -205,16 +207,18 @@ func ImportSdlc(ctx context.Context, db *sql.DB, export SdlcExport) (Sdlc, error
 		return Sdlc{}, err
 	}
 	for _, s := range export.Stages {
-		var roleID *int64
-		if strings.TrimSpace(s.Role) != "" {
-			role, err := GetRoleByTitle(ctx, db, s.Role)
-			if err != nil {
-				return Sdlc{}, fmt.Errorf("role %q not found: %w", s.Role, err)
-			}
-			roleID = &role.ID
-		}
-		if _, err := AddSdlcStage(ctx, db, wf.ID, s.StageName, s.Description, roleID, s.SortOrder); err != nil {
+		stage, err := AddSdlcStage(ctx, db, wf.ID, s.StageName, s.Description, s.SortOrder)
+		if err != nil {
 			return Sdlc{}, err
+		}
+		for _, roleName := range s.Roles {
+			role, err := GetRoleByTitle(ctx, db, strings.TrimSpace(roleName))
+			if err != nil {
+				return Sdlc{}, fmt.Errorf("role %q not found: %w", roleName, err)
+			}
+			if err := AddSdlcStageRole(ctx, db, wf.ID, stage.ID, role.ID); err != nil {
+				return Sdlc{}, err
+			}
 		}
 	}
 	return wf, nil
@@ -237,31 +241,25 @@ func getSdlcRow(ctx context.Context, db *sql.DB, id int64) (Sdlc, error) {
 
 func getSdlcStageRow(ctx context.Context, db *sql.DB, id int64) (SdlcStage, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ws.sdlc_stage_id, ws.sdlc_id, ws.stage_name, ws.description,
-		       ws.definition_of_ready, ws.definition_of_done,
-		       ws.role_id, COALESCE(r.title, ''), ws.sort_order, ws.created_at, ws.updated_at
-		FROM sdlc_stages ws
-		LEFT JOIN roles r ON r.role_id = ws.role_id
-		WHERE ws.sdlc_stage_id = ?
+		SELECT sdlc_stage_id, sdlc_id, stage_name, description, acceptance_criteria, sort_order, created_at, updated_at
+		FROM sdlc_stages
+		WHERE sdlc_stage_id = ?
 	`, id)
 	var s SdlcStage
 	if err := row.Scan(&s.ID, &s.SdlcID, &s.StageName, &s.Description,
-		&s.DefinitionOfReady, &s.DefinitionOfDone,
-		&s.RoleID, &s.RoleTitle, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.AcceptanceCriteria, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return SdlcStage{}, err
 	}
+	s.Roles, _ = ListSdlcStageRoles(ctx, db, s.SdlcID, s.ID)
 	return s, nil
 }
 
 func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ws.sdlc_stage_id, ws.sdlc_id, ws.stage_name, ws.description,
-		       ws.definition_of_ready, ws.definition_of_done,
-		       ws.role_id, COALESCE(r.title, ''), ws.sort_order, ws.created_at, ws.updated_at
-		FROM sdlc_stages ws
-		LEFT JOIN roles r ON r.role_id = ws.role_id
-		WHERE ws.sdlc_id = ?
-		ORDER BY ws.sort_order, ws.sdlc_stage_id
+		SELECT sdlc_stage_id, sdlc_id, stage_name, description, acceptance_criteria, sort_order, created_at, updated_at
+		FROM sdlc_stages
+		WHERE sdlc_id = ?
+		ORDER BY sort_order, sdlc_stage_id
 	`, sdlcID)
 	if err != nil {
 		return nil, err
@@ -271,10 +269,10 @@ func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage,
 	for rows.Next() {
 		var s SdlcStage
 		if err := rows.Scan(&s.ID, &s.SdlcID, &s.StageName, &s.Description,
-			&s.DefinitionOfReady, &s.DefinitionOfDone,
-			&s.RoleID, &s.RoleTitle, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.AcceptanceCriteria, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
+		s.Roles, _ = ListSdlcStageRoles(ctx, db, sdlcID, s.ID)
 		stages = append(stages, s)
 	}
 	return stages, rows.Err()

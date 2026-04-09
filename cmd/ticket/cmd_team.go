@@ -335,8 +335,8 @@ func runRole(args []string) error {
 				}
 				fmt.Printf("ID:         %d\n", role.ID)
 				fmt.Printf("Title:      %s\n", role.Title)
-				fmt.Printf("Motivation: %s\n", role.Motivation)
-				fmt.Printf("Goals:      %s\n", role.Goals)
+				fmt.Printf("Description: %s\n", role.Description)
+				fmt.Printf("AcceptanceCriteria:      %s\n", role.AcceptanceCriteria)
 				fmt.Printf("Created:    %s\n", role.CreatedAt)
 				fmt.Printf("Updated:    %s\n", role.UpdatedAt)
 				return nil
@@ -357,8 +357,8 @@ func runRole(args []string) error {
 		}
 		role, err := svc.CreateRole(libticket.RoleRequest{
 			Title:      strings.TrimSpace(*title),
-			Motivation: strings.TrimSpace(*motivation),
-			Goals:      strings.TrimSpace(*goals),
+			Description: strings.TrimSpace(*motivation),
+			AcceptanceCriteria:      strings.TrimSpace(*goals),
 		})
 		if err != nil {
 			return err
@@ -383,8 +383,8 @@ func runRole(args []string) error {
 		}
 		role, err := svc.UpdateRole(*id, libticket.RoleRequest{
 			Title:      strings.TrimSpace(*title),
-			Motivation: strings.TrimSpace(*motivation),
-			Goals:      strings.TrimSpace(*goals),
+			Description: strings.TrimSpace(*motivation),
+			AcceptanceCriteria:      strings.TrimSpace(*goals),
 		})
 		if err != nil {
 			return err

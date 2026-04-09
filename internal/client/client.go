@@ -221,7 +221,7 @@ func (c *Client) CreateRole(request RoleRequest) (store.Role, error) {
 			return store.Role{}, err
 		}
 		defer db.Close()
-		return store.CreateRole(context.Background(), db, request.Title, request.Motivation, request.Goals)
+		return store.CreateRole(context.Background(), db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
 	}
 	var role store.Role
 	err := c.doJSON(http.MethodPost, "/api/roles", request, &role)
@@ -249,7 +249,7 @@ func (c *Client) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
 			return store.Role{}, err
 		}
 		defer db.Close()
-		return store.UpdateRole(context.Background(), db, id, request.Title, request.Motivation, request.Goals)
+		return store.UpdateRole(context.Background(), db, id, request.Title, request.Description, request.AcceptanceCriteria)
 	}
 	var role store.Role
 	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/roles/%d", id), request, &role)

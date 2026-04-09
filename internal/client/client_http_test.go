@@ -354,13 +354,13 @@ func TestRemoteClientRolesCRUD(t *testing.T) {
 
 	api := New(config.Config{Location: server.URL})
 
-	if _, err := api.CreateRole(RoleRequest{Title: "dev", Motivation: "build", Goals: "ship"}); err != nil {
+	if _, err := api.CreateRole(RoleRequest{Title: "dev", Description: "build", AcceptanceCriteria: "ship"}); err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
 	if _, err := api.ListRoles(); err != nil {
 		t.Fatalf("ListRoles() error = %v", err)
 	}
-	if _, err := api.UpdateRole(1, RoleRequest{Title: "dev2", Motivation: "build", Goals: "ship"}); err != nil {
+	if _, err := api.UpdateRole(1, RoleRequest{Title: "dev2", Description: "build", AcceptanceCriteria: "ship"}); err != nil {
 		t.Fatalf("UpdateRole() error = %v", err)
 	}
 	if err := api.DeleteRole(1); err != nil {

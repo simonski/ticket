@@ -216,7 +216,7 @@ func TestLocalModeClientRolesCRUD(t *testing.T) {
 	}
 	api := New(config.Config{})
 
-	role, err := api.CreateRole(RoleRequest{Title: "dev", Motivation: "build", Goals: "ship"})
+	role, err := api.CreateRole(RoleRequest{Title: "dev", Description: "build", AcceptanceCriteria: "ship"})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
@@ -230,7 +230,7 @@ func TestLocalModeClientRolesCRUD(t *testing.T) {
 	if len(roles) == 0 {
 		t.Fatal("ListRoles() returned empty")
 	}
-	updated, err := api.UpdateRole(role.ID, RoleRequest{Title: "dev2", Motivation: "build", Goals: "ship"})
+	updated, err := api.UpdateRole(role.ID, RoleRequest{Title: "dev2", Description: "build", AcceptanceCriteria: "ship"})
 	if err != nil {
 		t.Fatalf("UpdateRole() error = %v", err)
 	}

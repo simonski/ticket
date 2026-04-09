@@ -174,11 +174,14 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS roles (
 	role_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	title TEXT NOT NULL UNIQUE,
-	motivation TEXT NOT NULL DEFAULT '',
-	goals TEXT NOT NULL DEFAULT '',
+	sdlc_id INTEGER,
+	title TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	acceptance_criteria TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
+	UNIQUE(sdlc_id, title)
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -196,6 +199,7 @@ CREATE TABLE IF NOT EXISTS projects (
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	ticket_sequence INTEGER NOT NULL DEFAULT 0,
+	default_draft INTEGER NOT NULL DEFAULT 0,
 	sdlc_id INTEGER,
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
 	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id)
@@ -213,17 +217,21 @@ CREATE TABLE IF NOT EXISTS tickets (
 	git_repository TEXT NOT NULL DEFAULT '',
 	git_branch TEXT NOT NULL DEFAULT '',
 	sdlc_stage_id INTEGER,
+	role_id INTEGER,
 	stage TEXT NOT NULL DEFAULT 'design',
 	state TEXT NOT NULL DEFAULT 'idle',
-	status TEXT NOT NULL DEFAULT 'open',
+	status TEXT NOT NULL DEFAULT 'design/idle',
 	priority INTEGER NOT NULL DEFAULT 3,
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	estimate_effort INTEGER NOT NULL DEFAULT 0,
 	estimate_complete TEXT NOT NULL DEFAULT '',
 	health_score INTEGER NOT NULL DEFAULT 0,
 	assignee TEXT NOT NULL DEFAULT '',
-	open INTEGER NOT NULL DEFAULT 1,
+	draft INTEGER NOT NULL DEFAULT 0,
+	complete INTEGER NOT NULL DEFAULT 0,
 	archived INTEGER NOT NULL DEFAULT 0,
+	previous_sdlc_stage_id INTEGER,
+	previous_role_id INTEGER,
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -231,7 +239,8 @@ CREATE TABLE IF NOT EXISTS tickets (
 	FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
-	FOREIGN KEY(sdlc_stage_id) REFERENCES sdlc_stages(sdlc_stage_id)
+	FOREIGN KEY(sdlc_stage_id) REFERENCES sdlc_stages(sdlc_stage_id),
+	FOREIGN KEY(role_id) REFERENCES roles(role_id)
 );
 
 CREATE TABLE IF NOT EXISTS stories (
@@ -403,13 +412,24 @@ CREATE TABLE IF NOT EXISTS sdlc_stages (
 	sdlc_id INTEGER NOT NULL,
 	stage_name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
-	role_id INTEGER,
+	acceptance_criteria TEXT NOT NULL DEFAULT '',
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
-	FOREIGN KEY(role_id) REFERENCES roles(role_id),
 	UNIQUE(sdlc_id, stage_name)
+);
+
+CREATE TABLE IF NOT EXISTS sdlc_stage_roles (
+	sdlc_id INTEGER NOT NULL,
+	stage_id INTEGER NOT NULL,
+	role_id INTEGER NOT NULL,
+	sort_order INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(sdlc_id, stage_id, role_id),
+	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
+	FOREIGN KEY(stage_id) REFERENCES sdlc_stages(sdlc_stage_id),
+	FOREIGN KEY(role_id) REFERENCES roles(role_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -442,10 +462,12 @@ CREATE INDEX IF NOT EXISTS idx_labels_project_id ON labels(project_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_labels_label_id ON ticket_labels(label_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id);
 
-CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open);
+CREATE INDEX IF NOT EXISTS idx_tickets_draft ON tickets(draft);
+CREATE INDEX IF NOT EXISTS idx_tickets_complete ON tickets(complete);
 CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type);
+CREATE INDEX IF NOT EXISTS idx_tickets_role_id ON tickets(role_id);
 
 CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
@@ -457,7 +479,8 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id)
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_sdlc_stages_sdlc_id ON sdlc_stages(sdlc_id);
-CREATE INDEX IF NOT EXISTS idx_sdlc_stages_role_id ON sdlc_stages(role_id);
+CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_stage_id ON sdlc_stage_roles(stage_id);
+CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_role_id ON sdlc_stage_roles(role_id);
 
 `
 
@@ -1013,7 +1036,7 @@ func backfillTicketSdlcStages(ctx context.Context, db *sql.DB) error {
 }
 
 func seedDefaultSdlc(ctx context.Context, db *sql.DB) error {
-	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO sdlcs (name, description, updated_at) VALUES ('default', 'Standard engineering lifecycle', CURRENT_TIMESTAMP)`)
+	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO sdlcs (name, description, updated_at) VALUES ('default', 'Minimal SDLC: develop and done', CURRENT_TIMESTAMP)`)
 	if err != nil {
 		return err
 	}
@@ -1021,30 +1044,22 @@ func seedDefaultSdlc(ctx context.Context, db *sql.DB) error {
 	if affected == 0 {
 		return nil // already seeded
 	}
-	wfID, err := result.LastInsertId()
+	sdlcID, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
 	stages := []struct {
-		name      string
-		roleTitle string
-		order     int
+		name  string
+		order int
 	}{
-		{"design", "BA", 0},
-		{"develop", "Lead Engineer", 1},
-		{"test", "QA/Tester", 2},
-		{"done", "Product Owner", 3},
+		{"develop", 0},
+		{"done", 1},
 	}
 	for _, s := range stages {
-		var roleID *int64
-		role, err := GetRoleByTitle(ctx, db, s.roleTitle)
-		if err == nil {
-			roleID = &role.ID
-		}
 		if _, err := db.ExecContext(ctx, `
-			INSERT INTO sdlc_stages (sdlc_id, stage_name, role_id, sort_order, updated_at)
-			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		`, wfID, s.name, roleID, s.order); err != nil {
+			INSERT INTO sdlc_stages (sdlc_id, stage_name, sort_order, updated_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		`, sdlcID, s.name, s.order); err != nil {
 			return err
 		}
 	}
@@ -1060,151 +1075,19 @@ func seedYoloSdlc(ctx context.Context, db *sql.DB) error {
 	if affected == 0 {
 		return nil // already seeded
 	}
-	wfID, err := result.LastInsertId()
+	sdlcID, err := result.LastInsertId()
 	if err != nil {
 		return err
 	}
-	var roleID *int64
-	role, err := GetRoleByTitle(ctx, db, "Lead Engineer")
-	if err == nil {
-		roleID = &role.ID
-	}
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO sdlc_stages (sdlc_id, stage_name, role_id, sort_order, updated_at)
-		VALUES (?, 'done', ?, 0, CURRENT_TIMESTAMP)
-	`, wfID, roleID)
+		INSERT INTO sdlc_stages (sdlc_id, stage_name, sort_order, updated_at)
+		VALUES (?, 'done', 0, CURRENT_TIMESTAMP)
+	`, sdlcID)
 	return err
 }
 
-func seedDefaultRoles(ctx context.Context, db *sql.DB) error {
-	type defaultRole struct {
-		Title            string
-		LegacyMotivation string
-		LegacyGoals      string
-		Motivation       string
-		Goals            string
-	}
-
-	defaultRoles := []defaultRole{
-		{
-			Title:            "Product Owner",
-			LegacyMotivation: "Maximize customer value and clarity.",
-			LegacyGoals:      "Prioritize backlog and validate outcomes.",
-			Motivation: `The Product Owner is the steward of value. This role gathers the many voices around a product and turns them into one accountable direction that the team can execute without ambiguity.
-
-In classical delivery practice, the Product Owner protects both customer outcomes and engineering focus by deciding what matters now, what can wait, and what should never be built.`,
-			Goals: `Shape and maintain a prioritized backlog whose ordering reflects business value, risk reduction, and delivery reality.
-
-Define acceptance criteria that make success testable, and continuously validate delivered work with users and stakeholders so the team learns quickly and adjusts course deliberately.`,
-		},
-		{
-			Title:            "Architect",
-			LegacyMotivation: "Maintain coherent system design.",
-			LegacyGoals:      "Define architecture guardrails and reduce complexity.",
-			Motivation: `The Architect preserves structural integrity while change is constant. This role balances immediate delivery pressure against the long-term fitness of the system so that each release does not mortgage the next.
-
-Classically, the Architect translates strategy into technical boundaries: where variation is welcome, where standards are required, and where simplification must be enforced.`,
-			Goals: `Set architecture principles, interfaces, and constraints that allow teams to move independently without creating fragmentation.
-
-Drive intentional reduction of complexity through clear decomposition, dependable integration points, and regular review of hotspots where cost, risk, and coupling are rising.`,
-		},
-		{
-			Title:            "DevOps",
-			LegacyMotivation: "Improve delivery reliability and speed.",
-			LegacyGoals:      "Automate build/deploy and keep systems stable.",
-			Motivation: `DevOps exists to eliminate the false trade-off between speed and stability. The role champions delivery systems that are repeatable, observable, and safe under real operational load.
-
-In the classical sense, DevOps is a reliability discipline as much as a tooling discipline: remove toil, shorten feedback loops, and make production behavior visible to everyone.`,
-			Goals: `Build and maintain automated pipelines for build, test, release, and rollback so deployment becomes routine rather than exceptional.
-
-Improve operational excellence through monitoring, alerting, incident learning, and capacity planning, keeping service health and change lead time in continuous balance.`,
-		},
-		{
-			Title:            "QA/Tester",
-			LegacyMotivation: "Protect product quality.",
-			LegacyGoals:      "Design tests and prevent regressions.",
-			Motivation: `QA/Tester represents disciplined skepticism in the delivery process. This role asks how a feature can fail in practice and ensures quality is demonstrated, not merely asserted.
-
-Classical testing practice positions QA as a partner in design and risk management, helping teams discover defects early and prevent classes of failure before release.`,
-			Goals: `Create layered test strategies across functional, integration, and exploratory testing that reflect product risk and user impact.
-
-Strengthen regression safety by improving test automation, test data quality, and defect feedback loops so each release increases confidence instead of uncertainty.`,
-		},
-		{
-			Title:            "BA",
-			LegacyMotivation: "Turn business needs into implementable requirements.",
-			LegacyGoals:      "Clarify scope and acceptance criteria.",
-			Motivation: `The Business Analyst translates intent into precision. This role turns broad business goals into clear problem statements, measurable outcomes, and decisions that teams can implement without rework.
-
-Classically, BA work reduces waste by exposing assumptions early, surfacing dependencies, and creating shared understanding before expensive development begins.`,
-			Goals: `Elicit and document requirements in language that is concrete for engineering and meaningful for stakeholders, including explicit boundaries and constraints.
-
-Maintain alignment between scope, process, and outcomes by refining acceptance criteria, tracking requirement changes, and resolving ambiguity before it reaches implementation.`,
-		},
-		{
-			Title:            "Lead Engineer",
-			LegacyMotivation: "Deliver technically sound features.",
-			LegacyGoals:      "Guide implementation and unblock execution.",
-			Motivation: `The Lead Engineer is accountable for turning plans into high-quality software under real timeline pressure. This role keeps the team moving while preserving technical standards and delivery discipline.
-
-In classical engineering leadership, the lead is both builder and coordinator: clarifying trade-offs, sequencing work, and intervening quickly when execution drifts.`,
-			Goals: `Guide implementation across design, coding, and review practices so feature delivery remains coherent, testable, and maintainable.
-
-Actively unblock execution by resolving technical uncertainty, coordinating cross-role decisions, and maintaining a predictable cadence from development through handoff.`,
-		},
-		{
-			Title:            "Staff Engineer",
-			LegacyMotivation: "Raise cross-team technical quality.",
-			LegacyGoals:      "Drive long-term engineering improvements.",
-			Motivation: `The Staff Engineer operates at system and organization scale. This role focuses on problems that exceed a single team boundary and improves how engineering works across the whole product surface.
-
-Classically, staff-level impact is measured in leverage: better defaults, better standards, and better technical decisions that make many teams more effective over time.`,
-			Goals: `Lead cross-team initiatives that improve architecture consistency, platform capability, and engineering effectiveness without centralizing all decision-making.
-
-Advance long-term technical quality by identifying systemic risks, shaping roadmaps for foundational work, and mentoring engineers in high-leverage design and execution patterns.`,
-		},
-		{
-			Title:            "StoryReview",
-			LegacyMotivation: "",
-			LegacyGoals:      "",
-			Motivation: `StoryReview converts high-level requirements into a coherent implementation shape. The role ensures scope is represented as outcome-focused epics and delivery-focused tickets that can be executed incrementally.
-
-This role emphasizes completeness, clear boundaries, and actionable decomposition that engineering teams can review and implement with minimal ambiguity.`,
-			Goals: `Break each story into a small set of epics that represent major capability slices, then derive concrete implementation tickets for each epic.
-
-Ensure generated work items have clear intent, practical scope, and traceability back to the parent story for review and approval.`,
-		},
-		{
-			Title:            "EpicReview",
-			LegacyMotivation: "",
-			LegacyGoals:      "",
-			Motivation: `EpicReview translates a strategic epic into executable tickets. The role focuses on identifying practical delivery steps that preserve architectural integrity while enabling fast implementation.
-
-This role acts as the bridge between planning and coding by turning broad capability statements into clear, testable work units.`,
-			Goals: `Decompose epics into implementation tickets with well-defined titles and descriptions that support estimation and assignment.
-
-Produce tickets that are specific enough for immediate development while maintaining linkage to the parent epic and story context.`,
-		},
-	}
-	for _, role := range defaultRoles {
-		if _, err := db.ExecContext(ctx, `
-			INSERT OR IGNORE INTO roles (title, motivation, goals, updated_at)
-			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		`, role.Title, role.Motivation, role.Goals); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, `
-			UPDATE roles
-			SET motivation = ?, goals = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE title = ?
-			  AND (
-			    (motivation = ? AND goals = ?)
-			    OR (TRIM(motivation) = '' AND TRIM(goals) = '')
-			  )
-		`, role.Motivation, role.Goals, role.Title, role.LegacyMotivation, role.LegacyGoals); err != nil {
-			return err
-		}
-	}
+// seedDefaultRoles is a no-op — roles are now scoped to SDLCs and created by users.
+func seedDefaultRoles(_ context.Context, _ *sql.DB) error {
 	return nil
 }
 

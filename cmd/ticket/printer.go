@@ -184,11 +184,11 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 	if resp.Role != nil {
 		fmt.Println()
 		fmt.Printf("current role: %s\n", resp.Role.Title)
-		if resp.Role.Motivation != "" {
-			fmt.Printf("  motivation: %s\n", resp.Role.Motivation)
+		if resp.Role.Description != "" {
+			fmt.Printf("  motivation: %s\n", resp.Role.Description)
 		}
-		if resp.Role.Goals != "" {
-			fmt.Printf("  goals: %s\n", resp.Role.Goals)
+		if resp.Role.AcceptanceCriteria != "" {
+			fmt.Printf("  goals: %s\n", resp.Role.AcceptanceCriteria)
 		}
 	}
 }
@@ -847,8 +847,8 @@ func printRoleTable(roles []store.Role) {
 		rows = append(rows, fmt.Sprintf("%d\t%s\t%s\t%s",
 			role.ID,
 			truncRune(role.Title, titleW),
-			truncRune(role.Motivation, motW),
-			truncRune(role.Goals, goalW),
+			truncRune(role.Description, motW),
+			truncRune(role.AcceptanceCriteria, goalW),
 		))
 	}
 	printBoxTable("ID\tTITLE\tMOTIVATION\tGOALS", rows)

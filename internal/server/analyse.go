@@ -83,10 +83,10 @@ func buildStoryAnalyseCLIInstructions(story store.Story, project store.Project, 
 	projectRef := fmt.Sprintf("%d", project.ID)
 	return fmt.Sprintf(
 		`You are role %s.
-Motivation:
+Description:
 %s
 
-Goals:
+AcceptanceCriteria:
 %s
 
 Break down the following story into implementation epics and tasks using the local "ticket" CLI binary.
@@ -117,8 +117,8 @@ Requirements:
 7) Print a short final summary of created epic/task refs.
 `,
 		role.Title,
-		role.Motivation,
-		role.Goals,
+		role.Description,
+		role.AcceptanceCriteria,
 		story.ID,
 		strings.TrimSpace(story.Title),
 		strings.TrimSpace(story.Description),
@@ -178,10 +178,10 @@ func runRoleJSONAnalysis(db *sql.DB, roleTitle, prompt string, target any) error
 		return err
 	}
 	fullPrompt := fmt.Sprintf(
-		"You are role %s.\nMotivation:\n%s\n\nGoals:\n%s\n\nReturn JSON only.\n%s\n",
+		"You are role %s.\nDescription:\n%s\n\nAcceptanceCriteria:\n%s\n\nReturn JSON only.\n%s\n",
 		role.Title,
-		role.Motivation,
-		role.Goals,
+		role.Description,
+		role.AcceptanceCriteria,
 		prompt,
 	)
 

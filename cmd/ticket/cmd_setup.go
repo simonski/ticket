@@ -790,9 +790,9 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
 		fmt.Println()
 		if promptYN(reader, "no roles found — create default roles (engineer, tech lead, QA engineer)?", true) {
 			defaults := []libticket.RoleRequest{
-				{Title: "Engineer", Motivation: "Build reliable, well-tested software", Goals: "Ship features, fix bugs, write tests"},
-				{Title: "Tech Lead", Motivation: "Guide the technical direction of the team", Goals: "Architecture decisions, code quality, mentoring"},
-				{Title: "QA Engineer", Motivation: "Ensure quality across the product", Goals: "Test coverage, bug detection, release confidence"},
+				{Title: "Engineer", Description: "Build reliable, well-tested software", AcceptanceCriteria: "Ship features, fix bugs, write tests"},
+				{Title: "Tech Lead", Description: "Guide the technical direction of the team", AcceptanceCriteria: "Architecture decisions, code quality, mentoring"},
+				{Title: "QA Engineer", Description: "Ensure quality across the product", AcceptanceCriteria: "Test coverage, bug detection, release confidence"},
 			}
 			for _, r := range defaults {
 				if _, rErr := svc.CreateRole(r); rErr != nil {
