@@ -436,7 +436,7 @@ func TestLocalModeClientDependencies(t *testing.T) {
 	}
 }
 
-func TestLocalModeClientWorkflows(t *testing.T) {
+func TestLocalModeClientSdlcs(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -445,49 +445,49 @@ func TestLocalModeClientWorkflows(t *testing.T) {
 	}
 	api := New(config.Config{})
 
-	wf, err := api.CreateWorkflow(WorkflowRequest{Name: "wf1", Description: "d"})
+	wf, err := api.CreateSdlc(SdlcRequest{Name: "wf1", Description: "d"})
 	if err != nil {
-		t.Fatalf("CreateWorkflow() error = %v", err)
+		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	if _, err := api.ListWorkflows(); err != nil {
-		t.Fatalf("ListWorkflows() error = %v", err)
+	if _, err := api.ListSdlcs(); err != nil {
+		t.Fatalf("ListSdlcs() error = %v", err)
 	}
-	if _, err := api.GetWorkflow(wf.ID); err != nil {
-		t.Fatalf("GetWorkflow() error = %v", err)
+	if _, err := api.GetSdlc(wf.ID); err != nil {
+		t.Fatalf("GetSdlc() error = %v", err)
 	}
-	stage, err := api.AddWorkflowStage(wf.ID, WorkflowStageRequest{StageName: "design", SortOrder: 0})
+	stage, err := api.AddSdlcStage(wf.ID, SdlcStageRequest{StageName: "design", SortOrder: 0})
 	if err != nil {
-		t.Fatalf("AddWorkflowStage() error = %v", err)
+		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
-	if err := api.ReorderWorkflowStages(wf.ID, []int64{stage.ID}); err != nil {
-		t.Fatalf("ReorderWorkflowStages() error = %v", err)
+	if err := api.ReorderSdlcStages(wf.ID, []int64{stage.ID}); err != nil {
+		t.Fatalf("ReorderSdlcStages() error = %v", err)
 	}
-	if err := api.RemoveWorkflowStage(stage.ID); err != nil {
-		t.Fatalf("RemoveWorkflowStage() error = %v", err)
+	if err := api.RemoveSdlcStage(stage.ID); err != nil {
+		t.Fatalf("RemoveSdlcStage() error = %v", err)
 	}
-	export, err := api.ExportWorkflow(wf.ID)
+	export, err := api.ExportSdlc(wf.ID)
 	if err != nil {
-		t.Fatalf("ExportWorkflow() error = %v", err)
+		t.Fatalf("ExportSdlc() error = %v", err)
 	}
 	export.Name = "imported-wf"
-	if _, err := api.ImportWorkflow(export); err != nil {
-		t.Fatalf("ImportWorkflow() error = %v", err)
+	if _, err := api.ImportSdlc(export); err != nil {
+		t.Fatalf("ImportSdlc() error = %v", err)
 	}
 
-	// Test SetTicketWorkflow/UnsetTicketWorkflow
+	// Test SetTicketSdlc/UnsetTicketSdlc
 	ticket, err := api.CreateTicket(TicketCreateRequest{ProjectID: 1, Type: "task", Title: "wf-test"})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.SetTicketWorkflow(ticket.ID, wf.ID); err != nil {
-		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	if _, err := api.SetTicketSdlc(ticket.ID, wf.ID); err != nil {
+		t.Fatalf("SetTicketSdlc() error = %v", err)
 	}
-	if _, err := api.UnsetTicketWorkflow(ticket.ID); err != nil {
-		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+	if _, err := api.UnsetTicketSdlc(ticket.ID); err != nil {
+		t.Fatalf("UnsetTicketSdlc() error = %v", err)
 	}
 
-	if err := api.DeleteWorkflow(wf.ID); err != nil {
-		t.Fatalf("DeleteWorkflow() error = %v", err)
+	if err := api.DeleteSdlc(wf.ID); err != nil {
+		t.Fatalf("DeleteSdlc() error = %v", err)
 	}
 }
 

@@ -162,7 +162,7 @@ Stage 4. UAT
     role1: Product Owner
 Stage 5. Done
 
-This means there would be a minimum of 6 different steps involved in completing the workflow described in "Agile v1.0".   If every step was a success, then it would flow through in sequence:
+This means there would be a minimum of 6 different steps involved in completing the sdlc described in "Agile v1.0".   If every step was a success, then it would flow through in sequence:
 
     1. Design/Product Owner
     2. Design/Business Analyst
@@ -172,7 +172,7 @@ This means there would be a minimum of 6 different steps involved in completing 
     6. UAT/Product Owner
     7. DONE
 
-The workflow rules (the SDLC itself) then has an implied "next(), current(), last()" functions - which tell us the Stage and Role a ticket should be moved to, where next() is based on success, current() reports where it currently is and "last()" would look at the prior role, or the prior stage.
+The sdlc rules (the SDLC itself) then has an implied "next(), current(), last()" functions - which tell us the Stage and Role a ticket should be moved to, where next() is based on success, current() reports where it currently is and "last()" would look at the prior role, or the prior stage.
 
 #### Performing work / Orchestration
 
@@ -273,11 +273,11 @@ idle ──> active ──> fail
 
 The refactor from the current model to this target model:
 
-1. **Rename `workflow` to `sdlc`** throughout codebase (DB tables, Go types, CLI commands, API endpoints).
+1. **Rename `sdlc` to `sdlc`** throughout codebase (DB tables, Go types, CLI commands, API endpoints).
 2. **Replace `open` field with `complete`** (inverted semantics). `tk close` sets complete=true + stage=done.
 3. **Replace `ready` field with `draft`** (inverted semantics). `tk draft` / `tk undraft`.
 4. **Add `role` field to tickets** — references the current active role within the stage.
-5. **Add stage-role junction table** — supports multiple ordered roles per stage (replaces single `role_id` on `workflow_stages`).
+5. **Add stage-role junction table** — supports multiple ordered roles per stage (replaces single `role_id` on `sdlc_stages`).
 6. **Drop `status` column** — compute `stage/state` at read time only.
 7. **`tk state <ticket_id> <stage>`** sets the role to the first role in that stage's role order.
 8. **Document `fail -> idle` as the retry path** in CLI help.

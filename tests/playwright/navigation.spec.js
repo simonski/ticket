@@ -28,7 +28,7 @@ async function setupAdmin(page) {
     agents = [];
     roles = [];
     teams = [];
-    workflows = [];
+    sdlcs = [];
     stories = [];
     renderBoard();
   });

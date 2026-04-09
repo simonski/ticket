@@ -7,7 +7,7 @@ metadata:
 
 # tk Ticket Management Skill
 
-`tk` is the project's ticket and workflow management CLI. You must use it to read and update task state throughout your work. Do not rely on memory or conversation history for ticket state — always query `tk` directly.
+`tk` is the project's ticket and sdlc management CLI. You must use it to read and update task state throughout your work. Do not rely on memory or conversation history for ticket state — always query `tk` directly.
 
 ## Core Principle
 
@@ -37,14 +37,14 @@ tk summary
 tk list
 ```
 
-## Workflow Stages
+## SDLC Stages
 
-The default workflow has four stages: `design`, `develop`, `test`, `done`. Each ticket also has a state (e.g. `idle`, `active`, `success`, `failed`). Together these form the ticket's status as `stage/state` (e.g. `develop/active`).
+The default sdlc has four stages: `design`, `develop`, `test`, `done`. Each ticket also has a state (e.g. `idle`, `active`, `success`, `failed`). Together these form the ticket's status as `stage/state` (e.g. `develop/active`).
 
-Always check the project's available workflow stages before transitioning — don't assume stage names:
+Always check the project's available sdlc stages before transitioning — don't assume stage names:
 ```bash
-tk workflow list
-tk workflow get -id <workflow-id>
+tk sdlc list
+tk sdlc get -id <sdlc-id>
 ```
 
 ## Starting Work

@@ -153,7 +153,7 @@ test.describe("authentication", () => {
       const agentNav = document.querySelector('[data-left-panel-action="agents"]');
       const roleNav = document.querySelector('[data-left-panel-action="roles"]');
       const teamNav = document.querySelector('[data-left-panel-action="teams"]');
-      const workflowNav = document.querySelector('[data-left-panel-action="workflows"]');
+      const sdlcNav = document.querySelector('[data-left-panel-action="sdlcs"]');
       const settingsNav = document.querySelector('[data-left-panel-action="settings"]');
 
       return {
@@ -161,7 +161,7 @@ test.describe("authentication", () => {
         agentHidden: agentNav ? window.getComputedStyle(agentNav).display === "none" : true,
         roleHidden: roleNav ? window.getComputedStyle(roleNav).display === "none" : true,
         teamHidden: teamNav ? window.getComputedStyle(teamNav).display === "none" : true,
-        workflowHidden: workflowNav ? window.getComputedStyle(workflowNav).display === "none" : true,
+        sdlcHidden: sdlcNav ? window.getComputedStyle(sdlcNav).display === "none" : true,
         settingsHidden: settingsNav ? window.getComputedStyle(settingsNav).display === "none" : true,
       };
     });
@@ -170,7 +170,7 @@ test.describe("authentication", () => {
     expect(result.agentHidden).toBe(true);
     expect(result.roleHidden).toBe(true);
     expect(result.teamHidden).toBe(true);
-    expect(result.workflowHidden).toBe(true);
+    expect(result.sdlcHidden).toBe(true);
     expect(result.settingsHidden).toBe(true);
   });
 
@@ -183,14 +183,14 @@ test.describe("authentication", () => {
       const agentNav = document.querySelector('[data-left-panel-action="agents"]');
       const roleNav = document.querySelector('[data-left-panel-action="roles"]');
       const teamNav = document.querySelector('[data-left-panel-action="teams"]');
-      const workflowNav = document.querySelector('[data-left-panel-action="workflows"]');
+      const sdlcNav = document.querySelector('[data-left-panel-action="sdlcs"]');
       const settingsNav = document.querySelector('[data-left-panel-action="settings"]');
 
       return {
         agentVisible: agentNav ? window.getComputedStyle(agentNav).display !== "none" : false,
         roleVisible: roleNav ? window.getComputedStyle(roleNav).display !== "none" : false,
         teamVisible: teamNav ? window.getComputedStyle(teamNav).display !== "none" : false,
-        workflowVisible: workflowNav ? window.getComputedStyle(workflowNav).display !== "none" : false,
+        sdlcVisible: sdlcNav ? window.getComputedStyle(sdlcNav).display !== "none" : false,
         settingsVisible: settingsNav ? window.getComputedStyle(settingsNav).display !== "none" : false,
       };
     });
@@ -198,7 +198,7 @@ test.describe("authentication", () => {
     expect(result.agentVisible).toBe(true);
     expect(result.roleVisible).toBe(true);
     expect(result.teamVisible).toBe(true);
-    expect(result.workflowVisible).toBe(true);
+    expect(result.sdlcVisible).toBe(true);
     expect(result.settingsVisible).toBe(true);
   });
 });

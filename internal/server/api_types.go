@@ -21,7 +21,7 @@ type projectRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
-	WorkflowID         *int64 `json:"workflow_id,omitempty"`
+	SdlcID         *int64 `json:"sdlc_id,omitempty"`
 }
 
 type roleRequest struct {
@@ -30,19 +30,19 @@ type roleRequest struct {
 	Goals      string `json:"goals"`
 }
 
-type workflowRequest struct {
+type sdlcRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-type workflowStageRequest struct {
+type sdlcStageRequest struct {
 	StageName   string `json:"stage_name"`
 	Description string `json:"description"`
 	RoleID      *int64 `json:"role_id,omitempty"`
 	SortOrder   int    `json:"sort_order"`
 }
 
-type workflowReorderRequest struct {
+type sdlcReorderRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 

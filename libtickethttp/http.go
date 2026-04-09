@@ -280,12 +280,12 @@ func (s *Service) NotReadyTicket(id string, message string) (store.Ticket, error
 	return s.client.NotReadyTicket(id, message)
 }
 
-func (s *Service) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
-	return s.client.SetTicketWorkflow(id, workflowID)
+func (s *Service) SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error) {
+	return s.client.SetTicketSdlc(id, sdlcID)
 }
 
-func (s *Service) UnsetTicketWorkflow(id string) (store.Ticket, error) {
-	return s.client.UnsetTicketWorkflow(id)
+func (s *Service) UnsetTicketSdlc(id string) (store.Ticket, error) {
+	return s.client.UnsetTicketSdlc(id)
 }
 
 func (s *Service) DeleteTicket(id string) error {
@@ -356,40 +356,40 @@ func (s *Service) RequestTicket(request libticket.TicketRequest) (libticket.Tick
 	return libticket.TicketRequestResponse(response), nil
 }
 
-func (s *Service) CreateWorkflow(request libticket.WorkflowRequest) (store.Workflow, error) {
-	return s.client.CreateWorkflow(client.WorkflowRequest(request))
+func (s *Service) CreateSdlc(request libticket.SdlcRequest) (store.Sdlc, error) {
+	return s.client.CreateSdlc(client.SdlcRequest(request))
 }
 
-func (s *Service) ListWorkflows() ([]store.Workflow, error) {
-	return s.client.ListWorkflows()
+func (s *Service) ListSdlcs() ([]store.Sdlc, error) {
+	return s.client.ListSdlcs()
 }
 
-func (s *Service) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
-	return s.client.GetWorkflow(id)
+func (s *Service) GetSdlc(id int64) (store.SdlcWithStages, error) {
+	return s.client.GetSdlc(id)
 }
 
-func (s *Service) DeleteWorkflow(id int64) error {
-	return s.client.DeleteWorkflow(id)
+func (s *Service) DeleteSdlc(id int64) error {
+	return s.client.DeleteSdlc(id)
 }
 
-func (s *Service) AddWorkflowStage(workflowID int64, request libticket.WorkflowStageRequest) (store.WorkflowStage, error) {
-	return s.client.AddWorkflowStage(workflowID, client.WorkflowStageRequest(request))
+func (s *Service) AddSdlcStage(sdlcID int64, request libticket.SdlcStageRequest) (store.SdlcStage, error) {
+	return s.client.AddSdlcStage(sdlcID, client.SdlcStageRequest(request))
 }
 
-func (s *Service) RemoveWorkflowStage(stageID int64) error {
-	return s.client.RemoveWorkflowStage(stageID)
+func (s *Service) RemoveSdlcStage(stageID int64) error {
+	return s.client.RemoveSdlcStage(stageID)
 }
 
-func (s *Service) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error {
-	return s.client.ReorderWorkflowStages(workflowID, stageIDs)
+func (s *Service) ReorderSdlcStages(sdlcID int64, stageIDs []int64) error {
+	return s.client.ReorderSdlcStages(sdlcID, stageIDs)
 }
 
-func (s *Service) ExportWorkflow(id int64) (store.WorkflowExport, error) {
-	return s.client.ExportWorkflow(id)
+func (s *Service) ExportSdlc(id int64) (store.SdlcExport, error) {
+	return s.client.ExportSdlc(id)
 }
 
-func (s *Service) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
-	return s.client.ImportWorkflow(export)
+func (s *Service) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
+	return s.client.ImportSdlc(export)
 }
 
 func (s *Service) LogTime(ticketID string, request libticket.TimeEntryRequest) (store.TimeEntry, error) {

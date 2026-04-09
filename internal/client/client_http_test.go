@@ -571,9 +571,9 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 			_, _ = w.Write([]byte(ticketJSON))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/notready":
 			_, _ = w.Write([]byte(ticketJSON))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/workflow":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/sdlc":
 			_, _ = w.Write([]byte(ticketJSON))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11/workflow":
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11/sdlc":
 			_, _ = w.Write([]byte(ticketJSON))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11":
 			_, _ = w.Write([]byte(ticketJSON))
@@ -608,11 +608,11 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 	if _, err := api.NotReadyTicket("11", ""); err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}
-	if _, err := api.SetTicketWorkflow("11", 1); err != nil {
-		t.Fatalf("SetTicketWorkflow() error = %v", err)
+	if _, err := api.SetTicketSdlc("11", 1); err != nil {
+		t.Fatalf("SetTicketSdlc() error = %v", err)
 	}
-	if _, err := api.UnsetTicketWorkflow("11"); err != nil {
-		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+	if _, err := api.UnsetTicketSdlc("11"); err != nil {
+		t.Fatalf("UnsetTicketSdlc() error = %v", err)
 	}
 	if _, err := api.GetTicket("11"); err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
@@ -625,27 +625,27 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 	}
 }
 
-func TestRemoteClientWorkflowsCRUD(t *testing.T) {
+func TestRemoteClientSdlcsCRUD(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs":
 			_, _ = w.Write([]byte(`{"id":1,"name":"wf1","description":"d"}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs":
 			_, _ = w.Write([]byte(`[{"id":1,"name":"wf1","description":"d"}]`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/1":
-			_, _ = w.Write([]byte(`{"workflow":{"id":1,"name":"wf1"},"stages":[]}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/1":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/1":
+			_, _ = w.Write([]byte(`{"sdlc":{"id":1,"name":"wf1"},"stages":[]}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/sdlcs/1":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/1/stages":
-			_, _ = w.Write([]byte(`{"id":1,"workflow_id":1,"stage_name":"design","sort_order":0}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/stages/1":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs/1/stages":
+			_, _ = w.Write([]byte(`{"id":1,"sdlc_id":1,"stage_name":"design","sort_order":0}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/sdlcs/stages/1":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPut && r.URL.Path == "/api/workflows/1/reorder":
+		case r.Method == http.MethodPut && r.URL.Path == "/api/sdlcs/1/reorder":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/1/export":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/1/export":
 			_, _ = w.Write([]byte(`{"name":"wf1","description":"d","stages":[]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/import":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs/import":
 			_, _ = w.Write([]byte(`{"id":2,"name":"wf1","description":"d"}`))
 		default:
 			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
@@ -656,32 +656,32 @@ func TestRemoteClientWorkflowsCRUD(t *testing.T) {
 
 	api := New(config.Config{Location: server.URL})
 
-	if _, err := api.CreateWorkflow(WorkflowRequest{Name: "wf1", Description: "d"}); err != nil {
-		t.Fatalf("CreateWorkflow() error = %v", err)
+	if _, err := api.CreateSdlc(SdlcRequest{Name: "wf1", Description: "d"}); err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	if _, err := api.ListWorkflows(); err != nil {
-		t.Fatalf("ListWorkflows() error = %v", err)
+	if _, err := api.ListSdlcs(); err != nil {
+		t.Fatalf("ListSdlcs() error = %v", err)
 	}
-	if _, err := api.GetWorkflow(1); err != nil {
-		t.Fatalf("GetWorkflow() error = %v", err)
+	if _, err := api.GetSdlc(1); err != nil {
+		t.Fatalf("GetSdlc() error = %v", err)
 	}
-	if err := api.DeleteWorkflow(1); err != nil {
-		t.Fatalf("DeleteWorkflow() error = %v", err)
+	if err := api.DeleteSdlc(1); err != nil {
+		t.Fatalf("DeleteSdlc() error = %v", err)
 	}
-	if _, err := api.AddWorkflowStage(1, WorkflowStageRequest{StageName: "design", SortOrder: 0}); err != nil {
-		t.Fatalf("AddWorkflowStage() error = %v", err)
+	if _, err := api.AddSdlcStage(1, SdlcStageRequest{StageName: "design", SortOrder: 0}); err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
-	if err := api.RemoveWorkflowStage(1); err != nil {
-		t.Fatalf("RemoveWorkflowStage() error = %v", err)
+	if err := api.RemoveSdlcStage(1); err != nil {
+		t.Fatalf("RemoveSdlcStage() error = %v", err)
 	}
-	if err := api.ReorderWorkflowStages(1, []int64{1, 2}); err != nil {
-		t.Fatalf("ReorderWorkflowStages() error = %v", err)
+	if err := api.ReorderSdlcStages(1, []int64{1, 2}); err != nil {
+		t.Fatalf("ReorderSdlcStages() error = %v", err)
 	}
-	if _, err := api.ExportWorkflow(1); err != nil {
-		t.Fatalf("ExportWorkflow() error = %v", err)
+	if _, err := api.ExportSdlc(1); err != nil {
+		t.Fatalf("ExportSdlc() error = %v", err)
 	}
-	if _, err := api.ImportWorkflow(store.WorkflowExport{Name: "wf1", Description: "d"}); err != nil {
-		t.Fatalf("ImportWorkflow() error = %v", err)
+	if _, err := api.ImportSdlc(store.SdlcExport{Name: "wf1", Description: "d"}); err != nil {
+		t.Fatalf("ImportSdlc() error = %v", err)
 	}
 }
 

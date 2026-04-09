@@ -153,8 +153,8 @@ func run(args []string) error {
 		return runRole(trimmedArgs[1:])
 	case "story":
 		return runStory(trimmedArgs[1:])
-	case "workflow":
-		return runWorkflow(trimmedArgs[1:])
+	case "sdlc":
+		return runSdlc(trimmedArgs[1:])
 	case "board":
 		return runBoard(trimmedArgs[1:])
 	case "label":

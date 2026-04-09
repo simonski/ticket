@@ -1,6 +1,6 @@
 # Ticket — Issue Tracking for Agents
 
-This project uses `tk` for issue tracking. All work is managed through CLI commands using a workflow.
+This project uses `tk` for issue tracking. All work is managed through CLI commands using a sdlc.
 
 ## Setup
 
@@ -77,17 +77,17 @@ tk unset-parent -id <child-id>
 
 Tickets have a two-part status: `stage/state` (e.g. `develop/active`, `done/success`).
 
-### Workflow-Driven Stages
+### SDLC-Driven Stages
 
-Stages are defined by the project's workflow (an ordered sequence of stages). The default workflow has: `design → develop → test → done`.
+Stages are defined by the project's sdlc (an ordered sequence of stages). The default sdlc has: `design → develop → test → done`.
 
-Stages advance automatically: when a ticket's state is set to `success`, it moves to the next workflow stage with state `idle`. On the final stage, `success` means the ticket is complete.
+Stages advance automatically: when a ticket's state is set to `success`, it moves to the next sdlc stage with state `idle`. On the final stage, `success` means the ticket is complete.
 
 You cannot set a ticket's stage directly — use state commands to drive progression.
 
 ```bash
-# View a project's workflow stages
-tk workflow get -id <workflow-id>
+# View a project's sdlc stages
+tk sdlc get -id <sdlc-id>
 ```
 
 ### State Commands
@@ -164,7 +164,7 @@ tk time delete <entry-id>
 ## Board View
 
 ```bash
-# Kanban-style view grouped by workflow stage
+# Kanban-style view grouped by sdlc stage
 tk board
 ```
 
@@ -233,7 +233,7 @@ tk project get <id>                # View project detail
 tk project init                    # Write .ticket.json in current dir
 ```
 
-## Workflow Guidelines
+## SDLC Guidelines
 
 1. **Pick up work**: `tk ls --status design/idle`, then `tk claim -id <id>` and `tk state -id <id> active`
 2. **Advance to develop before coding**: Once design is done and you are about to write code, run `tk complete -id <id>` to advance the ticket from design → develop, then `tk state -id <id> active` to set it to develop/active. **Never start coding on a ticket that is still in design/active.**

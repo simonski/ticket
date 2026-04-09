@@ -575,7 +575,7 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
 			CreatedBy:          user.ID,
-			WorkflowID:         request.WorkflowID,
+			SdlcID:         request.SdlcID,
 		})
 	}
 	var project store.Project
@@ -626,7 +626,7 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
-			WorkflowID:         request.WorkflowID,
+			SdlcID:         request.SdlcID,
 		})
 	}
 	var project store.Project
@@ -1203,31 +1203,31 @@ func (c *Client) NotReadyTicket(id string, message string) (store.Ticket, error)
 	return ticket, err
 }
 
-func (c *Client) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
+func (c *Client) SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.SetTicketWorkflow(context.Background(), db, id, workflowID)
+		return store.SetTicketSdlc(context.Background(), db, id, sdlcID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/workflow", map[string]int64{"workflow_id": workflowID}, &ticket)
+	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/sdlc", map[string]int64{"sdlc_id": sdlcID}, &ticket)
 	return ticket, err
 }
 
-func (c *Client) UnsetTicketWorkflow(id string) (store.Ticket, error) {
+func (c *Client) UnsetTicketSdlc(id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
 		defer db.Close()
-		return store.UnsetTicketWorkflow(context.Background(), db, id)
+		return store.UnsetTicketSdlc(context.Background(), db, id)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id)+"/workflow", nil, &ticket)
+	err := c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id)+"/sdlc", nil, &ticket)
 	return ticket, err
 }
 
@@ -1508,7 +1508,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 			ctx := store.EnrichTicketContext(context.Background(), db, ticket)
 			response.Project = ctx.Project
 			response.Parents = ctx.Parents
-			response.Workflow = ctx.Workflow
+			response.Sdlc = ctx.Sdlc
 			response.Role = ctx.Role
 		}
 		return response, nil
@@ -1557,123 +1557,123 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 }
 
 
-func (c *Client) CreateWorkflow(request WorkflowRequest) (store.Workflow, error) {
+func (c *Client) CreateSdlc(request SdlcRequest) (store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return store.Workflow{}, err
+			return store.Sdlc{}, err
 		}
 		defer db.Close()
-		return store.CreateWorkflow(context.Background(), db, request.Name, request.Description)
+		return store.CreateSdlc(context.Background(), db, request.Name, request.Description)
 	}
-	var wf store.Workflow
-	err := c.doJSON(http.MethodPost, "/api/workflows", request, &wf)
+	var wf store.Sdlc
+	err := c.doJSON(http.MethodPost, "/api/sdlcs", request, &wf)
 	return wf, err
 }
 
-func (c *Client) ListWorkflows() ([]store.Workflow, error) {
+func (c *Client) ListSdlcs() ([]store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListWorkflows(context.Background(), db)
+		return store.ListSdlcs(context.Background(), db)
 	}
-	var workflows []store.Workflow
-	err := c.doJSON(http.MethodGet, "/api/workflows", nil, &workflows)
-	return workflows, err
+	var sdlcs []store.Sdlc
+	err := c.doJSON(http.MethodGet, "/api/sdlcs", nil, &sdlcs)
+	return sdlcs, err
 }
 
-func (c *Client) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
+func (c *Client) GetSdlc(id int64) (store.SdlcWithStages, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return store.WorkflowWithStages{}, err
+			return store.SdlcWithStages{}, err
 		}
 		defer db.Close()
-		return store.GetWorkflow(context.Background(), db, id)
+		return store.GetSdlc(context.Background(), db, id)
 	}
-	var wf store.WorkflowWithStages
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/workflows/%d", id), nil, &wf)
+	var wf store.SdlcWithStages
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/%d", id), nil, &wf)
 	return wf, err
 }
 
-func (c *Client) DeleteWorkflow(id int64) error {
+func (c *Client) DeleteSdlc(id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
 		defer db.Close()
-		return store.DeleteWorkflow(context.Background(), db, id)
+		return store.DeleteSdlc(context.Background(), db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/workflows/%d", id), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/%d", id), nil, nil)
 }
 
-func (c *Client) AddWorkflowStage(workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
+func (c *Client) AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return store.WorkflowStage{}, err
+			return store.SdlcStage{}, err
 		}
 		defer db.Close()
-		return store.AddWorkflowStage(context.Background(), db, workflowID, request.StageName, request.Description, request.RoleID, request.SortOrder)
+		return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.RoleID, request.SortOrder)
 	}
-	var stage store.WorkflowStage
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/workflows/%d/stages", workflowID), request, &stage)
+	var stage store.SdlcStage
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages", sdlcID), request, &stage)
 	return stage, err
 }
 
-func (c *Client) RemoveWorkflowStage(stageID int64) error {
+func (c *Client) RemoveSdlcStage(stageID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
 		defer db.Close()
-		return store.RemoveWorkflowStage(context.Background(), db, stageID)
+		return store.RemoveSdlcStage(context.Background(), db, stageID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/workflows/stages/%d", stageID), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), nil, nil)
 }
 
-func (c *Client) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error {
+func (c *Client) ReorderSdlcStages(sdlcID int64, stageIDs []int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
 		defer db.Close()
-		return store.ReorderWorkflowStages(context.Background(), db, workflowID, stageIDs)
+		return store.ReorderSdlcStages(context.Background(), db, sdlcID, stageIDs)
 	}
-	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/workflows/%d/reorder", workflowID), WorkflowReorderRequest{StageIDs: stageIDs}, nil)
+	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/%d/reorder", sdlcID), SdlcReorderRequest{StageIDs: stageIDs}, nil)
 }
 
-func (c *Client) ExportWorkflow(id int64) (store.WorkflowExport, error) {
+func (c *Client) ExportSdlc(id int64) (store.SdlcExport, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return store.WorkflowExport{}, err
+			return store.SdlcExport{}, err
 		}
 		defer db.Close()
-		return store.ExportWorkflow(context.Background(), db, id)
+		return store.ExportSdlc(context.Background(), db, id)
 	}
-	var export store.WorkflowExport
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/workflows/%d/export", id), nil, &export)
+	var export store.SdlcExport
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/%d/export", id), nil, &export)
 	return export, err
 }
 
-func (c *Client) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
+func (c *Client) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return store.Workflow{}, err
+			return store.Sdlc{}, err
 		}
 		defer db.Close()
-		return store.ImportWorkflow(context.Background(), db, export)
+		return store.ImportSdlc(context.Background(), db, export)
 	}
-	var wf store.Workflow
-	err := c.doJSON(http.MethodPost, "/api/workflows/import", export, &wf)
+	var wf store.Sdlc
+	err := c.doJSON(http.MethodPost, "/api/sdlcs/import", export, &wf)
 	return wf, err
 }
 

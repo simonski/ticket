@@ -533,12 +533,12 @@ func buildAgentPrompt(resp libticket.AgentWorkResponse) string {
 		b.WriteString("\n")
 	}
 
-	if resp.Workflow != nil {
-		b.WriteString(fmt.Sprintf("Workflow: %s\n", resp.Workflow.Name))
+	if resp.Sdlc != nil {
+		b.WriteString(fmt.Sprintf("Sdlc: %s\n", resp.Sdlc.Name))
 		b.WriteString("Stages:")
-		for _, stage := range resp.Workflow.Stages {
+		for _, stage := range resp.Sdlc.Stages {
 			marker := " "
-			if ticket.WorkflowStageID != nil && stage.ID == *ticket.WorkflowStageID {
+			if ticket.SdlcStageID != nil && stage.ID == *ticket.SdlcStageID {
 				marker = ">"
 			}
 			b.WriteString(fmt.Sprintf(" %s %s", marker, stage.StageName))
@@ -592,8 +592,8 @@ func printAgentTable(statuses []store.AgentStatus) {
 			proj = s.ProjectName
 		}
 		wf := "-"
-		if s.WorkflowName != "" {
-			wf = s.WorkflowName
+		if s.SdlcName != "" {
+			wf = s.SdlcName
 		}
 		role := "-"
 		if s.RoleTitle != "" {

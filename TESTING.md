@@ -100,7 +100,7 @@ Enforced via `make test-go-cover`:
 ## Playwright browser tests
 
 Located in `tests/playwright/` with 11 spec files covering auth, navigation,
-ticket management, projects, stories, workflows, labels, time tracking,
+ticket management, projects, stories, sdlcs, labels, time tracking,
 dependencies, hierarchy, and chat. Run with:
 
 ```bash

@@ -51,12 +51,12 @@ func runProject(args []string) error {
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitBranch := fs.String("git-branch", "", "project git branch")
-		workflowID := fs.Int64("workflow", 0, "workflow id to associate")
+		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: ticket project create -title <title> -prefix <prefix> [-description text] [-ac text] [-workflow id]")
+			return errors.New("usage: ticket project create -title <title> -prefix <prefix> [-description text] [-ac text] [-sdlc id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -65,8 +65,8 @@ func runProject(args []string) error {
 			return errors.New("project title is required")
 		}
 		var wfID *int64
-		if *workflowID > 0 {
-			wfID = workflowID
+		if *sdlcID > 0 {
+			wfID = sdlcID
 		}
 		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
 			Prefix:             *prefix,
@@ -75,7 +75,7 @@ func runProject(args []string) error {
 			AcceptanceCriteria: *acceptanceCriteria,
 			GitRepository:      strings.TrimSpace(*gitRepository),
 			GitBranch:          strings.TrimSpace(*gitBranch),
-			WorkflowID:         wfID,
+			SdlcID:         wfID,
 		})
 		if err != nil {
 			return err
@@ -98,13 +98,13 @@ func runProject(args []string) error {
 		if outputJSON {
 			return printJSON(projects)
 		}
-		workflowNames := map[int64]string{}
-		if wfs, err := svc.ListWorkflows(); err == nil {
+		sdlcNames := map[int64]string{}
+		if wfs, err := svc.ListSdlcs(); err == nil {
 			for _, wf := range wfs {
-				workflowNames[wf.ID] = wf.Name
+				sdlcNames[wf.ID] = wf.Name
 			}
 		}
-		printProjectTable(projects, cfg.ProjectID, workflowNames)
+		printProjectTable(projects, cfg.ProjectID, sdlcNames)
 		return nil
 	case "get":
 		if len(args) != 2 {
@@ -159,7 +159,7 @@ func runProject(args []string) error {
 			fs.String("git", "", "")
 			fs.String("git-branch", "", "")
 			fs.String("status", "", "")
-			fs.Int64("workflow", 0, "")
+			fs.Int64("sdlc", 0, "")
 			_ = fs.Parse(args[1:])
 			if *idFlag > 0 {
 				return runProjectByID(svc, *idFlag, args)
@@ -175,8 +175,8 @@ func runProject(args []string) error {
 		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
-	case "workflow":
-		return runProjectWorkflow(cfg, svc, args[1:])
+	case "sdlc":
+		return runProjectSdlc(cfg, svc, args[1:])
 	case "rename-prefix":
 		if len(args) < 2 {
 			return errors.New("usage: ticket project rename-prefix <new-prefix>")
@@ -314,8 +314,8 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	return nil
 }
 
-func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string) error {
-	usage := "ticket project workflow <workflow-id>   (use 0 to clear)"
+func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) error {
+	usage := "ticket project sdlc <sdlc-id>   (use 0 to clear)"
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		fmt.Println(usage)
 		return nil
@@ -331,9 +331,9 @@ func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string)
 	if err != nil {
 		return fmt.Errorf("usage: %s", usage)
 	}
-	var nextWorkflowID *int64
+	var nextSdlcID *int64
 	if wfIDRaw > 0 {
-		nextWorkflowID = &wfIDRaw
+		nextSdlcID = &wfIDRaw
 	}
 	project, err := svc.UpdateProject(current.ID, libticket.ProjectUpdateRequest{
 		Title:              current.Title,
@@ -342,7 +342,7 @@ func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string)
 		GitRepository:      current.GitRepository,
 		GitBranch:          current.GitBranch,
 		Status:             current.Status,
-		WorkflowID:         nextWorkflowID,
+		SdlcID:         nextSdlcID,
 	})
 	if err != nil {
 		return err
@@ -350,10 +350,10 @@ func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string)
 	if outputJSON {
 		return printJSON(project)
 	}
-	if nextWorkflowID == nil {
-		fmt.Printf("cleared workflow from project %s\n", project.Prefix)
+	if nextSdlcID == nil {
+		fmt.Printf("cleared sdlc from project %s\n", project.Prefix)
 	} else {
-		fmt.Printf("set workflow %d on project %s\n", wfIDRaw, project.Prefix)
+		fmt.Printf("set sdlc %d on project %s\n", wfIDRaw, project.Prefix)
 	}
 	printProject(project)
 	return nil
@@ -485,7 +485,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
 		gitBranch := fs.String("git-branch", "", "project git branch")
 		status := fs.String("status", "", "project status (open|closed)")
-		workflowID := fs.Int64("workflow", 0, "workflow ID to associate with project")
+		sdlcID := fs.Int64("sdlc", 0, "sdlc ID to associate with project")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -524,13 +524,13 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 				return err
 			}
 		}
-		var nextWorkflowID *int64
-		if containsFlag(args[1:], "-workflow") {
-			if *workflowID > 0 {
-				nextWorkflowID = workflowID
+		var nextSdlcID *int64
+		if containsFlag(args[1:], "-sdlc") {
+			if *sdlcID > 0 {
+				nextSdlcID = sdlcID
 			}
 		} else {
-			nextWorkflowID = current.WorkflowID
+			nextSdlcID = current.SdlcID
 		}
 		project, err := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{
 			Title:              *title,
@@ -539,7 +539,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			GitRepository:      nextRepo,
 			GitBranch:          nextBranch,
 			Status:             nextStatus,
-			WorkflowID:         nextWorkflowID,
+			SdlcID:         nextSdlcID,
 		})
 		if err != nil {
 			return err

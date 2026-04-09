@@ -15,7 +15,7 @@ design from scratch using only this document and the OpenAPI specification in
 `ticket` is a ticket and project management system for software engineering
 work. It is delivered as a single Go binary that provides:
 
-1. **CLI** — 60+ commands for all workflows
+1. **CLI** — 60+ commands for all sdlcs
 2. **HTTP API** — RESTful JSON API under `/api/`
 3. **Web UI** — Embedded single-page application served from the binary
 4. **Terminal UI (TUI)** — Interactive BubbleTea-based full-screen interface
@@ -32,9 +32,9 @@ The system operates in two modes:
 ## 2. Goals
 
 1. Provide a lightweight, self-contained issue tracker that works locally or as a server.
-2. Model projects, tickets, workflows, teams, and agents as first-class entities.
+2. Model projects, tickets, sdlcs, teams, and agents as first-class entities.
 3. Give every ticket a stable, project-scoped human identifier (e.g. `CUS-T-42`).
-4. Preserve the `stage + state` lifecycle model with workflow-driven progression.
+4. Preserve the `stage + state` lifecycle model with sdlc-driven progression.
 5. Make hierarchy, assignment, and claim rules explicit and deterministic.
 6. Support autonomous agent workers that can claim and complete tickets.
 7. Offer a CLI and API simple enough to use directly from the terminal.
@@ -128,7 +128,7 @@ Top-level namespace and container for tickets.
 | notes | TEXT | Default empty |
 | status | TEXT | `open` \| `closed`, default `open` |
 | visibility | TEXT | `public` \| `private`, default `public` |
-| workflow_id | INTEGER | Nullable FK → workflows |
+| sdlc_id | INTEGER | Nullable FK → sdlcs |
 | ticket_sequence | INTEGER | Auto-incrementing per project, default 0 |
 | created_by | TEXT | FK → users |
 | created_at | TEXT | Timestamp |
@@ -154,7 +154,7 @@ The primary work artifact.
 | acceptance_criteria | TEXT | Default empty |
 | git_repository | TEXT | Default empty |
 | git_branch | TEXT | Default empty |
-| workflow_stage_id | INTEGER | Nullable FK → workflow_stages |
+| sdlc_stage_id | INTEGER | Nullable FK → sdlc_stages |
 | stage | TEXT | Default `design` |
 | state | TEXT | Default `idle` |
 | status | TEXT | Default `open` |
@@ -206,27 +206,27 @@ Examples: `CUS-E-12`, `CUS-T-143`, `OPS-B-9`
 - Cycles are forbidden
 - A parent ticket with children derives its lifecycle from descendants
 
-### 5.5 Workflow
+### 5.5 SDLC
 
 Defines a sequence of stages that tickets progress through.
 
 | Field | Type | Constraints |
 |-------|------|-------------|
-| workflow_id | INTEGER | Primary key, autoincrement |
+| sdlc_id | INTEGER | Primary key, autoincrement |
 | name | TEXT | Unique, required |
 | description | TEXT | Default empty |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
 
-### 5.6 Workflow Stage
+### 5.6 SDLC Stage
 
-An individual stage within a workflow.
+An individual stage within a sdlc.
 
 | Field | Type | Constraints |
 |-------|------|-------------|
-| workflow_stage_id | INTEGER | Primary key, autoincrement |
-| workflow_id | INTEGER | FK → workflows |
-| stage_name | TEXT | Required, unique per workflow |
+| sdlc_stage_id | INTEGER | Primary key, autoincrement |
+| sdlc_id | INTEGER | FK → sdlcs |
+| stage_name | TEXT | Required, unique per sdlc |
 | description | TEXT | Default empty |
 | role_id | INTEGER | Nullable FK → roles |
 | sort_order | INTEGER | Default 0 |
@@ -284,7 +284,7 @@ User group with optional hierarchy.
 
 ### 5.12 Role
 
-Custom role definition for workflow stages.
+Custom role definition for sdlc stages.
 
 | Field | Type | Constraints |
 |-------|------|-------------|
@@ -471,7 +471,7 @@ ticket has children; stage/state is derived from descendants
 
 - `idle` — keeps stage, sets `state=idle`
 - `active` — keeps stage, sets `state=active`
-- `complete` — sets `state=success`; auto-advances to next workflow stage with `state=idle`
+- `complete` — sets `state=success`; auto-advances to next sdlc stage with `state=idle`
 - On the final stage, `success` means the ticket is complete
 
 ### 6.9 Derived Parent Lifecycle
@@ -747,15 +747,15 @@ The binary is named `ticket` with the alias `tk`.
 | `tk dependency remove -id <id> <depends-on>` | Remove dependency |
 | `tk dependency list <id>` | Show dependencies |
 
-### 12.12 Workflows
+### 12.12 SDLCs
 
 | Command | Description |
 |---------|-------------|
-| `tk workflow list` | List workflows |
-| `tk workflow get -id <id>` | View workflow stages |
-| `tk workflow create -name "..." -description "..."` | Create workflow |
-| `tk workflow delete -id <id>` | Delete workflow |
-| `tk workflow add-stage <workflow-id> <stage-name>` | Add stage |
+| `tk sdlc list` | List sdlcs |
+| `tk sdlc get -id <id>` | View sdlc stages |
+| `tk sdlc create -name "..." -description "..."` | Create sdlc |
+| `tk sdlc delete -id <id>` | Delete sdlc |
+| `tk sdlc add-stage <sdlc-id> <stage-name>` | Add stage |
 
 ### 12.13 Requirements and Decisions
 
@@ -904,18 +904,18 @@ See [`openapi.yaml`](./openapi.yaml) for the full OpenAPI 3.1 specification.
 | PUT | `/api/roles/{id}` | Admin | Update role |
 | DELETE | `/api/roles/{id}` | Admin | Delete role |
 
-#### Workflows
+#### SDLCs
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/workflows` | User | List workflows |
-| POST | `/api/workflows` | Admin | Create workflow |
-| POST | `/api/workflows/import` | Admin | Import workflow |
-| GET | `/api/workflows/{id}` | User | Get workflow with stages |
-| DELETE | `/api/workflows/{id}` | User | Delete workflow |
-| POST | `/api/workflows/{id}/stages` | User | Add stage |
-| PUT | `/api/workflows/{id}/reorder` | User | Reorder stages |
-| GET | `/api/workflows/{id}/export` | User | Export workflow |
-| DELETE | `/api/workflows/stages/{id}` | Admin | Delete stage |
+| GET | `/api/sdlcs` | User | List sdlcs |
+| POST | `/api/sdlcs` | Admin | Create sdlc |
+| POST | `/api/sdlcs/import` | Admin | Import sdlc |
+| GET | `/api/sdlcs/{id}` | User | Get sdlc with stages |
+| DELETE | `/api/sdlcs/{id}` | User | Delete sdlc |
+| POST | `/api/sdlcs/{id}/stages` | User | Add stage |
+| PUT | `/api/sdlcs/{id}/reorder` | User | Reorder stages |
+| GET | `/api/sdlcs/{id}/export` | User | Export sdlc |
+| DELETE | `/api/sdlcs/stages/{id}` | Admin | Delete stage |
 
 #### Teams
 | Method | Path | Auth | Description |
@@ -980,8 +980,8 @@ See [`openapi.yaml`](./openapi.yaml) for the full OpenAPI 3.1 specification.
 | POST | `/api/tickets/{ref}/unarchive` | Write | Unarchive ticket |
 | POST | `/api/tickets/{ref}/ready` | Write | Mark ready |
 | POST | `/api/tickets/{ref}/notready` | Write | Mark not ready |
-| POST | `/api/tickets/{ref}/workflow` | Write | Set workflow |
-| DELETE | `/api/tickets/{ref}/workflow` | Write | Remove workflow |
+| POST | `/api/tickets/{ref}/sdlc` | Write | Set sdlc |
+| DELETE | `/api/tickets/{ref}/sdlc` | Write | Remove sdlc |
 | POST | `/api/tickets/{ref}/analyse` | Write | Analyse epic (LLM) |
 
 #### Stories
@@ -1038,11 +1038,11 @@ column additions and table renames.
 
 ### 14.4 Indexes
 
-Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee, stage, state)`, `stories(project_id)`, `story_ticket_links(ticket_id)`, `history_events(project_id, ticket_id)`, `ticket_history(project_id, ticket_id)`, `comments(item_id, user_id)`, `dependencies(project_id, ticket_id, depends_on)`, `labels(project_id)`, `ticket_labels(label_id)`, `time_entries(ticket_id, user_id)`, `workflow_stages(workflow_id, role_id)`.
+Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee, stage, state)`, `stories(project_id)`, `story_ticket_links(ticket_id)`, `history_events(project_id, ticket_id)`, `ticket_history(project_id, ticket_id)`, `comments(item_id, user_id)`, `dependencies(project_id, ticket_id, depends_on)`, `labels(project_id)`, `ticket_labels(label_id)`, `time_entries(ticket_id, user_id)`, `sdlc_stages(sdlc_id, role_id)`.
 
 ### 14.5 Initialization
 
-`tk init` creates the database, schema, admin user, default workflow (`design → develop → test → done`), and a default project with prefix `TK`.
+`tk init` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), and a default project with prefix `TK`.
 
 ---
 

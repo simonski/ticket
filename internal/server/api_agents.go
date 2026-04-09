@@ -271,7 +271,7 @@ func (r *router) registerAgentHandlers() {
 				"project":           nil,
 				"ticket":            nil,
 				"parents":           []store.Ticket{},
-				"workflow":          nil,
+				"sdlc":          nil,
 				"role":              nil,
 				"config":            configMap,
 				"config_updated_at": configUpdatedAt,
@@ -281,7 +281,7 @@ func (r *router) registerAgentHandlers() {
 				ctx := store.EnrichTicketContext(r.Context(), db, ticket)
 				response["project"] = ctx.Project
 				response["parents"] = ctx.Parents
-				response["workflow"] = ctx.Workflow
+				response["sdlc"] = ctx.Sdlc
 				response["role"] = ctx.Role
 			}
 			vlog("response: agent_status=%s", agentStatus)

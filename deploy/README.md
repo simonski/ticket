@@ -98,7 +98,7 @@ Watchtower runs alongside the ticket container and polls ghcr.io every 5 minutes
 When a new `:latest` image is available, it automatically pulls it and restarts the
 ticket container. The SQLite database is on a Docker volume, so data survives restarts.
 
-The workflow is:
+The sdlc is:
 
 1. Make changes locally
 2. `make docker-push` — builds and pushes to ghcr.io

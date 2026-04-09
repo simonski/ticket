@@ -66,7 +66,7 @@ Mode is determined by the `location` field in `.ticket/config.json`: a path or `
 - **Projects** have prefixes (e.g. `CUS`). **Tickets** have human keys (e.g. `CUS-T-42`).
 - Ticket types: epic, task, bug, spike, chore, story, note, question, requirement, decision.
 - Lifecycle is `stage/state`: stages `design → develop → test → done`, states `idle | active | success | fail`.
-- Setting `state=success` auto-advances to the next workflow stage.
+- Setting `state=success` auto-advances to the next sdlc stage.
 - Parent tickets derive their lifecycle from descendants — only leaf tickets can be directly mutated.
 
 ### Test Strategy
@@ -81,7 +81,7 @@ Contract tests in `libtickettest/contract.go` define a `Factory` pattern and ver
 - Externalise strings to `constants.go` where possible.
 - The authoritative specification is `SPEC.md`; the OpenAPI spec is `openapi.yaml`.
 
-## Workflow (from AGENTS.md)
+## SDLC (from AGENTS.md)
 
 1. File issues for remaining work
 2. Run quality gates if code changed (`make test`)
@@ -91,7 +91,7 @@ Contract tests in `libtickettest/contract.go` define a `Factory` pattern and ver
 
 ## Special Commands
 
-These words as user input trigger specific workflows defined in `docs/RULES.md`:
+These words as user input trigger specific sdlcs defined in `docs/RULES.md`:
 
 - `spec` — Rebuild SPEC.md and openapi.yaml from the codebase
 - `drift` — Check documentation vs implementation drift

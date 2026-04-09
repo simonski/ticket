@@ -80,7 +80,7 @@ tk agent run -v               # stream LLM I/O to terminal
 
 Open `http://localhost:8080` in a browser:
 
-- Kanban board grouped by workflow stage
+- Kanban board grouped by sdlc stage
 - Ticket creation and inline editing
 - Drag-and-drop stage transitions
 - Team and user management

@@ -418,7 +418,7 @@
       #view-agents,
       #view-roles,
       #view-teams,
-      #view-workflows,
+      #view-sdlcs,
       #view-members,
       #view-settings {
         padding: 0.9rem;
@@ -967,7 +967,7 @@
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="teams">teams</button>
-            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="workflows">workflows</button>
+            <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="sdlcs">sdlcs</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="members">members</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="settings">settings</button>
             <button type="button" class="left-panel-item" data-left-panel-action="chat">chat</button>
@@ -1070,21 +1070,21 @@
                 </section>
               </div>
             </section>
-            <section id="view-workflows" class="perspective-view">
+            <section id="view-sdlcs" class="perspective-view">
               <div class="stories-head">
-                <strong>Workflows</strong>
+                <strong>SDLCs</strong>
               </div>
-              <div id="workflows-panel-host" class="management-host">
+              <div id="sdlcs-panel-host" class="management-host">
                 <section class="management-browser">
                   <div class="management-browser-head">
-                    <div class="muted">Manage workflow definitions and their stages.</div>
+                    <div class="muted">Manage sdlc definitions and their stages.</div>
                     <div class="management-browser-actions">
-                      <button id="workflows-import" class="btn" type="button">Import</button>
-                      <button id="workflows-create" class="btn" type="button">New Workflow</button>
+                      <button id="sdlcs-import" class="btn" type="button">Import</button>
+                      <button id="sdlcs-create" class="btn" type="button">New SDLC</button>
                     </div>
                   </div>
-                  <div id="workflow-list" class="management-grid cards"></div>
-                  <div id="workflows-browser-status" class="muted"></div>
+                  <div id="sdlc-list" class="management-grid cards"></div>
+                  <div id="sdlcs-browser-status" class="muted"></div>
                 </section>
               </div>
             </section>
@@ -1186,9 +1186,9 @@
           <div><strong>members</strong></div>
           <div class="perspective-kicker">Manage project user and team access</div>
         </div>
-        <div class="perspective-item admin-only hidden" data-panel-action="workflows">
-          <div><strong>workflows</strong></div>
-          <div class="perspective-kicker">Manage workflow definitions and stages</div>
+        <div class="perspective-item admin-only hidden" data-panel-action="sdlcs">
+          <div><strong>sdlcs</strong></div>
+          <div class="perspective-kicker">Manage sdlc definitions and stages</div>
         </div>
         <div class="perspective-item admin-only hidden" data-panel-action="settings">
           <div><strong>settings</strong></div>
@@ -1478,28 +1478,28 @@
         </div>
       </div>
     </div>
-    <div id="workflow-modal-overlay" class="modal-overlay hidden">
-      <div id="workflow-modal" class="modal">
+    <div id="sdlc-modal-overlay" class="modal-overlay hidden">
+      <div id="sdlc-modal" class="modal">
         <div class="row" style="justify-content:space-between; align-items:center;">
-          <strong id="workflow-modal-title">New Workflow</strong>
+          <strong id="sdlc-modal-title">New SDLC</strong>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
-          <input id="workflow-name" placeholder="workflow name" autocomplete="off" />
-          <input id="workflow-description" placeholder="description (optional)" autocomplete="off" />
+          <input id="sdlc-name" placeholder="sdlc name" autocomplete="off" />
+          <input id="sdlc-description" placeholder="description (optional)" autocomplete="off" />
           <div class="row">
-            <button id="workflow-save" class="btn" type="button">Create</button>
-            <button id="workflow-export" class="btn" type="button" style="display:none;">Export</button>
-            <button id="workflow-delete" class="btn" type="button">Delete</button>
-            <button id="workflow-modal-close" class="btn" type="button">Close</button>
+            <button id="sdlc-save" class="btn" type="button">Create</button>
+            <button id="sdlc-export" class="btn" type="button" style="display:none;">Export</button>
+            <button id="sdlc-delete" class="btn" type="button">Delete</button>
+            <button id="sdlc-modal-close" class="btn" type="button">Close</button>
           </div>
-          <div id="workflow-status" class="muted"></div>
-          <div id="workflow-stages-section" style="display:none;">
+          <div id="sdlc-status" class="muted"></div>
+          <div id="sdlc-stages-section" style="display:none;">
             <strong>Stages</strong>
-            <div id="workflow-stages-list" style="margin:0.4rem 0;"></div>
+            <div id="sdlc-stages-list" style="margin:0.4rem 0;"></div>
             <div class="row" style="gap:0.3rem;">
-              <input id="workflow-stage-name" placeholder="stage name" autocomplete="off" style="flex:1;" />
-              <input id="workflow-stage-order" type="number" placeholder="order" style="width:5rem;" />
-              <button id="workflow-stage-add" class="btn" type="button">Add Stage</button>
+              <input id="sdlc-stage-name" placeholder="stage name" autocomplete="off" style="flex:1;" />
+              <input id="sdlc-stage-order" type="number" placeholder="order" style="width:5rem;" />
+              <button id="sdlc-stage-add" class="btn" type="button">Add Stage</button>
             </div>
           </div>
         </div>
@@ -1833,14 +1833,14 @@
           await loadProjectMembers();
           return;
         }
-        if (action === "workflows") {
+        if (action === "sdlcs") {
           if (!isAdminUser()) {
             await uiAlert("Admin access required.");
             return;
           }
-          switchPerspective("workflows");
-          setLeftPanelActive("workflows");
-          await loadWorkflows();
+          switchPerspective("sdlcs");
+          setLeftPanelActive("sdlcs");
+          await loadSdlcs();
           return;
         }
         if (action === "settings") {
@@ -3929,54 +3929,54 @@
         if (event.target === teamModalOverlay) closeTeamModal();
       });
 
-      // ── Workflow Management ──
-      let workflows = [];
-      let selectedWorkflowID = 0;
-      const workflowListEl = document.getElementById("workflow-list");
-      const workflowBrowserStatusEl = document.getElementById("workflows-browser-status");
-      const workflowModalOverlay = document.getElementById("workflow-modal-overlay");
-      const workflowModalTitle = document.getElementById("workflow-modal-title");
-      const workflowNameInput = document.getElementById("workflow-name");
-      const workflowDescInput = document.getElementById("workflow-description");
-      const workflowSaveBtn = document.getElementById("workflow-save");
-      const workflowDeleteBtn = document.getElementById("workflow-delete");
-      const workflowModalCloseBtn = document.getElementById("workflow-modal-close");
-      const workflowStatusEl = document.getElementById("workflow-status");
-      const workflowStagesSection = document.getElementById("workflow-stages-section");
-      const workflowStagesList = document.getElementById("workflow-stages-list");
-      const workflowStageNameInput = document.getElementById("workflow-stage-name");
-      const workflowStageOrderInput = document.getElementById("workflow-stage-order");
-      const workflowStageAddBtn = document.getElementById("workflow-stage-add");
-      const workflowCreateBtn = document.getElementById("workflows-create");
+      // ── SDLC Management ──
+      let sdlcs = [];
+      let selectedSDLCID = 0;
+      const sdlcListEl = document.getElementById("sdlc-list");
+      const sdlcBrowserStatusEl = document.getElementById("sdlcs-browser-status");
+      const sdlcModalOverlay = document.getElementById("sdlc-modal-overlay");
+      const sdlcModalTitle = document.getElementById("sdlc-modal-title");
+      const sdlcNameInput = document.getElementById("sdlc-name");
+      const sdlcDescInput = document.getElementById("sdlc-description");
+      const sdlcSaveBtn = document.getElementById("sdlc-save");
+      const sdlcDeleteBtn = document.getElementById("sdlc-delete");
+      const sdlcModalCloseBtn = document.getElementById("sdlc-modal-close");
+      const sdlcStatusEl = document.getElementById("sdlc-status");
+      const sdlcStagesSection = document.getElementById("sdlc-stages-section");
+      const sdlcStagesList = document.getElementById("sdlc-stages-list");
+      const sdlcStageNameInput = document.getElementById("sdlc-stage-name");
+      const sdlcStageOrderInput = document.getElementById("sdlc-stage-order");
+      const sdlcStageAddBtn = document.getElementById("sdlc-stage-add");
+      const sdlcCreateBtn = document.getElementById("sdlcs-create");
 
-      function setWorkflowStatus(msg = "", isError = false) {
-        workflowStatusEl.textContent = msg;
-        workflowStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
+      function setSDLCStatus(msg = "", isError = false) {
+        sdlcStatusEl.textContent = msg;
+        sdlcStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
       }
 
-      async function loadWorkflows() {
-        const list = await call("/api/workflows", { headers: headers() });
-        workflows = Array.isArray(list) ? list : [];
-        renderWorkflowList();
-        workflowBrowserStatusEl.textContent = workflows.length ? `${workflows.length} workflow${workflows.length === 1 ? "" : "s"}` : "No workflows yet.";
+      async function loadSdlcs() {
+        const list = await call("/api/sdlc", { headers: headers() });
+        sdlcs = Array.isArray(list) ? list : [];
+        renderSdlcList();
+        sdlcBrowserStatusEl.textContent = sdlcs.length ? `${sdlcs.length} sdlc${sdlcs.length === 1 ? "" : "s"}` : "No sdlcs yet.";
       }
 
-      function renderWorkflowList() {
-        workflowListEl.innerHTML = "";
-        if (!workflows.length) {
+      function renderSdlcList() {
+        sdlcListEl.innerHTML = "";
+        if (!sdlcs.length) {
           const empty = document.createElement("div");
           empty.className = "management-card";
-          empty.textContent = "No workflows";
-          workflowListEl.appendChild(empty);
+          empty.textContent = "No sdlcs";
+          sdlcListEl.appendChild(empty);
           return;
         }
-        for (const wf of workflows) {
+        for (const wf of sdlcs) {
           const item = document.createElement("div");
           item.className = "management-card";
           item.innerHTML = `
             <div class="management-card-head">
               <div>
-                <div class="management-card-kicker">Workflow #${escape(wf.workflow_id)}</div>
+                <div class="management-card-kicker">SDLC #${escape(wf.sdlc_id)}</div>
                 <div class="management-card-title">${escape(wf.name || "")}</div>
               </div>
             </div>
@@ -3985,50 +3985,50 @@
               <div class="agent-actions"><button class="btn" type="button">Edit</button></div>
             </div>
           `;
-          item.addEventListener("click", () => openWorkflowEditor(wf));
+          item.addEventListener("click", () => openSdlcEditor(wf));
           item.querySelector("button").addEventListener("click", (event) => {
             event.stopPropagation();
-            openWorkflowEditor(wf);
+            openSdlcEditor(wf);
           });
-          workflowListEl.appendChild(item);
+          sdlcListEl.appendChild(item);
         }
       }
 
-      async function openWorkflowEditor(wf = null) {
-        selectedWorkflowID = 0;
-        workflowNameInput.value = "";
-        workflowDescInput.value = "";
-        setWorkflowStatus("");
-        workflowStagesSection.style.display = "none";
-        workflowStagesList.innerHTML = "";
+      async function openSdlcEditor(wf = null) {
+        selectedSDLCID = 0;
+        sdlcNameInput.value = "";
+        sdlcDescInput.value = "";
+        setSDLCStatus("");
+        sdlcStagesSection.style.display = "none";
+        sdlcStagesList.innerHTML = "";
         if (wf) {
-          selectedWorkflowID = wf.workflow_id;
-          workflowModalTitle.textContent = `Workflow #${wf.workflow_id}`;
-          workflowNameInput.value = wf.name || "";
-          workflowDescInput.value = wf.description || "";
-          workflowSaveBtn.textContent = "Save";
-          workflowDeleteBtn.style.display = "";
-          workflowExportBtn.style.display = "";
-          workflowStagesSection.style.display = "";
-          await loadWorkflowStages(wf.workflow_id);
+          selectedSDLCID = wf.sdlc_id;
+          sdlcModalTitle.textContent = `SDLC #${wf.sdlc_id}`;
+          sdlcNameInput.value = wf.name || "";
+          sdlcDescInput.value = wf.description || "";
+          sdlcSaveBtn.textContent = "Save";
+          sdlcDeleteBtn.style.display = "";
+          sdlcExportBtn.style.display = "";
+          sdlcStagesSection.style.display = "";
+          await loadSdlcStages(wf.sdlc_id);
         } else {
-          workflowModalTitle.textContent = "New Workflow";
-          workflowSaveBtn.textContent = "Create";
-          workflowDeleteBtn.style.display = "none";
-          workflowExportBtn.style.display = "none";
+          sdlcModalTitle.textContent = "New SDLC";
+          sdlcSaveBtn.textContent = "Create";
+          sdlcDeleteBtn.style.display = "none";
+          sdlcExportBtn.style.display = "none";
         }
-        workflowModalOverlay.classList.remove("hidden");
+        sdlcModalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
-        workflowNameInput.focus();
+        sdlcNameInput.focus();
       }
 
-      async function loadWorkflowStages(wfID) {
+      async function loadSdlcStages(wfID) {
         try {
-          const detail = await call(`/api/workflows/${wfID}`, { headers: headers() });
+          const detail = await call(`/api/sdlc/${wfID}`, { headers: headers() });
           const stages = detail.stages || [];
-          workflowStagesList.innerHTML = "";
+          sdlcStagesList.innerHTML = "";
           if (!stages.length) {
-            workflowStagesList.innerHTML = '<div class="muted">No stages</div>';
+            sdlcStagesList.innerHTML = '<div class="muted">No stages</div>';
             return;
           }
           for (const s of stages) {
@@ -4042,106 +4042,106 @@
             rm.className = "btn";
             rm.style.cssText = "padding:0 0.4rem;";
             rm.onclick = async () => {
-              await call(`/api/workflows/stages/${s.workflow_stage_id}`, { method: "DELETE", headers: headers() });
-              await loadWorkflowStages(wfID);
+              await call(`/api/sdlc/stages/${s.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
+              await loadSdlcStages(wfID);
             };
             row.appendChild(info);
             row.appendChild(rm);
-            workflowStagesList.appendChild(row);
+            sdlcStagesList.appendChild(row);
           }
         } catch (e) {
-          workflowStagesList.innerHTML = '<div class="muted">Failed to load stages</div>';
+          sdlcStagesList.innerHTML = '<div class="muted">Failed to load stages</div>';
         }
       }
 
-      workflowSaveBtn.addEventListener("click", async () => {
-        const name = workflowNameInput.value.trim();
-        if (!name) { setWorkflowStatus("Name is required.", true); return; }
+      sdlcSaveBtn.addEventListener("click", async () => {
+        const name = sdlcNameInput.value.trim();
+        if (!name) { setSDLCStatus("Name is required.", true); return; }
         try {
-          if (selectedWorkflowID) {
+          if (selectedSDLCID) {
             // No update endpoint exists, so just notify
-            setWorkflowStatus("Workflow name/description saved at creation time. Manage stages below.");
+            setSDLCStatus("SDLC name/description saved at creation time. Manage stages below.");
           } else {
-            const created = await call("/api/workflows", {
+            const created = await call("/api/sdlc", {
               method: "POST",
               headers: headers(true),
-              body: JSON.stringify({ name, description: workflowDescInput.value.trim() }),
+              body: JSON.stringify({ name, description: sdlcDescInput.value.trim() }),
             });
-            selectedWorkflowID = created.workflow_id;
-            workflowModalTitle.textContent = `Workflow #${created.workflow_id}`;
-            workflowSaveBtn.textContent = "Save";
-            workflowDeleteBtn.style.display = "";
-            workflowExportBtn.style.display = "";
-            workflowStagesSection.style.display = "";
-            setWorkflowStatus(`Created workflow #${created.workflow_id}`);
+            selectedSDLCID = created.sdlc_id;
+            sdlcModalTitle.textContent = `SDLC #${created.sdlc_id}`;
+            sdlcSaveBtn.textContent = "Save";
+            sdlcDeleteBtn.style.display = "";
+            sdlcExportBtn.style.display = "";
+            sdlcStagesSection.style.display = "";
+            setSDLCStatus(`Created sdlc #${created.sdlc_id}`);
           }
-          await loadWorkflows();
-        } catch (err) { setWorkflowStatus(err.message, true); }
+          await loadSdlcs();
+        } catch (err) { setSDLCStatus(err.message, true); }
       });
 
-      workflowDeleteBtn.addEventListener("click", async () => {
-        if (!selectedWorkflowID) return;
-        const ok = await uiConfirm(`Delete workflow #${selectedWorkflowID}?`, "Delete");
+      sdlcDeleteBtn.addEventListener("click", async () => {
+        if (!selectedSDLCID) return;
+        const ok = await uiConfirm(`Delete sdlc #${selectedSDLCID}?`, "Delete");
         if (!ok) return;
         try {
-          await call(`/api/workflows/${selectedWorkflowID}`, { method: "DELETE", headers: headers() });
-          workflowModalOverlay.classList.add("hidden");
+          await call(`/api/sdlc/${selectedSDLCID}`, { method: "DELETE", headers: headers() });
+          sdlcModalOverlay.classList.add("hidden");
           document.body.classList.remove("modal-open");
-          await loadWorkflows();
-        } catch (err) { setWorkflowStatus(err.message, true); }
+          await loadSdlcs();
+        } catch (err) { setSDLCStatus(err.message, true); }
       });
 
-      workflowStageAddBtn.addEventListener("click", async () => {
-        if (!selectedWorkflowID) return;
-        const stageName = workflowStageNameInput.value.trim();
-        if (!stageName) { setWorkflowStatus("Stage name is required.", true); return; }
-        const sortOrder = Number(workflowStageOrderInput.value || 0);
+      sdlcStageAddBtn.addEventListener("click", async () => {
+        if (!selectedSDLCID) return;
+        const stageName = sdlcStageNameInput.value.trim();
+        if (!stageName) { setSDLCStatus("Stage name is required.", true); return; }
+        const sortOrder = Number(sdlcStageOrderInput.value || 0);
         try {
-          await call(`/api/workflows/${selectedWorkflowID}/stages`, {
+          await call(`/api/sdlc/${selectedSDLCID}/stages`, {
             method: "POST",
             headers: headers(true),
             body: JSON.stringify({ stage_name: stageName, description: "", role_id: null, sort_order: sortOrder }),
           });
-          workflowStageNameInput.value = "";
-          workflowStageOrderInput.value = "";
-          await loadWorkflowStages(selectedWorkflowID);
-          setWorkflowStatus("");
-        } catch (err) { setWorkflowStatus(err.message, true); }
+          sdlcStageNameInput.value = "";
+          sdlcStageOrderInput.value = "";
+          await loadSdlcStages(selectedSDLCID);
+          setSDLCStatus("");
+        } catch (err) { setSDLCStatus(err.message, true); }
       });
 
-      workflowModalCloseBtn.addEventListener("click", () => {
-        workflowModalOverlay.classList.add("hidden");
+      sdlcModalCloseBtn.addEventListener("click", () => {
+        sdlcModalOverlay.classList.add("hidden");
         document.body.classList.remove("modal-open");
       });
 
-      workflowModalOverlay.addEventListener("click", (event) => {
-        if (event.target === workflowModalOverlay) {
-          workflowModalOverlay.classList.add("hidden");
+      sdlcModalOverlay.addEventListener("click", (event) => {
+        if (event.target === sdlcModalOverlay) {
+          sdlcModalOverlay.classList.add("hidden");
           document.body.classList.remove("modal-open");
         }
       });
 
-      workflowCreateBtn.addEventListener("click", () => openWorkflowEditor());
+      sdlcCreateBtn.addEventListener("click", () => openSdlcEditor());
 
-      // Workflow export button
-      const workflowExportBtn = document.getElementById("workflow-export");
-      workflowExportBtn.addEventListener("click", async () => {
-        if (!selectedWorkflowID) return;
+      // SDLC export button
+      const sdlcExportBtn = document.getElementById("sdlc-export");
+      sdlcExportBtn.addEventListener("click", async () => {
+        if (!selectedSDLCID) return;
         try {
-          const data = await call(`/api/workflows/${selectedWorkflowID}/export`, { headers: headers() });
+          const data = await call(`/api/sdlc/${selectedSDLCID}/export`, { headers: headers() });
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
-          a.download = `workflow-${selectedWorkflowID}.json`;
+          a.download = `sdlc-${selectedSDLCID}.json`;
           a.click();
           URL.revokeObjectURL(a.href);
-          setWorkflowStatus("Exported workflow JSON");
-        } catch (err) { setWorkflowStatus(err.message, true); }
+          setSDLCStatus("Exported sdlc JSON");
+        } catch (err) { setSDLCStatus(err.message, true); }
       });
 
-      // Workflow import button
-      const workflowImportBtn = document.getElementById("workflows-import");
-      workflowImportBtn.addEventListener("click", () => {
+      // SDLC import button
+      const sdlcImportBtn = document.getElementById("sdlcs-import");
+      sdlcImportBtn.addEventListener("click", () => {
         const input = document.createElement("input");
         input.type = "file";
         input.accept = ".json";
@@ -4151,12 +4151,12 @@
           try {
             const text = await file.text();
             const payload = JSON.parse(text);
-            await call("/api/workflows/import", {
+            await call("/api/sdlc/import", {
               method: "POST",
               headers: headers(true),
               body: JSON.stringify(payload),
             });
-            await loadWorkflows();
+            await loadSdlcs();
           } catch (err) {
             await uiAlert(`Import failed: ${err.message}`);
           }

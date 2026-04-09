@@ -39,9 +39,9 @@
 ## What Changed Since Last Assessment
 
 ### Improvements
-- **Product Owner +7**: TK-222 (`tk board` tree view), `tk init` workflow/role checks implemented; full SPEC feature coverage confirmed; tree display consistent between `tk ls` and `tk board`
+- **Product Owner +7**: TK-222 (`tk board` tree view), `tk init` sdlc/role checks implemented; full SPEC feature coverage confirmed; tree display consistent between `tk ls` and `tk board`
 - **SRE +8**: Confirmed comprehensive runbooks in `docs/RUNBOOKS.md` (9 scenarios with step-by-step commands); structured slog logging verified; health check at `/api/healthz` with DB connectivity check
-- **UX +6**: TK-222 board tree hierarchy; `tk init` feedback reports workflow name, stage count, role count; `buildTreeDisplay` shared between `runList` and `runBoard`
+- **UX +6**: TK-222 board tree hierarchy; `tk init` feedback reports sdlc name, stage count, role count; `buildTreeDisplay` shared between `runList` and `runBoard`
 - **Idiomatic JS +4**: `escape()` sanitiser confirmed applied to all 68 `innerHTML` assignments (XSS risk mitigated); `call()` wrapper centralises fetch
 - **New Starter +3**: `docs/ONBOARDING.md` added (was absent); binary rename `ticket → tk` propagated to key docs
 - **Tech Writer +3**: ONBOARDING.md comprehensive; CLAUDE.md up to date; USER_GUIDE reflects current features
@@ -89,7 +89,7 @@
 ### Medium
 9. **Remove zombie `messages`/`goals` tables** from schema (`internal/store/store.go:867,887`)
 10. **Generate and commit SBOM** → `cyclonedx-gomod mod -output sbom.json`
-11. **Add `golangci-lint` to CI pipeline** (`.github/workflows/`)
+11. **Add `golangci-lint` to CI pipeline** (`.github/sdlcs/`)
 12. **Add loading spinners** to web UI async operations
 13. **Add mobile breakpoints** (640px, 480px) to `web/static/index.html`
 
@@ -107,6 +107,6 @@
 
 ## Notes
 - Binary rename `ticket → tk` is complete in all source files, docs, and Makefile
-- `tk init` now checks workflow/stages/roles and prompts to create defaults
+- `tk init` now checks sdlc/stages/roles and prompts to create defaults
 - `tk board` now renders epic/story tree hierarchy consistent with `tk ls`
 - `cmd/tk-test/main.go` fixed this session (default binary path was `bin/ticket`, now `bin/tk`)

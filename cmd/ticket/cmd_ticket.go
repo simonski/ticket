@@ -473,14 +473,14 @@ func runBoard(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	var workflowStages []store.WorkflowStage
-	if project.WorkflowID != nil {
-		if wf, err := api.GetWorkflow(*project.WorkflowID); err == nil {
-			workflowStages = wf.Stages
+	var sdlcStages []store.SdlcStage
+	if project.SdlcID != nil {
+		if wf, err := api.GetSdlc(*project.SdlcID); err == nil {
+			sdlcStages = wf.Stages
 		}
 	}
-	if len(workflowStages) == 0 {
-		fmt.Println("no workflow stages defined for this project")
+	if len(sdlcStages) == 0 {
+		fmt.Println("no sdlc stages defined for this project")
 		return nil
 	}
 
@@ -505,7 +505,7 @@ func runBoard(args []string) error {
 	}
 
 	// Print each stage as a lane
-	for _, ws := range workflowStages {
+	for _, ws := range sdlcStages {
 		stageTickets := byStage[ws.StageName]
 		fmt.Printf("── %s (%d) ──\n", strings.ToUpper(ws.StageName), len(stageTickets))
 		if len(stageTickets) == 0 {
@@ -593,12 +593,12 @@ func runGet(args []string) error {
 	if outputJSON {
 		return printJSON(ticket)
 	}
-	// Look up workflow stages for progress display
-	var workflowStages []store.WorkflowStage
+	// Look up sdlc stages for progress display
+	var sdlcStages []store.SdlcStage
 	project, projectErr := svc.GetProject(fmt.Sprintf("%d", ticket.ProjectID))
-	if projectErr == nil && project.WorkflowID != nil {
-		if wf, err := svc.GetWorkflow(*project.WorkflowID); err == nil {
-			workflowStages = wf.Stages
+	if projectErr == nil && project.SdlcID != nil {
+		if wf, err := svc.GetSdlc(*project.SdlcID); err == nil {
+			sdlcStages = wf.Stages
 		}
 	}
 	ticketLabels, _ := svc.ListTicketLabels(ticket.ID)
@@ -615,7 +615,7 @@ func runGet(args []string) error {
 			cloneKey = ticketLabel(c)
 		}
 	}
-	printTicketDetails(ticket, dependencies, history, workflowStages, ticketLabels, totalTime, parentKey, cloneKey)
+	printTicketDetails(ticket, dependencies, history, sdlcStages, ticketLabels, totalTime, parentKey, cloneKey)
 	// Show children if any
 	if projectErr == nil {
 		all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, true)
@@ -1805,13 +1805,13 @@ Targets:
 
 		fmt.Printf("=== Project Doctor: %s — %s ===\n\n", proj.Prefix, proj.Title)
 
-		// Workflow check
-		if proj.WorkflowID == nil {
-			fmt.Println("[WARN] Project has no workflow assigned")
+		// Sdlc check
+		if proj.SdlcID == nil {
+			fmt.Println("[WARN] Project has no sdlc assigned")
 		} else {
-			wf, err := svc.GetWorkflow(*proj.WorkflowID)
+			wf, err := svc.GetSdlc(*proj.SdlcID)
 			if err == nil {
-				fmt.Printf("Workflow: %s (%d stages)\n", wf.Name, len(wf.Stages))
+				fmt.Printf("Sdlc: %s (%d stages)\n", wf.Name, len(wf.Stages))
 				for _, s := range wf.Stages {
 					role := "-"
 					if s.RoleTitle != "" {
@@ -1925,8 +1925,8 @@ Targets:
 		if ctx.Project != nil {
 			fmt.Printf("Project:  %s — %s\n", ctx.Project.Prefix, ctx.Project.Title)
 		}
-		if ctx.Workflow != nil {
-			fmt.Printf("Workflow: %s\n", ctx.Workflow.Name)
+		if ctx.Sdlc != nil {
+			fmt.Printf("Sdlc: %s\n", ctx.Sdlc.Name)
 		}
 		if ctx.Role != nil {
 			fmt.Printf("Role:     %s\n", ctx.Role.Title)
@@ -1961,8 +1961,8 @@ Targets:
 			fmt.Println("  [WARN] Active but no assignee")
 			issues++
 		}
-		if ticket.WorkflowID == nil && ctx.Workflow == nil {
-			fmt.Println("  [WARN] No workflow (inherited or explicit)")
+		if ticket.SdlcID == nil && ctx.Sdlc == nil {
+			fmt.Println("  [WARN] No sdlc (inherited or explicit)")
 			issues++
 		}
 		if issues == 0 {

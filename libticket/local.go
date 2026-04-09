@@ -432,7 +432,7 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 		Notes:              request.Notes,
 		Visibility:         request.Visibility,
 		CreatedBy:          user.ID,
-		WorkflowID:         request.WorkflowID,
+		SdlcID:         request.SdlcID,
 	})
 }
 
@@ -469,7 +469,7 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		Notes:              request.Notes,
 		Status:             request.Status,
 		Visibility:         request.Visibility,
-		WorkflowID:         request.WorkflowID,
+		SdlcID:         request.SdlcID,
 	})
 }
 
@@ -875,22 +875,22 @@ func (s *LocalService) NotReadyTicket(id string, message string) (store.Ticket, 
 	return ticket, nil
 }
 
-func (s *LocalService) SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error) {
+func (s *LocalService) SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
 	defer db.Close()
-	return store.SetTicketWorkflow(context.Background(), db, id, workflowID)
+	return store.SetTicketSdlc(context.Background(), db, id, sdlcID)
 }
 
-func (s *LocalService) UnsetTicketWorkflow(id string) (store.Ticket, error) {
+func (s *LocalService) UnsetTicketSdlc(id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
 	defer db.Close()
-	return store.UnsetTicketWorkflow(context.Background(), db, id)
+	return store.UnsetTicketSdlc(context.Background(), db, id)
 }
 
 func (s *LocalService) DeleteTicket(id string) error {
@@ -1095,7 +1095,7 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 		ctx := store.EnrichTicketContext(context.Background(), db, ticket)
 		response.Project = ctx.Project
 		response.Parents = ctx.Parents
-		response.Workflow = ctx.Workflow
+		response.Sdlc = ctx.Sdlc
 		response.Role = ctx.Role
 	}
 	return response, nil
@@ -1129,85 +1129,85 @@ func LocalUsername() string {
 	return "admin"
 }
 
-func (s *LocalService) CreateWorkflow(request WorkflowRequest) (store.Workflow, error) {
+func (s *LocalService) CreateSdlc(request SdlcRequest) (store.Sdlc, error) {
 	db, err := s.openDB()
 	if err != nil {
-		return store.Workflow{}, err
+		return store.Sdlc{}, err
 	}
 	defer db.Close()
-	return store.CreateWorkflow(context.Background(), db, request.Name, request.Description)
+	return store.CreateSdlc(context.Background(), db, request.Name, request.Description)
 }
 
-func (s *LocalService) ListWorkflows() ([]store.Workflow, error) {
+func (s *LocalService) ListSdlcs() ([]store.Sdlc, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListWorkflows(context.Background(), db)
+	return store.ListSdlcs(context.Background(), db)
 }
 
-func (s *LocalService) GetWorkflow(id int64) (store.WorkflowWithStages, error) {
+func (s *LocalService) GetSdlc(id int64) (store.SdlcWithStages, error) {
 	db, err := s.openDB()
 	if err != nil {
-		return store.WorkflowWithStages{}, err
+		return store.SdlcWithStages{}, err
 	}
 	defer db.Close()
-	return store.GetWorkflow(context.Background(), db, id)
+	return store.GetSdlc(context.Background(), db, id)
 }
 
-func (s *LocalService) DeleteWorkflow(id int64) error {
-	db, err := s.openDB()
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	return store.DeleteWorkflow(context.Background(), db, id)
-}
-
-func (s *LocalService) AddWorkflowStage(workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
-	db, err := s.openDB()
-	if err != nil {
-		return store.WorkflowStage{}, err
-	}
-	defer db.Close()
-	return store.AddWorkflowStage(context.Background(), db, workflowID, request.StageName, request.Description, request.RoleID, request.SortOrder)
-}
-
-func (s *LocalService) RemoveWorkflowStage(stageID int64) error {
+func (s *LocalService) DeleteSdlc(id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	return store.RemoveWorkflowStage(context.Background(), db, stageID)
+	return store.DeleteSdlc(context.Background(), db, id)
 }
 
-func (s *LocalService) ReorderWorkflowStages(workflowID int64, stageIDs []int64) error {
+func (s *LocalService) AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.SdlcStage{}, err
+	}
+	defer db.Close()
+	return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.RoleID, request.SortOrder)
+}
+
+func (s *LocalService) RemoveSdlcStage(stageID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	return store.ReorderWorkflowStages(context.Background(), db, workflowID, stageIDs)
+	return store.RemoveSdlcStage(context.Background(), db, stageID)
 }
 
-func (s *LocalService) ExportWorkflow(id int64) (store.WorkflowExport, error) {
+func (s *LocalService) ReorderSdlcStages(sdlcID int64, stageIDs []int64) error {
 	db, err := s.openDB()
 	if err != nil {
-		return store.WorkflowExport{}, err
+		return err
 	}
 	defer db.Close()
-	return store.ExportWorkflow(context.Background(), db, id)
+	return store.ReorderSdlcStages(context.Background(), db, sdlcID, stageIDs)
 }
 
-func (s *LocalService) ImportWorkflow(export store.WorkflowExport) (store.Workflow, error) {
+func (s *LocalService) ExportSdlc(id int64) (store.SdlcExport, error) {
 	db, err := s.openDB()
 	if err != nil {
-		return store.Workflow{}, err
+		return store.SdlcExport{}, err
 	}
 	defer db.Close()
-	return store.ImportWorkflow(context.Background(), db, export)
+	return store.ExportSdlc(context.Background(), db, id)
+}
+
+func (s *LocalService) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Sdlc{}, err
+	}
+	defer db.Close()
+	return store.ImportSdlc(context.Background(), db, export)
 }
 
 func (s *LocalService) LogTime(ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {

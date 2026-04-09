@@ -9,7 +9,7 @@ This guide describes a single Go binary that provides a server, a CLI, and an em
 `ticket` has three interfaces:
 
 1. The server, which owns persistence, authentication, and collaboration.
-2. The CLI, which provides fast and explicit terminal workflows.
+2. The CLI, which provides fast and explicit terminal sdlcs.
 3. The web app, which is embedded in the same binary and uses the same API.
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
@@ -265,7 +265,7 @@ tk logout
 
 `ticket logout` removes `$TICKET_HOME/credentials.json`.
 
-The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
+The web app uses the same account system. Once logged in, your session is shared across normal browser sdlcs.
 
 Top banner behavior in the web UI:
 
@@ -275,7 +275,7 @@ Top banner behavior in the web UI:
 - the center banner area renders an animated 8-bit activity stream using websocket event activity
 - login/register pages use the same animated logo renderer in place of a static `ticket` heading and do not open websocket activity streams
 
-## Typical Workflow
+## Typical SDLC
 
 Most teams use `ticket` in this order:
 
@@ -592,7 +592,7 @@ The TUI has six top-level panels, navigated with **Tab** (forward) or
 | Projects  | All projects; select one to make it active            |
 | Ideas     | Captured requirements/ideas (raw, unprocessed tickets) |
 | Tickets   | Ticket tree — epics with nested tasks, bugs, etc.     |
-| Workflows | Workflow definitions and stages                       |
+| SDLCs | SDLC definitions and stages                       |
 | Config    | Theme picker and TUI settings                         |
 
 ### Navigation
@@ -835,13 +835,13 @@ tk update -id <key-or-id> -estimate_effort 5
 tk update -id <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
 tk update -id <key-or-id> -stage develop -state active -priority 2 -title "new title"
 
-tk workflow list
-tk workflow create -name <name> [-d <description>]
-tk workflow get -id <id>
-tk workflow delete -id <id>
-tk workflow add-stage -id <wf-id> -name <name>
-tk workflow remove-stage -stage-id <id>
-tk workflow reorder-stages -id <wf-id> <ids>
+tk sdlc list
+tk sdlc create -name <name> [-d <description>]
+tk sdlc get -id <id>
+tk sdlc delete -id <id>
+tk sdlc add-stage -id <wf-id> -name <name>
+tk sdlc remove-stage -stage-id <id>
+tk sdlc reorder-stages -id <wf-id> <ids>
 
 tk decision add "text"
 tk decision list

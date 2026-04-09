@@ -27,8 +27,8 @@ type Ticket struct {
 	AcceptanceCriteria string    `json:"acceptance_criteria"`
 	GitRepository      string    `json:"git_repository"`
 	GitBranch          string    `json:"git_branch"`
-	WorkflowID         *int64    `json:"workflow_id,omitempty"`
-	WorkflowStageID    *int64    `json:"workflow_stage_id,omitempty"`
+	SdlcID         *int64    `json:"sdlc_id,omitempty"`
+	SdlcStageID    *int64    `json:"sdlc_stage_id,omitempty"`
 	Stage              string    `json:"stage"`
 	State              string    `json:"state"`
 	Status             string    `json:"status"`
@@ -52,7 +52,7 @@ type TicketCreateParams struct {
 	ProjectID          int64
 	ParentID           *string
 	CloneOf            *string
-	WorkflowID         *int64
+	SdlcID         *int64
 	Type               string
 	Title              string
 	Description        string
@@ -160,27 +160,27 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	defer tx.Rollback()
 	var projectPrefix string
 	var nextSequence int64
-	var projectWorkflowID sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT prefix, ticket_sequence + 1, workflow_id FROM projects WHERE project_id = ?`, params.ProjectID).Scan(&projectPrefix, &nextSequence, &projectWorkflowID); err != nil {
+	var projectSdlcID sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT prefix, ticket_sequence + 1, sdlc_id FROM projects WHERE project_id = ?`, params.ProjectID).Scan(&projectPrefix, &nextSequence, &projectSdlcID); err != nil {
 		return Ticket{}, err
 	}
-	// Resolve effective workflow: ticket param → parent chain → project
-	var effectiveWorkflowID sql.NullInt64
-	var ticketWorkflowID *int64 // stored on the ticket itself (NULL = inherit)
-	if params.WorkflowID != nil {
-		effectiveWorkflowID = sql.NullInt64{Int64: *params.WorkflowID, Valid: true}
-		ticketWorkflowID = params.WorkflowID
+	// Resolve effective sdlc: ticket param → parent chain → project
+	var effectiveSdlcID sql.NullInt64
+	var ticketSdlcID *int64 // stored on the ticket itself (NULL = inherit)
+	if params.SdlcID != nil {
+		effectiveSdlcID = sql.NullInt64{Int64: *params.SdlcID, Valid: true}
+		ticketSdlcID = params.SdlcID
 	} else if params.ParentID != nil {
-		// Walk parent chain for explicit workflow
+		// Walk parent chain for explicit sdlc
 		pid := params.ParentID
 		for pid != nil {
 			var pwf sql.NullInt64
 			var ppid sql.NullString
-			if err := tx.QueryRowContext(ctx, `SELECT workflow_id, parent_id FROM tickets WHERE ticket_id = ?`, *pid).Scan(&pwf, &ppid); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT sdlc_id, parent_id FROM tickets WHERE ticket_id = ?`, *pid).Scan(&pwf, &ppid); err != nil {
 				break
 			}
 			if pwf.Valid {
-				effectiveWorkflowID = pwf
+				effectiveSdlcID = pwf
 				break
 			}
 			if ppid.Valid {
@@ -189,21 +189,21 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 				pid = nil
 			}
 		}
-		if !effectiveWorkflowID.Valid {
-			effectiveWorkflowID = projectWorkflowID
+		if !effectiveSdlcID.Valid {
+			effectiveSdlcID = projectSdlcID
 		}
 	} else {
-		effectiveWorkflowID = projectWorkflowID
+		effectiveSdlcID = projectSdlcID
 	}
-	// Resolve initial workflow stage (first stage by sort_order)
-	var workflowStageID *int64
+	// Resolve initial sdlc stage (first stage by sort_order)
+	var sdlcStageID *int64
 	stage := StageDesign // fallback
-	if effectiveWorkflowID.Valid {
+	if effectiveSdlcID.Valid {
 		var wsID int64
 		var stageName string
-		err := tx.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? ORDER BY sort_order LIMIT 1`, effectiveWorkflowID.Int64).Scan(&wsID, &stageName)
+		err := tx.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? ORDER BY sort_order LIMIT 1`, effectiveSdlcID.Int64).Scan(&wsID, &stageName)
 		if err == nil {
-			workflowStageID = &wsID
+			sdlcStageID = &wsID
 			stage = stageName
 		}
 	}
@@ -212,9 +212,9 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		return Ticket{}, err
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, created_by)
+		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, created_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketWorkflowID), nullableInt64(workflowStageID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), nullableUserID(params.CreatedBy))
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketSdlcID), nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), nullableUserID(params.CreatedBy))
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -327,7 +327,7 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	}
 	state := current.State
 	stage := current.Stage
-	workflowStageID := current.WorkflowStageID
+	sdlcStageID := current.SdlcStageID
 	// Direct stage override (e.g. drag-and-drop on the board)
 	if explicitStage {
 		nextStage := strings.ToLower(strings.TrimSpace(params.Stage))
@@ -346,15 +346,15 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 					state = StateIdle
 				}
 			}
-			// Update workflow_stage_id to match the new stage (if a workflow is attached)
-			if current.WorkflowStageID != nil {
-				var workflowID int64
-				if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *current.WorkflowStageID).Scan(&workflowID); err == nil {
+			// Update sdlc_stage_id to match the new stage (if a sdlc is attached)
+			if current.SdlcStageID != nil {
+				var sdlcID int64
+				if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlc_stages WHERE sdlc_stage_id = ?`, *current.SdlcStageID).Scan(&sdlcID); err == nil {
 					var wsID int64
-					if err := db.QueryRowContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND stage_name = ? LIMIT 1`, workflowID, stage).Scan(&wsID); err == nil {
-						workflowStageID = &wsID
+					if err := db.QueryRowContext(ctx, `SELECT sdlc_stage_id FROM sdlc_stages WHERE sdlc_id = ? AND stage_name = ? LIMIT 1`, sdlcID, stage).Scan(&wsID); err == nil {
+						sdlcStageID = &wsID
 					} else {
-						workflowStageID = nil
+						sdlcStageID = nil
 					}
 				}
 			}
@@ -371,9 +371,9 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		if nextState == StateActive && strings.TrimSpace(assignee) == "" {
 			return Ticket{}, errors.New("active ticket requires assignee")
 		}
-		// Check if ticket is at final workflow stage with success — can't reopen
-		if current.State == StateSuccess && current.WorkflowStageID != nil {
-			nextID, _, err := getNextWorkflowStage(ctx, db, *current.WorkflowStageID)
+		// Check if ticket is at final sdlc stage with success — can't reopen
+		if current.State == StateSuccess && current.SdlcStageID != nil {
+			nextID, _, err := getNextSdlcStage(ctx, db, *current.SdlcStageID)
 			if err == nil && nextID == nil {
 				// Final stage with success: ticket is "done"
 				return Ticket{}, errors.New("done ticket cannot be reopened")
@@ -386,10 +386,10 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		}
 		state = nextState
 		// Auto-advance: when state becomes success on a non-final stage, advance to next stage
-		if state == StateSuccess && workflowStageID != nil {
-			nextStageID, nextStageName, err := getNextWorkflowStage(ctx, db, *workflowStageID)
+		if state == StateSuccess && sdlcStageID != nil {
+			nextStageID, nextStageName, err := getNextSdlcStage(ctx, db, *sdlcStageID)
 			if err == nil && nextStageID != nil {
-				workflowStageID = nextStageID
+				sdlcStageID = nextStageID
 				stage = nextStageName
 				state = StateIdle
 			}
@@ -404,9 +404,9 @@ writeTicket:
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, workflow_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, open = ?, type = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, sdlc_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, open = ?, type = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(workflowStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), openVal, nextType, id)
+	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), openVal, nextType, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -646,7 +646,7 @@ func ListTickets(ctx context.Context, db *sql.DB, params TicketListParams) ([]Ti
 	}
 
 	query := `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE project_id = ?
 	`
@@ -721,7 +721,7 @@ func SearchTickets(ctx context.Context, db *sql.DB, projectID int64, query strin
 
 func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id string) (Ticket, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE project_id = ? AND ticket_id = ?
 	`, projectID, id)
@@ -737,7 +737,7 @@ func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id str
 
 func GetTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE ticket_id = ?
 	`, id)
@@ -839,19 +839,19 @@ func ListTicketParents(ctx context.Context, db *sql.DB, id string) ([]Ticket, er
 	rows, err := db.QueryContext(ctx, `
 		WITH RECURSIVE ancestors(ticket_id, project_id, parent_id, clone_of, type, title,
 		  description, acceptance_criteria, git_repository, git_branch,
-		  workflow_id, workflow_stage_id, stage, state, status, priority, sort_order,
+		  sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order,
 		  estimate_effort, estimate_complete, health_score, assignee, author,
 		  ready, open, archived, created_by, created_at, updated_at) AS (
 			SELECT ticket_id, project_id, parent_id, clone_of, type, title,
 			  description, acceptance_criteria, git_repository, git_branch,
-			  workflow_id, workflow_stage_id, stage, state, status, priority, sort_order,
+			  sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order,
 			  estimate_effort, estimate_complete, health_score, assignee, COALESCE(author,''),
 			  ready, open, archived, COALESCE(created_by,''), created_at, updated_at
 			FROM tickets WHERE ticket_id = ?
 			UNION ALL
 			SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title,
 			  t.description, t.acceptance_criteria, t.git_repository, t.git_branch,
-			  t.workflow_id, t.workflow_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order,
+			  t.sdlc_id, t.sdlc_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order,
 			  t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author,''),
 			  t.ready, t.open, t.archived, COALESCE(t.created_by,''), t.created_at, t.updated_at
 			FROM tickets t
@@ -859,7 +859,7 @@ func ListTicketParents(ctx context.Context, db *sql.DB, id string) ([]Ticket, er
 		)
 		SELECT ticket_id, project_id, parent_id, clone_of, type, title,
 		  description, acceptance_criteria, git_repository, git_branch,
-		  workflow_id, workflow_stage_id, stage, state, status, priority, sort_order,
+		  sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order,
 		  estimate_effort, estimate_complete, health_score, assignee, author,
 		  ready, open, archived, created_by, created_at, updated_at
 		FROM ancestors
@@ -906,8 +906,8 @@ func scanTicket(s scanner) (Ticket, error) {
 	var ticket Ticket
 	var parentID sql.NullString
 	var cloneOf sql.NullString
-	var workflowID sql.NullInt64
-	var workflowStageID sql.NullInt64
+	var sdlcID sql.NullInt64
+	var sdlcStageID sql.NullInt64
 	var storedStatus string
 	var ready int
 	var open int
@@ -923,8 +923,8 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.AcceptanceCriteria,
 		&ticket.GitRepository,
 		&ticket.GitBranch,
-		&workflowID,
-		&workflowStageID,
+		&sdlcID,
+		&sdlcStageID,
 		&ticket.Stage,
 		&ticket.State,
 		&storedStatus,
@@ -950,11 +950,11 @@ func scanTicket(s scanner) (Ticket, error) {
 	if cloneOf.Valid {
 		ticket.CloneOf = &cloneOf.String
 	}
-	if workflowID.Valid {
-		ticket.WorkflowID = &workflowID.Int64
+	if sdlcID.Valid {
+		ticket.SdlcID = &sdlcID.Int64
 	}
-	if workflowStageID.Valid {
-		ticket.WorkflowStageID = &workflowStageID.Int64
+	if sdlcStageID.Valid {
+		ticket.SdlcStageID = &sdlcStageID.Int64
 	}
 	ticket.Status = RenderLifecycleStatus(ticket.Stage, ticket.State)
 	ticket.Ready = ready == 1
@@ -1060,12 +1060,12 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 		return ticket.ParentID, nil
 	}
 
-	// Find minimum stage among children by workflow sort_order
+	// Find minimum stage among children by sdlc sort_order
 	nextStage := children[0].Stage
-	nextWorkflowStageID := children[0].WorkflowStageID
+	nextSdlcStageID := children[0].SdlcStageID
 	minOrder := -1
-	if children[0].WorkflowStageID != nil {
-		if o, err := GetWorkflowStageOrder(ctx, db, *children[0].WorkflowStageID); err == nil {
+	if children[0].SdlcStageID != nil {
+		if o, err := GetSdlcStageOrder(ctx, db, *children[0].SdlcStageID); err == nil {
 			minOrder = o
 		}
 	}
@@ -1083,11 +1083,11 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 		if childState == StateFail {
 			anyFail = true
 		}
-		if child.WorkflowStageID != nil {
-			if o, err := GetWorkflowStageOrder(ctx, db, *child.WorkflowStageID); err == nil && (minOrder < 0 || o < minOrder) {
+		if child.SdlcStageID != nil {
+			if o, err := GetSdlcStageOrder(ctx, db, *child.SdlcStageID); err == nil && (minOrder < 0 || o < minOrder) {
 				minOrder = o
 				nextStage = child.Stage
-				nextWorkflowStageID = child.WorkflowStageID
+				nextSdlcStageID = child.SdlcStageID
 			}
 		}
 	}
@@ -1108,9 +1108,9 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 
 	if _, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET workflow_stage_id = ?, stage = ?, state = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+		SET sdlc_stage_id = ?, stage = ?, state = ?, status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, nullableInt64(nextWorkflowStageID), nextStage, nextState, RenderLifecycleStatus(nextStage, nextState), id); err != nil {
+	`, nullableInt64(nextSdlcStageID), nextStage, nextState, RenderLifecycleStatus(nextStage, nextState), id); err != nil {
 		return nil, err
 	}
 
@@ -1129,7 +1129,7 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 
 func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([]Ticket, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE parent_id = ?
 		ORDER BY created_at, ticket_id
@@ -1152,7 +1152,7 @@ func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([
 
 func getStoredTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
 	ticket, err := scanTicket(db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE ticket_id = ?
 	`, id))
@@ -1396,7 +1396,7 @@ func ticketClaimable(ctx context.Context, db *sql.DB, ticket Ticket, projectID i
 
 func findAssignedTicketForUser(ctx context.Context, db *sql.DB, projectID int64, username, state string) (Ticket, bool, error) {
 	query := `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, workflow_id, workflow_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), ready, open, archived, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE assignee = ? AND open = 1 AND archived = 0 AND state = ?
 	`
@@ -1425,7 +1425,7 @@ func findClaimCandidate(ctx context.Context, db *sql.DB, projectID int64) (Ticke
 		return Ticket{}, false, errors.New("project is required")
 	}
 	ticket, err := scanTicket(db.QueryRowContext(ctx, `
-		SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.git_repository, t.git_branch, t.workflow_id, t.workflow_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.ready, t.open, t.archived, COALESCE(t.created_by, ''), t.created_at, t.updated_at
+		SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.git_repository, t.git_branch, t.sdlc_id, t.sdlc_stage_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.ready, t.open, t.archived, COALESCE(t.created_by, ''), t.created_at, t.updated_at
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
 		WHERE t.project_id = ? AND p.status = 'open' AND t.open = 1 AND t.archived = 0 AND t.ready = 1 AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
@@ -1648,15 +1648,15 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 type TicketContext struct {
 	Project  *Project            `json:"project,omitempty"`
 	Parents  []Ticket            `json:"parents,omitempty"`
-	Workflow *WorkflowWithStages `json:"workflow,omitempty"`
+	Sdlc *SdlcWithStages `json:"sdlc,omitempty"`
 	Role     *Role               `json:"role,omitempty"`
 }
 
-// ResolveWorkflowID returns the effective workflow ID for a ticket by walking:
-// ticket.WorkflowID → parent chain → project.WorkflowID.
-func ResolveWorkflowID(ctx context.Context, db *sql.DB, ticket Ticket) *int64 {
-	if ticket.WorkflowID != nil {
-		return ticket.WorkflowID
+// ResolveSdlcID returns the effective sdlc ID for a ticket by walking:
+// ticket.SdlcID → parent chain → project.SdlcID.
+func ResolveSdlcID(ctx context.Context, db *sql.DB, ticket Ticket) *int64 {
+	if ticket.SdlcID != nil {
+		return ticket.SdlcID
 	}
 	// Walk parent chain
 	parentID := ticket.ParentID
@@ -1665,31 +1665,31 @@ func ResolveWorkflowID(ctx context.Context, db *sql.DB, ticket Ticket) *int64 {
 		if err != nil {
 			break
 		}
-		if parent.WorkflowID != nil {
-			return parent.WorkflowID
+		if parent.SdlcID != nil {
+			return parent.SdlcID
 		}
 		parentID = parent.ParentID
 	}
 	// Fall back to project
 	if project, err := GetProjectByID(ctx, db, ticket.ProjectID); err == nil {
-		return project.WorkflowID
+		return project.SdlcID
 	}
 	return nil
 }
 
-// EnrichTicketContext gathers the project, parent chain, workflow, and
+// EnrichTicketContext gathers the project, parent chain, sdlc, and
 // current-stage role for a ticket. Missing data is silently skipped.
 func EnrichTicketContext(ctx context.Context, db *sql.DB, ticket Ticket) TicketContext {
 	var result TicketContext
 	if project, err := GetProjectByID(ctx, db, ticket.ProjectID); err == nil {
 		result.Project = &project
 	}
-	if wfID := ResolveWorkflowID(ctx, db, ticket); wfID != nil {
-		if wf, err := GetWorkflow(ctx, db, *wfID); err == nil {
-			result.Workflow = &wf
-			if ticket.WorkflowStageID != nil {
+	if wfID := ResolveSdlcID(ctx, db, ticket); wfID != nil {
+		if wf, err := GetSdlc(ctx, db, *wfID); err == nil {
+			result.Sdlc = &wf
+			if ticket.SdlcStageID != nil {
 				for _, stage := range wf.Stages {
-					if stage.ID == *ticket.WorkflowStageID && stage.RoleID != nil {
+					if stage.ID == *ticket.SdlcStageID && stage.RoleID != nil {
 						if role, err := GetRoleByID(ctx, db, *stage.RoleID); err == nil {
 							result.Role = &role
 						}
@@ -1705,12 +1705,12 @@ func EnrichTicketContext(ctx context.Context, db *sql.DB, ticket Ticket) TicketC
 	return result
 }
 
-// SetTicketWorkflow sets an explicit workflow on a ticket, resetting the
-// workflow stage to the first stage of the new workflow.
-func SetTicketWorkflow(ctx context.Context, db *sql.DB, ticketID string, workflowID int64) (Ticket, error) {
-	wf, err := GetWorkflow(ctx, db, workflowID)
+// SetTicketSdlc sets an explicit sdlc on a ticket, resetting the
+// sdlc stage to the first stage of the new sdlc.
+func SetTicketSdlc(ctx context.Context, db *sql.DB, ticketID string, sdlcID int64) (Ticket, error) {
+	wf, err := GetSdlc(ctx, db, sdlcID)
 	if err != nil {
-		return Ticket{}, fmt.Errorf("workflow %d not found", workflowID)
+		return Ticket{}, fmt.Errorf("sdlc %d not found", sdlcID)
 	}
 	var wsID *int64
 	stage := StageDesign
@@ -1720,37 +1720,37 @@ func SetTicketWorkflow(ctx context.Context, db *sql.DB, ticketID string, workflo
 	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE tickets
-		SET workflow_id = ?, workflow_stage_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
+		SET sdlc_id = ?, sdlc_stage_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, workflowID, wsID, stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
+	`, sdlcID, wsID, stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
 	if err != nil {
 		return Ticket{}, err
 	}
 	return GetTicket(ctx, db, ticketID)
 }
 
-// UnsetTicketWorkflow clears the explicit workflow on a ticket, falling back
-// to the inherited workflow and resetting the stage accordingly.
-func UnsetTicketWorkflow(ctx context.Context, db *sql.DB, ticketID string) (Ticket, error) {
+// UnsetTicketSdlc clears the explicit sdlc on a ticket, falling back
+// to the inherited sdlc and resetting the stage accordingly.
+func UnsetTicketSdlc(ctx context.Context, db *sql.DB, ticketID string) (Ticket, error) {
 	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
 		return Ticket{}, err
 	}
-	// Clear the ticket's own workflow_id
-	ticket.WorkflowID = nil
-	// Resolve inherited workflow
-	wfID := ResolveWorkflowID(ctx, db, ticket)
+	// Clear the ticket's own sdlc_id
+	ticket.SdlcID = nil
+	// Resolve inherited sdlc
+	wfID := ResolveSdlcID(ctx, db, ticket)
 	var wsID *int64
 	stage := StageDesign
 	if wfID != nil {
-		if wf, err := GetWorkflow(ctx, db, *wfID); err == nil && len(wf.Stages) > 0 {
+		if wf, err := GetSdlc(ctx, db, *wfID); err == nil && len(wf.Stages) > 0 {
 			wsID = &wf.Stages[0].ID
 			stage = wf.Stages[0].StageName
 		}
 	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE tickets
-		SET workflow_id = NULL, workflow_stage_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
+		SET sdlc_id = NULL, sdlc_stage_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
 	`, wsID, stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
 	if err != nil {

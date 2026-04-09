@@ -610,7 +610,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 
 	fmt.Println()
 
-	// Check that workflows and roles are populated.
+	// Check that sdlcs and roles are populated.
 	cfg, cfgErr := config.Load()
 	if cfgErr == nil {
 		if err := runInitCheckDefaults(reader, cfg); err != nil {
@@ -712,7 +712,7 @@ func runInitDB(args []string) error {
 		}
 	}
 
-	// Prompt to populate missing workflows and roles.
+	// Prompt to populate missing sdlcs and roles.
 	reader := bufio.NewReader(os.Stdin)
 	if err := runInitCheckDefaults(reader, cfg); err != nil {
 		fmt.Printf("warning: could not check defaults: %v\n", err)
@@ -720,7 +720,7 @@ func runInitDB(args []string) error {
 	return nil
 }
 
-// runInitCheckDefaults checks whether the current project has a workflow with
+// runInitCheckDefaults checks whether the current project has a sdlc with
 // stages, and whether any roles exist. If not, it prompts the user to create
 // sensible defaults.
 func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
@@ -729,55 +729,55 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
 		return err
 	}
 
-	// ── Project workflow ──────────────────────────────────────────────────────
+	// ── Project sdlc ──────────────────────────────────────────────────────
 	project, err := svc.GetProject(cfg.ProjectID)
 	if err != nil {
 		return err
 	}
 
 	var wfID int64
-	if project.WorkflowID == nil {
-		// No workflow assigned to the project.
+	if project.SdlcID == nil {
+		// No sdlc assigned to the project.
 		fmt.Println()
-		if promptYN(reader, "project has no workflow — create and assign a default workflow (design→develop→test→done)?", true) {
-			wf, wfErr := svc.CreateWorkflow(libticket.WorkflowRequest{
+		if promptYN(reader, "project has no sdlc — create and assign a default sdlc (design→develop→test→done)?", true) {
+			wf, wfErr := svc.CreateSdlc(libticket.SdlcRequest{
 				Name:        "default",
 				Description: "Standard engineering lifecycle",
 			})
 			if wfErr != nil {
-				fmt.Printf("  warning: could not create workflow: %v\n", wfErr)
+				fmt.Printf("  warning: could not create sdlc: %v\n", wfErr)
 			} else {
 				wfID = wf.ID
-				if err := addDefaultWorkflowStages(svc, wfID); err != nil {
+				if err := addDefaultSdlcStages(svc, wfID); err != nil {
 					fmt.Printf("  warning: could not add stages: %v\n", err)
 				}
-				fmt.Printf("  created workflow %q (id %d) with stages: design, develop, test, done\n", wf.Name, wf.ID)
+				fmt.Printf("  created sdlc %q (id %d) with stages: design, develop, test, done\n", wf.Name, wf.ID)
 				projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
 				if parseErr != nil {
 					fmt.Printf("  warning: could not parse project id: %v\n", parseErr)
-				} else if _, pErr := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{WorkflowID: &wfID}); pErr != nil {
-					fmt.Printf("  warning: could not assign workflow: %v\n", pErr)
+				} else if _, pErr := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{SdlcID: &wfID}); pErr != nil {
+					fmt.Printf("  warning: could not assign sdlc: %v\n", pErr)
 				} else {
-					fmt.Printf("  workflow assigned to project %s\n", cfg.ProjectID)
+					fmt.Printf("  sdlc assigned to project %s\n", cfg.ProjectID)
 				}
 			}
 		}
 	} else {
-		wfID = *project.WorkflowID
+		wfID = *project.SdlcID
 
-		// ── Workflow stages ───────────────────────────────────────────────────
-		wf, wfErr := svc.GetWorkflow(wfID)
+		// ── Sdlc stages ───────────────────────────────────────────────────
+		wf, wfErr := svc.GetSdlc(wfID)
 		if wfErr == nil && len(wf.Stages) == 0 {
 			fmt.Println()
-			if promptYN(reader, fmt.Sprintf("workflow %q has no stages — add default stages (design→develop→test→done)?", wf.Name), true) {
-				if err := addDefaultWorkflowStages(svc, wfID); err != nil {
+			if promptYN(reader, fmt.Sprintf("sdlc %q has no stages — add default stages (design→develop→test→done)?", wf.Name), true) {
+				if err := addDefaultSdlcStages(svc, wfID); err != nil {
 					fmt.Printf("  warning: could not add stages: %v\n", err)
 				} else {
 					fmt.Println("  added stages: design, develop, test, done")
 				}
 			}
 		} else if wfErr == nil {
-			fmt.Printf("workflow   : %q (%d stages)\n", wf.Name, len(wf.Stages))
+			fmt.Printf("sdlc   : %q (%d stages)\n", wf.Name, len(wf.Stages))
 		}
 	}
 
@@ -809,8 +809,8 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
 	return nil
 }
 
-// addDefaultWorkflowStages adds the standard engineering lifecycle stages to a workflow.
-func addDefaultWorkflowStages(svc libticket.Service, workflowID int64) error {
+// addDefaultSdlcStages adds the standard engineering lifecycle stages to a sdlc.
+func addDefaultSdlcStages(svc libticket.Service, sdlcID int64) error {
 	stages := []struct {
 		name string
 		desc string
@@ -821,7 +821,7 @@ func addDefaultWorkflowStages(svc libticket.Service, workflowID int64) error {
 		{"done", "Complete and shipped"},
 	}
 	for i, s := range stages {
-		if _, err := svc.AddWorkflowStage(workflowID, libticket.WorkflowStageRequest{
+		if _, err := svc.AddSdlcStage(sdlcID, libticket.SdlcStageRequest{
 			StageName:   s.name,
 			Description: s.desc,
 			SortOrder:   i,
@@ -929,12 +929,12 @@ func seedExampleData(db *sql.DB) error {
 		{
 			prefix:      "CRM",
 			title:       "Customer Relationship Portal",
-			description: "Sample CRM modernization project with customer workflows.",
+			description: "Sample CRM modernization project with customer sdlcs.",
 			stories: []seedStory{
 				{
 					title:       "Customer onboarding lifecycle",
 					description: "As operations, we need guided onboarding states and notifications.",
-					epicTitle:   "Onboarding workflow foundation",
+					epicTitle:   "Onboarding sdlc foundation",
 					taskTitle:   "Implement onboarding timeline UI",
 					bugTitle:    "Fix duplicate welcome email trigger",
 					choreTitle:  "Refactor onboarding API response contract",

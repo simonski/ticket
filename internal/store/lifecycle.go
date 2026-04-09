@@ -85,17 +85,17 @@ func ParseLifecycleStatus(raw string) (string, string, error) {
 	return "", "", fmt.Errorf("invalid status %q", raw)
 }
 
-// getNextWorkflowStage returns the next workflow stage after the given stage ID.
+// getNextSdlcStage returns the next sdlc stage after the given stage ID.
 // Returns (nil, "", nil) if the given stage is the final stage.
-func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64) (*int64, string, error) {
-	var workflowID int64
+func getNextSdlcStage(ctx context.Context, db *sql.DB, currentStageID int64) (*int64, string, error) {
+	var sdlcID int64
 	var currentOrder int
-	if err := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT sdlc_id, sort_order FROM sdlc_stages WHERE sdlc_stage_id = ?`, currentStageID).Scan(&sdlcID, &currentOrder); err != nil {
 		return nil, "", err
 	}
 	var nextID int64
 	var nextName string
-	err := db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextID, &nextName)
+	err := db.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, sdlcID, currentOrder).Scan(&nextID, &nextName)
 	if err == sql.ErrNoRows {
 		return nil, "", nil // final stage
 	}
@@ -105,9 +105,9 @@ func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64)
 	return &nextID, nextName, nil
 }
 
-// GetWorkflowStageOrder returns the sort_order for a workflow stage by ID.
-func GetWorkflowStageOrder(ctx context.Context, db *sql.DB, stageID int64) (int, error) {
+// GetSdlcStageOrder returns the sort_order for a sdlc stage by ID.
+func GetSdlcStageOrder(ctx context.Context, db *sql.DB, stageID int64) (int, error) {
 	var order int
-	err := db.QueryRowContext(ctx, `SELECT sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, stageID).Scan(&order)
+	err := db.QueryRowContext(ctx, `SELECT sort_order FROM sdlc_stages WHERE sdlc_stage_id = ?`, stageID).Scan(&order)
 	return order, err
 }

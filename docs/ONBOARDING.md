@@ -11,7 +11,7 @@ fully productive in under 30 minutes.
 2. [Prerequisites](#prerequisites)
 3. [Clone and setup](#clone-and-setup)
 4. [Daily development loop](#daily-development-loop)
-5. [Ticket workflow](#ticket-workflow)
+5. [Ticket sdlc](#ticket-sdlc)
 6. [Running tests](#running-tests)
 7. [Common pitfalls](#common-pitfalls)
 8. [Getting help](#getting-help)
@@ -102,7 +102,7 @@ make test
 
 ---
 
-## Ticket workflow
+## Ticket sdlc
 
 The project tracks its own work using the `tk` CLI tool (an alias for the
 `ticket` binary):
@@ -127,7 +127,7 @@ tk bug -title "Fix login redirect loop"
 tk get TK-XXX
 ```
 
-See `cmd/ticket/TICKETS.md` for the complete workflow reference including the
+See `cmd/ticket/TICKETS.md` for the complete sdlc reference including the
 lifecycle (design → develop → test → done) and stage/state combinations.
 
 ---

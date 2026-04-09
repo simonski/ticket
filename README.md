@@ -108,7 +108,7 @@ tk <noun> <verb> [flags]
 | `story` | `ls`, `new`, `get`, `update`, `rm` |
 | `decision` | `ls`, `new` |
 | `role` | `ls`, `new`, `get`, `update`, `rm` |
-| `workflow` | `ls`, `new`, `get`, `rm`, `set`, `unset` |
+| `sdlc` | `ls`, `new`, `get`, `rm`, `set`, `unset` |
 | `team` | `ls`, `new`, `update`, `rm` |
 | `agent` | `ls`, `new`, `update`, `rm`, `run` |
 | `user` | `ls`, `new`, `rm`, `enable`, `disable` |
@@ -140,7 +140,7 @@ tk -g
 ```
 
 Launches a full-screen terminal UI. Navigate with Tab / arrow keys.  
-Tabs: **Home · Projects · Ideas · Tickets · Workflows · Config**
+Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ### Web server
 
@@ -256,7 +256,7 @@ graph LR
 erDiagram
     Project ||--o{ Ticket : contains
     Project ||--o{ ProjectMember : has
-    Project }o--o| Workflow : uses
+    Project }o--o| SDLC : uses
     Ticket ||--o{ Ticket : "parent-child"
     Ticket ||--o{ Dependency : blocks
     Ticket ||--o{ Label : tagged
@@ -265,7 +265,7 @@ erDiagram
     Ticket ||--o{ HistoryEvent : logs
     Team ||--o{ User : members
     Team ||--o{ Agent : agents
-    Workflow ||--o{ WorkflowStage : stages
+    SDLC ||--o{ SdlcStage : stages
     User ||--o{ Ticket : assigned
     Agent ||--o{ Ticket : works
 ```
@@ -346,9 +346,9 @@ graph LR
     ADMIN --> USERS["Manage users<br/>create, enable, disable"]
     ADMIN --> AGENTS["Manage agents<br/>create, configure"]
     ADMIN --> TEAMS["Manage teams<br/>create, add members"]
-    ADMIN --> PROJECTS["Manage projects<br/>create, set workflow"]
+    ADMIN --> PROJECTS["Manage projects<br/>create, set sdlc"]
     ADMIN --> ROLES["Manage roles"]
-    ADMIN --> WF["Define workflows<br/>stages, ordering"]
+    ADMIN --> WF["Define sdlcs<br/>stages, ordering"]
     ADMIN --> SYS["System config<br/>registration, features"]
 ```
 

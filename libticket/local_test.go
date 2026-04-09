@@ -317,29 +317,29 @@ func TestLocalServiceNotReadyTicket(t *testing.T) {
 	}
 }
 
-func TestLocalServiceSetUnsetTicketWorkflow(t *testing.T) {
+func TestLocalServiceSetUnsetTicketSdlc(t *testing.T) {
 	svc := newLocalSvc(t)
-	wf, err := svc.CreateWorkflow(libticket.WorkflowRequest{Name: "Test WF"})
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Test WF"})
 	if err != nil {
-		t.Fatalf("CreateWorkflow() error = %v", err)
+		t.Fatalf("CreateSdlc() error = %v", err)
 	}
 	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "WF test"})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	updated, err := svc.SetTicketWorkflow(ticket.ID, wf.ID)
+	updated, err := svc.SetTicketSdlc(ticket.ID, wf.ID)
 	if err != nil {
-		t.Fatalf("SetTicketWorkflow() error = %v", err)
+		t.Fatalf("SetTicketSdlc() error = %v", err)
 	}
-	if updated.WorkflowID == nil || *updated.WorkflowID != wf.ID {
-		t.Fatalf("SetTicketWorkflow() workflow_id = %v, want %d", updated.WorkflowID, wf.ID)
+	if updated.SdlcID == nil || *updated.SdlcID != wf.ID {
+		t.Fatalf("SetTicketSdlc() sdlc_id = %v, want %d", updated.SdlcID, wf.ID)
 	}
-	unset, err := svc.UnsetTicketWorkflow(ticket.ID)
+	unset, err := svc.UnsetTicketSdlc(ticket.ID)
 	if err != nil {
-		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
+		t.Fatalf("UnsetTicketSdlc() error = %v", err)
 	}
-	if unset.WorkflowID != nil {
-		t.Fatalf("UnsetTicketWorkflow() workflow_id = %v, want nil", unset.WorkflowID)
+	if unset.SdlcID != nil {
+		t.Fatalf("UnsetTicketSdlc() sdlc_id = %v, want nil", unset.SdlcID)
 	}
 }
 

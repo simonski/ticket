@@ -34,13 +34,13 @@ const (
 	modeProjects // new: inline projects panel (replaces the modal modeProjectPicker)
 	modeProjectEdit
 	modeIdeas     // new: list of top-level non-epic tickets (m.toplevel)
-	modeWorkflows // workflow list with expandable stages
+	modeSdlcs // sdlc list with expandable stages
 	modeBoard     // kanban board: tickets by stage columns
 )
 
-// tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Workflows > Config.
-var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeBoard, modeWorkflows, modeSettings}
-var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Board", "Workflows", "Config"}
+// tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Sdlcs > Config.
+var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeBoard, modeSdlcs, modeSettings}
+var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Board", "Sdlcs", "Config"}
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ type ticketCreatedMsg store.Ticket
 type updateAvailableMsg string
 type errMsg struct{ err error }
 type projectsLoadedMsg []store.Project
-type workflowsLoadedMsg []store.WorkflowWithStages
+type sdlcLoadedMsg []store.SdlcWithStages
 type projectSwitchedMsg struct {
 	project store.Project
 	tickets treeLoadedMsg
@@ -394,13 +394,13 @@ type Model struct {
 	ideasCursor int
 	ideasOffset int
 
-	// workflows panel
-	workflows       []store.WorkflowWithStages
+	// sdlcs panel
+	sdlcs       []store.SdlcWithStages
 	wfCursor        int
 	wfOffset        int
-	wfExpanded      map[int64]bool // expanded workflow IDs
+	wfExpanded      map[int64]bool // expanded sdlc IDs
 	wfStageCursor   int            // cursor within expanded stages
-	wfInStages      bool           // true when navigating stages within an expanded workflow
+	wfInStages      bool           // true when navigating stages within an expanded sdlc
 	wfAddingStage   bool
 	wfStageInput    textinput.Model
 
@@ -408,7 +408,7 @@ type Model struct {
 	boardCol      int            // active column index
 	boardRow      int            // cursor row within the active column
 	boardOffset   int            // scroll offset within the active column
-	boardCols     []boardColumn  // columns built from workflow stages
+	boardCols     []boardColumn  // columns built from sdlc stages
 	boardInHeader bool           // true when focus is on the stage header row
 	boardInTabBar bool           // true when focus is on the panel tab bar
 
@@ -460,7 +460,7 @@ func newModel(svc libticket.Service, cfg config.Config, th Theme) Model {
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadTickets(m.svc, m.cfg),
-		loadWorkflows(m.svc),
+		loadSdlcs(m.svc),
 		checkUpdate(m.svc),
 		tickCmd(),
 	)
@@ -542,8 +542,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case workflowsLoadedMsg:
-		m.workflows = []store.WorkflowWithStages(msg)
+	case sdlcLoadedMsg:
+		m.sdlcs = []store.SdlcWithStages(msg)
 		m.buildBoardColumns()
 
 	case projectSavedMsg:
@@ -689,8 +689,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleKeyProjectEdit(msg)
 	case modeIdeas:
 		return m.handleKeyIdeas(key)
-	case modeWorkflows:
-		return m.handleKeyWorkflows(msg)
+	case modeSdlcs:
+		return m.handleKeySdlcs(msg)
 	case modeBoard:
 		return m.handleKeyBoard(key)
 	}
@@ -1204,12 +1204,12 @@ func (m Model) handleKeyIdeas(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// ─── workflow key handler ─────────────────────────────────────────────────────
+// ─── sdlc key handler ─────────────────────────────────────────────────────
 
-// wfRowCount returns the total visible rows (workflows + expanded stages).
+// wfRowCount returns the total visible rows (sdlcs + expanded stages).
 func (m Model) wfRowCount() int {
-	n := len(m.workflows)
-	for _, wf := range m.workflows {
+	n := len(m.sdlcs)
+	for _, wf := range m.sdlcs {
 		if m.wfExpanded[wf.ID] {
 			n += len(wf.Stages)
 		}
@@ -1217,11 +1217,11 @@ func (m Model) wfRowCount() int {
 	return n
 }
 
-// wfRowAt returns the workflow index and stage index at the given flat row.
-// stageIdx == -1 means the row is a workflow header.
+// wfRowAt returns the sdlc index and stage index at the given flat row.
+// stageIdx == -1 means the row is a sdlc header.
 func (m Model) wfRowAt(row int) (wfIdx int, stageIdx int) {
 	cur := 0
-	for i, wf := range m.workflows {
+	for i, wf := range m.sdlcs {
 		if cur == row {
 			return i, -1
 		}
@@ -1238,7 +1238,7 @@ func (m Model) wfRowAt(row int) (wfIdx int, stageIdx int) {
 	return 0, -1
 }
 
-func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
 	// Stage name input mode
@@ -1250,20 +1250,20 @@ func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			name := strings.TrimSpace(m.wfStageInput.Value())
 			if name != "" {
 				wfIdx, _ := m.wfRowAt(m.wfCursor)
-				if wfIdx < len(m.workflows) {
-					wf := m.workflows[wfIdx]
+				if wfIdx < len(m.sdlcs) {
+					wf := m.sdlcs[wfIdx]
 					svc := m.svc
 					order := len(wf.Stages)
 					m.wfAddingStage = false
 					return m, func() tea.Msg {
-						_, err := svc.AddWorkflowStage(wf.ID, libticket.WorkflowStageRequest{
+						_, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
 							StageName: name,
 							SortOrder: order,
 						})
 						if err != nil {
 							return errMsg{err}
 						}
-						return loadWorkflows(svc)()
+						return loadSdlcs(svc)()
 					}
 				}
 			}
@@ -1289,17 +1289,17 @@ func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.wfCursor++
 		}
 	case "enter", " ":
-		// Toggle expand on workflow headers
+		// Toggle expand on sdlc headers
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx == -1 && wfIdx < len(m.workflows) {
-			wfID := m.workflows[wfIdx].ID
+		if stageIdx == -1 && wfIdx < len(m.sdlcs) {
+			wfID := m.sdlcs[wfIdx].ID
 			m.wfExpanded[wfID] = !m.wfExpanded[wfID]
 		}
 	case "n":
-		// Add a stage to the workflow under cursor
+		// Add a stage to the sdlc under cursor
 		wfIdx, _ := m.wfRowAt(m.wfCursor)
-		if wfIdx < len(m.workflows) {
-			m.wfExpanded[m.workflows[wfIdx].ID] = true
+		if wfIdx < len(m.sdlcs) {
+			m.wfExpanded[m.sdlcs[wfIdx].ID] = true
 			m.wfAddingStage = true
 			ti := textinput.New()
 			ti.Placeholder = "stage name..."
@@ -1310,21 +1310,21 @@ func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		// Delete stage under cursor
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx >= 0 && wfIdx < len(m.workflows) {
-			stage := m.workflows[wfIdx].Stages[stageIdx]
+		if stageIdx >= 0 && wfIdx < len(m.sdlcs) {
+			stage := m.sdlcs[wfIdx].Stages[stageIdx]
 			svc := m.svc
 			return m, func() tea.Msg {
-				if err := svc.RemoveWorkflowStage(stage.ID); err != nil {
+				if err := svc.RemoveSdlcStage(stage.ID); err != nil {
 					return errMsg{err}
 				}
-				return loadWorkflows(svc)()
+				return loadSdlcs(svc)()
 			}
 		}
 	case "shift+up", "K":
 		// Move stage up
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx > 0 && wfIdx < len(m.workflows) {
-			wf := m.workflows[wfIdx]
+		if stageIdx > 0 && wfIdx < len(m.sdlcs) {
+			wf := m.sdlcs[wfIdx]
 			ids := make([]int64, len(wf.Stages))
 			for i, s := range wf.Stages {
 				ids[i] = s.ID
@@ -1334,17 +1334,17 @@ func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			wfID := wf.ID
 			m.wfCursor--
 			return m, func() tea.Msg {
-				if err := svc.ReorderWorkflowStages(wfID, ids); err != nil {
+				if err := svc.ReorderSdlcStages(wfID, ids); err != nil {
 					return errMsg{err}
 				}
-				return loadWorkflows(svc)()
+				return loadSdlcs(svc)()
 			}
 		}
 	case "shift+down", "J":
 		// Move stage down
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx >= 0 && wfIdx < len(m.workflows) {
-			wf := m.workflows[wfIdx]
+		if stageIdx >= 0 && wfIdx < len(m.sdlcs) {
+			wf := m.sdlcs[wfIdx]
 			if stageIdx < len(wf.Stages)-1 {
 				ids := make([]int64, len(wf.Stages))
 				for i, s := range wf.Stages {
@@ -1355,10 +1355,10 @@ func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				wfID := wf.ID
 				m.wfCursor++
 				return m, func() tea.Msg {
-					if err := svc.ReorderWorkflowStages(wfID, ids); err != nil {
+					if err := svc.ReorderSdlcStages(wfID, ids); err != nil {
 						return errMsg{err}
 					}
-					return loadWorkflows(svc)()
+					return loadSdlcs(svc)()
 				}
 			}
 		}
@@ -1472,7 +1472,7 @@ func (m Model) goBack() (tea.Model, tea.Cmd) {
 		m.mode = modeList
 	case modeBoard:
 		m.mode = modeSummary
-	case modeProjects, modeIdeas, modeWorkflows:
+	case modeProjects, modeIdeas, modeSdlcs:
 		m.mode = modeSummary
 	case modeList:
 		m.mode = modeSummary
@@ -1509,21 +1509,21 @@ func loadProjects(svc libticket.Service) tea.Cmd {
 	}
 }
 
-func loadWorkflows(svc libticket.Service) tea.Cmd {
+func loadSdlcs(svc libticket.Service) tea.Cmd {
 	return func() tea.Msg {
-		wfs, err := svc.ListWorkflows()
+		wfs, err := svc.ListSdlcs()
 		if err != nil {
 			return errMsg{err}
 		}
-		var result []store.WorkflowWithStages
+		var result []store.SdlcWithStages
 		for _, wf := range wfs {
-			ws, err := svc.GetWorkflow(wf.ID)
+			ws, err := svc.GetSdlc(wf.ID)
 			if err != nil {
 				continue
 			}
 			result = append(result, ws)
 		}
-		return workflowsLoadedMsg(result)
+		return sdlcLoadedMsg(result)
 	}
 }
 
@@ -1562,8 +1562,8 @@ func (m Model) View() string {
 		content = m.viewProjectEdit()
 	case modeIdeas:
 		content = m.viewIdeas()
-	case modeWorkflows:
-		content = m.viewWorkflows()
+	case modeSdlcs:
+		content = m.viewSdlcs()
 	case modeBoard:
 		content = m.viewBoard()
 	}
@@ -1711,7 +1711,7 @@ func (m Model) statusBar(w int) string {
 			modeProjects:      "↑↓ nav · space switch · enter/e edit · esc back",
 			modeProjectEdit:   "tab next · enter save · ctrl+s save · esc cancel",
 			modeIdeas:         "↑↓/wasd · enter · e edit · n new · esc back",
-			modeWorkflows:     "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
+			modeSdlcs:     "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
 		}
 		hint := hints[m.mode]
 		text = " " + moon + "  " + hint
@@ -2521,9 +2521,9 @@ func (m Model) viewIdeas() []string {
 	return lines
 }
 
-// ─── workflows panel view ─────────────────────────────────────────────────────
+// ─── sdlcs panel view ─────────────────────────────────────────────────────
 
-func (m Model) viewWorkflows() []string {
+func (m Model) viewSdlcs() []string {
 	th := m.theme
 	inner := m.width - 2
 
@@ -2534,14 +2534,14 @@ func (m Model) viewWorkflows() []string {
 
 	var lines []string
 	lines = append(lines, m.tabBar(inner))
-	lines = append(lines, headerStyle.Render(padRight("  workflows", inner)))
+	lines = append(lines, headerStyle.Render(padRight("  sdlcs", inner)))
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 
-	if len(m.workflows) == 0 {
-		lines = append(lines, mutedStyle.Render(padRight("  (no workflows)", inner)))
+	if len(m.sdlcs) == 0 {
+		lines = append(lines, mutedStyle.Render(padRight("  (no sdlcs)", inner)))
 	} else {
 		row := 0
-		for _, wf := range m.workflows {
+		for _, wf := range m.sdlcs {
 			expanded := m.wfExpanded[wf.ID]
 			arrow := "▸"
 			if expanded {
@@ -2600,9 +2600,9 @@ type boardColumn struct {
 // buildBoardColumns groups open tickets by stage into columns.
 func (m *Model) buildBoardColumns() {
 	stages := []string{store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone}
-	if len(m.workflows) > 0 && len(m.workflows[0].Stages) > 0 {
+	if len(m.sdlcs) > 0 && len(m.sdlcs[0].Stages) > 0 {
 		stages = stages[:0]
-		for _, ws := range m.workflows[0].Stages {
+		for _, ws := range m.sdlcs[0].Stages {
 			stages = append(stages, ws.StageName)
 		}
 	}

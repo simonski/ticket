@@ -153,7 +153,7 @@ var helpIndex = map[string]commandHelp{
 			"-ac <acceptance-criteria>: set acceptance criteria",
 			"-priority <n>: set numeric priority",
 			"-order <n>: set numeric sort order",
-			"-state <state>: valid values [idle, active, success, fail]; setting success auto-advances to next workflow stage",
+			"-state <state>: valid values [idle, active, success, fail]; setting success auto-advances to next sdlc stage",
 			"-status <stage/state>: set state from rendered status format",
 			"-parent_id <id>: set parent ticket id",
 			"-estimate_effort <n>: set numeric estimate effort",
@@ -332,10 +332,10 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Admin command for managing roles.", "Run `tk role help` for the full verb list."},
 		example: "tk role ls",
 	},
-	"workflow": {
-		usage:   "tk workflow <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|export|import> [flags]",
-		details: []string{"Admin command for managing workflows and their stages.", "Run `tk workflow help` for the full verb list."},
-		example: "tk workflow ls",
+	"sdlc": {
+		usage:   "tk sdlc <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|export|import> [flags]",
+		details: []string{"Admin command for managing sdlcs and their stages.", "Run `tk sdlc help` for the full verb list."},
+		example: "tk sdlc ls",
 	},
 	"decision": {
 		usage:   "tk decision <new|ls> [flags]",
@@ -349,7 +349,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"doctor": {
 		usage:   "tk doctor",
-		details: []string{"Interactive health review that checks project configuration, orphan tickets, and workflow consistency."},
+		details: []string{"Interactive health review that checks project configuration, orphan tickets, and sdlc consistency."},
 		example: "tk doctor",
 	},
 	"whoami": {
@@ -457,7 +457,7 @@ func renderRootUsage() string {
 	printCommandUsageRows(&b, commandRows, 10)
 	adminRows := [][2]string{
 		{"role", "Manage roles (ls, new, get, update, rm)"},
-		{"workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
+		{"sdlc", "Manage sdlcs (ls, new, get, rm, set, unset)"},
 		{"team", "Manage teams (ls, new, update, rm)"},
 		{"agent", "Manage agents (ls, new, update, rm, run)"},
 		{"user", "Manage users (ls, new, rm, enable, disable)"},
@@ -552,7 +552,7 @@ Commands:
   use      [<id>]                     Switch active project (or show current)
   rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
   rename-prefix <new-prefix>          Rename prefix and re-key all tickets
-  workflow <id>                       Set workflow on current project (use 0 to clear)
+  sdlc <id>                       Set sdlc on current project (use 0 to clear)
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
@@ -568,20 +568,20 @@ Commands:
   update   -id <id> -title <t> [-motivation m] [-goals g] Update a role
   rm       -id <id>                              Delete a role`
 
-const workflowUsage = `Usage: tk workflow <command> [flags]
+const sdlcUsage = `Usage: tk sdlc <command> [flags]
 
 Commands:
-  ls                                  List all workflows
-  new      -name <n> [-d desc]        Create a workflow
-  get      -id <id>                   Show workflow details
-  rm       -id <id>                   Delete a workflow
-  set      -ticket <id> -workflow <id> Set workflow on a ticket (overrides inherited)
-  unset    -ticket <id>               Clear workflow from a ticket (inherit from parent/project)
+  ls                                  List all sdlcs
+  new      -name <n> [-d desc]        Create a sdlc
+  get      -id <id>                   Show sdlc details
+  rm       -id <id>                   Delete a sdlc
+  set      -ticket <id> -sdlc <id> Set sdlc on a ticket (overrides inherited)
+  unset    -ticket <id>               Clear sdlc from a ticket (inherit from parent/project)
   add-stage    -id <wf-id> -name <n>  Add a stage
   remove-stage -stage-id <id>         Remove a stage
   reorder-stages -id <wf-id> <ids>    Reorder stages
-  export   -id <id> [-o file]         Export a workflow
-  import   -file <file>               Import a workflow`
+  export   -id <id> [-o file]         Export a sdlc
+  import   -file <file>               Import a sdlc`
 
 const decisionUsage = `Usage: tk decision <command> [flags]
 

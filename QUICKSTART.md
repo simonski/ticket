@@ -60,7 +60,7 @@ Setting state to `success` auto-advances to the next stage.
 
 ---
 
-## Daily workflow
+## Daily sdlc
 
 ```bash
 tk summary                            # daily overview
@@ -86,7 +86,7 @@ tk -g
 ```
 
 Full-screen terminal UI. Navigate with Tab / arrow keys.  
-Tabs: **Home · Projects · Ideas · Tickets · Workflows · Config**
+Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ---
 

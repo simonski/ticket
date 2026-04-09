@@ -27,7 +27,7 @@ Read `internal/store/store.go` schema section. Grepped for `CREATE INDEX`, `FORE
 | No `ON DELETE CASCADE` on any FK — relies on app-level logic | Medium | `store.go` all FK definitions | Add `ON DELETE CASCADE` to child FK constraints (tickets→projects, comments→tickets, etc.) |
 | `tickets.assignee` is TEXT (username), not FK to `users` — not nulled on user delete | Medium | `store.go:223-224`, `auth.go:243-310` | Add `UPDATE tickets SET assignee = '' WHERE assignee = ?` to `DeleteUser()` |
 | No HMAC on `history_events.payload` — audit records can be tampered silently | Medium | `internal/store/store.go:264,277` | Compute HMAC-SHA256 of payload on insert; verify on read |
-| `workflow_stages.role_id` FK has no index | Low | `store.go:367` | `CREATE INDEX idx_workflow_stages_role_id ON workflow_stages(role_id)` |
+| `sdlc_stages.role_id` FK has no index | Low | `store.go:367` | `CREATE INDEX idx_sdlc_stages_role_id ON sdlc_stages(role_id)` |
 
 ## Verdict
 Score drops from 68 to 60. The `messages` and `goals` tables are confirmed zombie — defined in schema, never written to in production code — creating schema bloat and confusion. The `assignee` orphaning-on-delete is a real data integrity gap. DB cascade deletes are entirely absent; the app-level workarounds work but are fragile.
@@ -45,4 +45,4 @@ Score drops from 68 to 60. The `messages` and `goals` tables are confirmed zombi
 | Fix `assignee` orphaning | High | Add `UPDATE tickets SET assignee = '' WHERE assignee = ?` inside `DeleteUser()` transaction |
 | Add HMAC to audit payloads | Medium | Sign `history_events.payload` with HMAC-SHA256 keyed on a server secret |
 | Add `ON DELETE CASCADE` | Medium | At minimum: `comments→tickets`, `ticket_labels→tickets`, `time_entries→tickets` |
-| Add missing FK indexes | Low | `workflow_stages.role_id`, `tickets.clone_of`, `messages.from/to_user_id` |
+| Add missing FK indexes | Low | `sdlc_stages.role_id`, `tickets.clone_of`, `messages.from/to_user_id` |

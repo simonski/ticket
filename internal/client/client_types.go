@@ -27,7 +27,7 @@ type ProjectCreateRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
-	WorkflowID         *int64 `json:"workflow_id,omitempty"`
+	SdlcID         *int64 `json:"sdlc_id,omitempty"`
 }
 
 type ProjectUpdateRequest struct {
@@ -39,7 +39,7 @@ type ProjectUpdateRequest struct {
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	Visibility         string `json:"visibility"`
-	WorkflowID         *int64 `json:"workflow_id,omitempty"`
+	SdlcID         *int64 `json:"sdlc_id,omitempty"`
 }
 
 type ProjectMemberRequest struct {
@@ -63,19 +63,19 @@ type TeamMemberRequest struct {
 	JobTitle string `json:"job_title"`
 }
 
-type WorkflowRequest struct {
+type SdlcRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-type WorkflowStageRequest struct {
+type SdlcStageRequest struct {
 	StageName   string `json:"stage_name"`
 	Description string `json:"description"`
 	RoleID      *int64 `json:"role_id,omitempty"`
 	SortOrder   int    `json:"sort_order"`
 }
 
-type WorkflowReorderRequest struct {
+type SdlcReorderRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 
@@ -148,7 +148,7 @@ type TicketRequestResponse struct {
 	Ticket   *store.Ticket             `json:"ticket,omitempty"`
 	Project  *store.Project            `json:"project,omitempty"`
 	Parents  []store.Ticket            `json:"parents,omitempty"`
-	Workflow *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Sdlc *store.SdlcWithStages `json:"sdlc,omitempty"`
 	Role     *store.Role               `json:"role,omitempty"`
 }
 
@@ -157,7 +157,7 @@ type AgentWorkResponse struct {
 	Project         *store.Project            `json:"project"`
 	Ticket          *store.Ticket             `json:"ticket"`
 	Parents         []store.Ticket            `json:"parents"`
-	Workflow        *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Sdlc        *store.SdlcWithStages `json:"sdlc,omitempty"`
 	Role            *store.Role               `json:"role,omitempty"`
 	Config          map[string]string         `json:"config,omitempty"`
 	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"`

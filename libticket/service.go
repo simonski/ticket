@@ -76,17 +76,17 @@ type TeamService interface {
 	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
 }
 
-// WorkflowService covers workflow templates and stage management.
-type WorkflowService interface {
-	CreateWorkflow(request WorkflowRequest) (store.Workflow, error)
-	ListWorkflows() ([]store.Workflow, error)
-	GetWorkflow(id int64) (store.WorkflowWithStages, error)
-	DeleteWorkflow(id int64) error
-	AddWorkflowStage(workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error)
-	RemoveWorkflowStage(stageID int64) error
-	ReorderWorkflowStages(workflowID int64, stageIDs []int64) error
-	ExportWorkflow(id int64) (store.WorkflowExport, error)
-	ImportWorkflow(export store.WorkflowExport) (store.Workflow, error)
+// SdlcService covers sdlc templates and stage management.
+type SdlcService interface {
+	CreateSdlc(request SdlcRequest) (store.Sdlc, error)
+	ListSdlcs() ([]store.Sdlc, error)
+	GetSdlc(id int64) (store.SdlcWithStages, error)
+	DeleteSdlc(id int64) error
+	AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error)
+	RemoveSdlcStage(stageID int64) error
+	ReorderSdlcStages(sdlcID int64, stageIDs []int64) error
+	ExportSdlc(id int64) (store.SdlcExport, error)
+	ImportSdlc(export store.SdlcExport) (store.Sdlc, error)
 }
 
 // TicketService covers ticket CRUD, lifecycle, labels, time, dependencies, and history.
@@ -111,8 +111,8 @@ type TicketService interface {
 	UnarchiveTicket(id string, message string) (store.Ticket, error)
 	ReadyTicket(id string, message string) (store.Ticket, error)
 	NotReadyTicket(id string, message string) (store.Ticket, error)
-	SetTicketWorkflow(id string, workflowID int64) (store.Ticket, error)
-	UnsetTicketWorkflow(id string) (store.Ticket, error)
+	SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error)
+	UnsetTicketSdlc(id string) (store.Ticket, error)
 	DeleteTicket(id string) error
 	SetTicketParent(id string, parentID string, message string) (store.Ticket, error)
 	UnsetTicketParent(id string, message string) (store.Ticket, error)
@@ -145,6 +145,6 @@ type Service interface {
 	AgentService
 	ProjectService
 	TeamService
-	WorkflowService
+	SdlcService
 	TicketService
 }

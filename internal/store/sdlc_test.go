@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func setupWorkflowTestDB(t *testing.T) *sql.DB {
+func setupSdlcTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "secret"); err != nil {
@@ -21,42 +21,42 @@ func setupWorkflowTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestInitSeedsDefaultWorkflow(t *testing.T) {
-	db := setupWorkflowTestDB(t)
-	workflows, err := ListWorkflows(context.Background(), db)
+func TestInitSeedsDefaultSdlc(t *testing.T) {
+	db := setupSdlcTestDB(t)
+	sdlcs, err := ListSdlcs(context.Background(), db)
 	if err != nil {
-		t.Fatalf("ListWorkflows() error = %v", err)
+		t.Fatalf("ListSdlcs() error = %v", err)
 	}
-	if len(workflows) == 0 {
-		t.Fatal("expected default workflow to be seeded")
+	if len(sdlcs) == 0 {
+		t.Fatal("expected default sdlc to be seeded")
 	}
 	found := false
-	for _, w := range workflows {
+	for _, w := range sdlcs {
 		if w.Name == "default" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("default workflow not found")
+		t.Fatal("default sdlc not found")
 	}
 }
 
-func TestDefaultWorkflowHasFourStages(t *testing.T) {
-	db := setupWorkflowTestDB(t)
-	workflows, _ := ListWorkflows(context.Background(), db)
+func TestDefaultSdlcHasFourStages(t *testing.T) {
+	db := setupSdlcTestDB(t)
+	sdlcs, _ := ListSdlcs(context.Background(), db)
 	var wfID int64
-	for _, w := range workflows {
+	for _, w := range sdlcs {
 		if w.Name == "default" {
 			wfID = w.ID
 		}
 	}
-	wf, err := GetWorkflow(context.Background(), db, wfID)
+	wf, err := GetSdlc(context.Background(), db, wfID)
 	if err != nil {
-		t.Fatalf("GetWorkflow() error = %v", err)
+		t.Fatalf("GetSdlc() error = %v", err)
 	}
 	if len(wf.Stages) != 4 {
-		t.Fatalf("default workflow stages = %d, want 4", len(wf.Stages))
+		t.Fatalf("default sdlc stages = %d, want 4", len(wf.Stages))
 	}
 	expected := []struct {
 		name string
@@ -81,12 +81,12 @@ func TestDefaultWorkflowHasFourStages(t *testing.T) {
 	}
 }
 
-func TestWorkflowCRUD(t *testing.T) {
-	db := setupWorkflowTestDB(t)
+func TestSdlcCRUD(t *testing.T) {
+	db := setupSdlcTestDB(t)
 
-	wf, err := CreateWorkflow(context.Background(), db, "custom", "A custom workflow")
+	wf, err := CreateSdlc(context.Background(), db, "custom", "A custom sdlc")
 	if err != nil {
-		t.Fatalf("CreateWorkflow() error = %v", err)
+		t.Fatalf("CreateSdlc() error = %v", err)
 	}
 	if wf.Name != "custom" {
 		t.Fatalf("Name = %q, want %q", wf.Name, "custom")
@@ -94,9 +94,9 @@ func TestWorkflowCRUD(t *testing.T) {
 
 	// Add stages
 	role, _ := GetRoleByTitle(context.Background(), db, "BA")
-	s1, err := AddWorkflowStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", &role.ID, 0)
+	s1, err := AddSdlcStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", &role.ID, 0)
 	if err != nil {
-		t.Fatalf("AddWorkflowStage() error = %v", err)
+		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
 	if s1.StageName != "analysis" {
 		t.Fatalf("StageName = %q, want %q", s1.StageName, "analysis")
@@ -105,25 +105,25 @@ func TestWorkflowCRUD(t *testing.T) {
 		t.Fatalf("RoleTitle = %q, want %q", s1.RoleTitle, "BA")
 	}
 
-	s2, err := AddWorkflowStage(context.Background(), db, wf.ID, "build", "", nil, 1)
+	s2, err := AddSdlcStage(context.Background(), db, wf.ID, "build", "", nil, 1)
 	if err != nil {
-		t.Fatalf("AddWorkflowStage(build) error = %v", err)
+		t.Fatalf("AddSdlcStage(build) error = %v", err)
 	}
 
-	// Get workflow with stages
-	got, err := GetWorkflow(context.Background(), db, wf.ID)
+	// Get sdlc with stages
+	got, err := GetSdlc(context.Background(), db, wf.ID)
 	if err != nil {
-		t.Fatalf("GetWorkflow() error = %v", err)
+		t.Fatalf("GetSdlc() error = %v", err)
 	}
 	if len(got.Stages) != 2 {
 		t.Fatalf("stages = %d, want 2", len(got.Stages))
 	}
 
 	// Remove stage
-	if err := RemoveWorkflowStage(context.Background(), db, s1.ID); err != nil {
-		t.Fatalf("RemoveWorkflowStage() error = %v", err)
+	if err := RemoveSdlcStage(context.Background(), db, s1.ID); err != nil {
+		t.Fatalf("RemoveSdlcStage() error = %v", err)
 	}
-	got, _ = GetWorkflow(context.Background(), db, wf.ID)
+	got, _ = GetSdlc(context.Background(), db, wf.ID)
 	if len(got.Stages) != 1 {
 		t.Fatalf("stages after remove = %d, want 1", len(got.Stages))
 	}
@@ -131,28 +131,28 @@ func TestWorkflowCRUD(t *testing.T) {
 		t.Fatalf("remaining stage ID = %d, want %d", got.Stages[0].ID, s2.ID)
 	}
 
-	// Delete workflow
-	if err := DeleteWorkflow(context.Background(), db, wf.ID); err != nil {
-		t.Fatalf("DeleteWorkflow() error = %v", err)
+	// Delete sdlc
+	if err := DeleteSdlc(context.Background(), db, wf.ID); err != nil {
+		t.Fatalf("DeleteSdlc() error = %v", err)
 	}
-	_, err = GetWorkflow(context.Background(), db, wf.ID)
+	_, err = GetSdlc(context.Background(), db, wf.ID)
 	if err == nil {
 		t.Fatal("expected error after delete, got nil")
 	}
 }
 
-func TestReorderWorkflowStages(t *testing.T) {
-	db := setupWorkflowTestDB(t)
-	wf, _ := CreateWorkflow(context.Background(), db, "reorder-test", "")
-	s1, _ := AddWorkflowStage(context.Background(), db, wf.ID, "first", "", nil, 0)
-	s2, _ := AddWorkflowStage(context.Background(), db, wf.ID, "second", "", nil, 1)
-	s3, _ := AddWorkflowStage(context.Background(), db, wf.ID, "third", "", nil, 2)
+func TestReorderSdlcStages(t *testing.T) {
+	db := setupSdlcTestDB(t)
+	wf, _ := CreateSdlc(context.Background(), db, "reorder-test", "")
+	s1, _ := AddSdlcStage(context.Background(), db, wf.ID, "first", "", nil, 0)
+	s2, _ := AddSdlcStage(context.Background(), db, wf.ID, "second", "", nil, 1)
+	s3, _ := AddSdlcStage(context.Background(), db, wf.ID, "third", "", nil, 2)
 
 	// Reverse order
-	if err := ReorderWorkflowStages(context.Background(), db, wf.ID, []int64{s3.ID, s2.ID, s1.ID}); err != nil {
-		t.Fatalf("ReorderWorkflowStages() error = %v", err)
+	if err := ReorderSdlcStages(context.Background(), db, wf.ID, []int64{s3.ID, s2.ID, s1.ID}); err != nil {
+		t.Fatalf("ReorderSdlcStages() error = %v", err)
 	}
-	got, _ := GetWorkflow(context.Background(), db, wf.ID)
+	got, _ := GetSdlc(context.Background(), db, wf.ID)
 	if got.Stages[0].StageName != "third" {
 		t.Fatalf("first stage = %q, want %q", got.Stages[0].StageName, "third")
 	}
@@ -161,21 +161,21 @@ func TestReorderWorkflowStages(t *testing.T) {
 	}
 }
 
-func TestWorkflowExportImportRoundTrip(t *testing.T) {
-	db := setupWorkflowTestDB(t)
+func TestSdlcExportImportRoundTrip(t *testing.T) {
+	db := setupSdlcTestDB(t)
 
-	// Find the default workflow
-	workflows, _ := ListWorkflows(context.Background(), db)
+	// Find the default sdlc
+	sdlcs, _ := ListSdlcs(context.Background(), db)
 	var defaultID int64
-	for _, w := range workflows {
+	for _, w := range sdlcs {
 		if w.Name == "default" {
 			defaultID = w.ID
 		}
 	}
 
-	exported, err := ExportWorkflow(context.Background(), db, defaultID)
+	exported, err := ExportSdlc(context.Background(), db, defaultID)
 	if err != nil {
-		t.Fatalf("ExportWorkflow() error = %v", err)
+		t.Fatalf("ExportSdlc() error = %v", err)
 	}
 	if exported.Name != "default" {
 		t.Fatalf("exported.Name = %q, want %q", exported.Name, "default")
@@ -184,18 +184,18 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 		t.Fatalf("exported stages = %d, want 4", len(exported.Stages))
 	}
 
-	// Import as a new workflow with different name
+	// Import as a new sdlc with different name
 	exported.Name = "imported-copy"
-	imported, err := ImportWorkflow(context.Background(), db, exported)
+	imported, err := ImportSdlc(context.Background(), db, exported)
 	if err != nil {
-		t.Fatalf("ImportWorkflow() error = %v", err)
+		t.Fatalf("ImportSdlc() error = %v", err)
 	}
 	if imported.Name != "imported-copy" {
 		t.Fatalf("imported.Name = %q, want %q", imported.Name, "imported-copy")
 	}
 
 	// Verify stages match
-	got, _ := GetWorkflow(context.Background(), db, imported.ID)
+	got, _ := GetSdlc(context.Background(), db, imported.ID)
 	if len(got.Stages) != 4 {
 		t.Fatalf("imported stages = %d, want 4", len(got.Stages))
 	}

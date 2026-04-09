@@ -97,7 +97,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  decision",
 		"  doctor",
 		"  role",
-		"  workflow",
+		"  sdlc",
 		"  team",
 		"  agent",
 		"  user",
@@ -1118,19 +1118,19 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 	}
 }
 
-func TestRenderWorkflowProgress(t *testing.T) {
+func TestRenderSdlcProgress(t *testing.T) {
 	noColorOutput = true
 	defer func() { noColorOutput = false }()
-	stages := []store.WorkflowStage{
+	stages := []store.SdlcStage{
 		{StageName: "design"},
 		{StageName: "develop"},
 		{StageName: "test"},
 		{StageName: "done"},
 	}
-	got := renderWorkflowProgress("develop", stages)
+	got := renderSdlcProgress("develop", stages)
 	want := "design → [develop] → test → done"
 	if got != want {
-		t.Fatalf("renderWorkflowProgress() = %q, want %q", got, want)
+		t.Fatalf("renderSdlcProgress() = %q, want %q", got, want)
 	}
 }
 
@@ -2239,59 +2239,59 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestRunWorkflowListInLocalMode(t *testing.T) {
+func TestRunSdlcListInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
-		if err := run([]string{"workflow", "list"}); err != nil {
-			t.Fatalf("workflow list error = %v", err)
+		if err := run([]string{"sdlc", "list"}); err != nil {
+			t.Fatalf("sdlc list error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "default") {
-		t.Fatalf("workflow list missing default workflow:\n%s", output)
+		t.Fatalf("sdlc list missing default sdlc:\n%s", output)
 	}
 }
 
-func TestRunWorkflowGetShowsStages(t *testing.T) {
+func TestRunSdlcGetShowsStages(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
-		if err := run([]string{"workflow", "get", "-id", "1"}); err != nil {
-			t.Fatalf("workflow get error = %v", err)
+		if err := run([]string{"sdlc", "get", "-id", "1"}); err != nil {
+			t.Fatalf("sdlc get error = %v", err)
 		}
 	})
 	for _, want := range []string{"design", "develop", "test", "done", "BA", "Lead Engineer", "QA/Tester", "Product Owner"} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("workflow get missing %q:\n%s", want, output)
+			t.Fatalf("sdlc get missing %q:\n%s", want, output)
 		}
 	}
 }
 
-func TestRunWorkflowCreateAndDelete(t *testing.T) {
+func TestRunSdlcCreateAndDelete(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
-		if err := run([]string{"workflow", "create", "-name", "custom"}); err != nil {
-			t.Fatalf("workflow create error = %v", err)
+		if err := run([]string{"sdlc", "create", "-name", "custom"}); err != nil {
+			t.Fatalf("sdlc create error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "custom") {
-		t.Fatalf("workflow create missing name:\n%s", output)
+		t.Fatalf("sdlc create missing name:\n%s", output)
 	}
 	// List should show both
 	output = captureStdout(t, func() {
-		if err := run([]string{"workflow", "list"}); err != nil {
-			t.Fatalf("workflow list error = %v", err)
+		if err := run([]string{"sdlc", "list"}); err != nil {
+			t.Fatalf("sdlc list error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "custom") {
-		t.Fatalf("workflow list missing custom:\n%s", output)
+		t.Fatalf("sdlc list missing custom:\n%s", output)
 	}
 }
 
-func TestRunWorkflowExportImportRoundTrip(t *testing.T) {
+func TestRunSdlcExportImportRoundTrip(t *testing.T) {
 	setupLocalCLI(t)
-	tmpFile := filepath.Join(t.TempDir(), "workflow.json")
+	tmpFile := filepath.Join(t.TempDir(), "sdlc.json")
 	// Export
-	if err := run([]string{"workflow", "export", "-id", "1", "-o", tmpFile}); err != nil {
-		t.Fatalf("workflow export error = %v", err)
+	if err := run([]string{"sdlc", "export", "-id", "1", "-o", tmpFile}); err != nil {
+		t.Fatalf("sdlc export error = %v", err)
 	}
 	// Modify the file to change the name so we can import
 	data, err := os.ReadFile(tmpFile)
@@ -2304,12 +2304,12 @@ func TestRunWorkflowExportImportRoundTrip(t *testing.T) {
 	}
 	// Import
 	output := captureStdout(t, func() {
-		if err := run([]string{"workflow", "import", "-file", tmpFile}); err != nil {
-			t.Fatalf("workflow import error = %v", err)
+		if err := run([]string{"sdlc", "import", "-file", tmpFile}); err != nil {
+			t.Fatalf("sdlc import error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "imported") {
-		t.Fatalf("workflow import missing name:\n%s", output)
+		t.Fatalf("sdlc import missing name:\n%s", output)
 	}
 }
 
@@ -2594,16 +2594,16 @@ func TestBuildAgentPrompt(t *testing.T) {
 		AcceptanceCriteria: "Must pass",
 	}
 	role := store.Role{Title: "Developer", Motivation: "Ship features", Goals: "Quality code"}
-	wf := store.WorkflowWithStages{
-		Workflow: store.Workflow{Name: "Standard"},
-		Stages:  []store.WorkflowStage{{StageName: "design"}, {StageName: "develop"}, {StageName: "test"}},
+	wf := store.SdlcWithStages{
+		Sdlc: store.Sdlc{Name: "Standard"},
+		Stages:  []store.SdlcStage{{StageName: "design"}, {StageName: "develop"}, {StageName: "test"}},
 	}
 	project := store.Project{Prefix: "TK", Title: "Test Project", GitRepository: "github.com/test/repo"}
 	resp := libticket.AgentWorkResponse{
 		Status:   "NEW",
 		Ticket:   &ticket,
 		Project:  &project,
-		Workflow: &wf,
+		Sdlc: &wf,
 		Role:     &role,
 	}
 	prompt := buildAgentPrompt(resp)
@@ -2612,7 +2612,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 			t.Errorf("buildAgentPrompt missing %q:\n%s", want, prompt)
 		}
 	}
-	// Without description/AC/role/workflow
+	// Without description/AC/role/sdlc
 	ticket2 := store.Ticket{Title: "Simple"}
 	prompt2 := buildAgentPrompt(libticket.AgentWorkResponse{Ticket: &ticket2})
 	if strings.Contains(prompt2, "Description:") {
@@ -2625,7 +2625,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 
 func TestAllTopLevelCommandsShowUsageWithNoArgs(t *testing.T) {
 	commands := []string{
-		"project", "workflow", "team", "story", "user", "label",
+		"project", "sdlc", "team", "story", "user", "label",
 		"dep", "decision", "agent", "role", "idea",
 	}
 	for _, cmd := range commands {
@@ -3173,7 +3173,7 @@ func TestRunAcceptAndRejectRequirement(t *testing.T) {
 			t.Fatalf("accept error = %v", err)
 		}
 	})
-	// accept auto-advances through the workflow: design/success → develop/idle
+	// accept auto-advances through the sdlc: design/success → develop/idle
 	if !strings.Contains(acceptOut, "develop") {
 		t.Fatalf("accept output should show ticket moved to develop stage:\n%s", acceptOut)
 	}
@@ -4029,7 +4029,7 @@ func TestPrintAgentTableNonEmpty(t *testing.T) {
 			Agent:        store.Agent{ID: "uuid-1", Username: "bot-a", Enabled: true, Status: "idle", LastSeen: "2025-01-01T00:00:00Z"},
 			TicketKey:    &tk,
 			ProjectName:  "MyProject",
-			WorkflowName: "default",
+			SdlcName: "default",
 			RoleTitle:    "developer",
 		},
 		{
