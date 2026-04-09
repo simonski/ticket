@@ -43,7 +43,7 @@ make test-tk-test
 go run ./cmd/tk-test -v QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
 # Point at a different binary
-go run ./cmd/tk-test -ticket ./bin/ticket QUICKSTART_CLIENT.md
+go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md
 ```
 
 ### What gets skipped
@@ -60,7 +60,7 @@ The tool automatically skips blocks that cannot be executed in an automated test
 
 When a block contains `tk server`, tk-test:
 
-1. Runs `ticket initdb` non-interactively (since `tk init` is interactive)
+1. Runs `tk initdb` non-interactively (since `tk init` is interactive)
 2. Picks a random free port to avoid conflicts with running services
 3. Starts the server in the background on that port
 4. Waits for `/api/healthz` to respond (up to 10 seconds)

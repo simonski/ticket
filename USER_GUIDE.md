@@ -28,7 +28,7 @@ working directory looking for an existing `.ticket` directory. If none is found,
 Write the local agent instructions template into the current repository:
 
 ```bash
-ticket onboard
+tk onboard
 ```
 
 `ticket onboard` prints the embedded onboarding template to stdout.
@@ -36,7 +36,7 @@ ticket onboard
 Initialize a task sqlite database:
 
 ```bash
-ticket init
+tk init
 ```
 
 If `-f` is omitted, `ticket init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` in the current or nearest parent directory).
@@ -56,8 +56,8 @@ Bootstrap resolution works like this:
 Create or restore database snapshots (LOCAL mode):
 
 ```bash
-ticket export -o ./ticket-snapshot.json
-ticket import -i ./ticket-snapshot.json
+tk export -o ./ticket-snapshot.json
+tk import -i ./ticket-snapshot.json
 ```
 
 Snapshot files are JSON and include a `schema_version`; imports replace existing database contents and preserve entity ids.
@@ -65,15 +65,15 @@ Snapshot files are JSON and include a `schema_version`; imports replace existing
 Start the server:
 
 ```bash
-ticket server
+tk server
 ```
 
-If `-f` is omitted, `ticket server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `ticket init`).
+If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `ticket init`).
 
-If `-v` is supplied, `ticket server` prints verbose request and response logs to stdout.
+If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
 
-On startup, `ticket server` also prints a colored ASCII-art `TICKET` banner before the listen message.
+On startup, `tk server` also prints a colored ASCII-art `TICKET` banner before the listen message.
 
 Immediately below the banner it prints:
 
@@ -85,10 +85,10 @@ By default the web app is available at `http://localhost:8080`.
 Show the current CLI version:
 
 ```bash
-ticket version
+tk version
 ```
 
-`ticket version` prints the semantic version embedded into the binary at build time. Each `make build` increments that semantic version before compiling the binary.
+`tk version` prints the semantic version embedded into the binary at build time. Each `make build` increments that semantic version before compiling the binary.
 
 Running `ticket` with no arguments prints a colored ASCII-art `TICKET` banner above the main usage output.
 
@@ -101,17 +101,17 @@ export TICKET_URL=http://your-server:8080
 As an admin create users:
 
 ```bash
-ticket user create -username XXXX -password YYYY
+tk user create -username XXXX -password YYYY
 created user xxxxx
 ```
 
 As an admin enable/disable users:
 
 ```bash
-ticket user enable -username XXXX
-ticket user disable -username XXXX
-ticket user ls|list
-ticket user rm|delete -username XXXX
+tk user enable -username XXXX
+tk user disable -username XXXX
+tk user ls|list
+tk user rm|delete -username XXXX
 ```
 
 These commands are admin-only. If a logged-in non-admin user runs them, the server returns `403` and the CLI prints `user is not an admin`.
@@ -120,28 +120,28 @@ Manage autonomous agents:
 
 **Agent Commands:**
 ```bash
-ticket agent request [flags]
-ticket agent run -id <uuid> -url http://localhost:8080
+tk agent request [flags]
+tk agent run -id <uuid> -url http://localhost:8080
 ```
 
 **Admin Commands:**
 ```bash
-ticket agent create [-password <p>]  # UUID auto-generated
-ticket agent ls
-ticket agent update -id <uuid> -password <p>
-ticket agent disable -id <uuid>
-ticket agent enable -id <uuid>
-ticket agent delete -id <uuid>
-ticket agent reset-password -id <uuid> [-password <p>]
-ticket agent config-set -id <uuid> <key> <value>
-ticket agent config-ls -id <uuid>
-ticket agent config-rm -id <uuid> <key>
+tk agent create [-password <p>]  # UUID auto-generated
+tk agent ls
+tk agent update -id <uuid> -password <p>
+tk agent disable -id <uuid>
+tk agent enable -id <uuid>
+tk agent delete -id <uuid>
+tk agent reset-password -id <uuid> [-password <p>]
+tk agent config-set -id <uuid> <key> <value>
+tk agent config-ls -id <uuid>
+tk agent config-rm -id <uuid> <key>
 ```
 
 Run an agent worker process:
 
 ```bash
-ticket agent run -id <uuid> -url http://localhost:8080
+tk agent run -id <uuid> -url http://localhost:8080
 ```
 
 `ticket agent run` resolves required settings from flags first, then env vars:
@@ -160,13 +160,13 @@ The `-llm` flag selects the LLM: `claude` (default, uses Sonnet 4.5), `codex`, o
 Create an account:
 
 ```bash
-ticket register -username name -password '*******'
+tk register -username name -password '*******'
 ```
 
 Log in:
 
 ```bash
-ticket login -username name -password '*******'
+tk login -username name -password '*******'
 ```
 
 For `ticket register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `ticket register` falls back to `whoami` and `password`.
@@ -195,17 +195,17 @@ Registering a user does not log that user in or create local session credentials
 Check the current mode and connection state:
 
 ```bash
-ticket status
+tk status
 ```
 
-`ticket status` always prints the current effective configuration first, then performs a mode-appropriate connectivity check.
+`tk status` always prints the current effective configuration first, then performs a mode-appropriate connectivity check.
 
 Inspect or clear local CLI config keys:
 
 ```bash
-ticket config ls
-ticket config rm server
-ticket config delete current_project
+tk config ls
+tk config rm server
+tk config delete current_project
 ```
 
 Supported local keys are:
@@ -249,9 +249,9 @@ If `-nocolor` is set, the same output is printed without ANSI colors.
 Show aggregate counts:
 
 ```bash
-ticket count
+tk count
 15
-ticket count -project_id 1
+tk count -project_id 1
 11
 ```
 
@@ -260,7 +260,7 @@ ticket count -project_id 1
 Log out:
 
 ```bash
-ticket logout
+tk logout
 ```
 
 `ticket logout` removes `$TICKET_HOME/credentials.json`.
@@ -290,7 +290,7 @@ Most teams use `ticket` in this order:
 Create a project:
 
 ```bash
-ticket project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Portal launch criteria"
+tk project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Portal launch criteria"
 ```
 
 The project is now the default project.
@@ -298,8 +298,8 @@ The project is now the default project.
 List projects:
 
 ```bash
-ticket project list
-ticket project ls
+tk project list
+tk project ls
 ```
 
 `ticket project list` prints the project id, prefix, title, and status, and marks the active project with `*`.
@@ -307,13 +307,13 @@ ticket project ls
 Select the active project for subsequent commands:
 
 ```bash
-ticket project use CUS
+tk project use CUS
 ```
 
 Rename a project's prefix (re-keys all tickets, updates all references):
 
 ```bash
-ticket project rename-prefix NEW
+tk project rename-prefix NEW
 ```
 
 This changes every ticket key in the active project (e.g. `CUS-T-1` → `NEW-T-1`),
@@ -345,7 +345,7 @@ The lookup order is:
 Show project usage:
 
 ```bash
-ticket project
+tk project
 ```
 
 `ticket project` shows the current active project, or `no active project` if none is selected.
@@ -353,23 +353,23 @@ ticket project
 Get details on a project:
 
 ```bash
-ticket project get <prefix-or-id>
-ticket project CUS
+tk project get <prefix-or-id>
+tk project CUS
 ```
 
 Update a project:
 
 ```bash
-ticket project CUS update -title "New project title"
-ticket project CUS update -description "The new description"
-ticket project CUS update -ac "The acceptance criteria"
+tk project CUS update -title "New project title"
+tk project CUS update -description "The new description"
+tk project CUS update -ac "The acceptance criteria"
 ```
 
 Enable or disable a project:
 
 ```bash
-ticket project CUS enable
-ticket project CUS disable
+tk project CUS enable
+tk project CUS disable
 ```
 
 The active project is remembered by the CLI so you do not need to pass a project prefix for every command.
@@ -381,32 +381,32 @@ Capture is intentionally lightweight. You can add project work as soon as it app
 Add a task (type defaults to task)
 
 ```bash
-ticket add "Customers can reset their password."
+tk add "Customers can reset their password."
 ```
 
 These are equivalent:
 
 ```bash
-ticket add "I am a new task"
-ticket create "I am a new task"
-ticket new "I am a new task"
-ticket add -title "I am a new task"
+tk add "I am a new task"
+tk create "I am a new task"
+tk new "I am a new task"
+tk add -title "I am a new task"
 ```
 
 Add a bug:
 
 ```bash
-ticket bug "This is a bug"
+tk bug "This is a bug"
 ```
 
 Add an epic:
 
 ```bash
-ticket epic "This is an Epic"
+tk epic "This is an Epic"
 ```
 
 ```bash
-ticket create -t task -p 1 -a alice -d "This is a Task" -ac "Has a title and description" -estimate_effort 5 -estimate_complete 2026-04-30T17:00:00Z "This is a Task"
+tk create -t task -p 1 -a alice -d "This is a Task" -ac "Has a title and description" -estimate_effort 5 -estimate_complete 2026-04-30T17:00:00Z "This is a Task"
 ```
 
 Creation defaults:
@@ -442,34 +442,34 @@ In the web app, use the capture panel at the top of the project page to create t
 List open items in the active project:
 
 ```bash
-ticket list
-ticket ls
-ticket list -n 20
-ticket ls -a              # include closed and archived tickets
+tk list
+tk ls
+tk list -n 20
+tk ls -a              # include closed and archived tickets
 ```
 
 Filter by item kind:
 
 ```bash
-ticket list --type task
-ticket list --type bug
-ticket list --type epic
+tk list --type task
+tk list --type bug
+tk list --type epic
 ```
 
 Filter by lifecycle:
 
 ```bash
-ticket list --stage design
-ticket list --state active
-ticket list --status develop/idle
-ticket list --status done/complete
+tk list --stage design
+tk list --state active
+tk list --status develop/idle
+tk list --status done/complete
 ```
 
 Filter by assignee:
 
 ```bash
-ticket list -u alice
-ticket ls -u alice
+tk list -u alice
+tk ls -u alice
 ```
 
 `ticket list` prints a table with ID (key with status icon), type, title, stage, state, ready, parent, assignee, and priority.
@@ -477,21 +477,21 @@ ticket ls -u alice
 Search within the active project:
 
 ```bash
-ticket search "password reset"
-ticket search password reset -status develop/idle -owner alice
+tk search "password reset"
+tk search password reset -status develop/idle -owner alice
 ```
 
 Search across all projects:
 
 ```bash
-ticket search password reset -allprojects
+tk search password reset -allprojects
 ```
 
 Show a single item:
 
 ```bash
-ticket get CUS-T-42
-ticket get -json CUS-T-42
+tk get CUS-T-42
+tk get -json CUS-T-42
 ```
 
 `ticket get` accepts a ticket ID (key such as `CUS-T-42`). It prints the ticket fields directly, including `DependsOn`, the acceptance criteria, `EstimateEffort`, `EstimateComplete`, `CloneOf` when the ticket is a clone, and comments ordered most recent first.
@@ -499,25 +499,25 @@ ticket get -json CUS-T-42
 Show orphaned items with no parent:
 
 ```bash
-ticket orphans
+tk orphans
 ```
 
 Assignment commands:
 
 ```bash
-ticket assign CUS-T-42 alice
-ticket unassign CUS-T-42 alice
-ticket dependency add 4 1,2,3
-ticket dependency remove 4 2
-ticket claim
-ticket claim -id CUS-T-42
-ticket claim -dry-run
-ticket unclaim CUS-T-42
-ticket request
-ticket request CUS-T-42
-ticket attach CUS-T-17 CUS-E-9
-ticket detach CUS-T-17
-ticket delete CUS-T-17
+tk assign CUS-T-42 alice
+tk unassign CUS-T-42 alice
+tk dependency add 4 1,2,3
+tk dependency remove 4 2
+tk claim
+tk claim -id CUS-T-42
+tk claim -dry-run
+tk unclaim CUS-T-42
+tk request
+tk request CUS-T-42
+tk attach CUS-T-17 CUS-E-9
+tk detach CUS-T-17
+tk delete CUS-T-17
 ```
 
 `ticket assign` and `ticket unassign` are admin-only.
@@ -529,8 +529,8 @@ They also fail if the named user does not exist or is disabled.
 New tickets default to not-ready. Mark a ticket as ready before it can be picked up by `claim` or `request`:
 
 ```bash
-ticket ready CUS-T-42       # mark ready for work
-ticket notready CUS-T-42    # mark not ready
+tk ready CUS-T-42       # mark ready for work
+tk notready CUS-T-42    # mark not ready
 ```
 
 Only ready tickets are eligible for automatic assignment. You can still explicitly request a specific not-ready ticket by ID.
@@ -542,13 +542,13 @@ Only ready tickets are eligible for automatic assignment. You can still explicit
 Lifecycle commands:
 
 ```bash
-ticket design CUS-T-42
-ticket develop CUS-T-42
-ticket test CUS-T-42
-ticket done CUS-T-42
-ticket idle CUS-T-42
-ticket active CUS-T-42
-ticket complete CUS-T-42
+tk design CUS-T-42
+tk develop CUS-T-42
+tk test CUS-T-42
+tk done CUS-T-42
+tk idle CUS-T-42
+tk active CUS-T-42
+tk complete CUS-T-42
 ```
 
 `ticket complete` keeps the current stage and marks the ticket state as `complete`. Use `ticket done` to move a ticket into terminal `done/complete`.
@@ -558,7 +558,7 @@ Most client-facing commands also support `-json` to pretty-print the JSON respon
 Show the history of any item:
 
 ```bash
-ticket history CUS-T-42
+tk history CUS-T-42
 ```
 
 `ticket history` prints the stored history events for that item.
@@ -721,132 +721,132 @@ Keyboard shortcuts in the board view:
 ## Command Reference
 
 ```bash
-ticket init
-ticket export -o ./ticket-snapshot.json
-ticket import -i ./ticket-snapshot.json
-ticket server -v
-ticket version
+tk init
+tk export -o ./ticket-snapshot.json
+tk import -i ./ticket-snapshot.json
+tk server -v
+tk version
 
-ticket register -username <name> -password <password>
-ticket login -username <name> -password <password>
-ticket status
-ticket config ls
-ticket config rm server
-ticket logout
+tk register -username <name> -password <password>
+tk login -username <name> -password <password>
+tk status
+tk config ls
+tk config rm server
+tk logout
 
-ticket user create -username <name> -password <password>
-ticket user ls
-ticket user delete -username <name>
-ticket user enable -username <name>
-ticket user disable -username <name>
-ticket user reset-password -username <name> [-password <password>]
+tk user create -username <name> -password <password>
+tk user ls
+tk user delete -username <name>
+tk user enable -username <name>
+tk user disable -username <name>
+tk user reset-password -username <name> [-password <password>]
 # Agent Commands
-ticket agent request [flags]
-ticket agent run -id <uuid> -url <server-url>  # password from AGENT_PASSWORD env or prompt
+tk agent request [flags]
+tk agent run -id <uuid> -url <server-url>  # password from AGENT_PASSWORD env or prompt
 
 # Agent Admin Commands
-ticket agent create [-password <password>]  # UUID auto-generated
-ticket agent list
-ticket agent update -id <uuid> -password <password>
-ticket agent delete -id <uuid>
-ticket agent enable -id <uuid>
-ticket agent disable -id <uuid>
-ticket agent reset-password -id <uuid> [-password <password>]
-ticket agent config-set -id <uuid> <key> <value>
-ticket agent config-ls -id <uuid>
-ticket agent config-rm -id <uuid> <key>
+tk agent create [-password <password>]  # UUID auto-generated
+tk agent list
+tk agent update -id <uuid> -password <password>
+tk agent delete -id <uuid>
+tk agent enable -id <uuid>
+tk agent disable -id <uuid>
+tk agent reset-password -id <uuid> [-password <password>]
+tk agent config-set -id <uuid> <key> <value>
+tk agent config-ls -id <uuid>
+tk agent config-rm -id <uuid> <key>
 
-ticket project create -prefix ABC -title "..."
-ticket project init
-ticket project list
-ticket project ls
-ticket project use <prefix-or-id>
-ticket project
-ticket project get <prefix-or-id>
-ticket project <prefix-or-id>
-ticket project <prefix-or-id> update -title "..."
-ticket project <prefix-or-id> update -description "..."
-ticket project <prefix-or-id> update -ac "..."
-ticket project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
-ticket project <prefix-or-id> update -git-branch "main"
-ticket project <prefix-or-id> enable
-ticket project <prefix-or-id> disable
-ticket project rename-prefix <new-prefix>
-ticket project rm [-id] <prefix-or-id> [--confirm <token>]
+tk project create -prefix ABC -title "..."
+tk project init
+tk project list
+tk project ls
+tk project use <prefix-or-id>
+tk project
+tk project get <prefix-or-id>
+tk project <prefix-or-id>
+tk project <prefix-or-id> update -title "..."
+tk project <prefix-or-id> update -description "..."
+tk project <prefix-or-id> update -ac "..."
+tk project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
+tk project <prefix-or-id> update -git-branch "main"
+tk project <prefix-or-id> enable
+tk project <prefix-or-id> disable
+tk project rename-prefix <new-prefix>
+tk project rm [-id] <prefix-or-id> [--confirm <token>]
 
-ticket ticket <verb> [flags]                              # namespace for all ticket verbs
+tk ticket <verb> [flags]                              # namespace for all ticket verbs
 
-ticket add "..."
-ticket bug "..."
-ticket epic "..."
+tk add "..."
+tk bug "..."
+tk epic "..."
 
-ticket list
-ticket ls
-ticket ls -a                                              # include closed/archived
-ticket list --type task
-ticket list --status develop/idle
-ticket list -u <name>
-ticket search "..."
-ticket search "..." -allprojects
-ticket get -id <key-or-id>
-ticket edit [-id] <key-or-id>
-ticket history <key-or-id>
-ticket health <key-or-id>
-ticket comment add <key-or-id> "..."
-ticket orphans
+tk list
+tk ls
+tk ls -a                                              # include closed/archived
+tk list --type task
+tk list --status develop/idle
+tk list -u <name>
+tk search "..."
+tk search "..." -allprojects
+tk get -id <key-or-id>
+tk edit [-id] <key-or-id>
+tk history <key-or-id>
+tk health <key-or-id>
+tk comment add <key-or-id> "..."
+tk orphans
 
-ticket dependency add <key-or-id> <key-or-id[,key-or-id...]>
-ticket dependency remove <key-or-id> <key-or-id[,key-or-id...]>
-ticket assign <key-or-id> <name>
-ticket unassign <key-or-id> <name>
-ticket claim -id <key-or-id>
-ticket unclaim <key-or-id>
-ticket request [<key-or-id>]
-ticket attach -id <key-or-id> <parent-key-or-id>
-ticket detach -id <key-or-id>
-ticket ready <key-or-id>
-ticket notready <key-or-id>
-ticket close -id <key-or-id>
-ticket open -id <key-or-id>
-ticket archive -id <key-or-id>
-ticket unarchive -id <key-or-id>
-ticket rm <key-or-id>
-ticket delete <key-or-id>
-ticket idle -id <key-or-id>
-ticket active -id <key-or-id>
-ticket complete -id <key-or-id>
-ticket state -id <key-or-id> <state>
-ticket update -id <key-or-id> -stage <stage> -state <state>
-ticket count
-ticket count -project_id <prefix-or-id>
-ticket whoami
-ticket summary
+tk dependency add <key-or-id> <key-or-id[,key-or-id...]>
+tk dependency remove <key-or-id> <key-or-id[,key-or-id...]>
+tk assign <key-or-id> <name>
+tk unassign <key-or-id> <name>
+tk claim -id <key-or-id>
+tk unclaim <key-or-id>
+tk request [<key-or-id>]
+tk attach -id <key-or-id> <parent-key-or-id>
+tk detach -id <key-or-id>
+tk ready <key-or-id>
+tk notready <key-or-id>
+tk close -id <key-or-id>
+tk open -id <key-or-id>
+tk archive -id <key-or-id>
+tk unarchive -id <key-or-id>
+tk rm <key-or-id>
+tk delete <key-or-id>
+tk idle -id <key-or-id>
+tk active -id <key-or-id>
+tk complete -id <key-or-id>
+tk state -id <key-or-id> <state>
+tk update -id <key-or-id> -stage <stage> -state <state>
+tk count
+tk count -project_id <prefix-or-id>
+tk whoami
+tk summary
 
-ticket update -id <key-or-id> -stage develop -state idle
-ticket update -id <key-or-id> -title "new title"
-ticket update -id <key-or-id> -description "new description"
-ticket update -id <key-or-id> -ac "new acceptance criteria"
-ticket update -id <key-or-id> -git-repository "https://github.com/org/repo.git"
-ticket update -id <key-or-id> -git-branch "feature/x"
-ticket update -id <key-or-id> -priority 4
-ticket update -id <key-or-id> -order 7
-ticket update -id <key-or-id> -parent_id 12
-ticket update -id <key-or-id> -estimate_effort 5
-ticket update -id <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
-ticket update -id <key-or-id> -stage develop -state active -priority 2 -title "new title"
+tk update -id <key-or-id> -stage develop -state idle
+tk update -id <key-or-id> -title "new title"
+tk update -id <key-or-id> -description "new description"
+tk update -id <key-or-id> -ac "new acceptance criteria"
+tk update -id <key-or-id> -git-repository "https://github.com/org/repo.git"
+tk update -id <key-or-id> -git-branch "feature/x"
+tk update -id <key-or-id> -priority 4
+tk update -id <key-or-id> -order 7
+tk update -id <key-or-id> -parent_id 12
+tk update -id <key-or-id> -estimate_effort 5
+tk update -id <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
+tk update -id <key-or-id> -stage develop -state active -priority 2 -title "new title"
 
-ticket workflow list
-ticket workflow create -name <name> [-d <description>]
-ticket workflow get -id <id>
-ticket workflow delete -id <id>
-ticket workflow add-stage -id <wf-id> -name <name>
-ticket workflow remove-stage -stage-id <id>
-ticket workflow reorder-stages -id <wf-id> <ids>
+tk workflow list
+tk workflow create -name <name> [-d <description>]
+tk workflow get -id <id>
+tk workflow delete -id <id>
+tk workflow add-stage -id <wf-id> -name <name>
+tk workflow remove-stage -stage-id <id>
+tk workflow reorder-stages -id <wf-id> <ids>
 
-ticket decision add "text"
-ticket decision list
+tk decision add "text"
+tk decision list
 
-ticket conversation show <key-or-id>
+tk conversation show <key-or-id>
 
 ```
 

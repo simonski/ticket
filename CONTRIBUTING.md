@@ -35,7 +35,7 @@ make test        # All tests must pass before you start
 
 > **⚠️ Do NOT use `make build` for day-to-day development.**
 > `make build` auto-increments the patch version in `cmd/ticket/VERSION` on
-> every invocation. Use `go build -o ./bin/ticket ./cmd/ticket` instead.
+> every invocation. Use `go build -o ./bin/tk ./cmd/ticket` instead.
 > Reserve `make build` for cutting releases.
 
 See [docs/ONBOARDING.md](docs/ONBOARDING.md) for a full onboarding walkthrough.

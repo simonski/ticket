@@ -8,13 +8,13 @@
 # Usage:
 #   make build && ./tests/quickstart_test.sh
 #
-# Requires: the ticket binary at ./bin/ticket
+# Requires: the tk binary at ./bin/tk
 #
 set -euo pipefail
 
-TICKET_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/ticket"
+TICKET_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/tk"
 if [ ! -x "$TICKET_BIN" ]; then
-  echo "FAIL: ticket binary not found at $TICKET_BIN (run 'make build' first)" >&2
+  echo "FAIL: tk binary not found at $TICKET_BIN (run 'make build' first)" >&2
   exit 1
 fi
 

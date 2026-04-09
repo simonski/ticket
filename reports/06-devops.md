@@ -40,7 +40,7 @@ Reviewed `.github/workflows/makefile.yaml`, `Makefile`, `Dockerfile`, `compose.y
 |---------|----------|----------|----------------|
 | No named networks in `compose.yaml` — default bridge only | Low | `compose.yaml` | Define a named network (`ticket-net`) for future multi-service segmentation |
 | No CPU reservation in `compose.yaml` (only limit) | Low | `compose.yaml:13` | Add `reservations.cpus: "0.25"` alongside memory reservation |
-| Builder stage has no `-ldflags="-s -w"` or `CGO_ENABLED=0` | Low | `Dockerfile:12` | Add `RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/ticket ./cmd/ticket` for a smaller, fully static binary |
+| Builder stage has no `-ldflags="-s -w"` or `CGO_ENABLED=0` | Low | `Dockerfile:12` | Add `RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/tk ./cmd/ticket` for a smaller, fully static binary |
 | No image digest pinning on builder base image | Low | `Dockerfile:2` | Pin `golang:1.26-alpine@sha256:...` to eliminate supply-chain substitution risk |
 | Publish job: if `TAP_TOKEN` is unset, tap push uses `GITHUB_TOKEN` which lacks cross-repo write access — tap update will silently fail | Medium | `makefile.yaml:44` | Add a CI check: `if [ -z "$TAP_TOKEN" ]; then echo "::error::TAP_TOKEN not set"; exit 1; fi` |
 | `make docker-push` calls `make docker-build` which calls `make bump-version` — a second version bump can occur if invoked locally | Low | `Makefile:docker-push` | Add a guard so `bump-version` is a no-op if already called in the same make session, or decouple `docker-build` from `bump-version` |

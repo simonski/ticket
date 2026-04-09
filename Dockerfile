@@ -9,7 +9,7 @@ RUN go mod download
 
 # Copy everything and build
 COPY . .
-RUN go build -o /out/ticket ./cmd/ticket
+RUN go build -o /out/tk ./cmd/ticket
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
 FROM alpine:3.21
@@ -22,7 +22,7 @@ RUN mkdir -p /home/ticket/.ticket && chown ticket:ticket /home/ticket/.ticket
 USER ticket
 WORKDIR /home/ticket
 
-COPY --from=builder /out/ticket /usr/local/bin/ticket
+COPY --from=builder /out/tk /usr/local/bin/tk
 COPY --chmod=755 deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 EXPOSE 8080

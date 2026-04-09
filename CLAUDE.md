@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 make setup                # Install all dev dependencies (Go modules + Node + Playwright)
-make build                # Build binary to ./bin/ticket, increments patch version
+make build                # Build binary to ./bin/tk, increments patch version
 make test                 # Run all tests (unit + integration + playwright)
 make test-go              # Run all Go tests (unit + integration)
 make test-unit            # Unit tests only (config, password, web)
@@ -17,7 +17,7 @@ make dev                  # Print env vars for local development mode
 ```
 
 > **⚠️ `make build` increments the patch version** in `cmd/ticket/VERSION` on
-> every invocation. Use `go build -o ./bin/ticket ./cmd/ticket` for day-to-day
+> every invocation. Use `go build -o ./bin/tk ./cmd/ticket` for day-to-day
 > development. Reserve `make build` for cutting releases.
 
 Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`

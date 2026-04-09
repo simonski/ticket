@@ -110,10 +110,10 @@ See [Backup and restore](#backup-and-restore).
 If no backup exists but the server can start:
 
 ```bash
-ticket export > /tmp/ticket-export-$(date +%Y%m%d).json
+tk export > /tmp/ticket-export-$(date +%Y%m%d).json
 # Then restore into a fresh DB:
-ticket initdb
-ticket import /tmp/ticket-export-$(date +%Y%m%d).json
+tk initdb
+tk import /tmp/ticket-export-$(date +%Y%m%d).json
 ```
 
 ---
@@ -129,7 +129,7 @@ Add this cron job on the host (or as a sidecar container):
 #!/bin/bash
 BACKUP_DIR=/var/backups/ticket
 mkdir -p "$BACKUP_DIR"
-docker exec ticket ticket export | gzip > "$BACKUP_DIR/ticket-$(date +%Y%m%d-%H%M%S).json.gz"
+docker exec ticket tk export | gzip > "$BACKUP_DIR/ticket-$(date +%Y%m%d-%H%M%S).json.gz"
 # Keep last 30 days
 find "$BACKUP_DIR" -name "*.json.gz" -mtime +30 -delete
 ```
@@ -137,7 +137,7 @@ find "$BACKUP_DIR" -name "*.json.gz" -mtime +30 -delete
 ### Manual backup
 
 ```bash
-ticket export | gzip > ticket-backup-$(date +%Y%m%d).json.gz
+tk export | gzip > ticket-backup-$(date +%Y%m%d).json.gz
 ```
 
 ### Restore from backup
@@ -147,7 +147,7 @@ ticket export | gzip > ticket-backup-$(date +%Y%m%d).json.gz
 docker compose stop ticket
 
 # Restore
-gunzip -c ticket-backup-20250718.json.gz | ticket import --overwrite
+gunzip -c ticket-backup-20250718.json.gz | tk import --overwrite
 
 # Restart
 docker compose start ticket
@@ -157,7 +157,7 @@ curl http://localhost:8080/api/healthz
 ticket project ls
 ```
 
-> **Note:** `ticket import` uses upsert semantics — it does not delete existing
+> **Note:** `tk import` uses upsert semantics — it does not delete existing
 > data. Use `--overwrite` to replace records that already exist.
 
 ---

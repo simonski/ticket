@@ -11,7 +11,7 @@ default: help
 
 help:
 	@printf "Available targets:\n\n"
-	@printf "  make build           Build ticket into ./bin/ticket and symlink ./tk.\n"
+	@printf "  make build           Build tk binary into ./bin/tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
 	@printf "  make setup           Install development dependencies (Go + Node).\n"
 	@printf "  make setup-go        Download and cache Go module dependencies.\n"
@@ -44,7 +44,7 @@ help:
 build: 
 	@$(MAKE) bump-version
 	@mkdir -p bin
-	go build -o ./bin/ticket ./cmd/ticket
+	go build -o ./bin/tk ./cmd/ticket
 
 setup: setup-go setup-node setup-playwright
 
@@ -145,12 +145,12 @@ release-build:
 	@for platform in $(RELEASE_PLATFORMS); do \
 		os=$$(echo $$platform | cut -d/ -f1); \
 		arch=$$(echo $$platform | cut -d/ -f2); \
-		name=ticket_$(VERSION)_$${os}_$${arch}; \
+		name=tk_$(VERSION)_$${os}_$${arch}; \
 		outdir=$(DIST_DIR)/$$name; \
 		mkdir -p $$outdir; \
 		printf "  %-32s" "$$os/$$arch"; \
-		GOOS=$$os GOARCH=$$arch go build -o $$outdir/ticket ./cmd/ticket && echo "ok" || exit 1; \
-		tar -czf $(DIST_DIR)/$${name}.tar.gz -C $$outdir ticket; \
+		GOOS=$$os GOARCH=$$arch go build -o $$outdir/tk ./cmd/ticket && echo "ok" || exit 1; \
+		tar -czf $(DIST_DIR)/$${name}.tar.gz -C $$outdir tk; \
 		rm -rf $$outdir; \
 	done
 	@echo "Tarballs written to $(DIST_DIR)/"
@@ -170,10 +170,10 @@ release-sbom:
 
 release-formula:
 	@echo "Generating homebrew/ticket.rb for v$(VERSION)..."
-	@darwin_arm64=$$(shasum -a 256 $(DIST_DIR)/ticket_$(VERSION)_darwin_arm64.tar.gz | cut -d' ' -f1); \
-	 darwin_amd64=$$(shasum -a 256 $(DIST_DIR)/ticket_$(VERSION)_darwin_amd64.tar.gz | cut -d' ' -f1); \
-	 linux_amd64=$$(shasum -a 256  $(DIST_DIR)/ticket_$(VERSION)_linux_amd64.tar.gz  | cut -d' ' -f1); \
-	 linux_arm64=$$(shasum -a 256  $(DIST_DIR)/ticket_$(VERSION)_linux_arm64.tar.gz  | cut -d' ' -f1); \
+	@darwin_arm64=$$(shasum -a 256 $(DIST_DIR)/tk_$(VERSION)_darwin_arm64.tar.gz | cut -d' ' -f1); \
+	 darwin_amd64=$$(shasum -a 256 $(DIST_DIR)/tk_$(VERSION)_darwin_amd64.tar.gz | cut -d' ' -f1); \
+	 linux_amd64=$$(shasum -a 256  $(DIST_DIR)/tk_$(VERSION)_linux_amd64.tar.gz  | cut -d' ' -f1); \
+	 linux_arm64=$$(shasum -a 256  $(DIST_DIR)/tk_$(VERSION)_linux_arm64.tar.gz  | cut -d' ' -f1); \
 	 sed \
 		-e "s/__VERSION__/$(VERSION)/g" \
 		-e "s/__DARWIN_ARM64_SHA256__/$$darwin_arm64/g" \
@@ -189,10 +189,10 @@ release-publish: release-build release-checksums release-sbom release-formula
 		--repo $(GITHUB_REPO) \
 		--title "v$(VERSION)" \
 		--generate-notes \
-		$(DIST_DIR)/ticket_$(VERSION)_darwin_arm64.tar.gz \
-		$(DIST_DIR)/ticket_$(VERSION)_darwin_amd64.tar.gz \
-		$(DIST_DIR)/ticket_$(VERSION)_linux_amd64.tar.gz \
-		$(DIST_DIR)/ticket_$(VERSION)_linux_arm64.tar.gz \
+		$(DIST_DIR)/tk_$(VERSION)_darwin_arm64.tar.gz \
+		$(DIST_DIR)/tk_$(VERSION)_darwin_amd64.tar.gz \
+		$(DIST_DIR)/tk_$(VERSION)_linux_amd64.tar.gz \
+		$(DIST_DIR)/tk_$(VERSION)_linux_arm64.tar.gz \
 		$(DIST_DIR)/checksums.txt \
 		$(DIST_DIR)/sbom.cdx.json
 	@echo "Release v$(VERSION) published."
@@ -237,11 +237,9 @@ docker-down:
 
 clean:
 	@rm -rf bin
-	@rm -f tk
 
-install: clean build
-	go install ./cmd/ticket
-	alias tk=ticket
+install: build
+	cp ./bin/tk $$(go env GOPATH)/bin/tk
 
 dev:
     # prints out the env vars I need to set to go into a ticket dev mode

@@ -1076,11 +1076,11 @@ Built with BubbleTea (Elm-inspired architecture).
 ### 17.1 Docker
 
 Multi-stage build:
-1. **Builder:** `golang:1.26-alpine`, compile to `/out/ticket`
+1. **Builder:** `golang:1.26-alpine`, compile to `/out/tk`
 2. **Runtime:** `alpine:3.21`, non-root user `ticket`, expose 8080
 
 ```dockerfile
-CMD ["ticket", "server"]
+CMD ["tk", "server"]
 ```
 
 ### 17.2 Installation
@@ -1094,7 +1094,7 @@ go install github.com/simonski/ticket/cmd/ticket@latest
 
 # Docker
 docker build -t ticket .
-docker run -p 8080:8080 ticket server
+docker run -p 8080:8080 tk server
 ```
 
 ### 17.3 Build Targets

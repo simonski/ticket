@@ -7,8 +7,8 @@ export TICKET_HOME
 if [ ! -f "$TICKET_HOME/ticket.db" ]; then
   echo "No database found — initialising..."
   mkdir -p "$TICKET_HOME"
-  ticket initdb
+  tk initdb
   echo ""
 fi
 
-exec ticket server "$@"
+exec tk server "$@"

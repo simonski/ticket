@@ -17,7 +17,7 @@ The system has three interfaces:
 2. A CLI for fast, explicit terminal workflows.
 3. An embedded web application for browsing, editing, and status management.
 
-The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `ticket version`.
+The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
 Client-side files are stored under `$TICKET_HOME`. If `$TICKET_HOME` is not set, `tk` walks up the directory tree from the current working directory looking for an existing `.ticket` directory; if none is found, `.ticket` in the current directory is used as the default.
 
@@ -321,8 +321,8 @@ Bootstrap defaults:
 Snapshot portability:
 
 - CLI-only snapshot commands:
-  - `ticket export -o <file>` writes a JSON representation of persisted entities
-  - `ticket import -i <file>` replaces database contents from that JSON file
+  - `tk export -o <file>` writes a JSON representation of persisted entities
+  - `tk import -i <file>` replaces database contents from that JSON file
 - snapshot JSON includes a `schema_version` field and table payloads
 - import must preserve entity ids (primary keys) so relationships remain stable after restore
 
@@ -341,9 +341,9 @@ Responsibilities:
 
 The default local server should listen on `http://localhost:8080`.
 
-If `ticket server` is run without `-f`, it must open the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
+If `tk server` is run without `-f`, it must open the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
 
-If `ticket server` is run with `-v`, it must print verbose request and response details to stdout.
+If `tk server` is run with `-v`, it must print verbose request and response details to stdout.
 When chat is active, `-v` must also print chat process telemetry, including:
 - inbound client prompts
 - outbound LLM process output chunks
@@ -368,7 +368,7 @@ Representative commands:
 
 ```bash
 ticket onboard
-ticket version
+tk version
 ticket user create --username alice --password secret
 ticket user ls
 ticket user delete --username alice
@@ -393,13 +393,13 @@ ticket agent config-rm -id <uuid> <key>
 
 ticket register
 ticket login
-ticket status
+tk status
 ticket logout
 ```
 
 `ticket onboard` must print the embedded `cmd/ticket/TICKETS.md` template to stdout.
 
-`ticket status` must always print the current effective configuration first, then perform a mode-appropriate connectivity check.
+`tk status` must always print the current effective configuration first, then perform a mode-appropriate connectivity check.
 
 In REMOTE mode it must print at least:
 
@@ -438,7 +438,7 @@ The LOCAL result must then print:
 - `connection: success` in green if the database can be opened and the schema is valid
 - `connection: failure` in red if the database is missing, cannot be opened, or the schema is invalid
 
-If the database does not exist in LOCAL mode, `ticket status` must also print:
+If the database does not exist in LOCAL mode, `tk status` must also print:
 
 - `hint: run ticket init`
 
@@ -456,7 +456,7 @@ The CLI must resolve the server URL from `-url` first, then `TICKET_URL`, then s
 - `ticket config rm|delete <key>` to clear a local config key
 - supported removable keys: `server`, `username`, `current_project`, `current_epic_id`
 
-The CLI must expose `ticket version`, which prints the semantic version embedded into the binary at build time.
+The CLI must expose `tk version`, which prints the semantic version embedded into the binary at build time.
 
 `ticket init` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.
 
@@ -464,9 +464,9 @@ Admin-only user-management requests must be rejected by the server when the call
 
 When `ticket` is run without arguments, the CLI should print a colored ASCII-art `TICKET` banner above the main usage text.
 
-When `ticket server` starts, it should print the same colored ASCII-art `TICKET` banner before the startup message.
+When `tk server` starts, it should print the same colored ASCII-art `TICKET` banner before the startup message.
 
-Below that banner, `ticket server` must print the embedded version and the resolved task database path.
+Below that banner, `tk server` must print the embedded version and the resolved task database path.
 
 The CLI stores non-sensitive client defaults in `$TICKET_CONFIG_DIR/config.json` and session credentials in `$TICKET_CONFIG_DIR/credentials.json`.
 

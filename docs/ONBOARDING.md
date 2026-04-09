@@ -74,7 +74,7 @@ The `make setup` command installs:
 
 ```bash
 # Build for local use (does NOT bump version)
-go build -o ./bin/ticket ./cmd/ticket
+go build -o ./bin/tk ./cmd/ticket
 
 # Run unit + integration tests
 make test-go
@@ -97,7 +97,7 @@ make test
 > `make build` auto-increments the patch version in `cmd/ticket/VERSION` on
 > every run. This creates an unwanted commit and pollutes git history.
 >
-> **Always use `go build -o ./bin/ticket ./cmd/ticket` for development.**
+> **Always use `go build -o ./bin/tk ./cmd/ticket` for development.**
 > Only use `make build` when cutting a release.
 
 ---
@@ -155,9 +155,9 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 
 | Pitfall | Fix |
 |---------|-----|
-| `make build` bumps the version unexpectedly | Use `go build -o ./bin/ticket ./cmd/ticket` for dev builds |
+| `make build` bumps the version unexpectedly | Use `go build -o ./bin/tk ./cmd/ticket` for dev builds |
 | Tests fail with "no such file or directory" on Playwright | Run `make setup-playwright` first |
-| `tk` command not found | Run `go build -o ./bin/ticket ./cmd/ticket && ln -sf ./bin/ticket ./tk` |
+| `tk` command not found | Run `go build -o ./bin/tk ./cmd/ticket` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
 | DB conflicts on `git pull` | The `.ticket/ticket.db` file is tracked in git. Always run `git checkout -- .ticket/ticket.db` before `git pull --rebase` to avoid merge conflicts on the binary file |
 | `make test` times out | Playwright tests require a local server; the Makefile starts one automatically, but if port 8080 is already in use the tests will hang — kill any running `ticket` server first |
 | Import cycle errors | The dependency flow must be `cmd → libticket → internal/store`. Nothing in `internal/` may import `cmd/` |

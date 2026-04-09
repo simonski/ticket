@@ -63,11 +63,11 @@ Download a tarball for your platform from the [releases page](https://github.com
 git clone https://github.com/simonski/ticket
 cd ticket
 make setup        # install Go tools, Node, Playwright
-go build -o ./bin/ticket ./cmd/ticket
+go build -o ./bin/tk ./cmd/ticket
 ```
 
 > **Note:** `make build` increments the patch version on every call. Use
-> `go build -o ./bin/ticket ./cmd/ticket` for day-to-day development.
+> `go build -o ./bin/tk ./cmd/ticket` for day-to-day development.
 
 Run the tests:
 
