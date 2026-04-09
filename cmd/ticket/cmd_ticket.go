@@ -1237,16 +1237,78 @@ func runUpdate(args []string) error {
 	if outputJSON {
 		return printJSON(updated)
 	}
-	dependencies, _ := svc.ListDependencies(current.ID)
-	history, _ := svc.ListHistory(updated.ID)
-	parentKey := ""
-	if updated.ParentID != nil {
-		if p, err := svc.GetTicket(*updated.ParentID); err == nil {
-			parentKey = ticketLabel(p)
+	printUpdateSummary(updated, current, svc)
+	return nil
+}
+
+func printUpdateSummary(updated, previous store.Ticket, svc libticket.Service) {
+	var changes []string
+	if updated.Title != previous.Title {
+		changes = append(changes, fmt.Sprintf("title is now %q", updated.Title))
+	}
+	if updated.Description != previous.Description {
+		changes = append(changes, "description updated")
+	}
+	if updated.AcceptanceCriteria != previous.AcceptanceCriteria {
+		changes = append(changes, "acceptance criteria updated")
+	}
+	if updated.Type != previous.Type {
+		changes = append(changes, fmt.Sprintf("type is now %s", updated.Type))
+	}
+	if updated.Status != previous.Status {
+		changes = append(changes, fmt.Sprintf("status is now %s", updated.Status))
+	} else if updated.State != previous.State {
+		changes = append(changes, fmt.Sprintf("state is now %s", updated.State))
+	}
+	if updated.Priority != previous.Priority {
+		changes = append(changes, fmt.Sprintf("priority is now %d", updated.Priority))
+	}
+	if updated.Order != previous.Order {
+		changes = append(changes, fmt.Sprintf("order is now %d", updated.Order))
+	}
+	if updated.Assignee != previous.Assignee {
+		if updated.Assignee == "" {
+			changes = append(changes, "assignee cleared")
+		} else {
+			changes = append(changes, fmt.Sprintf("assignee is now %s", updated.Assignee))
 		}
 	}
-	printTicketDetails(updated, dependencies, history, nil, nil, 0, parentKey, "")
-	return nil
+	if updated.EstimateEffort != previous.EstimateEffort {
+		changes = append(changes, fmt.Sprintf("estimate_effort is now %d", updated.EstimateEffort))
+	}
+	if updated.EstimateComplete != previous.EstimateComplete {
+		changes = append(changes, fmt.Sprintf("estimate_complete is now %s", updated.EstimateComplete))
+	}
+	if updated.GitRepository != previous.GitRepository {
+		changes = append(changes, fmt.Sprintf("git-repository is now %s", updated.GitRepository))
+	}
+	if updated.GitBranch != previous.GitBranch {
+		changes = append(changes, fmt.Sprintf("git-branch is now %s", updated.GitBranch))
+	}
+	prevParent := ""
+	if previous.ParentID != nil {
+		prevParent = *previous.ParentID
+	}
+	newParent := ""
+	if updated.ParentID != nil {
+		newParent = *updated.ParentID
+	}
+	if newParent != prevParent {
+		if newParent == "" {
+			changes = append(changes, "parent removed")
+		} else {
+			parentLabel := newParent
+			if p, err := svc.GetTicket(newParent); err == nil {
+				parentLabel = ticketLabel(p)
+			}
+			changes = append(changes, fmt.Sprintf("parent is now %s", parentLabel))
+		}
+	}
+	summary := strings.Join(changes, ", ")
+	if summary == "" {
+		summary = "no changes"
+	}
+	fmt.Printf("%s updated (%s)\n", updated.ID, summary)
 }
 
 func runAssign(args []string) error {

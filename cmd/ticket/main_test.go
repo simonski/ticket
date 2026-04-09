@@ -1700,16 +1700,16 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 			t.Fatalf("update error = %v", err)
 		}
 	})
+	// Update now prints a single-line summary instead of full ticket details.
+	if !strings.Contains(updateOutput, taskID+" updated (") {
+		t.Fatalf("update output missing summary line:\n%s", updateOutput)
+	}
 	for _, want := range []string{
-		"Title        : Ticket Beta",
-		"Description  : new description",
-		"Parent       : " + ticketLabelByID(t, parentID),
-		"Order        : 7",
-		"EstimateEffort   : 5",
-		"EstimateComplete : 2026-04-15T12:00:00Z",
-		"Status       : develop/active",
-		"Priority     : 3",
-		"Acceptance Criteria : new ac",
+		"title is now \"Ticket Beta\"",
+		"description updated",
+		"acceptance criteria updated",
+		"priority is now 3",
+		"order is now 7",
 	} {
 		if !strings.Contains(updateOutput, want) {
 			t.Fatalf("update output missing %q:\n%s", want, updateOutput)
