@@ -1,6 +1,6 @@
 # Compliance
 
-**Score: 62/100** (was 42)
+**Score: 74/100** (was 62)
 
 ## What is being assessed
 GDPR compliance (right to erasure, data retention, portability, transparency), audit trail completeness and integrity, cookie consent implications, data processing documentation, license compliance, and SBOM existence/freshness.
@@ -29,9 +29,8 @@ Reviewed `internal/store/auth.go` (user deletion cascade), `internal/store/encry
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
 | `tickets.assignee` is a plain TEXT username, not a FK — not cleared when user is deleted; deleted user's name lingers on assigned tickets | High | `internal/store/store.go:224`, `internal/store/auth.go:DeleteUser` | Add `UPDATE tickets SET assignee = '' WHERE assignee = ?` with the deleted username inside the `DeleteUser` transaction |
-| No privacy documentation (`PRIVACY.md` or DPA template) | High | repo-wide | Create `docs/PRIVACY.md` documenting: data categories, processing purposes, retention periods, subject rights process (access, erasure, portability) |
 | No data export API (GDPR Art. 20 portability) | High | repo-wide | Add `GET /api/users/{id}/export` returning all the user's tickets, comments, time entries, and activity as JSON |
-| SBOM in `dist/` is stale — generated for v0.1.733, current release is v0.1.737 | Medium | `dist/sbom.cdx.json` | Regenerate SBOM as part of every release; CI should fail if `dist/sbom.cdx.json` version does not match `cmd/ticket/VERSION` |
+| SBOM in `dist/` is stale — `dist/sbom.cdx.json` shows v0.1.733, binary is v0.1.737 | Medium | `dist/sbom.cdx.json` | Regenerate SBOM as part of every release; CI should fail if `dist/sbom.cdx.json` version does not match `cmd/ticket/VERSION` |
 | `TICKET_ENCRYPTION_KEY` optional — email stored plaintext by default | Medium | `internal/store/encrypt.go` | Log a `WARN` at server startup if key is absent; add a `--strict` / `TICKET_STRICT=1` mode that refuses to start without it |
 | SQLite database stored unencrypted at rest — no documentation of this requirement | Medium | `internal/store/store.go` | Add a note to deployment docs requiring OS-level disk encryption (dm-crypt / FileVault) for any multi-user server |
 | History events deleted when parent ticket is deleted — no tamper-evident audit trail | Medium | `internal/store/store.go:1405` | Archive rather than delete audit records on ticket deletion; consider HMAC chaining for integrity |
@@ -39,19 +38,21 @@ Reviewed `internal/store/auth.go` (user deletion cascade), `internal/store/encry
 | `TICKET_HISTORY_RETENTION_DAYS` defaults to 0 (disabled) — no guidance on recommended value | Low | `internal/server/server.go:87` | Document the env var in README/USER_GUIDE; recommend a default (e.g. 365 days) for production |
 
 ## Verdict
-Significant improvement from 42 → 62 since the last assessment. The critical gaps around user deletion cascade and session expiry are resolved; an SBOM is now generated and published with each release; and a configurable history retention mechanism exists and runs automatically. The remaining blockers for GDPR-regulated production deployment are: clearing the `assignee` field on user deletion, providing a data-export endpoint (Art. 20), and publishing a privacy notice. Encryption and retention infrastructure is present but needs hardening for default-on behaviour.
+Large jump from 62 → 74 on fresh re-assessment. `docs/PRIVACY.md` was added and is comprehensive (130 lines covering GDPR Articles 15-21, data categories, retention periods, processing purposes, and third-party LLM disclosure) — this alone closes the previous High finding. The SBOM exists but is **stale**: `dist/sbom.cdx.json` shows version 0.1.733 while the binary is 0.1.737. The two most critical GDPR gaps remaining are: `tickets.assignee` is not cleared on user deletion (Art. 17 partially broken), and there is no data-export endpoint (Art. 20 portability still missing).
 
 ## Changes since last assessment
+- **`docs/PRIVACY.md` added** (130 lines): covers Art. 15-21, all data categories, retention periods, processing purposes, and third-party LLM disclosure — **closes the previous High "No privacy documentation" finding** (score +8)
 - **SBOM generated and published** (`make release-sbom` + `cyclonedx-gomod`): resolves the previous High "No SBOM" finding. CycloneDX 1.6 JSON uploaded to GitHub releases (Makefile:166–197)
-- **`DeleteUser()` properly cascades** (internal/store/auth.go): deletes sessions, memberships, time entries, messages, comments; anonymises audit trail `created_by` — substantially addresses the previous Critical "incomplete user deletion" finding
-- **Session expiry enforced** (internal/store/auth.go:169): `AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)` present in `GetUserByToken` — resolves previous High finding (this was already fixed prior to 0.1.730 but mis-stated in last report)
-- **`PurgeOldHistory()` integrated**: called in `runRetentionPurge()` on server startup and ticker (internal/server/server.go:93–96) — partially resolves previous Critical "no data retention" finding; still opt-in via env var
+- **`DeleteUser()` properly cascades** (internal/store/auth.go): deletes sessions, memberships, time entries, messages, comments; anonymises audit trail `created_by`
+- **`PurgeOldHistory()` integrated**: called in `runRetentionPurge()` on server startup and ticker (internal/server/server.go:93–96)
+- **Session expiry enforced** (internal/store/auth.go:169)
+- **Re-assessment confirmed:** `dist/sbom.cdx.json` is for v0.1.733, current binary is v0.1.737 — SBOM is stale
+- **Re-assessment confirmed:** `tickets.assignee` TEXT field not cleared in `DeleteUser()` — Art. 17 still partially broken
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
 | Clear `tickets.assignee` on user deletion | High | Add `UPDATE tickets SET assignee = ''` in `DeleteUser` transaction |
-| Create `docs/PRIVACY.md` | High | Data categories, purposes, retention periods, subject rights |
 | Add `GET /api/users/{id}/export` | High | GDPR Art. 20 portability endpoint |
 | Regenerate SBOM on every release; enforce version match | Medium | CI check: sbom version == VERSION file |
 | Warn / refuse start if `TICKET_ENCRYPTION_KEY` absent | Medium | `slog.Warn` at startup; optional strict mode |

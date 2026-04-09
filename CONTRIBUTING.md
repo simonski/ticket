@@ -145,7 +145,7 @@ Coverage thresholds (enforced in CI):
 ## Architecture decisions
 
 Significant design decisions are recorded as **decision tickets** in the
-tracker (`tk ticket new -type decision -title "..."`) and summarised in
+tracker (`tk decision new "..."`) and summarised in
 [docs/DESIGN.md](docs/DESIGN.md).
 
 If you're proposing a change that affects the public `Service` interface,

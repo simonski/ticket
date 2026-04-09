@@ -608,8 +608,6 @@ The TUI has six top-level panels, navigated with **Tab** (forward) or
 Open a ticket in the TUI editor directly from the CLI:
 
 ```bash
-tk ticket edit TK-42
-# or shorthand:
 tk edit TK-42
 ```
 

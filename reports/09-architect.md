@@ -1,6 +1,6 @@
 # Architecture
 
-**Score: 73/100** (was 70)
+**Score: 72/100** (was 73)
 
 ## What is being assessed
 Package dependency DAG (circular import detection), resource bounding, plugin/provider patterns, event/notification system design, interface abstraction quality, SQLite concurrency ceiling, background goroutine lifecycle, and unbounded data growth risks.
@@ -60,29 +60,29 @@ libtickettest ──► libticket, libtickethttp (test only)
 | `cmd/ticket/main.go` is a 457-line switch statement with 60+ cases — no sub-command routing | Low | `cmd/ticket/main.go:94` | Extract each command group into a `cmd/<group>/` package with its own `Run(args)` entry point |
 
 ## Verdict
-The decomposition of `Service` into 7 named sub-interfaces is a meaningful structural improvement over the prior monolithic 104-method blob. History TTL and session purge goroutines close two previously open data-growth risks. The clean 7-dependency `go.mod` and zero-cycle package graph remain strong foundations. The main unresolved risks are the SQLite concurrency ceiling (architectural, not a code defect), the `client.go` mode-branching that grew from ~80 to 98 cases, the unbounded WebSocket hub, and the absence of a `Store` interface that would unlock both real mocking and future backend migration. Score moves from 70 to 73.
+Fresh re-assessment confirms a slight regression (73 → 72). The clean package DAG, 7-sub-interface `Service` decomposition, and bounded goroutine/channel lifecycle all hold. The `client.go` mode-branch count grew from ~80 to 98 between assessments — structural debt is increasing, not decreasing. WebSocket hub still has no subscriber cap (DoS vector). The `messages` table was added without TTL/archival policy (new unbounded growth). Project-scoped event filtering is absent — all WebSocket clients receive all events regardless of project, creating potential cross-project data leakage.
 
 ## Changes since last assessment
 | Change | Impact |
 |--------|--------|
-| `Service` interface split into 7 named sub-interfaces (`AuthService`, `UserService`, `AgentService`, `ProjectService`, `TeamService`, `WorkflowService`, `TicketService`) | **+5** — ISP violation substantially addressed; sub-interfaces can be depended on independently |
-| Daily `PurgeOldHistory` + hourly `PurgeExpiredSessions` goroutines added to server reaper | **+3** — two previously unbounded growth vectors now bounded |
-| Auth rate limiter expired-entry pruning runs on each `allow()` call | **+1** — partial mitigation of rate limiter map growth |
-| `client.go` mode-branch count grew from ~80 to 98 | **-3** — regression; mode-branching is expanding rather than being refactored away |
-| New `messages` table has no TTL/archival policy | **-1** — new unbounded growth vector introduced |
-| SSE hub still has no subscriber limit | **-2** — connection-based DoS vector remains open |
+| `Service` split into 7 named sub-interfaces (AuthService, UserService, AgentService, ProjectService, TeamService, WorkflowService, TicketService) | **+5** — ISP substantially addressed |
+| Daily `PurgeOldHistory` + daily `PurgeExpiredSessions` goroutines | **+3** — two unbounded growth vectors bounded |
+| Auth rate limiter expired-entry pruning on each `allow()` call | **+1** — partial mitigation |
+| **`client.go` mode-branch count: 80 → 98** | **-3** — regression; structural debt increasing |
+| New `messages` table added without TTL policy | **-1** — new unbounded growth vector |
+| WebSocket hub still has no subscriber limit | **-2** — DoS vector remains open |
+| Cross-project WebSocket broadcasts confirmed (no project-scoped filtering) | **-1** — potential data leakage |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Document and plan for SQLite concurrency ceiling | High | Explicit capacity note in README; PostgreSQL migration path |
-| Refactor `client.go` mode-branching | High | Strategy pattern: `LocalClient` + `RemoteClient` implementing shared interface |
-| Expose sub-interfaces for external consumers | High | Allow callers to declare `TicketService` or `UserService` dependency, not full `Service` |
-| Add `max_live_connections` cap to WebSocket hub | Medium | 503 when exceeded; configurable via `app_settings` |
+| Refactor `client.go` mode-branching (98 branches, 1894 lines) | High | Strategy pattern: `LocalClient` + `RemoteClient` implementing shared interface |
+| Add `max_live_connections` cap to WebSocket hub | Medium | 503 when exceeded; configurable via env var or `app_settings` |
+| Add project-scoped event subscriptions | Medium | Filter hub broadcast by `project_id`; prevents cross-project event leakage |
 | Add `Store` interface | Medium | Enables alternative backends and proper unit mocking |
 | Schema migration versioning | Medium | `schema_version` table; skip already-applied migrations |
 | Rate limiter map periodic eviction | Medium | Sweep entries older than window on a ticker |
-| Event persistence for reconnect | Medium | Ring-buffer `events` table; replay on WS reconnect with cursor |
-| Project-scoped event subscriptions | Medium | Filter hub broadcast by `project_id`; prevent cross-project leakage |
-| Add TTL policy for `messages` and `time_entries` | Medium | Config var + purge goroutine |
-| Extract command groups from `main.go` switch | Low | `cmd/<group>/` packages with own `Run()` entry points |
+| Event persistence for reconnect | Medium | Ring-buffer or `events` table; replay on WS reconnect with cursor |
+| Add TTL policy for `messages` and `time_entries` | Medium | Config var + purge goroutine alongside existing history purge |
+| Document SQLite concurrency ceiling | High | Explicit capacity note in README; PostgreSQL migration path |
+| Extract command groups from `cmd_ticket.go` (2610 lines) | Low | Split into lifecycle, assignment, search, rendering files |

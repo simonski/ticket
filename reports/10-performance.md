@@ -1,6 +1,6 @@
 # Performance
 
-**Score: 60/100** (was 60)
+**Score: 62/100** (was 60)
 
 ## What is being assessed
 N+1 query patterns, unbounded list queries, connection pool configuration, database indexing, SSE/WebSocket scalability, pagination on list endpoints, goroutine lifecycle management, and slow-query visibility.
@@ -38,10 +38,13 @@ Reviewed `internal/store/store.go` for connection pool and index definitions. In
 | `MaxOpenConns=1` undocumented — not visible to operators; concurrency ceiling invisible | Low | internal/store/store.go | Add comment explaining SQLite WAL single-writer design choice |
 
 ## Verdict
-The SQLite foundation is well-configured (WAL, busy_timeout, correct pool settings) and indexed for the primary query patterns. The SSE/WebSocket layer is scalable with non-blocking broadcasts and buffered channels. The main performance gap is the unbounded `ListHistoryEvents` and `ListComments` per ticket (both have no LIMIT), the missing composite index on `(open, archived)` causing full scans on the most common query, and the N+1 comments fetch pattern on ticket hydration. No improvements to these issues were made since the last assessment — score holds at 60.
+The SQLite foundation is well-configured (WAL, busy_timeout, correct pool settings). Nine new indexes were confirmed added covering the hottest read paths (`tickets.open/archived/status/type`, `project_members.user_id`, `team_members.user_id`, `ticket_labels.ticket_id`, `users.username`). The main remaining performance gap is the unbounded `ListHistoryEvents` and `ListComments` per ticket (no LIMIT), the missing composite index on `(open, archived)`, the N+1 comments fetch in ticket hydration, and full-project scans in `DeleteTicket`/`cloneTicketRecursive` when `WHERE parent_id = ?` would suffice. Additionally `messages` and `goals` tables were added without FK-column indexes. Score improves to 62 (+2) reflecting the index additions while the N+1 patterns remain unfixed.
 
 ## Changes since last assessment
-- No performance-related changes between 0.1.730 and 0.1.737; all seven version bumps were feature/fix work in chat bridge and CLI commands
+- **9 new indexes confirmed**: `idx_tickets_open`, `idx_tickets_archived`, `idx_tickets_status`, `idx_tickets_type`, `idx_project_members_user_id`, `idx_team_members_user_id`, `idx_team_agents_user_id`, `idx_ticket_labels_ticket_id`, `idx_users_username` — eliminates full-table scans on hottest read paths (+4 points)
+- **New finding**: `messages` table has no indexes on `from_user_id`/`to_user_id` FK columns; `goals` table has no index on `project_id` — new unbounded growth vectors (-2 points)
+- **N+1 patterns confirmed unfixed**: `hydrateTicket()` N+1 comments, `GetWorkflowStageOrder` loop, full-project scan in `DeleteTicket`/`cloneTicketRecursive` still present
+- **Unbounded queries confirmed unfixed**: `ListHistoryEvents` and `ListComments` still have no LIMIT clause
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |

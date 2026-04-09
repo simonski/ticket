@@ -115,10 +115,10 @@ tk ls
 tk ls --status develop/idle --type task
 
 # Mark a ticket active when you start
-tk ticket state TK-XXX active
+tk state TK-XXX active
 
 # Mark it complete when done
-tk ticket state TK-XXX success
+tk state TK-XXX success
 
 # Create a new bug
 tk bug -title "Fix login redirect loop"

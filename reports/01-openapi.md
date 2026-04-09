@@ -1,6 +1,6 @@
 # OpenAPI Spec
 
-**Score: 62/100** (was 55)
+**Score: 64/100** (was 62)
 
 ## What is being assessed
 OpenAPI specification completeness and accuracy: operationId coverage, error response documentation, request body examples, response schema completeness, alignment between spec and implementation handlers, and drift risk from manual maintenance.
@@ -37,26 +37,28 @@ Reviewed `openapi.yaml` (4529 lines, 104 operations) and cross-referenced with `
 | Spec maintained manually — no code generation — drift risk | Medium | repo-wide | Add `spectral lint` to CI; consider openapi-generator for client SDK |
 
 ## Verdict
-Error response coverage is now comprehensive — all 104 operations have 4xx documentation and 96% have 500 coverage; this is the major structural improvement over the previous assessment. The spec remains weak on discoverability: virtually no examples (4 total for 104 operations) and parameter descriptions at 13.5% make it difficult to use as standalone developer documentation. Core structure is sound; the remaining gap is documentation richness.
+Error response coverage is comprehensive — all 104 operations have 4xx documentation and 96% have 500 coverage. Parameter descriptions improved from 13.5% to 27% (15 more parameters documented). One new drift finding: the Prometheus `/metrics` endpoint exists in code but is entirely absent from the spec. The spec remains weak on discoverability with virtually no examples (4 total) and only 7-8% schema property descriptions. Score improves to 64 (+2) reflecting parameter coverage gains and fresh-assessment transparency; the main ceiling is still documentation richness.
 
 ## Changes since last assessment
 | Area | Previous | Now | Delta |
 |------|----------|-----|-------|
 | Operations with 4xx | 22/104 (21%) | 104/104 (100%) | +82 ops fixed |
 | Operations with 5xx | 0/104 | 100/104 (96%) | +100 ops fixed |
+| Parameter descriptions | 13.5% (15/111) | 27% (30/111) | +15 params documented |
 | Request body examples | 0/37 | 1/37 (2.7%) | marginal |
 | Response examples | 0/104 | 2/104 (1.9%) | marginal |
 | Spec size | 3401 lines | 4529 lines | +33% (error responses added) |
-
-The critical finding from the previous assessment (82/104 operations missing error codes) has been fully resolved. Spec grew from 3401 to 4529 lines to accommodate the new error response documentation.
+| `/metrics` endpoint documented | — | ❌ Not in spec | New drift finding |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
 | Add request body examples to all 37 requestBody defs | Critical | Real-world values — use `$ref` to shared `components/examples` entries |
 | Add response examples to complex schemas | Critical | Ticket, User, Project, Workflow objects — add inline `example:` at schema level |
-| Add parameter descriptions to all 111 parameters | High | One-line descriptions for all path (`{id}`, `{ref}`, `{prefix}`) and query params |
-| Add schema property descriptions | High | Especially for core types: Ticket, Project, User, Workflow |
+| Add schema property descriptions (~600 undescribed) | High | Start with core types: Ticket, Project, User, Workflow |
+| Add parameter descriptions to remaining 81 parameters | High | One-line descriptions for all path (`{id}`, `{ref}`, `{prefix}`) and query params |
+| Add `GET /api/metrics` (Prometheus format) to spec | Medium | New drift: endpoint exists in `api_system.go:32` but absent from spec |
 | Add `spectral lint` to CI | Medium | Prevents spec regressions on every PR |
 | Update `info.version` to track binary version | Medium | Keep spec version in sync; drive from `cmd/ticket/VERSION` in Makefile |
+| Add 500 responses to `register`, `login`, `setRegistration`, `createTicket` | Low | 4 critical operations missing 5xx coverage |
 | Add staging/production server entries | Low | Helps SDK generators and hosted docs |

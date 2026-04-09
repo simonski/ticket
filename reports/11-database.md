@@ -1,6 +1,6 @@
 # Database
 
-**Score: 66/100** (was 60)
+**Score: 68/100** (was 66)
 
 ## What is being assessed
 Schema design, index coverage, foreign key cascade behaviour, migration strategy, connection pool configuration, query parameterisation, N+1 patterns, pagination support, audit trail integrity, and encryption/tamper evidence.
@@ -50,7 +50,7 @@ Indexes (35 non-PK): sessions ×2, tickets ×9, stories ×1, story_ticket_links 
 | OFFSET-based pagination is O(n) — no keyset/cursor implementation | Low | `ticket.go` (`ListTickets`) | Add cursor-based path: `WHERE ticket_id > ? ORDER BY ticket_id LIMIT ?` |
 
 ## Verdict
-The addition of the 9 previously missing indexes resolves the most critical performance gap identified in the prior assessment. Daily history purge and AES-GCM email encryption are genuine improvements. However, three new tables (`messages`, `goals`) arrived without indexes on their FK columns, the `history_events` consolidation was started but not finished (leaving a zombie table), and `ON DELETE CASCADE` is still absent across all 25+ foreign key relationships. Score moves from 60 to 66.
+Fresh re-assessment confirms score moves from 66 to 68. The 9 previously missing indexes, daily history purge, and AES-GCM email encryption remain solid. Three new issues were confirmed via re-assessment: the `messages` table is missing `idx_messages_from_user_id` and `idx_messages_to_user_id`; the `goals` table is missing `idx_goals_project_id`; and the `history_events` zombie table is still referenced in DELETE paths. On balance the +2 from additional index coverage (time_entries, workflow_stages) slightly outweighs the new FK-column index gaps. `ON DELETE CASCADE` is still absent across all 25+ foreign key relationships — the most impactful single fix remaining.
 
 ## Changes since last assessment
 | Change | Impact |
@@ -59,6 +59,7 @@ The addition of the 9 previously missing indexes resolves the most critical perf
 | `AddHistoryEvent` now writes only to `ticket_history`; dual-write race eliminated | **+2** — removes inconsistency risk from prior assessment |
 | `PurgeOldHistory` + `PurgeExpiredSessions` wired into server reaper goroutine | **+2** — history and session growth bounded |
 | AES-256-GCM email encryption added (`encrypt.go`) | **+1** — at-rest data protection for PII |
+| Additional coverage: `time_entries` (`idx_time_entries_ticket_id`, `idx_time_entries_user_id`) and `workflow_stages` indexes present | **+2** — confirmed via re-assessment |
 | New `messages` and `goals` tables added without FK-column indexes | **-3** — new unindexed tables on most-queried columns |
 | `history_events` table still exists as zombie; partial migration not completed | **-2** — dead table still referenced in DELETE paths and snapshots |
 | `columnExists` still concatenates table name into PRAGMA without `quoteIdentifier` | **-2** — code smell identified last assessment, unfixed |

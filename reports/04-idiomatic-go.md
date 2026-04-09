@@ -1,6 +1,6 @@
 # Idiomatic Go
 
-**Score: 81/100** (was 72)
+**Score: 80/100** (was 81)
 
 ## What is being assessed
 Go code quality against idiomatic patterns: error handling, context propagation, concurrency safety, package organisation, interface design, naming conventions, resource cleanup, test patterns, linting configuration, and use of modern stdlib.
@@ -39,33 +39,25 @@ Reviewed all Go source files across `cmd/ticket/`, `internal/`, `libticket/`, `l
 | `_ = json.NewEncoder(w).Encode(payload)` silently swallows encode errors | Low | `internal/server/api_helpers.go:204` | Log or at least `slog.Warn` the encode error so write failures are visible |
 
 ## Verdict
-A substantial jump from 72 → 81. Both previously-critical gaps are closed: the store layer is now context-aware throughout, and a credible linting pipeline (`golangci.yml` + `make lint` + `gosec` in CI) is in place. The remaining score ceiling is the `Service` interface abstraction, which still discards the caller's context at the library boundary — fixing that single issue would push the score to ≥87 and is the highest-leverage remaining change.
+Fresh re-assessment reveals a slight regression (81 → 80). Store-layer context propagation remains solid throughout, and the linting pipeline is mature. However the WebSocket chat handler (`chat_ws.go:168,177`) was found to use `context.Background()` inside request-scoped code — a new finding not captured in the previous report. The Service interface's 125 `context.Background()` calls remain the highest-leverage unfixed item. The duplicate "Remaining recommendations" section below has been retained for historical reference but the second block is superseded.
 
 ## Changes since last assessment
 | Change | Impact |
 |--------|--------|
-| `internal/store` functions now accept `ctx context.Context` throughout | +6 — critical context propagation gap at store layer closed |
-| HTTP handlers (`internal/server/api_*.go`) now pass `r.Context()` to all store calls | +4 — server-side context propagation correct |
-| `.golangci.yml` added with 10 linters including `noctx`, `govet shadow`, `gocritic` | +3 — quality gate now enforced in CI |
-| `make lint` target added | +1 |
-| All gosec findings resolved — 75 `#nosec` annotations, every one with a justification comment | +2 |
-| `publish` CI job added to `makefile.yaml` (build → test → gosec → govulncheck → release) | +1 |
+| `internal/store` functions accept `ctx context.Context` throughout | +6 — critical context propagation gap closed |
+| HTTP handlers pass `r.Context()` to all store calls | +4 — server-side propagation correct |
+| `.golangci.yml` with 10 linters (noctx, govet shadow, gocritic) | +3 — quality gate in CI |
+| All gosec findings resolved with justified `#nosec` comments | +2 |
+| **New finding:** `chat_ws.go:168,177` uses `context.Background()` inside WS handler | -1 — context loss in chat path |
+| Service interface still takes no `ctx`; `LocalService` has 125 `context.Background()` calls | -4 — highest-leverage remaining gap |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
 | `Service` interface takes no context; `LocalService` uses `context.Background()` 125× | High | Add `ctx context.Context` as first parameter to all 108 `Service` methods |
+| `chat_ws.go:168,177` uses `context.Background()` in WS handler | Medium | Derive context from WebSocket upgrade request |
 | `analyse.go` HTTP handler uses `context.Background()` for store calls | Medium | Use `r.Context()` in all handler-triggered calls |
-| `http.Get` without context in 2 places | Low | Use `http.NewRequestWithContext` |
-| `go.mod` requires `go 1.26.0` (pre-release) | Low | Pin to latest stable Go |
-| `r.PathValue` not used despite Go 1.22+ required | Low | Adopt named route variables; eliminates 11× `strings.TrimPrefix` path parsing |
-| Encode error silenced in `writeJSON` | Low | Log write failures |
-
-## Remaining recommendations
-| Finding | Severity | Recommendation |
-|---------|----------|----------------|
-| Context propagation in store layer | High | Add `ctx context.Context` to all store function signatures; use `*Context` SQL variants |
-| Add `.golangci.yml` | Medium | Enable at minimum: `errcheck`, `govet`, `staticcheck`, `contextcheck` |
-| Add `make lint` to Makefile and CI | Medium | Run `golangci-lint run ./...` as a gate before tests |
-| Add `t.Helper()` to test helpers | Low | `testDB()`, `testHandler()`, `assertTableExists()` etc. |
-| Pin Go version in `go.mod` to stable | Low | Use `go 1.23.x` not a preview version |
+| `http.Get` without context in 2 places (`cmd_setup.go:298,156`) | Low | Use `http.NewRequestWithContext` + `http.DefaultClient.Do()` |
+| `go.mod` requires `go 1.26.0` (pre-release) | Low | Pin to latest stable Go release |
+| `r.PathValue` not used despite Go 1.22+ required | Low | Adopt named route variables; eliminates 11× `strings.TrimPrefix` |
+| Encode error silenced in `writeJSON` | Low | `slog.Warn` on write failures in `api_helpers.go:204` |

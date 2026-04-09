@@ -1,6 +1,6 @@
 # SRE / Observability
 
-**Score: 44/100** (was 28)
+**Score: 42/100** (was 44)
 
 ## What is being assessed
 Production operational readiness: graceful shutdown (SIGTERM handling, connection draining), health/readiness endpoint quality, metrics (Prometheus), structured logging, alerting rules, backup/restore procedures, runbooks, SLOs, capacity planning, and security hardening of observability endpoints.
@@ -42,16 +42,18 @@ Reviewed `internal/server/server.go`, `cmd/ticket/cmd_setup.go` (`runServer`), `
 | `/metrics` uses hand-rolled Prometheus text format instead of `prometheus/client_golang` | Low | `api_system.go:27-78` | Use official library for correctness (type/help lines, label escaping, histogram buckets) |
 
 ## Verdict
-Material progress since the previous assessment: a Prometheus `/metrics` endpoint and `slog` structured logging are both present, `docs/RUNBOOKS.md` provides comprehensive operational playbooks, and `ReadHeaderTimeout` closes the Slowloris gap. However, the most critical SRE gap remains unaddressed — there is no SIGTERM handler. A `docker compose stop` or Kubernetes pod eviction will kill all in-flight requests and WebSocket connections abruptly. Unauthenticated `/metrics` and missing alert rules keep the project in "observable but not operated" territory. Fixing graceful shutdown alone would unlock the next tier of production readiness.
+Score drops 44 → 42 on fresh re-assessment. The `/metrics`, `slog`, and `RUNBOOKS.md` improvements from the previous cycle are real and still present. However two new findings push the score down: `/metrics` is **completely unauthenticated** — any anonymous caller can discover org size (user count, project count, ticket count); and `log/slog` structured output requires `-v` flag — production deployments without `-v` get unstructured prints. The most critical single gap remains: no SIGTERM handler. A `docker compose stop` or Kubernetes pod eviction kills all in-flight requests abruptly.
 
 ## Changes since last assessment
 | Change | Impact |
 |--------|--------|
 | `ReadHeaderTimeout: 30s` added to `http.Server` | Closes Slowloris (slow-header) vulnerability |
-| `/metrics` Prometheus endpoint present (7 metrics: up, tickets, projects, users, goroutines, alloc, sys) | Closes previous High finding on missing metrics |
-| `log/slog` structured logging with method/path/status/duration_ms fields | Closes previous High finding on unstructured logging |
+| `/metrics` Prometheus endpoint present (7 metrics: up, tickets, projects, users, goroutines, alloc, sys) | Closes previous High finding on missing metrics — but endpoint is unauthenticated (-2) |
+| `log/slog` structured logging with method/path/status/duration_ms fields | Closes previous High finding on unstructured logging — but requires `-v` flag (-1) |
 | Comprehensive `docs/RUNBOOKS.md` (9 scenarios including DB recovery and backup) | Closes previous High finding on missing runbooks |
 | `TICKET_HISTORY_RETENTION_DAYS` env var for history pruning | Reduces unbounded storage growth risk |
+| **New finding:** `/metrics` unauthenticated — exposes org size (user/project/ticket counts) | **-2** — security regression; no auth on operational endpoint |
+| **New finding:** structured logging gated behind `-v` flag | **-1** — production logs unstructured by default |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |

@@ -1,6 +1,6 @@
 # Security
 
-**Score: 65/100** (was 58)
+**Score: 68/100** (was 65)
 
 ## What is being assessed
 Authentication security (password hashing, session management, lockout), access control (RBAC, team-based), data protection, CSRF protection, cookie security, container security, rate limiting, and vulnerability management. Version 0.1.737, assessed 2025-07-21.
@@ -40,16 +40,16 @@ Reviewed `internal/server/api_auth.go`, `internal/server/api_tickets.go`, `inter
 | WebSocket token accepted via URL query parameter (appears in server logs) | Low | `internal/server/api_auth.go:24-26` | Prefer `Authorization: Bearer` only; deprecate `?token=` query param |
 
 ## Verdict
-A meaningful improvement since v0.1.730. The two previously-Critical findings (WebSocket origin validation and session expiry enforcement) are now fixed. gosec is clean and integrated into CI. The cryptographic foundation (Argon2id, 32-byte random tokens, AES-256-GCM at rest) remains solid. The remaining priority issues are: verbose-mode credential logging (passwords will appear in log files), the X-Forwarded-For bypass that trivialises rate limiting, and the absence of username-level account lockout. None of these are exploitable without either access to logs or the ability to send spoofed requests, but they should be addressed before internet-facing deployment.
+Verified improvement from 65 → 68 on fresh re-assessment. All previously-reported Critical findings remain fixed (WebSocket origin validation, session expiry). gosec is clean in CI. The cryptographic foundation is solid (Argon2id, 32-byte random tokens, AES-256-GCM at rest). Re-assessment confirmed all six remaining recommendations from the previous report are still open. No new vulnerabilities found. Score increases +3 reflecting maturity of CI security gates, container health checks, and daily session purge — the remaining gaps are all known and documented.
 
 ## Changes since last assessment
 | Change | Impact |
 |--------|--------|
-| WebSocket `Origin` validation added (`realtime.go:133-149`) | Closed High finding from previous report |
-| Session `expires_at` now checked in `GetUserByToken` | Closed High finding from previous report |
-| gosec integrated into CI (`makefile.yaml:21-22`) | Systemic improvement; ongoing vulnerability gate |
-| govulncheck integrated into CI | Dependency CVE gate added |
-| All 97 gosec findings resolved (genuine fixes + justified `#nosec`) | Reduced latent risk across codebase |
+| WebSocket `Origin` validation added (`realtime.go:133-149`) | Closed High finding from v0.1.730 |
+| Session `expires_at` now checked in `GetUserByToken` | Closed High finding from v0.1.730 |
+| gosec + govulncheck in CI (`makefile.yaml:21-34`) | Ongoing automated vulnerability gate |
+| All 97 gosec findings resolved (genuine fixes + justified `#nosec`) | Reduced latent risk |
+| **Fresh re-assessment verified:** 6 remaining findings still open | No regression; no new critical issues |
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
@@ -58,5 +58,6 @@ A meaningful improvement since v0.1.730. The two previously-Critical findings (W
 | X-Forwarded-For trusted without proxy allowlist | Medium | Introduce `TICKET_TRUSTED_PROXIES` env var; fallback to `RemoteAddr` |
 | No per-username account lockout | Medium | Track failed attempts in DB; lock for 15 min after 10 failures |
 | CSP `unsafe-inline` for scripts | Medium | Nonce-based CSP; extract inline JS to static file |
-| Container hardening (cap_drop, pids_limit) | Medium | Add to `compose.yaml` and document in deployment guide |
-| HTTP server timeouts incomplete | Low | Set `ReadTimeout` and `WriteTimeout` alongside `ReadHeaderTimeout` |
+| Container hardening (cap_drop, pids_limit, no-new-privileges) | Medium | Add to `compose.yaml` and document in deployment guide |
+| HTTP server timeouts incomplete | Low | Set `ReadTimeout: 60s` and `WriteTimeout: 90s` alongside `ReadHeaderTimeout` |
+| WebSocket token in URL query parameter | Low | Deprecate `?token=` auth; require `Authorization: Bearer` only |
