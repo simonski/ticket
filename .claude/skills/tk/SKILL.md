@@ -1,6 +1,8 @@
 ---
 name: tk
 description: Use this skill when working on tasks within a codebase that uses `tk` for ticket tracking. Applies when starting work on a feature or bug, completing work, needing to understand current project state, capturing new requirements or decisions, logging time, or when the user references a ticket ID. Also applies when the user says things like "what are we working on", "mark that done", "log this as a bug", or "record that decision".
+metadata: 
+    version: 0.0.1
 ---
 
 # tk Ticket Management Skill

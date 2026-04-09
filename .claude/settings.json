@@ -1,6 +1,9 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions"
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "Read(.ticket/ticket.db)"
+    ]
   },
   "spinnerTipsEnabled": false,
   "attribution": {
