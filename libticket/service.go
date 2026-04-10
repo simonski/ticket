@@ -76,7 +76,7 @@ type TeamService interface {
 	ListTeamAgents(teamID int64) ([]store.TeamAgent, error)
 }
 
-// SdlcService covers sdlc templates and stage management.
+// SdlcService covers sdlc templates, stage management, and stage-role assignments.
 type SdlcService interface {
 	CreateSdlc(request SdlcRequest) (store.Sdlc, error)
 	ListSdlcs() ([]store.Sdlc, error)
@@ -87,6 +87,9 @@ type SdlcService interface {
 	ReorderSdlcStages(sdlcID int64, stageIDs []int64) error
 	ExportSdlc(id int64) (store.SdlcExport, error)
 	ImportSdlc(export store.SdlcExport) (store.Sdlc, error)
+	AddSdlcStageRole(sdlcID, stageID, roleID int64) error
+	RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error
+	ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error
 }
 
 // TicketService covers ticket CRUD, lifecycle, labels, time, dependencies, and history.
@@ -107,10 +110,16 @@ type TicketService interface {
 	UpdateTicket(id string, request TicketUpdateRequest) (store.Ticket, error)
 	CloseTicket(id string, message string) (store.Ticket, error)
 	OpenTicket(id string, message string) (store.Ticket, error)
+	CompleteTicket(id string, message string) (store.Ticket, error)
+	ReopenTicket(id string, message string) (store.Ticket, error)
 	ArchiveTicket(id string, message string) (store.Ticket, error)
 	UnarchiveTicket(id string, message string) (store.Ticket, error)
 	ReadyTicket(id string, message string) (store.Ticket, error)
 	NotReadyTicket(id string, message string) (store.Ticket, error)
+	DraftTicket(id string, message string) (store.Ticket, error)
+	UndraftTicket(id string, message string) (store.Ticket, error)
+	NextTicket(id string) (store.Ticket, error)
+	PreviousTicket(id string) (store.Ticket, error)
 	SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error)
 	UnsetTicketSdlc(id string) (store.Ticket, error)
 	DeleteTicket(id string) error

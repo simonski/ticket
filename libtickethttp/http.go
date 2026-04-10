@@ -392,6 +392,42 @@ func (s *Service) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
 	return s.client.ImportSdlc(export)
 }
 
+func (s *Service) AddSdlcStageRole(sdlcID, stageID, roleID int64) error {
+	return s.client.AddSdlcStageRole(sdlcID, stageID, roleID)
+}
+
+func (s *Service) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
+	return s.client.RemoveSdlcStageRole(sdlcID, stageID, roleID)
+}
+
+func (s *Service) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error {
+	return s.client.ReorderSdlcStageRoles(sdlcID, stageID, roleIDs)
+}
+
+func (s *Service) CompleteTicket(id string, message string) (store.Ticket, error) {
+	return s.client.CompleteTicket(id, message)
+}
+
+func (s *Service) ReopenTicket(id string, message string) (store.Ticket, error) {
+	return s.client.ReopenTicket(id, message)
+}
+
+func (s *Service) DraftTicket(id string, message string) (store.Ticket, error) {
+	return s.client.DraftTicket(id, message)
+}
+
+func (s *Service) UndraftTicket(id string, message string) (store.Ticket, error) {
+	return s.client.UndraftTicket(id, message)
+}
+
+func (s *Service) NextTicket(id string) (store.Ticket, error) {
+	return s.client.NextTicket(id)
+}
+
+func (s *Service) PreviousTicket(id string) (store.Ticket, error) {
+	return s.client.PreviousTicket(id)
+}
+
 func (s *Service) LogTime(ticketID string, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
 	return s.client.LogTime(ticketID, request)
 }

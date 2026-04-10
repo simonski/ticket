@@ -2690,3 +2690,137 @@ func createTicket(opts ticketCreateOptions) error {
 	fmt.Println(ticketLabel(ticket))
 	return nil
 }
+
+func runComplete(args []string) error {
+	fs := flag.NewFlagSet("complete", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: ticket complete [-id] <id> [-m comment]")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	updated, err := svc.CompleteTicket(idVal, *message)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	fmt.Printf("%s completed (stage: done, complete: true)\n", updated.ID)
+	return nil
+}
+
+func runReopen(args []string) error {
+	fs := flag.NewFlagSet("reopen", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: ticket reopen [-id] <id> [-m comment]")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	updated, err := svc.ReopenTicket(idVal, *message)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	fmt.Printf("%s reopened (stage: %s, complete: false)\n", updated.ID, updated.Stage)
+	return nil
+}
+
+func runNext(args []string) error {
+	fs := flag.NewFlagSet("next", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: ticket next [-id] <id>")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	before, err := svc.GetTicket(idVal)
+	if err != nil {
+		return err
+	}
+	updated, err := svc.NextTicket(before.ID)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	if updated.Complete {
+		fmt.Printf("%s advanced: %s -> done (complete)\n", updated.ID, before.Status)
+	} else {
+		fmt.Printf("%s advanced: %s -> %s (idle)\n", updated.ID, before.Status, updated.Status)
+	}
+	return nil
+}
+
+func runPrevious(args []string) error {
+	fs := flag.NewFlagSet("previous", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: ticket previous [-id] <id>")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	before, err := svc.GetTicket(idVal)
+	if err != nil {
+		return err
+	}
+	updated, err := svc.PreviousTicket(before.ID)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	fmt.Printf("%s regressed: %s -> %s (idle)\n", updated.ID, before.Status, updated.Status)
+	return nil
+}

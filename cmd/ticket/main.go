@@ -188,7 +188,19 @@ func run(args []string) error {
 	case "active":
 		return runTicketStateAlias(trimmedArgs[1:], store.StateActive, trimmedArgs[0])
 	case "complete":
+		return runComplete(trimmedArgs[1:])
+	case "reopen":
+		return runReopen(trimmedArgs[1:])
+	case "success":
 		return runTicketStateAlias(trimmedArgs[1:], store.StateSuccess, trimmedArgs[0])
+	case "next":
+		return runNext(trimmedArgs[1:])
+	case "previous", "prev":
+		return runPrevious(trimmedArgs[1:])
+	case "draft":
+		return runSetTicketDraft(trimmedArgs[1:], true)
+	case "undraft":
+		return runSetTicketDraft(trimmedArgs[1:], false)
 	case "assign":
 		return runAssign(trimmedArgs[1:])
 	case "unassign":

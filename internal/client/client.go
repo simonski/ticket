@@ -1677,6 +1677,88 @@ func (c *Client) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
 	return wf, err
 }
 
+func (c *Client) AddSdlcStageRole(sdlcID, stageID, roleID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.AddSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+	}
+	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages/%d/roles", sdlcID, stageID), map[string]int64{"role_id": roleID}, nil)
+}
+
+func (c *Client) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.RemoveSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+	}
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/%d/stages/%d/roles/%d", sdlcID, stageID, roleID), nil, nil)
+}
+
+func (c *Client) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.ReorderSdlcStageRoles(context.Background(), db, sdlcID, stageID, roleIDs)
+	}
+	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/%d/stages/%d/roles/reorder", sdlcID, stageID), map[string][]int64{"role_ids": roleIDs}, nil)
+}
+
+func (c *Client) CompleteTicket(id string, message string) (store.Ticket, error) {
+	return c.CloseTicket(id, message)
+}
+
+func (c *Client) ReopenTicket(id string, message string) (store.Ticket, error) {
+	return c.OpenTicket(id, message)
+}
+
+func (c *Client) DraftTicket(id string, message string) (store.Ticket, error) {
+	return c.NotReadyTicket(id, message)
+}
+
+func (c *Client) UndraftTicket(id string, message string) (store.Ticket, error) {
+	return c.ReadyTicket(id, message)
+}
+
+func (c *Client) NextTicket(id string) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, _ := c.localUser(db)
+		return store.NextTicket(context.Background(), db, id, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/next", id), nil, &ticket)
+	return ticket, err
+}
+
+func (c *Client) PreviousTicket(id string) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		defer db.Close()
+		user, _ := c.localUser(db)
+		return store.PreviousTicket(context.Background(), db, id, user.Username, user.ID)
+	}
+	var ticket store.Ticket
+	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/previous", id), nil, &ticket)
+	return ticket, err
+}
+
 func (c *Client) LogTime(ticketID string, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

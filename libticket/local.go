@@ -1210,6 +1210,75 @@ func (s *LocalService) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
 	return store.ImportSdlc(context.Background(), db, export)
 }
 
+func (s *LocalService) AddSdlcStageRole(sdlcID, stageID, roleID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.AddSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+}
+
+func (s *LocalService) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.RemoveSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+}
+
+func (s *LocalService) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.ReorderSdlcStageRoles(context.Background(), db, sdlcID, stageID, roleIDs)
+}
+
+func (s *LocalService) CompleteTicket(id string, message string) (store.Ticket, error) {
+	return s.CloseTicket(id, message)
+}
+
+func (s *LocalService) ReopenTicket(id string, message string) (store.Ticket, error) {
+	return s.OpenTicket(id, message)
+}
+
+func (s *LocalService) DraftTicket(id string, message string) (store.Ticket, error) {
+	return s.NotReadyTicket(id, message)
+}
+
+func (s *LocalService) UndraftTicket(id string, message string) (store.Ticket, error) {
+	return s.ReadyTicket(id, message)
+}
+
+func (s *LocalService) NextTicket(id string) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.NextTicket(context.Background(), db, id, user.Username, user.ID)
+}
+
+func (s *LocalService) PreviousTicket(id string) (store.Ticket, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	defer db.Close()
+	user, err := s.localUser(db)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return store.PreviousTicket(context.Background(), db, id, user.Username, user.ID)
+}
+
 func (s *LocalService) LogTime(ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
 	db, err := s.openDB()
 	if err != nil {

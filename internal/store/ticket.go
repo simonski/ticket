@@ -462,11 +462,34 @@ func SetTicketComplete(ctx context.Context, db *sql.DB, id string, complete bool
 	if current.Complete == complete {
 		return current, nil
 	}
+	var stage, state string
+	if complete {
+		// Completing: save current position for reopen, move to done
+		stage = StageDone
+		state = current.State
+		if state == StateActive {
+			state = StateIdle
+		}
+	} else {
+		// Reopening: restore previous position or default to develop/idle
+		if current.PreviousSdlcStageID != nil {
+			stage = current.Stage // will be overridden below
+		} else {
+			stage = StageDevelop
+		}
+		state = StateIdle
+	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET complete = ?, updated_at = CURRENT_TIMESTAMP
+		SET complete = ?, stage = ?, state = ?, status = ?,
+			previous_sdlc_stage_id = CASE WHEN ? = 1 THEN sdlc_stage_id ELSE previous_sdlc_stage_id END,
+			previous_role_id = CASE WHEN ? = 1 THEN role_id ELSE previous_role_id END,
+			sdlc_stage_id = CASE WHEN ? = 0 THEN previous_sdlc_stage_id ELSE sdlc_stage_id END,
+			role_id = CASE WHEN ? = 0 THEN previous_role_id ELSE role_id END,
+			updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, boolToInt(complete), id)
+	`, boolToInt(complete), stage, state, RenderLifecycleStatus(stage, state),
+		boolToInt(complete), boolToInt(complete), boolToInt(complete), boolToInt(complete), id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -605,6 +628,190 @@ func addTicketLifecycleHistoryEvent(ctx context.Context, db *sql.DB, current Tic
 		return err
 	}
 	return nil
+}
+
+// NextTicket advances a ticket to the next role within its stage, or to the first
+// role of the next stage if it's at the last role. Requires state=success.
+func NextTicket(ctx context.Context, db *sql.DB, id string, actorUsername, actorID string) (Ticket, error) {
+	ticket, err := GetTicket(ctx, db, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if ticket.State != StateSuccess {
+		return Ticket{}, fmt.Errorf("cannot advance %s — state is %q, must be %q", id, ticket.State, StateSuccess)
+	}
+	if ticket.Complete {
+		return Ticket{}, fmt.Errorf("cannot advance %s — ticket is complete", id)
+	}
+	if ticket.SdlcStageID == nil {
+		return Ticket{}, fmt.Errorf("cannot advance %s — no SDLC stage assigned", id)
+	}
+
+	// Find the next role in the current stage, or the first role in the next stage.
+	nextStageID, nextRoleID, nextStageName, done, err := findNextStep(ctx, db, *ticket.SdlcStageID, ticket.RoleID)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if done {
+		// Last step — mark complete
+		if _, err := db.ExecContext(ctx, `
+			UPDATE tickets SET complete = 1, stage = 'done', state = 'idle', status = 'done/idle',
+				sdlc_stage_id = ?, role_id = NULL, updated_at = CURRENT_TIMESTAMP
+			WHERE ticket_id = ?`, nextStageID, id); err != nil {
+			return Ticket{}, err
+		}
+	} else {
+		if _, err := db.ExecContext(ctx, `
+			UPDATE tickets SET sdlc_stage_id = ?, role_id = ?, stage = ?, state = 'idle',
+				status = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE ticket_id = ?`, nextStageID, nextRoleID, nextStageName, RenderLifecycleStatus(nextStageName, StateIdle), id); err != nil {
+			return Ticket{}, err
+		}
+	}
+	return GetTicket(ctx, db, id)
+}
+
+// PreviousTicket moves a ticket back to the previous role or stage. Requires state=fail.
+func PreviousTicket(ctx context.Context, db *sql.DB, id string, actorUsername, actorID string) (Ticket, error) {
+	ticket, err := GetTicket(ctx, db, id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if ticket.State != StateFail {
+		return Ticket{}, fmt.Errorf("cannot regress %s — state is %q, must be %q", id, ticket.State, StateFail)
+	}
+	if ticket.SdlcStageID == nil {
+		return Ticket{}, fmt.Errorf("cannot regress %s — no SDLC stage assigned", id)
+	}
+
+	prevStageID, prevRoleID, prevStageName, atStart, err := findPrevStep(ctx, db, *ticket.SdlcStageID, ticket.RoleID)
+	if err != nil {
+		return Ticket{}, err
+	}
+	if atStart {
+		return Ticket{}, fmt.Errorf("cannot regress %s — already at the first step", id)
+	}
+	if _, err := db.ExecContext(ctx, `
+		UPDATE tickets SET sdlc_stage_id = ?, role_id = ?, stage = ?, state = 'idle',
+			status = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE ticket_id = ?`, prevStageID, prevRoleID, prevStageName, RenderLifecycleStatus(prevStageName, StateIdle), id); err != nil {
+		return Ticket{}, err
+	}
+	return GetTicket(ctx, db, id)
+}
+
+// findNextStep finds the next role in the current stage, or the first role of the next stage.
+// Returns (stageID, roleID, stageName, done, error). done=true means the ticket has completed all steps.
+func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, currentRoleID *int64) (int64, *int64, string, bool, error) {
+	// Get the current stage's SDLC ID and stage info
+	var sdlcID int64
+	var currentOrder int
+	var currentStageName string
+	if err := db.QueryRowContext(ctx, `SELECT sdlc_id, sort_order, stage_name FROM sdlc_stages WHERE sdlc_stage_id = ?`, currentStageID).Scan(&sdlcID, &currentOrder, &currentStageName); err != nil {
+		return 0, nil, "", false, err
+	}
+
+	// Get roles for the current stage
+	roles, err := ListSdlcStageRoles(ctx, db, sdlcID, currentStageID)
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+
+	// Find current role index
+	currentRoleIdx := -1
+	if currentRoleID != nil {
+		for i, r := range roles {
+			if r.ID == *currentRoleID {
+				currentRoleIdx = i
+				break
+			}
+		}
+	}
+
+	// If there's a next role in this stage, return it
+	if currentRoleIdx >= 0 && currentRoleIdx < len(roles)-1 {
+		nextRole := roles[currentRoleIdx+1]
+		return currentStageID, &nextRole.ID, currentStageName, false, nil
+	}
+
+	// Otherwise, move to the next stage
+	var nextStageID int64
+	var nextStageName string
+	err = db.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, sdlcID, currentOrder).Scan(&nextStageID, &nextStageName)
+	if err == sql.ErrNoRows {
+		// No next stage — done
+		return currentStageID, nil, "done", true, nil
+	}
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+
+	// Check if the next stage is "done"
+	if nextStageName == StageDone {
+		return nextStageID, nil, StageDone, true, nil
+	}
+
+	// Get the first role in the next stage
+	nextRoles, err := ListSdlcStageRoles(ctx, db, sdlcID, nextStageID)
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+	if len(nextRoles) > 0 {
+		return nextStageID, &nextRoles[0].ID, nextStageName, false, nil
+	}
+	return nextStageID, nil, nextStageName, false, nil
+}
+
+// findPrevStep finds the previous role in the current stage, or the last role of the previous stage.
+func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, currentRoleID *int64) (int64, *int64, string, bool, error) {
+	var sdlcID int64
+	var currentOrder int
+	var currentStageName string
+	if err := db.QueryRowContext(ctx, `SELECT sdlc_id, sort_order, stage_name FROM sdlc_stages WHERE sdlc_stage_id = ?`, currentStageID).Scan(&sdlcID, &currentOrder, &currentStageName); err != nil {
+		return 0, nil, "", false, err
+	}
+
+	roles, err := ListSdlcStageRoles(ctx, db, sdlcID, currentStageID)
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+
+	currentRoleIdx := -1
+	if currentRoleID != nil {
+		for i, r := range roles {
+			if r.ID == *currentRoleID {
+				currentRoleIdx = i
+				break
+			}
+		}
+	}
+
+	// If there's a previous role in this stage, return it
+	if currentRoleIdx > 0 {
+		prevRole := roles[currentRoleIdx-1]
+		return currentStageID, &prevRole.ID, currentStageName, false, nil
+	}
+
+	// Otherwise, move to the previous stage
+	var prevStageID int64
+	var prevStageName string
+	err = db.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1`, sdlcID, currentOrder).Scan(&prevStageID, &prevStageName)
+	if err == sql.ErrNoRows {
+		return 0, nil, "", true, nil // at the very start
+	}
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+
+	prevRoles, err := ListSdlcStageRoles(ctx, db, sdlcID, prevStageID)
+	if err != nil {
+		return 0, nil, "", false, err
+	}
+	if len(prevRoles) > 0 {
+		lastRole := prevRoles[len(prevRoles)-1]
+		return prevStageID, &lastRole.ID, prevStageName, false, nil
+	}
+	return prevStageID, nil, prevStageName, false, nil
 }
 
 func SetTicketHealth(ctx context.Context, db *sql.DB, id string, score int) (Ticket, error) {

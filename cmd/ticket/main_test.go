@@ -1898,8 +1898,8 @@ func TestRunStatusChangeInLocalModeDoesNotRequireOwnership(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "status: done/idle") {
-		t.Fatalf("complete output = %q, want status: done/idle (auto-advanced from develop)", output)
+	if !strings.Contains(output, "completed") {
+		t.Fatalf("complete output = %q, want completed", output)
 	}
 }
 
@@ -4502,10 +4502,19 @@ func TestQuickstartClient(t *testing.T) {
 		}
 	})
 	ticket, _ = svcGetTicket(t, taskID)
-	// complete auto-advances to next stage
-	if ticket.Stage == "develop" {
-		t.Fatalf("complete did not advance stage, still design")
+	if !ticket.Complete {
+		t.Fatal("complete should set complete=true")
 	}
+	if ticket.Stage != "done" {
+		t.Fatalf("complete should set stage=done, got %s", ticket.Stage)
+	}
+
+	// Reopen to continue testing
+	captureStdout(t, func() {
+		if err := run([]string{"reopen", "-id", taskID}); err != nil {
+			t.Fatalf("reopen error = %v", err)
+		}
+	})
 
 	captureStdout(t, func() {
 		if err := run([]string{"idle", "-id", taskID}); err != nil {
