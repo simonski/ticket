@@ -587,7 +587,7 @@ func (r *router) registerTicketHandlers() {
 				if msg.Message != "" {
 					store.AddComment(r.Context(), db, id, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
 				}
-				ticket, err := store.SetTicketOpen(r.Context(), db, id, false, user.Username, user.ID)
+				ticket, err := store.SetTicketComplete(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
@@ -607,7 +607,7 @@ func (r *router) registerTicketHandlers() {
 				}
 				var msg messageRequest
 				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
-				ticket, err := store.SetTicketOpen(r.Context(), db, id, true, user.Username, user.ID)
+				ticket, err := store.SetTicketComplete(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
@@ -677,7 +677,7 @@ func (r *router) registerTicketHandlers() {
 				}
 				var msg messageRequest
 				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
-				ticket, err := store.SetTicketReady(r.Context(), db, id, true, user.Username, user.ID)
+				ticket, err := store.SetTicketDraft(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())
@@ -700,7 +700,7 @@ func (r *router) registerTicketHandlers() {
 				}
 				var msg messageRequest
 				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
-				ticket, err := store.SetTicketReady(r.Context(), db, id, false, user.Username, user.ID)
+				ticket, err := store.SetTicketDraft(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
 						writeError(w, http.StatusNotFound, err.Error())

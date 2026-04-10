@@ -617,16 +617,16 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CloseTicket() error = %v", err)
 		}
-		if closed.Open {
-			t.Fatal("CloseTicket().Open = true, want false")
+		if !closed.Complete {
+			t.Fatal("CloseTicket() should set complete=true")
 		}
 
 		opened, err := svc.OpenTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("OpenTicket() error = %v", err)
 		}
-		if !opened.Open {
-			t.Fatal("OpenTicket().Open = false, want true")
+		if opened.Complete {
+			t.Fatal("OpenTicket() should set complete=false")
 		}
 
 		// Archive/Unarchive
@@ -1336,16 +1336,16 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
-		if !readied.Ready {
-			t.Fatal("ReadyTicket().Ready = false, want true")
+		if readied.Draft {
+			t.Fatal("ReadyTicket() should clear draft flag")
 		}
 
 		unreadied, err := svc.NotReadyTicket(ticket.ID, "")
 		if err != nil {
 			t.Fatalf("NotReadyTicket() error = %v", err)
 		}
-		if unreadied.Ready {
-			t.Fatal("NotReadyTicket().Ready = true, want false")
+		if !unreadied.Draft {
+			t.Fatal("NotReadyTicket() should set draft flag")
 		}
 	})
 

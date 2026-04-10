@@ -20,7 +20,7 @@ func AddDependency(ctx context.Context, db *sql.DB, projectID int64, ticketID, d
 	if err != nil {
 		return Dependency{}, err
 	}
-	if !ticket.Open {
+	if ticket.Complete {
 		return Dependency{}, ErrTicketClosed
 	}
 	if ticket.Archived {
@@ -77,7 +77,7 @@ func DeleteDependency(ctx context.Context, db *sql.DB, projectID int64, ticketID
 	if err != nil {
 		return err
 	}
-	if !ticket.Open {
+	if ticket.Complete {
 		return ErrTicketClosed
 	}
 	if ticket.Archived {

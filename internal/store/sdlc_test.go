@@ -42,42 +42,27 @@ func TestInitSeedsDefaultSdlc(t *testing.T) {
 	}
 }
 
-func TestDefaultSdlcHasFourStages(t *testing.T) {
+func TestDefaultSdlcHasTwoStages(t *testing.T) {
 	db := setupSdlcTestDB(t)
 	sdlcs, _ := ListSdlcs(context.Background(), db)
-	var wfID int64
+	var sdlcID int64
 	for _, w := range sdlcs {
 		if w.Name == "default" {
-			wfID = w.ID
+			sdlcID = w.ID
 		}
 	}
-	wf, err := GetSdlc(context.Background(), db, wfID)
+	wf, err := GetSdlc(context.Background(), db, sdlcID)
 	if err != nil {
 		t.Fatalf("GetSdlc() error = %v", err)
 	}
-	if len(wf.Stages) != 4 {
-		t.Fatalf("default sdlc stages = %d, want 4", len(wf.Stages))
+	if len(wf.Stages) != 2 {
+		t.Fatalf("default sdlc stages = %d, want 2", len(wf.Stages))
 	}
-	expected := []struct {
-		name string
-		role string
-	}{
-		{"design", "BA"},
-		{"develop", "Lead Engineer"},
-		{"test", "QA/Tester"},
-		{"done", "Product Owner"},
+	if wf.Stages[0].StageName != "develop" {
+		t.Errorf("stage[0] = %q, want develop", wf.Stages[0].StageName)
 	}
-	for i, want := range expected {
-		got := wf.Stages[i]
-		if got.StageName != want.name {
-			t.Errorf("stage[%d].StageName = %q, want %q", i, got.StageName, want.name)
-		}
-		if got.RoleTitle != want.role {
-			t.Errorf("stage[%d].RoleTitle = %q, want %q", i, got.RoleTitle, want.role)
-		}
-		if got.SortOrder != i {
-			t.Errorf("stage[%d].SortOrder = %d, want %d", i, got.SortOrder, i)
-		}
+	if wf.Stages[1].StageName != "done" {
+		t.Errorf("stage[1] = %q, want done", wf.Stages[1].StageName)
 	}
 }
 
@@ -92,20 +77,16 @@ func TestSdlcCRUD(t *testing.T) {
 		t.Fatalf("Name = %q, want %q", wf.Name, "custom")
 	}
 
-	// Add stages
-	role, _ := GetRoleByTitle(context.Background(), db, "BA")
-	s1, err := AddSdlcStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", &role.ID, 0)
+	// Add stages (no role_id — roles are via junction table now)
+	s1, err := AddSdlcStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", 0)
 	if err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
 	if s1.StageName != "analysis" {
 		t.Fatalf("StageName = %q, want %q", s1.StageName, "analysis")
 	}
-	if s1.RoleTitle != "BA" {
-		t.Fatalf("RoleTitle = %q, want %q", s1.RoleTitle, "BA")
-	}
 
-	s2, err := AddSdlcStage(context.Background(), db, wf.ID, "build", "", nil, 1)
+	s2, err := AddSdlcStage(context.Background(), db, wf.ID, "build", "", 1)
 	if err != nil {
 		t.Fatalf("AddSdlcStage(build) error = %v", err)
 	}
@@ -144,9 +125,9 @@ func TestSdlcCRUD(t *testing.T) {
 func TestReorderSdlcStages(t *testing.T) {
 	db := setupSdlcTestDB(t)
 	wf, _ := CreateSdlc(context.Background(), db, "reorder-test", "")
-	s1, _ := AddSdlcStage(context.Background(), db, wf.ID, "first", "", nil, 0)
-	s2, _ := AddSdlcStage(context.Background(), db, wf.ID, "second", "", nil, 1)
-	s3, _ := AddSdlcStage(context.Background(), db, wf.ID, "third", "", nil, 2)
+	s1, _ := AddSdlcStage(context.Background(), db, wf.ID, "first", "", 0)
+	s2, _ := AddSdlcStage(context.Background(), db, wf.ID, "second", "", 1)
+	s3, _ := AddSdlcStage(context.Background(), db, wf.ID, "third", "", 2)
 
 	// Reverse order
 	if err := ReorderSdlcStages(context.Background(), db, wf.ID, []int64{s3.ID, s2.ID, s1.ID}); err != nil {
@@ -180,8 +161,8 @@ func TestSdlcExportImportRoundTrip(t *testing.T) {
 	if exported.Name != "default" {
 		t.Fatalf("exported.Name = %q, want %q", exported.Name, "default")
 	}
-	if len(exported.Stages) != 4 {
-		t.Fatalf("exported stages = %d, want 4", len(exported.Stages))
+	if len(exported.Stages) != 2 {
+		t.Fatalf("exported stages = %d, want 2", len(exported.Stages))
 	}
 
 	// Import as a new sdlc with different name
@@ -196,15 +177,69 @@ func TestSdlcExportImportRoundTrip(t *testing.T) {
 
 	// Verify stages match
 	got, _ := GetSdlc(context.Background(), db, imported.ID)
-	if len(got.Stages) != 4 {
-		t.Fatalf("imported stages = %d, want 4", len(got.Stages))
+	if len(got.Stages) != 2 {
+		t.Fatalf("imported stages = %d, want 2", len(got.Stages))
 	}
 	for i, s := range got.Stages {
 		if s.StageName != exported.Stages[i].StageName {
 			t.Errorf("stage[%d] = %q, want %q", i, s.StageName, exported.Stages[i].StageName)
 		}
-		if s.RoleTitle != exported.Stages[i].Role {
-			t.Errorf("stage[%d] role = %q, want %q", i, s.RoleTitle, exported.Stages[i].Role)
-		}
+	}
+}
+
+func TestSdlcStageRoles(t *testing.T) {
+	db := setupSdlcTestDB(t)
+
+	sdlc, _ := CreateSdlc(context.Background(), db, "role-test", "")
+	stage, _ := AddSdlcStage(context.Background(), db, sdlc.ID, "design", "", 0)
+
+	r1, _ := CreateRole(context.Background(), db, &sdlc.ID, "Architect", "design role", "review architecture")
+	r2, _ := CreateRole(context.Background(), db, &sdlc.ID, "BA", "analysis role", "gather requirements")
+
+	// Add roles to stage
+	if err := AddSdlcStageRole(context.Background(), db, sdlc.ID, stage.ID, r1.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole(r1) error = %v", err)
+	}
+	if err := AddSdlcStageRole(context.Background(), db, sdlc.ID, stage.ID, r2.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole(r2) error = %v", err)
+	}
+
+	// List roles
+	roles, err := ListSdlcStageRoles(context.Background(), db, sdlc.ID, stage.ID)
+	if err != nil {
+		t.Fatalf("ListSdlcStageRoles() error = %v", err)
+	}
+	if len(roles) != 2 {
+		t.Fatalf("roles = %d, want 2", len(roles))
+	}
+	if roles[0].Title != "Architect" {
+		t.Errorf("roles[0] = %q, want Architect", roles[0].Title)
+	}
+
+	// Reorder
+	if err := ReorderSdlcStageRoles(context.Background(), db, sdlc.ID, stage.ID, []int64{r2.ID, r1.ID}); err != nil {
+		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	}
+	roles, _ = ListSdlcStageRoles(context.Background(), db, sdlc.ID, stage.ID)
+	if roles[0].Title != "BA" {
+		t.Errorf("after reorder roles[0] = %q, want BA", roles[0].Title)
+	}
+
+	// Remove
+	if err := RemoveSdlcStageRole(context.Background(), db, sdlc.ID, stage.ID, r1.ID); err != nil {
+		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	}
+	roles, _ = ListSdlcStageRoles(context.Background(), db, sdlc.ID, stage.ID)
+	if len(roles) != 1 {
+		t.Fatalf("roles after remove = %d, want 1", len(roles))
+	}
+
+	// Verify stage loads roles via GetSdlc
+	got, _ := GetSdlc(context.Background(), db, sdlc.ID)
+	if len(got.Stages[0].Roles) != 1 {
+		t.Fatalf("stage.Roles = %d, want 1", len(got.Stages[0].Roles))
+	}
+	if got.Stages[0].Roles[0].Title != "BA" {
+		t.Errorf("stage.Roles[0] = %q, want BA", got.Stages[0].Roles[0].Title)
 	}
 }

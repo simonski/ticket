@@ -125,9 +125,9 @@ func runTicketNS(args []string) error {
 	case "unarchive":
 		return runSetTicketArchived(args[1:], false)
 	case "ready":
-		return runSetTicketReady(args[1:], true)
+		return runSetTicketDraft(args[1:], true)
 	case "notready":
-		return runSetTicketReady(args[1:], false)
+		return runSetTicketDraft(args[1:], false)
 	case "clone", "cp":
 		return runClone(args[1:])
 	case "delete", "rm":
@@ -381,7 +381,7 @@ func runList(args []string) error {
 	if !*includeAll {
 		open := tickets[:0]
 		for _, t := range tickets {
-			if t.Open {
+			if !t.Complete {
 				open = append(open, t)
 			}
 		}
@@ -1091,7 +1091,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id string, current stor
 	if state == store.StateSuccess {
 		if updated.Stage != current.Stage {
 			fmt.Printf("\n◉ %s advanced: %s → %s/%s\n", updated.ID, current.Status, updated.Stage, updated.State)
-		} else if !updated.Open && current.Open {
+		} else if updated.Complete && !current.Complete {
 			fmt.Printf("\n✓ %s is complete.\n", updated.ID)
 		}
 	}
@@ -1813,11 +1813,15 @@ Targets:
 			if err == nil {
 				fmt.Printf("Sdlc: %s (%d stages)\n", wf.Name, len(wf.Stages))
 				for _, s := range wf.Stages {
-					role := "-"
-					if s.RoleTitle != "" {
-						role = s.RoleTitle
+					var roleNames []string
+					for _, r := range s.Roles {
+						roleNames = append(roleNames, r.Title)
 					}
-					fmt.Printf("  %s (role: %s)\n", s.StageName, role)
+					role := "-"
+					if len(roleNames) > 0 {
+						role = strings.Join(roleNames, ", ")
+					}
+					fmt.Printf("  %s (roles: %s)\n", s.StageName, role)
 				}
 			}
 		}
@@ -1831,7 +1835,7 @@ Targets:
 
 		var noDesc, noAC, noAssignee, notReady, stale int
 		for _, t := range tickets {
-			if !t.Open || t.Archived {
+			if t.Complete || t.Archived {
 				continue
 			}
 			if strings.TrimSpace(t.Description) == "" {
@@ -1843,7 +1847,7 @@ Targets:
 			if strings.TrimSpace(t.Assignee) == "" && t.State == store.StateActive {
 				noAssignee++
 			}
-			if !t.Ready && t.State == store.StateIdle {
+			if t.Draft && t.State == store.StateIdle {
 				notReady++
 			}
 			if t.State == store.StateActive && strings.TrimSpace(t.Assignee) == "" {
@@ -1876,7 +1880,7 @@ Targets:
 		fmt.Println()
 		if promptYN(reader, "Run health scoring on all open tickets?", false) {
 			for _, t := range tickets {
-				if !t.Open || t.Archived {
+				if t.Complete || t.Archived {
 					continue
 				}
 				comments, _ := svc.ListComments(t.ID)
@@ -1910,7 +1914,7 @@ Targets:
 		fmt.Printf("Type:     %s\n", ticket.Type)
 		fmt.Printf("Status:   %s\n", ticket.Status)
 		fmt.Printf("Assignee: %s\n", orDash(ticket.Assignee))
-		fmt.Printf("Ready:    %t\n", ticket.Ready)
+		fmt.Printf("Draft:    %t\n", ticket.Draft)
 		fmt.Printf("Priority: %d\n", ticket.Priority)
 
 		// Context — open DB directly for enrichment
@@ -1999,7 +2003,7 @@ Targets:
 				}
 			}
 		}
-		if !ticket.Ready && ticket.State == store.StateIdle {
+		if ticket.Draft && ticket.State == store.StateIdle {
 			if promptYN(reader, "Mark ticket as ready?", false) {
 				if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
 					fmt.Printf("  [ERR] %v\n", err)
@@ -2467,7 +2471,7 @@ func runSetTicketArchived(args []string, archived bool) error {
 	return nil
 }
 
-func runSetTicketReady(args []string, ready bool) error {
+func runSetTicketDraft(args []string, ready bool) error {
 	command := "notready"
 	if ready {
 		command = "ready"

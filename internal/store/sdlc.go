@@ -272,8 +272,14 @@ func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage,
 			&s.AcceptanceCriteria, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
-		s.Roles, _ = ListSdlcStageRoles(ctx, db, sdlcID, s.ID)
 		stages = append(stages, s)
 	}
-	return stages, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Load roles per stage after closing the rows cursor to avoid SQLite nested query deadlock.
+	for i := range stages {
+		stages[i].Roles, _ = ListSdlcStageRoles(ctx, db, sdlcID, stages[i].ID)
+	}
+	return stages, nil
 }

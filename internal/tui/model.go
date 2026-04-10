@@ -1758,7 +1758,7 @@ func (m Model) viewList() []string {
 		}
 
 		icon := typeIcon(t.Type)
-		si := stateIcon(t.State, t.Open)
+		si := stateIcon(t.State, !t.Complete)
 		title := truncate(t.Title, inner-len(prefix)-12)
 		keyStr := lipgloss.NewStyle().Foreground(th.Muted).Render(t.ID)
 		row := fmt.Sprintf("%s%s%s %s  %s", prefix, si, icon, title, keyStr)
@@ -1799,7 +1799,7 @@ func (m Model) viewDetail() []string {
 				valStyle.Render(truncate(val, inner-17)))
 	}
 
-	title := fmt.Sprintf(" %s%s  %s", typeIcon(t.Type), stateIcon(t.State, t.Open), t.Title)
+	title := fmt.Sprintf(" %s%s  %s", typeIcon(t.Type), stateIcon(t.State, !t.Complete), t.Title)
 	lines = append(lines, headerStyle.Render(padRight(title, inner)))
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 	add("key", t.ID)
@@ -2166,7 +2166,7 @@ func (m Model) viewSummary() []string {
 		if t.Type == "epic" {
 			epicCount++
 		}
-		if t.Open {
+		if !t.Complete {
 			openCount++
 		}
 		if t.State == "active" {
@@ -2182,7 +2182,7 @@ func (m Model) viewSummary() []string {
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 	for _, n := range m.nodes {
 		e := n.epic
-		si := stateIcon(e.State, e.Open)
+		si := stateIcon(e.State, !e.Complete)
 		childInfo := fmt.Sprintf("(%d)", len(n.children))
 		line := fmt.Sprintf("  %s◈ %-40s %s", si, truncate(e.Title, 38), childInfo)
 		lines = append(lines, mutedStyle.Render(padRight(line, inner)))
@@ -2197,7 +2197,7 @@ func (m Model) viewSummary() []string {
 		lines = append(lines, accentStyle.Render(padRight(" other open tickets", inner)))
 		lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 		for _, t := range m.toplevel {
-			si := stateIcon(t.State, t.Open)
+			si := stateIcon(t.State, !t.Complete)
 			line := fmt.Sprintf("  %s%s %s", si, typeIcon(t.Type), truncate(t.Title, inner-8))
 			lines = append(lines, mutedStyle.Render(padRight(line, inner)))
 		}
@@ -2500,7 +2500,7 @@ func (m Model) viewIdeas() []string {
 		vis := m.visibleRows() - 1 // extra row used by tab bar
 		for i := m.ideasOffset; i < len(m.ideas) && len(lines)-3 < vis; i++ {
 			t := m.ideas[i]
-			si := stateIcon(t.State, t.Open)
+			si := stateIcon(t.State, !t.Complete)
 			icon := typeIcon(t.Type)
 			title := truncate(t.Title, inner-12)
 			keyStr := lipgloss.NewStyle().Foreground(th.Muted).Render(t.ID)
@@ -2915,7 +2915,7 @@ func loadTicketsSync(svc libticket.Service, cfg config.Config) treeLoadedMsg {
 	var epics []store.Ticket
 	var toplevel []store.Ticket
 	for _, t := range all {
-		if !t.Open {
+		if t.Complete {
 			continue
 		}
 		if t.ParentID == nil {

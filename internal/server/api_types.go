@@ -39,7 +39,6 @@ type sdlcRequest struct {
 type sdlcStageRequest struct {
 	StageName   string `json:"stage_name"`
 	Description string `json:"description"`
-	RoleID      *int64 `json:"role_id,omitempty"`
 	SortOrder   int    `json:"sort_order"`
 }
 

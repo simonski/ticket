@@ -127,7 +127,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				stage, err := store.AddSdlcStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.RoleID, payload.SortOrder)
+				stage, err := store.AddSdlcStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.SortOrder)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return

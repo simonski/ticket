@@ -226,9 +226,9 @@ func run(args []string) error {
 	case "unarchive":
 		return runSetTicketArchived(trimmedArgs[1:], false)
 	case "ready":
-		return runSetTicketReady(trimmedArgs[1:], true)
+		return runSetTicketDraft(trimmedArgs[1:], true)
 	case "notready":
-		return runSetTicketReady(trimmedArgs[1:], false)
+		return runSetTicketDraft(trimmedArgs[1:], false)
 	case "rm", "delete":
 		return runDeleteTicket(trimmedArgs[1:])
 	case "req":
@@ -293,7 +293,7 @@ func runSummary(_ []string) error {
 	var allTickets []store.Ticket
 	var activeTickets []store.Ticket
 	for _, t := range all {
-		if t.Open {
+		if !t.Complete {
 			allTickets = append(allTickets, t)
 			if t.State == store.StateActive {
 				activeTickets = append(activeTickets, t)

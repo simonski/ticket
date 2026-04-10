@@ -90,43 +90,33 @@ func TestDefaultRoleContentIsDetailed(t *testing.T) {
 	}
 }
 
-func TestSeedDefaultRolesBackfillsLegacyRoleText(t *testing.T) {
+// TestSeedDefaultRolesIsNoOp verifies that seedDefaultRoles is a no-op (roles are now per-SDLC).
+func TestSeedDefaultRolesIsNoOp(t *testing.T) {
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	if _, err := db.Exec(`
-		UPDATE roles
-		SET motivation = 'Maintain coherent system design.',
-		    goals = 'Define architecture guardrails and reduce complexity.'
-		WHERE title = 'Architect'
-	`); err != nil {
-		t.Fatalf("seed setup update error = %v", err)
-	}
+	roles, _ := ListRoles(context.Background(), db)
+	before := len(roles)
 
 	if err := seedDefaultRoles(context.Background(), db); err != nil {
 		t.Fatalf("seedDefaultRoles() error = %v", err)
 	}
 
-	role, err := getRoleByTitle(db, "Architect")
-	if err != nil {
-		t.Fatalf("getRoleByTitle() error = %v", err)
-	}
-	if !strings.Contains(role.Description, "\n\n") {
-		t.Fatalf("Architect motivation should be backfilled to detailed content")
-	}
-	if !strings.Contains(role.AcceptanceCriteria, "\n\n") {
-		t.Fatalf("Architect goals should be backfilled to detailed content")
+	roles, _ = ListRoles(context.Background(), db)
+	if len(roles) != before {
+		t.Fatalf("seedDefaultRoles() should be a no-op, but role count changed: %d -> %d", before, len(roles))
 	}
 }
 
 func getRoleByTitle(db *sql.DB, title string) (Role, error) {
 	row := db.QueryRow(`
-		SELECT role_id, title, motivation, goals, created_at, updated_at
+		SELECT role_id, sdlc_id, title, description, acceptance_criteria, created_at, updated_at
 		FROM roles
 		WHERE title = ?
 	`, title)
 	var role Role
-	if err := row.Scan(&role.ID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
+	var sdlcID sql.NullInt64
+	if err := row.Scan(&role.ID, &sdlcID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
 		return Role{}, err
 	}
 	return role, nil

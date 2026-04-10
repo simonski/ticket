@@ -102,22 +102,16 @@ func runSdlc(args []string) error {
 		wfID := fs.Int64("id", 0, "sdlc id")
 		name := fs.String("name", "", "stage name")
 		desc := fs.String("d", "", "stage description")
-		roleID := fs.Int64("role", 0, "role id")
 		order := fs.Int("order", 0, "sort order")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *wfID == 0 || *name == "" {
-			return errors.New("usage: ticket sdlc add-stage -id <sdlc_id> -name <stage> [-role <role_id>] [-d <desc>] [-order <n>]")
-		}
-		var rID *int64
-		if *roleID > 0 {
-			rID = roleID
+			return errors.New("usage: ticket sdlc add-stage -id <sdlc_id> -name <stage> [-d <desc>] [-order <n>]")
 		}
 		stage, err := svc.AddSdlcStage(*wfID, libticket.SdlcStageRequest{
 			StageName:   *name,
 			Description: *desc,
-			RoleID:      rID,
 			SortOrder:   *order,
 		})
 		if err != nil {
@@ -276,9 +270,13 @@ func printSdlcDetail(wf store.SdlcWithStages) {
 	fmt.Printf("Description : %s\n", wf.Description)
 	fmt.Printf("Stages      :\n")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLE\tDESCRIPTION")
+	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLES\tDESCRIPTION")
 	for _, s := range wf.Stages {
-		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, s.RoleTitle, s.Description)
+		var roleNames []string
+		for _, r := range s.Roles {
+			roleNames = append(roleNames, r.Title)
+		}
+		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description)
 	}
 	_ = w.Flush()
 }

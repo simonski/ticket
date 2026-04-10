@@ -136,7 +136,7 @@ func AddComment(ctx context.Context, db *sql.DB, ticketID string, userID string,
 	if err != nil {
 		return Comment{}, err
 	}
-	if !ticket.Open {
+	if ticket.Complete {
 		return Comment{}, ErrTicketClosed
 	}
 	if ticket.Archived {
