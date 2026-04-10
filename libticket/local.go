@@ -765,7 +765,7 @@ func (s *LocalService) CloseTicket(id string, message string) (store.Ticket, err
 			return store.Ticket{}, err
 		}
 	}
-	return store.SetTicketComplete(context.Background(), db, id, false, user.Username, user.ID)
+	return store.SetTicketComplete(context.Background(), db, id, true, user.Username, user.ID)
 }
 
 func (s *LocalService) OpenTicket(id string, message string) (store.Ticket, error) {
@@ -778,7 +778,7 @@ func (s *LocalService) OpenTicket(id string, message string) (store.Ticket, erro
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketComplete(context.Background(), db, id, true, user.Username, user.ID)
+	ticket, err := store.SetTicketComplete(context.Background(), db, id, false, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
@@ -841,7 +841,7 @@ func (s *LocalService) ReadyTicket(id string, message string) (store.Ticket, err
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketDraft(context.Background(), db, id, true, user.Username, user.ID)
+	ticket, err := store.SetTicketDraft(context.Background(), db, id, false, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
@@ -863,7 +863,7 @@ func (s *LocalService) NotReadyTicket(id string, message string) (store.Ticket, 
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketDraft(context.Background(), db, id, false, user.Username, user.ID)
+	ticket, err := store.SetTicketDraft(context.Background(), db, id, true, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}

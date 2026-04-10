@@ -1724,11 +1724,11 @@ func ticketHealthCheck(ticket store.Ticket, comments []store.Comment) ticketHeal
 	notOrphan := ticket.Type == "epic" || ticket.ParentID != nil
 	hasAC := strings.TrimSpace(ticket.AcceptanceCriteria) != ""
 	reviewedByReviewer := hasReviewerAgentComment(comments)
-	ready := ticket.Status == "design/idle"
+	ready := ticket.Status == "develop/idle"
 	if !ready {
 		stage, state, err := store.ParseLifecycleStatus(ticket.Status)
 		if err == nil {
-			ready = stage == store.StageDesign && state == store.StateIdle
+			ready = stage == store.StageDevelop && state == store.StateIdle
 		}
 	}
 	checks := []bool{notOrphan, hasAC, reviewedByReviewer, ready}

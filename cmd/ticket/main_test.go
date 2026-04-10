@@ -1123,12 +1123,10 @@ func TestRenderSdlcProgress(t *testing.T) {
 	defer func() { noColorOutput = false }()
 	stages := []store.SdlcStage{
 		{StageName: "develop"},
-		{StageName: "develop"},
-		{StageName: "test"},
 		{StageName: "done"},
 	}
 	got := renderSdlcProgress("develop", stages)
-	want := "design → [develop] → test → done"
+	want := "[develop] → done"
 	if got != want {
 		t.Fatalf("renderSdlcProgress() = %q, want %q", got, want)
 	}
@@ -1487,11 +1485,6 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 		t.Fatalf("list output = %q", listOutput)
 	}
 
-	// Advance ticket to develop/idle so it's claimable via specific request
-	if err := run([]string{"complete", "-id", taskID}); err != nil {
-		t.Fatalf("complete (advance to develop) error = %v", err)
-	}
-
 	requestOutput := captureStdout(t, func() {
 		if err := run([]string{"request", taskID}); err != nil {
 			t.Fatalf("request error = %v", err)
@@ -1508,11 +1501,6 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	})
 	if !strings.Contains(requestDryRunOutput, "would assign ticket: ") {
 		t.Fatalf("request -dryrun output = %q", requestDryRunOutput)
-	}
-
-	// Advance depID to develop/idle so it's claimable
-	if err := run([]string{"complete", "-id", depID}); err != nil {
-		t.Fatalf("complete (advance dep to develop) error = %v", err)
 	}
 
 	claimOutput := captureStdout(t, func() {
@@ -1611,10 +1599,6 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 		t.Fatalf("project use error = %v", err)
 	}
 
-	// Advance to develop/idle so ticket is claimable
-	if err := run([]string{"complete", "-id", matchingID}); err != nil {
-		t.Fatalf("complete (advance to develop) error = %v", err)
-	}
 	if err := run([]string{"claim", matchingID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
@@ -1674,10 +1658,6 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 
 	parentID := createLocalTask(t, []string{"add", "-type", "epic", "Parent Epic"})
 	taskID := createLocalTask(t, []string{"add", "-d", "old description", "-ac", "old ac", "Ticket Alpha"})
-	// Advance to develop/idle so ticket is claimable
-	if err := run([]string{"complete", "-id", taskID}); err != nil {
-		t.Fatalf("complete (advance to develop) error = %v", err)
-	}
 	if err := run([]string{"claim", taskID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
@@ -1918,8 +1898,8 @@ func TestRunStatusChangeInLocalModeDoesNotRequireOwnership(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "status: develop/idle") {
-		t.Fatalf("complete output = %q, want status: develop/idle (auto-advanced from design)", output)
+	if !strings.Contains(output, "status: done/idle") {
+		t.Fatalf("complete output = %q, want status: done/idle (auto-advanced from develop)", output)
 	}
 }
 
@@ -2258,7 +2238,7 @@ func TestRunSdlcGetShowsStages(t *testing.T) {
 			t.Fatalf("sdlc get error = %v", err)
 		}
 	})
-	for _, want := range []string{"develop", "develop", "test", "done", "BA", "Lead Engineer", "QA/Tester", "Product Owner"} {
+	for _, want := range []string{"develop", "done"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("sdlc get missing %q:\n%s", want, output)
 		}
@@ -2321,8 +2301,8 @@ func TestRunRoleCRUD(t *testing.T) {
 			t.Fatalf("role list error = %v", err)
 		}
 	})
-	if !strings.Contains(output, "BA") {
-		t.Fatalf("role list missing seeded role BA:\n%s", output)
+	if !strings.Contains(output, "Engineer") {
+		t.Fatalf("role list missing seeded role Engineer:\n%s", output)
 	}
 	// Create
 	createOutput := captureStdout(t, func() {
@@ -2766,7 +2746,7 @@ func TestRunBoard(t *testing.T) {
 			t.Fatalf("board error = %v", err)
 		}
 	})
-	for _, want := range []string{"DESIGN", "DEVELOP", "TEST", "DONE"} {
+	for _, want := range []string{"DEVELOP", "DONE"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("board missing %q:\n%s", want, output)
 		}

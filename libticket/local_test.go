@@ -158,16 +158,7 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	// Advance from design/idle to develop/idle so ticket is claimable via specific ID
-	if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
-		Title:       ticket.Title,
-		Description: ticket.Description,
-		ParentID:    ticket.ParentID,
-		State:       "success",
-	}); err != nil {
-		t.Fatalf("UpdateTicket(advance to develop) error = %v", err)
-	}
-
+	// Ticket starts at develop/idle (2-stage SDLC), request it directly
 	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &ticket.ID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)
@@ -214,9 +205,9 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	// Advance through all stages: design -> develop -> test -> done
+	// Advance through all stages: develop -> done (2-stage SDLC)
 	// Each state=success on a non-final stage auto-advances to next stage with state=idle
-	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
+	for _, wantStatus := range []string{"done/idle", "done/success"} {
 		ticket, err = svc.GetTicketByID(ticket.ID)
 		if err != nil {
 			t.Fatalf("GetTicketByID() error = %v", err)
@@ -312,8 +303,8 @@ func TestLocalServiceNotReadyTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}
-	if updated.Ready {
-		t.Fatal("NotReadyTicket() did not clear ready flag")
+	if !updated.Draft {
+		t.Fatal("NotReadyTicket() did not set draft flag")
 	}
 }
 

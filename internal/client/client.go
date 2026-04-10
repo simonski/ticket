@@ -1041,7 +1041,7 @@ func (c *Client) CloseTicket(id string, message string) (store.Ticket, error) {
 				return store.Ticket{}, err
 			}
 		}
-		return store.SetTicketComplete(context.Background(), db, id, false, user.Username, user.ID)
+		return store.SetTicketComplete(context.Background(), db, id, true, user.Username, user.ID)
 	}
 	var body any
 	if message != "" {
@@ -1063,7 +1063,7 @@ func (c *Client) OpenTicket(id string, message string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketComplete(context.Background(), db, id, true, user.Username, user.ID)
+		ticket, err := store.SetTicketComplete(context.Background(), db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
@@ -1152,7 +1152,7 @@ func (c *Client) ReadyTicket(id string, message string) (store.Ticket, error) {
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketDraft(context.Background(), db, id, true, user.Username, user.ID)
+		ticket, err := store.SetTicketDraft(context.Background(), db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
@@ -1183,7 +1183,7 @@ func (c *Client) NotReadyTicket(id string, message string) (store.Ticket, error)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketDraft(context.Background(), db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketDraft(context.Background(), db, id, true, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}

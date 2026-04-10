@@ -39,7 +39,7 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if strings.TrimSpace(ticket.Assignee) != "" || ticket.Status != "design/idle" {
+	if strings.TrimSpace(ticket.Assignee) != "" || ticket.Status != "develop/idle" {
 		t.Fatalf("CreateTicket() = %#v", ticket)
 	}
 
@@ -65,8 +65,8 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
-	if updated.Status != "design/active" {
-		t.Fatalf("UpdateTicket().Status = %q, want design/active", updated.Status)
+	if updated.Status != "develop/active" {
+		t.Fatalf("UpdateTicket().Status = %q, want develop/active", updated.Status)
 	}
 
 	parent, err := api.CreateTicket(TicketCreateRequest{
@@ -124,8 +124,8 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket().Assignee = %q, want unassigned", ticket.Assignee)
 	}
 
-	// Advance through all stages to reach done/success
-	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
+	// Advance through all stages to reach done/success (2-stage SDLC: develop, done)
+	for _, wantStatus := range []string{"done/idle", "done/success"} {
 		ticket, err = api.GetTicketByID(ticket.ID)
 		if err != nil {
 			t.Fatalf("GetTicketByID() error = %v", err)

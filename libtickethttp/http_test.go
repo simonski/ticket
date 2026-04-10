@@ -151,16 +151,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	// Advance from design/idle to develop/idle so ticket is claimable via specific ID
-	if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
-		Title:       ticket.Title,
-		Description: ticket.Description,
-		ParentID:    ticket.ParentID,
-		State:       "success",
-	}); err != nil {
-		t.Fatalf("UpdateTicket(advance to develop) error = %v", err)
-	}
-
+	// Ticket starts at develop/idle (2-stage SDLC), request it directly
 	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &ticket.ID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)

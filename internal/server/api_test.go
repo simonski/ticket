@@ -681,7 +681,7 @@ func TestTaskAPI(t *testing.T) {
 		"description": "Email reset support",
 		"parent_id":   epic.ID,
 		"assignee":    "alice",
-		"status":      "design/active",
+		"status":      "develop/active",
 	}, aliceAuth.Token)
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("update task status = %d body=%s", updateResp.Code, updateResp.Body.String())
@@ -693,11 +693,11 @@ func TestTaskAPI(t *testing.T) {
 	}
 	var updated store.Ticket
 	decodeResponse(t, getResp, &updated)
-	if updated.Status != "design/active" {
-		t.Fatalf("updated status = %q, want design/active", updated.Status)
+	if updated.Status != "develop/active" {
+		t.Fatalf("updated status = %q, want develop/active", updated.Status)
 	}
 
-	filteredResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets?type=task&status=design/active&q=password", nil, auth.Token)
+	filteredResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/tickets?type=task&status=develop/active&q=password", nil, auth.Token)
 	if filteredResp.Code != http.StatusOK {
 		t.Fatalf("filtered list status = %d body=%s", filteredResp.Code, filteredResp.Body.String())
 	}
@@ -1146,7 +1146,7 @@ func TestTicketRequestAPI(t *testing.T) {
 		"title":       openTask.Title,
 		"description": openTask.Description,
 		"assignee":    "alice",
-		"status":      "design/active",
+		"status":      "develop/active",
 	}, aliceAuth.Token)
 	if inProgressResp.Code != http.StatusOK {
 		t.Fatalf("set inprogress status = %d body=%s", inProgressResp.Code, inProgressResp.Body.String())
@@ -1175,20 +1175,7 @@ func TestTicketRequestAPI(t *testing.T) {
 		t.Fatalf("add bob editor membership error = %v", err)
 	}
 
-	rejectedResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
-		"project_id": project.ID,
-		"ticket_id":  otherTask.ID,
-	}, bobAuth.Token)
-	if rejectedResp.Code != http.StatusOK {
-		t.Fatalf("request rejected status = %d body=%s", rejectedResp.Code, rejectedResp.Body.String())
-	}
-	var rejectedPayload map[string]string
-	decodeResponse(t, rejectedResp, &rejectedPayload)
-	if rejectedPayload["status"] != "REJECTED" {
-		t.Fatalf("request rejected payload = %#v", rejectedPayload)
-	}
-
-	// Assign otherTask so no idle unassigned tickets remain for the NO-WORK test
+	// Assign otherTask to alice so bob's claim is rejected
 	assignOtherResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+otherTask.ID, map[string]any{
 		"title":       otherTask.Title,
 		"description": otherTask.Description,
@@ -1197,6 +1184,19 @@ func TestTicketRequestAPI(t *testing.T) {
 	}, adminAuth.Token)
 	if assignOtherResp.Code != http.StatusOK {
 		t.Fatalf("assign otherTask status = %d body=%s", assignOtherResp.Code, assignOtherResp.Body.String())
+	}
+
+	rejectedResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
+		"project_id": project.ID,
+		"ticket_id":  otherTask.ID,
+	}, bobAuth.Token)
+	if rejectedResp.Code != http.StatusOK {
+		t.Fatalf("request rejected status = %d body=%s", rejectedResp.Code, rejectedResp.Body.String())
+	}
+	var rejectedPayload map[string]any
+	decodeResponse(t, rejectedResp, &rejectedPayload)
+	if rejectedPayload["status"] != "REJECTED" {
+		t.Fatalf("request rejected payload = %#v", rejectedPayload)
 	}
 
 	noWorkResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/claim", map[string]any{
@@ -1255,7 +1255,7 @@ func TestCloneTicketAPI(t *testing.T) {
 	}
 	var clonedEpic store.Ticket
 	decodeResponse(t, cloneResp, &clonedEpic)
-	if clonedEpic.CloneOf == nil || *clonedEpic.CloneOf != epic.ID || clonedEpic.Status != "design/idle" || clonedEpic.Assignee != "" {
+	if clonedEpic.CloneOf == nil || *clonedEpic.CloneOf != epic.ID || clonedEpic.Status != "develop/idle" || clonedEpic.Assignee != "" {
 		t.Fatalf("cloned epic = %#v", clonedEpic)
 	}
 
@@ -1272,7 +1272,7 @@ func TestCloneTicketAPI(t *testing.T) {
 	if clonedChild == nil {
 		t.Fatalf("cloned child not found in %#v", tickets)
 	}
-	if clonedChild.ParentID == nil || *clonedChild.ParentID != clonedEpic.ID || clonedChild.Status != "design/idle" || clonedChild.Assignee != "" {
+	if clonedChild.ParentID == nil || *clonedChild.ParentID != clonedEpic.ID || clonedChild.Status != "develop/idle" || clonedChild.Assignee != "" {
 		t.Fatalf("cloned child = %#v", clonedChild)
 	}
 }
