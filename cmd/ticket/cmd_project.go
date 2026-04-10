@@ -175,6 +175,24 @@ func runProject(args []string) error {
 		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
+	case "set-draft":
+		fs := flag.NewFlagSet("project set-draft", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectID := fs.Int64("project_id", 0, "project id (default: current project)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return errors.New("usage: ticket project set-draft [-project_id <id>] <true|false>")
+		}
+		val := strings.TrimSpace(fs.Arg(0))
+		if val != "true" && val != "false" {
+			return fmt.Errorf("expected true or false, got %q", val)
+		}
+		_ = projectID
+		_ = cfg
+		fmt.Println("not yet implemented")
+		return nil
 	case "sdlc":
 		return runProjectSdlc(cfg, svc, args[1:])
 	case "rename-prefix":

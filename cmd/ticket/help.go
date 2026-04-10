@@ -333,7 +333,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk role ls",
 	},
 	"sdlc": {
-		usage:   "tk sdlc <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|export|import> [flags]",
+		usage:   "tk sdlc <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
 		details: []string{"Admin command for managing sdlcs and their stages.", "Run `tk sdlc help` for the full verb list."},
 		example: "tk sdlc ls",
 	},
@@ -580,6 +580,9 @@ Commands:
   add-stage    -id <wf-id> -name <n>  Add a stage
   remove-stage -stage-id <id>         Remove a stage
   reorder-stages -id <wf-id> <ids>    Reorder stages
+  stage-role-add -sdlc_id X -stage_id Y -role_id Z   Assign a role to a stage
+  stage-role-rm  -sdlc_id X -stage_id Y -role_id Z   Remove a role from a stage
+  stage-role-order -sdlc_id X -stage_id Y -roles 1,2  Reorder roles in a stage
   export   -id <id> [-o file]         Export a sdlc
   import   -file <file>               Import a sdlc`
 

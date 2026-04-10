@@ -232,6 +232,66 @@ func runSdlc(args []string) error {
 		}
 		fmt.Printf("set sdlc %d on ticket %s\n", *sdlcID, ticket.ID)
 		return nil
+	case "stage-role-add":
+		fs := flag.NewFlagSet("sdlc stage-role-add", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		stageID := fs.Int64("stage_id", 0, "stage id")
+		roleID := fs.Int64("role_id", 0, "role id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || *stageID == 0 || *roleID == 0 {
+			return errors.New("usage: ticket sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>")
+		}
+		if err := svc.AddSdlcStageRole(*sdlcID, *stageID, *roleID); err != nil {
+			return err
+		}
+		fmt.Printf("assigned role #%d to stage #%d\n", *roleID, *stageID)
+		return nil
+	case "stage-role-rm":
+		fs := flag.NewFlagSet("sdlc stage-role-rm", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		stageID := fs.Int64("stage_id", 0, "stage id")
+		roleID := fs.Int64("role_id", 0, "role id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || *stageID == 0 || *roleID == 0 {
+			return errors.New("usage: ticket sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>")
+		}
+		if err := svc.RemoveSdlcStageRole(*sdlcID, *stageID, *roleID); err != nil {
+			return err
+		}
+		fmt.Printf("removed role #%d from stage #%d\n", *roleID, *stageID)
+		return nil
+	case "stage-role-order":
+		fs := flag.NewFlagSet("sdlc stage-role-order", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		stageID := fs.Int64("stage_id", 0, "stage id")
+		roles := fs.String("roles", "", "comma-separated role ids")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || *stageID == 0 || *roles == "" {
+			return errors.New("usage: ticket sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <id,id,...>")
+		}
+		parts := strings.Split(*roles, ",")
+		roleIDs := make([]int64, 0, len(parts))
+		for _, p := range parts {
+			v, err := strconv.ParseInt(strings.TrimSpace(p), 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid role id %q", p)
+			}
+			roleIDs = append(roleIDs, v)
+		}
+		if err := svc.ReorderSdlcStageRoles(*sdlcID, *stageID, roleIDs); err != nil {
+			return err
+		}
+		fmt.Printf("reordered roles in stage #%d\n", *stageID)
+		return nil
 	case "unset":
 		fs := flag.NewFlagSet("sdlc unset", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
