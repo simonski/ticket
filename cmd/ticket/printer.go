@@ -189,10 +189,10 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 		fmt.Println()
 		fmt.Printf("current role: %s\n", resp.Role.Title)
 		if resp.Role.Description != "" {
-			fmt.Printf("  motivation: %s\n", resp.Role.Description)
+			fmt.Printf("  description: %s\n", resp.Role.Description)
 		}
 		if resp.Role.AcceptanceCriteria != "" {
-			fmt.Printf("  goals: %s\n", resp.Role.AcceptanceCriteria)
+			fmt.Printf("  acceptance criteria: %s\n", resp.Role.AcceptanceCriteria)
 		}
 	}
 }
@@ -824,7 +824,7 @@ func printRoleTable(roles []store.Role) {
 	}
 
 	// Fixed columns: ID (6) + gaps (6 for 3 x 2-char gaps) = 12.
-	// Remaining space split: title 25%, motivation 37.5%, goals 37.5%.
+	// Remaining space split: title 25%, description 37.5%, ac 37.5%.
 	const idW = 6
 	const gaps = 6
 	remaining := termW - idW - gaps
@@ -855,7 +855,7 @@ func printRoleTable(roles []store.Role) {
 			truncRune(role.AcceptanceCriteria, goalW),
 		))
 	}
-	printBoxTable("ID\tTITLE\tMOTIVATION\tGOALS", rows)
+	printBoxTable("ID\tTITLE\tDESCRIPTION\tAC", rows)
 }
 
 func formatHistoryEvent(event store.HistoryEvent) string {

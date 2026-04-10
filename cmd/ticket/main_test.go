@@ -1072,8 +1072,8 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			ID:                 "TK-42",
 			Title:              "Example Task",
 			Type:               "task",
-			Status:             "design/idle",
-			Stage:              "design",
+			Status:             "develop/idle",
+			Stage:              "develop",
 			State:              "idle",
 			Description:        "Example description",
 			ProjectID:          7,
@@ -1087,7 +1087,7 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 				{Author: "alice", Text: "latest comment", CreatedAt: "2026-03-02 10:00:00"},
 			},
 		}, nil, []store.HistoryEvent{
-			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: "test-user", Payload: "{\"status\":\"design/idle\"}"},
+			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: "test-user", Payload: "{\"status\":\"develop/idle\"}"},
 		}, nil, nil, 0, "", "")
 	})
 
@@ -1100,8 +1100,8 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 		"EstimateEffort   : 3",
 		"EstimateComplete : 2026-04-01T12:00:00Z",
 		"DependsOn    : []",
-		"Status       : design/idle",
-		"Stage        : design",
+		"Status       : develop/idle",
+		"Stage        : develop",
 		"State        : idle",
 		"Priority     : 1",
 		"Created      : 2026-03-01 12:00:00",
@@ -1122,7 +1122,7 @@ func TestRenderSdlcProgress(t *testing.T) {
 	noColorOutput = true
 	defer func() { noColorOutput = false }()
 	stages := []store.SdlcStage{
-		{StageName: "design"},
+		{StageName: "develop"},
 		{StageName: "develop"},
 		{StageName: "test"},
 		{StageName: "done"},
@@ -1155,7 +1155,7 @@ func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
 	}
 
 	// tk state -id ID <stage> form also works
-	if err := run([]string{"state", "-id", idArg, "design"}); err != nil {
+	if err := run([]string{"state", "-id", idArg, "develop"}); err != nil {
 		t.Fatalf("state with stage name error = %v", err)
 	}
 
@@ -1179,7 +1179,7 @@ func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
 	if err := json.Unmarshal([]byte(stateOutput), &stateData); err != nil {
 		t.Fatalf("state output parse error = %v\n%s", err, stateOutput)
 	}
-	for _, want := range []string{"design/active", "design", "active"} {
+	for _, want := range []string{"develop/active", "develop", "active"} {
 		if got := stateData["status"]; got != want && stateData["stage"] != want && stateData["state"] != want {
 			t.Fatalf("state output missing %q in status/stage/state: %#v", want, stateData)
 		}
@@ -1327,11 +1327,11 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 			t.Fatalf("list unicode row missing symbol=%q stage=%q state=%q:\n%s", statusSymbol, stage, state, unicodeOutput)
 		}
 	}
-	checkRow("◑", "design", "active")
+	checkRow("◑", "develop", "active")
 	checkRow("○", "develop", "idle")
-	checkRow("○", "design", "idle")
+	checkRow("○", "develop", "idle")
 
-	for _, want := range []string{"design", "develop", "active", "idle"} {
+	for _, want := range []string{"develop", "develop", "active", "idle"} {
 		if !strings.Contains(unicodeOutput, want) {
 			t.Fatalf("list unicode output missing %q:\n%s", want, unicodeOutput)
 		}
@@ -1479,7 +1479,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	listOutput := captureStdout(t, func() {
-		if err := run([]string{"list", "--status", "design/idle"}); err != nil {
+		if err := run([]string{"list", "--status", "develop/idle"}); err != nil {
 			t.Fatalf("list error = %v", err)
 		}
 	})
@@ -1538,7 +1538,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("clone error = %v", err)
 		}
 	})
-	if !strings.Contains(cloneOutput, "clone_of:") || !strings.Contains(cloneOutput, "status: design/idle") {
+	if !strings.Contains(cloneOutput, "clone_of:") || !strings.Contains(cloneOutput, "status: develop/idle") {
 		t.Fatalf("clone output = %q", cloneOutput)
 	}
 
@@ -1664,7 +1664,7 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	if !strings.Contains(allProjectsOutput, "Free form entry") || !strings.Contains(allProjectsOutput, "develop/active") {
 		t.Fatalf("allprojects output missing current project task:\n%s", allProjectsOutput)
 	}
-	if !strings.Contains(allProjectsOutput, "Free form entry elsewhere") || !strings.Contains(allProjectsOutput, "design/idle") {
+	if !strings.Contains(allProjectsOutput, "Free form entry elsewhere") || !strings.Contains(allProjectsOutput, "develop/idle") {
 		t.Fatalf("allprojects output missing cross-project task:\n%s", allProjectsOutput)
 	}
 }
@@ -2258,7 +2258,7 @@ func TestRunSdlcGetShowsStages(t *testing.T) {
 			t.Fatalf("sdlc get error = %v", err)
 		}
 	})
-	for _, want := range []string{"design", "develop", "test", "done", "BA", "Lead Engineer", "QA/Tester", "Product Owner"} {
+	for _, want := range []string{"develop", "develop", "test", "done", "BA", "Lead Engineer", "QA/Tester", "Product Owner"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("sdlc get missing %q:\n%s", want, output)
 		}
@@ -2326,7 +2326,7 @@ func TestRunRoleCRUD(t *testing.T) {
 	}
 	// Create
 	createOutput := captureStdout(t, func() {
-		if err := run([]string{"role", "create", "-title", "Security Lead", "-motivation", "Protect systems", "-goals", "Zero breaches"}); err != nil {
+		if err := run([]string{"role", "create", "-title", "Security Lead", "-description", "Protect systems", "-ac", "Zero breaches"}); err != nil {
 			t.Fatalf("role create error = %v", err)
 		}
 	})
@@ -2357,7 +2357,7 @@ func TestRunRoleCRUD(t *testing.T) {
 	}
 	// Update
 	output = captureStdout(t, func() {
-		if err := run([]string{"role", "update", "-id", roleID, "-title", "Chief Security", "-motivation", "Lead design", "-goals", "Excellence"}); err != nil {
+		if err := run([]string{"role", "update", "-id", roleID, "-title", "Chief Security", "-description", "Lead design", "-ac", "Excellence"}); err != nil {
 			t.Fatalf("role update error = %v", err)
 		}
 	})
@@ -2538,8 +2538,8 @@ func TestResolveLifecycleInput(t *testing.T) {
 	if err != nil || stage != "develop" || state != "active" {
 		t.Errorf("explicit stage/state = (%q, %q, %v)", stage, state, err)
 	}
-	stage, state, err = resolveLifecycleInput("design/idle", "", "")
-	if err != nil || stage != "design" || state != "idle" {
+	stage, state, err = resolveLifecycleInput("develop/idle", "", "")
+	if err != nil || stage != "develop" || state != "idle" {
 		t.Errorf("status parse = (%q, %q, %v)", stage, state, err)
 	}
 	stage, state, err = resolveLifecycleInput("", "", "")
@@ -2596,7 +2596,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 	role := store.Role{Title: "Developer", Description: "Ship features", AcceptanceCriteria: "Quality code"}
 	wf := store.SdlcWithStages{
 		Sdlc: store.Sdlc{Name: "Standard"},
-		Stages:  []store.SdlcStage{{StageName: "design"}, {StageName: "develop"}, {StageName: "test"}},
+		Stages:  []store.SdlcStage{{StageName: "develop"}, {StageName: "develop"}, {StageName: "test"}},
 	}
 	project := store.Project{Prefix: "TK", Title: "Test Project", GitRepository: "github.com/test/repo"}
 	resp := libticket.AgentWorkResponse{
@@ -2607,7 +2607,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 		Role:     &role,
 	}
 	prompt := buildAgentPrompt(resp)
-	for _, want := range []string{"Test Task", "Some description", "Must pass", "Developer", "Ship features", "Standard", "design", "develop", "Test Project", "github.com/test/repo"} {
+	for _, want := range []string{"Test Task", "Some description", "Must pass", "Developer", "Ship features", "Standard", "develop", "develop", "Test Project", "github.com/test/repo"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("buildAgentPrompt missing %q:\n%s", want, prompt)
 		}
@@ -3862,23 +3862,23 @@ func TestOrDashNonEmpty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRowColorActive(t *testing.T) {
-	got := rowColor("design/active")
+	got := rowColor("develop/active")
 	if got != "\033[32m" {
-		t.Fatalf("rowColor(design/active) = %q, want ansiGreen", got)
+		t.Fatalf("rowColor(develop/active) = %q, want ansiGreen", got)
 	}
 }
 
 func TestRowColorFail(t *testing.T) {
-	got := rowColor("design/fail")
+	got := rowColor("develop/fail")
 	if got != "\033[31m" {
 		t.Fatalf("rowColor(design/fail) = %q, want ansiRed", got)
 	}
 }
 
 func TestRowColorIdle(t *testing.T) {
-	got := rowColor("design/idle")
+	got := rowColor("develop/idle")
 	if got != ansiWhite {
-		t.Fatalf("rowColor(design/idle) = %q, want ansiWhite", got)
+		t.Fatalf("rowColor(develop/idle) = %q, want ansiWhite", got)
 	}
 }
 
@@ -3890,7 +3890,7 @@ func TestRowColorInvalid(t *testing.T) {
 }
 
 func TestRowColorSuccess(t *testing.T) {
-	got := rowColor("design/success")
+	got := rowColor("develop/success")
 	if got != ansiGray {
 		t.Fatalf("rowColor(design/success) = %q, want ansiGray", got)
 	}
@@ -4079,7 +4079,7 @@ func TestPrintTeamAgentTableNonEmpty(t *testing.T) {
 
 func TestPrintTicketChildrenOutput(t *testing.T) {
 	children := []store.Ticket{
-		{ID: "PROJ-1", Type: "task", Status: "design/idle", Title: "Child One"},
+		{ID: "PROJ-1", Type: "task", Status: "develop/idle", Title: "Child One"},
 		{ID: "PROJ-2", Type: "bug", Status: "develop/active", Title: "Child Two"},
 	}
 	out := captureStdout(t, func() {
@@ -4523,7 +4523,7 @@ func TestQuickstartClient(t *testing.T) {
 	})
 	ticket, _ = svcGetTicket(t, taskID)
 	// complete auto-advances to next stage
-	if ticket.Stage == "design" {
+	if ticket.Stage == "develop" {
 		t.Fatalf("complete did not advance stage, still design")
 	}
 

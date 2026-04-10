@@ -347,18 +347,18 @@ func runRole(args []string) error {
 		fs := flag.NewFlagSet("role create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		title := fs.String("title", "", "role title")
-		motivation := fs.String("motivation", "", "role motivation")
-		goals := fs.String("goals", "", "role goals")
+		description := fs.String("description", "", "role description")
+		ac := fs.String("ac", "", "role acceptance criteria")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket role create -title <title> [-motivation <text>] [-goals <text>]")
+			return errors.New("usage: ticket role create -title <title> [-description <text>] [-ac <text>]")
 		}
 		role, err := svc.CreateRole(libticket.RoleRequest{
 			Title:      strings.TrimSpace(*title),
-			Description: strings.TrimSpace(*motivation),
-			AcceptanceCriteria:      strings.TrimSpace(*goals),
+			Description: strings.TrimSpace(*description),
+			AcceptanceCriteria:      strings.TrimSpace(*ac),
 		})
 		if err != nil {
 			return err
@@ -373,18 +373,18 @@ func runRole(args []string) error {
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "role id")
 		title := fs.String("title", "", "role title")
-		motivation := fs.String("motivation", "", "role motivation")
-		goals := fs.String("goals", "", "role goals")
+		description := fs.String("description", "", "role description")
+		ac := fs.String("ac", "", "role acceptance criteria")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *id == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket role update -id <id> -title <title> [-motivation <text>] [-goals <text>]")
+			return errors.New("usage: ticket role update -id <id> -title <title> [-description <text>] [-ac <text>]")
 		}
 		role, err := svc.UpdateRole(*id, libticket.RoleRequest{
 			Title:      strings.TrimSpace(*title),
-			Description: strings.TrimSpace(*motivation),
-			AcceptanceCriteria:      strings.TrimSpace(*goals),
+			Description: strings.TrimSpace(*description),
+			AcceptanceCriteria:      strings.TrimSpace(*ac),
 		})
 		if err != nil {
 			return err
