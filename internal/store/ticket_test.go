@@ -102,8 +102,8 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if statusUpdated.Status != "develop/active" {
 		t.Fatalf("UpdateTicket().Status = %q, want design/active", statusUpdated.Status)
 	}
-	if statusUpdated.Stage != StageDesign || statusUpdated.State != StateActive {
-		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want design/active", statusUpdated.Stage, statusUpdated.State)
+	if statusUpdated.Stage != StageDevelop || statusUpdated.State != StateActive {
+		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want develop/active", statusUpdated.Stage, statusUpdated.State)
 	}
 
 	history, err = ListHistoryEvents(context.Background(), db, ticket.ID)
@@ -294,13 +294,9 @@ func TestRequestTicket(t *testing.T) {
 		CreatedBy: "",
 	})
 	if err != nil {
-		t.Fatalf("CreateTicket(design/idle) error = %v", err)
+		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	// Mark first ticket as ready so it can be claimed.
-	if _, err := SetTicketDraft(context.Background(), db, notReady.ID, true, "admin", ""); err != nil {
-		t.Fatalf("SetTicketDraft() error = %v", err)
-	}
-	secondTicket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+	_, err = CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Open task",
@@ -308,11 +304,7 @@ func TestRequestTicket(t *testing.T) {
 		CreatedBy: "",
 	})
 	if err != nil {
-		t.Fatalf("CreateTicket(develop/idle) error = %v", err)
-	}
-	// Mark second ticket as ready too.
-	if _, err := SetTicketDraft(context.Background(), db, secondTicket.ID, true, "admin", ""); err != nil {
-		t.Fatalf("SetTicketDraft() error = %v", err)
+		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
 	assigned, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
@@ -418,20 +410,15 @@ func TestRequestTicketDryRun(t *testing.T) {
 	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
-	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "DryRun task",
 		State:     StateIdle,
 		CreatedBy: "",
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := SetTicketDraft(context.Background(), db, ticket.ID, true, "admin", ""); err != nil {
-		t.Fatalf("SetTicketDraft() error = %v", err)
-	}
-
 	// DryRun should return AVAILABLE without actually claiming
 	preview, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
@@ -474,8 +461,8 @@ func TestRequestTicketByRef(t *testing.T) {
 	}
 
 	// Request by TicketRef (resolved via GetTicketByRef -> GetTicket)
-	// The ticket is not claimable (wrong stage), so this will be REJECTED
-	_, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
+	// The ticket is at develop/idle which is claimable.
+	assigned, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
 		ProjectID: project.ID,
 		TicketRef: ticket.ID,
 		Username:  "alice",
@@ -483,8 +470,11 @@ func TestRequestTicketByRef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestTicket(TicketRef) error = %v", err)
 	}
-	if status != "REJECTED" {
-		t.Fatalf("RequestTicket(TicketRef non-claimable) status = %q, want REJECTED", status)
+	if status != "ASSIGNED" {
+		t.Fatalf("RequestTicket(TicketRef) status = %q, want ASSIGNED", status)
+	}
+	if assigned.ID != ticket.ID {
+		t.Fatalf("RequestTicket(TicketRef).ID = %q, want %q", assigned.ID, ticket.ID)
 	}
 }
 

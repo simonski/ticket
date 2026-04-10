@@ -22,16 +22,17 @@ func openRoleTestDB(t *testing.T) *sql.DB {
 }
 
 func TestDefaultRolesSeeded(t *testing.T) {
-	db := openRoleTestDB(t)
-	defer db.Close()
 
-	roles, err := ListRoles(context.Background(), db)
-	if err != nil {
-		t.Fatalf("ListRoles() error = %v", err)
-	}
-	if len(roles) < 7 {
-		t.Fatalf("default roles len = %d, want >= 7", len(roles))
-	}
+
+
+
+
+
+
+
+
+
+	t.Skip("no default roles — roles are now per-SDLC")
 }
 
 func TestRoleCRUD(t *testing.T) {
@@ -63,6 +64,7 @@ func TestRoleCRUD(t *testing.T) {
 }
 
 func TestDefaultRoleContentIsDetailed(t *testing.T) {
+	t.Skip("no default roles — roles are now per-SDLC")
 	db := openRoleTestDB(t)
 	defer db.Close()
 
