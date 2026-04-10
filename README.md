@@ -127,10 +127,10 @@ tk summary                                # daily starting-point overview
 ### Ticket lifecycle
 
 ```bash
-tk active -id MY-T-1      # begin work  (design/active)
+tk active -id MY-T-1      # begin work  (develop/active)
 tk complete -id MY-T-1    # finish stage, auto-advance
 tk idle -id MY-T-1        # pause
-tk close -id MY-T-1       # close ticket
+tk complete -id MY-T-1    # mark ticket complete
 ```
 
 ### TUI
@@ -168,7 +168,7 @@ tk agent run -llm codex                # use codex
 tk agent run -v                        # stream LLM I/O to terminal
 ```
 
-Only tickets marked `ready` are eligible. Use `tk ready -id <id>` to flag a ticket.
+Only non-draft tickets are eligible. Use `tk undraft -id <id>` to make a ticket available.
 
 ### Claude Code skill
 

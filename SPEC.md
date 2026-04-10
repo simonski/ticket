@@ -164,8 +164,12 @@ The primary work artifact.
 | estimate_complete | TEXT | Default empty |
 | health_score | INTEGER | Default 0 |
 | assignee | TEXT | Default empty |
-| open | INTEGER | Boolean, default 1 |
+| draft | INTEGER | Boolean, default 0. When true, ticket is not ready for work. |
+| complete | INTEGER | Boolean, default 0. When true, ticket is finished (stage=done). |
 | archived | INTEGER | Boolean, default 0 |
+| role_id | INTEGER | FK → roles. Current active role within the stage. |
+| previous_sdlc_stage_id | INTEGER | Saved stage for reopen after completion. |
+| previous_role_id | INTEGER | Saved role for reopen after completion. |
 | created_by | TEXT | FK → users |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
@@ -289,9 +293,10 @@ Custom role definition for sdlc stages.
 | Field | Type | Constraints |
 |-------|------|-------------|
 | role_id | INTEGER | Primary key, autoincrement |
-| title | TEXT | Unique, required |
-| motivation | TEXT | Default empty |
-| goals | TEXT | Default empty |
+| sdlc_id | INTEGER | FK → sdlcs. Roles are scoped to an SDLC. |
+| title | TEXT | Unique per sdlc_id, required |
+| description | TEXT | Default empty |
+| acceptance_criteria | TEXT | Default empty |
 | created_at | TEXT | Timestamp |
 | updated_at | TEXT | Timestamp |
 
@@ -775,10 +780,13 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk role list` | List roles |
-| `tk role create -title "..." -motivation "..." -goals "..."` | Create role |
-| `tk role update -id <id> -title "..."` | Update role |
-| `tk role delete -id <id>` | Delete role |
+| `tk sdlc role-list -sdlc_id <id>` | List roles for an SDLC |
+| `tk sdlc role-add -sdlc_id <id> -title "..." -description "..." -ac "..."` | Create role |
+| `tk sdlc role-update -sdlc_id <id> -role_id <id> -title "..."` | Update role |
+| `tk sdlc role-rm -sdlc_id <id> -role_id <id>` | Delete role |
+| `tk sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>` | Assign role to stage |
+| `tk sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>` | Remove role from stage |
+| `tk sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <ids>` | Reorder roles in stage |
 
 ### 12.15 Teams
 
@@ -826,12 +834,16 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk close -id <id>` | Close ticket |
-| `tk open -id <id>` | Reopen ticket |
+| `tk complete -id <id>` | Mark ticket as complete (stage=done) |
+| `tk reopen -id <id>` | Undo completion |
+| `tk close -id <id>` | Alias for `tk complete` |
 | `tk archive -id <id>` | Archive ticket |
 | `tk unarchive -id <id>` | Unarchive ticket |
-| `tk ready -id <id>` | Mark as ready |
-| `tk notready -id <id>` | Mark as not ready |
+| `tk draft -id <id>` | Mark as draft (not ready for work) |
+| `tk undraft -id <id>` | Mark as not draft (ready for work) |
+| `tk next -id <id>` | Advance to next role or stage |
+| `tk previous -id <id>` | Regress to previous role or stage |
+| `tk success -id <id>` | Shortcut: state → success |
 | `tk help <command>` | Show command help |
 
 ---

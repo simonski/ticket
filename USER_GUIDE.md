@@ -529,8 +529,8 @@ They also fail if the named user does not exist or is disabled.
 New tickets default to not-ready. Mark a ticket as ready before it can be picked up by `claim` or `request`:
 
 ```bash
-tk ready CUS-T-42       # mark ready for work
-tk notready CUS-T-42    # mark not ready
+tk undraft CUS-T-42      # mark ready for work
+tk draft CUS-T-42        # mark as draft (not ready)
 ```
 
 Only ready tickets are eligible for automatic assignment. You can still explicitly request a specific not-ready ticket by ID.
@@ -705,8 +705,8 @@ Keyboard shortcuts in the board view:
 - each management panel can switch between `card` and `list` layouts
 - clicking an agent, role, or team item opens a popup editor for create/update work
 - agents support create/update/enable/disable/delete using the same API
-- roles support create/update/delete role personas (`title`, `motivation`, `goals`)
-- seeded roles include richer multi-paragraph `motivation` and `goals` text for classical delivery personas
+- roles support create/update/delete role personas (`title`, `description`, `acceptance_criteria`)
+- roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
 - admin `settings` includes global chat limits:
@@ -804,10 +804,10 @@ tk unclaim <key-or-id>
 tk request [<key-or-id>]
 tk attach -id <key-or-id> <parent-key-or-id>
 tk detach -id <key-or-id>
-tk ready <key-or-id>
-tk notready <key-or-id>
-tk close -id <key-or-id>
-tk open -id <key-or-id>
+tk undraft <key-or-id>
+tk draft <key-or-id>
+tk complete <key-or-id>
+tk reopen <key-or-id>
 tk archive -id <key-or-id>
 tk unarchive -id <key-or-id>
 tk rm <key-or-id>
@@ -916,6 +916,6 @@ tk agent run -llm codex       # use codex instead
 tk agent run -v               # stream LLM I/O to terminal
 ```
 
-Only tickets marked as ready are eligible for automatic assignment (`tk ready <id>`).
+Only non-draft tickets are eligible for automatic assignment (`tk undraft <id>`).
 Agents are stored in the users table with `user_type=agent`.
 

@@ -48,7 +48,7 @@ Tickets progress through stages: **design → develop → test → done**.
 tk active   -id CUS-T-1      # begin work  (sets state=active)
 tk complete -id CUS-T-1      # finish stage, auto-advance to next
 tk idle     -id CUS-T-1      # pause
-tk close    -id CUS-T-1      # close ticket
+tk complete -id CUS-T-1      # mark ticket complete
 ```
 
 ## 6. Claim and request work
@@ -65,7 +65,7 @@ Admins can assign to other users with `tk assign <id> <username>`.
 The agent picks up tickets marked `ready` and works on them autonomously.
 
 ```bash
-tk ready -id CUS-T-3          # mark ticket as available for agents
+tk undraft -id CUS-T-3         # make ticket available for agents
 
 tk agent create               # prints agent_id (UUID) and password
 export AGENT_ID=<agent-uuid>

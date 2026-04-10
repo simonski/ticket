@@ -99,17 +99,18 @@ Notes:
 ### Role
 
 - `role_id`
+- `sdlc_id` (FK → sdlcs; roles are scoped to an SDLC)
 - `title`
-- `motivation`
-- `goals`
+- `description`
+- `acceptance_criteria`
 - `created_at`
 - `updated_at`
 
 Notes:
 
 - roles represent reusable agent personas for ticket work
-- default software delivery roles are seeded (for example Product Owner, Architect, DevOps, QA/Tester, BA, Lead Engineer, Staff Engineer)
-- seeded role `motivation` and `goals` use multi-paragraph classical role descriptions to provide richer persona context out of the box
+- roles are scoped to an SDLC and assigned to stages via the `sdlc_stage_roles` junction table
+- each stage can have multiple ordered roles; a ticket progresses through each role within a stage before advancing
 
 ### Project
 

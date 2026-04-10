@@ -71,7 +71,7 @@ tk epic "Authentication"              # create an epic
 
 tk active   -id CUS-T-1              # begin work
 tk complete -id CUS-T-1              # finish stage, auto-advance
-tk close    -id CUS-T-1              # close ticket
+tk complete -id CUS-T-1              # mark ticket complete
 
 tk claim    -id CUS-T-1              # assign to yourself
 tk request                            # get the next available ticket
