@@ -64,6 +64,76 @@ func (r *router) registerSdlcHandlers() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	})
 
+	// Stage-role management: /api/sdlcs/{id}/stages/{stageId}/roles[/{roleId}]
+	mux.HandleFunc("/api/sdlcs/stages/roles/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		// Parse: /api/sdlcs/stages/roles/{sdlcId}/{stageId}[/{roleId}]
+		// This is a simplified routing — we use sdlcId/stageId/roleId in the path
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/stages/roles/")
+		pathParts := strings.Split(trimmed, "/")
+		if len(pathParts) < 2 {
+			writeError(w, http.StatusBadRequest, "invalid path")
+			return
+		}
+		var sdlcID, stageID int64
+		if _, err := fmt.Sscan(pathParts[0], &sdlcID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid sdlc id")
+			return
+		}
+		if _, err := fmt.Sscan(pathParts[1], &stageID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid stage id")
+			return
+		}
+		switch r.Method {
+		case http.MethodPost:
+			var payload struct {
+				RoleID int64 `json:"role_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.RoleID == 0 {
+				writeError(w, http.StatusBadRequest, "role_id is required")
+				return
+			}
+			if err := store.AddSdlcStageRole(r.Context(), db, sdlcID, stageID, payload.RoleID); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusCreated, map[string]string{"status": "assigned"})
+		case http.MethodDelete:
+			if len(pathParts) < 3 {
+				writeError(w, http.StatusBadRequest, "role id required")
+				return
+			}
+			var roleID int64
+			if _, err := fmt.Sscan(pathParts[2], &roleID); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid role id")
+				return
+			}
+			if err := store.RemoveSdlcStageRole(r.Context(), db, sdlcID, stageID, roleID); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+		case http.MethodPut:
+			var payload struct {
+				RoleIDs []int64 `json:"role_ids"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || len(payload.RoleIDs) == 0 {
+				writeError(w, http.StatusBadRequest, "role_ids array is required")
+				return
+			}
+			if err := store.ReorderSdlcStageRoles(r.Context(), db, sdlcID, stageID, payload.RoleIDs); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "reordered"})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
 	mux.HandleFunc("/api/sdlcs", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

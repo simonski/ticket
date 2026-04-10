@@ -716,6 +716,76 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "complete" && r.Method == http.MethodPost {
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
+				ticket, err := store.SetTicketComplete(r.Context(), db, id, true, user.Username, user.ID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				if msg.Message != "" {
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "reopen" && r.Method == http.MethodPost {
+				var msg messageRequest
+				json.NewDecoder(r.Body).Decode(&msg)
+				ticket, err := store.SetTicketComplete(r.Context(), db, id, false, user.Username, user.ID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				if msg.Message != "" {
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "draft" && r.Method == http.MethodPost {
+				ticket, err := store.SetTicketDraft(r.Context(), db, id, true, user.Username, user.ID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "undraft" && r.Method == http.MethodPost {
+				ticket, err := store.SetTicketDraft(r.Context(), db, id, false, user.Username, user.ID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "next" && r.Method == http.MethodPost {
+				ticket, err := store.NextTicket(r.Context(), db, id, user.Username, user.ID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "previous" && r.Method == http.MethodPost {
+				ticket, err := store.PreviousTicket(r.Context(), db, id, user.Username, user.ID)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusOK, ticket)
+				return
+			}
 			if len(parts) == 2 && parts[1] == "sdlc" {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)
