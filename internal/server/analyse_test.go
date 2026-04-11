@@ -52,6 +52,7 @@ func TestStoryAnalyseProcessEnvDefaults(t *testing.T) {
 }
 
 func TestBuildStoryAnalyseCLIInstructionsContainsTicketCommands(t *testing.T) {
+	t.Parallel()
 	story := store.Story{
 		ID:          7,
 		ProjectID:   3,

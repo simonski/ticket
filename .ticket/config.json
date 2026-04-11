@@ -2,11 +2,6 @@
   "location": "ticket.db",
   "token": "",
   "username": "admin",
-  "project_id": "1",
-  "current_epic_id": "TK-229",
-  "tui_theme": "the-grey",
-  "tui_mode": "list",
-  "tui_expanded_epics": [
-    "TK-229"
-  ]
+  "project_id": "TK",
+  "current_epic_id": "TK-109"
 }

@@ -27,8 +27,9 @@ Read these documents in order — each one builds on the last:
 3. `QUICKSTART.md` — choose local or server mode, then follow the linked guide
 4. `TESTING.md` — test strategy, how to run each suite, coverage thresholds
 5. `docs/DESIGN.md` — deeper architecture, data model, design decisions
-6. `USER_GUIDE.md` — full CLI and web UI reference
-7. `CONTRIBUTING.md` — branching, commits, PR process
+6. `docs/LIFECYCLE.md` — SDLC lifecycle, stages, roles, and stage-role assignments
+7. `USER_GUIDE.md` — full CLI and web UI reference
+8. `CONTRIBUTING.md` — branching, commits, PR process
 
 ---
 
@@ -74,7 +75,7 @@ The `make setup` command installs:
 
 ```bash
 # Build for local use (does NOT bump version)
-go build -o ./bin/tk ./cmd/ticket
+go build -o ./bin/tk ./cmd/tk
 
 # Run unit + integration tests
 make test-go
@@ -94,10 +95,10 @@ make test
 
 > **⚠️ Critical pitfall: `make build` increments the version**
 >
-> `make build` auto-increments the patch version in `cmd/ticket/VERSION` on
+> `make build` auto-increments the patch version in `cmd/tk/VERSION` on
 > every run. This creates an unwanted commit and pollutes git history.
 >
-> **Always use `go build -o ./bin/tk ./cmd/ticket` for development.**
+> **Always use `go build -o ./bin/tk ./cmd/tk` for development.**
 > Only use `make build` when cutting a release.
 
 ---
@@ -127,8 +128,35 @@ tk bug -title "Fix login redirect loop"
 tk get TK-XXX
 ```
 
-See `cmd/ticket/TICKETS.md` for the complete sdlc reference including the
+See `cmd/tk/TICKETS.md` for the complete sdlc reference including the
 lifecycle (design → develop → test → done) and stage/state combinations.
+
+### SDLC entities
+
+The ticket system supports custom SDLC (Software Development Life Cycle)
+definitions. An SDLC defines a sequence of stages that tickets move through.
+Roles describe the responsibilities at each stage, and stage-role assignments
+connect roles to specific stages within an SDLC.
+
+```bash
+# Create an SDLC definition
+tk sdlc create -name "Agile" -d "Standard agile process"
+
+# Add stages to the SDLC
+tk sdlc add-stage -id 1 -name develop
+tk sdlc add-stage -id 1 -name test
+
+# Create a role
+tk role create -title Engineer -d "Software engineer"
+
+# Assign a role to a stage
+tk sdlc stage-role-add -sdlc_id 1 -stage_id 1 -role_id 1
+
+# List all roles
+tk role ls
+```
+
+See `docs/LIFECYCLE.md` for the full SDLC reference.
 
 ---
 
@@ -155,9 +183,9 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 
 | Pitfall | Fix |
 |---------|-----|
-| `make build` bumps the version unexpectedly | Use `go build -o ./bin/tk ./cmd/ticket` for dev builds |
+| `make build` bumps the version unexpectedly | Use `go build -o ./bin/tk ./cmd/tk` for dev builds |
 | Tests fail with "no such file or directory" on Playwright | Run `make setup-playwright` first |
-| `tk` command not found | Run `go build -o ./bin/tk ./cmd/ticket` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
+| `tk` command not found | Run `go build -o ./bin/tk ./cmd/tk` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
 | DB conflicts on `git pull` | The `.ticket/ticket.db` file is tracked in git. Always run `git checkout -- .ticket/ticket.db` before `git pull --rebase` to avoid merge conflicts on the binary file |
 | `make test` times out | Playwright tests require a local server; the Makefile starts one automatically, but if port 8080 is already in use the tests will hang — kill any running `ticket` server first |
 | Import cycle errors | The dependency flow must be `cmd → libticket → internal/store`. Nothing in `internal/` may import `cmd/` |

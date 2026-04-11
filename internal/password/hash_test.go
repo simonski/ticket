@@ -6,6 +6,7 @@ import (
 )
 
 func TestHashUsesArgon2IDFormat(t *testing.T) {
+	t.Parallel()
 	hash, err := Hash("secret-password")
 	if err != nil {
 		t.Fatalf("Hash() error = %v", err)
@@ -20,6 +21,7 @@ func TestHashUsesArgon2IDFormat(t *testing.T) {
 }
 
 func TestVerifyMatchesPassword(t *testing.T) {
+	t.Parallel()
 	hash, err := Hash("secret-password")
 	if err != nil {
 		t.Fatalf("Hash() error = %v", err)

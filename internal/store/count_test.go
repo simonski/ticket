@@ -6,6 +6,7 @@ import (
 )
 
 func TestCountEverything(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")

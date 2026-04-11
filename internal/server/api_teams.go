@@ -22,7 +22,7 @@ func (r *router) registerTeamHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			teams, err := store.ListTeams(r.Context(), db)
+			teams, err := store.ListTeams(r.Context(), db, 0)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return

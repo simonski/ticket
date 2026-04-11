@@ -1,12 +1,10 @@
 # ticket
 
-`ticket` is a local-first ticket and project management system for software engineering teams. It runs as a single Go binary that provides a CLI, a terminal UI, a web UI, and a REST API — all backed by SQLite.
+`ticket` is an issue tracking toolkit for software engineering.  It is a single Go binary that provides a CLI, a terminal UI, a web UI, and a REST API — all backed by SQLite.
 
 ```
 brew install simonski/tap/ticket
 ```
-
-Both `ticket` and the short alias `tk` are installed.
 
 ---
 
@@ -30,9 +28,7 @@ It works in two modes:
 - **Local** — CLI and TUI operate directly on a SQLite file. No server required.
 - **Server** — HTTP server adds multi-user auth, a web Kanban board, WebSocket live updates, and AI agent support.
 
-The authoritative system contract is in [SPEC.md](./SPEC.md). Full user-facing
-documentation is in [USER_GUIDE.md](./USER_GUIDE.md). Architecture and design
-notes are in [docs/DESIGN.md](./docs/DESIGN.md).
+The authoritative system contract is in [SPEC.md](./SPEC.md). Full user-facing documentation is in [USER_GUIDE.md](./USER_GUIDE.md). Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
 ## Installation
 
@@ -42,13 +38,12 @@ notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 brew install simonski/tap/ticket
 ```
 
-Installs both `ticket` and the alias `tk`.
+Installs as `tk`.
 
 ### Go install
 
 ```bash
-go install github.com/simonski/ticket/cmd/ticket@latest
-alias tk=ticket
+go install github.com/simonski/ticket/cmd/tk@latest
 ```
 
 ### Download a binary
@@ -63,11 +58,10 @@ Download a tarball for your platform from the [releases page](https://github.com
 git clone https://github.com/simonski/ticket
 cd ticket
 make setup        # install Go tools, Node, Playwright
-go build -o ./bin/tk ./cmd/ticket
+make build
 ```
 
-> **Note:** `make build` increments the patch version on every call. Use
-> `go build -o ./bin/tk ./cmd/ticket` for day-to-day development.
+New to the codebase? See [docs/ONBOARDING.md](docs/ONBOARDING.md) for a guided reading order and setup walkthrough.
 
 Run the tests:
 
@@ -83,8 +77,6 @@ make test
 
 ```bash
 tk init                                          # create .ticket/ workspace
-tk project create -prefix MY -title "My Work"
-tk project use MY
 tk add "First ticket"
 tk list
 ```
@@ -206,7 +198,7 @@ graph TB
     end
 
     subgraph Core
-        SVC["libticket.Service<br/>107-method interface"]
+        SVC["libticket.Service<br/>119-method interface"]
         LOCAL["LocalService<br/>Direct DB access"]
         REMOTE["HTTP Client<br/>Remote access"]
     end
@@ -228,7 +220,7 @@ graph TB
 
 ```mermaid
 graph LR
-    CMD["cmd/ticket<br/>CLI entry point"] --> CLIENT["internal/client"]
+    CMD["cmd/tk<br/>CLI entry point"] --> CLIENT["internal/client"]
     CMD --> CONFIG["internal/config"]
     CMD --> STORE["internal/store"]
     CMD --> LIB["libticket"]

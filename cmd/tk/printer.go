@@ -99,7 +99,7 @@ func printProjectTable(projects []store.Project, currentProjectID string, sdlcNa
 		}
 		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, sdlc, project.GitRepository, desc))
 	}
-	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWORKFLOW\tGIT\tDESCRIPTION", rows)
+	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tSDLC\tGIT\tDESCRIPTION", rows)
 }
 
 func ticketLabel(ticket store.Ticket) string {

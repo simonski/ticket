@@ -22,6 +22,7 @@ func setupSdlcTestDB(t *testing.T) *sql.DB {
 }
 
 func TestInitSeedsDefaultSdlc(t *testing.T) {
+	t.Parallel()
 	db := setupSdlcTestDB(t)
 	sdlcs, err := ListSdlcs(context.Background(), db)
 	if err != nil {
@@ -43,6 +44,7 @@ func TestInitSeedsDefaultSdlc(t *testing.T) {
 }
 
 func TestDefaultSdlcHasTwoStages(t *testing.T) {
+	t.Parallel()
 	db := setupSdlcTestDB(t)
 	sdlcs, _ := ListSdlcs(context.Background(), db)
 	var sdlcID int64
@@ -67,6 +69,7 @@ func TestDefaultSdlcHasTwoStages(t *testing.T) {
 }
 
 func TestSdlcCRUD(t *testing.T) {
+	t.Parallel()
 	db := setupSdlcTestDB(t)
 
 	wf, err := CreateSdlc(context.Background(), db, "custom", "A custom sdlc")
@@ -78,7 +81,7 @@ func TestSdlcCRUD(t *testing.T) {
 	}
 
 	// Add stages (no role_id — roles are via junction table now)
-	s1, err := AddSdlcStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", 0)
+	s1, err := AddSdlcStage(context.Background(), db, wf.ID, "analysis", "Analyse requirements", "", 0)
 	if err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
@@ -86,7 +89,7 @@ func TestSdlcCRUD(t *testing.T) {
 		t.Fatalf("StageName = %q, want %q", s1.StageName, "analysis")
 	}
 
-	s2, err := AddSdlcStage(context.Background(), db, wf.ID, "build", "", 1)
+	s2, err := AddSdlcStage(context.Background(), db, wf.ID, "build", "", "", 1)
 	if err != nil {
 		t.Fatalf("AddSdlcStage(build) error = %v", err)
 	}
@@ -123,11 +126,12 @@ func TestSdlcCRUD(t *testing.T) {
 }
 
 func TestReorderSdlcStages(t *testing.T) {
+	t.Parallel()
 	db := setupSdlcTestDB(t)
 	wf, _ := CreateSdlc(context.Background(), db, "reorder-test", "")
-	s1, _ := AddSdlcStage(context.Background(), db, wf.ID, "first", "", 0)
-	s2, _ := AddSdlcStage(context.Background(), db, wf.ID, "second", "", 1)
-	s3, _ := AddSdlcStage(context.Background(), db, wf.ID, "third", "", 2)
+	s1, _ := AddSdlcStage(context.Background(), db, wf.ID, "first", "", "", 0)
+	s2, _ := AddSdlcStage(context.Background(), db, wf.ID, "second", "", "", 1)
+	s3, _ := AddSdlcStage(context.Background(), db, wf.ID, "third", "", "", 2)
 
 	// Reverse order
 	if err := ReorderSdlcStages(context.Background(), db, wf.ID, []int64{s3.ID, s2.ID, s1.ID}); err != nil {
@@ -143,6 +147,7 @@ func TestReorderSdlcStages(t *testing.T) {
 }
 
 func TestSdlcExportImportRoundTrip(t *testing.T) {
+	t.Parallel()
 	db := setupSdlcTestDB(t)
 
 	// Find the default sdlc
@@ -188,10 +193,11 @@ func TestSdlcExportImportRoundTrip(t *testing.T) {
 }
 
 func TestSdlcStageRoles(t *testing.T) {
+	t.Parallel()
 	db := setupSdlcTestDB(t)
 
 	sdlc, _ := CreateSdlc(context.Background(), db, "role-test", "")
-	stage, _ := AddSdlcStage(context.Background(), db, sdlc.ID, "design", "", 0)
+	stage, _ := AddSdlcStage(context.Background(), db, sdlc.ID, "design", "", "", 0)
 
 	r1, _ := CreateRole(context.Background(), db, &sdlc.ID, "Architect", "design role", "review architecture")
 	r2, _ := CreateRole(context.Background(), db, &sdlc.ID, "BA", "analysis role", "gather requirements")

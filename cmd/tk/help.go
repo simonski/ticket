@@ -578,8 +578,12 @@ Commands:
   set      -ticket <id> -sdlc <id> Set sdlc on a ticket (overrides inherited)
   unset    -ticket <id>               Clear sdlc from a ticket (inherit from parent/project)
   add-stage    -id <wf-id> -name <n>  Add a stage
+  stage-update -stage-id <id> -name <n> [-d desc] [-ac criteria]  Update a stage
+  stage-get    -stage-id <id>         Show stage details
+  stage-list   -id <sdlc_id>         List stages in a sdlc
   remove-stage -stage-id <id>         Remove a stage
   reorder-stages -id <wf-id> <ids>    Reorder stages
+  role-list  -id <sdlc_id>                            List roles scoped to a sdlc
   stage-role-add -sdlc_id X -stage_id Y -role_id Z   Assign a role to a stage
   stage-role-rm  -sdlc_id X -stage_id Y -role_id Z   Remove a role from a stage
   stage-role-order -sdlc_id X -stage_id Y -roles 1,2  Reorder roles in a stage

@@ -16,6 +16,7 @@ import (
 )
 
 func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/status" {
 			t.Fatalf("path = %q, want /api/status", r.URL.Path)
@@ -48,6 +49,7 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 }
 
 func TestRemoteClientListTicketsFilteredBuildsQuery(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/projects/7/tickets" {
 			t.Fatalf("path = %q", r.URL.Path)
@@ -72,6 +74,7 @@ func TestRemoteClientListTicketsFilteredBuildsQuery(t *testing.T) {
 }
 
 func TestRemoteClientListTicketsFilteredIncludesArchived(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/projects/7/tickets" {
 			t.Fatalf("path = %q", r.URL.Path)
@@ -96,6 +99,7 @@ func TestRemoteClientListTicketsFilteredIncludesArchived(t *testing.T) {
 }
 
 func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/tickets/claim" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
@@ -128,6 +132,7 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 }
 
 func TestRemoteClientReturnsAPIErrorMessage(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Header().Set("Content-Type", "application/json")
@@ -143,6 +148,7 @@ func TestRemoteClientReturnsAPIErrorMessage(t *testing.T) {
 }
 
 func TestRemoteClientReturnsStatusErrorForNonJSONFailures(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "plain failure", http.StatusBadGateway)
 	}))
@@ -170,6 +176,7 @@ func TestRemoteClientReturnsDecodeErrorOnMalformedJSON(t *testing.T) {
 }
 
 func TestRemoteClientHandlesNetworkFailure(t *testing.T) {
+	t.Parallel()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen() error = %v", err)
@@ -184,6 +191,7 @@ func TestRemoteClientHandlesNetworkFailure(t *testing.T) {
 }
 
 func TestLocalModeClientRejectsRemoteOnlyAuthCalls(t *testing.T) {
+	t.Parallel()
 
 	api := New(config.Config{})
 	if _, err := api.Register("alice", "secret"); err == nil {
@@ -198,6 +206,7 @@ func TestLocalModeClientRejectsRemoteOnlyAuthCalls(t *testing.T) {
 }
 
 func TestRemoteClientCRUDRoutes(t *testing.T) {
+	t.Parallel()
 	projectID := int64(7)
 	taskID := "11"
 	dependsOn := "12"
@@ -334,6 +343,7 @@ func TestRemoteClientCRUDRoutes(t *testing.T) {
 }
 
 func TestRemoteClientRolesCRUD(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -369,6 +379,7 @@ func TestRemoteClientRolesCRUD(t *testing.T) {
 }
 
 func TestRemoteClientAgentsCRUD(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -455,6 +466,7 @@ func TestRemoteClientAgentsCRUD(t *testing.T) {
 }
 
 func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -555,6 +567,7 @@ func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
 }
 
 func TestRemoteClientTicketLifecycle(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		ticketJSON := `{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"design","state":"idle","status":"design/idle"}`
@@ -626,6 +639,7 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 }
 
 func TestRemoteClientSdlcsCRUD(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -686,6 +700,7 @@ func TestRemoteClientSdlcsCRUD(t *testing.T) {
 }
 
 func TestRemoteClientTimeTrackingAndLabels(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -753,6 +768,7 @@ func TestRemoteClientTimeTrackingAndLabels(t *testing.T) {
 }
 
 func TestRemoteClientStoriesCRUD(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -793,6 +809,7 @@ func TestRemoteClientStoriesCRUD(t *testing.T) {
 }
 
 func TestRemoteClientRegistrationAndPasswordReset(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {

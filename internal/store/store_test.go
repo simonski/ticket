@@ -9,6 +9,7 @@ import (
 )
 
 func TestInitCreatesDatabaseAndAdminUser(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 
 	if err := Init(dbPath, "admin", "password"); err != nil {
@@ -72,6 +73,7 @@ func TestInitCreatesDatabaseAndAdminUser(t *testing.T) {
 }
 
 func TestInitFailsIfDatabaseAlreadyExists(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("first Init() error = %v", err)
@@ -83,6 +85,7 @@ func TestInitFailsIfDatabaseAlreadyExists(t *testing.T) {
 }
 
 func TestFixStaleForeignKeysMigration(t *testing.T) {
+	t.Parallel()
 	t.Skip("migration tests are not applicable after SDLC schema refactor — we accept data loss")
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 
@@ -161,6 +164,7 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 }
 
 func TestParseTicketSequence(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input string
 		want  int64
@@ -195,6 +199,7 @@ func assertTableExists(t *testing.T, db *sql.DB, name string) {
 // never dropped (interrupted run), calling migrateTicketIDToText again does
 // not try to scan TEXT ids as int64 and simply drops the key column.
 func TestMigrateTicketIDToTextAlreadyTextDropsKeyColumn(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "migrate_test.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {

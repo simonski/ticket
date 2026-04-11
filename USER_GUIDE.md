@@ -839,9 +839,20 @@ tk sdlc list
 tk sdlc create -name <name> [-d <description>]
 tk sdlc get -id <id>
 tk sdlc delete -id <id>
-tk sdlc add-stage -id <wf-id> -name <name>
+tk sdlc add-stage -id <sdlc-id> -name <name> [-d <desc>] [-order <n>]
 tk sdlc remove-stage -stage-id <id>
-tk sdlc reorder-stages -id <wf-id> <ids>
+tk sdlc reorder-stages -id <sdlc-id> <stage_id,stage_id,...>
+tk sdlc export -id <id> [-o <file>]
+tk sdlc set -ticket <ticket-id> -sdlc <sdlc-id>
+tk sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>
+tk sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>
+tk sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <id,id,...>
+
+tk role list
+tk role create -title <title> [-description <desc>] [-ac <criteria>]
+tk role get -id <id>
+tk role update -id <id> [-title <title>] [-description <desc>] [-ac <criteria>]
+tk role delete -id <id>
 
 tk decision add "text"
 tk decision list

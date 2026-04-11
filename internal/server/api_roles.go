@@ -22,7 +22,7 @@ func (r *router) registerRoleHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			roles, err := store.ListRoles(r.Context(), db)
+			roles, err := store.ListRoles(r.Context(), db, 0)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return

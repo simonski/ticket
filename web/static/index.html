@@ -22,6 +22,23 @@
         --success: #2e7d32;
         --fail: #c62828;
       }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0f1e;
+          --panel: #11182b;
+          --lane: #1a2236;
+          --ticket: #1e2740;
+          --ink: #e0e4ed;
+          --muted: #8892a6;
+          --line: #2a3450;
+          --accent: #2ca5a8;
+          --banner-bg: #151c30;
+          --idle: #607d8b;
+          --active: #ff9800;
+          --success: #43a047;
+          --fail: #e53935;
+        }
+      }
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; font-family: Georgia, "Times New Roman", serif; }
       button, input, textarea, select { font: inherit; }
@@ -84,6 +101,8 @@
         border-color: #0ea5e9;
         color: #fff;
       }
+      .btn.danger { background: #dc3545; color: #fff; border-color: #dc3545; }
+      .btn.danger:hover { background: #c82333; border-color: #bd2130; }
       .link {
         border: 0;
         background: transparent;
@@ -96,6 +115,27 @@
         margin-top: 0.4rem;
         color: #c7d6ff;
       }
+
+      .loading-spinner {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        color: var(--muted, #677083);
+        font-style: italic;
+      }
+      .loading-spinner::before {
+        content: "";
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        margin-right: 0.5em;
+        border: 2px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
 
       .app {
         min-height: 0;
@@ -914,7 +954,7 @@
       <div class="app-head-banner">
         <canvas id="pixel-logo" width="640" height="48" title="ticket"></canvas>
       </div>
-      <div id="app-status" style="display:none;"></div>
+      <div id="app-status" style="position:fixed;bottom:0;left:0;right:0;padding:4px 12px;font-size:12px;color:#555;background:#f0f0f0;border-top:1px solid #ddd;z-index:999;min-height:0;"></div>
       <div class="app-head-right">
         <div class="proj-dropdown" id="proj-dropdown">
           <button class="proj-btn" id="proj-btn" type="button">Project</button>
@@ -938,7 +978,9 @@
       <div class="login-card">
         <h1 class="login-banner"><canvas id="login-pixel-logo" width="320" height="48" title="ticket"></canvas></h1>
         <form id="login-form" class="stack">
+          <label for="login-user">Username</label>
           <input id="login-user" placeholder="username" autocomplete="username" autofocus required />
+          <label for="login-pass">Password</label>
           <input id="login-pass" type="password" placeholder="password" required />
           <div class="row">
             <button class="btn primary" type="submit">Login</button>
@@ -1220,6 +1262,9 @@
             <option value="private">private</option>
             <option value="public">public</option>
           </select>
+          <select id="proj-modal-sdlc">
+            <option value="">No SDLC (default lifecycle)</option>
+          </select>
           <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
           <input id="proj-modal-git-branch" placeholder="git branch (optional)" autocomplete="off" />
           <textarea id="proj-modal-description" placeholder="description (optional)"></textarea>
@@ -1269,7 +1314,7 @@
           <textarea id="role-goals" placeholder="goals"></textarea>
           <div class="row">
             <button id="role-save" class="btn" type="button">Create Role</button>
-            <button id="role-delete" class="btn" type="button">Delete</button>
+            <button id="role-delete" class="btn danger" type="button">Delete</button>
             <button id="role-clear" class="btn" type="button">Clear</button>
           </div>
           <div id="role-status" class="muted"></div>
@@ -1293,7 +1338,7 @@
           </div>
           <div class="row">
             <button id="team-save" class="btn" type="button">Create Team</button>
-            <button id="team-delete" class="btn" type="button">Delete</button>
+            <button id="team-delete" class="btn danger" type="button">Delete</button>
           </div>
           <div class="row">
             <input id="team-member-user-id" placeholder="user id" autocomplete="off" />
@@ -1469,9 +1514,9 @@
             </div>
           </div>
           <div class="row ticket-form-actions">
-            <button id="ticket-delete" class="btn" type="button">Delete</button>
+            <button id="ticket-delete" class="btn danger" type="button">Delete</button>
             <button id="ticket-close-open" class="btn" type="button">Close</button>
-            <button id="ticket-archive" class="btn" type="button">Archive</button>
+            <button id="ticket-archive" class="btn danger" type="button">Archive</button>
             <button id="ticket-analyse" class="btn" type="button">Analyse</button>
           </div>
           <div class="muted">No save button. Changes are persisted as you type.</div>
@@ -1489,7 +1534,7 @@
           <div class="row">
             <button id="sdlc-save" class="btn" type="button">Create</button>
             <button id="sdlc-export" class="btn" type="button" style="display:none;">Export</button>
-            <button id="sdlc-delete" class="btn" type="button">Delete</button>
+            <button id="sdlc-delete" class="btn danger" type="button">Delete</button>
             <button id="sdlc-modal-close" class="btn" type="button">Close</button>
           </div>
           <div id="sdlc-status" class="muted"></div>
@@ -1499,6 +1544,9 @@
             <div class="row" style="gap:0.3rem;">
               <input id="sdlc-stage-name" placeholder="stage name" autocomplete="off" style="flex:1;" />
               <input id="sdlc-stage-order" type="number" placeholder="order" style="width:5rem;" />
+              <select id="sdlc-stage-role" style="flex:1;">
+                <option value="">No role</option>
+              </select>
               <button id="sdlc-stage-add" class="btn" type="button">Add Stage</button>
             </div>
           </div>
@@ -2874,14 +2922,14 @@
 
       // ── Project dropdown (custom, not native select) ──────────────────────
       let currentUsername = "";
-      var currentUserRole = "";
-      var registrationEnabled = true;
-      var chatEnabled = true;
-      var chatMaxConnections = 2;
-      var chatMaxDurationMinutes = 3;
-      var chatCapacityBlocked = false;
-      var chatRunningProcesses = 0;
-      var chatCapacityPollTimer = null;
+      let currentUserRole = "";
+      let registrationEnabled = true;
+      let chatEnabled = true;
+      let chatMaxConnections = 2;
+      let chatMaxDurationMinutes = 3;
+      let chatCapacityBlocked = false;
+      let chatRunningProcesses = 0;
+      let chatCapacityPollTimer = null;
       let recentProjects = JSON.parse(localStorage.getItem("recent-projects") || "[]");
 
       function touchRecent(id) {
@@ -3089,10 +3137,10 @@
       let selectedStoryID = 0;
       let socket = null;
       let socketRetry = null;
-      var chatSocket = null;
-      var chatSocketRetry = null;
-      var activeAssistantBubble = null;
-      var chatPendingTimer = null;
+      let chatSocket = null;
+      let chatSocketRetry = null;
+      let activeAssistantBubble = null;
+      let chatPendingTimer = null;
       let realtimeSyncTimer = null;
       let wsHealthy = false;
       let lastWSMessageAt = 0;
@@ -3106,12 +3154,19 @@
       let draft = null;
       let autosaveTimer = null;
       let recentlySavedTicketIds = new Set();
-      var token = localStorage.getItem("task-token") || "";
+      let token = localStorage.getItem("task-token") || "";
+
+      function getCsrfToken() {
+        const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/);
+        return match ? decodeURIComponent(match[1]) : "";
+      }
 
       function headers(json = false) {
         const h = {};
         if (token) h.Authorization = `Bearer ${token}`;
         if (json) h["Content-Type"] = "application/json";
+        const csrf = getCsrfToken();
+        if (csrf) h["X-CSRF-Token"] = csrf;
         return h;
       }
 
@@ -3226,7 +3281,7 @@
           actionWrap.appendChild(toggle);
 
           const remove = document.createElement("button");
-          remove.className = "btn";
+          remove.className = "btn danger";
           remove.type = "button";
           remove.textContent = "Delete";
           remove.addEventListener("click", async (event) => {
@@ -3247,6 +3302,7 @@
       }
 
       async function loadAgents() {
+        showSpinner(agentListEl, "Loading agents...");
         const list = await call("/api/agents", { headers: headers() });
         agents = Array.isArray(list) ? list : [];
         if (window.statusAnimator && typeof window.statusAnimator.setAgents === "function") {
@@ -3448,6 +3504,7 @@
       }
 
       async function loadRoles() {
+        showSpinner(roleListEl, "Loading roles...");
         const list = await call("/api/roles", { headers: headers() });
         roles = Array.isArray(list) ? list : [];
         renderRoleSelector(selectedRoleID);
@@ -3659,6 +3716,7 @@
       }
 
       async function loadTeams() {
+        showSpinner(teamListEl, "Loading teams...");
         const list = await call("/api/teams", { headers: headers() });
         teams = Array.isArray(list) ? list : [];
         renderTeamSelector();
@@ -3947,6 +4005,7 @@
       const sdlcStageNameInput = document.getElementById("sdlc-stage-name");
       const sdlcStageOrderInput = document.getElementById("sdlc-stage-order");
       const sdlcStageAddBtn = document.getElementById("sdlc-stage-add");
+      const sdlcStageRoleSelect = document.getElementById("sdlc-stage-role");
       const sdlcCreateBtn = document.getElementById("sdlcs-create");
 
       function setSDLCStatus(msg = "", isError = false) {
@@ -3954,8 +4013,22 @@
         sdlcStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
       }
 
+      async function populateStageRoleSelector() {
+        if (!sdlcStageRoleSelect) return;
+        const list = await call("/api/roles", { headers: headers() }).catch(() => []);
+        const roleList = Array.isArray(list) ? list : [];
+        sdlcStageRoleSelect.innerHTML = '<option value="">No role</option>';
+        for (const r of roleList) {
+          const opt = document.createElement("option");
+          opt.value = String(r.role_id);
+          opt.textContent = r.title || `Role #${r.role_id}`;
+          sdlcStageRoleSelect.appendChild(opt);
+        }
+      }
+
       async function loadSdlcs() {
-        const list = await call("/api/sdlc", { headers: headers() });
+        showSpinner(sdlcListEl, "Loading SDLCs...");
+        const list = await call("/api/sdlcs", { headers: headers() });
         sdlcs = Array.isArray(list) ? list : [];
         renderSdlcList();
         sdlcBrowserStatusEl.textContent = sdlcs.length ? `${sdlcs.length} sdlc${sdlcs.length === 1 ? "" : "s"}` : "No sdlcs yet.";
@@ -4011,6 +4084,7 @@
           sdlcExportBtn.style.display = "";
           sdlcStagesSection.style.display = "";
           await loadSdlcStages(wf.sdlc_id);
+          await populateStageRoleSelector();
         } else {
           sdlcModalTitle.textContent = "New SDLC";
           sdlcSaveBtn.textContent = "Create";
@@ -4024,7 +4098,7 @@
 
       async function loadSdlcStages(wfID) {
         try {
-          const detail = await call(`/api/sdlc/${wfID}`, { headers: headers() });
+          const detail = await call(`/api/sdlcs/${wfID}`, { headers: headers() });
           const stages = detail.stages || [];
           sdlcStagesList.innerHTML = "";
           if (!stages.length) {
@@ -4036,13 +4110,13 @@
             row.className = "row";
             row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
             const info = document.createElement("span");
-            info.innerHTML = `<strong>${escape(s.stage_name)}</strong> <span class="muted">(order: ${s.sort_order}${s.role_title ? ", role: " + escape(s.role_title) : ""})</span>`;
+            info.innerHTML = `<strong>${escape(s.stage_name)}</strong> <span class="muted">(order: ${escape(String(s.sort_order))}${s.role_title ? ", role: " + escape(s.role_title) : ""})</span>`;
             const rm = document.createElement("button");
             rm.textContent = "\u00d7";
-            rm.className = "btn";
+            rm.className = "btn danger";
             rm.style.cssText = "padding:0 0.4rem;";
             rm.onclick = async () => {
-              await call(`/api/sdlc/stages/${s.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
+              await call(`/api/sdlcs/stages/${s.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
               await loadSdlcStages(wfID);
             };
             row.appendChild(info);
@@ -4062,7 +4136,7 @@
             // No update endpoint exists, so just notify
             setSDLCStatus("SDLC name/description saved at creation time. Manage stages below.");
           } else {
-            const created = await call("/api/sdlc", {
+            const created = await call("/api/sdlcs", {
               method: "POST",
               headers: headers(true),
               body: JSON.stringify({ name, description: sdlcDescInput.value.trim() }),
@@ -4073,6 +4147,7 @@
             sdlcDeleteBtn.style.display = "";
             sdlcExportBtn.style.display = "";
             sdlcStagesSection.style.display = "";
+            await populateStageRoleSelector();
             setSDLCStatus(`Created sdlc #${created.sdlc_id}`);
           }
           await loadSdlcs();
@@ -4084,7 +4159,7 @@
         const ok = await uiConfirm(`Delete sdlc #${selectedSDLCID}?`, "Delete");
         if (!ok) return;
         try {
-          await call(`/api/sdlc/${selectedSDLCID}`, { method: "DELETE", headers: headers() });
+          await call(`/api/sdlcs/${selectedSDLCID}`, { method: "DELETE", headers: headers() });
           sdlcModalOverlay.classList.add("hidden");
           document.body.classList.remove("modal-open");
           await loadSdlcs();
@@ -4096,14 +4171,16 @@
         const stageName = sdlcStageNameInput.value.trim();
         if (!stageName) { setSDLCStatus("Stage name is required.", true); return; }
         const sortOrder = Number(sdlcStageOrderInput.value || 0);
+        const roleID = sdlcStageRoleSelect ? Number(sdlcStageRoleSelect.value || 0) : 0;
         try {
-          await call(`/api/sdlc/${selectedSDLCID}/stages`, {
+          await call(`/api/sdlcs/${selectedSDLCID}/stages`, {
             method: "POST",
             headers: headers(true),
-            body: JSON.stringify({ stage_name: stageName, description: "", role_id: null, sort_order: sortOrder }),
+            body: JSON.stringify({ stage_name: stageName, description: "", role_id: roleID || null, sort_order: sortOrder }),
           });
           sdlcStageNameInput.value = "";
           sdlcStageOrderInput.value = "";
+          if (sdlcStageRoleSelect) sdlcStageRoleSelect.value = "";
           await loadSdlcStages(selectedSDLCID);
           setSDLCStatus("");
         } catch (err) { setSDLCStatus(err.message, true); }
@@ -4128,7 +4205,7 @@
       sdlcExportBtn.addEventListener("click", async () => {
         if (!selectedSDLCID) return;
         try {
-          const data = await call(`/api/sdlc/${selectedSDLCID}/export`, { headers: headers() });
+          const data = await call(`/api/sdlcs/${selectedSDLCID}/export`, { headers: headers() });
           const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
@@ -4151,7 +4228,7 @@
           try {
             const text = await file.text();
             const payload = JSON.parse(text);
-            await call("/api/sdlc/import", {
+            await call("/api/sdlcs/import", {
               method: "POST",
               headers: headers(true),
               body: JSON.stringify(payload),
@@ -4472,6 +4549,11 @@
         }
       });
 
+      function showSpinner(container, msg = "Loading...") {
+        if (!container) return;
+        container.innerHTML = `<div class="loading-spinner">${msg}</div>`;
+      }
+
       async function call(path, options = {}) {
         const response = await fetch(path, { cache: "no-store", ...options });
         const body = await response.text();
@@ -4580,6 +4662,7 @@
           }
           showApp(status.user.username, status.user.role);
           ensureRealtimeSync();
+          showSpinner(boardEl, "Loading board...");
           await loadProjects();
           await loadStories();
           await syncAgentsForAnimator();
@@ -4652,6 +4735,7 @@
             refreshTicketViews();
             return;
           }
+          if (!tickets.length) showSpinner(boardEl, "Loading tickets...");
           try {
             const result = await call(`/api/projects/${projectID}/tickets`, { headers: headers() }) || [];
             if (seq !== ticketLoadSeq) return;
@@ -4876,10 +4960,25 @@
       const projModalGitBranch = document.getElementById("proj-modal-git-branch");
       const projModalDescription = document.getElementById("proj-modal-description");
       const projModalAC = document.getElementById("proj-modal-ac");
+      const projModalSdlc = document.getElementById("proj-modal-sdlc");
       const projModalError = document.getElementById("proj-modal-error");
       const projModalCreate = document.getElementById("proj-modal-create");
       let projModalMode = "create";
       let projModalProjectID = 0;
+
+      async function populateProjModalSdlcSelector(selectedSdlcID = 0) {
+        if (!projModalSdlc) return;
+        const list = await call("/api/sdlcs", { headers: headers() }).catch(() => []);
+        const sdlcList = Array.isArray(list) ? list : [];
+        projModalSdlc.innerHTML = '<option value="">No SDLC (default lifecycle)</option>';
+        for (const s of sdlcList) {
+          const opt = document.createElement("option");
+          opt.value = String(s.sdlc_id);
+          opt.textContent = s.name || `SDLC #${s.sdlc_id}`;
+          projModalSdlc.appendChild(opt);
+        }
+        projModalSdlc.value = selectedSdlcID ? String(selectedSdlcID) : "";
+      }
 
       function renderProjectModalSelector(selectedID = 0) {
         if (!projModalSelect) return;
@@ -4908,6 +5007,7 @@
         projModalGitBranch.value = "";
         projModalDescription.value = "";
         projModalAC.value = "";
+        populateProjModalSdlcSelector(0);
         projModalError.style.display = "none";
         projModalError.textContent = "";
         projModalOverlay.classList.remove("hidden");
@@ -4928,6 +5028,7 @@
         projModalGitBranch.value = project.git_branch || "";
         projModalDescription.value = project.description || "";
         projModalAC.value = project.acceptance_criteria || "";
+        populateProjModalSdlcSelector(project.sdlc_id || 0);
         projModalError.style.display = "none";
         projModalError.textContent = "";
         projModalOverlay.classList.remove("hidden");
@@ -4952,6 +5053,7 @@
           ? `/api/projects/${projModalProjectID}`
           : "/api/projects";
         const method = projModalMode === "edit" ? "PUT" : "POST";
+        const sdlcID = projModalSdlc ? Number(projModalSdlc.value || 0) : 0;
         const payload = {
           prefix,
           title,
@@ -4960,6 +5062,7 @@
           git_repository: gitRepository,
           git_branch: gitBranch,
           visibility,
+          sdlc_id: sdlcID || null,
         };
         const res = await call(endpoint, { method, headers: headers(true), body: JSON.stringify(payload) });
         if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to save project."; projModalError.style.display = ""; return; }
@@ -5071,7 +5174,7 @@
         if (ticket.parent_id) {
           parentLink.textContent = "↗ open parent";
           parentLink.onclick = () => {
-            const parent = allTickets.find(t => t.ticket_id === ticket.parent_id);
+            const parent = tickets.find(t => t.ticket_id === ticket.parent_id);
             if (parent) openEdit(parent);
           };
         } else {
@@ -5170,7 +5273,7 @@
             link.style.cssText = "cursor:pointer;text-decoration:underline;";
             link.textContent = `#${d.depends_on}`;
             link.onclick = () => {
-              const dep = allTickets.find(t => t.ticket_id === d.depends_on);
+              const dep = tickets.find(t => t.ticket_id === d.depends_on);
               if (dep) openEdit(dep);
             };
             tag.appendChild(link);

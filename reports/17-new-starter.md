@@ -1,45 +1,63 @@
 # New Starter
 
-**Score: 86/100** (was 83)
+**Score: 84/100** (was 86)
 
 ## What is being assessed
-Onboarding effectiveness from the perspective of a day-one engineer: reading order, way of working, setup speed, ticket sdlc, testing expectations, collaboration, common pitfalls, and documentation completeness.
+
+Onboarding effectiveness — the full path from first clone to productive contributor, including documentation quality, accuracy, and coverage of the SDLC lifecycle refactor.
 
 ## Methodology
-Read `README.md`, `CLAUDE.md`, `QUICKSTART.md`, `CONTRIBUTING.md`, `docs/ONBOARDING.md` (if exists), `TESTING.md`. Searched for `ticket binary`, `ticket server`, `./ticket`, `bin/ticket` in docs.
+
+Read all seven documents in the reading order (README.md, CLAUDE.md, QUICKSTART.md, docs/ONBOARDING.md, TESTING.md, CONTRIBUTING.md, USER_GUIDE.md). Cross-checked claims against actual codebase. Reviewed Phase 2 commits for documentation gaps.
 
 ## Findings
 
 ### Passing checks
-- `docs/ONBOARDING.md` exists and is well structured: reading order, dev setup, ticket sdlc, test conventions, collaboration, common pitfalls table (`docs/ONBOARDING.md`)
-- Reading order is explicit: README → CLAUDE.md → QUICKSTART → CONTRIBUTING → ONBOARDING → USER_GUIDE (`ONBOARDING.md:18-30`)
-- `make setup` → `make test` flow works from clean clone; documented in ONBOARDING.md pitfalls table
-- Binary rename `ticket → tk` reflected in CLAUDE.md, README, QUICKSTART, CONTRIBUTING, USER_GUIDE
-- Common pitfalls table is comprehensive: 8 gotchas documented (`ONBOARDING.md:101-115`)
-- `tk` ticket sdlc documented: `tk ls`, `tk start`, `tk state`, `tk close` (`ONBOARDING.md:58-80`)
-- Test conventions documented in `TESTING.md` with example patterns
-- Commit message style, PR conventions, branching in `CONTRIBUTING.md`
+- Reading order documented and sequenced — `docs/ONBOARDING.md:25-31`
+- README provides clear product summary — `README.md:1-35`
+- QUICKSTART.md is concrete and runnable — `QUICKSTART.md:19-75`
+- Branching conventions explicit — `CONTRIBUTING.md:46-57`
+- Commit style documented — `CONTRIBUTING.md:60-76`
+- PR process has checklist — `CONTRIBUTING.md:79-95`
+- `make build` version-bump pitfall documented in 3 places
+- Daily dev loop accurate — `ONBOARDING.md:75-92`
+- Testing expectations comprehensive — `TESTING.md` + `CONTRIBUTING.md:99-125`
+- Common pitfalls table solid — `ONBOARDING.md:156-165`
+- `tk` tool usage covered end-to-end
+- Lifecycle stage diagram in README (Mermaid)
+- `make dev` exists and documented
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `ONBOARDING.md` still mentions "ticket binary" (pre-rename) | Low | `docs/ONBOARDING.md:108` | Change "ticket binary" → "tk binary" |
-| `ONBOARDING.md` still says "ticket server" | Low | `docs/ONBOARDING.md:161` | Change "ticket server" → "tk server" |
-| `QUICKSTART.md` may have `./ticket` references | Low | `QUICKSTART.md` | Audit for pre-rename binary references |
-| No explicit SLA on PR review response time documented | Low | `CONTRIBUTING.md` | Add "PRs are reviewed within N business days" expectation |
+| `docs/DESIGN.md` references non-existent `docs/TICKET_LIFECYCLE_SPEC.md` | High | `DESIGN.md:4` | Change to `docs/LIFECYCLE.md` |
+| ONBOARDING.md has no SDLC concepts section — stages, roles, stage-roles unexplained | High | `ONBOARDING.md:105-132` | Add SDLC subsection with examples |
+| USER_GUIDE.md SDLC commands use pre-refactor names | High | `USER_GUIDE.md:838-844` | Update to `stage-add`/`stage-rm`/`stage-order`; add role commands |
+| DESIGN.md ticket model still lists old `open` field | Medium | `DESIGN.md:153` | Replace with `draft`/`complete` |
+| `docs/LIFECYCLE.md` not in reading order | Medium | `ONBOARDING.md:25-31` | Add as item 5 or 6 |
+| README.md doesn't link to `docs/ONBOARDING.md` | Medium | `README.md` | Add link under "Build from source" |
+| ONBOARDING.md points to `cmd/tk/TICKETS.md` as reference — it's an agent template | Medium | `ONBOARDING.md:130-131` | Point to LIFECYCLE.md instead |
+| Command syntax inconsistency between ONBOARDING.md and README.md | Low | `ONBOARDING.md:117-121` | Normalise to shortcut forms |
+| No collaboration patterns section (review turnaround, escalation) | Low | `CONTRIBUTING.md` | Add section |
+| `make dev` not mentioned in ONBOARDING.md daily loop | Low | `ONBOARDING.md:75-92` | Add mention |
 
 ## Verdict
-Strong score (+3) and approaching best-in-class. The ONBOARDING.md provides a clear, sequenced path for new starters. The main remaining gap is two stale binary name references in ONBOARDING.md — these cause confusion for anyone following the docs literally.
+
+Foundations remain strong. Score drops 2 points to 84 due to SDLC refactor documentation debt: no ONBOARDING.md section on new concepts, broken DESIGN.md reference, stale USER_GUIDE.md commands. A developer working with `tk sdlc` commands would have to piece together the picture from LIFECYCLE.md — which isn't in the reading order.
 
 ## Changes since last assessment
-- Binary rename `ticket → tk` propagated to key docs (README, CLAUDE.md, QUICKSTART, CONTRIBUTING, USER_GUIDE)
-- `docs/ONBOARDING.md` added (was absent in prior assessment) — major improvement
-- `tk init` now reports sdlc/role status post-setup — reduces "why isn't anything working" confusion
-- Two stale `ticket` references remain in ONBOARDING.md
+- Phase 2 SDLC refactor shipped across 6 commits
+- README, QUICKSTART, SPEC, USER_GUIDE partially updated
+- ONBOARDING.md and DESIGN.md not updated for new concepts
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Fix "ticket binary" → "tk binary" in ONBOARDING.md | Low | `sed -i 's/ticket binary/tk binary/g' docs/ONBOARDING.md` |
-| Fix "ticket server" → "tk server" in ONBOARDING.md | Low | `sed -i 's/ticket server/tk server/g' docs/ONBOARDING.md` |
-| Audit QUICKSTART.md for pre-rename binary refs | Low | `grep -n 'ticket' QUICKSTART.md` |
+| Fix DESIGN.md broken reference | High | Point to `docs/LIFECYCLE.md` |
+| Add SDLC concepts to ONBOARDING.md | High | Subsection with example commands |
+| Update USER_GUIDE.md SDLC commands | High | Correct names + add role commands |
+| Update DESIGN.md ticket model | Medium | Replace `open` with `draft`/`complete` |
+| Add LIFECYCLE.md to reading order | Medium | `ONBOARDING.md:25-31` |
+| Link ONBOARDING.md from README | Medium | Under "Build from source" |

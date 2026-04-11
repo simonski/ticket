@@ -1,7 +1,7 @@
 # Design
 
 The authoritative lifecycle remodel specification is
-`docs/TICKET_LIFECYCLE_SPEC.md`. Where this file still describes the older
+`docs/LIFECYCLE.md`. Where this file still describes the older
 single-status model, the lifecycle spec takes precedence until the rest of this
 document is rewritten.
 
@@ -150,7 +150,10 @@ Projects are the top-level container for work items.
 - `estimate_complete`
 - `assignee`
 - `health_score`
-- `open`
+- `draft`
+- `complete`
+- `role_id`
+- `sdlc_stage_id`
 - `comments`
 - `created_at`
 - `created_by`
@@ -398,7 +401,7 @@ tk status
 ticket logout
 ```
 
-`ticket onboard` must print the embedded `cmd/ticket/TICKETS.md` template to stdout.
+`ticket onboard` must print the embedded `cmd/tk/TICKETS.md` template to stdout.
 
 `tk status` must always print the current effective configuration first, then perform a mode-appropriate connectivity check.
 
@@ -922,7 +925,7 @@ ticket upgrade
 ```
 
 Fetches the `VERSION` file from the GitHub repository
-(`https://raw.githubusercontent.com/simonski/ticket/refs/heads/main/cmd/ticket/VERSION`)
+(`https://raw.githubusercontent.com/simonski/ticket/refs/heads/main/cmd/tk/VERSION`)
 with a 3-second timeout and compares it to the version embedded at build time.
 
 Outcomes:

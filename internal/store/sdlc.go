@@ -43,8 +43,8 @@ type SdlcStageExport struct {
 }
 
 type SdlcExport struct {
-	Name        string                `json:"name"`
-	Description string                `json:"description"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
 	Stages      []SdlcStageExport `json:"stages"`
 }
 
@@ -101,10 +101,18 @@ func GetSdlc(ctx context.Context, db *sql.DB, id int64) (SdlcWithStages, error) 
 }
 
 func DeleteSdlc(ctx context.Context, db *sql.DB, id int64) error {
-	if _, err := db.ExecContext(ctx, `DELETE FROM sdlc_stages WHERE sdlc_id = ?`, id); err != nil {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	result, err := db.ExecContext(ctx, `DELETE FROM sdlcs WHERE sdlc_id = ?`, id)
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sdlc_stage_roles WHERE sdlc_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sdlc_stages WHERE sdlc_id = ?`, id); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM sdlcs WHERE sdlc_id = ?`, id)
 	if err != nil {
 		return err
 	}
@@ -115,18 +123,18 @@ func DeleteSdlc(ctx context.Context, db *sql.DB, id int64) error {
 	if affected == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	return tx.Commit()
 }
 
-func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, description string, sortOrder int) (SdlcStage, error) {
+func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, description, acceptanceCriteria string, sortOrder int) (SdlcStage, error) {
 	stageName = strings.TrimSpace(stageName)
 	if stageName == "" {
 		return SdlcStage{}, errors.New("stage name is required")
 	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO sdlc_stages (sdlc_id, stage_name, description, sort_order, updated_at)
-		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, sdlcID, stageName, strings.TrimSpace(description), sortOrder)
+		INSERT INTO sdlc_stages (sdlc_id, stage_name, description, acceptance_criteria, sort_order, updated_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, sdlcID, stageName, strings.TrimSpace(description), strings.TrimSpace(acceptanceCriteria), sortOrder)
 	if err != nil {
 		return SdlcStage{}, err
 	}
@@ -135,6 +143,37 @@ func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, desc
 		return SdlcStage{}, err
 	}
 	return getSdlcStageRow(ctx, db, id)
+}
+
+func UpdateSdlcStage(ctx context.Context, db *sql.DB, stageID int64, name, description, acceptanceCriteria string) (SdlcStage, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return SdlcStage{}, errors.New("stage name is required")
+	}
+	result, err := db.ExecContext(ctx, `
+		UPDATE sdlc_stages
+		SET stage_name = ?, description = ?, acceptance_criteria = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE sdlc_stage_id = ?
+	`, name, strings.TrimSpace(description), strings.TrimSpace(acceptanceCriteria), stageID)
+	if err != nil {
+		return SdlcStage{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return SdlcStage{}, err
+	}
+	if affected == 0 {
+		return SdlcStage{}, sql.ErrNoRows
+	}
+	return getSdlcStageRow(ctx, db, stageID)
+}
+
+func GetSdlcStage(ctx context.Context, db *sql.DB, stageID int64) (SdlcStage, error) {
+	return getSdlcStageRow(ctx, db, stageID)
+}
+
+func ListSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage, error) {
+	return listSdlcStages(ctx, db, sdlcID)
 }
 
 func RemoveSdlcStage(ctx context.Context, db *sql.DB, stageID int64) error {
@@ -153,8 +192,13 @@ func RemoveSdlcStage(ctx context.Context, db *sql.DB, stageID int64) error {
 }
 
 func ReorderSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64, orderedStageIDs []int64) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	for i, id := range orderedStageIDs {
-		result, err := db.ExecContext(ctx, `
+		result, err := tx.ExecContext(ctx, `
 			UPDATE sdlc_stages SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE sdlc_stage_id = ? AND sdlc_id = ?
 		`, i, id, sdlcID)
@@ -169,7 +213,7 @@ func ReorderSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64, orderedSta
 			return fmt.Errorf("sdlc stage %d not found in sdlc %d", id, sdlcID)
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func ExportSdlc(ctx context.Context, db *sql.DB, id int64) (SdlcExport, error) {
@@ -202,12 +246,35 @@ func ImportSdlc(ctx context.Context, db *sql.DB, export SdlcExport) (Sdlc, error
 	if name == "" {
 		return Sdlc{}, errors.New("sdlc name is required")
 	}
-	wf, err := CreateSdlc(ctx, db, name, export.Description)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return Sdlc{}, err
 	}
+	defer tx.Rollback()
+
+	// Create the SDLC
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO sdlcs (name, description, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+	`, name, strings.TrimSpace(export.Description))
+	if err != nil {
+		return Sdlc{}, err
+	}
+	sdlcID, err := result.LastInsertId()
+	if err != nil {
+		return Sdlc{}, err
+	}
+
+	// Create stages and assign roles
 	for _, s := range export.Stages {
-		stage, err := AddSdlcStage(ctx, db, wf.ID, s.StageName, s.Description, s.SortOrder)
+		stageResult, err := tx.ExecContext(ctx, `
+			INSERT INTO sdlc_stages (sdlc_id, stage_name, description, sort_order, updated_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`, sdlcID, strings.TrimSpace(s.StageName), strings.TrimSpace(s.Description), s.SortOrder)
+		if err != nil {
+			return Sdlc{}, err
+		}
+		stageID, err := stageResult.LastInsertId()
 		if err != nil {
 			return Sdlc{}, err
 		}
@@ -216,12 +283,19 @@ func ImportSdlc(ctx context.Context, db *sql.DB, export SdlcExport) (Sdlc, error
 			if err != nil {
 				return Sdlc{}, fmt.Errorf("role %q not found: %w", roleName, err)
 			}
-			if err := AddSdlcStageRole(ctx, db, wf.ID, stage.ID, role.ID); err != nil {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO sdlc_stage_roles (sdlc_id, stage_id, role_id, sort_order)
+				VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sdlc_stage_roles WHERE sdlc_id = ? AND stage_id = ?))
+			`, sdlcID, stageID, role.ID, sdlcID, stageID); err != nil {
 				return Sdlc{}, err
 			}
 		}
 	}
-	return wf, nil
+
+	if err := tx.Commit(); err != nil {
+		return Sdlc{}, err
+	}
+	return getSdlcRow(ctx, db, sdlcID)
 }
 
 // internal helpers
@@ -277,9 +351,47 @@ func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage,
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// Load roles per stage after closing the rows cursor to avoid SQLite nested query deadlock.
-	for i := range stages {
-		stages[i].Roles, _ = ListSdlcStageRoles(ctx, db, sdlcID, stages[i].ID)
+	// Batch-load all roles for all stages in one query to avoid N+1.
+	rolesByStage, err := listSdlcStageRolesBatch(ctx, db, sdlcID)
+	if err == nil {
+		for i := range stages {
+			if r, ok := rolesByStage[stages[i].ID]; ok {
+				stages[i].Roles = r
+			}
+		}
 	}
 	return stages, nil
+}
+
+// listSdlcStageRolesBatch fetches all roles for every stage belonging to the
+// given sdlcID in a single query and returns them grouped by stage_id.
+func listSdlcStageRolesBatch(ctx context.Context, db *sql.DB, sdlcID int64) (map[int64][]Role, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT sr.stage_id, r.role_id, r.sdlc_id, r.title, r.description, r.acceptance_criteria, r.created_at, r.updated_at
+		FROM sdlc_stage_roles sr
+		JOIN roles r ON r.role_id = sr.role_id
+		WHERE sr.sdlc_id = ?
+		ORDER BY sr.stage_id, sr.sort_order
+	`, sdlcID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[int64][]Role)
+	for rows.Next() {
+		var stageID int64
+		var role Role
+		var sdlcNullID sql.NullInt64
+		if err := rows.Scan(&stageID, &role.ID, &sdlcNullID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if sdlcNullID.Valid {
+			role.SdlcID = &sdlcNullID.Int64
+		}
+		result[stageID] = append(result[stageID], role)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

@@ -1,48 +1,63 @@
 # SRE
 
-**Score: 50/100** (was 42)
+**Score: 52/100** (was 50)
 
 ## What is being assessed
-Observability (metrics, structured logging, tracing), alerting readiness, runbook quality, incident response, backup/restore, graceful shutdown, HTTP timeout configuration, and health check endpoints.
+
+Operational readiness: observability, health checks, graceful shutdown, HTTP timeouts, alerting, runbooks, backup/restore, capacity planning, SLA/SLO definitions, graceful degradation.
 
 ## Methodology
-Read `internal/server/api.go`, `internal/server/server.go`, `docs/RUNBOOKS.md`, `deploy/entrypoint.sh`. Grepped for `prometheus`, `slog`, `SIGTERM`, `signal`, `IdleTimeout`, `WriteTimeout`, `http.Server{`.
+
+Read `internal/server/server.go`, `api_system.go`, `cmd/tk/cmd_setup.go`. Read `deploy/compose.yaml`, `docs/RUNBOOKS.md`. Grepped for SIGTERM, Shutdown, timeouts, prometheus, recover(), request IDs, SLO/SLA.
 
 ## Findings
 
 ### Passing checks
-- `/api/healthz` endpoint returns `{"status":"ok","version":"<ver>"}` with SQLite `SELECT 1` health check (`internal/server/api_system.go:18-30`)
-- Structured logging: `log/slog` used for agent reaper, session purge, history purge (`internal/server/server.go:12,54,57,82,84,94,96`)
-- Full request logging middleware logs method, path, status, duration_ms for all `/api/` requests (`server.go:201-241`)
-- Prometheus-style `/metrics` endpoint exists with runtime stats (`api_system.go:32`)
-- `docs/RUNBOOKS.md` is comprehensive: cold start, crash recovery, DB recovery, backup/restore, user lockout, agent reaper, high latency, WebSocket disconnections, disk full — 9 scenarios with step-by-step commands
-- Backup procedure documented with cron example: `docker exec ticket tk export | gzip` (`RUNBOOKS.md:121-162`)
-- Restore procedure with `--overwrite` flag documented (`RUNBOOKS.md:131-162`)
-- `ReadHeaderTimeout: 30s` set on HTTP server (`server.go:37`)
+- `/api/healthz` with live SQLite `SELECT 1` — `api_system.go:18-30`
+- Structured logging via `log/slog` — `server.go:11,54,57,82,84,94,96`
+- Request logging: method, path, status, `duration_ms` — `server.go:201-241`
+- `/metrics` in Prometheus format — `api_system.go:32-74`
+- `ReadHeaderTimeout: 30s` — `server.go:37`
+- `stopReaper` channel plumbed to background goroutines — `server.go:26,66,73,108`
+- `docs/RUNBOOKS.md` with 9 scenarios — `docs/RUNBOOKS.md`
+- Backup procedure documented with cron and retention — `RUNBOOKS.md:121-162`
+- Rate limiting on auth endpoints — `ratelimit.go`
+- Docker `restart: unless-stopped` — `deploy/compose.yaml:8`
+- DB migrations auto-run on startup
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `/metrics` endpoint has no authentication — exposes goroutine counts, user counts, memory stats | High | `internal/server/api_system.go:32` | Add `requireUser()` middleware or serve on a separate internal port |
-| No `SIGTERM` / graceful shutdown handler | High | `cmd/ticket/cmd_setup.go` (`runServer`) | Add `signal.Notify` + `http.Server.Shutdown(ctx)` with 30s drain timeout |
-| `WriteTimeout`, `ReadTimeout`, `IdleTimeout` not configured | High | `internal/server/server.go:34-38` | Set `WriteTimeout: 30s`, `ReadTimeout: 60s`, `IdleTimeout: 120s` |
-| Background reaper/purge goroutines not stopped on shutdown | Medium | `internal/server/server.go:41-42` | Close `stopReaper` channel from SIGTERM handler |
-| No distributed tracing or request correlation IDs | Low | `internal/server/server.go` | Add `X-Request-ID` header; pass to slog fields |
-| No panic recovery middleware | Low | `internal/server/api.go` | Add `http.HandlerFunc` wrapper with `recover()` to prevent server crashes |
+| No SIGTERM/graceful shutdown — `ListenAndServe` never calls `Shutdown` | High | `cmd_setup.go:1143` | Add `signal.Notify` + `srv.Shutdown(ctx)` |
+| Missing `WriteTimeout`/`ReadTimeout`/`IdleTimeout` | High | `server.go:34-38` | Add timeouts |
+| `/metrics` unauthenticated | High | `api_system.go:32` | Add `requireAdmin` or restrict to loopback |
+| Background goroutines not stopped — `stopReaper` never closed | Medium | `server.go:41-42` | Close from SIGTERM handler |
+| No panic recovery middleware | Medium | `server.go:133` | Add `recover()` middleware returning 500 |
+| No request correlation IDs | Low | `server.go:201-241` | Generate UUID per request |
+| No distributed tracing | Low | — | Document gap |
+| No SLA/SLO definitions | Medium | `docs/` | Define in `docs/SLO.md` |
+| No alerting rules | Medium | — | Add `alerts/ticket.yml` |
+| No capacity planning docs | Low | `docs/` | Add capacity section |
+| No Docker resource limits in deploy compose | Low | `deploy/compose.yaml` | Add limits |
+| No health-check in deploy compose | Medium | `deploy/compose.yaml` | Add healthcheck |
 
 ## Verdict
-Meaningful improvement (+8) from confirming the runbooks are comprehensive and structured logging is in place. However, three high-severity issues remain: the metrics endpoint is unauthenticated, there is no graceful shutdown on SIGTERM, and HTTP Write/Read/Idle timeouts are missing — these are blocking for production hardening.
+
+Score improves marginally +2 to 52. All three high-severity items from previous report remain: no graceful shutdown, no HTTP timeouts, unauthenticated `/metrics`. These block production readiness.
 
 ## Changes since last assessment
-- `deploy/entrypoint.sh` updated for `tk` binary name (cosmetic)
-- No new observability or SRE improvements implemented
-- Same three High-severity gaps persist from v0.1.737
+- `stopReaper` confirmed correctly plumbed at goroutine level (+)
+- No SRE gaps remediated — SDLC refactor didn't touch server lifecycle code
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Protect `/metrics` | High | Add `requireUser()` check or bind to `127.0.0.1:9090` separately |
-| Add SIGTERM handler | High | `signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)`; `srv.Shutdown(ctx)` |
-| HTTP timeouts | High | Set `WriteTimeout`, `ReadTimeout`, `IdleTimeout` on `http.Server` struct |
-| Stop background jobs on shutdown | Medium | Close `stopReaper` channel from SIGTERM handler to drain goroutines |
-| Request correlation IDs | Low | Generate UUID in middleware; attach to `slog.With("request_id", id)` |
+| Graceful SIGTERM shutdown | Critical | `cmd_setup.go:1134-1144` |
+| HTTP timeouts | Critical | `server.go:34-38` |
+| Authenticate `/metrics` | High | `api_system.go:32` |
+| Compose health check | Medium | `deploy/compose.yaml` |
+| Panic recovery middleware | Medium | `server.go` handler chain |
+| SLO/alerting docs | Medium | `docs/SLO.md` |
+| Request correlation IDs | Low | `server.go:201` |

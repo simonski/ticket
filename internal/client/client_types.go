@@ -69,9 +69,10 @@ type SdlcRequest struct {
 }
 
 type SdlcStageRequest struct {
-	StageName   string `json:"stage_name"`
-	Description string `json:"description"`
-	SortOrder   int    `json:"sort_order"`
+	StageName          string `json:"stage_name"`
+	Description        string `json:"description"`
+	AcceptanceCriteria string `json:"acceptance_criteria"`
+	SortOrder          int    `json:"sort_order"`
 }
 
 type SdlcReorderRequest struct {

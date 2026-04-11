@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -96,7 +97,7 @@ func getNextSdlcStage(ctx context.Context, db *sql.DB, currentStageID int64) (*i
 	var nextID int64
 	var nextName string
 	err := db.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, sdlcID, currentOrder).Scan(&nextID, &nextName)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", nil // final stage
 	}
 	if err != nil {
@@ -110,4 +111,46 @@ func GetSdlcStageOrder(ctx context.Context, db *sql.DB, stageID int64) (int, err
 	var order int
 	err := db.QueryRowContext(ctx, `SELECT sort_order FROM sdlc_stages WHERE sdlc_stage_id = ?`, stageID).Scan(&order)
 	return order, err
+}
+
+// batchGetSdlcStageOrders collects all unique non-nil SdlcStageID values from
+// the given tickets and fetches their sort_order in a single query. Returns a
+// map from sdlc_stage_id to sort_order.
+func batchGetSdlcStageOrders(ctx context.Context, db *sql.DB, tickets []Ticket) (map[int64]int, error) {
+	seen := make(map[int64]bool)
+	ids := make([]int64, 0)
+	for _, t := range tickets {
+		if t.SdlcStageID != nil && !seen[*t.SdlcStageID] {
+			seen[*t.SdlcStageID] = true
+			ids = append(ids, *t.SdlcStageID)
+		}
+	}
+	if len(ids) == 0 {
+		return make(map[int64]int), nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(`SELECT sdlc_stage_id, sort_order FROM sdlc_stages WHERE sdlc_stage_id IN (%s)`, strings.Join(placeholders, ","))
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[int64]int, len(ids))
+	for rows.Next() {
+		var stageID int64
+		var order int
+		if err := rows.Scan(&stageID, &order); err != nil {
+			return nil, err
+		}
+		result[stageID] = order
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

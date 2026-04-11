@@ -6,6 +6,7 @@ import (
 )
 
 func TestLabelCRUD(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProject(context.Background(), db, "Label Test", "", "", "")
@@ -64,6 +65,7 @@ func TestLabelCRUD(t *testing.T) {
 }
 
 func TestTicketLabels(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProject(context.Background(), db, "Ticket Labels", "", "", "")

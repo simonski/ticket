@@ -32,10 +32,11 @@ type liveHub struct {
 }
 
 type liveClient struct {
-	conn net.Conn
-	send chan []byte
-	done chan struct{}
-	once sync.Once
+	conn      net.Conn
+	send      chan []byte
+	done      chan struct{}
+	once      sync.Once
+	projectID int64 // if set, only receive events for this project
 }
 
 func newLiveHub() *liveHub {
@@ -72,6 +73,10 @@ func (h *liveHub) broadcast(event liveEvent) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.clients {
+		// Skip clients subscribed to a different project.
+		if client.projectID != 0 && event.ProjectID != 0 && client.projectID != event.ProjectID {
+			continue
+		}
 		select {
 		case client.send <- payload:
 		default:
@@ -125,6 +130,14 @@ func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request) error 
 			return nil
 		case 0x9:
 			_ = writeWebSocketFrame(client.conn, 0xA, payload)
+		case 0x1: // text frame — handle subscribe messages
+			var msg struct {
+				Type      string `json:"type"`
+				ProjectID int64  `json:"project_id"`
+			}
+			if json.Unmarshal(payload, &msg) == nil && msg.Type == "subscribe" && msg.ProjectID > 0 {
+				client.projectID = msg.ProjectID
+			}
 		}
 	}
 }

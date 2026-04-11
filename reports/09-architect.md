@@ -1,45 +1,59 @@
-# Architecture
+# Architect
 
-**Score: 68/100** (was 72)
+**Score: 72/100** (was 68)
 
 ## What is being assessed
-Package dependency graph (circular imports), resource bounding (channels, goroutines, connections), WebSocket event scoping, interface abstraction quality, CLI→local vs CLI→remote abstraction, extensibility patterns, and architectural regressions.
+
+Package layering, circular dependencies, resource bounding, interface quality, WebSocket/event system, and the new SDLC lifecycle refactor architecture.
 
 ## Methodology
-Read `libticket/service.go`, `internal/server/api.go`, `internal/server/realtime.go`, `internal/server/chat_ws.go`, `go.mod`. Counted Service interface methods. Checked `liveHub.broadcast()` for project filtering. Reviewed `cmd/ticket/resolve.go`.
+
+Mapped all internal import edges. Read bounded resource declarations. Reviewed `libticket/service.go` composition. Read `realtime.go`, `chat_ws.go`, `live_event.go`. Read all new SDLC store/service/API/CLI code.
 
 ## Findings
 
 ### Passing checks
-- No circular imports; package DAG is clean (`go build ./...` clean)
-- CLI→local/remote abstraction is excellent: `cmd/ticket/resolve.go:56-72` uses `libticket.Service` interface, mode determined by `config.ResolveLocation()`, transparent to CLI handlers
-- All channels bounded: chat `send: make(chan []byte, 64)`, realtime `send: make(chan []byte, 32)` (`chat_ws.go:96`, `realtime.go:50`)
-- Chat process count bounded by `maxConnections` config (`chat_ws.go:190-195`)
-- Goroutine lifecycle scoped to connection: `defer client.close()` on all WS handlers (`chat_ws.go:111`)
-- Service interface decomposed into 7 sub-interfaces (Auth, User, Agent, Project, Team, Workflow, Ticket) (`libticket/service.go`)
-- Rate limiting added at API boundary for auth endpoints (`api.go:14`)
+- Package DAG is acyclic — no circular imports
+- SQLite: `SetMaxOpenConns(1)` + WAL + `busy_timeout=5000` — correct for SQLite single-writer (`store.go:26-27`)
+- WebSocket send channels bounded: live=32, chat=64 — slow clients dropped via `default:` (`realtime.go:50,73-76`)
+- Rate limiter with sliding window, pruning on each call (`api.go:14`)
+- Two bounded background goroutines stopped via `stopReaper` channel (`server.go:25,39`)
+- Service interface decomposes into 7 sub-interfaces: `AuthService`, `UserService`, `AgentService`, `ProjectService`, `TeamService`, `SdlcService`, `TicketService`
+- SDLC four-layer chain complete: store -> service -> API -> CLI
+- HTTP client parity: `libtickethttp` delegates all 11 `SdlcService` methods to client
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `liveHub.broadcast()` sends all events to all clients — no project-level filtering | Critical | `internal/server/realtime.go:66-80` | Create per-project hub instances or filter `broadcast()` by `event.ProjectID` vs user's project list |
-| `TicketService` sub-interface has 44 methods — too broad for interface segregation | High | `libticket/service.go:93-137` | Split into `TicketLifecycle`, `TicketComments`, `TicketLabels`, `TicketTime` |
-| `LocalService` uses `context.Background()` ~125 times — context doesn't propagate | Medium | `libticket/local.go` | Add `ctx context.Context` to `LocalService` method signatures |
-| No plugin/provider abstraction for Chat, Auth, or Notifications | Medium | `internal/server/` | Define `ChatProvider` interface; allows future backends without core changes |
+| Server handlers call `store.*` directly, bypassing `libticket.Service` — parallel service layers with no shared validation | Medium | `api_sdlc.go` (all handlers) | Route through `LocalService` or document bypass |
+| N+1 in `listSdlcStages`: separate `ListSdlcStageRoles` per stage | Medium | `sdlc.go:281-282` | Single JOIN query |
+| No contract tests for `AddSdlcStageRole`, `RemoveSdlcStageRole`, `ReorderSdlcStageRoles` | Medium | `libtickettest/contract.go` | Add `stage-role-crud` section |
+| `AddSdlcStage` doesn't accept/persist `acceptance_criteria` despite column existing | Low | `sdlc.go:127-137` | Add field to `SdlcStageRequest` and INSERT |
+| No `UpdateSdlc` or `UpdateSdlcStage` — stages immutable after creation | Low | `sdlc.go` | Implement across all four layers |
+| Rate limiter map grows unboundedly | Low | `ratelimit.go:12` | Add periodic eviction of stale IPs |
+| `project set-draft` is a stub | Low | `cmd_project.go:194` | Implement or remove |
+| `sharedChatRuntime` is a package-level global | Low | `chat_ws.go:55` | Inject as parameter |
+| `libtickethttp` imports `internal/store` for types — structural coupling | Info | `libtickethttp/http.go:11` | Move types to `libticket` |
 
 ## Verdict
-The core CLI abstraction layer is excellent, channels are bounded, and imports are clean. The critical issue is the WebSocket broadcast hub sending all events to all connected clients without project-scoping — a multi-tenant isolation failure that worsens as the system scales. Score drops from 72 to 68 as this issue is now confirmed rather than theoretical.
+
+The SDLC refactor is structurally sound with a complete four-layer chain. Interface decomposition into 7 sub-interfaces is a genuine improvement. Score improves +4 from 68 to 72, held back by the service-layer bypass and new N+1 query.
 
 ## Changes since last assessment
-- `runBoard` now calls `buildTreeDisplay` — better use of existing architecture (positive)
-- `runInitCheckDefaults` added cleanly using existing `libticket.Service` interface (positive)
-- WebSocket broadcast gap carries forward from v0.1.737
-- `TicketService` interface continues to grow without segregation
+- SDLC model: new `Sdlc`, `SdlcStage`, `SdlcWithStages` types; 3 new tables with FK integrity
+- Service interface: `SdlcService` (11 methods) added; total now 119 methods
+- API: `api_sdlc.go` with 7 route groups; `api_roles.go` updated
+- CLI: `cmd_sdlc.go` covers full SDLC management
+- Ticket model: `SdlcID`, `SdlcStageID`, `RoleID`, lifecycle auto-advance
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| WebSocket project scoping | Critical | Map `projectID → []*liveClient` in hub; `broadcast(event)` only sends to clients subscribed to `event.ProjectID` |
-| Split `TicketService` | High | Extract 4 focused sub-interfaces; reduces mock surface and compile coupling |
-| Context propagation | Medium | Pass `ctx` through `LocalService`; enables request-scoped cancellation for slow queries |
-| Provider pattern | Medium | Define `ChatProvider` interface (`Send`, `Receive`, `Close`) for the chat sub-system |
+| Add stage-role contract tests | High | `libtickettest/contract.go` |
+| Fix `AddSdlcStage` acceptance_criteria gap | High | Add field to request and INSERT |
+| Fix N+1 in `listSdlcStages` | Medium | Single JOIN query |
+| Implement `UpdateSdlc`/`UpdateSdlcStage` | Medium | All four layers |
+| Implement or remove `project set-draft` | Medium | `cmd_project.go:178` |
+| Fix rate limiter memory leak | Medium | Periodic eviction |

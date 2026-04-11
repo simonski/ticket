@@ -41,7 +41,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
 	svc := New(config.Config{Location: fixture.server.URL})
-	user, err := svc.Register("alice", "secret")
+	user, err := svc.Register("alice", "secret12")
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -49,7 +49,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 		t.Fatalf("Register() = %#v", user)
 	}
 
-	loggedIn, token, err := svc.Login("alice", "secret")
+	loggedIn, token, err := svc.Login("alice", "secret12")
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
@@ -190,6 +190,7 @@ func TestHTTPServiceCountRequiresAuth(t *testing.T) {
 }
 
 func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{not-json"))
@@ -204,6 +205,7 @@ func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
 }
 
 func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "plain failure", http.StatusForbidden)
 	}))
@@ -217,6 +219,7 @@ func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
 }
 
 func TestHTTPServiceHandlesNetworkFailure(t *testing.T) {
+	t.Parallel()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen() error = %v", err)
@@ -241,7 +244,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -259,7 +262,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 	t.Cleanup(httpServer.Close)
 
 	raw := client.New(config.Config{Location: httpServer.URL})
-	auth, err := raw.Login("admin", "secret")
+	auth, err := raw.Login("admin", "secret12")
 	if err != nil {
 		t.Fatalf("raw Login() error = %v", err)
 	}

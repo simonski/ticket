@@ -12,11 +12,12 @@ import (
 )
 
 func TestLocalServiceContract(t *testing.T) {
+
 	libtickettest.RunServiceContractTests(t, func(t *testing.T) libticket.Service {
 		tempDir := t.TempDir()
 		t.Setenv("TICKET_HOME", tempDir)
 		dbPath := filepath.Join(tempDir, "ticket.db")
-		if err := store.Init(dbPath, "admin", "secret"); err != nil {
+		if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 			t.Fatalf("store.Init() error = %v", err)
 		}
 		return libticket.NewLocal(config.Config{})
@@ -24,10 +25,11 @@ func TestLocalServiceContract(t *testing.T) {
 }
 
 func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -45,12 +47,13 @@ func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {
 }
 
 func TestLocalServiceRemoteAuthCommandsFail(t *testing.T) {
+	t.Parallel()
 	svc := libticket.NewLocal(config.Config{})
 
-	if _, err := svc.Register("alice", "secret"); err == nil {
+	if _, err := svc.Register("alice", "secret12"); err == nil {
 		t.Fatal("Register() error = nil, want remote-mode error")
 	}
-	if _, _, err := svc.Login("alice", "secret"); err == nil {
+	if _, _, err := svc.Login("alice", "secret12"); err == nil {
 		t.Fatal("Login() error = nil, want remote-mode error")
 	}
 	if err := svc.Logout(); err == nil {
@@ -59,6 +62,7 @@ func TestLocalServiceRemoteAuthCommandsFail(t *testing.T) {
 }
 
 func TestLocalServiceStatusFailsWhenDatabaseMissing(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 
@@ -69,6 +73,7 @@ func TestLocalServiceStatusFailsWhenDatabaseMissing(t *testing.T) {
 }
 
 func TestLocalUsernameUsesEnvironmentFallbacks(t *testing.T) {
+
 	t.Setenv("USER", "env-user")
 	t.Setenv("USERNAME", "env-username")
 
@@ -79,11 +84,12 @@ func TestLocalUsernameUsesEnvironmentFallbacks(t *testing.T) {
 }
 
 func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -98,10 +104,11 @@ func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
 }
 
 func TestLocalServiceSetTicketParent(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -133,10 +140,11 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 }
 
 func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -188,10 +196,11 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 }
 
 func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -229,10 +238,11 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 }
 
 func TestLocalServiceDeleteTicket(t *testing.T) {
+
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 
@@ -258,7 +268,7 @@ func newLocalSvc(t *testing.T) libticket.Service {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
 		t.Fatalf("store.Init() error = %v", err)
 	}
 	return libticket.NewLocal(config.Config{})

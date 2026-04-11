@@ -13,6 +13,7 @@ import (
 )
 
 func TestServerServesHealthAndFrontend(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := store.Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -65,6 +66,7 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 }
 
 func TestServerVerboseLogging(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := store.Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)

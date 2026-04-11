@@ -7,6 +7,7 @@ import (
 )
 
 func TestChatLimitsConfigDefaults(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -30,6 +31,7 @@ func TestChatLimitsConfigDefaults(t *testing.T) {
 }
 
 func TestSetChatLimitsConfigPersistsValues(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -56,6 +58,7 @@ func TestSetChatLimitsConfigPersistsValues(t *testing.T) {
 }
 
 func TestSetChatLimitsConfigFallsBackToDefaults(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -82,6 +85,7 @@ func TestSetChatLimitsConfigFallsBackToDefaults(t *testing.T) {
 }
 
 func TestChatEnabledDefaultsToTrue(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -102,6 +106,7 @@ func TestChatEnabledDefaultsToTrue(t *testing.T) {
 }
 
 func TestRegistrationEnabledDefaultsToTrue(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -122,6 +127,7 @@ func TestRegistrationEnabledDefaultsToTrue(t *testing.T) {
 }
 
 func TestSetRegistrationEnabledPersistsValues(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)
@@ -156,6 +162,7 @@ func TestSetRegistrationEnabledPersistsValues(t *testing.T) {
 }
 
 func TestSetChatEnabledPersistsValues(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 	if err := Init(dbPath, "admin", "password"); err != nil {
 		t.Fatalf("Init() error = %v", err)

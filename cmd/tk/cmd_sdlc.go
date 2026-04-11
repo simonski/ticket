@@ -96,7 +96,7 @@ func runSdlc(args []string) error {
 		}
 		fmt.Printf("deleted sdlc %d\n", *id)
 		return nil
-	case "add-stage":
+	case "add-stage", "stage-add":
 		fs := flag.NewFlagSet("sdlc add-stage", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		wfID := fs.Int64("id", 0, "sdlc id")
@@ -122,7 +122,71 @@ func runSdlc(args []string) error {
 		}
 		fmt.Printf("added stage: %s (id %d)\n", stage.StageName, stage.ID)
 		return nil
-	case "remove-stage":
+	case "stage-update":
+		fs := flag.NewFlagSet("sdlc stage-update", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		stageID := fs.Int64("stage-id", 0, "sdlc stage id")
+		name := fs.String("name", "", "stage name")
+		desc := fs.String("d", "", "stage description")
+		ac := fs.String("ac", "", "acceptance criteria")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *stageID == 0 || *name == "" {
+			return errors.New("usage: ticket sdlc stage-update -stage-id <id> -name <name> [-d <desc>] [-ac <criteria>]")
+		}
+		stage, err := svc.UpdateSdlcStage(*stageID, libticket.SdlcStageRequest{
+			StageName:          *name,
+			Description:        *desc,
+			AcceptanceCriteria: *ac,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(stage)
+		}
+		fmt.Printf("updated stage: %s (id %d)\n", stage.StageName, stage.ID)
+		return nil
+	case "stage-list":
+		fs := flag.NewFlagSet("sdlc stage-list", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("id", 0, "sdlc id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 {
+			return errors.New("usage: ticket sdlc stage-list -id <sdlc_id>")
+		}
+		stages, err := svc.ListSdlcStages(*sdlcID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(stages)
+		}
+		printStageTable(stages)
+		return nil
+	case "stage-get":
+		fs := flag.NewFlagSet("sdlc stage-get", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		stageID := fs.Int64("stage-id", 0, "sdlc stage id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *stageID == 0 {
+			return errors.New("usage: ticket sdlc stage-get -stage-id <id>")
+		}
+		stage, err := svc.GetSdlcStage(*stageID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(stage)
+		}
+		printStageDetail(stage)
+		return nil
+	case "remove-stage", "stage-rm":
 		fs := flag.NewFlagSet("sdlc remove-stage", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		stageID := fs.Int64("stage-id", 0, "sdlc stage id")
@@ -137,7 +201,7 @@ func runSdlc(args []string) error {
 		}
 		fmt.Printf("removed stage %d\n", *stageID)
 		return nil
-	case "reorder-stages":
+	case "reorder-stages", "stage-order":
 		fs := flag.NewFlagSet("sdlc reorder-stages", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		wfID := fs.Int64("id", 0, "sdlc id")
@@ -232,6 +296,31 @@ func runSdlc(args []string) error {
 		}
 		fmt.Printf("set sdlc %d on ticket %s\n", *sdlcID, ticket.ID)
 		return nil
+	case "role-list", "role-ls":
+		fs := flag.NewFlagSet("sdlc role-list", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("id", 0, "sdlc id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 {
+			return errors.New("usage: ticket sdlc role-list -id <sdlc_id>")
+		}
+		roles, err := svc.ListRoles()
+		if err != nil {
+			return err
+		}
+		filtered := make([]store.Role, 0)
+		for _, r := range roles {
+			if r.SdlcID != nil && *r.SdlcID == *sdlcID {
+				filtered = append(filtered, r)
+			}
+		}
+		if outputJSON {
+			return printJSON(filtered)
+		}
+		printRoleTable(filtered)
+		return nil
 	case "stage-role-add":
 		fs := flag.NewFlagSet("sdlc stage-role-add", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -322,6 +411,34 @@ func printSdlcTable(sdlcs []store.Sdlc) {
 		rows = append(rows, fmt.Sprintf("%d\t%s\t%s", wf.ID, wf.Name, wf.Description))
 	}
 	printBoxTable("ID\tNAME\tDESCRIPTION", rows)
+}
+
+func printStageTable(stages []store.SdlcStage) {
+	rows := make([]string, 0, len(stages))
+	for _, s := range stages {
+		var roleNames []string
+		for _, r := range s.Roles {
+			roleNames = append(roleNames, r.Title)
+		}
+		rows = append(rows, fmt.Sprintf("%d\t%d\t%s\t%s\t%s", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description))
+	}
+	printBoxTable("ORDER\tID\tSTAGE\tROLES\tDESCRIPTION", rows)
+}
+
+func printStageDetail(s store.SdlcStage) {
+	fmt.Printf("ID                  : %d\n", s.ID)
+	fmt.Printf("SDLC ID             : %d\n", s.SdlcID)
+	fmt.Printf("Stage Name          : %s\n", s.StageName)
+	fmt.Printf("Description         : %s\n", s.Description)
+	fmt.Printf("Acceptance Criteria : %s\n", s.AcceptanceCriteria)
+	fmt.Printf("Sort Order          : %d\n", s.SortOrder)
+	if len(s.Roles) > 0 {
+		var roleNames []string
+		for _, r := range s.Roles {
+			roleNames = append(roleNames, r.Title)
+		}
+		fmt.Printf("Roles               : %s\n", strings.Join(roleNames, ", "))
+	}
 }
 
 func printSdlcDetail(wf store.SdlcWithStages) {

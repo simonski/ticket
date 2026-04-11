@@ -30,6 +30,10 @@ func (r *router) registerSystemHandlers() {
 	})
 
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireUser(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return

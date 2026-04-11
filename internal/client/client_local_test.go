@@ -251,7 +251,7 @@ func TestLocalModeClientUserOps(t *testing.T) {
 	}
 	api := New(config.Config{})
 
-	user, err := api.CreateUser("bob", "pw")
+	user, err := api.CreateUser("bob", "password1")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

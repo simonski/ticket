@@ -176,6 +176,10 @@ func (s *Service) SetProjectEnabled(id int64, enabled bool) (store.Project, erro
 	return s.client.SetProjectEnabled(id, enabled)
 }
 
+func (s *Service) SetProjectDefaultDraft(projectID int64, draft bool) error {
+	return s.client.SetProjectDefaultDraft(projectID, draft)
+}
+
 func (s *Service) AddProjectMember(projectID int64, request libticket.ProjectMemberRequest) (store.ProjectMember, error) {
 	return s.client.AddProjectMember(projectID, client.ProjectMemberRequest(request))
 }
@@ -374,6 +378,18 @@ func (s *Service) DeleteSdlc(id int64) error {
 
 func (s *Service) AddSdlcStage(sdlcID int64, request libticket.SdlcStageRequest) (store.SdlcStage, error) {
 	return s.client.AddSdlcStage(sdlcID, client.SdlcStageRequest(request))
+}
+
+func (s *Service) UpdateSdlcStage(stageID int64, request libticket.SdlcStageRequest) (store.SdlcStage, error) {
+	return s.client.UpdateSdlcStage(stageID, client.SdlcStageRequest(request))
+}
+
+func (s *Service) GetSdlcStage(stageID int64) (store.SdlcStage, error) {
+	return s.client.GetSdlcStage(stageID)
+}
+
+func (s *Service) ListSdlcStages(sdlcID int64) ([]store.SdlcStage, error) {
+	return s.client.ListSdlcStages(sdlcID)
 }
 
 func (s *Service) RemoveSdlcStage(stageID int64) error {

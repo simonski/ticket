@@ -81,7 +81,7 @@ tk -g
 ```
 
 Full-screen terminal UI. Navigate with Tab / arrow keys.  
-Tabs: **Home · Projects · Ideas · Tickets · Workflows · Config**
+Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ## 9. Health check
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestAuthLifecycle(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	user, err := RegisterUser(context.Background(), db, "carol", "password123")
@@ -49,6 +50,7 @@ func TestAuthLifecycle(t *testing.T) {
 }
 
 func TestAdminUserManagement(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	created, err := CreateUser(context.Background(), db, "bob", "password123", "user")
@@ -59,7 +61,7 @@ func TestAdminUserManagement(t *testing.T) {
 		t.Fatalf("CreateUser().Username = %q, want bob", created.Username)
 	}
 
-	users, err := ListUsers(context.Background(), db)
+	users, err := ListUsers(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListUsers() error = %v", err)
 	}
@@ -85,7 +87,7 @@ func TestAdminUserManagement(t *testing.T) {
 		t.Fatalf("DeleteUser() error = %v", err)
 	}
 
-	users, err = ListUsers(context.Background(), db)
+	users, err = ListUsers(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListUsers(after delete) error = %v", err)
 	}
@@ -95,6 +97,7 @@ func TestAdminUserManagement(t *testing.T) {
 }
 
 func TestResetUserPassword(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	user, err := CreateUser(context.Background(), db, "carol", "password123", "user")

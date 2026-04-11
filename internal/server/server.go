@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/simonski/ticket/internal/store"
 	web "github.com/simonski/ticket/web"
 )
@@ -35,6 +39,10 @@ func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer
 			Addr:              addr,
 			Handler:           handler,
 			ReadHeaderTimeout: 30 * time.Second,
+			ReadTimeout:       60 * time.Second,
+			// WriteTimeout is intentionally omitted: WebSocket connections are
+			// long-lived and a write timeout would kill them mid-stream.
+			IdleTimeout: 120 * time.Second,
 		},
 		stopReaper: make(chan struct{}),
 	}
@@ -131,6 +139,9 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 	mux.Handle("/", spaHandler(fileServer, staticFS))
 
 	var handler http.Handler = mux
+	handler = csrfMiddleware(handler)
+	handler = recoverMiddleware(handler)
+	handler = bodySizeLimitHandler(handler)
 	handler = securityHeadersHandler(handler)
 	if verbose {
 		logOutput := output
@@ -143,6 +154,18 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 	return handler, nil
 }
 
+func recoverMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				slog.Error("panic recovered", "error", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func securityHeadersHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -152,8 +175,25 @@ func securityHeadersHandler(next http.Handler) http.Handler {
 	})
 }
 
+func bodySizeLimitHandler(next http.Handler) http.Handler {
+	const maxBodySize = 1 << 20 // 1 MB
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) ListenAndServe() error {
 	return s.httpServer.ListenAndServe()
+}
+
+// Shutdown gracefully shuts down the HTTP server and stops background goroutines.
+func (s *Server) Shutdown(ctx context.Context) error {
+	close(s.stopReaper)
+	sharedChatRuntime.stopHeartbeat()
+	return s.httpServer.Shutdown(ctx)
 }
 
 func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
@@ -204,8 +244,21 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+
+		// Generate a request correlation ID.
+		requestID := r.Header.Get("X-Request-ID")
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		w.Header().Set("X-Request-ID", requestID)
+
+		// Skip logging request body for sensitive endpoints to avoid leaking credentials.
+		sensitiveEndpoint := strings.Contains(r.URL.Path, "/login") ||
+			strings.Contains(r.URL.Path, "/register") ||
+			strings.Contains(r.URL.Path, "/reset-password")
+
 		var requestBody []byte
-		if r.Body != nil {
+		if r.Body != nil && !sensitiveEndpoint {
 			requestBody, _ = io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(requestBody))
 		}
@@ -218,6 +271,7 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 		}
 
 		attrs := []any{
+			"request_id", requestID,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", lw.status,
@@ -237,5 +291,89 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 		} else {
 			logger.Info("api request", attrs...)
 		}
+	})
+}
+
+// csrfMiddleware implements a double-submit cookie pattern for CSRF protection.
+// Safe methods (GET/HEAD/OPTIONS) set a CSRF token cookie if absent.
+// Mutating methods (POST/PUT/DELETE) require the X-CSRF-Token header to match
+// the _csrf cookie value. Requests with a Bearer token (API auth) and the
+// login/register endpoints are exempt.
+func csrfMiddleware(next http.Handler) http.Handler {
+	const cookieName = "_csrf"
+	const headerName = "X-CSRF-Token"
+
+	csrfExemptPaths := map[string]bool{
+		"/api/login":           true,
+		"/api/register":        true,
+		"/api/agents/register": true,
+	}
+
+	generateToken := func() string {
+		b := make([]byte, 32)
+		_, _ = rand.Read(b)
+		return hex.EncodeToString(b)
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only apply to /api/ paths.
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			// Set CSRF cookie if not present.
+			if _, err := r.Cookie(cookieName); err != nil {
+				http.SetCookie(w, &http.Cookie{
+					Name:     cookieName,
+					Value:    generateToken(),
+					Path:     "/",
+					HttpOnly: false, // JS must read it
+					SameSite: http.SameSiteStrictMode,
+					Secure:   r.TLS != nil,
+				})
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Mutating method — check CSRF unless exempt.
+
+		// Exempt paths (login/register — no cookie exists yet).
+		if csrfExemptPaths[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Exempt requests using token-based auth (Bearer or Basic).
+		// These are programmatic API calls, not browser-initiated — CSRF
+		// is a browser-only attack vector.
+		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") || strings.HasPrefix(authHeader, "Basic ") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Exempt requests with no session cookie — they're API calls or
+		// unauthenticated requests, not browser form submissions.
+		if _, err := r.Cookie("session"); err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Validate double-submit: cookie must match header.
+		cookie, err := r.Cookie(cookieName)
+		if err != nil || cookie.Value == "" {
+			http.Error(w, `{"error":"missing CSRF token"}`, http.StatusForbidden)
+			return
+		}
+		headerVal := r.Header.Get(headerName)
+		if headerVal == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(headerVal)) != 1 {
+			http.Error(w, `{"error":"CSRF token mismatch"}`, http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }

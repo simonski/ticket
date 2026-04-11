@@ -22,6 +22,7 @@ func openAgentTestDB(t *testing.T) *sql.DB {
 }
 
 func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
@@ -60,6 +61,7 @@ func TestCreateAgentGeneratesPasswordAndUUID(t *testing.T) {
 }
 
 func TestAgentUpdateAndLifecycle(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
@@ -124,15 +126,16 @@ func TestAgentUpdateAndLifecycle(t *testing.T) {
 }
 
 func TestAgentDoesNotAppearInListUsers(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
 
-	users, err := ListUsers(context.Background(), db)
+	users, err := ListUsers(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListUsers() error = %v", err)
 	}
@@ -144,10 +147,11 @@ func TestAgentDoesNotAppearInListUsers(t *testing.T) {
 }
 
 func TestGetAgentByUUID(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -162,13 +166,14 @@ func TestGetAgentByUUID(t *testing.T) {
 }
 
 func TestListAgents(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
 	if _, _, err := CreateAgent(context.Background(), db, "secret1"); err != nil {
 		t.Fatalf("CreateAgent(1) error = %v", err)
 	}
-	if _, _, err := CreateAgent(context.Background(), db, "secret2"); err != nil {
+	if _, _, err := CreateAgent(context.Background(), db, "secret12b"); err != nil {
 		t.Fatalf("CreateAgent(2) error = %v", err)
 	}
 
@@ -182,10 +187,11 @@ func TestListAgents(t *testing.T) {
 }
 
 func TestReapStaleAgents(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -218,10 +224,11 @@ func TestReapStaleAgents(t *testing.T) {
 }
 
 func TestListAgentStatuses(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -274,10 +281,11 @@ func TestListAgentStatuses(t *testing.T) {
 }
 
 func TestAgentConfig(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -332,10 +340,11 @@ func TestAgentConfig(t *testing.T) {
 }
 
 func TestAgentFoundByGetUserByUsername(t *testing.T) {
+	t.Parallel()
 	db := openAgentTestDB(t)
 	defer db.Close()
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}

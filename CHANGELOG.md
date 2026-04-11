@@ -23,7 +23,7 @@ All notable changes to the Ticket project are documented here.
 - **Homebrew formula** — distribution via `brew install simonski/tap/ticket`
 - **Security hardening** — security headers (CSP, X-Frame-Options, nosniff), Secure cookie flag for HTTPS, rate limiting on login/register, tightened DB directory permissions
 - **SAST in CI** — added `govulncheck` and `gosec` to GitHub Actions pipeline
-- **CLI test coverage** — boosted `cmd/ticket` above 55% threshold with tests for timeAgo, orDash, rowColor, formatPayloadKeyValues, generateConfirmToken, prefixWriter/Reader, printAgentTable, printTeamAgentTable, runWhoami, runSummary, runTicketNS, runSetTicketClosed, project user/team commands, clone, request, archive, comment, dependency, team, and requirements/decisions sdlcs
+- **CLI test coverage** — boosted `cmd/tk` above 55% threshold with tests for timeAgo, orDash, rowColor, formatPayloadKeyValues, generateConfirmToken, prefixWriter/Reader, printAgentTable, printTeamAgentTable, runWhoami, runSummary, runTicketNS, runSetTicketClosed, project user/team commands, clone, request, archive, comment, dependency, team, and requirements/decisions sdlcs
 
 ### Changed
 - **TICKET_CONFIG_DIR → TICKET_HOME** — env var renamed; `.ticket/` auto-located by walking up from CWD
@@ -70,7 +70,7 @@ All notable changes to the Ticket project are documented here.
 - **Web UI: ticket assignment** — edit assignee directly in ticket modal
 - **Web UI: sdlc management panel** — create/delete sdlcs, add/remove stages (admin)
 - **Contract tests** — expanded coverage for labels, time tracking, sdlc CRUD, roles, teams, ticket lifecycle, and count
-- **CLI tests** — boosted cmd/ticket coverage above 55% threshold
+- **CLI tests** — boosted cmd/tk coverage above 55% threshold
 
 ### Changed
 - CLI usage output reorganised into admin and client command groups
@@ -80,6 +80,6 @@ All notable changes to the Ticket project are documented here.
 
 ### Fixed
 - DESIGN.md and PROMPTS.md updated to reference `TICKETS.md` (was `AGENTS.md`)
-- Gitignore no longer excludes `cmd/ticket/` directory
+- Gitignore no longer excludes `cmd/tk/` directory
 - Stale FK migration after tasks→tickets table rename
 - HTTP API: standalone DELETE handlers for `/api/labels/<id>` and `/api/time/<id>`

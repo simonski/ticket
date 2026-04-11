@@ -729,7 +729,7 @@ func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 
-	if err := runInitDB([]string{"-password", "secret"}); err != nil {
+	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
 
@@ -761,7 +761,7 @@ func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T)
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
-	if err := runInitDB([]string{"-f", dbPath, "-password", "secret", "--populate"}); err != nil {
+	if err := runInitDB([]string{"-f", dbPath, "-password", "secret12", "--populate"}); err != nil {
 		t.Fatalf("runInitDB(--populate) error = %v", err)
 	}
 
@@ -771,7 +771,7 @@ func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T)
 	}
 	defer db.Close()
 
-	projects, err := store.ListProjects(context.Background(), db)
+	projects, err := store.ListProjects(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -830,21 +830,21 @@ func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T)
 }
 
 func TestPromptForCredentials(t *testing.T) {
-	username, password, err := promptForCredentials(strings.NewReader("alice\nsecret\n"), ioDiscard{}, "", "")
+	username, password, err := promptForCredentials(strings.NewReader("alice\nsecret12\n"), ioDiscard{}, "", "")
 	if err != nil {
 		t.Fatalf("promptForCredentials() error = %v", err)
 	}
-	if username != "alice" || password != "secret" {
+	if username != "alice" || password != "secret12" {
 		t.Fatalf("promptForCredentials() = %q/%q", username, password)
 	}
 }
 
 func TestPromptForCredentialsUsesDefaultsWhenInputIsEmpty(t *testing.T) {
-	username, password, err := promptForCredentials(strings.NewReader("\n\n"), ioDiscard{}, "alice", "secret")
+	username, password, err := promptForCredentials(strings.NewReader("\n\n"), ioDiscard{}, "alice", "secret12")
 	if err != nil {
 		t.Fatalf("promptForCredentials(defaults) error = %v", err)
 	}
-	if username != "alice" || password != "secret" {
+	if username != "alice" || password != "secret12" {
 		t.Fatalf("promptForCredentials(defaults) = %q/%q", username, password)
 	}
 }
@@ -869,7 +869,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 				_, _ = w.Write([]byte(`{"error":"invalid credentials"}`))
 				return
 			}
-			if loginPayload["username"] != "alice" || loginPayload["password"] != "secret" {
+			if loginPayload["username"] != "alice" || loginPayload["password"] != "secret12" {
 				t.Fatalf("retry login payload = %#v", loginPayload)
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -886,7 +886,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 
 	oldIn := loginPromptInput
 	oldOut := loginPromptOutput
-	loginPromptInput = strings.NewReader("alice\nsecret\n")
+	loginPromptInput = strings.NewReader("alice\nsecret12\n")
 	loginPromptOutput = ioDiscard{}
 	t.Cleanup(func() {
 		loginPromptInput = oldIn
@@ -894,7 +894,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 	})
 
 	output := captureStdout(t, func() {
-		if err := runLogin([]string{"-username", "alice", "-password", "wrong"}); err != nil {
+		if err := runLogin([]string{"-username", "alice", "-password", "wrongpwd1"}); err != nil {
 			t.Fatalf("runLogin() error = %v", err)
 		}
 	})
@@ -1044,7 +1044,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 func TestRunStatusLocalSuccess(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	if err := runInitDB([]string{"-password", "secret"}); err != nil {
+	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
 
@@ -1853,7 +1853,7 @@ func TestRunAssignAndUnassignInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "-estimate_effort", "3", "-estimate_complete", "2026-04-10T09:00:00Z", "Task Gamma"})
 
-	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
+	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret12"}); err != nil {
 		t.Fatalf("user create error = %v", err)
 	}
 
@@ -2364,7 +2364,7 @@ func setupLocalCLI(t *testing.T) {
 	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
-	if err := runInitDB([]string{"-password", "secret"}); err != nil {
+	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
 }
@@ -2845,7 +2845,7 @@ func TestRunUnclaimRejectsNonOwner(t *testing.T) {
 
 	// Create and assign to alice
 	taskID := createLocalTask(t, []string{"add", "Unclaim Test Task"})
-	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
+	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret12"}); err != nil {
 		t.Fatalf("user create error = %v", err)
 	}
 	if err := run([]string{"assign", taskID, "alice"}); err != nil {
@@ -2867,7 +2867,7 @@ func TestRunClaimRejectsAlreadyAssigned(t *testing.T) {
 
 	// Create and assign to alice
 	taskID := createLocalTask(t, []string{"add", "Claim Conflict Task"})
-	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret"}); err != nil {
+	if err := run([]string{"user", "create", "-username", "alice", "-password", "secret12"}); err != nil {
 		t.Fatalf("user create error = %v", err)
 	}
 	if err := run([]string{"assign", taskID, "alice"}); err != nil {
@@ -2894,7 +2894,7 @@ func TestRunAssignDisabledUserFails(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "Disabled Assign Task"})
-	if err := run([]string{"user", "create", "-username", "carol", "-password", "secret"}); err != nil {
+	if err := run([]string{"user", "create", "-username", "carol", "-password", "secret12"}); err != nil {
 		t.Fatalf("user create error = %v", err)
 	}
 	if err := run([]string{"user", "disable", "-username", "carol"}); err != nil {
@@ -3682,7 +3682,7 @@ func TestRunUserCRUD(t *testing.T) {
 
 	// create user
 	createOut := captureStdout(t, func() {
-		if err := run([]string{"user", "create", "-username", "newuser", "-password", "testpass"}); err != nil {
+		if err := run([]string{"user", "create", "-username", "newuser", "-password", "testpass1"}); err != nil {
 			t.Fatalf("user create error = %v", err)
 		}
 	})
@@ -3747,7 +3747,7 @@ func TestRunUserCreateRequiresUsername(t *testing.T) {
 	// to trigger a non-interactive path. In test environments whoami may
 	// resolve a username, so just verify the command doesn't panic.
 	// The main thing is the create path is exercisable.
-	_ = run([]string{"user", "create", "-username", "testonly", "-password", "p"})
+	_ = run([]string{"user", "create", "-username", "testonly", "-password", "password1"})
 }
 
 // ---------------------------------------------------------------------------
@@ -4560,14 +4560,14 @@ func TestQuickstartServer(t *testing.T) {
 
 	// Step 1: Register a user
 	captureStdout(t, func() {
-		if err := run([]string{"register", "-username", "alice", "-password", "secret"}); err != nil {
+		if err := run([]string{"register", "-username", "alice", "-password", "secret12"}); err != nil {
 			t.Fatalf("register error = %v", err)
 		}
 	})
 
 	// Step 2: Login as alice, verify it works
 	loginOut := captureStdout(t, func() {
-		if err := run([]string{"login", "-username", "alice", "-password", "secret"}); err != nil {
+		if err := run([]string{"login", "-username", "alice", "-password", "secret12"}); err != nil {
 			t.Fatalf("login alice error = %v", err)
 		}
 	})
@@ -4632,7 +4632,7 @@ func TestQuickstartServer(t *testing.T) {
 
 	// Step 7: Create user bob and assign (admin required)
 	captureStdout(t, func() {
-		if err := run([]string{"user", "create", "-username", "bob", "-password", "bobpass"}); err != nil {
+		if err := run([]string{"user", "create", "-username", "bob", "-password", "bobpass12"}); err != nil {
 			t.Fatalf("user create bob error = %v", err)
 		}
 	})

@@ -29,7 +29,7 @@ func (rl *rateLimiter) allow(key string) bool {
 	now := time.Now()
 	cutoff := now.Add(-rl.window)
 
-	// Remove expired entries.
+	// Remove expired entries for the current key.
 	valid := rl.attempts[key][:0]
 	for _, t := range rl.attempts[key] {
 		if t.After(cutoff) {
@@ -37,6 +37,17 @@ func (rl *rateLimiter) allow(key string) bool {
 		}
 	}
 	rl.attempts[key] = valid
+
+	// Evict stale keys to prevent unbounded map growth.
+	for k, timestamps := range rl.attempts {
+		if k == key {
+			continue
+		}
+		latest := timestamps[len(timestamps)-1]
+		if !latest.After(cutoff) {
+			delete(rl.attempts, k)
+		}
+	}
 
 	if len(valid) >= rl.limit {
 		return false
@@ -46,9 +57,6 @@ func (rl *rateLimiter) allow(key string) bool {
 }
 
 func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		return fwd
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

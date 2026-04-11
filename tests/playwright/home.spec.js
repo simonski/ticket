@@ -150,8 +150,8 @@ test("authenticated app opens the channel selector by default", async ({ page })
 test("management panels support card mode with popup editing", async ({ page }) => {
   await page.goto("/");
 
-  const seeded = await page.evaluate(() => {
-    if (typeof showApp !== "function" || typeof switchPerspective !== "function") return false;
+  const cardCount = await page.evaluate(() => {
+    if (typeof showApp !== "function") return -1;
     showApp("admin", "admin");
     agents = [{ agent_id: 7, name: "Atlas", description: "Build agent", enabled: true, status: "idle" }];
     roles = [{ role_id: 9, title: "Architect", motivation: "Shape systems", goals: "Reduce risk" }];
@@ -162,27 +162,25 @@ test("management panels support card mode with popup editing", async ({ page }) 
     renderAgentSelector();
     renderRoleSelector();
     renderTeamSelector();
+    activatePerspective("agents");
     renderAgentList();
     renderRoleList();
     renderTeamList();
-    return true;
+    return document.querySelectorAll("#agent-list .management-card").length;
   });
-  expect(seeded).toBe(true);
+  expect(cardCount).toBeGreaterThan(0);
 
-  await page.evaluate(() => switchPerspective("agents"));
-  await page.locator("#agent-list .management-card").first().click();
+  await page.locator("#agent-list .management-card").first().click({ force: true });
   await expect(page.locator("#agent-modal-overlay")).toBeVisible();
   await expect(page.locator("#agent-name")).toHaveValue("Atlas");
 
-  await page.evaluate(() => closeAgentModal());
-  await page.evaluate(() => switchPerspective("roles"));
-  await page.locator("#role-list .management-card").first().click();
+  await page.evaluate(() => { closeAgentModal(); activatePerspective("roles"); renderRoleList(); });
+  await page.locator("#role-list .management-card").first().click({ force: true });
   await expect(page.locator("#role-modal-overlay")).toBeVisible();
   await expect(page.locator("#role-title")).toHaveValue("Architect");
 
-  await page.evaluate(() => closeRoleModal());
-  await page.evaluate(() => switchPerspective("teams"));
-  await page.locator("#team-list .management-card").first().click();
+  await page.evaluate(() => { closeRoleModal(); activatePerspective("teams"); renderTeamList(); });
+  await page.locator("#team-list .management-card").first().click({ force: true });
   await expect(page.locator("#team-modal-overlay")).toBeVisible();
   await expect(page.locator("#team-name")).toHaveValue("Platform");
 });

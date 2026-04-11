@@ -21,7 +21,7 @@ func (r *router) registerUserHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			users, err := store.ListUsers(r.Context(), db)
+			users, err := store.ListUsers(r.Context(), db, 0)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return

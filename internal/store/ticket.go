@@ -738,7 +738,7 @@ func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 	var nextStageID int64
 	var nextStageName string
 	err = db.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, sdlcID, currentOrder).Scan(&nextStageID, &nextStageName)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// No next stage — done
 		return currentStageID, nil, "done", true, nil
 	}
@@ -796,7 +796,7 @@ func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 	var prevStageID int64
 	var prevStageName string
 	err = db.QueryRowContext(ctx, `SELECT sdlc_stage_id, stage_name FROM sdlc_stages WHERE sdlc_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1`, sdlcID, currentOrder).Scan(&prevStageID, &prevStageName)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil, "", true, nil // at the very start
 	}
 	if err != nil {
@@ -1285,12 +1285,15 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 		return ticket.ParentID, nil
 	}
 
+	// Batch-fetch sort_order for all unique sdlc_stage_ids to avoid N+1 queries.
+	stageOrderMap, _ := batchGetSdlcStageOrders(ctx, db, children)
+
 	// Find minimum stage among children by sdlc sort_order
 	nextStage := children[0].Stage
 	nextSdlcStageID := children[0].SdlcStageID
 	minOrder := -1
 	if children[0].SdlcStageID != nil {
-		if o, err := GetSdlcStageOrder(ctx, db, *children[0].SdlcStageID); err == nil {
+		if o, ok := stageOrderMap[*children[0].SdlcStageID]; ok {
 			minOrder = o
 		}
 	}
@@ -1309,7 +1312,7 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 			anyFail = true
 		}
 		if child.SdlcStageID != nil {
-			if o, err := GetSdlcStageOrder(ctx, db, *child.SdlcStageID); err == nil && (minOrder < 0 || o < minOrder) {
+			if o, ok := stageOrderMap[*child.SdlcStageID]; ok && (minOrder < 0 || o < minOrder) {
 				minOrder = o
 				nextStage = child.Stage
 				nextSdlcStageID = child.SdlcStageID

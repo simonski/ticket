@@ -504,6 +504,18 @@ func (rt *chatRuntime) setLogger(logf func(string)) {
 	}()
 }
 
+func (rt *chatRuntime) stopHeartbeat() {
+	if rt == nil {
+		return
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.heartbeatRunning && rt.heartbeatStop != nil {
+		close(rt.heartbeatStop)
+		rt.heartbeatRunning = false
+	}
+}
+
 func (rt *chatRuntime) connectionOpened() {
 	if rt == nil {
 		return

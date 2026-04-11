@@ -1,50 +1,61 @@
 # Tech Lead
 
-**Score: 60/100** (was 63)
+**Score: 56/100** (was 60)
 
 ## What is being assessed
-File sizes (target: no file >700 lines), code duplication, cyclomatic complexity, magic numbers, dead code, naming consistency, and helper reuse. Good means: files are focused and reviewable, functions have single responsibilities, errors are consistent.
+
+Code quality: file sizes, duplication, error consistency, magic values, dead code, naming conventions, interface sizes, helper reuse, and impact of the SDLC lifecycle refactor.
 
 ## Methodology
-Ran `wc -l` on all `.go` files. Grepped for TODO/FIXME, magic numbers, duplicated patterns. Inspected `cmd_ticket.go`, `client.go`, `cmd_setup.go` and `printer.go` for complexity.
+
+`wc -l` on all Go and web files. `git diff main...HEAD` for size deltas. Grep and spot-reads across `cmd/tk/`, `internal/store/`, `internal/client/`, `libticket/`, `libtickethttp/`, `internal/tui/`. Diffed `service.go` between main and refactor branch.
 
 ## Findings
 
 ### Passing checks
-- Only 1 TODO marker: `cmd/ticket/cmd_ticket.go:70` ("dedicated tree view") — clean codebase
-- Error wrapping with `%w` used consistently; 68 `fmt.Errorf` instances
-- `promptYN` and `prompt` helpers reused throughout `cmd_setup.go:47-73` (no inline re-implementation)
-- No obvious copy-paste duplication detected
-- Magic numbers minimal: mostly named constants or HTTP status codes
-- Dead code: none found
-- Error messages consistent: `"usage: "` prefix, lowercase descriptions
+- `doJSON` HTTP helper centralised — `client_util.go:87,130`
+- `writeJSON`/`writeError` server helpers consistent — `api.go`
+- Store sentinel errors defined and used via `errors.Is()` — `ticket.go:13-16`
+- `lifecycle.go` constants file well-structured — `internal/store/lifecycle.go`
+- Workflow->Sdlc rename complete — no residual references
+- New SDLC files appropriately sized: `cmd_sdlc.go` (342), `api_sdlc.go` (268), `store/sdlc.go` (285)
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `cmd/ticket/cmd_ticket.go`: 2,626 lines, 32 `run*` handler functions | Critical | `cmd/ticket/cmd_ticket.go` | Split into `cmd_ticket_list.go`, `cmd_ticket_get.go`, `cmd_ticket_update.go`, `cmd_ticket_state.go` |
-| `internal/client/client.go`: 1,894 lines, 102 methods on one struct | Critical | `internal/client/client.go` | Split into `client_tickets.go`, `client_projects.go`, `client_auth.go`, `client_teams.go` |
-| `internal/tui/model.go`: 2,817 lines — monolithic TUI model | Critical | `internal/tui/model.go` | Extract view components into separate files |
-| `cmd/ticket/cmd_setup.go`: now 1,144 lines (grew +128 lines this cycle) | High | `cmd/ticket/cmd_setup.go` | Extract to `cmd_setup_init.go`, `cmd_setup_seed.go`, `cmd_setup_validate.go` |
-| `cmd/ticket/main_test.go`: 4,744 lines — test file larger than production code | High | `cmd/ticket/main_test.go` | Split by command domain |
-| `internal/store/ticket.go`: 1,688 lines; `internal/store/store.go`: 1,680 lines | High | `internal/store/` | Extract schema DDL to `schema.go`; split ticket CRUD by operation type |
-| `cmd/ticket/printer.go`: 993 lines | Medium | `cmd/ticket/printer.go` | Extract colour helpers and table formatters into sub-files |
-| 13 files total exceed 700 lines | High | Multiple files | Address in priority order above |
+| TUI `ticketStates` has `"open"` — not a valid store state (should be `idle`) | Critical | `tui/model.go:281` | Replace with `"idle"` |
+| TUI `ticketStages` has `"planning"`, `"development"`, `"review"` — none match store constants | High | `tui/model.go:282` | Use `design/develop/test/done` |
+| `cmd_ticket.go` grew to 2,826 lines (+138 from refactor) | High | `cmd/tk/cmd_ticket.go` | Split into sub-files |
+| `tui/model.go` at 3,151 lines — largest file in repo | High | `internal/tui/model.go` | Extract form, picker, board, detail views |
+| `store/ticket.go` grew to 1,988 lines (+228 from refactor) | High | `internal/store/ticket.go` | Split CRUD from lifecycle |
+| `client.go` has 99 `c.openLocalDB()` repetitions | High | `internal/client/client.go` (1,976 lines) | Extract `withLocalDB(func)` helper |
+| Service interface at 119 methods with naming inconsistency | High | `libticket/service.go:107-131` | Normalise VerbNoun pattern |
+| `index.html` at 6,080 lines | Medium | `web/static/index.html` | Split CSS/JS into separate files |
+| Magic number `* 10` in sort bucket | Medium | `cmd_ticket.go:36` | Add `const stageBucketSize = 10` |
+| 18 repeated `writeError(w, 404, "ticket not found")` without shared helper | Medium | `api_tickets.go` | Extract `handleTicketNotFound` |
+| `ReadyTicket`/`NotReadyTicket`/`DraftTicket`/`UndraftTicket` — 4 methods for 2 booleans | Medium | `service.go:117-120` | Collapse to `SetTicketDraft(bool)` |
+| Hardcoded stage strings not using constants | Low | `store.go:1055-1056`, `main.go:184,188,194` | Use `StageDevelop`/`StageDone` constants |
 
 ## Verdict
-Score regresses from 63 to 60 because `cmd_setup.go` grew 128 lines this cycle with no corresponding refactor, and the 13 oversized files remain unaddressed. The codebase is functionally sound but architecturally strained — `cmd_ticket.go` at 2,626 lines with 32 handler functions is the highest-priority refactoring target.
+
+The refactor's new files are appropriately sized, but it worsened the three pre-existing mega-file problems without splitting them. The TUI `ticketStates` bug (`"open"`) is the most critical new regression. Score drops 4 points.
 
 ## Changes since last assessment
-- `cmd_setup.go` grew from ~1,016 to 1,144 lines (+128) due to `runInitCheckDefaults` and `addDefaultWorkflowStages`
-- No file splits or extractions performed this cycle
-- `runBoard` changes added ~46 lines to `cmd_ticket.go`
-- All 13 oversized files unchanged in structure
+- `lifecycle.go` constants file added (+)
+- Workflow->Sdlc rename complete (+)
+- New SDLC files well-scoped (+)
+- `cmd_ticket.go` +138 lines, `store/ticket.go` +228 lines, `client.go` +82 lines (-)
+- TUI `ticketStates`/`ticketStages` bug introduced (-)
+- Service interface naming inconsistency grew (-)
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Split `cmd_ticket.go` | Critical | Minimum: extract `runList`, `runBoard`, `runGet` into dedicated files |
-| Split `client.go` | Critical | Group methods by domain: auth, tickets, projects, teams |
-| Split `cmd_setup.go` | High | Extract `runInitCheckDefaults` + seeds to `cmd_setup_validate.go` |
-| Split `tui/model.go` | High | Extract view rendering functions into `tui/views/` sub-package |
-| Add `gocyclo` lint rule | Medium | Enforce max cyclomatic complexity of 15 per function in golangci-lint config |
+| Fix TUI `ticketStates`/`ticketStages` | Critical | `tui/model.go:281-282` |
+| Split `tui/model.go` (3,151 lines) | High | Extract into sub-files |
+| Split `cmd_ticket.go` (2,826 lines) | High | Extract state/lifecycle commands |
+| Refactor `client.go` local/remote branching | Medium | `withLocalDB(func)` helper |
+| Normalise Service interface naming | Medium | Consistent VerbNoun pattern |
+| Use lifecycle constants everywhere | Low | `store.go:1055`, `main.go:184` |

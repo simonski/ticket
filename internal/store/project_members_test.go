@@ -7,6 +7,7 @@ import (
 )
 
 func TestProjectMemberCRUD(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	admin, err := GetUserByUsername(context.Background(), db, "admin")

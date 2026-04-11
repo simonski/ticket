@@ -273,6 +273,30 @@ components:
           type: string
           format: date-time
 
+    SdlcExport:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        stages:
+          type: array
+          items:
+            type: object
+            properties:
+              stage_name:
+                type: string
+              description:
+                type: string
+              roles:
+                type: array
+                items:
+                  type: string
+              sort_order:
+                type: integer
+
     SdlcStage:
       type: object
       properties:
@@ -610,18 +634,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    MethodNotAllowed:
-      description: HTTP method not allowed on this endpoint
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    Conflict:
-      description: Resource already exists or state conflict
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
     InternalServerError:
       description: Unexpected server error
       content:
@@ -669,7 +681,7 @@ components:
         status: "develop/active"
         priority: 2
         assignee: "alice"
-        open: true
+        complete: false
         archived: false
         created_by: "admin"
         created_at: "2025-02-01T09:00:00Z"
@@ -1670,7 +1682,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
   # ── Sdlcs ───────────────────────────────────────────────────────
-  /api/sdlc:
+  /api/sdlcs:
     get:
       tags: [Sdlcs]
       summary: List all sdlcs
@@ -1732,7 +1744,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/import:
+  /api/sdlcs/import:
     post:
       tags: [Sdlcs]
       summary: Import a sdlc from export format
@@ -1744,8 +1756,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              description: SdlcExport object with stages array
+              $ref: '#/components/schemas/SdlcExport'
       responses:
         '201':
           description: Sdlc imported
@@ -1764,7 +1775,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}:
+  /api/sdlcs/{sdlc_id}:
     get:
       tags: [Sdlcs]
       summary: Get sdlc with stages
@@ -1829,7 +1840,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}/stages:
+  /api/sdlcs/{sdlc_id}/stages:
     post:
       tags: [Sdlcs]
       summary: Add a stage to a sdlc
@@ -1855,10 +1866,8 @@ paths:
                   type: string
                 description:
                   type: string
-                role_id:
-                  type: integer
-                  format: int64
-                  nullable: true
+                acceptance_criteria:
+                  type: string
                 sort_order:
                   type: integer
       responses:
@@ -1879,7 +1888,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}/reorder:
+  /api/sdlcs/{sdlc_id}/reorder:
     put:
       tags: [Sdlcs]
       summary: Reorder sdlc stages
@@ -1927,7 +1936,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}/export:
+  /api/sdlcs/{sdlc_id}/export:
     get:
       tags: [Sdlcs]
       summary: Export sdlc configuration
@@ -1959,7 +1968,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/stages/{stage_id}:
+  /api/sdlcs/stages/{stage_id}:
     delete:
       tags: [Sdlcs]
       summary: Delete a sdlc stage
@@ -1994,7 +2003,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}/stages/{stage_id}/roles:
+  /api/sdlcs/stages/roles/{sdlc_id}/{stage_id}:
     post:
       tags: [Sdlcs]
       summary: Assign role to stage
@@ -2031,50 +2040,6 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SdlcStage'
-
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}/stages/{stage_id}/roles/{role_id}:
-    delete:
-      tags: [Sdlcs]
-      summary: Remove role from stage
-      operationId: removeRoleFromStage
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: sdlc_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: stage_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: role_id
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Role removed from stage
-          content:
-            application/json:
-              schema:
                 type: object
                 properties:
                   status:
@@ -2090,7 +2055,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlc/{sdlc_id}/stages/{stage_id}/roles/reorder:
     put:
       tags: [Sdlcs]
       summary: Reorder roles within a stage
@@ -2129,7 +2093,57 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SdlcStage'
+                type: object
+                properties:
+                  status:
+                    type: string
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/sdlcs/stages/roles/{sdlc_id}/{stage_id}/{role_id}:
+    delete:
+      tags: [Sdlcs]
+      summary: Remove role from stage
+      operationId: removeRoleFromStage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sdlc_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: stage_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: role_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Role removed from stage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -4148,6 +4162,174 @@ paths:
       responses:
         '200':
           description: Ticket draft status removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/close:
+    post:
+      tags: [Tickets]
+      summary: Close a ticket (alias for complete)
+      operationId: closeTicket
+      description: Alias for completeTicket. Marks the ticket as complete.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: Optional comment to add
+      responses:
+        '200':
+          description: Ticket closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/open:
+    post:
+      tags: [Tickets]
+      summary: Open a ticket (alias for reopen)
+      operationId: openTicket
+      description: Alias for reopenTicket. Reopens a completed ticket.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: Optional comment to add
+      responses:
+        '200':
+          description: Ticket opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/ready:
+    post:
+      tags: [Tickets]
+      summary: Mark ticket as ready (alias for undraft)
+      operationId: readyTicket
+      description: Alias for undraftTicket. Removes draft status from the ticket.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: Optional comment to add
+      responses:
+        '200':
+          description: Ticket marked as ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/notready:
+    post:
+      tags: [Tickets]
+      summary: Mark ticket as not ready (alias for draft)
+      operationId: notreadyTicket
+      description: Alias for markTicketDraft. Sets the ticket back to draft status.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  description: Optional comment to add
+      responses:
+        '200':
+          description: Ticket marked as not ready
           content:
             application/json:
               schema:

@@ -4,7 +4,7 @@ import re
 # Don't change: case "task": / type == "task" / == "task" / "task," in type lists
 
 files = [
-    'cmd/ticket/main.go',
+    'cmd/tk/main.go',
     'internal/store/task.go',
     'internal/server/api.go',
     'internal/store/dependency.go',

@@ -134,7 +134,7 @@ func (s *LocalService) ListUsers() ([]store.User, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListUsers(context.Background(), db)
+	return store.ListUsers(context.Background(), db, 0)
 }
 
 func (s *LocalService) DeleteUser(username string) error {
@@ -170,7 +170,7 @@ func (s *LocalService) ListRoles() ([]store.Role, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListRoles(context.Background(), db)
+	return store.ListRoles(context.Background(), db, 0)
 }
 
 func (s *LocalService) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
@@ -316,7 +316,7 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 		projectID = 0
 	}
 	if request.TicketID == nil && projectID == 0 {
-		projects, err := store.ListProjects(context.Background(), db)
+		projects, err := store.ListProjects(context.Background(), db, 0)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
@@ -442,7 +442,7 @@ func (s *LocalService) ListProjects() ([]store.Project, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListProjects(context.Background(), db)
+	return store.ListProjects(context.Background(), db, 0)
 }
 
 func (s *LocalService) GetProject(id string) (store.Project, error) {
@@ -498,6 +498,15 @@ func (s *LocalService) SetProjectEnabled(id int64, enabled bool) (store.Project,
 	}
 	defer db.Close()
 	return store.SetProjectStatus(context.Background(), db, id, enabled)
+}
+
+func (s *LocalService) SetProjectDefaultDraft(projectID int64, draft bool) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return store.SetProjectDefaultDraft(context.Background(), db, projectID, draft)
 }
 
 func (s *LocalService) AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
@@ -569,7 +578,7 @@ func (s *LocalService) ListTeams() ([]store.Team, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListTeams(context.Background(), db)
+	return store.ListTeams(context.Background(), db, 0)
 }
 
 func (s *LocalService) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
@@ -1171,7 +1180,34 @@ func (s *LocalService) AddSdlcStage(sdlcID int64, request SdlcStageRequest) (sto
 		return store.SdlcStage{}, err
 	}
 	defer db.Close()
-	return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.SortOrder)
+	return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
+}
+
+func (s *LocalService) UpdateSdlcStage(stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.SdlcStage{}, err
+	}
+	defer db.Close()
+	return store.UpdateSdlcStage(context.Background(), db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
+}
+
+func (s *LocalService) GetSdlcStage(stageID int64) (store.SdlcStage, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.SdlcStage{}, err
+	}
+	defer db.Close()
+	return store.GetSdlcStage(context.Background(), db, stageID)
+}
+
+func (s *LocalService) ListSdlcStages(sdlcID int64) ([]store.SdlcStage, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	return store.ListSdlcStages(context.Background(), db, sdlcID)
 }
 
 func (s *LocalService) RemoveSdlcStage(stageID int64) error {

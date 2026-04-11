@@ -1,47 +1,60 @@
 # Performance
 
-**Score: 58/100** (was 62)
+**Score: 61/100** (was 58)
 
 ## What is being assessed
-N+1 query patterns, unbounded resource usage, connection pool configuration, goroutine leak potential, SSE/WebSocket scalability, pagination on list endpoints, and algorithmic complexity of display functions.
+
+N+1 queries, connection pooling, unbounded resources, goroutine leaks, pagination coverage, query instrumentation, and SDLC refactor performance impact.
 
 ## Methodology
-Read `internal/store/ticket.go`, `internal/store/store.go` (indexes), `internal/server/api_tickets.go`. Ran grep for `CREATE INDEX`, `SELECT.*FROM messages`, `LIMIT`, `SetMaxOpenConns`. Analysed `buildTreeDisplay` algorithm in `printer.go`.
+
+Read all store files for N+1 patterns and missing pagination. Read `store.go` for connection settings. Read `realtime.go`, `chat_ws.go`, `server.go` for goroutine/buffer patterns. Read API handlers for pagination.
 
 ## Findings
 
 ### Passing checks
-- 44 indexes defined covering most foreign key columns (`internal/store/store.go:427+`)
-- `idx_history_events_project_id`, `idx_history_events_ticket_id` present (`store.go:427-428`)
-- Batch comment loading: `batchFetchComments()` bulk-loads comments for multiple tickets in one query (`ticket.go:903`)
-- Recursive CTE for ancestor traversal avoids per-row parent lookups (`ticket.go:767`)
-- `buildTreeDisplay` is O(n): single-pass map build + single recursive descent (`printer.go:316-369`)
-- WebSocket goroutines cleaned up: `defer hub.remove(client)` and `defer client.close()` (`realtime.go:97`, `chat_ws.go:111`)
-- Timers properly stopped on goroutine exit (`chat_ws.go:304, 492`)
-- Pagination implemented with LIMIT/OFFSET on ticket list (`ticket.go:694`)
+- SQLite WAL mode + `busy_timeout=5000` — `store.go:32,36`
+- 30+ indexes covering hot columns — `store.go`
+- Recursive CTE for ancestor chain — `ticket.go:1046`
+- Batch comment fetch via `IN` clause — `ticket.go:1200`
+- WebSocket send channels bounded (32/64) with drop-on-full — `realtime.go:50,74`
+- Reaper goroutines stopped via channel — `server.go:70,108`
+- New SDLC indexes added — `store.go:481-483,652`
+- `ReorderSdlcStageRoles` wrapped in transaction — `role.go:183`
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `db.SetMaxOpenConns(1)` — single connection for all concurrent requests | Critical | `internal/store/store.go:26-27` | Set to 25 for server mode: `db.SetMaxOpenConns(25); db.SetMaxIdleConns(5)` |
-| `messages` table: no index on `from_user_id` or `to_user_id` | High | `internal/store/store.go:867` | `CREATE INDEX idx_messages_from_user_id ON messages(from_user_id)` |
-| `goals` table: no index on `project_id` | High | `internal/store/store.go:887` | `CREATE INDEX idx_goals_project_id ON goals(project_id)` |
-| `tickets.clone_of` FK column has no index | Medium | `internal/store/store.go:169` | `CREATE INDEX idx_tickets_clone_of ON tickets(clone_of)` |
-| Several list endpoints default to LIMIT 1000 — unbounded for large datasets | Low | `internal/store/auth.go:211`, `team.go:110` | Expose pagination params; reduce default LIMIT to 100 |
+| N+1: `GetSdlcStageOrder` per child in `recalculateParentLifecycle` | High | `ticket.go:1293,1312` | Batch fetch with `IN (...)` |
+| N+1: `ListSdlcStageRoles` per stage in `listSdlcStages` | High | `sdlc.go:282` | Single JOIN query |
+| N+1: `GetTicket` in nested loops in `resolveBySequenceNumber` | Medium | `ticket.go:1029-1041` | Single `IN (...)` query |
+| `SetMaxOpenConns(1)` serialises all reads | Medium | `store.go:26-27` | Consider raising for WAL readers |
+| `ReorderSdlcStages` issues UPDATEs without transaction | Medium | `sdlc.go:156-172` | Wrap in `BeginTx`/`Commit` |
+| Missing `ReadTimeout`/`WriteTimeout`/`IdleTimeout` | Medium | `server.go:34-38` | Add timeouts |
+| Two separate writes per WebSocket frame | Medium | `realtime.go:267-277` | Combine into single buffer write |
+| Chat heartbeat goroutine never stopped | Low | `chat_ws.go:484-504` | Close `heartbeatStop` on shutdown |
+| Unbounded list queries (users, agents, roles, teams, sdlcs) | Low | Various store files | Add pagination |
+| `ListHistoryEvents` has no limit parameter | Low | `activity.go:46` | Add limit param |
+| No query timing instrumentation | Info | — | Add driver hooks or middleware |
 
 ## Verdict
-The connection pool `SetMaxOpenConns(1)` is the dominant performance bottleneck — under any concurrent load it serialises all database access, causing cascading latency. This is likely intentional for SQLite WAL mode but is undocumented and will cause severe throughput degradation. Score drops from 62 to 58 as this finding is now confirmed.
+
+Score improves 58 to 61. SDLC refactor added correct indexes and transaction on role reordering but introduced two new N+1 patterns on hot paths. `SetMaxOpenConns(1)` remains.
 
 ## Changes since last assessment
-- `buildTreeDisplay` now called from `runBoard` — confirmed O(n), no performance regression
-- Connection pool limit confirmed at 1 (unchanged, newly flagged as critical)
-- `messages`/`goals` index gaps carried forward
+- New SDLC indexes added (+)
+- Transaction on role reordering (+)
+- Two new N+1 patterns (stage-role per stage, stage-order per child) (-)
+- `ReorderSdlcStages` without transaction (-)
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Connection pool | Critical | Increase `MaxOpenConns` to 25 for server mode; add comment explaining WAL trade-off |
-| `messages` indexes | High | Add FK indexes for `from_user_id`, `to_user_id` |
-| `goals` index | High | Add FK index for `project_id` |
-| `clone_of` index | Medium | Add index on `tickets.clone_of` |
-| Pagination defaults | Low | Reduce default LIMIT from 1000 to 100; document max-page-size |
+| Fix `listSdlcStages` N+1 | High | Single JOIN query |
+| Fix `recalculateParentLifecycle` N+1 | High | Batch `IN (...)` |
+| Wrap `ReorderSdlcStages` in transaction | Medium | `BeginTx`/`Commit` |
+| Add HTTP timeouts | Medium | Write/Read/IdleTimeout |
+| Fix WebSocket double-write | Medium | Single buffer write |
+| Add pagination to list queries | Low | LIMIT/OFFSET support |

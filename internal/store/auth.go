@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,6 +20,12 @@ var (
 	ErrUnauthorized       = errors.New("unauthorized")
 	ErrForbidden          = errors.New("forbidden")
 	ErrAdminRequired      = errors.New("user is not an admin")
+	ErrAccountLocked      = errors.New("account locked, try again later")
+)
+
+const (
+	maxFailedLoginAttempts = 10
+	lockoutDuration        = "+15 minutes"
 )
 
 type User struct {
@@ -76,6 +84,9 @@ func createUser(ctx context.Context, db *sql.DB, username, plainPassword, role s
 	if username == "" || plainPassword == "" {
 		return User{}, errors.New("username and password are required")
 	}
+	if len(plainPassword) < 8 {
+		return User{}, errors.New("password must be at least 8 characters")
+	}
 
 	hash, err := password.Hash(plainPassword)
 	if err != nil {
@@ -97,7 +108,9 @@ func createUser(ctx context.Context, db *sql.DB, username, plainPassword, role s
 
 func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword string) (User, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT `+userSelectColumns+`, password_hash
+		SELECT `+userSelectColumns+`, password_hash,
+		       COALESCE(failed_login_attempts, 0),
+		       COALESCE(locked_until, '')
 		FROM users
 		WHERE username = ?
 	`, username)
@@ -105,12 +118,14 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 	var user User
 	var hash string
 	var enabled int
+	var failedAttempts int
+	var lockedUntil string
 	if err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.EmailConfirmedAt,
 		&user.Role, &user.DisplayName, &enabled, &user.CreatedAt,
 		&user.UserType, &user.Description, &user.Status,
 		&user.LastSeen, &user.UpdatedAt,
-		&hash,
+		&hash, &failedAttempts, &lockedUntil,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, ErrInvalidCredentials
@@ -122,12 +137,38 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 		return User{}, ErrForbidden
 	}
 
+	// Check account lockout.
+	if lockedUntil != "" {
+		var locked int
+		err := db.QueryRowContext(ctx, `SELECT 1 WHERE datetime(?) > datetime('now')`, lockedUntil).Scan(&locked)
+		if err == nil {
+			// locked_until is in the future
+			return User{}, ErrAccountLocked
+		}
+		// Lock period expired — reset for a clean slate.
+		_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?`, user.ID)
+		failedAttempts = 0
+	}
+
 	ok, err := password.Verify(hash, plainPassword)
 	if err != nil {
 		return User{}, err
 	}
 	if !ok {
+		failedAttempts++
+		if failedAttempts >= maxFailedLoginAttempts {
+			_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = ?, locked_until = datetime('now', ?) WHERE user_id = ?`,
+				failedAttempts, lockoutDuration, user.ID)
+		} else {
+			_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = ? WHERE user_id = ?`,
+				failedAttempts, user.ID)
+		}
 		return User{}, ErrInvalidCredentials
+	}
+
+	// Successful authentication — reset failed attempts.
+	if failedAttempts > 0 {
+		_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?`, user.ID)
 	}
 	return user, nil
 }
@@ -139,10 +180,18 @@ func CreateSession(ctx context.Context, db *sql.DB, userID string) (string, erro
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 
+	expiryDays := 30
+	if v := os.Getenv("TICKET_SESSION_EXPIRY_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			expiryDays = n
+		}
+	}
+	expiryModifier := fmt.Sprintf("+%d days", expiryDays)
+
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO sessions (user_id, token, expires_at)
-		VALUES (?, ?, datetime('now', '+30 days'))
-	`, userID, token); err != nil {
+		VALUES (?, ?, datetime('now', ?))
+	`, userID, token, expiryModifier); err != nil {
 		return "", err
 	}
 	return token, nil
@@ -202,14 +251,17 @@ func GetUserByUsername(ctx context.Context, db *sql.DB, username string) (User, 
 	return scanUser(row.Scan)
 }
 
-func ListUsers(ctx context.Context, db *sql.DB) ([]User, error) {
+func ListUsers(ctx context.Context, db *sql.DB, limit int) ([]User, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL
 		ORDER BY username
-		LIMIT 1000
-	`)
+		LIMIT ?
+	`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -266,6 +318,10 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 		return err
 	}	// Nullify ticket creator reference (nullable FK).
 	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
+		return err
+	}
+	// Clear free-text assignee field that stores the username.
+	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET assignee = '' WHERE assignee = (SELECT username FROM users WHERE user_id = ?)`, userID); err != nil {
 		return err
 	}
 	// Remove personal data: sessions, memberships, time entries, messages, agent config.

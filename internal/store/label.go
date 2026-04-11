@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 )
 
 var ErrLabelNotFound = errors.New("label not found")
+var colorRegexp = regexp.MustCompile(`^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)$`)
 
 type Label struct {
 	ID        int64  `json:"label_id"`
@@ -23,6 +26,9 @@ func CreateLabel(ctx context.Context, db *sql.DB, projectID int64, name, color s
 		return Label{}, errors.New("label name is required")
 	}
 	color = strings.TrimSpace(color)
+	if color != "" && !colorRegexp.MatchString(color) {
+		return Label{}, fmt.Errorf("invalid label color %q: must be a hex color (e.g. #fff or #a1b2c3)", color)
+	}
 	result, err := db.ExecContext(ctx, `INSERT INTO labels (project_id, name, color) VALUES (?, ?, ?)`, projectID, name, color)
 	if err != nil {
 		return Label{}, err

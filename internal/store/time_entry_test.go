@@ -6,6 +6,7 @@ import (
 )
 
 func TestTimeEntryCRUD(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	adminID := testAdminID(t, db)
 

@@ -40,7 +40,7 @@ async function setupSDLCs(page) {
     sdlcs = wfs;
     renderBoard();
     activatePerspective("sdlcs");
-    renderSDLCList();
+    renderSdlcList();
   }, SAMPLE_WORKFLOWS);
 }
 
@@ -54,7 +54,7 @@ test.describe("sdlc management", () => {
 
   test("clicking sdlc card opens editor", async ({ page }) => {
     await mockAPI(page, [
-      ["**/api/sdlc/1", {
+      ["**/api/sdlcs/1", {
         sdlc_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
@@ -69,10 +69,10 @@ test.describe("sdlc management", () => {
       sdlcs = wfs;
       renderBoard();
       activatePerspective("sdlcs");
-      renderSDLCList();
+      renderSdlcList();
     }, SAMPLE_WORKFLOWS);
 
-    await page.evaluate(() => openSDLCEditor(sdlcs[0]));
+    await page.evaluate(() => openSdlcEditor(sdlcs[0]));
 
     await expect(page.locator("#sdlc-modal-overlay")).toBeVisible();
     await expect(page.locator("#sdlc-name")).toHaveValue("default");
@@ -81,7 +81,7 @@ test.describe("sdlc management", () => {
   test("create sdlc posts to API", async ({ page }) => {
     let postBody = null;
     await mockAPI(page, [
-      ["**/api/sdlc", (route) => {
+      ["**/api/sdlcs", (route) => {
         if (route.request().method() === "POST") {
           postBody = route.request().postDataJSON();
           return route.fulfill({
@@ -102,8 +102,8 @@ test.describe("sdlc management", () => {
       sdlcs = [];
       renderBoard();
       activatePerspective("sdlcs");
-      renderSDLCList();
-      openSDLCEditor();
+      renderSdlcList();
+      openSdlcEditor();
     });
 
     await page.fill("#sdlc-name", "custom");
@@ -118,7 +118,7 @@ test.describe("sdlc management", () => {
   test("delete sdlc calls DELETE", async ({ page }) => {
     let deleteCalled = false;
     await mockAPI(page, [
-      ["**/api/sdlc/1", (route) => {
+      ["**/api/sdlcs/1", (route) => {
         if (route.request().method() === "DELETE") {
           deleteCalled = true;
           return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
@@ -131,7 +131,7 @@ test.describe("sdlc management", () => {
         }
         return route.continue();
       }],
-      ["**/api/sdlc", []],
+      ["**/api/sdlcs", []],
       ["**/api/board/ws", (route) => route.abort()],
     ]);
     await page.goto("/");
@@ -143,8 +143,8 @@ test.describe("sdlc management", () => {
       sdlcs = wfs;
       renderBoard();
       activatePerspective("sdlcs");
-      renderSDLCList();
-      openSDLCEditor(sdlcs[0]);
+      renderSdlcList();
+      openSdlcEditor(sdlcs[0]);
     }, SAMPLE_WORKFLOWS);
 
     await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
@@ -160,7 +160,7 @@ test.describe("sdlc management", () => {
   test("add stage posts to API", async ({ page }) => {
     let stageBody = null;
     await mockAPI(page, [
-      ["**/api/sdlc/1/stages", (route) => {
+      ["**/api/sdlcs/1/stages", (route) => {
         if (route.request().method() === "POST") {
           stageBody = route.request().postDataJSON();
           return route.fulfill({
@@ -170,7 +170,7 @@ test.describe("sdlc management", () => {
         }
         return route.continue();
       }],
-      ["**/api/sdlc/1", {
+      ["**/api/sdlcs/1", {
         sdlc_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
@@ -185,8 +185,8 @@ test.describe("sdlc management", () => {
       sdlcs = wfs;
       renderBoard();
       activatePerspective("sdlcs");
-      renderSDLCList();
-      openSDLCEditor(sdlcs[0]);
+      renderSdlcList();
+      openSdlcEditor(sdlcs[0]);
     }, SAMPLE_WORKFLOWS);
 
     // Fill stage form and click add
@@ -204,7 +204,7 @@ test.describe("sdlc management", () => {
 
   test("sdlc stages are displayed after opening editor", async ({ page }) => {
     await mockAPI(page, [
-      ["**/api/sdlc/1", {
+      ["**/api/sdlcs/1", {
         sdlc_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
@@ -219,8 +219,8 @@ test.describe("sdlc management", () => {
       sdlcs = wfs;
       renderBoard();
       activatePerspective("sdlcs");
-      renderSDLCList();
-      openSDLCEditor(sdlcs[0]);
+      renderSdlcList();
+      openSdlcEditor(sdlcs[0]);
     }, SAMPLE_WORKFLOWS);
 
     await page.waitForTimeout(500);
@@ -237,12 +237,12 @@ test.describe("sdlc management", () => {
   test("close sdlc modal hides overlay", async ({ page }) => {
     await setupSDLCs(page);
 
-    await page.evaluate(() => openSDLCEditor(sdlcs[0]));
+    await page.evaluate(() => openSdlcEditor(sdlcs[0]));
 
-    // closeSDLCModal might not exist — check first
+    // closeSdlcModal might not exist — check first
     const closed = await page.evaluate(() => {
-      if (typeof closeSDLCModal === "function") {
-        closeSDLCModal();
+      if (typeof closeSdlcModal === "function") {
+        closeSdlcModal();
         return true;
       }
       const overlay = document.getElementById("sdlc-modal-overlay");
@@ -257,7 +257,7 @@ test.describe("sdlc management", () => {
 
   test("export button triggers download for existing sdlc", async ({ page }) => {
     await mockAPI(page, [
-      ["**/api/sdlc/1/export", {
+      ["**/api/sdlcs/1/export", {
         name: "default",
         description: "Standard lifecycle",
         stages: [
@@ -265,7 +265,7 @@ test.describe("sdlc management", () => {
           { stage_name: "develop", description: "", role: "Lead Engineer", sort_order: 1 },
         ],
       }],
-      ["**/api/sdlc/1", {
+      ["**/api/sdlcs/1", {
         sdlc_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
@@ -280,8 +280,8 @@ test.describe("sdlc management", () => {
       sdlcs = wfs;
       renderBoard();
       activatePerspective("sdlcs");
-      renderSDLCList();
-      openSDLCEditor(sdlcs[0]);
+      renderSdlcList();
+      openSdlcEditor(sdlcs[0]);
     }, SAMPLE_WORKFLOWS);
 
     const exportBtn = page.locator("#sdlc-export");

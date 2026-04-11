@@ -1,46 +1,64 @@
 # DevOps
 
-**Score: 76/100** (was 81)
+**Score: 82/100** (was 76)
 
 ## What is being assessed
-Build pipeline (Makefile targets, binary naming), Docker quality (multi-stage, Alpine version, non-root user, health check), Compose (resource limits, health checks, network segmentation), CI/CD (Go version alignment, linting, govulncheck, coverage thresholds), release pipeline (cross-platform, checksums), and secrets management.
+
+Build tooling, containerisation, compose configuration, CI/CD pipeline, Go version alignment, linting, vulnerability scanning, coverage enforcement, secrets handling, and version management.
 
 ## Methodology
-Read `Makefile`, `Dockerfile`, `compose.yaml`, `.github/sdlcs/makefile.yaml`, `homebrew/ticket.rb.tmpl`. Searched for old `ticket` binary references, checked CI pipeline steps.
+
+Read `Makefile`, `Dockerfile`, `compose.yaml`, `.github/workflows/makefile.yaml`, `.golangci.yml`, `go.mod`, `.gitignore`, `.dockerignore`, `deploy/entrypoint.sh`, `cmd/tk/VERSION`.
 
 ## Findings
 
 ### Passing checks
-- Binary correctly builds to `./bin/tk` (`Makefile:47`: `go build -o ./bin/tk ./cmd/ticket`)
-- Release tarballs named `tk_VERSION_*` for all 4 platforms (`Makefile:136-156`)
-- Homebrew formula updated: URLs use `tk_VERSION_*`, `bin.install "tk"`, test calls `tk version` (`homebrew/ticket.rb.tmpl:11,16,23,28,34,38`)
-- Dockerfile: multi-stage build, Alpine 3.21 pinned, non-root user `ticket`, HEALTHCHECK configured (`Dockerfile:2,15,20-22,30-31`)
-- compose.yaml: resource limits set (`memory: 512m`, `cpus: "1.0"`), health check configured (`compose.yaml:12-24`)
-- CI: Go version from `go.mod` (`go-version-file: 'go.mod'`), `govulncheck` step present (`.github/sdlcs/makefile.yaml:19,33-34`)
-- Coverage thresholds enforced per package in `Makefile:100-117` (cmd 55%, libticket 65%, libtickethttp 75%, store 70%, config 70%)
-- SHA256 checksums generated for release artifacts (`Makefile:158-164`)
-- SBOM via CycloneDX in release pipeline (`Makefile:166-169`)
-- Automated release on tag push (`.github/sdlcs/makefile.yaml:84-88`)
+- All required Makefile targets present: `build`, `test`, `lint`, `setup`, `docker-build`, `docker-up`, `docker-down`
+- Multi-stage Dockerfile: `golang:1.26-alpine` builder, `alpine:3.21` runtime — `Dockerfile:2,15`
+- Non-root USER — `Dockerfile:9-11`
+- Dockerfile HEALTHCHECK — `Dockerfile:22-24`
+- Compose resource limits: `memory: 512m`, `cpus: 1.0` — `compose.yaml:13-18`
+- Compose healthcheck mirrors Dockerfile — `compose.yaml:19-24`
+- CI/CD pipeline triggers on push/PR to `main` and `develop` — `.github/workflows/makefile.yaml`
+- Go version alignment: both go.mod and Dockerfile use Go 1.26
+- `govulncheck` in CI — `makefile.yaml:30`
+- `gosec` in CI — `makefile.yaml:28`
+- Coverage thresholds enforced per-package in CI — `makefile.yaml:25`
+- Secrets via `secrets.*` not hardcoded — `makefile.yaml:49,87`
+- `.gitignore` covers secrets; `.dockerignore` present and well-scoped
+- SBOM generation via `cyclonedx-gomod` in release pipeline
+- Version management: `cmd/tk/VERSION` auto-bumped
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `cmd/tk-test/main.go` defaults to `./bin/ticket`, not `./bin/tk` | High | `cmd/tk-test/main.go:37,42,49` | Change default from `bin/ticket` to `bin/tk`; update usage strings |
-| `golangci-lint` not run in CI pipeline | Medium | `.github/sdlcs/makefile.yaml` | Add `make lint` step between govulncheck and test |
-| Docker image tagged as `ticket:` not `tk:` | Medium | `Makefile:222,225-228` | Rename docker build/push targets to use `tk:` image tag |
+| `.golangci.yml` `go: "1.23"` is stale — should be `"1.26"` | Medium | `.golangci.yml:3` | Update to `"1.26"` |
+| `make lint` not invoked in CI pipeline | Medium | `.github/workflows/makefile.yaml` | Add `make lint` step |
+| GitHub Actions not pinned to SHA digests | Medium | `makefile.yaml:15,17,45,52,75` | Pin to `@sha256:...` |
+| Single service, no network segmentation in compose | Low | `compose.yaml` | Add named network |
+| Docker base images not pinned to digests | Low | `Dockerfile:2,15` | Add `@sha256:...` |
+| No Go module/build cache in CI | Low | `makefile.yaml` | Enable `cache: true` on `setup-go` |
+| `docker-push` re-tags from local rather than GHCR name | Low | `Makefile:225-228` | Use GHCR name throughout |
+| No guard for duplicate VERSION release | Info | `makefile.yaml:40-88` | Check if release already exists |
 
 ## Verdict
-The binary rename from `ticket` to `tk` is complete in all the primary surfaces (Makefile, Dockerfile, Homebrew, docs). However, `cmd/tk-test/main.go` was missed — its default flag value and usage strings still reference `./bin/ticket`, breaking executable documentation tests unless `-ticket ./bin/tk` is passed explicitly. The score regresses from 81 to 76 for this issue plus the missing golangci-lint CI step.
+
+Improved from 76 to 82. Dockerfile, compose, release pipeline, and security scanning are solid. Top items: add `make lint` to CI, fix stale `.golangci.yml` Go version, pin Actions to SHA digests.
 
 ## Changes since last assessment
-- Binary rename complete: `Makefile`, `Dockerfile`, `deploy/entrypoint.sh`, `homebrew/ticket.rb.tmpl` all updated (commit `c2c1353`)
-- All documentation updated to reference `tk` binary
-- **NEW ISSUE FOUND**: `cmd/tk-test/main.go` still defaults to `./bin/ticket`
-- CI pipeline unchanged since v0.1.737
+- Docker image tag fixed — `Makefile:222`
+- `gosec` + `govulncheck` added to CI
+- SBOM generation integrated in release pipeline
+- `.dockerignore` added
+- Compose resource limits added
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Fix `tk-test` default path | High | `bin = "bin/tk"` at `cmd/tk-test/main.go:49`; update usage strings on lines 37, 42 |
-| Add golangci-lint to CI | Medium | Add `- run: make lint` step after `govulncheck` in `makefile.yaml` |
-| Rename docker image tag | Medium | Change `ticket:` to `tk:` in `Makefile:222,225-228` docker targets |
+| Add `make lint` to CI | Medium | `.github/workflows/makefile.yaml` |
+| Update `.golangci.yml` Go version | Medium | `.golangci.yml:3` |
+| Pin GitHub Actions to SHA | Medium | `makefile.yaml` |
+| Enable Go cache in CI | Low | `setup-go` `cache: true` |
+| Pin Docker base images | Low | `Dockerfile:2,15` |

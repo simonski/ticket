@@ -1,6 +1,6 @@
 .PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
 
-VERSION_FILE  := cmd/ticket/VERSION
+VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
 GITHUB_REPO   := simonski/ticket
 GHCR_IMAGE    := ghcr.io/simonski/ticket
@@ -44,7 +44,7 @@ help:
 build: 
 	@$(MAKE) bump-version
 	@mkdir -p bin
-	go build -o ./bin/tk ./cmd/ticket
+	go build -o ./bin/tk ./cmd/tk
 
 setup: setup-go setup-node setup-playwright
 
@@ -79,27 +79,28 @@ bump-version:
 	fi
 
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
-INTEGRATION_TEST_PKGS := ./cmd/ticket ./internal/client ./internal/server ./internal/store ./libticket ./libtickethttp
+INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket ./libtickethttp
 
 test: test-unit test-integration test-playwright
 
 test-go:
-	go test ./...
+	TICKET_FAST_HASH=1 go test ./...
 
 test-unit:
-	go test $(UNIT_TEST_PKGS)
+	TICKET_FAST_HASH=1 go test $(UNIT_TEST_PKGS)
 
 test-integration:
-	go test $(INTEGRATION_TEST_PKGS)
+	TICKET_FAST_HASH=1 go test $(INTEGRATION_TEST_PKGS)
 
 test-go-cover:
-	@set -e; \
+	@export TICKET_FAST_HASH=1; set -e; \
 	for entry in \
-		"./cmd/ticket 55" \
+		"./cmd/tk 55" \
 		"./libticket 65" \
 		"./libtickethttp 75" \
 		"./internal/client 55" \
 		"./internal/store 70" \
+		"./internal/server 55" \
 		"./internal/config 70"; do \
 		pkg=$${entry% *}; \
 		min=$${entry#* }; \
@@ -149,7 +150,7 @@ release-build:
 		outdir=$(DIST_DIR)/$$name; \
 		mkdir -p $$outdir; \
 		printf "  %-32s" "$$os/$$arch"; \
-		GOOS=$$os GOARCH=$$arch go build -o $$outdir/tk ./cmd/ticket && echo "ok" || exit 1; \
+		GOOS=$$os GOARCH=$$arch go build -o $$outdir/tk ./cmd/tk && echo "ok" || exit 1; \
 		tar -czf $(DIST_DIR)/$${name}.tar.gz -C $$outdir tk; \
 		rm -rf $$outdir; \
 	done

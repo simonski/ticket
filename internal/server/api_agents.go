@@ -178,7 +178,7 @@ func (r *router) registerAgentHandlers() {
 			vlog("agent=%q authenticated (id=%s)", agent.Username, agent.ID)
 			projectID := payload.ProjectID
 			if payload.TicketID == nil && projectID == 0 {
-				projects, err := store.ListProjects(r.Context(), db)
+				projects, err := store.ListProjects(r.Context(), db, 0)
 				if err != nil {
 					writeError(w, http.StatusInternalServerError, err.Error())
 					return

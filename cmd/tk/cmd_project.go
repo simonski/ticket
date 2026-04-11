@@ -189,9 +189,22 @@ func runProject(args []string) error {
 		if val != "true" && val != "false" {
 			return fmt.Errorf("expected true or false, got %q", val)
 		}
-		_ = projectID
-		_ = cfg
-		fmt.Println("not yet implemented")
+		draft := val == "true"
+		pid := *projectID
+		if pid == 0 {
+			if cfg.ProjectID == "" {
+				return errors.New("no current project set; use: tk project use <id>")
+			}
+			project, err := svc.GetProject(cfg.ProjectID)
+			if err != nil {
+				return err
+			}
+			pid = project.ID
+		}
+		if err := svc.SetProjectDefaultDraft(pid, draft); err != nil {
+			return err
+		}
+		fmt.Printf("default_draft set to %v\n", draft)
 		return nil
 	case "sdlc":
 		return runProjectSdlc(cfg, svc, args[1:])

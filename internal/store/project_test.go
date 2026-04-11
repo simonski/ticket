@@ -6,6 +6,7 @@ import (
 )
 
 func TestCreateListAndGetProject(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "Portal work", "Ship the portal safely.", "")
@@ -16,7 +17,7 @@ func TestCreateListAndGetProject(t *testing.T) {
 		t.Fatalf("CreateProject().AcceptanceCriteria = %q", project.AcceptanceCriteria)
 	}
 
-	projects, err := ListProjects(context.Background(), db)
+	projects, err := ListProjects(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -38,6 +39,7 @@ func TestCreateListAndGetProject(t *testing.T) {
 }
 
 func TestUpdateAndEnableDisableProject(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "Portal work", "", "")
@@ -71,6 +73,7 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 }
 
 func TestGetProjectByPrefix(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
@@ -111,6 +114,7 @@ func TestGetProjectByPrefix(t *testing.T) {
 }
 
 func TestProjectVisibilityAndVisibleListing(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	admin, err := GetUserByUsername(context.Background(), db, "admin")
@@ -180,6 +184,7 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 }
 
 func TestRenameProjectPrefix(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
@@ -282,6 +287,7 @@ func TestRenameProjectPrefix(t *testing.T) {
 }
 
 func TestDeleteProject(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Delete Me", "", "", "")
 	if err != nil {

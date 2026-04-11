@@ -37,7 +37,7 @@ gh repo create simonski/homebrew-tap --public --source=. --push
    ```bash
    cp homebrew/ticket.rb ../homebrew-tap/Formula/ticket.rb
    cd ../homebrew-tap
-   git commit -am "ticket $(cat ../ticket/cmd/ticket/VERSION | tr -d '[:space:]')"
+   git commit -am "ticket $(cat ../ticket/cmd/tk/VERSION | tr -d '[:space:]')"
    git push
    ```
 

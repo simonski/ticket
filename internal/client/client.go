@@ -181,7 +181,7 @@ func (c *Client) ListUsers() ([]store.User, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListUsers(context.Background(), db)
+		return store.ListUsers(context.Background(), db, 0)
 	}
 	var users []store.User
 	err := c.doJSON(http.MethodGet, "/api/users", nil, &users)
@@ -235,7 +235,7 @@ func (c *Client) ListRoles() ([]store.Role, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListRoles(context.Background(), db)
+		return store.ListRoles(context.Background(), db, 0)
 	}
 	var roles []store.Role
 	err := c.doJSON(http.MethodGet, "/api/roles", nil, &roles)
@@ -451,7 +451,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 			projectID = 0
 		}
 		if projectID == 0 {
-			projects, err := store.ListProjects(context.Background(), db)
+			projects, err := store.ListProjects(context.Background(), db, 0)
 			if err != nil {
 				return AgentWorkResponse{}, err
 			}
@@ -590,7 +590,7 @@ func (c *Client) ListProjects() ([]store.Project, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListProjects(context.Background(), db)
+		return store.ListProjects(context.Background(), db, 0)
 	}
 	var projects []store.Project
 	err := c.doJSON(http.MethodGet, "/api/projects", nil, &projects)
@@ -650,6 +650,18 @@ func (c *Client) SetProjectEnabled(id int64, enabled bool) (store.Project, error
 	var project store.Project
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/%s", id, action), nil, &project)
 	return project, err
+}
+
+func (c *Client) SetProjectDefaultDraft(projectID int64, draft bool) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		return store.SetProjectDefaultDraft(context.Background(), db, projectID, draft)
+	}
+	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/projects/%d/set-draft", projectID), map[string]bool{"draft": draft}, nil)
 }
 
 func (c *Client) DeleteProject(id int64) error {
@@ -765,7 +777,7 @@ func (c *Client) ListTeams() ([]store.Team, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListTeams(context.Background(), db)
+		return store.ListTeams(context.Background(), db, 0)
 	}
 	var teams []store.Team
 	err := c.doJSON(http.MethodGet, "/api/teams", nil, &teams)
@@ -1618,11 +1630,57 @@ func (c *Client) AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.Sdl
 			return store.SdlcStage{}, err
 		}
 		defer db.Close()
-		return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.SortOrder)
+		return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
 	}
 	var stage store.SdlcStage
 	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages", sdlcID), request, &stage)
 	return stage, err
+}
+
+func (c *Client) UpdateSdlcStage(stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.SdlcStage{}, err
+		}
+		defer db.Close()
+		return store.UpdateSdlcStage(context.Background(), db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
+	}
+	var stage store.SdlcStage
+	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), request, &stage)
+	return stage, err
+}
+
+func (c *Client) GetSdlcStage(stageID int64) (store.SdlcStage, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.SdlcStage{}, err
+		}
+		defer db.Close()
+		return store.GetSdlcStage(context.Background(), db, stageID)
+	}
+	var stage store.SdlcStage
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), nil, &stage)
+	return stage, err
+}
+
+func (c *Client) ListSdlcStages(sdlcID int64) ([]store.SdlcStage, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		defer db.Close()
+		return store.ListSdlcStages(context.Background(), db, sdlcID)
+	}
+	// Derive from GetSdlc
+	var wf store.SdlcWithStages
+	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/%d", sdlcID), nil, &wf)
+	if err != nil {
+		return nil, err
+	}
+	return wf.Stages, nil
 }
 
 func (c *Client) RemoveSdlcStage(stageID int64) error {
@@ -1686,7 +1744,7 @@ func (c *Client) AddSdlcStageRole(sdlcID, stageID, roleID int64) error {
 		defer db.Close()
 		return store.AddSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
 	}
-	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages/%d/roles", sdlcID, stageID), map[string]int64{"role_id": roleID}, nil)
+	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", sdlcID, stageID), map[string]int64{"role_id": roleID}, nil)
 }
 
 func (c *Client) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
@@ -1698,7 +1756,7 @@ func (c *Client) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
 		defer db.Close()
 		return store.RemoveSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/%d/stages/%d/roles/%d", sdlcID, stageID, roleID), nil, nil)
+	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d/%d", sdlcID, stageID, roleID), nil, nil)
 }
 
 func (c *Client) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error {
@@ -1710,7 +1768,7 @@ func (c *Client) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) e
 		defer db.Close()
 		return store.ReorderSdlcStageRoles(context.Background(), db, sdlcID, stageID, roleIDs)
 	}
-	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/%d/stages/%d/roles/reorder", sdlcID, stageID), map[string][]int64{"role_ids": roleIDs}, nil)
+	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", sdlcID, stageID), map[string][]int64{"role_ids": roleIDs}, nil)
 }
 
 func (c *Client) CompleteTicket(id string, message string) (store.Ticket, error) {

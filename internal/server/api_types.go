@@ -11,7 +11,6 @@ type agentRequest struct {
 	Password string `json:"password,omitempty"`
 }
 
-
 type projectRequest struct {
 	Prefix             string `json:"prefix"`
 	Title              string `json:"title"`
@@ -21,7 +20,7 @@ type projectRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
-	SdlcID         *int64 `json:"sdlc_id,omitempty"`
+	SdlcID             *int64 `json:"sdlc_id,omitempty"`
 }
 
 type roleRequest struct {
@@ -37,9 +36,10 @@ type sdlcRequest struct {
 }
 
 type sdlcStageRequest struct {
-	StageName   string `json:"stage_name"`
-	Description string `json:"description"`
-	SortOrder   int    `json:"sort_order"`
+	StageName          string `json:"stage_name"`
+	Description        string `json:"description"`
+	AcceptanceCriteria string `json:"acceptance_criteria"`
+	SortOrder          int    `json:"sort_order"`
 }
 
 type sdlcReorderRequest struct {
@@ -66,21 +66,21 @@ type storyRequest struct {
 type ticketRequest struct {
 	ProjectID          int64   `json:"project_id"`
 	ParentID           *string `json:"parent_id"`
-	Type               string `json:"type"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	Status             string `json:"status"`
-	Stage              string `json:"stage"`
-	State              string `json:"state"`
-	Priority           int    `json:"priority"`
-	Order              int    `json:"order"`
-	EstimateEffort     int    `json:"estimate_effort"`
-	EstimateComplete   string `json:"estimate_complete,omitempty"`
-	Assignee           string `json:"assignee"`
-	Message            string `json:"message,omitempty"`
+	Type               string  `json:"type"`
+	Title              string  `json:"title"`
+	Description        string  `json:"description"`
+	AcceptanceCriteria string  `json:"acceptance_criteria"`
+	GitRepository      string  `json:"git_repository"`
+	GitBranch          string  `json:"git_branch"`
+	Status             string  `json:"status"`
+	Stage              string  `json:"stage"`
+	State              string  `json:"state"`
+	Priority           int     `json:"priority"`
+	Order              int     `json:"order"`
+	EstimateEffort     int     `json:"estimate_effort"`
+	EstimateComplete   string  `json:"estimate_complete,omitempty"`
+	Assignee           string  `json:"assignee"`
+	Message            string  `json:"message,omitempty"`
 }
 
 type messageRequest struct {
@@ -102,10 +102,10 @@ type dependencyRequest struct {
 }
 
 type ticketClaimRequest struct {
-	ProjectID int64  `json:"project_id"`
+	ProjectID int64   `json:"project_id"`
 	TicketID  *string `json:"ticket_id,omitempty"`
-	TicketRef string `json:"ticket_ref,omitempty"`
-	DryRun    bool   `json:"dry_run"`
+	TicketRef string  `json:"ticket_ref,omitempty"`
+	DryRun    bool    `json:"dry_run"`
 }
 
 type authResponse struct {

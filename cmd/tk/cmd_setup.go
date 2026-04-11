@@ -12,9 +12,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"net/http"
 
@@ -1140,5 +1143,28 @@ func runServer(args []string) error {
 	fmt.Printf("VERSION    %s\n", strings.TrimSpace(embeddedVersion))
 	fmt.Printf("TICKETDB   %s\n\n", *dbPath)
 	fmt.Printf("serving ticket on http://localhost%s\n", listenAddr)
-	return srv.ListenAndServe()
+
+	// Run the server in a goroutine so we can listen for shutdown signals.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+
+	select {
+	case err := <-errCh:
+		// Server stopped on its own (e.g. bind error).
+		return err
+	case sig := <-quit:
+		fmt.Printf("\nreceived %s, shutting down gracefully...\n", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			return fmt.Errorf("graceful shutdown failed: %w", err)
+		}
+		fmt.Println("server stopped")
+		return nil
+	}
 }

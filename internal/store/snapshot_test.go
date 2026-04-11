@@ -9,6 +9,7 @@ import (
 )
 
 func TestSnapshotExportImportPreservesIDs(t *testing.T) {
+	t.Parallel()
 	sourcePath := filepath.Join(t.TempDir(), "source.db")
 	if err := Init(sourcePath, "admin", "password"); err != nil {
 		t.Fatalf("Init(source) error = %v", err)
@@ -136,6 +137,7 @@ func TestSnapshotExportImportPreservesIDs(t *testing.T) {
 }
 
 func TestNormalizeExportValue(t *testing.T) {
+	t.Parallel()
 	// []byte -> string
 	if got := normalizeExportValue([]byte("hello")); got != "hello" {
 		t.Fatalf("normalizeExportValue([]byte) = %v, want hello", got)
@@ -152,6 +154,7 @@ func TestNormalizeExportValue(t *testing.T) {
 }
 
 func TestNormalizeImportValue(t *testing.T) {
+	t.Parallel()
 	// json.Number integer
 	n := json.Number("42")
 	if got := normalizeImportValue(n); got != int64(42) {

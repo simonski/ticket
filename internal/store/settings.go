@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 const (
@@ -19,7 +20,7 @@ type ChatLimits struct {
 func RegistrationEnabled(ctx context.Context, db *sql.DB) (bool, error) {
 	var raw string
 	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'registration_enabled'`).Scan(&raw); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil
 		}
 		return false, err
@@ -42,7 +43,7 @@ func SetRegistrationEnabled(ctx context.Context, db *sql.DB, enabled bool) error
 func ChatEnabled(ctx context.Context, db *sql.DB) (bool, error) {
 	var raw string
 	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'chat_enabled'`).Scan(&raw); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return DefaultChatEnabled, nil
 		}
 		return false, err
@@ -72,7 +73,7 @@ func ChatLimitsConfig(ctx context.Context, db *sql.DB) (ChatLimits, error) {
 		if parsed := parsePositiveInt(rawConnections); parsed > 0 {
 			limits.MaxConnections = parsed
 		}
-	} else if err != sql.ErrNoRows {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return limits, err
 	}
 	var rawDuration string
@@ -80,7 +81,7 @@ func ChatLimitsConfig(ctx context.Context, db *sql.DB) (ChatLimits, error) {
 		if parsed := parsePositiveInt(rawDuration); parsed > 0 {
 			limits.MaxDurationMin = parsed
 		}
-	} else if err != sql.ErrNoRows {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return limits, err
 	}
 	return limits, nil

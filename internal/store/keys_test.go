@@ -6,6 +6,7 @@ import (
 )
 
 func TestTicketTypeCode(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input string
 		want  string
@@ -37,6 +38,7 @@ func TestTicketTypeCode(t *testing.T) {
 }
 
 func TestDeriveProjectPrefix(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input string
 		want  string
@@ -55,6 +57,7 @@ func TestDeriveProjectPrefix(t *testing.T) {
 }
 
 func TestGenerateTicketKey(t *testing.T) {
+	t.Parallel()
 	// Default prefix (TK) uses simple format
 	key, err := generateTicketKey("TK", "task", 1)
 	if err != nil {
@@ -85,6 +88,7 @@ func TestGenerateTicketKey(t *testing.T) {
 }
 
 func TestValidateProjectPrefix(t *testing.T) {
+	t.Parallel()
 	if err := validateProjectPrefix("ABC"); err != nil {
 		t.Fatalf("validateProjectPrefix(ABC) error = %v", err)
 	}
@@ -97,6 +101,7 @@ func TestValidateProjectPrefix(t *testing.T) {
 }
 
 func TestNextUniqueProjectPrefix(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	// TK is already used by default project

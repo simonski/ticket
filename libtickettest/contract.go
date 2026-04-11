@@ -327,7 +327,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("RemoveDependency(missing) error = nil")
 		}
 
-		if _, err := svc.CreateUser("someone-else", "secret"); err != nil {
+		if _, err := svc.CreateUser("someone-else", "secret12"); err != nil {
 			t.Fatalf("CreateUser(someone-else) error = %v", err)
 		}
 
@@ -360,7 +360,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
-		if _, err := svc.CreateUser("bob", "secret"); err != nil {
+		if _, err := svc.CreateUser("bob", "secret12"); err != nil {
 			t.Fatalf("CreateUser(bob) error = %v", err)
 		}
 		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
@@ -521,7 +521,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("user-management-and-request-no-work", func(t *testing.T) {
 		svc := factory(t)
 
-		user, err := svc.CreateUser("alice", "secret")
+		user, err := svc.CreateUser("alice", "secret12")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
@@ -777,9 +777,9 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		svc := factory(t)
 
 		role, err := svc.CreateRole(libticket.RoleRequest{
-			Title:      "Tester",
-			Description: "Ensure quality",
-			AcceptanceCriteria:      "Find bugs",
+			Title:              "Tester",
+			Description:        "Ensure quality",
+			AcceptanceCriteria: "Find bugs",
 		})
 		if err != nil {
 			t.Fatalf("CreateRole() error = %v", err)
@@ -803,9 +803,9 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		updated, err := svc.UpdateRole(role.ID, libticket.RoleRequest{
-			Title:      "Senior Tester",
-			Description: "Lead quality",
-			AcceptanceCriteria:      "Zero defects",
+			Title:              "Senior Tester",
+			Description:        "Lead quality",
+			AcceptanceCriteria: "Zero defects",
 		})
 		if err != nil {
 			t.Fatalf("UpdateRole() error = %v", err)
@@ -817,6 +817,127 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err := svc.DeleteRole(role.ID); err != nil {
 			t.Fatalf("DeleteRole() error = %v", err)
 		}
+	})
+
+	t.Run("stage-role-crud", func(t *testing.T) {
+		svc := factory(t)
+
+		// Create an SDLC
+		wf, err := svc.CreateSdlc(libticket.SdlcRequest{
+			Name:        "stage-role-sdlc",
+			Description: "sdlc for stage-role tests",
+		})
+		if err != nil {
+			t.Fatalf("CreateSdlc() error = %v", err)
+		}
+
+		// Add two stages
+		stage1, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+			StageName: "design",
+			SortOrder: 0,
+		})
+		if err != nil {
+			t.Fatalf("AddSdlcStage(design) error = %v", err)
+		}
+
+		_, err = svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+			StageName: "develop",
+			SortOrder: 1,
+		})
+		if err != nil {
+			t.Fatalf("AddSdlcStage(develop) error = %v", err)
+		}
+
+		// Create two roles
+		roleA, err := svc.CreateRole(libticket.RoleRequest{
+			Title:       "Analyst",
+			Description: "Requirements analysis",
+		})
+		if err != nil {
+			t.Fatalf("CreateRole(Analyst) error = %v", err)
+		}
+
+		roleB, err := svc.CreateRole(libticket.RoleRequest{
+			Title:       "Developer",
+			Description: "Implementation",
+		})
+		if err != nil {
+			t.Fatalf("CreateRole(Developer) error = %v", err)
+		}
+
+		// Assign both roles to stage1
+		if err := svc.AddSdlcStageRole(wf.ID, stage1.ID, roleA.ID); err != nil {
+			t.Fatalf("AddSdlcStageRole(Analyst) error = %v", err)
+		}
+		if err := svc.AddSdlcStageRole(wf.ID, stage1.ID, roleB.ID); err != nil {
+			t.Fatalf("AddSdlcStageRole(Developer) error = %v", err)
+		}
+
+		// Verify roles via GetSdlc
+		got, err := svc.GetSdlc(wf.ID)
+		if err != nil {
+			t.Fatalf("GetSdlc() error = %v", err)
+		}
+		var designStage *store.SdlcStage
+		for i := range got.Stages {
+			if got.Stages[i].StageName == "design" {
+				designStage = &got.Stages[i]
+				break
+			}
+		}
+		if designStage == nil {
+			t.Fatal("GetSdlc() missing design stage")
+		}
+		if len(designStage.Roles) != 2 {
+			t.Fatalf("design stage roles len = %d, want 2", len(designStage.Roles))
+		}
+		if designStage.Roles[0].ID != roleA.ID {
+			t.Fatalf("design stage roles[0].ID = %d, want %d", designStage.Roles[0].ID, roleA.ID)
+		}
+
+		// Reorder roles: swap order
+		if err := svc.ReorderSdlcStageRoles(wf.ID, stage1.ID, []int64{roleB.ID, roleA.ID}); err != nil {
+			t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+		}
+		reordered, err := svc.GetSdlc(wf.ID)
+		if err != nil {
+			t.Fatalf("GetSdlc() after reorder error = %v", err)
+		}
+		for i := range reordered.Stages {
+			if reordered.Stages[i].StageName == "design" {
+				designStage = &reordered.Stages[i]
+				break
+			}
+		}
+		if designStage.Roles[0].ID != roleB.ID {
+			t.Fatalf("after reorder roles[0].ID = %d, want %d", designStage.Roles[0].ID, roleB.ID)
+		}
+
+		// Remove roleA from stage
+		if err := svc.RemoveSdlcStageRole(wf.ID, stage1.ID, roleA.ID); err != nil {
+			t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+		}
+		afterRemove, err := svc.GetSdlc(wf.ID)
+		if err != nil {
+			t.Fatalf("GetSdlc() after remove error = %v", err)
+		}
+		for i := range afterRemove.Stages {
+			if afterRemove.Stages[i].StageName == "design" {
+				designStage = &afterRemove.Stages[i]
+				break
+			}
+		}
+		if len(designStage.Roles) != 1 {
+			t.Fatalf("after remove roles len = %d, want 1", len(designStage.Roles))
+		}
+		if designStage.Roles[0].ID != roleB.ID {
+			t.Fatalf("after remove roles[0].ID = %d, want %d", designStage.Roles[0].ID, roleB.ID)
+		}
+
+		// Cleanup
+		_ = svc.DeleteSdlc(wf.ID)
+		_ = svc.DeleteRole(roleA.ID)
+		_ = svc.DeleteRole(roleB.ID)
 	})
 
 	t.Run("team-crud-and-membership", func(t *testing.T) {
@@ -853,7 +974,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Team members
-		user, err := svc.CreateUser("team-member", "secret")
+		user, err := svc.CreateUser("team-member", "secret12")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
@@ -1050,7 +1171,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		countBefore := len(membersBefore)
 
 		// Create a user to add as member
-		user, err := svc.CreateUser("projmember", "pass123")
+		user, err := svc.CreateUser("projmember", "pass1234!")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
@@ -1464,7 +1585,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("reset-user-password", func(t *testing.T) {
 		svc := factory(t)
 
-		user, err := svc.CreateUser("resetme", "oldpass")
+		user, err := svc.CreateUser("resetme", "oldpass1")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
@@ -1472,7 +1593,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateUser().Username = %q", user.Username)
 		}
 
-		updated, err := svc.ResetUserPassword("resetme", "newpass")
+		updated, err := svc.ResetUserPassword("resetme", "newpass1")
 		if err != nil {
 			t.Fatalf("ResetUserPassword() error = %v", err)
 		}

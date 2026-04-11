@@ -3,6 +3,7 @@ package store
 import "testing"
 
 func TestValidStage(t *testing.T) {
+	t.Parallel()
 	for _, stage := range []string{StageDesign, StageDevelop, StageTest, StageDone} {
 		if !ValidStage(stage) {
 			t.Fatalf("ValidStage(%q) = false, want true", stage)
@@ -14,6 +15,7 @@ func TestValidStage(t *testing.T) {
 }
 
 func TestValidState(t *testing.T) {
+	t.Parallel()
 	for _, state := range []string{StateIdle, StateActive, StateSuccess, StateFail, StateComplete} {
 		if !ValidState(state) {
 			t.Fatalf("ValidState(%q) = false, want true", state)
@@ -25,6 +27,7 @@ func TestValidState(t *testing.T) {
 }
 
 func TestValidLifecycle(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		stage string
 		state string
@@ -51,12 +54,14 @@ func TestValidLifecycle(t *testing.T) {
 }
 
 func TestRenderLifecycleStatus(t *testing.T) {
+	t.Parallel()
 	if got := RenderLifecycleStatus(StageDesign, StateIdle); got != "design/idle" {
 		t.Fatalf("RenderLifecycleStatus() = %q", got)
 	}
 }
 
 func TestParseLifecycleStatus(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input     string
 		wantStage string

@@ -601,7 +601,7 @@ func printAgentTable(statuses []store.AgentStatus) {
 		}
 		rows = append(rows, fmt.Sprintf("%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s", s.Agent.ID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen))
 	}
-	printBoxTable("UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tWORKFLOW\tROLE\tLAST_SEEN", rows)
+	printBoxTable("UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tSDLC\tROLE\tLAST_SEEN", rows)
 }
 
 func printUserTable(users []store.User) {
@@ -687,18 +687,28 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 	}
 	defer os.Remove(promptFile)
 
-	// Build the LLM command string.
-	var llmCmd string
+	// Build the LLM command. Known agents use sh -c for piping; the default
+	// case avoids sh -c to prevent command injection via the --llm flag.
+	var cmd *exec.Cmd
+	var llmCmd string // for display only
 	switch agent {
 	case "claude":
 		llmCmd = fmt.Sprintf("cat %s | claude -p --model claude-sonnet-4-5", promptFile)
+		cmd = exec.Command("sh", "-c", llmCmd) //nolint:gosec // hardcoded trusted command
 	case "codex":
 		llmCmd = fmt.Sprintf("codex exec < %s", promptFile)
+		cmd = exec.Command("sh", "-c", llmCmd) //nolint:gosec // hardcoded trusted command
 	default:
 		llmCmd = fmt.Sprintf("%s -p < %s", agent, promptFile)
+		f, err := os.Open(promptFile)
+		if err != nil {
+			return "", fmt.Errorf("open prompt file: %w", err)
+		}
+		defer f.Close()
+		cmd = exec.Command(agent, "-p") // #nosec G204 -- agent comes from --llm flag; no shell interpretation
+		cmd.Stdin = f
 	}
 
-	cmd := exec.Command("sh", "-c", llmCmd) // #nosec G204 -- llmCmd is built from trusted agent configuration, not user-supplied input
 	if stream {
 		fmt.Printf("> %s\n\n", llmCmd)
 	}

@@ -426,6 +426,42 @@ func (r *router) registerProjectHandlers() {
 			return
 		}
 
+		if len(parts) == 2 && parts[1] == "set-draft" && r.Method == http.MethodPut {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canWriteProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var payload struct {
+				Draft bool `json:"draft"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			if err := store.SetProjectDefaultDraft(r.Context(), db, project.ID, payload.Draft); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			notify("project_updated", project.ID, "")
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			user, err := requireUser(db, r)
 			if err != nil {

@@ -1,13 +1,11 @@
 package store
 
 import (
-	"os"
 	"testing"
 )
 
 func TestEncryptDecryptEmailWithKey(t *testing.T) {
-	os.Setenv("TICKET_ENCRYPTION_KEY", "test-key-for-encryption-32bytes!")
-	defer os.Unsetenv("TICKET_ENCRYPTION_KEY")
+	t.Setenv("TICKET_ENCRYPTION_KEY", "test-key-for-encryption-32bytes!")
 
 	email := "user@example.com"
 	encrypted, err := EncryptEmail(email)
@@ -28,7 +26,7 @@ func TestEncryptDecryptEmailWithKey(t *testing.T) {
 }
 
 func TestEncryptEmailWithoutKey(t *testing.T) {
-	os.Unsetenv("TICKET_ENCRYPTION_KEY")
+	t.Setenv("TICKET_ENCRYPTION_KEY", "")
 
 	email := "user@example.com"
 	result, err := EncryptEmail(email)
@@ -41,7 +39,7 @@ func TestEncryptEmailWithoutKey(t *testing.T) {
 }
 
 func TestDecryptEmailPlaintext(t *testing.T) {
-	os.Unsetenv("TICKET_ENCRYPTION_KEY")
+	t.Setenv("TICKET_ENCRYPTION_KEY", "")
 
 	result, err := DecryptEmail("plain@example.com")
 	if err != nil {
@@ -53,7 +51,7 @@ func TestDecryptEmailPlaintext(t *testing.T) {
 }
 
 func TestDecryptEmailWithoutKeyFails(t *testing.T) {
-	os.Unsetenv("TICKET_ENCRYPTION_KEY")
+	t.Setenv("TICKET_ENCRYPTION_KEY", "")
 
 	if _, err := DecryptEmail("enc:somedata"); err == nil {
 		t.Fatal("DecryptEmail(enc: without key) error = nil, want error")

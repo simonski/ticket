@@ -1,45 +1,61 @@
 # Product Owner
 
-**Score: 85/100** (was 78)
+**Score: 78/100** (was 85)
 
 ## What is being assessed
-Feature completeness vs SPEC.md goals, user journey quality, error UX, consistency across interfaces (CLI, web, API), and absence of blocking gaps in the ticket tracking sdlc.
+
+Feature completeness of the SDLC lifecycle refactor against the specification in `docs/LIFECYCLE.md`. User journey from project creation through lifecycle management.
 
 ## Methodology
-Read README.md, SPEC.md (headers), `cmd/ticket/cmd_ticket.go` (runBoard, runList), `cmd/ticket/cmd_setup.go` (runInitCheckDefaults), `cmd/ticket/printer.go` (buildTreeDisplay), TODO.md.
+
+Read `docs/LIFECYCLE.md` (authoritative spec) and `CLAUDE.md`. Verified CLI commands in `cmd/tk/main.go`, `cmd_sdlc.go`, `cmd_project.go`. Verified API endpoints in `api_sdlc.go`, `api_roles.go`. Verified service interface in `service.go`. Searched for stubs.
 
 ## Findings
 
 ### Passing checks
-- **TK-222 complete**: `runBoard` now calls `buildTreeDisplay` for parent-child tree indentation (`cmd_ticket.go:519`); uses same box-drawing characters (`├─`, `└─`, `│`) as `runList`
-- **`tk ls` / `tk board` consistency**: Both call `buildTreeDisplay` from the same function (`printer.go:316`); identical tree prefixes
-- **`runInitCheckDefaults` comprehensive**: checks sdlc assignment (lines 739-764), stage count (768-781), and roles (785-807) with user prompts for defaults (`cmd_setup.go:726-810`)
-- **`tk init` reports status**: outputs `sdlc: "default" (4 stages)` and `roles: 9 found` at the end of setup (`cmd_setup.go:780, 806`)
-- **SPEC.md coverage**: all core entities implemented (User, Session, Project, Ticket, SDLC, Stage, Team, Role, Label, Comment, Dependency, TimeEntry, Story, History)
-- Full lifecycle state machine (design→develop→test→done with idle/active/success/fail states)
-- Assignment, claiming, time tracking, labels, dependencies, comments all present
-- Agent framework, TUI, web UI, REST API, CLI all operational
-- Error messages are actionable: `"no .git directory found.\n  tk requires a git repository. Run \`git init\` first"` (`cmd_setup.go:89`)
-- Delete confirmations in both CLI (2-step token pattern) and web UI (`uiConfirm()`)
-- TODO.md items are mostly infrastructure/docs — no blocking user-facing feature gaps
+- SDLC CRUD (create, list, get, delete, export, import) — `cmd_sdlc.go:45-213`, `api_sdlc.go:137-267`
+- Stage management (add, remove, reorder) — `cmd_sdlc.go:99-163`
+- Stage-role assignments (add, rm, order) — `cmd_sdlc.go:235-293`, `api_sdlc.go:67-135`
+- Role CRUD — `cmd_team.go:283-418` under `tk role` namespace
+- Project attach-SDLC as `tk project sdlc <id>` — `cmd_project.go:335-378`
+- Ticket next/previous — `cmd_ticket.go:2756/2794`, backed by `findNextStep`/`findPrevStep`
+- Ticket complete/reopen, draft/undraft, idle/active/success shortcuts
+- State transitions enforced in store — `lifecycle.go`
+- Export/import round-trip tested — `sdlc_test.go:145`
+- Contract tests run against both implementations
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `tk board` tree sort order: active tickets not consistently shown before idle within a lane | Low | `cmd/ticket/cmd_ticket.go:510-518` | Confirm `ticketSortKey` sorts parent tickets before children within same state |
-| No `tk board` filter by assignee or label (unlike `tk ls`) | Low | `cmd/ticket/cmd_ticket.go:458+` | Add `-a <user>` and `-l <label>` flags to `board` command |
-| Web UI board view may not yet reflect tree grouping | Low | `web/static/index.html` | Audit web board component to match CLI tree output |
+| `tk fail` shortcut missing from `main.go` switch — spec requires it | High | `main.go:185-195` | Add `case "fail"` |
+| LIFECYCLE.md defines `stage-list/get/update/rm/order` but CLI uses different names (`add-stage/remove-stage/reorder-stages`); `stage-list/get/update` don't exist | High | `cmd_sdlc.go:99-163` | Rename or alias to match spec |
+| LIFECYCLE.md defines SDLC-scoped role commands but roles are global under `tk role` | High | `cmd_sdlc.go` (absent) | Expose `ListRolesBySdlc` via CLI |
+| `tk project set-draft` is a stub — prints "not yet implemented" | High | `cmd_project.go:194` | Implement |
+| `tk project set-sdlc` syntax differs from spec (positional vs flag) | Medium | `cmd_project.go:196` vs `LIFECYCLE.md:25` | Add flag-style alias |
+| `tk sdlc stage-update` absent from CLI, service, and API | Medium | `service.go:80-93` | Implement across all layers |
+| `tk sdlc stage-get` absent — no per-stage detail command | Medium | `cmd_sdlc.go` | Add using existing store function |
+| API for stage update (`PUT /api/sdlcs/stages/{id}`) missing | Medium | `api_sdlc.go` | Add endpoint |
+| `tk status` doesn't display SDLC name or draft default | Low | `main.go:296-427` | Add to summary output |
+| `tk sdlc get` doesn't surface stage acceptance criteria | Low | `cmd_sdlc.go:327-342` | Add to detail output |
 
 ## Verdict
-Major improvement (+7). TK-222 delivers the tree grouping feature consistently across `tk ls` and `tk board`, and the enhanced `tk init` now guides users through sdlc and role setup. The product is functionally complete against the spec with no blocking gaps.
+
+The SDLC refactor delivered the core data model and lifecycle mechanics, but CLI surface area falls short of the LIFECYCLE.md specification. Missing `tk fail`, SDLC-scoped roles, and stub `project set-draft` are the key gaps. Score drops from 85 to 78 against the new spec bar.
 
 ## Changes since last assessment
-- **TK-222 implemented**: `tk board` groups epics/stories with indentation (commit `a08f8f7`)
-- **`tk init` sdlc/role checks**: reports status and prompts for defaults if missing (commit `a08f8f7`)
-- Tree consistency between `tk ls` and `tk board` confirmed — both use `buildTreeDisplay`
+- SDLC tables, stage-role junction, next/previous orchestration, export/import all delivered (+)
+- Assessment now applies LIFECYCLE.md as precise checklist (-)
+- Several spec-required commands missing or stubbed (-)
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Board filter flags | Low | Add `-a` assignee and `-l` label filters to `runBoard` mirroring `runList` |
-| Web board tree view | Low | Verify web UI board renders parent-child hierarchy matching CLI |
+| Add `tk fail` shortcut | Critical | Add `case "fail"` to `main.go` |
+| Implement `project set-draft` | High | Store + service + API + CLI |
+| Add `stage-update` across all layers | High | Store + service + API + CLI |
+| Add `stage-list` and `stage-get` | High | CLI commands using existing store |
+| Add SDLC-scoped role commands | High | Use `store.ListRolesBySdlc` |
+| Rename CLI commands to match spec | Medium | `add-stage` -> `stage-add` etc. |
+| Add stage update API endpoint | Medium | `PUT /api/sdlcs/stages/{id}` |

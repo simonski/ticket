@@ -36,12 +36,16 @@ func CreateRole(ctx context.Context, db *sql.DB, sdlcID *int64, title, descripti
 	return GetRoleByID(ctx, db, id)
 }
 
-func ListRoles(ctx context.Context, db *sql.DB) ([]Role, error) {
+func ListRoles(ctx context.Context, db *sql.DB, limit int) ([]Role, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT role_id, sdlc_id, title, description, acceptance_criteria, created_at, updated_at
 		FROM roles
 		ORDER BY title
-	`)
+		LIMIT ?
+	`, limit)
 	if err != nil {
 		return nil, err
 	}

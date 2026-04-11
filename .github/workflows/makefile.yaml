@@ -17,6 +17,7 @@ jobs:
     - uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
+        cache: true
 
     - name: Install dependencies
       run: make setup
@@ -26,6 +27,9 @@ jobs:
 
     - name: Run build
       run: make build
+
+    - name: Run lint
+      run: make lint
 
     - name: Run gosec
       run: gosec ./...
@@ -52,6 +56,7 @@ jobs:
     - uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
+        cache: true
 
     - name: Install release tools
       run: make setup-go
@@ -66,8 +71,8 @@ jobs:
 
     - name: Commit and push version bump
       run: |
-        VERSION=$(cat cmd/ticket/VERSION | tr -d '[:space:]')
-        git add cmd/ticket/VERSION
+        VERSION=$(cat cmd/tk/VERSION | tr -d '[:space:]')
+        git add cmd/tk/VERSION
         git commit -m "chore: bump version to ${VERSION} [skip ci]"
         git push
 

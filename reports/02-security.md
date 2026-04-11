@@ -1,49 +1,64 @@
 # Security
 
-**Score: 65/100** (was 68)
+**Score: 65/100** (was 65)
 
 ## What is being assessed
-Authentication (session tokens, password hashing), account protection (lockout, rate limiting), data protection (cookie flags, HTTPS enforcement), CSRF on all state-changing endpoints, container hardening (CapDrop, PidsLimit, non-root), HTTP server timeouts, and input validation.
+
+Authentication, access control, cookie security, CSRF protection, rate limiting, WebSocket security, container security, and data protection.
 
 ## Methodology
-Read `internal/server/api_auth.go`, `internal/password/hash.go`, `internal/server/ratelimit.go`, `internal/server/server.go`, `compose.yaml`, `Dockerfile`. Searched for CSRF middleware, cookie configuration, timeout settings, body size limits.
+
+Read `internal/password/hash.go`, `internal/server/api_auth.go`, `ratelimit.go`, `server.go`, `api_system.go`, `realtime.go`, `chat_ws.go`, `api_helpers.go`, `internal/store/auth.go`, `encrypt.go`, `compose.yaml`, `Dockerfile`.
 
 ## Findings
 
 ### Passing checks
-- Argon2ID password hashing with 64 MB memory, 4 iterations, 16-byte salt, constant-time comparison (`internal/password/hash.go`)
-- Session tokens: 32-byte random, stored in SQLite, 30-day expiry with automatic purge (`internal/server/api_auth.go:139-152`)
-- Cookie flags: `HttpOnly: true`, `SameSite: Lax`, `Secure` conditional on TLS (`api_auth.go:144-152`)
-- Rate limiting on `/api/login` and `/api/register`: 10 req/min/IP (`internal/server/ratelimit.go`, `api.go:14`)
-- Security headers set: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy` (`server.go:146-153`)
-- All SQL queries parameterized; no string-concatenated queries found
-- Non-root container user (`Dockerfile:20-22`)
-- Multi-stage Docker build on Alpine 3.21
+- Argon2ID password hashing (64 MB, 4 iterations, 2 parallelism, 16-byte salt, constant-time compare) — `internal/password/hash.go`
+- 32-byte CSPRNG session tokens with 30-day expiry and server-side revocation — `internal/store/auth.go:135-149`
+- Cookie flags: `HttpOnly: true`, `SameSite: Lax`, `Secure: r.TLS != nil` — `api_auth.go:144-152`
+- Session invalidation on password reset — `auth.go:334`
+- Rate limiting on login/register: 10 req/min/IP — `api.go:14`
+- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, CSP — `server.go:146-153`
+- All SQL parameterised throughout `internal/store/`
+- Role-based access control: `requireUser`/`requireAdmin`, per-project roles — `api_helpers.go:120-195`
+- WebSocket origin validation — `realtime.go:136-156`
+- WS auth checked before upgrade — `api_auth.go:25-80`
+- Non-root container, multi-stage build — `Dockerfile:20-22`
+- AES-256-GCM email encryption — `encrypt.go`
+- `ReadHeaderTimeout: 30s` — `server.go:37`
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No CSRF tokens on POST/PUT/DELETE endpoints | High | All `api_*.go` files | Add CSRF middleware (e.g. `gorilla/csrf`) to all state-changing routes |
-| No account lockout after failed login attempts | High | `internal/server/api_auth.go:113-137` | Track failed attempts per username; lock after 10 failures for 15 min |
-| `WriteTimeout`, `ReadTimeout`, `IdleTimeout` not set | Medium | `internal/server/server.go:34-38` | Add all three timeouts; only `ReadHeaderTimeout: 30s` currently set |
-| No request body size limit on JSON endpoints | Medium | `internal/server/api_tickets.go`, `api_projects.go` | Wrap `r.Body` with `http.MaxBytesReader(w, r.Body, 1<<20)` |
-| `cap_drop`/`pids_limit` absent from `compose.yaml` | Medium | `compose.yaml` | Add `cap_drop: [ALL]`, `pids_limit: 100` to service |
-| Rate limiter trusts `X-Forwarded-For` without validation | Medium | `internal/server/ratelimit.go:48-56` | Only trust forwarded IP if a known proxy prefix is configured |
-| CSP allows `unsafe-inline` for scripts and styles | Low | `internal/server/server.go:150` | Use CSP nonces; remove `unsafe-inline` |
+| No CSRF protection on state-changing endpoints | High | All `api_*.go` | Add `gorilla/csrf` or double-submit cookie |
+| No account lockout after failed logins | High | `api_auth.go:113-137` | Add `failed_attempts`/`locked_until` columns |
+| `/metrics` unauthenticated — exposes counts and heap stats | Medium | `api_system.go:32-74` | Add `requireAdmin` guard |
+| Cross-project WebSocket broadcast | Medium | `realtime.go:66-80` | Filter by `projectIDs` on `liveClient` |
+| `context.Background()` in WS handler | Low-Med | `chat_ws.go:168,177` | Derive context from WS lifecycle |
+| Missing `WriteTimeout`/`ReadTimeout`/`IdleTimeout` | Medium | `server.go:34-38` | Add timeouts; exempt WS via hijack |
+| No request body size limit | Medium | Various handlers | Use `http.MaxBytesReader` |
+| `X-Forwarded-For` spoofing bypasses rate limiter | Medium | `ratelimit.go:49-51` | Only trust with configured trusted-proxy CIDR |
+| Container hardening absent (cap_drop, pids_limit) | Medium | `compose.yaml` | Add security options |
+| CSP allows `unsafe-inline` | Low | `server.go:150` | Replace with nonces |
 
 ## Verdict
-Core auth primitives are strong (Argon2ID, session management, security headers, rate limiting on auth). The main gaps are CSRF protection and account lockout — both were present in the previous assessment and remain unfixed, driving a slight score decrease as they are now confirmed absent rather than merely flagged.
+
+Core auth primitives are strong. The Origin-check on WebSocket closes cross-origin hijacking. Score unchanged at 65: new cross-project leak and persistent CSRF/lockout/metrics gaps offset the WS origin fix.
 
 ## Changes since last assessment
-- No security-relevant code changes this cycle
-- `tk-test` default binary path still points to `./bin/ticket` (not a security issue)
-- All previously identified gaps persist
+- WebSocket Origin validation fixed — `realtime.go:136-156`
+- All other previous findings unchanged
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| CSRF protection | High | Add `gorilla/csrf` to all state-changing API routes |
-| Account lockout | High | Add `failed_attempts` + `locked_until` columns to `users` table |
-| HTTP timeouts | Medium | Set `WriteTimeout: 30s`, `ReadTimeout: 60s`, `IdleTimeout: 120s` |
-| Body size limit | Medium | Apply `http.MaxBytesReader` to all POST/PUT handlers |
-| Container hardening | Medium | Add `cap_drop`, `pids_limit`, `security_opt: no-new-privileges` |
+| CSRF protection | High | Add middleware to all state-changing routes |
+| Account lockout | High | Lock 15 min after 10 failures |
+| `/metrics` unauthenticated | Medium | Gate with `requireAdmin` |
+| Cross-project WS broadcast | Medium | Filter by project |
+| HTTP timeouts | Medium | Set Write/Read/IdleTimeout |
+| Body size limit | Medium | `http.MaxBytesReader` in JSON handlers |
+| X-Forwarded-For trust | Medium | Trusted-proxy CIDR |
+| Container hardening | Medium | `cap_drop: [ALL]`, `pids_limit: 200` |

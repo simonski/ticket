@@ -6,6 +6,7 @@ import (
 )
 
 func TestStoryCRUDAndLinking(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Stories Project", "", "", "")
 	if err != nil {
@@ -56,6 +57,7 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 }
 
 func TestStoryUpdateAndDelete(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Story Project", "", "", "")
 	if err != nil {

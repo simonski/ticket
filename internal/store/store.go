@@ -478,6 +478,7 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
 
+CREATE INDEX IF NOT EXISTS idx_roles_sdlc_id ON roles(sdlc_id);
 CREATE INDEX IF NOT EXISTS idx_sdlc_stages_sdlc_id ON sdlc_stages(sdlc_id);
 CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_stage_id ON sdlc_stage_roles(stage_id);
 CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_role_id ON sdlc_stage_roles(role_id);
@@ -994,6 +995,18 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	// Account lockout columns for brute-force protection.
+	if !columnExists(ctx, db, "users", "failed_login_attempts") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "users", "locked_until") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN locked_until TEXT`); err != nil {
+			return err
+		}
+	}
+
 	// Add missing indexes for frequently-queried columns.
 	missingIndexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open)`,
@@ -1052,8 +1065,8 @@ func seedDefaultSdlc(ctx context.Context, db *sql.DB) error {
 		name  string
 		order int
 	}{
-		{"develop", 0},
-		{"done", 1},
+		{StageDevelop, 0},
+		{StageDone, 1},
 	}
 	for _, s := range stages {
 		if _, err := db.ExecContext(ctx, `

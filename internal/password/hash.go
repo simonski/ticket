@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -14,11 +15,16 @@ import (
 
 const (
 	saltLength  = 16
-	memory      = 64 * 1024
-	iterations  = 4
 	parallelism = 2
 	keyLength   = 32
 )
+
+func hashParams() (uint32, uint32) {
+	if os.Getenv("TICKET_FAST_HASH") == "1" {
+		return 1024, 1
+	}
+	return 64 * 1024, 4
+}
 
 func Hash(plain string) (string, error) {
 	salt := make([]byte, saltLength)
@@ -26,6 +32,7 @@ func Hash(plain string) (string, error) {
 		return "", fmt.Errorf("read salt: %w", err)
 	}
 
+	memory, iterations := hashParams()
 	hash := argon2.IDKey([]byte(plain), salt, iterations, memory, parallelism, keyLength)
 
 	return fmt.Sprintf(

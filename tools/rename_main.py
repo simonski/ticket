@@ -4,7 +4,7 @@ import re
 # Strategy: replace word-boundary 'task' and 'tasks' ONLY when they're identifiers
 # (not inside double-quoted strings)
 
-path = 'cmd/ticket/main.go'
+path = 'cmd/tk/main.go'
 
 with open(path) as f:
     text = f.read()

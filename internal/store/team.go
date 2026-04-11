@@ -102,13 +102,16 @@ func GetTeamByID(ctx context.Context, db *sql.DB, id int64) (Team, error) {
 	return team, nil
 }
 
-func ListTeams(ctx context.Context, db *sql.DB) ([]Team, error) {
+func ListTeams(ctx context.Context, db *sql.DB, limit int) ([]Team, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT team_id, name, parent_team_id, created_at, updated_at
 		FROM teams
 		ORDER BY name, team_id
-		LIMIT 1000
-	`)
+		LIMIT ?
+	`, limit)
 	if err != nil {
 		return nil, err
 	}

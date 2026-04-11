@@ -8,6 +8,7 @@ import (
 )
 
 func TestSanitizeTerminalOutputRemovesAnsiSequences(t *testing.T) {
+	t.Parallel()
 	raw := "\x1b[?2026h\x1b[39mhello\x1b[0m\x1b[?25l world\x1b[?2026l"
 	got := sanitizeTerminalOutput(raw)
 	want := "hello world"
@@ -50,6 +51,7 @@ func TestStartChatBridgeStreamsOutputForInput(t *testing.T) {
 }
 
 func TestChatProcessBridgeStatusLineIncludesStatusAndActivity(t *testing.T) {
+	t.Parallel()
 	bridge := &chatProcessBridge{
 		processID:    3,
 		cmd:          &exec.Cmd{},
@@ -77,6 +79,7 @@ func TestChatProcessBridgeStatusLineIncludesStatusAndActivity(t *testing.T) {
 }
 
 func TestChatProcessBridgeStatusLineShowsCompletedAndError(t *testing.T) {
+	t.Parallel()
 	bridge := &chatProcessBridge{
 		processID: 9,
 		completed: true,
@@ -98,6 +101,7 @@ func TestChatProcessBridgeStatusLineShowsCompletedAndError(t *testing.T) {
 }
 
 func TestChatRuntimeHeartbeatLineIncludesConnectionAndRunningCounts(t *testing.T) {
+	t.Parallel()
 	runtime := newChatRuntime()
 	runtime.activeConnections = 4
 	runtime.processes[1] = &chatProcessBridge{}
@@ -115,6 +119,7 @@ func TestChatRuntimeHeartbeatLineIncludesConnectionAndRunningCounts(t *testing.T
 }
 
 func TestChatRuntimeRunningProcessCount(t *testing.T) {
+	t.Parallel()
 	runtime := newChatRuntime()
 	runtime.processes[1] = &chatProcessBridge{}
 	runtime.processes[2] = &chatProcessBridge{completed: true}
@@ -125,6 +130,7 @@ func TestChatRuntimeRunningProcessCount(t *testing.T) {
 }
 
 func TestChatRuntimeHasCapacity(t *testing.T) {
+	t.Parallel()
 	runtime := newChatRuntime()
 	runtime.processes[1] = &chatProcessBridge{}
 	runtime.processes[2] = &chatProcessBridge{completed: true}

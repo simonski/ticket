@@ -4,7 +4,7 @@ import re
 # Strategy: replace in variable declaration patterns, loop variables, and struct access
 
 files = [
-    'cmd/ticket/main.go',
+    'cmd/tk/main.go',
     'internal/store/task.go',
     'internal/store/activity.go',
     'internal/store/dependency.go',

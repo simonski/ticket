@@ -1,4 +1,5 @@
 # ── Stage 1: build ───────────────────────────────────────────────────────────
+# TODO: pin to @sha256: digest for reproducible builds
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
@@ -9,9 +10,10 @@ RUN go mod download
 
 # Copy everything and build
 COPY . .
-RUN go build -o /out/tk ./cmd/ticket
+RUN go build -o /out/tk ./cmd/tk
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
+# TODO: pin to @sha256: digest for reproducible builds
 FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates

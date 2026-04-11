@@ -6,6 +6,7 @@ import (
 )
 
 func TestBuildLiveChangeEvent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		eventType  string

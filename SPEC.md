@@ -671,6 +671,8 @@ The binary is named `ticket` with the alias `tk`.
 | `tk project update <id> -title "..."` | Update project |
 | `tk project delete <id>` | Delete project |
 | `tk project init` | Write `.ticket.json` in current directory |
+| `tk project sdlc <sdlc-id>` | Assign an SDLC to the active project |
+| `tk project set-draft <true\|false>` | Toggle draft mode on the active project |
 
 ### 12.4 Tickets
 
@@ -780,10 +782,10 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk sdlc role-list -sdlc_id <id>` | List roles for an SDLC |
-| `tk sdlc role-add -sdlc_id <id> -title "..." -description "..." -ac "..."` | Create role |
-| `tk sdlc role-update -sdlc_id <id> -role_id <id> -title "..."` | Update role |
-| `tk sdlc role-rm -sdlc_id <id> -role_id <id>` | Delete role |
+| `tk role list` / `tk role ls` | List all roles |
+| `tk role create -title "..." -description "..." -ac "..."` | Create role |
+| `tk role update -id <id> -title "..."` | Update role |
+| `tk role delete -id <id>` / `tk role rm -id <id>` | Delete role |
 | `tk sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>` | Assign role to stage |
 | `tk sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>` | Remove role from stage |
 | `tk sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <ids>` | Reorder roles in stage |
@@ -1102,7 +1104,7 @@ CMD ["tk", "server"]
 brew install simonski/tap/ticket
 
 # From source
-go install github.com/simonski/ticket/cmd/ticket@latest
+go install github.com/simonski/ticket/cmd/tk@latest
 
 # Docker
 docker build -t ticket .
@@ -1130,7 +1132,7 @@ docker run -p 8080:8080 tk server
 
 ```
 ticket/
-├── cmd/ticket/              # CLI entry point and command handlers
+├── cmd/tk/              # CLI entry point and command handlers
 │   ├── main.go              # Root command router
 │   ├── cmd_*.go             # Individual commands
 │   ├── help.go              # Command help

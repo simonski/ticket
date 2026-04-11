@@ -39,29 +39,69 @@ func (r *router) registerSdlcHandlers() {
 	})
 
 	mux.HandleFunc("/api/sdlcs/stages/", func(w http.ResponseWriter, r *http.Request) {
-		if _, err := requireAdmin(db, r); err != nil {
-			writeAuthError(w, err)
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/stages/")
+		// Skip if this is a roles sub-path (handled by a different handler)
+		if strings.HasPrefix(trimmed, "roles/") {
 			return
 		}
-		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/stages/")
 		var stageID int64
 		if _, err := fmt.Sscan(strings.TrimSpace(trimmed), &stageID); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid stage id")
 			return
 		}
-		if r.Method != http.MethodDelete {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		if err := store.RemoveSdlcStage(r.Context(), db, stageID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "sdlc stage not found")
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
 				return
 			}
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+			stage, err := store.GetSdlcStage(r.Context(), db, stageID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "sdlc stage not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, stage)
+		case http.MethodPut:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload sdlcStageRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			stage, err := store.UpdateSdlcStage(r.Context(), db, stageID, payload.StageName, payload.Description, payload.AcceptanceCriteria)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "sdlc stage not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, stage)
+		case http.MethodDelete:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			if err := store.RemoveSdlcStage(r.Context(), db, stageID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "sdlc stage not found")
+					return
+				}
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	})
 
 	// Stage-role management: /api/sdlcs/{id}/stages/{stageId}/roles[/{roleId}]
@@ -169,10 +209,6 @@ func (r *router) registerSdlcHandlers() {
 	})
 
 	mux.HandleFunc("/api/sdlcs/", func(w http.ResponseWriter, r *http.Request) {
-		if _, err := requireUser(db, r); err != nil {
-			writeAuthError(w, err)
-			return
-		}
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/")
 		parts := strings.Split(trimmed, "/")
 		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
@@ -188,6 +224,10 @@ func (r *router) registerSdlcHandlers() {
 		if len(parts) >= 2 {
 			switch parts[1] {
 			case "stages":
+				if _, err := requireAdmin(db, r); err != nil {
+					writeAuthError(w, err)
+					return
+				}
 				if r.Method != http.MethodPost {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
@@ -197,7 +237,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				stage, err := store.AddSdlcStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.SortOrder)
+				stage, err := store.AddSdlcStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.AcceptanceCriteria, payload.SortOrder)
 				if err != nil {
 					writeError(w, http.StatusBadRequest, err.Error())
 					return
@@ -205,6 +245,10 @@ func (r *router) registerSdlcHandlers() {
 				writeJSON(w, http.StatusCreated, stage)
 				return
 			case "reorder":
+				if _, err := requireAdmin(db, r); err != nil {
+					writeAuthError(w, err)
+					return
+				}
 				if r.Method != http.MethodPut {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
@@ -221,6 +265,10 @@ func (r *router) registerSdlcHandlers() {
 				writeJSON(w, http.StatusOK, map[string]string{"status": "reordered"})
 				return
 			case "export":
+				if _, err := requireUser(db, r); err != nil {
+					writeAuthError(w, err)
+					return
+				}
 				if r.Method != http.MethodGet {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
@@ -238,7 +286,11 @@ func (r *router) registerSdlcHandlers() {
 				return
 			}
 		}
-		// Direct sdlc resource
+		// Direct sdlc resource — auth check moved here for non-sub-resource paths
+		if _, err := requireUser(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
 		switch r.Method {
 		case http.MethodGet:
 			wf, err := store.GetSdlc(r.Context(), db, wfID)

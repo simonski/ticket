@@ -54,6 +54,7 @@ type ProjectService interface {
 	DeleteProject(id int64) error
 	RenameProjectPrefix(id int64, newPrefix string) (int, error)
 	SetProjectEnabled(id int64, enabled bool) (store.Project, error)
+	SetProjectDefaultDraft(projectID int64, draft bool) error
 	AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
 	RemoveProjectMember(projectID int64, userID string) error
 	ListProjectMembers(projectID int64) ([]store.ProjectMember, error)
@@ -83,6 +84,9 @@ type SdlcService interface {
 	GetSdlc(id int64) (store.SdlcWithStages, error)
 	DeleteSdlc(id int64) error
 	AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error)
+	UpdateSdlcStage(stageID int64, request SdlcStageRequest) (store.SdlcStage, error)
+	GetSdlcStage(stageID int64) (store.SdlcStage, error)
+	ListSdlcStages(sdlcID int64) ([]store.SdlcStage, error)
 	RemoveSdlcStage(stageID int64) error
 	ReorderSdlcStages(sdlcID int64, stageIDs []int64) error
 	ExportSdlc(id int64) (store.SdlcExport, error)

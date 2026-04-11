@@ -537,7 +537,7 @@ $ tk tui
 ```
 
 ```
- Home | Projects | Ideas | Tickets | Board | Workflows | Config
+ Home | Projects | Ideas | Tickets | Board | SDLCs | Config
  ticket
  ─────────────────────────────────────────────────────────────
  DESIGN (2)     DEVELOP (1)    TEST (0)       UAT (0)        DONE (1)

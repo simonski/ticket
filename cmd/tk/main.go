@@ -25,7 +25,7 @@ var (
 	fetchRepoVersion  = defaultFetchRepoVersion
 )
 
-const repoVersionURL = "https://raw.githubusercontent.com/simonski/ticket/refs/heads/main/cmd/ticket/VERSION"
+const repoVersionURL = "https://raw.githubusercontent.com/simonski/ticket/refs/heads/main/cmd/tk/VERSION"
 
 func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
@@ -193,6 +193,8 @@ func run(args []string) error {
 		return runReopen(trimmedArgs[1:])
 	case "success":
 		return runTicketStateAlias(trimmedArgs[1:], store.StateSuccess, trimmedArgs[0])
+	case "fail":
+		return runTicketStateAlias(trimmedArgs[1:], store.StateFail, trimmedArgs[0])
 	case "next":
 		return runNext(trimmedArgs[1:])
 	case "previous", "prev":

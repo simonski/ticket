@@ -9,6 +9,11 @@ services:
     volumes:
       - ticket-data:/home/ticket
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    pids_limit: 200
+    security_opt:
+      - no-new-privileges:true
     deploy:
       resources:
         limits:

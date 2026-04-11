@@ -118,13 +118,16 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 	return GetProjectByID(ctx, db, id)
 }
 
-func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
+func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		ORDER BY created_at, project_id
-		LIMIT 1000
-	`)
+		LIMIT ?
+	`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +146,7 @@ func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 
 func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Project, error) {
 	if user.Role == "admin" {
-		return ListProjects(ctx, db)
+		return ListProjects(ctx, db, 0)
 	}
 	rows, err := db.QueryContext(ctx, `
 		WITH RECURSIVE team_scope(team_id, parent_team_id) AS (
@@ -312,6 +315,26 @@ func SetProjectStatus(ctx context.Context, db *sql.DB, id int64, enabled bool) (
 		return Project{}, ErrProjectNotFound
 	}
 	return GetProjectByID(ctx, db, id)
+}
+
+// SetProjectDefaultDraft sets the default_draft flag on a project.
+func SetProjectDefaultDraft(ctx context.Context, db *sql.DB, projectID int64, draft bool) error {
+	val := 0
+	if draft {
+		val = 1
+	}
+	result, err := db.ExecContext(ctx, `UPDATE projects SET default_draft = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, val, projectID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrProjectNotFound
+	}
+	return nil
 }
 
 // DeleteProject removes a project and all associated data.

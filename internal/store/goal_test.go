@@ -6,6 +6,7 @@ import (
 )
 
 func TestGoalCRUD(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	project, err := CreateProject(context.Background(), db, "Goal Project", "", "", "")
@@ -62,6 +63,7 @@ func TestGoalCRUD(t *testing.T) {
 }
 
 func TestCreateGoalEmptyTitle(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Goal Project", "", "", "")
 	if err != nil {
@@ -73,6 +75,7 @@ func TestCreateGoalEmptyTitle(t *testing.T) {
 }
 
 func TestCreateGoalDefaultPriority(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Goal Project", "", "", "")
 	if err != nil {
@@ -88,6 +91,7 @@ func TestCreateGoalDefaultPriority(t *testing.T) {
 }
 
 func TestDeleteGoalNotFound(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	if err := DeleteGoal(context.Background(), db, 999); err == nil {
 		t.Fatal("DeleteGoal(nonexistent) error = nil, want error")

@@ -1,0 +1,661 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bom xmlns="http://cyclonedx.org/schema/bom/1.6" serialNumber="urn:uuid:aebbec50-4a92-409b-ba6e-eefecf2a9bde" version="1">
+  <metadata>
+    <timestamp>2026-04-10T22:49:43+01:00</timestamp>
+    <tools>
+      <tool>
+        <vendor>CycloneDX</vendor>
+        <name>cyclonedx-gomod</name>
+        <version>v1.10.0</version>
+        <hashes>
+          <hash alg="MD5">80615bd1befa680501118aff1f0fd19f</hash>
+          <hash alg="SHA-1">aaced12c49d558ce29a9e7527eee5d9c1b7b413e</hash>
+          <hash alg="SHA-256">ec051faad9b95432ace68ce2679efff171947542c4b2f9ee21b2a8fa69c7b70b</hash>
+          <hash alg="SHA-384">d6f010659543f6788078b5ac528dc04e76f1426e4e78d620d813d9719cfd1567df9e1d7aa3b21bfff3fdbb5585d4656f</hash>
+          <hash alg="SHA-512">b812026a0e872218f4c06962d6ce0578651ce91d53ca273552d5c17c05fe78cb2d623dcd4b6316856b5ff3d27ca6feb8f5b906f7ca483518bb2b89c7a2b35082</hash>
+        </hashes>
+        <externalReferences>
+          <reference type="vcs">
+            <url>https://github.com/CycloneDX/cyclonedx-gomod</url>
+          </reference>
+          <reference type="website">
+            <url>https://cyclonedx.org</url>
+          </reference>
+        </externalReferences>
+      </tool>
+    </tools>
+    <component bom-ref="pkg:golang/github.com/simonski/ticket@v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841?type=module" type="application">
+      <name>github.com/simonski/ticket</name>
+      <version>v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841</version>
+      <purl>pkg:golang/github.com/simonski/ticket@v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/simonski/ticket</url>
+        </reference>
+      </externalReferences>
+    </component>
+  </metadata>
+  <components>
+    <component bom-ref="pkg:golang/github.com/atotto/clipboard@v0.1.4?type=module" type="library">
+      <name>github.com/atotto/clipboard</name>
+      <version>v0.1.4</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">107d334959de64f4ae151d7506547d629a504d50db879fb5e8099c262e20d73e</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/atotto/clipboard@v0.1.4?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/atotto/clipboard</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?type=module" type="library">
+      <name>github.com/aymanbagabas/go-osc52/v2</name>
+      <version>v2.0.1</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">1f0a511db14c7192c456be360f8a7b5c1aa3caec501f948c884ac34f85a42769</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/aymanbagabas/go-osc52</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/bubbles@v1.0.0?type=module" type="library">
+      <name>github.com/charmbracelet/bubbles</name>
+      <version>v1.0.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">d7627cfda93fb82644310e8a53ba5c7f071eca32e55ac0cb0310797d7a277ef7</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/bubbles@v1.0.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/bubbles</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/bubbletea@v1.3.10?type=module" type="library">
+      <name>github.com/charmbracelet/bubbletea</name>
+      <version>v1.3.10</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">a2d5031d630ccd0481d0f91cf3bae6ebdd4a6774966b829496f17d9d1bc2202c</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/bubbletea@v1.3.10?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/bubbletea</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?type=module" type="library">
+      <name>github.com/charmbracelet/colorprofile</name>
+      <version>v0.4.1</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">6b594ed37a93ad221168af1cdc947124364ebe1bc8792728dde8fe9e02e4d649</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/colorprofile</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?type=module" type="library">
+      <name>github.com/charmbracelet/lipgloss</name>
+      <version>v1.1.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">bd85ec88b1d590aedfa7be11915edbda4abdfb30cba04538319a05a91fe7a026</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/lipgloss</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module" type="library">
+      <name>github.com/charmbracelet/x/ansi</name>
+      <version>v0.11.6</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">1a1576d52883cffe395bd02757647ad7164c46b8b93652e797a09517b8a1656f</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/x/ansi</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/x/cellbuf@v0.0.15?type=module" type="library">
+      <name>github.com/charmbracelet/x/cellbuf</name>
+      <version>v0.0.15</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">babde9672d28eb3fd1ec4ca5113f3bec20716a21354a9d46331a053c0233b4f2</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/x/cellbuf@v0.0.15?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/x/cellbuf</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module" type="library">
+      <name>github.com/charmbracelet/x/term</name>
+      <version>v0.2.2</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">c55453fd2d9970a76184eb923f8b7970b8b9a3e271925b2810e6c14a07e06519</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/charmbracelet/x/term@v0.2.2?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/charmbracelet/x/term</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?type=module" type="library">
+      <name>github.com/clipperhouse/displaywidth</name>
+      <version>v0.9.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">41be0a3a1630462377be232fd6fff7713065cf701c0195f7fb2f4e2e132d02d0</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/clipperhouse/displaywidth</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module" type="library">
+      <name>github.com/clipperhouse/stringish</name>
+      <version>v0.1.1</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">f8d4aa30eaf7191ea4d457518619d7acb7f3b46cee1be56e1437dab69587282b</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/clipperhouse/stringish@v0.1.1?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/clipperhouse/stringish</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module" type="library">
+      <name>github.com/clipperhouse/uax29/v2</name>
+      <version>v2.5.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">c7b4f44f87931c338dc4526c2fde2e28d28f1eb725c85234966efec3de1c3bc5</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/clipperhouse/uax29</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/dustin/go-humanize@v1.0.1?type=module" type="library">
+      <name>github.com/dustin/go-humanize</name>
+      <version>v1.0.1</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">1b392163b4f954d8449301f43d52608f3f9f5f5ae106b47ba514f79839297826</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/dustin/go-humanize@v1.0.1?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/dustin/go-humanize</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/erikgeiser/coninput@v0.0.0-20211004153227-1c3628e74d0f?type=module" type="library">
+      <name>github.com/erikgeiser/coninput</name>
+      <version>v0.0.0-20211004153227-1c3628e74d0f</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">63f097cad140e26e9b6944d718b3a859ee0f4211b1697d0aa676b202a0b8f29e</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/erikgeiser/coninput@v0.0.0-20211004153227-1c3628e74d0f?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/erikgeiser/coninput</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/google/uuid@v1.6.0?type=module" type="library">
+      <name>github.com/google/uuid</name>
+      <version>v1.6.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">348bda24330eb231c0f27d630212d2833ac0cf2d4782bfa136b6f9edefbde05d</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/google/uuid@v1.6.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/google/uuid</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module" type="library">
+      <name>github.com/lucasb-eyer/go-colorful</name>
+      <version>v1.3.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">dbfc8144b7560592ab7fb801e3416888a7c059843496a35c6ee4305475e9b5a8</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/lucasb-eyer/go-colorful</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module" type="library">
+      <name>github.com/mattn/go-isatty</name>
+      <version>v0.0.20</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">c5f0f4883b842a70e4974deae258a607ebc7f86c4b12d2ff8dbe315494965846</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/mattn/go-isatty@v0.0.20?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/mattn/go-isatty</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/mattn/go-localereader@v0.0.1?type=module" type="library">
+      <name>github.com/mattn/go-localereader</name>
+      <version>v0.0.1</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">ca04803a5ed95d3c7845d3d88a752983a5bdf54f235af5a2f587b6242fe8222e</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/mattn/go-localereader@v0.0.1?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/mattn/go-localereader</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module" type="library">
+      <name>github.com/mattn/go-runewidth</name>
+      <version>v0.0.19</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">bfef8986a62766ebb98d22ab93d45b805e6fe021948ea45f066d396f21462ddc</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/mattn/go-runewidth@v0.0.19?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/mattn/go-runewidth</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/muesli/ansi@v0.0.0-20230316100256-276c6243b2f6?type=module" type="library">
+      <name>github.com/muesli/ansi</name>
+      <version>v0.0.0-20230316100256-276c6243b2f6</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">64af331ed4473a46c7cba326af90f6eb88b2a774e25f93a635c2397080118902</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/muesli/ansi@v0.0.0-20230316100256-276c6243b2f6?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/muesli/ansi</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/muesli/cancelreader@v0.2.2?type=module" type="library">
+      <name>github.com/muesli/cancelreader</name>
+      <version>v0.2.2</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">dc8e0ab780508ce479e0d6afaa70e8831fcc22858115ad12b4f03c10b5171e60</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/muesli/cancelreader@v0.2.2?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/muesli/cancelreader</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/muesli/termenv@v0.16.0?type=module" type="library">
+      <name>github.com/muesli/termenv</name>
+      <version>v0.16.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">4b902550df5d10d079eebb1b9e43f27dd1ae5889649b32636c57f44dfe455947</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/muesli/termenv@v0.16.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/muesli/termenv</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/ncruces/go-strftime@v1.0.0?type=module" type="library">
+      <name>github.com/ncruces/go-strftime</name>
+      <version>v1.0.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">1cc169f262c24cfa77e3533f667038a9a7fb665b1b4dcfa68998c22ce140c3bc</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/ncruces/go-strftime@v1.0.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/ncruces/go-strftime</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?type=module" type="library">
+      <name>github.com/remyoudompheng/bigfft</name>
+      <version>v0.0.0-20230129092748-24d4a6f8daec</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">5b4f4854973de2272ae0d8d8ddc95becb93c3b5a89f01741105f33d226d4d2b1</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/remyoudompheng/bigfft</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module" type="library">
+      <name>github.com/rivo/uniseg</name>
+      <version>v0.4.7</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">59476f916f2e121ad87cb0b8673769236cedc4fd48e7cdbee3d39ce4cabae154</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/rivo/uniseg@v0.4.7?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/rivo/uniseg</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module" type="library">
+      <name>github.com/xo/terminfo</name>
+      <version>v0.0.0-20220910002029-abceb7e1c41e</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">2551b8e11b32681f53d8a2076af305fe9a4964d1bd669ca286f09dd30d74d67a</hash>
+      </hashes>
+      <purl>pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <externalReferences>
+        <reference type="vcs">
+          <url>https://github.com/xo/terminfo</url>
+        </reference>
+      </externalReferences>
+    </component>
+    <component bom-ref="pkg:golang/golang.org/x/crypto@v0.49.0?type=module" type="library">
+      <name>golang.org/x/crypto</name>
+      <version>v0.49.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">f8d83650b56f2c79c9fd9144ab829d70377f71f8ebae38cd497373c60d18e14e</hash>
+      </hashes>
+      <purl>pkg:golang/golang.org/x/crypto@v0.49.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module" type="library">
+      <name>golang.org/x/sys</name>
+      <version>v0.42.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">a26addda7025c93e444917422d8766dfe7cc7cd144ffe45fe1b0c840899125ea</hash>
+      </hashes>
+      <purl>pkg:golang/golang.org/x/sys@v0.42.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/golang.org/x/term@v0.41.0?type=module" type="library">
+      <name>golang.org/x/term</name>
+      <version>v0.41.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">40280fb28fd0dd14c9c764e1e1b0cba8c2f85ba88989a5c5ab6fdfb50175dd85</hash>
+      </hashes>
+      <purl>pkg:golang/golang.org/x/term@v0.41.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/golang.org/x/text@v0.35.0?type=module" type="library">
+      <name>golang.org/x/text</name>
+      <version>v0.35.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">24e571eaf543168924a5aab5004a6d5732d3a437bd286a63e6d478fd7fb26cbf</hash>
+      </hashes>
+      <purl>pkg:golang/golang.org/x/text@v0.35.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/modernc.org/libc@v1.70.0?type=module" type="library">
+      <name>modernc.org/libc</name>
+      <version>v1.70.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">539f0d6b05ea5db82967f75c752f6432c86ed3c6a203a6fb82eb04bacab3364c</hash>
+      </hashes>
+      <purl>pkg:golang/modernc.org/libc@v1.70.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/modernc.org/mathutil@v1.7.1?type=module" type="library">
+      <name>modernc.org/mathutil</name>
+      <version>v1.7.1</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">18265519775a37c813a81d4c7ffbaca7563f852aa0236bc01863f88d9302c4e5</hash>
+      </hashes>
+      <purl>pkg:golang/modernc.org/mathutil@v1.7.1?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/modernc.org/memory@v1.11.0?type=module" type="library">
+      <name>modernc.org/memory</name>
+      <version>v1.11.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">a38402f1a310ce673008adeddd4c7f6479b014fcc4ea17f66392db911b3e85b2</hash>
+      </hashes>
+      <purl>pkg:golang/modernc.org/memory@v1.11.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+    <component bom-ref="pkg:golang/modernc.org/sqlite@v1.48.0?type=module" type="library">
+      <name>modernc.org/sqlite</name>
+      <version>v1.48.0</version>
+      <scope>required</scope>
+      <hashes>
+        <hash alg="SHA-256">1256722e8a77436987624e4814f3d70037a366b947bbb00f6e9074b05efc6eae</hash>
+      </hashes>
+      <purl>pkg:golang/modernc.org/sqlite@v1.48.0?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+    </component>
+  </components>
+  <dependencies>
+    <dependency ref="pkg:golang/github.com/simonski/ticket@v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841?type=module">
+      <dependency ref="pkg:golang/github.com/charmbracelet/bubbles@v1.0.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/bubbletea@v1.3.10?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/google/uuid@v1.6.0?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/crypto@v0.49.0?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/term@v0.41.0?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/sqlite@v1.48.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/atotto/clipboard@v0.1.4?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/bubbles@v1.0.0?type=module">
+      <dependency ref="pkg:golang/github.com/atotto/clipboard@v0.1.4?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/bubbletea@v1.3.10?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/cellbuf@v0.0.15?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/dustin/go-humanize@v1.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/erikgeiser/coninput@v0.0.0-20211004153227-1c3628e74d0f?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-localereader@v0.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/ansi@v0.0.0-20230316100256-276c6243b2f6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/cancelreader@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/termenv@v0.16.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/text@v0.35.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/bubbletea@v1.3.10?type=module">
+      <dependency ref="pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/cellbuf@v0.0.15?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/erikgeiser/coninput@v0.0.0-20211004153227-1c3628e74d0f?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-localereader@v0.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/ansi@v0.0.0-20230316100256-276c6243b2f6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/cancelreader@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/termenv@v0.16.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/text@v0.35.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?type=module">
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?type=module">
+      <dependency ref="pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/cellbuf@v0.0.15?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/muesli/termenv@v0.16.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module">
+      <dependency ref="pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/x/cellbuf@v0.0.15?type=module">
+      <dependency ref="pkg:golang/github.com/charmbracelet/colorprofile@v0.4.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/ansi@v0.11.6?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/charmbracelet/x/term@v0.2.2?type=module">
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/clipperhouse/displaywidth@v0.9.0?type=module">
+      <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module">
+      <dependency ref="pkg:golang/github.com/clipperhouse/stringish@v0.1.1?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/dustin/go-humanize@v1.0.1?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/erikgeiser/coninput@v0.0.0-20211004153227-1c3628e74d0f?type=module">
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/google/uuid@v1.6.0?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module">
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/mattn/go-localereader@v0.0.1?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module">
+      <dependency ref="pkg:golang/github.com/clipperhouse/uax29/v2@v2.5.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/muesli/ansi@v0.0.0-20230316100256-276c6243b2f6?type=module">
+      <dependency ref="pkg:golang/github.com/mattn/go-runewidth@v0.0.19?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/muesli/cancelreader@v0.2.2?type=module">
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/muesli/termenv@v0.16.0?type=module">
+      <dependency ref="pkg:golang/github.com/aymanbagabas/go-osc52/v2@v2.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/lucasb-eyer/go-colorful@v1.3.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/github.com/ncruces/go-strftime@v1.0.0?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/rivo/uniseg@v0.4.7?type=module"></dependency>
+    <dependency ref="pkg:golang/github.com/xo/terminfo@v0.0.0-20220910002029-abceb7e1c41e?type=module"></dependency>
+    <dependency ref="pkg:golang/golang.org/x/crypto@v0.49.0?type=module">
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/term@v0.41.0?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/text@v0.35.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    <dependency ref="pkg:golang/golang.org/x/term@v0.41.0?type=module">
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/golang.org/x/text@v0.35.0?type=module"></dependency>
+    <dependency ref="pkg:golang/modernc.org/libc@v1.70.0?type=module">
+      <dependency ref="pkg:golang/github.com/dustin/go-humanize@v1.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/google/uuid@v1.6.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/ncruces/go-strftime@v1.0.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/mathutil@v1.7.1?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/memory@v1.11.0?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/modernc.org/mathutil@v1.7.1?type=module">
+      <dependency ref="pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/modernc.org/memory@v1.11.0?type=module">
+      <dependency ref="pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/mathutil@v1.7.1?type=module"></dependency>
+    </dependency>
+    <dependency ref="pkg:golang/modernc.org/sqlite@v1.48.0?type=module">
+      <dependency ref="pkg:golang/github.com/dustin/go-humanize@v1.0.1?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/google/uuid@v1.6.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/mattn/go-isatty@v0.0.20?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/ncruces/go-strftime@v1.0.0?type=module"></dependency>
+      <dependency ref="pkg:golang/github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec?type=module"></dependency>
+      <dependency ref="pkg:golang/golang.org/x/sys@v0.42.0?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/libc@v1.70.0?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/mathutil@v1.7.1?type=module"></dependency>
+      <dependency ref="pkg:golang/modernc.org/memory@v1.11.0?type=module"></dependency>
+    </dependency>
+  </dependencies>
+</bom>

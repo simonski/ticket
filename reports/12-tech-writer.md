@@ -1,49 +1,61 @@
 # Tech Writer
 
-**Score: 77/100** (was 74)
+**Score: 79/100** (was 77)
 
 ## What is being assessed
-Documentation completeness, accuracy, and maintenance: README, CLAUDE.md, CONTRIBUTING.md, USER_GUIDE.md, SPEC.md, openapi.yaml, docs/ directory, CHANGELOG, GitHub issue templates, SBOM, and inline comment density.
+
+Documentation completeness, accuracy, and currency following the SDLC lifecycle refactor. Covers README.md, CLAUDE.md, SPEC.md, USER_GUIDE.md, QUICKSTART*.md, CONTRIBUTING.md, CHANGELOG.md, TESTING.md, docs/*.md, openapi.yaml, and inline comment density.
 
 ## Methodology
-Read README.md, CLAUDE.md, CONTRIBUTING.md, TESTING.md, docs/ONBOARDING.md, USER_GUIDE.md headers. Grepped for remaining `ticket ` binary references in user-facing docs. Checked for SBOM, CHANGELOG, issue templates.
+
+Read all primary docs (5,880 lines of markdown). Grepped for stale terminology. Cross-checked CLI syntax in docs against actual code. Verified openapi.yaml paths against server routes. Checked Go comment density.
 
 ## Findings
 
 ### Passing checks
-- CHANGELOG maintained with recent entry dated 2026-03-28 (`CHANGELOG.md`)
-- SPEC.md is authoritative and comprehensive at ~1,169 lines covering all entities, lifecycle, CLI commands, and REST API
-- CLAUDE.md updated with architecture table, two-mode explanation, coverage thresholds — excellent as agent/AI context
-- TESTING.md thoroughly covers all test suites, contract tests, coverage thresholds
-- CONTRIBUTING.md covers branching, commit format, PR checklist, and quality gates
-- `docs/ONBOARDING.md` has explicit 7-document reading order and pitfalls table
-- `docs/PRIVACY.md` exists with comprehensive GDPR documentation (130 lines)
-- `docs/DESIGN.md` covers 40 sections of architecture details
-- OpenAPI spec exists and versioned (`openapi.yaml`)
-- All primary command examples now use `tk` (not `ticket`) after commit `c2c1353`
+- CHANGELOG.md maintained with Phase 1 and Phase 2 milestones
+- SPEC.md (1,181 lines) comprehensive; correctly documents stage-role commands and lifecycle shortcuts
+- CLAUDE.md accurately describes architecture, modes, coverage thresholds
+- CONTRIBUTING.md covers branching, commits, PR checklist, thresholds
+- TESTING.md comprehensive on test types and contract patterns
+- docs/LIFECYCLE.md (284 lines) fully updated to new SDLC model
+- README.md contains Mermaid diagrams for architecture, dependencies, data model, lifecycle
+- QUICKSTART.md and QUICKSTART_SERVER.md correctly use `tk complete`/`tk undraft`
 
 ### Issues found
+
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| README.md still says "Both `ticket` and the short alias `tk` are installed" | Medium | `README.md:3,9,45,56` | Update to "`tk` is the primary command" (binary is now `tk` only) |
-| USER_GUIDE.md header still refers to "`ticket` is a ticket management tool" | Medium | `USER_GUIDE.md:3,5,34,42` | Replace "ticket" with "tk" in command examples and headers |
-| No GitHub issue templates | Medium | `.github/ISSUE_TEMPLATE/` (missing) | Add `bug_report.md` and `feature_request.md` templates |
-| No SBOM (Software Bill of Materials) | Medium | Root dir | Generate with `syft -o spdx-json . > sbom.json` and commit |
-| Service interface method count claim ("108 methods") may drift | Low | `CLAUDE.md:45` | Add `go list` script to verify count; current count is 103 |
+| `QUICKSTART_CLIENT.md` TUI tabs say "Workflows" not "SDLCs" | High | `QUICKSTART_CLIENT.md:84` | Change to "SDLCs" |
+| `docs/DESIGN.md` ticket model still lists `open` field | High | `DESIGN.md:153` | Replace with `draft`/`complete` |
+| `docs/DESIGN.md` references non-existent `docs/TICKET_LIFECYCLE_SPEC.md` | High | `DESIGN.md:3-6` | Point to `docs/LIFECYCLE.md` |
+| `SPEC.md` role CLI uses wrong namespace (`tk sdlc role-*` vs actual `tk role *`) | High | `SPEC.md:783-786` | Fix to `tk role ls/create/update/rm` |
+| `openapi.yaml` uses `/api/sdlc` (singular) vs server `/api/sdlcs` (plural) | High | `openapi.yaml:1673+` vs `api_sdlc.go:19+` | Fix to plural |
+| Stage-role endpoint structure mismatch between spec and server | High | `openapi.yaml:1997` vs `api_sdlc.go:68` | Align |
+| Missing `project sdlc` and `project set-draft` in SPEC.md project section | Medium | `SPEC.md:663-673` | Add both commands |
+| `SIMULATED_USER_GUIDE.md` TUI tabs say "Workflows" | Medium | `SIMULATED_USER_GUIDE.md:540` | Change to "SDLCs" |
+| README.md says "Both `ticket` and `tk` are installed" | Medium | `README.md:9,45,51` | Clarify `tk` is primary |
+| README.md Mermaid says 107-method interface — actual is 119 | Low | `README.md:209` | Update count |
+| Go godoc coverage ~19% on exported functions | Low | Codebase-wide | Add godoc to exported types |
+| openapi.yaml has only 4 inline examples across 83 endpoints | Low | `openapi.yaml` | Add examples to key endpoints |
 
 ## Verdict
-Good improvement (+3) from the binary rename docs update. The primary remaining gap is that README.md and USER_GUIDE.md still describe `ticket` as a valid primary binary, which contradicts the completed rename. SBOM and GitHub issue templates remain absent.
+
+Core docs substantially updated for the new lifecycle model. Score improves +2 to 79, held back by stale terminology in QUICKSTART_CLIENT.md, broken DESIGN.md reference, and openapi.yaml path mismatches.
 
 ## Changes since last assessment
-- All docs updated to use `tk` in command examples (commit `c2c1353`)
-- CLAUDE.md updated with `tk` binary name, architecture, and warning about `make build`
-- AGENTS.md refreshed
-- README.md and USER_GUIDE.md still retain "ticket" framing in headers/introductions
+- SPEC.md/USER_GUIDE.md/QUICKSTART*.md updated for lifecycle (+)
+- docs/LIFECYCLE.md comprehensive (+)
+- New issues: path mismatches, stale terminology in client docs, DESIGN.md gaps (-)
 
 ## Remaining recommendations
+
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Fix "ticket" framing in README/USER_GUIDE | Medium | Update lines that say "ticket" binary to say "tk"; update installation instructions |
-| GitHub issue templates | Medium | Add `.github/ISSUE_TEMPLATE/bug_report.md` and `feature_request.md` |
-| Generate SBOM | Medium | `syft -o spdx-json . > sbom.json`; add to release pipeline |
-| Verify method count in CLAUDE.md | Low | Script: `grep -c "^func" libticket/service.go` — update comment if count drifts |
+| Fix openapi.yaml `/api/sdlc` -> `/api/sdlcs` | High | Find-replace |
+| Fix DESIGN.md broken reference and stale `open` field | High | Point to LIFECYCLE.md; update schema |
+| Fix QUICKSTART_CLIENT.md "Workflows" | High | Change to "SDLCs" |
+| Fix SPEC.md role namespace | High | `tk role ls/create/update/rm` |
+| Add project commands to SPEC.md | Medium | `project sdlc`, `project set-draft` |
+| Fix SIMULATED_USER_GUIDE.md | Medium | "Workflows" -> "SDLCs" |
+| Update README.md method count | Low | 107 -> 119 |

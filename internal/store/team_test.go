@@ -6,6 +6,7 @@ import (
 )
 
 func TestTeamCRUDAndMemberships(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	parent, err := CreateTeam(context.Background(), db, "Platform", nil)
@@ -32,7 +33,7 @@ func TestTeamCRUDAndMemberships(t *testing.T) {
 		t.Fatalf("team member mismatch: %#v", member)
 	}
 
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -44,7 +45,7 @@ func TestTeamCRUDAndMemberships(t *testing.T) {
 		t.Fatalf("team agent mismatch: %#v", teamAgent)
 	}
 
-	teams, err := ListTeams(context.Background(), db)
+	teams, err := ListTeams(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListTeams() error = %v", err)
 	}
@@ -54,6 +55,7 @@ func TestTeamCRUDAndMemberships(t *testing.T) {
 }
 
 func TestTeamUpdateAndDelete(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	team, err := CreateTeam(context.Background(), db, "Alpha", nil)
@@ -78,6 +80,7 @@ func TestTeamUpdateAndDelete(t *testing.T) {
 }
 
 func TestUpdateTeamWithParentCycleProtection(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	root, err := CreateTeam(context.Background(), db, "Root", nil)
@@ -122,6 +125,7 @@ func TestUpdateTeamWithParentCycleProtection(t *testing.T) {
 }
 
 func TestTeamMemberRemoveAndList(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	team, err := CreateTeam(context.Background(), db, "Gamma", nil)
@@ -169,13 +173,14 @@ func TestTeamMemberRemoveAndList(t *testing.T) {
 }
 
 func TestTeamAgentRemoveAndList(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	team, err := CreateTeam(context.Background(), db, "Delta", nil)
 	if err != nil {
 		t.Fatalf("CreateTeam() error = %v", err)
 	}
-	agent, _, err := CreateAgent(context.Background(), db, "secret")
+	agent, _, err := CreateAgent(context.Background(), db, "secret12")
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
@@ -200,6 +205,7 @@ func TestTeamAgentRemoveAndList(t *testing.T) {
 }
 
 func TestProjectTeamMemberRemoveAndList(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	admin, err := GetUserByUsername(context.Background(), db, "admin")
@@ -240,6 +246,7 @@ func TestProjectTeamMemberRemoveAndList(t *testing.T) {
 }
 
 func TestTeamDescendantIDs(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	root, err := CreateTeam(context.Background(), db, "Root", nil)
@@ -272,6 +279,7 @@ func TestTeamDescendantIDs(t *testing.T) {
 }
 
 func TestProjectRoleViaTeamHierarchy(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 
 	admin, err := GetUserByUsername(context.Background(), db, "admin")

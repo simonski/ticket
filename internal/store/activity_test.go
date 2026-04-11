@@ -6,6 +6,7 @@ import (
 )
 
 func TestHistoryAndComments(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	adminID := testAdminID(t, db)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", adminID)
@@ -77,6 +78,7 @@ func TestHistoryAndComments(t *testing.T) {
 }
 
 func TestListProjectHistory(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	adminID := testAdminID(t, db)
 	project, err := CreateProject(context.Background(), db, "History Project", "", "", adminID)

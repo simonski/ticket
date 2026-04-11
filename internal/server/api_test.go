@@ -15,6 +15,7 @@ import (
 )
 
 func TestAuthAndAdminAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -133,6 +134,7 @@ func TestAuthAndAdminAPI(t *testing.T) {
 }
 
 func TestChatLimitsConfigAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -217,6 +219,7 @@ func TestChatLimitsConfigAPI(t *testing.T) {
 }
 
 func TestChatEnabledConfigAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -294,6 +297,7 @@ func TestChatEnabledConfigAPI(t *testing.T) {
 }
 
 func TestProjectAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -348,6 +352,7 @@ func TestProjectAPI(t *testing.T) {
 }
 
 func TestRoleAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -489,6 +494,7 @@ func TestStoryAPIAndAnalyseFallback(t *testing.T) {
 }
 
 func TestAgentAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -581,6 +587,7 @@ func TestAgentAPI(t *testing.T) {
 }
 
 func TestTaskAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -764,6 +771,7 @@ func TestTaskAPI(t *testing.T) {
 }
 
 func TestTicketRouteAliasesAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -869,6 +877,7 @@ func TestTicketRouteAliasesAPI(t *testing.T) {
 }
 
 func TestCountAPIAndAssignmentRules(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1044,6 +1053,7 @@ func TestCountAPIAndAssignmentRules(t *testing.T) {
 }
 
 func TestTicketRequestAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1213,6 +1223,7 @@ func TestTicketRequestAPI(t *testing.T) {
 }
 
 func TestCloneTicketAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1278,6 +1289,7 @@ func TestCloneTicketAPI(t *testing.T) {
 }
 
 func TestDeleteTicketAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1310,6 +1322,7 @@ func TestDeleteTicketAPI(t *testing.T) {
 }
 
 func TestDeleteTicketAPIFailsWhenTaskHasChildren(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1347,6 +1360,7 @@ func TestDeleteTicketAPIFailsWhenTaskHasChildren(t *testing.T) {
 }
 
 func TestAPIMethodValidation(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1394,6 +1408,7 @@ func TestAPIInvalidJSONAndBadParams(t *testing.T) {
 }
 
 func TestAPIMissingAuth(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1404,6 +1419,7 @@ func TestAPIMissingAuth(t *testing.T) {
 }
 
 func TestAutoProgressTicketLifecycleDesignToDevelop(t *testing.T) {
+	t.Parallel()
 	current := store.Ticket{
 		Stage:       store.StageDesign,
 		State:       store.StateIdle,
@@ -1424,6 +1440,7 @@ func TestAutoProgressTicketLifecycleDesignToDevelop(t *testing.T) {
 }
 
 func TestAutoProgressTicketLifecycleDevelopToTestOnEstimateComplete(t *testing.T) {
+	t.Parallel()
 	current := store.Ticket{
 		Stage:            store.StageDevelop,
 		State:            store.StateActive,
@@ -1445,6 +1462,7 @@ func TestAutoProgressTicketLifecycleDevelopToTestOnEstimateComplete(t *testing.T
 }
 
 func TestAutoProgressTicketLifecycleRespectsExplicitLifecycle(t *testing.T) {
+	t.Parallel()
 	current := store.Ticket{
 		Stage:       store.StageDesign,
 		State:       store.StateIdle,
@@ -1464,6 +1482,7 @@ func TestAutoProgressTicketLifecycleRespectsExplicitLifecycle(t *testing.T) {
 }
 
 func TestProjectVisibilityAndRolePermissions(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1641,6 +1660,7 @@ func TestProjectVisibilityAndRolePermissions(t *testing.T) {
 }
 
 func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -1730,6 +1750,7 @@ func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
 }
 
 func TestTicketStateOpsAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -1816,6 +1837,7 @@ func TestTicketStateOpsAPI(t *testing.T) {
 }
 
 func TestRegistrationConfigAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -1848,6 +1870,7 @@ func TestRegistrationConfigAPI(t *testing.T) {
 }
 
 func TestAgentSdlcAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -1928,6 +1951,7 @@ func TestAgentSdlcAPI(t *testing.T) {
 }
 
 func TestSdlcImportExportReorderAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -1993,6 +2017,7 @@ func TestSdlcImportExportReorderAPI(t *testing.T) {
 }
 
 func TestProjectMembershipAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2099,6 +2124,7 @@ func TestProjectMembershipAPI(t *testing.T) {
 }
 
 func TestTeamCRUDAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2210,6 +2236,7 @@ func TestTeamCRUDAPI(t *testing.T) {
 }
 
 func TestStoryCRUDAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2267,6 +2294,7 @@ func TestStoryCRUDAPI(t *testing.T) {
 }
 
 func TestDeleteLabelByIDAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2392,6 +2420,7 @@ func loginAdmin(t *testing.T, handler http.Handler) string {
 }
 
 func TestHealthzAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 
@@ -2407,6 +2436,7 @@ func TestHealthzAPI(t *testing.T) {
 }
 
 func TestSdlcAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2477,6 +2507,7 @@ func TestSdlcAPI(t *testing.T) {
 }
 
 func TestLabelAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2547,6 +2578,7 @@ func TestLabelAPI(t *testing.T) {
 }
 
 func TestTimeEntryAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
@@ -2608,6 +2640,7 @@ func TestTimeEntryAPI(t *testing.T) {
 }
 
 func TestDependencyAPI(t *testing.T) {
+	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)

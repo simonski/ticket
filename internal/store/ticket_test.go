@@ -9,6 +9,7 @@ import (
 )
 
 func TestCreateUpdateAndListTickets(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -179,6 +180,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 }
 
 func TestSetTicketHealth(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -221,6 +223,7 @@ func TestSetTicketHealth(t *testing.T) {
 }
 
 func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -277,6 +280,7 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 }
 
 func TestRequestTicket(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -402,6 +406,7 @@ func TestRequestTicket(t *testing.T) {
 }
 
 func TestRequestTicketDryRun(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "DryRun Project", "", "", "")
 	if err != nil {
@@ -441,6 +446,7 @@ func TestRequestTicketDryRun(t *testing.T) {
 }
 
 func TestRequestTicketByRef(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Ref Project", "", "", "")
 	if err != nil {
@@ -479,6 +485,7 @@ func TestRequestTicketByRef(t *testing.T) {
 }
 
 func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -540,6 +547,7 @@ func TestUpdateTicketAssignmentRulesForNonAdmin(t *testing.T) {
 }
 
 func TestUpdateTicketAssignRequiresExistingEnabledUser(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -583,6 +591,7 @@ func TestUpdateTicketAssignRequiresExistingEnabledUser(t *testing.T) {
 }
 
 func TestUpdateTicketStatusRequiresAssignee(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -615,6 +624,7 @@ func TestUpdateTicketStatusRequiresAssignee(t *testing.T) {
 }
 
 func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -651,6 +661,7 @@ func TestUpdateTicketStatusAllowsAdminBypass(t *testing.T) {
 }
 
 func TestClosedTaskCannotBeReopened(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -711,6 +722,7 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 }
 
 func TestCloneTicketClonesSingleTask(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -743,6 +755,7 @@ func TestCloneTicketClonesSingleTask(t *testing.T) {
 }
 
 func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	adminID := testAdminID(t, db)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
@@ -813,6 +826,7 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 }
 
 func TestDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -843,6 +857,7 @@ func TestDeleteTicketFailsWhenTaskHasChildren(t *testing.T) {
 }
 
 func TestCloneEpicClonesChildren(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -892,6 +907,7 @@ func TestCloneEpicClonesChildren(t *testing.T) {
 }
 
 func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
 	if err != nil {
@@ -998,6 +1014,7 @@ func TestParentLifecycleRecalculatesRecursivelyAndWritesDerivedHistory(t *testin
 }
 
 func TestSetTicketCompleteAndArchived(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Open/Archive Project", "", "", "")
 	if err != nil {
@@ -1060,6 +1077,7 @@ func TestSetTicketCompleteAndArchived(t *testing.T) {
 }
 
 func TestGetTicketByRefAndSearchTickets(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Search Project", "", "", "")
 	if err != nil {
@@ -1100,6 +1118,7 @@ func TestGetTicketByRefAndSearchTickets(t *testing.T) {
 }
 
 func TestListTicketParents(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Parents Project", "", "", "")
 	if err != nil {
@@ -1148,6 +1167,7 @@ func TestListTicketParents(t *testing.T) {
 }
 
 func TestCurrentAssignedTicketForUser(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Assign Project", "", "", "")
 	if err != nil {
@@ -1201,6 +1221,7 @@ func TestCurrentAssignedTicketForUser(t *testing.T) {
 }
 
 func TestExplainNoWork(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "NoWork Project", "", "", "")
 	if err != nil {
@@ -1275,6 +1296,7 @@ func TestExplainNoWork(t *testing.T) {
 }
 
 func TestSetAndUnsetTicketSdlc(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Sdlc Project", "", "", "")
 	if err != nil {
@@ -1284,7 +1306,7 @@ func TestSetAndUnsetTicketSdlc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	if _, err := AddSdlcStage(context.Background(), db, wfBase.ID, "Review", "", 1); err != nil {
+	if _, err := AddSdlcStage(context.Background(), db, wfBase.ID, "Review", "", "", 1); err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
 	wf, err := GetSdlc(context.Background(), db, wfBase.ID)
@@ -1322,6 +1344,7 @@ func TestSetAndUnsetTicketSdlc(t *testing.T) {
 }
 
 func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
+	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Context Project", "", "", "")
 	if err != nil {
@@ -1333,7 +1356,7 @@ func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	if _, err := AddSdlcStage(context.Background(), db, wfBase.ID, "step1", "", 0); err != nil {
+	if _, err := AddSdlcStage(context.Background(), db, wfBase.ID, "step1", "", "", 0); err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
 

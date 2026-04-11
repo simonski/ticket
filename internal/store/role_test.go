@@ -22,6 +22,7 @@ func openRoleTestDB(t *testing.T) *sql.DB {
 }
 
 func TestDefaultRolesSeeded(t *testing.T) {
+	t.Parallel()
 
 
 
@@ -36,6 +37,7 @@ func TestDefaultRolesSeeded(t *testing.T) {
 }
 
 func TestRoleCRUD(t *testing.T) {
+	t.Parallel()
 	db := openRoleTestDB(t)
 	defer db.Close()
 
@@ -64,11 +66,12 @@ func TestRoleCRUD(t *testing.T) {
 }
 
 func TestDefaultRoleContentIsDetailed(t *testing.T) {
+	t.Parallel()
 	t.Skip("no default roles — roles are now per-SDLC")
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	roles, err := ListRoles(context.Background(), db)
+	roles, err := ListRoles(context.Background(), db, 0)
 	if err != nil {
 		t.Fatalf("ListRoles() error = %v", err)
 	}
@@ -94,32 +97,20 @@ func TestDefaultRoleContentIsDetailed(t *testing.T) {
 
 // TestSeedDefaultRolesIsNoOp verifies that seedDefaultRoles is a no-op (roles are now per-SDLC).
 func TestSeedDefaultRolesIsNoOp(t *testing.T) {
+	t.Parallel()
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	roles, _ := ListRoles(context.Background(), db)
+	roles, _ := ListRoles(context.Background(), db, 0)
 	before := len(roles)
 
 	if err := seedDefaultRoles(context.Background(), db); err != nil {
 		t.Fatalf("seedDefaultRoles() error = %v", err)
 	}
 
-	roles, _ = ListRoles(context.Background(), db)
+	roles, _ = ListRoles(context.Background(), db, 0)
 	if len(roles) != before {
 		t.Fatalf("seedDefaultRoles() should be a no-op, but role count changed: %d -> %d", before, len(roles))
 	}
 }
 
-func getRoleByTitle(db *sql.DB, title string) (Role, error) {
-	row := db.QueryRow(`
-		SELECT role_id, sdlc_id, title, description, acceptance_criteria, created_at, updated_at
-		FROM roles
-		WHERE title = ?
-	`, title)
-	var role Role
-	var sdlcID sql.NullInt64
-	if err := row.Scan(&role.ID, &sdlcID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
-		return Role{}, err
-	}
-	return role, nil
-}

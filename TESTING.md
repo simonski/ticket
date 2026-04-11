@@ -90,7 +90,7 @@ Enforced via `make test-go-cover`:
 
 | Package              | Minimum |
 |----------------------|---------|
-| `cmd/ticket`         | 55%     |
+| `cmd/tk`         | 55%     |
 | `libticket`          | 65%     |
 | `libtickethttp`      | 75%     |
 | `internal/client`    | 55%     |

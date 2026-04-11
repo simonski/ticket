@@ -34,8 +34,8 @@ make test        # All tests must pass before you start
 ```
 
 > **⚠️ Do NOT use `make build` for day-to-day development.**
-> `make build` auto-increments the patch version in `cmd/ticket/VERSION` on
-> every invocation. Use `go build -o ./bin/tk ./cmd/ticket` instead.
+> `make build` auto-increments the patch version in `cmd/tk/VERSION` on
+> every invocation. Use `go build -o ./bin/tk ./cmd/tk` instead.
 > Reserve `make build` for cutting releases.
 
 See [docs/ONBOARDING.md](docs/ONBOARDING.md) for a full onboarding walkthrough.
@@ -116,7 +116,7 @@ Coverage thresholds (enforced in CI):
 
 | Package | Threshold |
 |---------|-----------|
-| `cmd/ticket` | 55% |
+| `cmd/tk` | 55% |
 | `libticket` | 65% |
 | `libtickethttp` | 75% |
 | `internal/client` | 55% |
