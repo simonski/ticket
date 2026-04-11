@@ -22,13 +22,13 @@ func runTicketStateAlias(args []string, state, command string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return fmt.Errorf("usage: ticket %s [-id] <id> [-m comment]", command)
+		return fmt.Errorf("usage: tk %s [-id] <id> [-m comment]", command)
 	}
 	return updateTicketState(idVal, state, *message)
 }
 
 func runTicketState(args []string) error {
-	usage := "ticket state <id> <idle|active|success|fail|design|develop|test|done> [-m comment]"
+	usage := "tk state <id> <idle|active|success|fail|design|develop|test|done> [-m comment]"
 	fs := flag.NewFlagSet("ticket state", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -313,7 +313,7 @@ func runComplete(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket complete [-id] <id> [-m comment]")
+		return errors.New("usage: tk complete [-id] <id> [-m comment]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -344,7 +344,7 @@ func runReopen(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket reopen [-id] <id> [-m comment]")
+		return errors.New("usage: tk reopen [-id] <id> [-m comment]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -374,7 +374,7 @@ func runNext(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket next [-id] <id>")
+		return errors.New("usage: tk next [-id] <id>")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -412,7 +412,7 @@ func runPrevious(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket previous [-id] <id>")
+		return errors.New("usage: tk previous [-id] <id>")
 	}
 	cfg, err := config.Load()
 	if err != nil {

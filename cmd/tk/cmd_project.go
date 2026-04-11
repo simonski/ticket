@@ -56,7 +56,7 @@ func runProject(args []string) error {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: ticket project create -title <title> -prefix <prefix> [-description text] [-ac text] [-sdlc id]")
+			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-description text] [-ac text] [-sdlc id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -108,7 +108,7 @@ func runProject(args []string) error {
 		return nil
 	case "get":
 		if len(args) != 2 {
-			return errors.New("usage: ticket project get <id>")
+			return errors.New("usage: tk project get <id>")
 		}
 		project, err := svc.GetProject(args[1])
 		if err != nil {
@@ -183,7 +183,7 @@ func runProject(args []string) error {
 			return err
 		}
 		if fs.NArg() != 1 {
-			return errors.New("usage: ticket project set-draft [-project_id <id>] <true|false>")
+			return errors.New("usage: tk project set-draft [-project_id <id>] <true|false>")
 		}
 		val := strings.TrimSpace(fs.Arg(0))
 		if val != "true" && val != "false" {
@@ -210,7 +210,7 @@ func runProject(args []string) error {
 		return runProjectSdlc(cfg, svc, args[1:])
 	case "rename-prefix":
 		if len(args) < 2 {
-			return errors.New("usage: ticket project rename-prefix <new-prefix>")
+			return errors.New("usage: tk project rename-prefix <new-prefix>")
 		}
 		newPrefix := strings.ToUpper(strings.TrimSpace(args[1]))
 		if newPrefix == "" {
@@ -252,7 +252,7 @@ func runProject(args []string) error {
 			id = &v
 		}
 		if strings.TrimSpace(*id) == "" {
-			return errors.New("usage: ticket project rm [-id] <id> [--confirm <token>]")
+			return errors.New("usage: tk project rm [-id] <id> [--confirm <token>]")
 		}
 		project, err := svc.GetProject(strings.TrimSpace(*id))
 		if err != nil {
@@ -269,7 +269,7 @@ func runProject(args []string) error {
 			fmt.Printf("tickets  : %d\n", len(tickets))
 			fmt.Printf("\nThis will permanently delete the project and all associated data.\n")
 			fmt.Printf("To confirm, run:\n\n")
-			fmt.Printf("  ticket project rm -id %s --confirm %s\n\n", *id, token)
+			fmt.Printf("  tk project rm -id %s --confirm %s\n\n", *id, token)
 			// Store token temporarily in config
 			cfg.DeleteConfirmToken = token
 			cfg.DeleteConfirmProject = fmt.Sprintf("%d", project.ID)
@@ -346,7 +346,7 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 }
 
 func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) error {
-	usage := "ticket project sdlc <sdlc-id>   (use 0 to clear)"
+	usage := "tk project sdlc <sdlc-id>   (use 0 to clear)"
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		fmt.Println(usage)
 		return nil
@@ -400,7 +400,7 @@ func runProjectAddUser(svc libticket.Service, args []string) error {
 		return err
 	}
 	if *userID == "" || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-		return errors.New("usage: ticket project add-user -user_id <id> -project_id <id> -role <viewer|editor|owner>")
+		return errors.New("usage: tk project add-user -user_id <id> -project_id <id> -role <viewer|editor|owner>")
 	}
 	member, err := svc.AddProjectMember(*projectID, libticket.ProjectMemberRequest{
 		UserID: *userID,
@@ -425,7 +425,7 @@ func runProjectRemoveUser(svc libticket.Service, args []string) error {
 		return err
 	}
 	if *userID == "" || *projectID == 0 || fs.NArg() != 0 {
-		return errors.New("usage: ticket project remove-user -user_id <id> -project_id <id>")
+		return errors.New("usage: tk project remove-user -user_id <id> -project_id <id>")
 	}
 	if err := svc.RemoveProjectMember(*projectID, *userID); err != nil {
 		return err
@@ -447,7 +447,7 @@ func runProjectAddTeam(svc libticket.Service, args []string) error {
 		return err
 	}
 	if *teamID == 0 || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-		return errors.New("usage: ticket project add-team -team_id <id> -project_id <id> -role <viewer|editor|owner>")
+		return errors.New("usage: tk project add-team -team_id <id> -project_id <id> -role <viewer|editor|owner>")
 	}
 	member, err := svc.AddProjectTeamMember(*projectID, libticket.ProjectTeamMemberRequest{
 		TeamID: *teamID,
@@ -472,7 +472,7 @@ func runProjectRemoveTeam(svc libticket.Service, args []string) error {
 		return err
 	}
 	if *teamID == 0 || *projectID == 0 || fs.NArg() != 0 {
-		return errors.New("usage: ticket project remove-team -team_id <id> -project_id <id>")
+		return errors.New("usage: tk project remove-team -team_id <id> -project_id <id>")
 	}
 	if err := svc.RemoveProjectTeamMember(*projectID, *teamID); err != nil {
 		return err

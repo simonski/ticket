@@ -46,7 +46,7 @@ func runStory(args []string) error {
 			*title = strings.Join(positional, " ")
 		}
 		if strings.TrimSpace(*title) == "" {
-			return errors.New("usage: ticket story create -title <title> [-d description]")
+			return errors.New("usage: tk story create -title <title> [-d description]")
 		}
 		story, err := svc.CreateStory(project.ID, *title, *description)
 		if err != nil {
@@ -74,7 +74,7 @@ func runStory(args []string) error {
 		return nil
 	case "get":
 		if len(args) != 2 {
-			return errors.New("usage: ticket story get <id>")
+			return errors.New("usage: tk story get <id>")
 		}
 		var id int64
 		if _, err := fmt.Sscan(args[1], &id); err != nil {
@@ -97,7 +97,7 @@ func runStory(args []string) error {
 		return nil
 	case "update":
 		if len(args) < 2 {
-			return errors.New("usage: ticket story update <id> -title <title> [-d description]")
+			return errors.New("usage: tk story update <id> -title <title> [-d description]")
 		}
 		var id int64
 		if _, err := fmt.Sscan(args[1], &id); err != nil {
@@ -132,7 +132,7 @@ func runStory(args []string) error {
 		return nil
 	case "delete":
 		if len(args) != 2 {
-			return errors.New("usage: ticket story delete <id>")
+			return errors.New("usage: tk story delete <id>")
 		}
 		var id int64
 		if _, err := fmt.Sscan(args[1], &id); err != nil {
@@ -154,7 +154,7 @@ func runEpic(args []string) error {
 		switch args[0] {
 		case "use":
 			if len(args) != 2 {
-				return errors.New("usage: ticket epic use <id>")
+				return errors.New("usage: tk epic use <id>")
 			}
 			cfg, svc, _, err := resolveCurrentProjectClient()
 			if err != nil {

@@ -661,7 +661,7 @@ func TestRunUpgradeReportsOutdatedLocalVersion(t *testing.T) {
 			t.Fatalf("runUpgrade() error = %v", err)
 		}
 	})
-	want := "A newer version of ticket is available, upgrade using `go install github.com/simonski/ticket@latest`"
+	want := "A newer version of tk is available, upgrade using `go install github.com/simonski/ticket@latest`"
 	if !strings.Contains(output, want) {
 		t.Fatalf("runUpgrade() output missing %q:\n%s", want, output)
 	}
@@ -1741,11 +1741,11 @@ func TestRunUpdateRequiresIDFlag(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Needs ID Update"})
 
-	if err := run([]string{"update", taskID, "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: ticket update -id") {
+	if err := run([]string{"update", taskID, "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update -id") {
 		t.Fatalf("expected usage error for positional id, got %v", err)
 	}
 
-	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: ticket update -id") {
+	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update -id") {
 		t.Fatalf("expected usage error for missing -id, got %v", err)
 	}
 }
@@ -2177,9 +2177,9 @@ func TestRunNegativeCommandCasesInLocalMode(t *testing.T) {
 		{[]string{"get", "-id", "abc"}, "ticket not found"},
 		{[]string{"dependency", "add", "-id", "1", "abc"}, "ticket not found"},
 		{[]string{"request", "abc"}, "ticket not found"},
-		{[]string{"project", "get"}, "usage: ticket project get <id>"},
-		{[]string{"list", "-n", "-1"}, "usage: ticket list|ls"},
-		{[]string{"comment", "add", "1"}, "usage: ticket comment <id>"},
+		{[]string{"project", "get"}, "usage: tk project get <id>"},
+		{[]string{"list", "-n", "-1"}, "usage: tk list|ls"},
+		{[]string{"comment", "add", "1"}, "usage: tk comment <id>"},
 		{[]string{"set-parent", "-id", "1", "abc"}, "ticket not found"},
 		{[]string{"unset-parent", "-id", "abc"}, "ticket not found"},
 	}

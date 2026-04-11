@@ -51,7 +51,7 @@ func runLabel(args []string) error {
 			*name = fs.Arg(0)
 		}
 		if *name == "" {
-			return errors.New("usage: ticket label create <name> [-color <color>]")
+			return errors.New("usage: tk label create <name> [-color <color>]")
 		}
 		label, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: *name, Color: *color})
 		if err != nil {
@@ -74,7 +74,7 @@ func runLabel(args []string) error {
 			idStr = fs.Arg(0)
 		}
 		if idStr == "" {
-			return errors.New("usage: ticket label delete -id <label-id>")
+			return errors.New("usage: tk label delete -id <label-id>")
 		}
 		var id int64
 		if _, err := fmt.Sscan(idStr, &id); err != nil {
@@ -102,7 +102,7 @@ func runLabel(args []string) error {
 				return errors.New("label id must be numeric")
 			}
 		} else {
-			return errors.New("usage: ticket label add -id <ticket-id> <label-id>")
+			return errors.New("usage: tk label add -id <ticket-id> <label-id>")
 		}
 		return svc.AddTicketLabel(ticketID, labelID)
 	case "remove":
@@ -125,7 +125,7 @@ func runLabel(args []string) error {
 				return errors.New("label id must be numeric")
 			}
 		} else {
-			return errors.New("usage: ticket label remove -id <ticket-id> <label-id>")
+			return errors.New("usage: tk label remove -id <ticket-id> <label-id>")
 		}
 		return svc.RemoveTicketLabel(ticketID, labelID)
 	case "show":
@@ -140,7 +140,7 @@ func runLabel(args []string) error {
 			idStr = fs.Arg(0)
 		}
 		if idStr == "" {
-			return errors.New("usage: ticket label show -id <ticket-id>")
+			return errors.New("usage: tk label show -id <ticket-id>")
 		}
 		ticketID := idStr
 		labels, err := svc.ListTicketLabels(ticketID)
@@ -187,7 +187,7 @@ func runTime(args []string) error {
 			return err
 		}
 		if *ticketID == "" || *minutes <= 0 {
-			return errors.New("usage: ticket time log -id <ticket-id> -m <minutes> [-note <text>]")
+			return errors.New("usage: tk time log -id <ticket-id> -m <minutes> [-note <text>]")
 		}
 		entry, err := svc.LogTime(*ticketID, libticket.TimeEntryRequest{Minutes: *minutes, Note: *note})
 		if err != nil {
@@ -210,7 +210,7 @@ func runTime(args []string) error {
 			ticketID = fs.Arg(0)
 		}
 		if ticketID == "" {
-			return errors.New("usage: ticket time list -id <ticket-id>")
+			return errors.New("usage: tk time list -id <ticket-id>")
 		}
 		entries, err := svc.ListTimeEntries(ticketID)
 		if err != nil {
@@ -241,7 +241,7 @@ func runTime(args []string) error {
 			ticketID = fs.Arg(0)
 		}
 		if ticketID == "" {
-			return errors.New("usage: ticket time total -id <ticket-id>")
+			return errors.New("usage: tk time total -id <ticket-id>")
 		}
 		total, err := svc.TotalTimeForTicket(ticketID)
 		if err != nil {
@@ -272,7 +272,7 @@ func runTime(args []string) error {
 			}
 		}
 		if id == 0 {
-			return errors.New("usage: ticket time delete -id <entry-id>")
+			return errors.New("usage: tk time delete -id <entry-id>")
 		}
 		return svc.DeleteTimeEntry(id)
 	default:

@@ -150,7 +150,7 @@ type TicketService interface {
 }
 
 // Service defines all ticket management operations. It is implemented by
-// LocalService (direct SQLite access) and libtickethttp.Service (HTTP client).
+// LocalService (direct SQLite access) and HTTPService (HTTP client).
 // It composes all sub-interfaces for convenient use as a single dependency.
 type Service interface {
 	AuthService

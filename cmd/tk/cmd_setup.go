@@ -29,7 +29,7 @@ import (
 
 func runOnboard(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: ticket onboard")
+		return errors.New("usage: tk onboard")
 	}
 	if outputJSON {
 		return printJSON(map[string]string{"status": "ok", "content": embeddedAgents})
@@ -587,7 +587,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 
 	// Check .gitignore for credentials file
 	gitignorePath := filepath.Join(cwd, ".gitignore")
-	credEntry := ".ticket/credentials.json" // #nosec G101 -- this is a path string, not a credential
+	credEntry := ".ticket/credentials.json"                          // #nosec G101 -- this is a path string, not a credential
 	if data, readErr := os.ReadFile(gitignorePath); readErr == nil { // #nosec G304 -- gitignorePath is derived from cwd, not user input
 		if !strings.Contains(string(data), credEntry) {
 			fmt.Println()
@@ -843,7 +843,7 @@ func runExportSnapshot(args []string) error {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return errors.New("usage: ticket export [-o <snapshot-file>]")
+		return errors.New("usage: tk export [-o <snapshot-file>]")
 	}
 	path := strings.TrimSpace(*outputPath)
 	if path == "" {
@@ -881,11 +881,11 @@ func runImportSnapshot(args []string) error {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return errors.New("usage: ticket import -i <snapshot-file>")
+		return errors.New("usage: tk import -i <snapshot-file>")
 	}
 	path := strings.TrimSpace(*inputPath)
 	if path == "" {
-		return errors.New("usage: ticket import -i <snapshot-file>")
+		return errors.New("usage: tk import -i <snapshot-file>")
 	}
 	raw, err := os.ReadFile(path) // #nosec G304 -- path is a CLI flag provided by the operator, not untrusted input
 	if err != nil {
@@ -1142,7 +1142,7 @@ func runServer(args []string) error {
 	fmt.Print(renderBanner())
 	fmt.Printf("VERSION    %s\n", strings.TrimSpace(embeddedVersion))
 	fmt.Printf("TICKETDB   %s\n\n", *dbPath)
-	fmt.Printf("serving ticket on http://localhost%s\n", listenAddr)
+	fmt.Printf("serving tk on http://localhost%s\n", listenAddr)
 
 	// Run the server in a goroutine so we can listen for shutdown signals.
 	errCh := make(chan error, 1)

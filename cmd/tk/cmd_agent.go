@@ -434,7 +434,7 @@ func runAgent(args []string) error {
 		return nil
 	case "config-set":
 		if len(args) < 4 {
-			return errors.New("usage: ticket agent config-set -id <agent-uuid> <key> <value>")
+			return errors.New("usage: tk agent config-set -id <agent-uuid> <key> <value>")
 		}
 		fs := flag.NewFlagSet("agent config-set", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -447,7 +447,7 @@ func runAgent(args []string) error {
 			return err
 		}
 		if fs.NArg() < 2 {
-			return errors.New("usage: ticket agent config-set -id <agent-uuid> <key> <value>")
+			return errors.New("usage: tk agent config-set -id <agent-uuid> <key> <value>")
 		}
 		if err := svc.SetAgentConfig(dbID, fs.Arg(0), fs.Arg(1)); err != nil {
 			return err
@@ -492,7 +492,7 @@ func runAgent(args []string) error {
 			return err
 		}
 		if fs.NArg() < 1 {
-			return errors.New("usage: ticket agent config-rm -id <agent-uuid> <key>")
+			return errors.New("usage: tk agent config-rm -id <agent-uuid> <key>")
 		}
 		if err := svc.DeleteAgentConfig(dbID, fs.Arg(0)); err != nil {
 			return err

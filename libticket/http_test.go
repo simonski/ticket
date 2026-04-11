@@ -1,4 +1,4 @@
-package libtickethttp
+package libticket_test
 
 import (
 	"database/sql"
@@ -14,20 +14,19 @@ import (
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
-	"github.com/simonski/ticket/libtickettest"
 )
 
 func TestHTTPServiceContract(t *testing.T) {
-	libtickettest.RunServiceContractTests(t, func(t *testing.T) libticket.Service {
+	RunServiceContractTests(t, func(t *testing.T) libticket.Service {
 		_, svc := newRemoteFixture(t)
 		return svc
-	}, libtickettest.ContractOptions{RequireStatusOwnership: false})
+	}, ContractOptions{RequireStatusOwnership: false})
 }
 
 func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
-	svc := New(config.Config{Location: fixture.server.URL})
+	svc := libticket.NewHTTP(config.Config{Location: fixture.server.URL})
 	status, err := svc.Status()
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
@@ -40,7 +39,7 @@ func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
 func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
-	svc := New(config.Config{Location: fixture.server.URL})
+	svc := libticket.NewHTTP(config.Config{Location: fixture.server.URL})
 	user, err := svc.Register("alice", "secret12")
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
@@ -57,7 +56,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 		t.Fatalf("Login() = %#v, token=%q", loggedIn, token)
 	}
 
-	authed := New(config.Config{Location: fixture.server.URL, Token: token, Username: "alice"})
+	authed := libticket.NewHTTP(config.Config{Location: fixture.server.URL, Token: token, Username: "alice"})
 	status, err := authed.Status()
 	if err != nil {
 		t.Fatalf("Status(authenticated) error = %v", err)
@@ -183,7 +182,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 func TestHTTPServiceCountRequiresAuth(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
-	svc := New(config.Config{Location: fixture.server.URL})
+	svc := libticket.NewHTTP(config.Config{Location: fixture.server.URL})
 	if _, err := svc.Count(nil); err == nil {
 		t.Fatal("Count() error = nil, want auth error")
 	}
@@ -196,9 +195,8 @@ func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
 		_, _ = w.Write([]byte("{not-json"))
 	}))
 	defer server.Close()
-	
 
-	svc := New(config.Config{Location: server.URL})
+	svc := libticket.NewHTTP(config.Config{Location: server.URL})
 	if _, err := svc.Status(); err == nil {
 		t.Fatal("Status() error = nil, want JSON decode error")
 	}
@@ -210,9 +208,8 @@ func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
 		http.Error(w, "plain failure", http.StatusForbidden)
 	}))
 	defer server.Close()
-	
 
-	svc := New(config.Config{Location: server.URL})
+	svc := libticket.NewHTTP(config.Config{Location: server.URL})
 	if _, err := svc.Count(nil); err == nil {
 		t.Fatal("Count() error = nil, want HTTP status error")
 	}
@@ -227,7 +224,7 @@ func TestHTTPServiceHandlesNetworkFailure(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	svc := New(config.Config{Location: "http://" + addr})
+	svc := libticket.NewHTTP(config.Config{Location: "http://" + addr})
 	if _, err := svc.Status(); err == nil {
 		t.Fatal("Status() error = nil, want network error")
 	}
@@ -238,7 +235,7 @@ type remoteFixture struct {
 	db     *sql.DB
 }
 
-func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
+func newRemoteFixture(t *testing.T) (*remoteFixture, *libticket.HTTPService) {
 	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -267,10 +264,10 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *Service) {
 		t.Fatalf("raw Login() error = %v", err)
 	}
 
-	svc := New(config.Config{
+	svc := libticket.NewHTTP(config.Config{
 		Location: httpServer.URL,
-		Token:     auth.Token,
-		Username:  auth.User.Username,
+		Token:    auth.Token,
+		Username: auth.User.Username,
 	})
 	return &remoteFixture{server: httpServer, db: db}, svc
 }

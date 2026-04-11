@@ -13,7 +13,7 @@ import (
 
 func runVersion(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: ticket version")
+		return errors.New("usage: tk version")
 	}
 	fmt.Println(strings.TrimSpace(embeddedVersion))
 	return nil
@@ -21,7 +21,7 @@ func runVersion(args []string) error {
 
 func runUpgrade(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: ticket upgrade")
+		return errors.New("usage: tk upgrade")
 	}
 
 	localVersion := strings.TrimSpace(embeddedVersion)
@@ -34,7 +34,7 @@ func runUpgrade(args []string) error {
 	case 0:
 		fmt.Printf("You are on the latest version (%s)\n", localVersion)
 	case -1:
-		fmt.Println("A newer version of ticket is available, upgrade using `go install github.com/simonski/ticket@latest`")
+		fmt.Println("A newer version of tk is available, upgrade using `go install github.com/simonski/ticket@latest`")
 	default:
 		fmt.Println("Your local copy is newer than the repo")
 	}

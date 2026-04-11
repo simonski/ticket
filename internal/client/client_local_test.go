@@ -10,7 +10,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
-	"github.com/simonski/ticket/libticket"
+
 )
 
 func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
@@ -505,7 +505,7 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	entry, err := api.LogTime(ticket.ID, libticket.TimeEntryRequest{Minutes: 30, Note: "work"})
+	entry, err := api.LogTime(ticket.ID, TimeEntryRequest{Minutes: 30, Note: "work"})
 	if err != nil {
 		t.Fatalf("LogTime() error = %v", err)
 	}
@@ -527,7 +527,7 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 		t.Fatalf("DeleteTimeEntry() error = %v", err)
 	}
 
-	label, err := api.CreateLabel(1, libticket.LabelRequest{Name: "bug", Color: "red"})
+	label, err := api.CreateLabel(1, LabelRequest{Name: "bug", Color: "red"})
 	if err != nil {
 		t.Fatalf("CreateLabel() error = %v", err)
 	}

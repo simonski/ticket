@@ -24,7 +24,7 @@ func runHealth(args []string) error {
 	}
 	idVal, _, err := resolveIDFlag(*id, fs.Args())
 	if err != nil {
-		return errors.New("usage: ticket health [-id] <id>|execute")
+		return errors.New("usage: tk health [-id] <id>|execute")
 	}
 
 	cfg, err := config.Load()
@@ -325,7 +325,7 @@ Targets:
 		}
 		idVal, _, err := resolveIDFlag(*id, fs.Args())
 		if err != nil || idVal == "" {
-			return errors.New("usage: ticket doctor ticket [-id] <id>")
+			return errors.New("usage: tk doctor ticket [-id] <id>")
 		}
 		ticket, err := svc.GetTicket(idVal)
 		if err != nil {

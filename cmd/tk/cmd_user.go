@@ -128,7 +128,7 @@ func finishLogin(cfg config.Config, user store.User, token string) error {
 
 func runLogout(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: ticket logout")
+		return errors.New("usage: tk logout")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -160,7 +160,7 @@ func runLogout(args []string) error {
 
 func runStatus(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: ticket status")
+		return errors.New("usage: tk status")
 	}
 	resolved, err := config.ResolveURL()
 	if err != nil {
@@ -188,7 +188,7 @@ func runCount(args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: ticket count [-project_id <id>]")
+		return errors.New("usage: tk count [-project_id <id>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -392,7 +392,7 @@ func runUser(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*username) == "" {
-			return errors.New("usage: ticket user reset-password -username <name> [-password <new-password>]")
+			return errors.New("usage: tk user reset-password -username <name> [-password <new-password>]")
 		}
 		pw := strings.TrimSpace(*newPassword)
 		if pw == "" {

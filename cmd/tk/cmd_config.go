@@ -19,7 +19,7 @@ func runConfig(args []string) error {
 	switch args[0] {
 	case "registration-enable":
 		if len(args) != 1 {
-			return errors.New("usage: ticket config registration-enable")
+			return errors.New("usage: tk config registration-enable")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -32,7 +32,7 @@ func runConfig(args []string) error {
 		return nil
 	case "registration-disable":
 		if len(args) != 1 {
-			return errors.New("usage: ticket config registration-disable")
+			return errors.New("usage: tk config registration-disable")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -45,7 +45,7 @@ func runConfig(args []string) error {
 		return nil
 	case "set":
 		if len(args) != 3 {
-			return errors.New("usage: ticket config set <key> <value>")
+			return errors.New("usage: tk config set <key> <value>")
 		}
 		switch args[1] {
 		case "location":
@@ -60,7 +60,7 @@ func runConfig(args []string) error {
 		return nil
 	case "get":
 		if len(args) != 2 {
-			return errors.New("usage: ticket config get <key>")
+			return errors.New("usage: tk config get <key>")
 		}
 		switch args[1] {
 		case "location":
@@ -84,7 +84,7 @@ func runConfig(args []string) error {
 		}
 	case "ls", "list":
 		if len(args) != 1 {
-			return errors.New("usage: ticket config ls")
+			return errors.New("usage: tk config ls")
 		}
 		r, _ := config.ResolveURL()
 		printBoxTable("KEY\tVALUE", []string{
@@ -97,7 +97,7 @@ func runConfig(args []string) error {
 		return nil
 	case "rm", "delete":
 		if len(args) != 2 {
-			return errors.New("usage: ticket config rm|delete <key>")
+			return errors.New("usage: tk config rm|delete <key>")
 		}
 		switch args[1] {
 		case "location":

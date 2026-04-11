@@ -12,7 +12,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
-	"github.com/simonski/ticket/libticket"
+
 )
 
 func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
@@ -733,7 +733,7 @@ func TestRemoteClientTimeTrackingAndLabels(t *testing.T) {
 
 	api := New(config.Config{Location: server.URL})
 
-	if _, err := api.LogTime("11", libticket.TimeEntryRequest{Minutes: 30, Note: "work"}); err != nil {
+	if _, err := api.LogTime("11", TimeEntryRequest{Minutes: 30, Note: "work"}); err != nil {
 		t.Fatalf("LogTime() error = %v", err)
 	}
 	if _, err := api.ListTimeEntries("11"); err != nil {
@@ -747,7 +747,7 @@ func TestRemoteClientTimeTrackingAndLabels(t *testing.T) {
 	} else if total != 30 {
 		t.Fatalf("TotalTimeForTicket() = %d, want 30", total)
 	}
-	if _, err := api.CreateLabel(7, libticket.LabelRequest{Name: "bug", Color: "red"}); err != nil {
+	if _, err := api.CreateLabel(7, LabelRequest{Name: "bug", Color: "red"}); err != nil {
 		t.Fatalf("CreateLabel() error = %v", err)
 	}
 	if _, err := api.ListLabels(7); err != nil {

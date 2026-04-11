@@ -15,7 +15,6 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
-	"github.com/simonski/ticket/libticket"
 )
 
 type Client struct {
@@ -1817,7 +1816,7 @@ func (c *Client) PreviousTicket(id string) (store.Ticket, error) {
 	return ticket, err
 }
 
-func (c *Client) LogTime(ticketID string, request libticket.TimeEntryRequest) (store.TimeEntry, error) {
+func (c *Client) LogTime(ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1877,7 +1876,7 @@ func (c *Client) TotalTimeForTicket(ticketID string) (int, error) {
 	return result.Total, err
 }
 
-func (c *Client) CreateLabel(projectID int64, request libticket.LabelRequest) (store.Label, error) {
+func (c *Client) CreateLabel(projectID int64, request LabelRequest) (store.Label, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {

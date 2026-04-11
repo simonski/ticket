@@ -193,7 +193,7 @@ func runTicketGen(args []string) error {
 		return err
 	}
 	if strings.TrimSpace(*filesArg) == "" || strings.TrimSpace(*outputFile) == "" {
-		return errors.New("usage: ticket ticket -f <file1,file2,...> -o <output-file> [-agent <agent>]")
+		return errors.New("usage: tk ticket -f <file1,file2,...> -o <output-file> [-agent <agent>]")
 	}
 
 	files := splitCSV(*filesArg)
@@ -357,7 +357,7 @@ func runList(args []string) error {
 		taskType = &v
 	}
 	if *limit < 0 {
-		return errors.New("usage: ticket list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-label <name>]")
+		return errors.New("usage: tk list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-label <name>]")
 	}
 	// -d implies -a (archived tickets are a superset of closed)
 	if *includeDeleted {
@@ -531,7 +531,7 @@ func runBoard(args []string) error {
 
 func runOrphans(args []string) error {
 	if len(args) != 0 {
-		return errors.New("usage: ticket orphans")
+		return errors.New("usage: tk orphans")
 	}
 	_, api, project, err := resolveCurrentProjectClient()
 	if err != nil {
@@ -557,7 +557,7 @@ func runOrphans(args []string) error {
 }
 
 func runGet(args []string) error {
-	usage := "ticket get [-id] <id>"
+	usage := "tk get [-id] <id>"
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -631,7 +631,7 @@ func runGet(args []string) error {
 }
 
 func runEdit(args []string) error {
-	usage := "ticket edit [-id] <id>"
+	usage := "tk edit [-id] <id>"
 	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id or key")
@@ -704,7 +704,7 @@ func runSearch(args []string) error {
 		return err
 	}
 	if query == "" {
-		return errors.New("usage: ticket search <free form query> [-status <status>] [-title <text>] [-description <text>] [-priority <n>] [-owner <user>]")
+		return errors.New("usage: tk search <free form query> [-status <status>] [-title <text>] [-description <text>] [-priority <n>] [-owner <user>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -946,7 +946,7 @@ func runUnsetParent(args []string, command string) error {
 }
 
 func runUpdate(args []string) error {
-	usage := "ticket update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
+	usage := "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -1168,7 +1168,7 @@ func runAssign(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 1 {
-		return errors.New("usage: ticket assign [-id] <id> <name> [-m comment]")
+		return errors.New("usage: tk assign [-id] <id> <name> [-m comment]")
 	}
 	return assignTicket(idVal, rest[0], true, *message)
 }
@@ -1183,7 +1183,7 @@ func runUnassign(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 1 {
-		return errors.New("usage: ticket unassign [-id] <id> <name> [-m comment]")
+		return errors.New("usage: tk unassign [-id] <id> <name> [-m comment]")
 	}
 	return unassignTicket(idVal, rest[0], true, *message)
 }
@@ -1194,7 +1194,7 @@ func runClaim(args []string) error {
 		switch args[i] {
 		case "-id":
 			if i+1 >= len(args) {
-				return errors.New("usage: ticket claim [-id <id>] [-dry-run]")
+				return errors.New("usage: tk claim [-id <id>] [-dry-run]")
 			}
 			rewritten = append(rewritten, args[i+1])
 			i++
@@ -1217,7 +1217,7 @@ func runUnclaim(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket unclaim [-id] <id> [-m comment]")
+		return errors.New("usage: tk unclaim [-id] <id> [-m comment]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1405,7 +1405,7 @@ func runHistory(args []string) error {
 	}
 
 	if len(remaining) != 1 {
-		return errors.New("usage: ticket history [-n <limit>] [-user_id ID] [-agent_id ID] [-team_id ID] [<id>]")
+		return errors.New("usage: tk history [-n <limit>] [-user_id ID] [-agent_id ID] [-team_id ID] [<id>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1447,7 +1447,7 @@ func runDependencyCommand(args []string, add bool) error {
 		command = "remove-dependency"
 	}
 	if len(args) != 2 {
-		return fmt.Errorf("usage: ticket %s <id> <dependency-id[,dependency-id...]>", command)
+		return fmt.Errorf("usage: tk %s <id> <dependency-id[,dependency-id...]>", command)
 	}
 	_, api, project, err := resolveCurrentProjectClient()
 	if err != nil {
@@ -1501,7 +1501,7 @@ func runDependency(args []string) error {
 		fmt.Println(depUsage)
 		return nil
 	}
-	depUsageErr := "usage: ticket dep <add|remove> -id <id> <dependency-id>"
+	depUsageErr := "usage: tk dep <add|remove> -id <id> <dependency-id>"
 	action := args[0]
 	switch args[0] {
 	case "add":
@@ -1543,10 +1543,10 @@ func runRequest(args []string) error {
 			dryRun = true
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("usage: ticket request [--dryrun] [<id>]")
+				return fmt.Errorf("usage: tk request [--dryrun] [<id>]")
 			}
 			if requestedRef != "" {
-				return fmt.Errorf("usage: ticket request [--dryrun] [<id>]")
+				return fmt.Errorf("usage: tk request [--dryrun] [<id>]")
 			}
 			requestedRef = arg
 		}
@@ -1583,7 +1583,7 @@ func runRequest(args []string) error {
 
 func runRequestDryRun(args []string) error {
 	if len(args) > 1 {
-		return errors.New("usage: ticket request-dryrun [<id>]")
+		return errors.New("usage: tk request-dryrun [<id>]")
 	}
 
 	_, api, project, err := resolveCurrentProjectClient()
@@ -1637,7 +1637,7 @@ func parseIDList(raw string) ([]int64, error) {
 }
 
 func runComment(args []string) error {
-	usage := "ticket comment <id> \"comment\""
+	usage := "tk comment <id> \"comment\""
 	if len(args) == 0 {
 		return errors.New("usage: " + usage)
 	}
@@ -1699,7 +1699,7 @@ func runClone(args []string) error {
 	}
 	idVal, rest, err := resolveIDFlag(*id, fs.Args())
 	if err != nil || len(rest) != 0 {
-		return errors.New("usage: ticket clone|cp [-id] <id> [-m comment]")
+		return errors.New("usage: tk clone|cp [-id] <id> [-m comment]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1726,7 +1726,7 @@ func runClone(args []string) error {
 }
 
 func runDeleteTicket(args []string) error {
-	usage := "ticket rm|delete [-id] <id> [--confirm <token>]"
+	usage := "tk rm|delete [-id] <id> [--confirm <token>]"
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -1760,7 +1760,7 @@ func runDeleteTicket(args []string) error {
 		fmt.Printf("type     : %s\n", ticket.Type)
 		fmt.Printf("\nThis will permanently delete the ticket and all associated data.\n")
 		fmt.Printf("To confirm, run:\n\n")
-		fmt.Printf("  ticket rm -id %s --confirm %s\n\n", ticket.ID, token)
+		fmt.Printf("  tk rm -id %s --confirm %s\n\n", ticket.ID, token)
 		cfg.DeleteConfirmToken = token
 		cfg.DeleteConfirmTicket = ticket.ID
 		return config.Save(cfg)
@@ -1835,8 +1835,45 @@ func runTicketCreate(args []string) error {
 	if title == "" {
 		title = strings.Join(fs.Args(), " ")
 	}
+
+	// Support @filename: read markdown file, parse key-value headers and body as description.
+	if strings.HasPrefix(title, "@") {
+		filePath := title[1:]
+		data, err := os.ReadFile(filePath) // #nosec G304 -- user-specified file path for ticket creation
+		if err != nil {
+			return fmt.Errorf("cannot read %s: %w", filePath, err)
+		}
+		fileTitle, fileFields, fileBody := parseTicketFile(string(data))
+		if fileTitle != "" && *titleFlag == "" {
+			title = fileTitle
+		}
+		if v, ok := fileFields["type"]; ok && *taskType == "task" {
+			*taskType = v
+		}
+		if v, ok := fileFields["priority"]; ok {
+			if n, err := strconv.Atoi(v); err == nil {
+				*priority = n
+			}
+		}
+		if v, ok := fileFields["assignee"]; ok && *assignee == "" {
+			*assignee = v
+		}
+		if v, ok := fileFields["parent"]; ok && *parent == "" {
+			*parent = v
+		}
+		if v, ok := fileFields["project"]; ok && *project == "" {
+			*project = v
+		}
+		if v, ok := fileFields["ac"]; ok && *acceptanceCriteria == "" {
+			*acceptanceCriteria = v
+		}
+		if fileBody != "" && *description == "" {
+			*description = fileBody
+		}
+	}
+
 	if title == "" {
-		return errors.New("usage: ticket add|create|new [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-ac criteria] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words]")
+		return errors.New("usage: tk add|create|new [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-ac criteria] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
 	}
 	opts := ticketCreateOptions{
 		TicketType:         *taskType,
@@ -1959,3 +1996,36 @@ func createTicket(opts ticketCreateOptions) error {
 	return nil
 }
 
+// parseTicketFile parses a markdown file into ticket fields. Lines at the top
+// of the file matching "key: value" are extracted as fields. The first
+// "title: ..." line sets the title. Everything after the key-value header
+// becomes the description body.
+func parseTicketFile(content string) (title string, fields map[string]string, body string) {
+	fields = make(map[string]string)
+	lines := strings.Split(content, "\n")
+	bodyStart := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			// Blank line ends the header section.
+			bodyStart = i + 1
+			break
+		}
+		idx := strings.Index(trimmed, ":")
+		if idx < 1 {
+			// Not a key-value line — treat everything from here as body.
+			bodyStart = i
+			break
+		}
+		key := strings.TrimSpace(strings.ToLower(trimmed[:idx]))
+		value := strings.TrimSpace(trimmed[idx+1:])
+		if key == "title" {
+			title = value
+		} else {
+			fields[key] = value
+		}
+		bodyStart = i + 1
+	}
+	body = strings.TrimSpace(strings.Join(lines[bodyStart:], "\n"))
+	return title, fields, body
+}

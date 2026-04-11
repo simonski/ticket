@@ -51,7 +51,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *name == "" {
-			return errors.New("usage: ticket sdlc create -name <name> [-d <description>]")
+			return errors.New("usage: tk sdlc create -name <name> [-d <description>]")
 		}
 		wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: *name, Description: *desc})
 		if err != nil {
@@ -70,7 +70,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *id == 0 {
-			return errors.New("usage: ticket sdlc get -id <id>")
+			return errors.New("usage: tk sdlc get -id <id>")
 		}
 		wf, err := svc.GetSdlc(*id)
 		if err != nil {
@@ -89,7 +89,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *id == 0 {
-			return errors.New("usage: ticket sdlc delete -id <id>")
+			return errors.New("usage: tk sdlc delete -id <id>")
 		}
 		if err := svc.DeleteSdlc(*id); err != nil {
 			return err
@@ -107,7 +107,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *wfID == 0 || *name == "" {
-			return errors.New("usage: ticket sdlc add-stage -id <sdlc_id> -name <stage> [-d <desc>] [-order <n>]")
+			return errors.New("usage: tk sdlc add-stage -id <sdlc_id> -name <stage> [-d <desc>] [-order <n>]")
 		}
 		stage, err := svc.AddSdlcStage(*wfID, libticket.SdlcStageRequest{
 			StageName:   *name,
@@ -133,7 +133,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *stageID == 0 || *name == "" {
-			return errors.New("usage: ticket sdlc stage-update -stage-id <id> -name <name> [-d <desc>] [-ac <criteria>]")
+			return errors.New("usage: tk sdlc stage-update -stage-id <id> -name <name> [-d <desc>] [-ac <criteria>]")
 		}
 		stage, err := svc.UpdateSdlcStage(*stageID, libticket.SdlcStageRequest{
 			StageName:          *name,
@@ -156,7 +156,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *sdlcID == 0 {
-			return errors.New("usage: ticket sdlc stage-list -id <sdlc_id>")
+			return errors.New("usage: tk sdlc stage-list -id <sdlc_id>")
 		}
 		stages, err := svc.ListSdlcStages(*sdlcID)
 		if err != nil {
@@ -175,7 +175,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *stageID == 0 {
-			return errors.New("usage: ticket sdlc stage-get -stage-id <id>")
+			return errors.New("usage: tk sdlc stage-get -stage-id <id>")
 		}
 		stage, err := svc.GetSdlcStage(*stageID)
 		if err != nil {
@@ -194,7 +194,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *stageID == 0 {
-			return errors.New("usage: ticket sdlc remove-stage -stage-id <id>")
+			return errors.New("usage: tk sdlc remove-stage -stage-id <id>")
 		}
 		if err := svc.RemoveSdlcStage(*stageID); err != nil {
 			return err
@@ -209,7 +209,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *wfID == 0 || fs.NArg() < 1 {
-			return errors.New("usage: ticket sdlc reorder-stages -id <sdlc_id> <stage_id,stage_id,...>")
+			return errors.New("usage: tk sdlc reorder-stages -id <sdlc_id> <stage_id,stage_id,...>")
 		}
 		parts := strings.Split(fs.Arg(0), ",")
 		ids := make([]int64, 0, len(parts))
@@ -234,7 +234,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *id == 0 {
-			return errors.New("usage: ticket sdlc export -id <id> [-o file]")
+			return errors.New("usage: tk sdlc export -id <id> [-o file]")
 		}
 		export, err := svc.ExportSdlc(*id)
 		if err != nil {
@@ -257,7 +257,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *inFile == "" {
-			return errors.New("usage: ticket sdlc import -file <file>")
+			return errors.New("usage: tk sdlc import -file <file>")
 		}
 		data, err := os.ReadFile(*inFile)
 		if err != nil {
@@ -285,7 +285,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *ticketID == "" || *sdlcID == 0 {
-			return errors.New("usage: ticket sdlc set -ticket <ticket-id> -sdlc <sdlc-id>")
+			return errors.New("usage: tk sdlc set -ticket <ticket-id> -sdlc <sdlc-id>")
 		}
 		ticket, err := svc.SetTicketSdlc(*ticketID, *sdlcID)
 		if err != nil {
@@ -304,7 +304,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *sdlcID == 0 {
-			return errors.New("usage: ticket sdlc role-list -id <sdlc_id>")
+			return errors.New("usage: tk sdlc role-list -id <sdlc_id>")
 		}
 		roles, err := svc.ListRoles()
 		if err != nil {
@@ -331,7 +331,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *sdlcID == 0 || *stageID == 0 || *roleID == 0 {
-			return errors.New("usage: ticket sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>")
+			return errors.New("usage: tk sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>")
 		}
 		if err := svc.AddSdlcStageRole(*sdlcID, *stageID, *roleID); err != nil {
 			return err
@@ -348,7 +348,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *sdlcID == 0 || *stageID == 0 || *roleID == 0 {
-			return errors.New("usage: ticket sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>")
+			return errors.New("usage: tk sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>")
 		}
 		if err := svc.RemoveSdlcStageRole(*sdlcID, *stageID, *roleID); err != nil {
 			return err
@@ -365,7 +365,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *sdlcID == 0 || *stageID == 0 || *roles == "" {
-			return errors.New("usage: ticket sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <id,id,...>")
+			return errors.New("usage: tk sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <id,id,...>")
 		}
 		parts := strings.Split(*roles, ",")
 		roleIDs := make([]int64, 0, len(parts))
@@ -389,7 +389,7 @@ func runSdlc(args []string) error {
 			return err
 		}
 		if *ticketID == "" {
-			return errors.New("usage: ticket sdlc unset -ticket <ticket-id>")
+			return errors.New("usage: tk sdlc unset -ticket <ticket-id>")
 		}
 		ticket, err := svc.UnsetTicketSdlc(*ticketID)
 		if err != nil {

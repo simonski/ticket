@@ -1,4 +1,7 @@
-package libtickettest
+// contract_test.go defines shared contract tests that verify the Service
+// interface. Both the local (SQLite) and HTTP implementations run these tests
+// to ensure behavioural parity.
+package libticket_test
 
 import (
 	"strconv"

@@ -79,6 +79,16 @@ type SdlcReorderRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 
+type TimeEntryRequest struct {
+	Minutes int    `json:"minutes"`
+	Note    string `json:"note"`
+}
+
+type LabelRequest struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
 type TicketCreateRequest struct {
 	ProjectID          int64   `json:"project_id"`
 	ParentID           *string `json:"parent_id,omitempty"`

@@ -12,7 +12,6 @@ import (
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
-	"github.com/simonski/ticket/libtickethttp"
 )
 
 func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
@@ -65,7 +64,7 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		if resolved.ServerURL == "" {
 			return nil, errors.New("remote mode requires a location (run tk init to configure)")
 		}
-		return libtickethttp.New(cfg), nil
+		return libticket.NewHTTP(cfg), nil
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", resolved.Mode)
 	}

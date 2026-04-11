@@ -8,12 +8,11 @@ import (
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
-	"github.com/simonski/ticket/libtickettest"
 )
 
 func TestLocalServiceContract(t *testing.T) {
 
-	libtickettest.RunServiceContractTests(t, func(t *testing.T) libticket.Service {
+	RunServiceContractTests(t, func(t *testing.T) libticket.Service {
 		tempDir := t.TempDir()
 		t.Setenv("TICKET_HOME", tempDir)
 		dbPath := filepath.Join(tempDir, "ticket.db")
@@ -21,7 +20,7 @@ func TestLocalServiceContract(t *testing.T) {
 			t.Fatalf("store.Init() error = %v", err)
 		}
 		return libticket.NewLocal(config.Config{})
-	}, libtickettest.ContractOptions{RequireStatusOwnership: false})
+	}, ContractOptions{RequireStatusOwnership: false})
 }
 
 func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {

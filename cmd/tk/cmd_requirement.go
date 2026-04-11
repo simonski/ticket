@@ -16,7 +16,7 @@ import (
 
 func runCurate(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ticket curate <id> [id...]")
+		return errors.New("usage: tk curate <id> [id...]")
 	}
 	_, api, project, err := resolveCurrentProjectClient()
 	if err != nil {
@@ -92,7 +92,7 @@ func runReview(args []string) error {
 func runRequirementStatus(reviewStatus string, args []string) error {
 	commandName := map[string]string{"accepted": "accept", "rejected": "reject"}[reviewStatus]
 	if len(args) != 2 || args[0] != "requirement" {
-		return fmt.Errorf("usage: ticket %s requirement <id>", commandName)
+		return fmt.Errorf("usage: tk %s requirement <id>", commandName)
 	}
 	stateToSet := map[string]string{"accepted": store.StateSuccess, "rejected": store.StateFail}[reviewStatus]
 	return updateTicketState(args[1], stateToSet)
@@ -100,7 +100,7 @@ func runRequirementStatus(reviewStatus string, args []string) error {
 
 func runRevise(args []string) error {
 	if len(args) != 2 || args[0] != "requirement" {
-		return errors.New("usage: ticket revise requirement <id>")
+		return errors.New("usage: tk revise requirement <id>")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -233,7 +233,7 @@ func runReqShape(args []string) error {
 		return err
 	}
 	if *id == "" {
-		return errors.New("usage: ticket req shape -id <id> [-d description] [-ac criteria]")
+		return errors.New("usage: tk req shape -id <id> [-d description] [-ac criteria]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -284,7 +284,7 @@ func runReqAcceptReject(verb string, args []string) error {
 		return err
 	}
 	if *id == "" {
-		return fmt.Errorf("usage: ticket req %s -id <id>", verb)
+		return fmt.Errorf("usage: tk req %s -id <id>", verb)
 	}
 	stateToSet := map[string]string{"accept": store.StateSuccess, "reject": store.StateFail}[verb]
 	return updateTicketState(*id, stateToSet)
@@ -298,7 +298,7 @@ func runReqRevise(args []string) error {
 		return err
 	}
 	if *id == "" {
-		return errors.New("usage: ticket req revise -id <id>")
+		return errors.New("usage: tk req revise -id <id>")
 	}
 	return runRevise([]string{"requirement", *id})
 }
@@ -313,7 +313,7 @@ func runReqBreak(args []string) error {
 		return err
 	}
 	if *id == "" {
-		return errors.New("usage: ticket req break -id <id> [--retry] [--reset]")
+		return errors.New("usage: tk req break -id <id> [--retry] [--reset]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -386,7 +386,7 @@ func runDecision(args []string) error {
 	switch args[0] {
 	case "add":
 		if len(args) != 2 {
-			return errors.New("usage: ticket decision add \"text\"")
+			return errors.New("usage: tk decision add \"text\"")
 		}
 		_, api, project, err := resolveCurrentProjectClient()
 		if err != nil {
@@ -423,7 +423,7 @@ func runDecision(args []string) error {
 
 func runConversation(args []string) error {
 	if len(args) < 2 || args[0] != "show" {
-		return errors.New("usage: ticket conversation show [-id] <id>")
+		return errors.New("usage: tk conversation show [-id] <id>")
 	}
 	return runHistory(args[1:])
 }

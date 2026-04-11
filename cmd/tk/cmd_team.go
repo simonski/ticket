@@ -49,7 +49,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*name) == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket team create -name <name> [-parent_id <id>]")
+			return errors.New("usage: tk team create -name <name> [-parent_id <id>]")
 		}
 		var parent *int64
 		if *parentID > 0 {
@@ -77,7 +77,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *id == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket team update -id <id> [-name <name>] [-parent_id <id|0>]")
+			return errors.New("usage: tk team update -id <id> [-name <name>] [-parent_id <id|0>]")
 		}
 		var parent *int64
 		if *parentID > 0 {
@@ -103,7 +103,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *id == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket team delete -id <id>")
+			return errors.New("usage: tk team delete -id <id>")
 		}
 		if err := svc.DeleteTeam(*id); err != nil {
 			return err
@@ -124,7 +124,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || *userID == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket team add-user -team_id <id> -user_id <id> -role <member|owner> [-job_title <title>]")
+			return errors.New("usage: tk team add-user -team_id <id> -user_id <id> -role <member|owner> [-job_title <title>]")
 		}
 		member, err := svc.AddTeamMember(*teamID, libticket.TeamMemberRequest{
 			UserID:   *userID,
@@ -148,7 +148,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || *userID == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket team remove-user -team_id <id> -user_id <id>")
+			return errors.New("usage: tk team remove-user -team_id <id> -user_id <id>")
 		}
 		if err := svc.RemoveTeamMember(*teamID, *userID); err != nil {
 			return err
@@ -166,7 +166,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket team users -team_id <id>")
+			return errors.New("usage: tk team users -team_id <id>")
 		}
 		members, err := svc.ListTeamMembers(*teamID)
 		if err != nil {
@@ -186,7 +186,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || *agentID == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket team add-agent -team_id <id> -agent_id <uuid>")
+			return errors.New("usage: tk team add-agent -team_id <id> -agent_id <uuid>")
 		}
 		item, err := svc.AddTeamAgent(*teamID, *agentID)
 		if err != nil {
@@ -206,7 +206,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || *agentID == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket team remove-agent -team_id <id> -agent_id <uuid>")
+			return errors.New("usage: tk team remove-agent -team_id <id> -agent_id <uuid>")
 		}
 		if err := svc.RemoveTeamAgent(*teamID, *agentID); err != nil {
 			return err
@@ -224,7 +224,7 @@ func runTeam(args []string) error {
 			return err
 		}
 		if *teamID == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket team agents -team_id <id>")
+			return errors.New("usage: tk team agents -team_id <id>")
 		}
 		items, err := svc.ListTeamAgents(*teamID)
 		if err != nil {
@@ -322,7 +322,7 @@ func runRole(args []string) error {
 			}
 		}
 		if *id == 0 {
-			return errors.New("usage: ticket role get -id <id>")
+			return errors.New("usage: tk role get -id <id>")
 		}
 		roles, err := svc.ListRoles()
 		if err != nil {
@@ -353,7 +353,7 @@ func runRole(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket role create -title <title> [-description <text>] [-ac <text>]")
+			return errors.New("usage: tk role create -title <title> [-description <text>] [-ac <text>]")
 		}
 		role, err := svc.CreateRole(libticket.RoleRequest{
 			Title:      strings.TrimSpace(*title),
@@ -379,7 +379,7 @@ func runRole(args []string) error {
 			return err
 		}
 		if *id == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: ticket role update -id <id> -title <title> [-description <text>] [-ac <text>]")
+			return errors.New("usage: tk role update -id <id> -title <title> [-description <text>] [-ac <text>]")
 		}
 		role, err := svc.UpdateRole(*id, libticket.RoleRequest{
 			Title:      strings.TrimSpace(*title),
@@ -402,7 +402,7 @@ func runRole(args []string) error {
 			return err
 		}
 		if *id == 0 || fs.NArg() != 0 {
-			return errors.New("usage: ticket role delete -id <id>")
+			return errors.New("usage: tk role delete -id <id>")
 		}
 		if err := svc.DeleteRole(*id); err != nil {
 			return err
