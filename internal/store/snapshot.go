@@ -30,6 +30,7 @@ var snapshotTableOrder = []string{
 	"roles",
 	"sdlcs",
 	"sdlc_stages",
+	"sdlc_stage_roles",
 	"projects",
 	"tickets",
 	"stories",

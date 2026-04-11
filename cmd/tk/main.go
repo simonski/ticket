@@ -91,6 +91,17 @@ func run(args []string) error {
 		return nil
 	}
 
+	// Commands that don't require an initialised .ticket folder.
+	noInitRequired := map[string]bool{
+		"init": true, "setup": true, "help": true, "version": true, "upgrade": true,
+	}
+	if !noInitRequired[trimmedArgs[0]] {
+		home, homeErr := config.Home()
+		if homeErr != nil || !dirExists(home) {
+			return fmt.Errorf("fatal: not a ticket folder — run `tk init` first")
+		}
+	}
+
 	switch trimmedArgs[0] {
 	case "help", "-h", "--help":
 		return runHelp(trimmedArgs[1:])
@@ -459,6 +470,11 @@ func timeAgo(ts string, now time.Time) string {
 	default:
 		return t.Format("2006-01-02")
 	}
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 func containsFlag(args []string, flag string) bool {

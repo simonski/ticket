@@ -107,6 +107,26 @@ func promptChoice(reader *bufio.Reader, question string, options []string) int {
 	}
 }
 
+func promptChoiceWithDefault(reader *bufio.Reader, question string, options []string, defaultIdx int) int {
+	fmt.Println(question)
+	for i, opt := range options {
+		fmt.Printf("  %d. %s\n", i+1, opt)
+	}
+	for {
+		fmt.Printf("choice [%d]: ", defaultIdx+1)
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return defaultIdx
+		}
+		var n int
+		if _, err := fmt.Sscanf(line, "%d", &n); err == nil && n >= 1 && n <= len(options) {
+			return n - 1
+		}
+		fmt.Printf("please enter a number between 1 and %d\n", len(options))
+	}
+}
+
 func resolveLoginUsername(configUsername, usernameFlag string) string {
 	if strings.TrimSpace(configUsername) != "" {
 		return strings.TrimSpace(configUsername)

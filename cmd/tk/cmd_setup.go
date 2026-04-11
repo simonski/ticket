@@ -23,6 +23,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
+	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
@@ -82,17 +83,21 @@ func runSetup(args []string) error {
 	fmt.Println("tk init")
 	fmt.Println()
 
-	// Require a git repository — walk up from cwd looking for .git
+	// Look for a git repository — walk up from cwd looking for .git.
+	// A git repo is used if present but not required.
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 	gitRoot, hasGit := config.FindGitRoot(cwd)
-	if !hasGit {
-		return fmt.Errorf("no .git directory found.\n  tk requires a git repository. Run `git init` first, then re-run `tk init`")
+	var ticketDir string
+	if hasGit {
+		ticketDir = filepath.Join(gitRoot, ".ticket")
+		fmt.Printf("git root   : %s\n", gitRoot)
+	} else {
+		ticketDir = filepath.Join(cwd, ".ticket")
+		fmt.Println("git root   : (none — using current directory)")
 	}
-	ticketDir := filepath.Join(gitRoot, ".ticket")
-	fmt.Printf("git root   : %s\n", gitRoot)
 	fmt.Printf("config dir : %s\n", ticketDir)
 	fmt.Println()
 
@@ -202,8 +207,6 @@ func runSetupExisting(reader *bufio.Reader) error {
 }
 
 func runSetupNew(reader *bufio.Reader) error {
-	home, _ := config.Home()
-	fmt.Printf("config     : %s/config.json\n", home)
 	fmt.Println()
 
 	choice := promptChoice(reader, "How do you want to use ticket?", []string{
@@ -260,22 +263,31 @@ func runSetupLocal(reader *bufio.Reader) error {
 		return err
 	}
 	cfg.Location = "ticket.db"
+	cfg.ProjectID = "1"
+	cfg.Username = "admin"
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
 	}
-	project, err := svc.CreateProject(libticket.ProjectCreateRequest{
-		Prefix:        projectPrefix,
+	// Update the default project (created by store.Init) with the user's settings
+	// rather than creating a second project.
+	project, err := svc.UpdateProject(1, libticket.ProjectUpdateRequest{
 		Title:         projectName,
 		GitRepository: gitRepo,
 	})
 	if err != nil {
 		return err
 	}
-	cfg.ProjectID = fmt.Sprintf("%d", project.ID)
-	cfg.Username = "admin"
-	if err := config.Save(cfg); err != nil {
-		return err
+	// Rename the prefix if different from the default.
+	if projectPrefix != project.Prefix {
+		if _, renameErr := svc.RenameProjectPrefix(1, projectPrefix); renameErr != nil {
+			fmt.Printf("  warning: could not set prefix %q: %v\n", projectPrefix, renameErr)
+		} else {
+			project.Prefix = projectPrefix
+		}
 	}
 
 	fmt.Println()
@@ -715,121 +727,177 @@ func runInitDB(args []string) error {
 		}
 	}
 
-	// Prompt to populate missing sdlcs and roles.
-	reader := bufio.NewReader(os.Stdin)
-	if err := runInitCheckDefaults(reader, cfg); err != nil {
-		fmt.Printf("warning: could not check defaults: %v\n", err)
+	// Seed built-in roles and SDLCs on a fresh init.
+	if !dbExists || *force {
+		reader := bufio.NewReader(os.Stdin)
+		if err := runInitCheckDefaults(reader, cfg); err != nil {
+			fmt.Printf("warning: could not check defaults: %v\n", err)
+		}
 	}
 	return nil
 }
 
 // runInitCheckDefaults checks whether the current project has a sdlc with
-// stages, and whether any roles exist. If not, it prompts the user to create
-// sensible defaults.
+// stages, and whether any roles exist. If not, it seeds them from the
+// built-in role and SDLC templates in internal/static/.
 func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
 	}
 
-	// ── Project sdlc ──────────────────────────────────────────────────────
+	// ── Roles (seed first — SDLCs reference them) ────────────────────────
+	existingRoles, err := svc.ListRoles()
+	if err != nil {
+		return err
+	}
+	// Build a map of title → role ID for stage-role assignment later.
+	roleIDByRef := make(map[string]int64)
+	for _, r := range existingRoles {
+		roleIDByRef[strings.ToLower(r.Title)] = r.ID
+	}
+	if len(existingRoles) == 0 {
+		builtinRoles, loadErr := static.LoadRoles()
+		if loadErr != nil {
+			fmt.Printf("  warning: could not load built-in roles: %v\n", loadErr)
+		} else {
+			for _, r := range builtinRoles {
+				created, rErr := svc.CreateRole(libticket.RoleRequest{
+					Title:              r.Title,
+					Description:        r.Description,
+					AcceptanceCriteria: r.AcceptanceCriteria,
+				})
+				if rErr != nil {
+					fmt.Printf("  warning: could not create role %q: %v\n", r.Title, rErr)
+				} else {
+					roleIDByRef[r.Filename] = created.ID
+					roleIDByRef[strings.ToLower(r.Title)] = created.ID
+				}
+			}
+			fmt.Printf("roles      : %d created\n", len(builtinRoles))
+		}
+	} else {
+		fmt.Printf("roles      : %d found\n", len(existingRoles))
+	}
+
+	// ── SDLC ─────────────────────────────────────────────────────────────
 	project, err := svc.GetProject(cfg.ProjectID)
 	if err != nil {
 		return err
 	}
 
-	var wfID int64
-	if project.SdlcID == nil {
-		// No sdlc assigned to the project.
-		fmt.Println()
-		if promptYN(reader, "project has no sdlc — create and assign a default sdlc (design→develop→test→done)?", true) {
-			wf, wfErr := svc.CreateSdlc(libticket.SdlcRequest{
-				Name:        "default",
-				Description: "Standard engineering lifecycle",
-			})
-			if wfErr != nil {
-				fmt.Printf("  warning: could not create sdlc: %v\n", wfErr)
-			} else {
-				wfID = wf.ID
-				if err := addDefaultSdlcStages(svc, wfID); err != nil {
-					fmt.Printf("  warning: could not add stages: %v\n", err)
-				}
-				fmt.Printf("  created sdlc %q (id %d) with stages: design, develop, test, done\n", wf.Name, wf.ID)
-				projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
-				if parseErr != nil {
-					fmt.Printf("  warning: could not parse project id: %v\n", parseErr)
-				} else if _, pErr := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{SdlcID: &wfID}); pErr != nil {
-					fmt.Printf("  warning: could not assign sdlc: %v\n", pErr)
-				} else {
-					fmt.Printf("  sdlc assigned to project %s\n", cfg.ProjectID)
-				}
-			}
+	// ── SDLCs ────────────────────────────────────────────────────────────
+	// Create all built-in SDLCs from static seed files.
+	builtinSdlcs, loadErr := static.LoadSdlcs()
+	if loadErr != nil {
+		fmt.Printf("  warning: could not load built-in SDLCs: %v\n", loadErr)
+	}
+	// Track which seed is the default.
+	defaultSeedName := ""
+	seedNames := make(map[string]bool)
+	for _, seed := range builtinSdlcs {
+		seedNames[strings.ToLower(seed.Name)] = true
+		if seed.Default {
+			defaultSeedName = seed.Name
 		}
-	} else {
-		wfID = *project.SdlcID
+	}
+	// Remove the bootstrap "default" SDLC created by store.Init if it's
+	// not one of the static seed SDLCs.
+	existingSdlcs, _ := svc.ListSdlcs()
+	for _, s := range existingSdlcs {
+		if !seedNames[strings.ToLower(s.Name)] {
+			_ = svc.DeleteSdlc(s.ID)
+		}
+	}
+	// Now create the real SDLCs from static files.
+	existingSdlcs, _ = svc.ListSdlcs()
+	existingNames := make(map[string]bool)
+	for _, s := range existingSdlcs {
+		existingNames[strings.ToLower(s.Name)] = true
+	}
+	for _, seed := range builtinSdlcs {
+		if existingNames[strings.ToLower(seed.Name)] {
+			continue
+		}
+		wf, wfErr := svc.CreateSdlc(libticket.SdlcRequest{
+			Name:        seed.Name,
+			Description: seed.Description,
+		})
+		if wfErr != nil {
+			fmt.Printf("  warning: could not create sdlc %q: %v\n", seed.Name, wfErr)
+			continue
+		}
+		if err := seedSdlcStages(svc, wf.ID, seed, roleIDByRef); err != nil {
+			fmt.Printf("  warning: could not add stages to %q: %v\n", seed.Name, err)
+		}
+	}
 
-		// ── Sdlc stages ───────────────────────────────────────────────────
-		wf, wfErr := svc.GetSdlc(wfID)
-		if wfErr == nil && len(wf.Stages) == 0 {
+	// List all available SDLCs and let the user choose.
+	allSdlcs, _ := svc.ListSdlcs()
+	if project.SdlcID == nil && len(allSdlcs) > 0 {
+		var chosenID int64
+		if len(allSdlcs) == 1 {
+			chosenID = allSdlcs[0].ID
+		} else {
 			fmt.Println()
-			if promptYN(reader, fmt.Sprintf("sdlc %q has no stages — add default stages (design→develop→test→done)?", wf.Name), true) {
-				if err := addDefaultSdlcStages(svc, wfID); err != nil {
-					fmt.Printf("  warning: could not add stages: %v\n", err)
-				} else {
-					fmt.Println("  added stages: design, develop, test, done")
+			defaultIdx := 0
+			options := make([]string, len(allSdlcs))
+			for i, s := range allSdlcs {
+				sdlcDetail, _ := svc.GetSdlc(s.ID)
+				stageNames := make([]string, len(sdlcDetail.Stages))
+				for j, st := range sdlcDetail.Stages {
+					stageNames[j] = st.StageName
 				}
+				label := fmt.Sprintf("%s — %s (%s)", s.Name, s.Description, strings.Join(stageNames, " → "))
+				if s.Name == defaultSeedName {
+					label += " [default]"
+					defaultIdx = i
+				}
+				options[i] = label
 			}
-		} else if wfErr == nil {
-			fmt.Printf("sdlc   : %q (%d stages)\n", wf.Name, len(wf.Stages))
+			choice := promptChoiceWithDefault(reader, "Choose an SDLC for this project:", options, defaultIdx)
+			chosenID = allSdlcs[choice].ID
 		}
-	}
-
-	// ── Roles ────────────────────────────────────────────────────────────────
-	roles, err := svc.ListRoles()
-	if err != nil {
-		return err
-	}
-	if len(roles) == 0 {
-		fmt.Println()
-		if promptYN(reader, "no roles found — create default roles (engineer, tech lead, QA engineer)?", true) {
-			defaults := []libticket.RoleRequest{
-				{Title: "Engineer", Description: "Build reliable, well-tested software", AcceptanceCriteria: "Ship features, fix bugs, write tests"},
-				{Title: "Tech Lead", Description: "Guide the technical direction of the team", AcceptanceCriteria: "Architecture decisions, code quality, mentoring"},
-				{Title: "QA Engineer", Description: "Ensure quality across the product", AcceptanceCriteria: "Test coverage, bug detection, release confidence"},
-			}
-			for _, r := range defaults {
-				if _, rErr := svc.CreateRole(r); rErr != nil {
-					fmt.Printf("  warning: could not create role %q: %v\n", r.Title, rErr)
-				} else {
-					fmt.Printf("  created role: %s\n", r.Title)
-				}
+		projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
+		if parseErr == nil {
+			if _, pErr := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{SdlcID: &chosenID}); pErr != nil {
+				fmt.Printf("  warning: could not assign sdlc: %v\n", pErr)
 			}
 		}
-	} else {
-		fmt.Printf("roles      : %d found\n", len(roles))
+		chosen, _ := svc.GetSdlc(chosenID)
+		stageNames := make([]string, len(chosen.Stages))
+		for i, s := range chosen.Stages {
+			stageNames[i] = s.StageName
+		}
+		fmt.Printf("sdlc       : %q (%s)\n", chosen.Name, strings.Join(stageNames, " → "))
+	} else if project.SdlcID != nil {
+		wf, wfErr := svc.GetSdlc(*project.SdlcID)
+		if wfErr == nil {
+			fmt.Printf("sdlc       : %q (%d stages)\n", wf.Name, len(wf.Stages))
+		}
 	}
 
 	return nil
 }
 
-// addDefaultSdlcStages adds the standard engineering lifecycle stages to a sdlc.
-func addDefaultSdlcStages(svc libticket.Service, sdlcID int64) error {
-	stages := []struct {
-		name string
-		desc string
-	}{
-		{"design", "Discovery and specification"},
-		{"develop", "Implementation"},
-		{"test", "Verification and QA"},
-		{"done", "Complete and shipped"},
-	}
-	for i, s := range stages {
-		if _, err := svc.AddSdlcStage(sdlcID, libticket.SdlcStageRequest{
-			StageName:   s.name,
-			Description: s.desc,
-			SortOrder:   i,
-		}); err != nil {
-			return fmt.Errorf("stage %q: %w", s.name, err)
+// seedSdlcStages creates stages and assigns roles from an SDLC seed template.
+func seedSdlcStages(svc libticket.Service, sdlcID int64, seed static.Sdlc, roleIDByRef map[string]int64) error {
+	for _, s := range seed.Stages {
+		stage, err := svc.AddSdlcStage(sdlcID, libticket.SdlcStageRequest{
+			StageName:   s.Name,
+			Description: s.Description,
+			SortOrder:   s.Order,
+		})
+		if err != nil {
+			return fmt.Errorf("stage %q: %w", s.Name, err)
+		}
+		// Assign roles to the stage.
+		for _, roleRef := range s.Roles {
+			if rid, ok := roleIDByRef[roleRef.RoleRef]; ok {
+				if err := svc.AddSdlcStageRole(sdlcID, stage.ID, rid); err != nil {
+					fmt.Printf("  warning: could not assign role %q to stage %q: %v\n", roleRef.RoleRef, s.Name, err)
+				}
+			}
 		}
 	}
 	return nil

@@ -95,22 +95,6 @@ func TestDefaultRoleContentIsDetailed(t *testing.T) {
 	}
 }
 
-// TestSeedDefaultRolesIsNoOp verifies that seedDefaultRoles is a no-op (roles are now per-SDLC).
-func TestSeedDefaultRolesIsNoOp(t *testing.T) {
-	t.Parallel()
-	db := openRoleTestDB(t)
-	defer db.Close()
-
-	roles, _ := ListRoles(context.Background(), db, 0)
-	before := len(roles)
-
-	if err := seedDefaultRoles(context.Background(), db); err != nil {
-		t.Fatalf("seedDefaultRoles() error = %v", err)
-	}
-
-	roles, _ = ListRoles(context.Background(), db, 0)
-	if len(roles) != before {
-		t.Fatalf("seedDefaultRoles() should be a no-op, but role count changed: %d -> %d", before, len(roles))
-	}
-}
+// Legacy seedDefaultRoles test removed — function was deleted.
+// Roles are now seeded from embedded static files by tk init.
 

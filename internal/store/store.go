@@ -87,10 +87,16 @@ func Init(path, adminUsername, adminPassword string) error {
 		return err
 	}
 
-	var defaultSdlcID *int64
-	var wfID int64
-	if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs WHERE name = 'default'`).Scan(&wfID); err == nil {
-		defaultSdlcID = &wfID
+	// Seed a minimal SDLC so tickets can have stages immediately.
+	// tk init replaces this with the user's chosen SDLC from static seed files.
+	if err := SeedMinimalSdlc(ctx, db); err != nil {
+		return err
+	}
+	// Look up the SDLC we just created to assign to the default project.
+	var sdlcID *int64
+	var id int64
+	if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs LIMIT 1`).Scan(&id); err == nil {
+		sdlcID = &id
 	}
 	if _, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix:             defaultProjectPrefix,
@@ -98,7 +104,7 @@ func Init(path, adminUsername, adminPassword string) error {
 		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
 		CreatedBy:          adminID,
-		SdlcID:         defaultSdlcID,
+		SdlcID:             sdlcID,
 	}); err != nil {
 		return err
 	}
@@ -745,15 +751,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
-	if err := seedDefaultRoles(ctx, db); err != nil {
-		return err
-	}
-	if err := seedDefaultSdlc(ctx, db); err != nil {
-		return err
-	}
-	if err := seedYoloSdlc(ctx, db); err != nil {
-		return err
-	}
+	// Roles and SDLCs are now seeded from static files by tk init (runInitCheckDefaults).
+	// The legacy seed functions are retained for backward compatibility with existing databases
+	// but are no longer called on new databases.
 	if err := backfillTicketSdlcStages(ctx, db); err != nil {
 		return err
 	}
@@ -1048,60 +1048,20 @@ func backfillTicketSdlcStages(ctx context.Context, db *sql.DB) error {
 	return err
 }
 
-func seedDefaultSdlc(ctx context.Context, db *sql.DB) error {
-	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO sdlcs (name, description, updated_at) VALUES ('default', 'Minimal SDLC: develop and done', CURRENT_TIMESTAMP)`)
+// SeedMinimalSdlc creates a basic develop→done SDLC and assigns it to project 1.
+// Used by tests that need an SDLC without running the full tk init flow.
+func SeedMinimalSdlc(ctx context.Context, db *sql.DB) error {
+	sdlc, err := CreateSdlc(ctx, db, "default", "Minimal bootstrap SDLC")
 	if err != nil {
 		return err
 	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return nil // already seeded
-	}
-	sdlcID, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-	stages := []struct {
-		name  string
-		order int
-	}{
-		{StageDevelop, 0},
-		{StageDone, 1},
-	}
-	for _, s := range stages {
-		if _, err := db.ExecContext(ctx, `
-			INSERT INTO sdlc_stages (sdlc_id, stage_name, sort_order, updated_at)
-			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		`, sdlcID, s.name, s.order); err != nil {
+	for i, name := range []string{StageDevelop, StageDone} {
+		if _, err := AddSdlcStage(ctx, db, sdlc.ID, name, "", "", i); err != nil {
 			return err
 		}
 	}
-	return nil
-}
-
-func seedYoloSdlc(ctx context.Context, db *sql.DB) error {
-	result, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO sdlcs (name, description, updated_at) VALUES ('yolo', 'Single-stage sdlc — straight to done', CURRENT_TIMESTAMP)`)
-	if err != nil {
-		return err
-	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		return nil // already seeded
-	}
-	sdlcID, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO sdlc_stages (sdlc_id, stage_name, sort_order, updated_at)
-		VALUES (?, 'done', 0, CURRENT_TIMESTAMP)
-	`, sdlcID)
+	_, err = db.ExecContext(ctx, `UPDATE projects SET sdlc_id = ? WHERE project_id = 1`, sdlc.ID)
 	return err
-}
-
-// seedDefaultRoles is a no-op — roles are now scoped to SDLCs and created by users.
-func seedDefaultRoles(_ context.Context, _ *sql.DB) error {
-	return nil
 }
 
 func backfillProjectPrefixes(ctx context.Context, db *sql.DB) error {

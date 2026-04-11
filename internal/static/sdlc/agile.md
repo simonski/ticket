@@ -1,6 +1,7 @@
 ---
 name: Agile
 description: General purpose agile methodology with design, development, testing, and completion stages.
+default: true
 ---
 
 ## Stages
@@ -21,6 +22,7 @@ Entry requirements:
 - Ticket has a title and type assigned
 - Ticket is in draft mode
 
+---
 Exit requirements:
 - Description is complete and unambiguous
 - Acceptance criteria are defined and reviewable
