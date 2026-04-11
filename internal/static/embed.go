@@ -4,12 +4,16 @@
 package static
 
 import (
+	"context"
+	"database/sql"
 	"embed"
 	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/simonski/ticket/internal/store"
 )
 
 //go:embed roles/*.md
@@ -68,6 +72,68 @@ func LoadRoles() ([]Role, error) {
 		roles = append(roles, role)
 	}
 	return roles, nil
+}
+
+// SeedDatabase populates a database with all built-in roles and SDLCs from the
+// embedded static files. It assigns roles to SDLC stages based on @role
+// references. This is intended to be passed to store.Init as a SeedFunc.
+func SeedDatabase(ctx context.Context, db *sql.DB) error {
+	roles, err := LoadRoles()
+	if err != nil {
+		return err
+	}
+	roleIDByRef := make(map[string]int64)
+	for _, r := range roles {
+		created, createErr := store.CreateRole(ctx, db, nil, r.Title, r.Description, r.AcceptanceCriteria)
+		if createErr != nil {
+			continue
+		}
+		roleIDByRef[r.Filename] = created.ID
+		roleIDByRef[strings.ToLower(r.Title)] = created.ID
+	}
+	sdlcs, err := LoadSdlcs()
+	if err != nil {
+		return err
+	}
+	for _, seed := range sdlcs {
+		wf, createErr := store.CreateSdlc(ctx, db, seed.Name, seed.Description)
+		if createErr != nil {
+			continue
+		}
+		for _, s := range seed.Stages {
+			stage, stageErr := store.AddSdlcStage(ctx, db, wf.ID, s.Name, s.Description, "", s.Order)
+			if stageErr != nil {
+				continue
+			}
+			for _, roleRef := range s.Roles {
+				if rid, ok := roleIDByRef[roleRef.RoleRef]; ok {
+					_ = store.AddSdlcStageRole(ctx, db, wf.ID, stage.ID, rid)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// DefaultSdlcID returns the database ID of the SDLC marked default: true in
+// the static seed files, by looking up its name in the given database.
+func DefaultSdlcID(ctx context.Context, db *sql.DB) (int64, error) {
+	sdlcs, err := LoadSdlcs()
+	if err != nil {
+		return 0, err
+	}
+	for _, s := range sdlcs {
+		if s.Default {
+			var id int64
+			if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs WHERE name = ?`, s.Name).Scan(&id); err == nil {
+				return id, nil
+			}
+		}
+	}
+	// Fallback: return the first SDLC.
+	var id int64
+	err = db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs ORDER BY sdlc_id LIMIT 1`).Scan(&id)
+	return id, err
 }
 
 // LoadSdlcs reads and parses all SDLC seed files from the embedded filesystem.

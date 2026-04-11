@@ -91,11 +91,11 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 	if err != nil {
 		return Project{}, err
 	}
-	// Default to the "default" sdlc if none specified
+	// Default to the first available sdlc if none specified
 	sdlcID := params.SdlcID
 	if sdlcID == nil {
 		var wfID int64
-		if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs WHERE name = 'default'`).Scan(&wfID); err == nil {
+		if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs ORDER BY sdlc_id LIMIT 1`).Scan(&wfID); err == nil {
 			sdlcID = &wfID
 		}
 	}

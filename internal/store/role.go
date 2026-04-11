@@ -117,6 +117,23 @@ func GetRoleByTitle(ctx context.Context, db *sql.DB, title string) (Role, error)
 	return role, nil
 }
 
+func getRoleByTitleTx(ctx context.Context, tx *sql.Tx, title string) (Role, error) {
+	row := tx.QueryRowContext(ctx, `
+		SELECT role_id, sdlc_id, title, description, acceptance_criteria, created_at, updated_at
+		FROM roles
+		WHERE title = ?
+	`, strings.TrimSpace(title))
+	var role Role
+	var sdlcID sql.NullInt64
+	if err := row.Scan(&role.ID, &sdlcID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
+		return Role{}, err
+	}
+	if sdlcID.Valid {
+		role.SdlcID = &sdlcID.Int64
+	}
+	return role, nil
+}
+
 func UpdateRole(ctx context.Context, db *sql.DB, id int64, title, description, ac string) (Role, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {

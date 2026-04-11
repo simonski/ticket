@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
 
 )
@@ -18,8 +19,8 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	api := New(config.Config{})
@@ -39,12 +40,23 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if strings.TrimSpace(ticket.Assignee) != "" || ticket.Status != "develop/idle" {
+	if strings.TrimSpace(ticket.Assignee) != "" || ticket.Status != "design/idle" {
 		t.Fatalf("CreateTicket() = %#v", ticket)
 	}
 
 	if _, err := api.ReadyTicket(ticket.ID, ""); err != nil {
 		t.Fatalf("ReadyTicket() error = %v", err)
+	}
+
+	// Advance design -> develop so ticket is claimable
+	if _, err := api.UpdateTicket(ticket.ID, TicketUpdateRequest{
+		Title:       ticket.Title,
+		Description: ticket.Description,
+		ParentID:    ticket.ParentID,
+		Assignee:    ticket.Assignee,
+		State:       "success",
+	}); err != nil {
+		t.Fatalf("UpdateTicket(design->develop) error = %v", err)
 	}
 
 	requested, err := api.RequestTicket(TicketRequest{ProjectID: 1})
@@ -55,18 +67,9 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		t.Fatalf("RequestTicket() = %#v", requested)
 	}
 
-	updated, err := api.UpdateTicket(ticket.ID, TicketUpdateRequest{
-		Title:       ticket.Title,
-		Description: ticket.Description,
-		ParentID:    ticket.ParentID,
-		Assignee:    requested.Ticket.Assignee,
-		State:       "active",
-	})
-	if err != nil {
-		t.Fatalf("UpdateTicket() error = %v", err)
-	}
-	if updated.Status != "develop/active" {
-		t.Fatalf("UpdateTicket().Status = %q, want develop/active", updated.Status)
+	// After request, ticket is in develop/active
+	if requested.Ticket.Status != "develop/active" {
+		t.Fatalf("RequestTicket().Ticket.Status = %q, want develop/active", requested.Ticket.Status)
 	}
 
 	parent, err := api.CreateTicket(TicketCreateRequest{
@@ -107,8 +110,8 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	api := New(config.Config{})
@@ -124,8 +127,8 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket().Assignee = %q, want unassigned", ticket.Assignee)
 	}
 
-	// Advance through all stages to reach done/success (2-stage SDLC: develop, done)
-	for _, wantStatus := range []string{"done/idle", "done/success"} {
+	// Advance through all stages to reach done/success (4-stage SDLC: design, develop, test, done)
+	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
 		ticket, err = api.GetTicketByID(ticket.ID)
 		if err != nil {
 			t.Fatalf("GetTicketByID() error = %v", err)
@@ -151,8 +154,8 @@ func TestLocalModeClientDeleteTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	api := New(config.Config{})
@@ -177,8 +180,8 @@ func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	api := New(config.Config{})
@@ -211,8 +214,8 @@ func TestLocalModeClientRolesCRUD(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -246,8 +249,8 @@ func TestLocalModeClientUserOps(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -284,8 +287,8 @@ func TestLocalModeClientRegistrationToggle(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -301,8 +304,8 @@ func TestLocalModeClientCount(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -319,8 +322,8 @@ func TestLocalModeClientProjectOps(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -353,8 +356,8 @@ func TestLocalModeClientTicketLifecycle(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -408,8 +411,8 @@ func TestLocalModeClientDependencies(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -440,8 +443,8 @@ func TestLocalModeClientSdlcs(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -495,8 +498,8 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -560,8 +563,8 @@ func TestLocalModeClientStories(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -599,8 +602,8 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 
@@ -689,8 +692,8 @@ func TestLocalModeClientAgents(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	api := New(config.Config{})
 

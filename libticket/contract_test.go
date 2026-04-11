@@ -60,6 +60,17 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
 
+		// Ticket starts at design/idle. Advance to develop/idle so it's claimable.
+		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    ticket.Assignee,
+			State:       "success",
+		}); err != nil {
+			t.Fatalf("UpdateTicket(design->develop) error = %v", err)
+		}
+
 		response, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID})
 		if err != nil {
 			t.Fatalf("RequestTicket() error = %v", err)
@@ -68,18 +79,9 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RequestTicket() = %#v", response)
 		}
 
-		updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
-			Title:       ticket.Title,
-			Description: ticket.Description,
-			ParentID:    ticket.ParentID,
-			Assignee:    response.Ticket.Assignee,
-			State:       "active",
-		})
-		if err != nil {
-			t.Fatalf("UpdateTicket() error = %v", err)
-		}
-		if updated.Status != "develop/active" {
-			t.Fatalf("UpdateTicket().Status = %q, want develop/active", updated.Status)
+		// After RequestTicket, ticket is in develop/active
+		if response.Ticket.Status != "develop/active" {
+			t.Fatalf("RequestTicket().Ticket.Status = %q, want develop/active", response.Ticket.Status)
 		}
 
 		comment, err := svc.AddComment(ticket.ID, "contract comment")
@@ -145,8 +147,8 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if cloned.CloneOf == nil || *cloned.CloneOf != ticket.ID {
 			t.Fatalf("CloneTicket() = %#v", cloned)
 		}
-		if cloned.Status != "develop/idle" {
-			t.Fatalf("CloneTicket().Status = %q, want develop/idle", cloned.Status)
+		if cloned.Status != "design/idle" {
+			t.Fatalf("CloneTicket().Status = %q, want design/idle", cloned.Status)
 		}
 
 		status, err := svc.Status()
@@ -217,10 +219,21 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		// Ticket starts at develop/idle (2-stage SDLC: develop, done)
-		// Mark ready and request to get develop/active
+		// Ticket starts at design/idle (4-stage SDLC: design, develop, test, done)
+		// Mark ready, advance to develop/idle, then request
 		if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
+		}
+
+		// Advance design -> develop
+		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    ticket.Assignee,
+			State:       "success",
+		}); err != nil {
+			t.Fatalf("UpdateTicket(design->develop) error = %v", err)
 		}
 
 		requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID, TicketID: &ticket.ID})
@@ -240,7 +253,22 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Advance through stages to reach done/success
-		// develop/active -> state=success -> done/idle
+		// develop/active -> state=success -> test/idle
+		advancedToTest, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+			Title:       ticket.Title,
+			Description: ticket.Description,
+			ParentID:    ticket.ParentID,
+			Assignee:    requested.Ticket.Assignee,
+			State:       "success",
+		})
+		if err != nil {
+			t.Fatalf("UpdateTicket(develop->test) error = %v", err)
+		}
+		if advancedToTest.Status != "test/idle" {
+			t.Fatalf("UpdateTicket(develop->test).Status = %q, want test/idle", advancedToTest.Status)
+		}
+
+		// test/idle -> state=success -> done/idle
 		advancedToDone, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
@@ -249,10 +277,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			State:       "success",
 		})
 		if err != nil {
-			t.Fatalf("UpdateTicket(develop->done) error = %v", err)
+			t.Fatalf("UpdateTicket(test->done) error = %v", err)
 		}
 		if advancedToDone.Status != "done/idle" {
-			t.Fatalf("UpdateTicket(develop->done).Status = %q, want done/idle", advancedToDone.Status)
+			t.Fatalf("UpdateTicket(test->done).Status = %q, want done/idle", advancedToDone.Status)
 		}
 
 		// done -> state=success -> done/success (final stage, no further advance)

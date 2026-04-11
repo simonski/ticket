@@ -2,6 +2,7 @@
 name: YOLO
 description: Single-player straight-to-dev workflow with minimal ceremony.
 default: false
+ticket_draft: false
 ---
 
 ## Stages

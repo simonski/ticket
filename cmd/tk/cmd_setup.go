@@ -21,6 +21,8 @@ import (
 
 	"net/http"
 
+	"golang.org/x/term"
+
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/static"
@@ -255,7 +257,7 @@ func runSetupLocal(reader *bufio.Reader) error {
 	if err != nil {
 		return err
 	}
-	if err := store.Init(dbPath, "admin", password); err != nil {
+	if err := store.Init(dbPath, "admin", password, static.SeedDatabase); err != nil {
 		return err
 	}
 	cfg, err := config.Load()
@@ -680,7 +682,7 @@ func runInitDB(args []string) error {
 		// DB already exists — skip creation, just update the config to point at it.
 		fmt.Printf("database already exists at %s (use -force to overwrite)\n", *dbPath)
 	} else {
-		if err := store.Init(*dbPath, "admin", password); err != nil {
+		if err := store.Init(*dbPath, "admin", password, static.SeedDatabase); err != nil {
 			return err
 		}
 		if *populate {
@@ -839,24 +841,33 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
 		if len(allSdlcs) == 1 {
 			chosenID = allSdlcs[0].ID
 		} else {
-			fmt.Println()
 			defaultIdx := 0
-			options := make([]string, len(allSdlcs))
 			for i, s := range allSdlcs {
-				sdlcDetail, _ := svc.GetSdlc(s.ID)
-				stageNames := make([]string, len(sdlcDetail.Stages))
-				for j, st := range sdlcDetail.Stages {
-					stageNames[j] = st.StageName
-				}
-				label := fmt.Sprintf("%s — %s (%s)", s.Name, s.Description, strings.Join(stageNames, " → "))
 				if s.Name == defaultSeedName {
-					label += " [default]"
 					defaultIdx = i
 				}
-				options[i] = label
 			}
-			choice := promptChoiceWithDefault(reader, "Choose an SDLC for this project:", options, defaultIdx)
-			chosenID = allSdlcs[choice].ID
+			// If stdin is a terminal, prompt the user. Otherwise auto-select the default.
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				fmt.Println()
+				options := make([]string, len(allSdlcs))
+				for i, s := range allSdlcs {
+					sdlcDetail, _ := svc.GetSdlc(s.ID)
+					stageNames := make([]string, len(sdlcDetail.Stages))
+					for j, st := range sdlcDetail.Stages {
+						stageNames[j] = st.StageName
+					}
+					label := fmt.Sprintf("%s — %s (%s)", s.Name, s.Description, strings.Join(stageNames, " → "))
+					if s.Name == defaultSeedName {
+						label += " [default]"
+					}
+					options[i] = label
+				}
+				choice := promptChoiceWithDefault(reader, "Choose an SDLC for this project:", options, defaultIdx)
+				chosenID = allSdlcs[choice].ID
+			} else {
+				chosenID = allSdlcs[defaultIdx].ID
+			}
 		}
 		projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
 		if parseErr == nil {

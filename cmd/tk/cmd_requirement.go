@@ -54,9 +54,9 @@ func runCurate(args []string) error {
 type reviewFilter struct{ stage, state string }
 
 var reviewStatusFilters = map[string]reviewFilter{
-	"proposed": {store.StageDevelop, store.StateIdle},
-	"accepted": {store.StageDone, ""},
-	"rejected": {store.StageDevelop, store.StateFail},
+	"proposed": {store.StageDesign, store.StateIdle},
+	"accepted": {store.StageDevelop, ""},
+	"rejected": {store.StageDesign, store.StateFail},
 }
 
 func runReview(args []string) error {

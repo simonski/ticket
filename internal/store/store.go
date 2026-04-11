@@ -44,7 +44,15 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Init(path, adminUsername, adminPassword string) error {
+// SeedFunc is called during Init to seed the database with SDLCs and roles.
+// It receives the opened database and should create at least one SDLC.
+// The first SDLC found after seeding is assigned to the default project.
+type SeedFunc func(ctx context.Context, db *sql.DB) error
+
+// Init creates a new database at path with an admin user and a default project.
+// The seedFn (if non-nil) is called to populate SDLCs and roles from embedded
+// static files. If nil, no SDLCs are created and the project has no lifecycle.
+func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	ctx := context.Background()
 	if adminUsername == "" || adminPassword == "" {
 		return errors.New("admin username and password are required")
@@ -87,12 +95,23 @@ func Init(path, adminUsername, adminPassword string) error {
 		return err
 	}
 
-	// Seed a minimal SDLC so tickets can have stages immediately.
-	// tk init replaces this with the user's chosen SDLC from static seed files.
-	if err := SeedMinimalSdlc(ctx, db); err != nil {
-		return err
+	// Run the seed function to populate SDLCs and roles.
+	// If no seed function is provided, create a minimal develop→done SDLC
+	// so tickets always have valid stages.
+	if len(seedFn) > 0 && seedFn[0] != nil {
+		if err := seedFn[0](ctx, db); err != nil {
+			return err
+		}
+	} else {
+		sdlc, sErr := CreateSdlc(ctx, db, "default", "Minimal bootstrap SDLC")
+		if sErr == nil {
+			for i, name := range []string{StageDevelop, StageDone} {
+				_, _ = AddSdlcStage(ctx, db, sdlc.ID, name, "", "", i)
+			}
+		}
 	}
-	// Look up the SDLC we just created to assign to the default project.
+
+	// Assign the first SDLC (if any) to the default project.
 	var sdlcID *int64
 	var id int64
 	if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs LIMIT 1`).Scan(&id); err == nil {
@@ -1045,22 +1064,6 @@ func backfillTicketSdlcStages(ctx context.Context, db *sql.DB) error {
 			WHERE p.project_id = tickets.project_id
 		)
 	`)
-	return err
-}
-
-// SeedMinimalSdlc creates a basic develop→done SDLC and assigns it to project 1.
-// Used by tests that need an SDLC without running the full tk init flow.
-func SeedMinimalSdlc(ctx context.Context, db *sql.DB) error {
-	sdlc, err := CreateSdlc(ctx, db, "default", "Minimal bootstrap SDLC")
-	if err != nil {
-		return err
-	}
-	for i, name := range []string{StageDevelop, StageDone} {
-		if _, err := AddSdlcStage(ctx, db, sdlc.ID, name, "", "", i); err != nil {
-			return err
-		}
-	}
-	_, err = db.ExecContext(ctx, `UPDATE projects SET sdlc_id = ? WHERE project_id = 1`, sdlc.ID)
 	return err
 }
 

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
 )
 
@@ -1266,7 +1267,7 @@ func TestCloneTicketAPI(t *testing.T) {
 	}
 	var clonedEpic store.Ticket
 	decodeResponse(t, cloneResp, &clonedEpic)
-	if clonedEpic.CloneOf == nil || *clonedEpic.CloneOf != epic.ID || clonedEpic.Status != "develop/idle" || clonedEpic.Assignee != "" {
+	if clonedEpic.CloneOf == nil || *clonedEpic.CloneOf != epic.ID || clonedEpic.Status != "design/idle" || clonedEpic.Assignee != "" {
 		t.Fatalf("cloned epic = %#v", clonedEpic)
 	}
 
@@ -1283,7 +1284,7 @@ func TestCloneTicketAPI(t *testing.T) {
 	if clonedChild == nil {
 		t.Fatalf("cloned child not found in %#v", tickets)
 	}
-	if clonedChild.ParentID == nil || *clonedChild.ParentID != clonedEpic.ID || clonedChild.Status != "develop/idle" || clonedChild.Assignee != "" {
+	if clonedChild.ParentID == nil || *clonedChild.ParentID != clonedEpic.ID || clonedChild.Status != "design/idle" || clonedChild.Assignee != "" {
 		t.Fatalf("cloned child = %#v", clonedChild)
 	}
 }
@@ -2321,7 +2322,7 @@ func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password"); err != nil {
+	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	db, err := store.Open(dbPath)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
@@ -16,8 +17,8 @@ func TestLocalServiceContract(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Setenv("TICKET_HOME", tempDir)
 		dbPath := filepath.Join(tempDir, "ticket.db")
-		if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-			t.Fatalf("store.Init() error = %v", err)
+		if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+			t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 		}
 		return libticket.NewLocal(config.Config{})
 	}, ContractOptions{RequireStatusOwnership: false})
@@ -28,8 +29,8 @@ func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	svc := libticket.NewLocal(config.Config{})
@@ -88,8 +89,8 @@ func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	svc := libticket.NewLocal(config.Config{})
@@ -107,8 +108,8 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	svc := libticket.NewLocal(config.Config{})
@@ -143,8 +144,8 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	svc := libticket.NewLocal(config.Config{})
@@ -165,19 +166,14 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
-	// Ticket starts at develop/idle (2-stage SDLC), request it directly
-	requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: 1, TicketID: &ticket.ID})
-	if err != nil {
-		t.Fatalf("RequestTicket() error = %v", err)
-	}
-
+	// Assign the ticket directly and set it active.
 	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
 		Title:              "Updated Child",
 		Description:        "new description",
 		AcceptanceCriteria: "new ac",
 		ParentID:           &parent.ID,
-		Assignee:           requested.Ticket.Assignee,
-		Status:             "develop/active",
+		Assignee:           "admin",
+		Status:             "design/active",
 		Priority:           3,
 		Order:              7,
 		EstimateEffort:     5,
@@ -186,7 +182,7 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
-	if updated.Title != "Updated Child" || updated.Description != "new description" || updated.AcceptanceCriteria != "new ac" || updated.Status != "develop/active" || updated.Priority != 3 || updated.Order != 7 || updated.EstimateEffort != 5 || updated.EstimateComplete != "2026-04-15T12:00:00Z" {
+	if updated.Title != "Updated Child" || updated.Description != "new description" || updated.AcceptanceCriteria != "new ac" || updated.Status != "design/active" || updated.Priority != 3 || updated.Order != 7 || updated.EstimateEffort != 5 || updated.EstimateComplete != "2026-04-15T12:00:00Z" {
 		t.Fatalf("UpdateTicket() = %#v", updated)
 	}
 	if updated.ParentID == nil || *updated.ParentID != parent.ID {
@@ -199,8 +195,8 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	svc := libticket.NewLocal(config.Config{})
@@ -213,9 +209,9 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	// Advance through all stages: develop -> done (2-stage SDLC)
+	// Advance through all stages: design -> develop -> test -> done (4-stage SDLC)
 	// Each state=success on a non-final stage auto-advances to next stage with state=idle
-	for _, wantStatus := range []string{"done/idle", "done/success"} {
+	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
 		ticket, err = svc.GetTicketByID(ticket.ID)
 		if err != nil {
 			t.Fatalf("GetTicketByID() error = %v", err)
@@ -241,8 +237,8 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
 	svc := libticket.NewLocal(config.Config{})
@@ -267,8 +263,8 @@ func newLocalSvc(t *testing.T) libticket.Service {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
-		t.Fatalf("store.Init() error = %v", err)
+	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 	return libticket.NewLocal(config.Config{})
 }

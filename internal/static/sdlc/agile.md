@@ -2,6 +2,7 @@
 name: Agile
 description: General purpose agile methodology with design, development, testing, and completion stages.
 default: true
+ticket_draft: true
 ---
 
 ## Stages

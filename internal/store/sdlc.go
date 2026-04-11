@@ -279,7 +279,7 @@ func ImportSdlc(ctx context.Context, db *sql.DB, export SdlcExport) (Sdlc, error
 			return Sdlc{}, err
 		}
 		for _, roleName := range s.Roles {
-			role, err := GetRoleByTitle(ctx, db, strings.TrimSpace(roleName))
+			role, err := getRoleByTitleTx(ctx, tx, strings.TrimSpace(roleName))
 			if err != nil {
 				return Sdlc{}, fmt.Errorf("role %q not found: %w", roleName, err)
 			}

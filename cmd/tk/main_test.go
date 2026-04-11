@@ -198,6 +198,11 @@ func TestRunHealthReportsTicketHealthSection(t *testing.T) {
 	parentID := createLocalTask(t, []string{"epic", "Parent Epic", "-ac", "Epic must launch"})
 	taskID := createLocalTask(t, []string{"add", "-parent", parentID, "-ac", "Child has AC", "-title", "Child Task"})
 
+	// Advance to develop/idle so definition_of_ready is true
+	if err := run([]string{"success", "-id", taskID}); err != nil {
+		t.Fatalf("success (design->develop) error = %v", err)
+	}
+
 	output := captureStdout(t, func() {
 		if err := run([]string{"comment", "add", "-id", taskID, "Reviewer approved this ticket."}); err != nil {
 			t.Fatalf("comment add error = %v", err)
@@ -228,6 +233,10 @@ func TestRunHealthSupportsJSONOutput(t *testing.T) {
 	setupLocalCLI(t)
 
 	taskID := createLocalTask(t, []string{"add", "Not Reviewed"})
+	// Advance to develop/idle so definition_of_ready is true
+	if err := run([]string{"success", "-id", taskID}); err != nil {
+		t.Fatalf("success (design->develop) error = %v", err)
+	}
 	output := captureStdout(t, func() {
 		if err := run([]string{"health", taskID, "-json"}); err != nil {
 			t.Fatalf("health -json error = %v", err)
@@ -267,6 +276,10 @@ func TestRunHealthExecutePersistsScores(t *testing.T) {
 
 	firstID := createLocalTask(t, []string{"add", "Task One"})
 	secondID := createLocalTask(t, []string{"add", "Task Two", "-ac", "criteria", "-parent", firstID})
+	// Advance both to develop/idle so definition_of_ready is true
+	if err := run([]string{"success", "-id", secondID}); err != nil {
+		t.Fatalf("success secondID (design->develop) error = %v", err)
+	}
 	if err := run([]string{"comment", "add", "-id", secondID, "Approved by reviewer"}); err != nil {
 		t.Fatalf("comment add error = %v", err)
 	}
@@ -1291,17 +1304,20 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 
 	_ = createLocalTask(t, []string{"add", "Moon Open Task"})
 	inProgressID := createLocalTask(t, []string{"add", "Moon Inprogress Task"})
-	completeID := createLocalTask(t, []string{"add", "Moon Complete Task"})
-	// Claim to assign, then set active (stays at design stage)
+	advancedID := createLocalTask(t, []string{"add", "Moon Advanced Task"})
+	// Advance inProgressID to develop, then assign and set active
+	if err := run([]string{"success", "-id", inProgressID}); err != nil {
+		t.Fatalf("success inProgressID (design->develop) error = %v", err)
+	}
 	if err := run([]string{"claim", inProgressID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
 	if err := run([]string{"active", "-id", inProgressID}); err != nil {
 		t.Fatalf("active error = %v", err)
 	}
-	// complete auto-advances from design to develop/idle
-	if err := run([]string{"complete", "-id", completeID}); err != nil {
-		t.Fatalf("complete error = %v", err)
+	// Advance advancedID from design to develop/idle
+	if err := run([]string{"success", "-id", advancedID}); err != nil {
+		t.Fatalf("success advancedID (design->develop) error = %v", err)
 	}
 
 	unicodeOutput := captureStdout(t, func() {
@@ -1327,9 +1343,9 @@ func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 	}
 	checkRow("◑", "develop", "active")
 	checkRow("○", "develop", "idle")
-	checkRow("○", "develop", "idle")
+	checkRow("○", "design", "idle")
 
-	for _, want := range []string{"develop", "develop", "active", "idle"} {
+	for _, want := range []string{"develop", "design", "active", "idle"} {
 		if !strings.Contains(unicodeOutput, want) {
 			t.Fatalf("list unicode output missing %q:\n%s", want, unicodeOutput)
 		}
@@ -1477,12 +1493,17 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 
 	listOutput := captureStdout(t, func() {
-		if err := run([]string{"list", "--status", "develop/idle"}); err != nil {
+		if err := run([]string{"list", "--status", "design/idle"}); err != nil {
 			t.Fatalf("list error = %v", err)
 		}
 	})
 	if !strings.Contains(listOutput, "Ticket Alpha") || !strings.Contains(listOutput, "Ticket Beta") {
 		t.Fatalf("list output = %q", listOutput)
+	}
+
+	// Advance design->develop/idle so the ticket is requestable
+	if err := run([]string{"success", "-id", taskID}); err != nil {
+		t.Fatalf("success (design->develop) error = %v", err)
 	}
 
 	requestOutput := captureStdout(t, func() {
@@ -1492,6 +1513,11 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	})
 	if !strings.Contains(requestOutput, "ticket: Ticket Alpha") || !strings.Contains(requestOutput, "status: develop/active") {
 		t.Fatalf("request output = %q", requestOutput)
+	}
+
+	// Advance depID design->develop/idle so it's claimable for dryrun and claim
+	if err := run([]string{"success", "-id", depID}); err != nil {
+		t.Fatalf("success depID (design->develop) error = %v", err)
 	}
 
 	requestDryRunOutput := captureStdout(t, func() {
@@ -1526,7 +1552,7 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("clone error = %v", err)
 		}
 	})
-	if !strings.Contains(cloneOutput, "clone_of:") || !strings.Contains(cloneOutput, "status: develop/idle") {
+	if !strings.Contains(cloneOutput, "clone_of:") || !strings.Contains(cloneOutput, "status: design/idle") {
 		t.Fatalf("clone output = %q", cloneOutput)
 	}
 
@@ -1599,6 +1625,10 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 		t.Fatalf("project use error = %v", err)
 	}
 
+	// Advance to develop/idle so claim and active produce develop/active
+	if err := run([]string{"success", "-id", matchingID}); err != nil {
+		t.Fatalf("success matchingID (design->develop) error = %v", err)
+	}
 	if err := run([]string{"claim", matchingID}); err != nil {
 		t.Fatalf("claim error = %v", err)
 	}
@@ -1648,7 +1678,7 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	if !strings.Contains(allProjectsOutput, "Free form entry") || !strings.Contains(allProjectsOutput, "develop/active") {
 		t.Fatalf("allprojects output missing current project task:\n%s", allProjectsOutput)
 	}
-	if !strings.Contains(allProjectsOutput, "Free form entry elsewhere") || !strings.Contains(allProjectsOutput, "develop/idle") {
+	if !strings.Contains(allProjectsOutput, "Free form entry elsewhere") || !strings.Contains(allProjectsOutput, "design/idle") {
 		t.Fatalf("allprojects output missing cross-project task:\n%s", allProjectsOutput)
 	}
 }
@@ -1674,7 +1704,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 			"-order", "7",
 			"-estimate_effort", "5",
 			"-estimate_complete", "2026-04-15T12:00:00Z",
-			"-status", "develop/active",
+			"-status", "design/active",
 			"-parent_id", parentID,
 		}); err != nil {
 			t.Fatalf("update error = %v", err)
@@ -1708,7 +1738,7 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 		"Order        : 7",
 		"EstimateEffort   : 5",
 		"EstimateComplete : 2026-04-15T12:00:00Z",
-		"Status       : develop/active",
+		"Status       : design/active",
 		"Priority     : 3",
 		"Acceptance Criteria : new ac",
 	} {
@@ -2226,8 +2256,8 @@ func TestRunSdlcListInLocalMode(t *testing.T) {
 			t.Fatalf("sdlc list error = %v", err)
 		}
 	})
-	if !strings.Contains(output, "default") {
-		t.Fatalf("sdlc list missing default sdlc:\n%s", output)
+	if !strings.Contains(output, "Agile") {
+		t.Fatalf("sdlc list missing Agile sdlc:\n%s", output)
 	}
 }
 
@@ -2278,7 +2308,7 @@ func TestRunSdlcExportImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export file error = %v", err)
 	}
-	modified := strings.Replace(string(data), `"default"`, `"imported"`, 1)
+	modified := strings.Replace(string(data), `"Agile"`, `"imported"`, 1)
 	if err := os.WriteFile(tmpFile, []byte(modified), 0o644); err != nil {
 		t.Fatalf("write modified file error = %v", err)
 	}
