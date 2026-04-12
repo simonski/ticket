@@ -119,11 +119,17 @@ func printStatusBoxWidth(lines []statusLine, fixedWidth int) {
 		}
 	}
 
-	// If a fixed width is provided, use it as the inner content width
-	// (minus borders and padding) so the box matches an external table.
+	// Expand to fill the terminal width (or fixedWidth if provided).
+	targetWidth := 0
 	if fixedWidth > 0 {
-		targetInner := fixedWidth - 2 // subtract the │ borders
-		contentW := targetInner - padding*2
+		targetWidth = fixedWidth
+	} else if isTerminal() {
+		if tw, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && tw > 0 { // #nosec G115
+			targetWidth = tw
+		}
+	}
+	if targetWidth > 0 {
+		contentW := targetWidth - 2 - padding*2 // subtract borders and padding
 		if contentW > maxWidth {
 			maxWidth = contentW
 		}

@@ -414,7 +414,11 @@ func runList(args []string) error {
 		if outputJSON {
 			return printJSON(tickets)
 		}
-		fmt.Printf("no tickets for project %s\n", project.Prefix)
+		if isTerminal() {
+			_ = runSummary(nil)
+			fmt.Println()
+		}
+		fmt.Printf("no tickets yet — create one with: tk new \"My first ticket\"\n")
 		return nil
 	}
 	// Build parent key map: ticket ID → parent's key string.
@@ -449,11 +453,11 @@ func runList(args []string) error {
 			agentUsernames[a.Username] = true
 		}
 	}
-	// When there are few tickets, show a compact summary above the list.
-	if len(tickets) <= 10 && !outputJSON {
-		if err := printSummaryBox(api, project, 0); err == nil {
-			fmt.Println()
-		}
+	// When there are few tickets (or none) and output is a terminal, show
+	// the full summary as a header so new users get context about their setup.
+	if len(tickets) <= 10 && !outputJSON && isTerminal() {
+		_ = runSummary(nil)
+		fmt.Println()
 	}
 	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll)
 	return nil
