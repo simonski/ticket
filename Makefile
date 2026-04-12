@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -20,6 +20,7 @@ help:
 	@printf "  make setup-playwright Install Chromium for Playwright.\n"
 	@printf "  make test            Run all tests.\n"
 	@printf "  make test-go         Run Go tests.\n"
+	@printf "  make test-go-race    Run Go tests with the race detector.\n"
 	@printf "  make test-unit       Run unit-oriented Go test packages.\n"
 	@printf "  make test-integration Run integration-oriented Go test packages.\n"
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
@@ -90,6 +91,9 @@ test: test-unit test-integration test-playwright
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
+
+test-go-race:
+	TICKET_FAST_HASH=1 go test -race ./...
 
 test-unit:
 	TICKET_FAST_HASH=1 go test $(UNIT_TEST_PKGS)

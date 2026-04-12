@@ -6,7 +6,7 @@ info:
     All endpoints are under `/api/`. Authentication uses Bearer tokens,
     cookies (`ticket_token`), or query parameter (`?token=`).
     Agent endpoints use HTTP Basic Auth (agent UUID + password).
-.1.775
+  version: 0.1.774
   contact:
     name: Simon Gauld
     url: https://github.com/simonski/ticket
@@ -663,7 +663,7 @@ components:
         prefix: "CUS"
         title: "Customer Portal"
         description: "Customer-facing web portal project"
-        status: "active"
+        status: "open"
         visibility: "private"
         created_at: "2025-01-15T10:00:00Z"
         updated_at: "2025-06-20T14:30:00Z"
@@ -702,15 +702,103 @@ components:
           username: "alice"
           role: "user"
 
+    ProjectListExample:
+      summary: Project list response
+      value:
+        - project_id: 1
+          prefix: "CUS"
+          title: "Customer Portal"
+          description: "Customer-facing web portal project"
+          status: "open"
+          visibility: "private"
+        - project_id: 2
+          prefix: "OPS"
+          title: "Operations Console"
+          description: "Internal operational tooling"
+          status: "open"
+          visibility: "private"
+
+    CreateProjectRequestExample:
+      summary: Create project request
+      value:
+        prefix: "CUS"
+        title: "Customer Portal"
+        description: "Customer-facing web portal project"
+        visibility: "private"
+        sdlc_id: 1
+
     CreateTicketRequestExample:
       summary: Create a task ticket
       value:
+        project_id: 1
         type: "task"
         title: "Implement login page"
         description: "Build the user login page"
         parent_id: "CUS-E-1"
         priority: 2
         assignee: "alice"
+
+    TicketListExample:
+      summary: Ticket list response
+      value:
+        - ticket_id: "CUS-E-1"
+          project_id: 1
+          type: "epic"
+          title: "Authentication improvements"
+          stage: "develop"
+          state: "active"
+          status: "develop/active"
+        - ticket_id: "CUS-T-42"
+          project_id: 1
+          type: "task"
+          title: "Implement login page"
+          stage: "develop"
+          state: "active"
+          status: "develop/active"
+
+    UpdateTicketRequestExample:
+      summary: Update ticket request
+      value:
+        title: "Implement login page and forgot-password flow"
+        stage: "test"
+        state: "idle"
+        priority: 1
+        assignee: "alice"
+
+    HistoryEventListExample:
+      summary: Ticket history response
+      value:
+        - id: 101
+          project_id: 1
+          ticket_id: "CUS-T-42"
+          event_type: "ticket.created"
+          payload: "{\"title\":\"Implement login page\"}"
+          created_by: "admin"
+          created_at: "2025-02-01T09:00:00Z"
+        - id: 102
+          project_id: 1
+          ticket_id: "CUS-T-42"
+          event_type: "ticket.updated"
+          payload: "{\"stage\":\"test\",\"state\":\"idle\"}"
+          created_by: "alice"
+          created_at: "2025-02-03T14:30:00Z"
+
+    ClaimTicketResponseExample:
+      summary: Claim result with assigned ticket
+      value:
+        status: "ASSIGNED"
+        ticket:
+          ticket_id: "CUS-T-42"
+          project_id: 1
+          type: "task"
+          title: "Implement login page"
+          stage: "develop"
+          state: "active"
+          status: "develop/active"
+        project:
+          project_id: 1
+          prefix: "CUS"
+          title: "Customer Portal"
 
     ErrorExample:
       summary: A typical error response
@@ -778,8 +866,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
   # ── Authentication ──────────────────────────────────────────────────
@@ -843,11 +929,21 @@ paths:
             examples:
               typical:
                 $ref: '#/components/examples/LoginRequestExample'
+      responses:
+        '200':
+          description: Authenticated successfully
           headers:
             Set-Cookie:
               description: "ticket_token session cookie (HttpOnly, SameSite=Lax, 30-day expiry)"
               schema:
                 type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                success:
+                  $ref: '#/components/examples/LoginResponseExample'
         '401':
           description: Invalid credentials
           content:
@@ -883,8 +979,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
   # ── Configuration ───────────────────────────────────────────────────
@@ -956,8 +1050,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/config/chat_limits:
@@ -999,8 +1091,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
   # ── Users ───────────────────────────────────────────────────────────
@@ -1493,6 +1583,39 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Agents]
+      summary: Delete an agent
+      operationId: deleteAgent
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/agents/{agent_id}/config:
     get:
       tags: [Agents]
@@ -1599,39 +1722,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-    delete:
-      tags: [Agents]
-      summary: Delete an agent
-      operationId: deleteAgent
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: agent_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Agent deleted
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/agents/{agent_id}/enable:
@@ -2735,6 +2825,9 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Project'
+              examples:
+                default:
+                  $ref: '#/components/examples/ProjectListExample'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2780,7 +2873,9 @@ paths:
                 sdlc_id:
                   type: integer
                   format: int64
-                  nullable: true
+            examples:
+              default:
+                $ref: '#/components/examples/CreateProjectRequestExample'
       responses:
         '201':
           description: Project created
@@ -2788,6 +2883,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Project'
+              examples:
+                created:
+                  $ref: '#/components/examples/ProjectExample'
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -2820,50 +2918,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Project'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-  /api/projects/{project_id}/set-draft:
-    put:
-      tags: [Projects]
-      summary: Set the project's default draft flag
-      operationId: setProjectDefaultDraft
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [draft]
-              properties:
-                draft:
-                  type: boolean
-      responses:
-        '200':
-          description: Project default draft updated
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
+              examples:
+                default:
+                  $ref: '#/components/examples/ProjectExample'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2915,7 +2972,13 @@ paths:
                 sdlc_id:
                   type: integer
                   format: int64
-                  nullable: true
+            examples:
+              default:
+                value:
+                  title: "Customer Portal"
+                  description: "Customer-facing web portal project"
+                  visibility: "private"
+                  sdlc_id: 1
       responses:
         '200':
           description: Project updated
@@ -2923,7 +2986,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Project'
-
+              examples:
+                updated:
+                  $ref: '#/components/examples/ProjectExample'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/set-draft:
+    put:
+      tags: [Projects]
+      summary: Set the project's default draft flag
+      operationId: setProjectDefaultDraft
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [draft]
+              properties:
+                draft:
+                  type: boolean
+      responses:
+        '200':
+          description: Project default draft updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3061,6 +3170,9 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Ticket'
+              examples:
+                default:
+                  $ref: '#/components/examples/TicketListExample'
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -3571,6 +3683,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ticket'
+              examples:
+                created:
+                  $ref: '#/components/examples/TicketExample'
         '400':
           description: Validation error
           content:
@@ -3613,6 +3728,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TicketRequestResponse'
+              examples:
+                assigned:
+                  $ref: '#/components/examples/ClaimTicketResponseExample'
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -3645,6 +3763,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ticket'
+              examples:
+                default:
+                  $ref: '#/components/examples/TicketExample'
         '404':
           description: Ticket not found
           content:
@@ -3657,8 +3778,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
     put:
@@ -3709,6 +3828,9 @@ paths:
                   type: integer
                 estimate_complete:
                   type: string
+            examples:
+              default:
+                $ref: '#/components/examples/UpdateTicketRequestExample'
       responses:
         '200':
           description: Ticket updated
@@ -3716,6 +3838,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ticket'
+              examples:
+                updated:
+                  $ref: '#/components/examples/TicketExample'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3781,6 +3906,9 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoryEvent'
+              examples:
+                default:
+                  $ref: '#/components/examples/HistoryEventListExample'
 
         '400':
           $ref: '#/components/responses/BadRequest'
