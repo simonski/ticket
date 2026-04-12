@@ -16,6 +16,9 @@ Reviewed the current doc set alongside the existing report baseline and compared
 - **The doc corpus is still broad and discoverable** — top-level guides plus `docs/` still cover architecture, lifecycle, onboarding, testing, and runbooks
 - **The lifecycle documentation remains the right conceptual center** — `docs/LIFECYCLE.md` still captures the authoritative stage/state model used by the codebase
 - **The onboarding and testing docs still exist and are substantial** — `docs/ONBOARDING.md` and `TESTING.md` remain strong entry points for new contributors
+- **Prefix, lifecycle-command, and runbook syntax drift is now corrected** — `docs/LIFECYCLE.md` and `docs/RUNBOOKS.md` match the current `tk` CLI verbs and flag names
+- **The operational restore/export examples now reflect the real snapshot interface** — runbooks use `tk export -o ...` and `tk import -i ...` instead of stale pipeline/overwrite examples
+- **Published API version metadata is back in sync** — `openapi.yaml` now matches `cmd/tk/VERSION`
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
@@ -30,19 +33,13 @@ Reviewed the current doc set alongside the existing report baseline and compared
 
 ## Verdict
 
-The documentation set is still one of the project’s strengths, but it lost a point because the code has moved faster than the docs in a few high-visibility places. The biggest problem is not missing documentation from scratch; it is stale documentation around environment naming, init flags, and prefix constraints.
+The documentation set is back in sync on the high-visibility surfaces that were drifting. The main remaining risk in this category was stale examples rather than missing concepts, and that gap is now closed across lifecycle docs, runbooks, and published API metadata.
 
 ## Changes since last assessment
-- The main drift now centers on init flags, prefix length, and environment naming rather than missing SDLC concept coverage
-- The newer CLI/runtime behavior continues to outpace updates in `DESIGN.md`, `SPEC.md`, and some operational docs
+- Corrected the lifecycle prefix rule and current `tk` command examples in `docs/LIFECYCLE.md`
+- Refreshed `docs/RUNBOOKS.md` to use the real export/import workflow and current CLI flag spellings
+- Synced `openapi.yaml` version metadata with `cmd/tk/VERSION`
 
 ## Remaining recommendations
-| Finding | Severity | Recommendation |
-|---------|----------|----------------|
-| Prefix length drift | High | Update docs to “1-5 uppercase ASCII letters” everywhere |
-| Undocumented `tk init` flags | High | Document `-sdlc`, `-prefix`, `-name`, `-git` in SPEC and USER_GUIDE |
-| Stale `TICKET_CONFIG_DIR` references | High | Replace with `TICKET_HOME` behavior |
-| Stale DB path docs | High | Update DESIGN to `.ticket/ticket.db` |
-| Incomplete ticket type list | Medium | Add the missing current types to DESIGN |
-| Old CLI syntax in runbooks | Medium | Refresh commands to current `tk` forms |
-| Version drift | Low | Sync doc versions with `cmd/tk/VERSION` |
+
+None. Re-audited on **2026-04-12** under **TK-130** after commit **`619ed5a`**.

@@ -19,6 +19,12 @@ Reviewed CLI routing and ticket workflows in `cmd/tk`, compared the current beha
 - **`tk get` keeps attached children visible and visually prioritised by state** — child rendering is explicit and state-aware (`cmd/tk/printer.go:262-307`)
 - **The recent child-count and child-visibility behavior is regression-tested** — `cmd/tk/main_test.go:1855-1880`, `cmd/tk/main_test.go:4193-4203`
 - **The broader SDLC and ticket-management feature set remains in place** — stage CRUD, stage-role assignment, `tk fail`, `project set-draft`, and the command help surface still exist and are wired end-to-end
+- **`tk ready` / `tk notready` now match their names** — the root routing now passes the correct draft booleans and the lifecycle helper/help text matches the draft model
+- **SDLC-scoped role CRUD is now available under `tk sdlc`** — `role-add`, `role-get`, `role-update`, and `role-rm` work under the SDLC namespace and are regression-tested
+- **`tk sdlc get` now includes stage acceptance criteria** — detail output renders AC alongside stage metadata
+- **`tk status` now shows project SDLC and default draft context** — both text and JSON output expose the active project’s workflow and default-draft setting
+- **`tk ticket tree` no longer pretends to be a distinct feature** — the placeholder alias is removed and replaced with an explicit error directing users to supported views
+- **The SPA’s modal accessibility is materially stronger** — modal dialogs now expose labels and ARIA metadata, trap focus, support Escape/Tab keyboard handling, and keep the ticket parent link keyboard-activatable
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
@@ -32,19 +38,15 @@ Reviewed CLI routing and ticket workflows in `cmd/tk`, compared the current beha
 
 ## Verdict
 
-The recent CLI work improved day-to-day usability for ticket inspection and listing, but the score still drops because the highest-impact correctness bug remains unresolved: `tk ready` still does the opposite of what users expect. This category is now less about missing features and more about semantic correctness and finishing the last SDLC workflow gaps.
+The remaining workflow gaps from the prior review are now closed. The highest-impact semantic bug (`tk ready` / `tk notready`) is fixed, the SDLC surface is more complete, status output reflects the active workflow, and the web UI’s modal interactions are materially more usable from the keyboard.
 
 ## Changes since last assessment
-- `tk ls` now filters on genuinely open tickets instead of only `complete` state
-- `tk get` now reports child counts and keeps attached children visible with state-based emphasis
-- The highest-impact workflow bug (`tk ready` / `tk notready`) still remains unresolved
+- Fixed the inverted ready/notready lifecycle routing and added CLI regression coverage
+- Completed the `tk sdlc role-*` command family and stage acceptance-criteria output
+- Added project SDLC/default-draft context to `tk status`
+- Removed the placeholder `tk ticket tree` alias
+- Improved modal labels, focus management, Escape handling, and keyboard affordances in the SPA
 
 ## Remaining recommendations
-| Finding | Severity | Recommendation |
-|---------|----------|----------------|
-| Inverted `ready` / `notready` semantics | High | Swap the booleans in `main.go` so the commands match their names |
-| Incomplete SDLC-scoped role CRUD | Medium | Finish the `tk sdlc role-*` command family |
-| Web accessibility debt | Medium | Add labels, ARIA, and focus trapping in the SPA |
-| Missing AC in `tk sdlc get` | Low | Render stage acceptance criteria |
-| `tk status` missing SDLC context | Low | Show SDLC name and draft-default setting |
-| `tk ticket tree` placeholder | Low | Build it or remove the alias |
+
+None. Re-audited on **2026-04-12** under **TK-131** after commit **`619ed5a`**.
