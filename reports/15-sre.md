@@ -32,14 +32,13 @@ Reviewed SRE-facing docs and server/runtime code, with emphasis on metrics expos
 This category regressed because the mismatch between the SLO documentation and the actual observability surface is still a high-severity issue. The code has sensible timeouts and logging, but the operator story is not trustworthy while the docs claim metrics that do not exist.
 
 ## Changes since last assessment
-- The metrics-vs-docs mismatch remains unresolved and is still the biggest SRE risk
-- No material improvements landed in alerting, backup/restore, or tracing guidance
+- 2026-04-12 — TK-234 — commit `67b0af3` rewrote `docs/SLO.md` to match the authenticated `/metrics` endpoint and the current log-derived observability story
+- 2026-04-12 — TK-235 — commit `67b0af3` added concrete alert guidance and ownership expectations to `docs/SLO.md`
+- 2026-04-12 — TK-236 — commit `67b0af3` expanded `docs/RUNBOOKS.md` with explicit local-mode and server-mode restore checklists
+- 2026-04-12 — TK-237 — commit `67b0af3` documented the deliberate absence of tracing in `docs/SLO.md`
+- 2026-04-12 — TK-238 — commit `67b0af3` documented capacity assumptions and single-node SQLite ceilings in `docs/SLO.md`
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Missing `/metrics` despite documented claims | High | Implement `/metrics` or rewrite `docs/SLO.md` to match reality |
-| No alerting definitions | Medium | Add concrete alert rules and ownership |
-| Thin backup/restore runbook | Medium | Add tested restore steps for local and server modes |
-| Missing tracing story | Low | Add tracing or document the deliberate absence |
-| No explicit scale envelope | Low | Document resource ceilings and capacity assumptions |
+| None | - | Completed on 2026-04-12 via TK-234/TK-235/TK-236/TK-237/TK-238 in commit `67b0af3` |

@@ -50,15 +50,12 @@ The OpenAPI spec remains broadly stable in this pass. The earlier SDLC URL and s
 
 ## Changes since last assessment
 
-- No material OpenAPI changes landed in this review window
-- The earlier SDLC URL and stage-role alignment fixes remain intact
-- The same five undocumented endpoints remain the primary spec drift
+- 2026-04-12 — TK-145 — commit `67b0af3` documented `/metrics`, `/api/users/{username}/reset-password`, `/api/projects/{project_id}/set-draft`, `/api/agents/{agent_id}/config`, and `/api/agents/{agent_id}/config/{key}` in `openapi.yaml`
+- 2026-04-12 — TK-147 — commit `67b0af3` removed impossible 401/403/404 responses from `/api/healthz`
 
 ## Remaining recommendations
 
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| 5 undocumented server endpoints | Medium | Add `/metrics`, `/api/users/{username}/reset-password`, `/api/projects/{project_id}/set-draft`, `/api/agents/{agent_id}/config`, `/api/agents/{agent_id}/config/{key}` to openapi.yaml |
 | Sparse response examples | Low | Add inline examples to the 10 most-used endpoints (login, list projects, create ticket, get ticket, list tickets, etc.) |
-| Inapplicable error codes on healthz | Low | Remove 401/403/404 from `/api/healthz` -- it has no auth requirement |
 | Stale spec version | Low | Add a build step or Makefile target to sync openapi.yaml version with `cmd/tk/VERSION` |

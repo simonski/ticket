@@ -80,6 +80,12 @@ Since the previous report set, the codebase picked up useful CLI workflow improv
 8. **Complete dark-mode and modal keyboard handling in the SPA** — hardcoded light colors and missing Escape handling remain the top UX issues
 9. **Suppress verbose response-body logging for auth and agent endpoints** — current behavior can still leak tokens or generated passwords in verbose mode
 
+## Resolved Since Publication
+
+- 2026-04-12 — TK-137 — commit `67b0af3` aligned the TUI ticket type/state/stage pickers with the current lifecycle constants in `internal/tui/model_forms.go`
+- 2026-04-12 — TK-138 — commit `67b0af3` restored the enforced Go coverage gates by adding targeted CLI/API/store/server tests and fixing `tk project sdlc 0`
+- 2026-04-12 — TK-144 — commit `67b0af3` capped verbose body capture and suppressed auth/agent request-response bodies in `internal/server/server.go`
+
 ## Cumulative Progress
 
 | Assessment | Date | Score | Delta |
