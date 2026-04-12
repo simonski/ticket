@@ -2012,7 +2012,7 @@
         let renderer;
         try {
           renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
-        } catch {
+        } catch { /* WebGL unavailable; fall back to the 2D renderer */ }
           return {
             ctx,
             render() {
@@ -2738,7 +2738,7 @@
         if (tvGraph.initialized || !window.THREE || !tvCanvas) return;
         try {
           tvGraph.renderer = new window.THREE.WebGLRenderer({ canvas: tvCanvas, alpha: true, antialias: true });
-        } catch {
+        } catch { /* WebGL unavailable; skip the ticket vision canvas */ }
           return;
         }
         tvGraph.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -3061,7 +3061,7 @@
       });
       document.getElementById("menu-logout").addEventListener("click", async () => {
         closeProfileMenu();
-        try { await call("/api/logout", { method: "POST", headers: headers() }); } catch {}
+        try { await call("/api/logout", { method: "POST", headers: headers() }); } catch { /* best-effort logout; local session must still clear */ }
         token = "";
         currentUserRole = "";
         localStorage.removeItem("task-token");
@@ -3810,7 +3810,9 @@
                 linkedProjects.push({ project_id: project.project_id, prefix: project.prefix, title: project.title, role: item.role });
               }
             }
-          } catch {}
+          } catch (err) {
+            console.warn("Unable to load linked project teams", err);
+          }
         }
         if (!linkedProjects.length) {
           const empty = document.createElement("div");
@@ -4115,10 +4117,10 @@
             rm.textContent = "\u00d7";
             rm.className = "btn danger";
             rm.style.cssText = "padding:0 0.4rem;";
-            rm.onclick = async () => {
+            rm.addEventListener("click", async () => {
               await call(`/api/sdlcs/stages/${s.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
               await loadSdlcStages(wfID);
-            };
+            });
             row.appendChild(info);
             row.appendChild(rm);
             sdlcStagesList.appendChild(row);
@@ -4284,10 +4286,10 @@
               rm.textContent = "\u00d7";
               rm.className = "btn";
               rm.style.cssText = "padding:0 0.4rem;";
-              rm.onclick = async () => {
+              rm.addEventListener("click", async () => {
                 await call(`/api/projects/${projectID}/users/${m.user_id}`, { method: "DELETE", headers: headers() });
                 await loadProjectMembers();
-              };
+              });
               row.appendChild(rm);
               projectMembersListEl.appendChild(row);
             }
@@ -4308,10 +4310,10 @@
               rm.textContent = "\u00d7";
               rm.className = "btn";
               rm.style.cssText = "padding:0 0.4rem;";
-              rm.onclick = async () => {
+              rm.addEventListener("click", async () => {
                 await call(`/api/projects/${projectID}/teams/${t.team_id}`, { method: "DELETE", headers: headers() });
                 await loadProjectMembers();
-              };
+              });
               row.appendChild(rm);
               projectTeamsListEl.appendChild(row);
             }
@@ -4558,7 +4560,7 @@
         const response = await fetch(path, { cache: "no-store", ...options });
         const body = await response.text();
         let data = {};
-        try { data = body ? JSON.parse(body) : {}; } catch {}
+        try { data = body ? JSON.parse(body) : {}; } catch { /* non-JSON response body */ }
         if (response.status === 401) {
           token = "";
           localStorage.removeItem("task-token");
@@ -4716,7 +4718,7 @@
           ticketRefreshTimer = null;
           try {
             await loadTickets();
-          } catch {}
+          } catch { /* best-effort refresh after debounced updates */ }
           if (ticketRefreshPending) {
             ticketRefreshPending = false;
             scheduleTicketReload(reason, { delayMs: 120 });
@@ -4756,12 +4758,12 @@
           // Load project labels and per-ticket labels in parallel
           try {
             projectLabels = await call(`/api/projects/${projectID}/labels`, { headers: headers() }) || [];
-          } catch { projectLabels = []; }
+          } catch { /* labels are optional metadata; keep the board usable without them */ projectLabels = []; }
           const labelMap = {};
           await Promise.all(tickets.map(async (t) => {
             try {
               labelMap[t.ticket_id] = await call(`/api/tickets/${t.ticket_id}/labels`, { headers: headers() }) || [];
-            } catch { labelMap[t.ticket_id] = []; }
+            } catch { /* missing labels should not block ticket rendering */ labelMap[t.ticket_id] = []; }
           }));
           if (seq !== ticketLoadSeq) return;
           ticketLabelsMap = labelMap;
@@ -5064,11 +5066,16 @@
           visibility,
           sdlc_id: sdlcID || null,
         };
-        const res = await call(endpoint, { method, headers: headers(true), body: JSON.stringify(payload) });
-        if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to save project."; projModalError.style.display = ""; return; }
-        closeProjModal();
-        await loadProjects();
-        await loadTickets();
+        try {
+          const res = await call(endpoint, { method, headers: headers(true), body: JSON.stringify(payload) });
+          if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to save project."; projModalError.style.display = ""; return; }
+          closeProjModal();
+          await loadProjects();
+          await loadTickets();
+        } catch (err) {
+          projModalError.textContent = err.message || "Failed to save project.";
+          projModalError.style.display = "";
+        }
       });
 
       projModalOverlay.addEventListener("click", (e) => { if (e.target === projModalOverlay) closeProjModal(); });
@@ -5171,15 +5178,16 @@
         ticketAnalyseBtn.disabled = !(ticket.ticket_id && ticket.type === "epic");
         // Parent link
         const parentLink = document.getElementById("ticket-parent-link");
+        const freshParentLink = parentLink.cloneNode(true);
+        parentLink.replaceWith(freshParentLink);
         if (ticket.parent_id) {
-          parentLink.textContent = "↗ open parent";
-          parentLink.onclick = () => {
+          freshParentLink.textContent = "↗ open parent";
+          freshParentLink.addEventListener("click", () => {
             const parent = tickets.find(t => t.ticket_id === ticket.parent_id);
             if (parent) openEdit(parent);
-          };
+          });
         } else {
-          parentLink.textContent = "";
-          parentLink.onclick = null;
+          freshParentLink.textContent = "";
         }
       }
 
@@ -5210,10 +5218,10 @@
             const rm = document.createElement("button");
             rm.textContent = "\u00d7";
             rm.style.cssText = "background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:0;line-height:1;";
-            rm.onclick = async () => {
+            rm.addEventListener("click", async () => {
               await call(`/api/tickets/${ticketID}/labels/${l.label_id}`, { method: "DELETE", headers: headers() });
               loadTicketLabels(ticketID);
-            };
+            });
             tag.appendChild(rm);
             container.appendChild(tag);
           }
@@ -5243,10 +5251,10 @@
             const rm = document.createElement("button");
             rm.textContent = "\u00d7";
             rm.style.cssText = "background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.9rem;padding:0;";
-            rm.onclick = async () => {
+            rm.addEventListener("click", async () => {
               await call(`/api/time/${e.time_entry_id}`, { method: "DELETE", headers: headers() });
               loadTicketTime(ticketID);
-            };
+            });
             row.appendChild(info);
             row.appendChild(rm);
             entriesEl.appendChild(row);
@@ -5272,19 +5280,19 @@
             const link = document.createElement("span");
             link.style.cssText = "cursor:pointer;text-decoration:underline;";
             link.textContent = `#${d.depends_on}`;
-            link.onclick = () => {
+            link.addEventListener("click", () => {
               const dep = tickets.find(t => t.ticket_id === d.depends_on);
               if (dep) openEdit(dep);
-            };
+            });
             tag.appendChild(link);
             const rm = document.createElement("span");
             rm.textContent = "\u00d7";
             rm.style.cssText = "cursor:pointer;color:var(--muted);font-size:0.9rem;";
-            rm.onclick = async () => {
+            rm.addEventListener("click", async () => {
               const pid = Number(selectedProjectID() || d.project_id);
               await call(`/api/dependencies?project_id=${pid}&ticket_id=${d.ticket_id}&depends_on=${d.depends_on}`, { method: "DELETE", headers: headers() });
               await loadTicketDeps(ticketID);
-            };
+            });
             tag.appendChild(rm);
             container.appendChild(tag);
           }
@@ -5441,7 +5449,7 @@
         socket.onerror = () => {
           wsHealthy = false;
           if (!firstWSUnhealthyAt) firstWSUnhealthyAt = Date.now();
-          try { socket.close(); } catch {}
+          try { socket.close(); } catch { /* best-effort socket shutdown */ }
           if (!token && !localStorage.getItem("task-token")) return;
           if (socketRetry) clearTimeout(socketRetry);
           socketRetry = setTimeout(connectWS, 1200);
@@ -5531,7 +5539,9 @@
               stopChatCapacityPolling();
               appendChatBubble("system", "Chat capacity available again.");
             }
-          } catch (_) {}
+          } catch (err) {
+            console.warn("Unable to refresh chat capacity", err);
+          }
         }, 3000);
       }
 
@@ -5568,7 +5578,7 @@
         if (chatSocketRetry) clearTimeout(chatSocketRetry);
         chatSocketRetry = null;
         if (chatSocket) {
-          try { chatSocket.close(); } catch {}
+          try { chatSocket.close(); } catch { /* best-effort socket shutdown */ }
           chatSocket = null;
         }
         activeAssistantBubble = null;
@@ -5588,7 +5598,7 @@
         chatSocket = new WebSocket(wsURL);
         chatSocket.onmessage = (evt) => {
           let msg = {};
-          try { msg = JSON.parse(evt.data || "{}"); } catch { return; }
+          try { msg = JSON.parse(evt.data || "{}"); } catch { /* ignore malformed websocket frames */ return; }
           if (msg.type === "chat_ready") {
             chatCapacityBlocked = false;
             updateChatInputAvailability();
@@ -5647,7 +5657,7 @@
           chatSocketRetry = setTimeout(connectChatWS, 1200);
         };
         chatSocket.onerror = () => {
-          try { chatSocket.close(); } catch {}
+          try { chatSocket.close(); } catch { /* best-effort socket shutdown */ }
         };
       }
 
@@ -5834,7 +5844,7 @@
           // Refresh project labels cache and dropdown
           try {
             projectLabels = await call(`/api/projects/${pid}/labels`, { headers: headers() }) || [];
-          } catch { /* ignore */ }
+          } catch { /* label creation succeeded; cache refresh is best-effort */ }
           loadProjectLabelsDropdown();
         } catch (err) {
           appStatus.textContent = `Create label failed: ${err.message}`;
