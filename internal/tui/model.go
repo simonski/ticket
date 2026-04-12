@@ -118,14 +118,11 @@ type Model struct {
 	ideasOffset int
 
 	// sdlcs panel
-	sdlcs       []store.SdlcWithStages
-	wfCursor        int
-	wfOffset        int
-	wfExpanded      map[int64]bool // expanded sdlc IDs
-	wfStageCursor   int            // cursor within expanded stages
-	wfInStages      bool           // true when navigating stages within an expanded sdlc
-	wfAddingStage   bool
-	wfStageInput    textinput.Model
+	sdlcs        []store.SdlcWithStages
+	wfCursor     int
+	wfExpanded   map[int64]bool // expanded sdlc IDs
+	wfAddingStage bool
+	wfStageInput textinput.Model
 
 	// board (kanban)
 	boardCol      int            // active column index

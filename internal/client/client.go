@@ -475,7 +475,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
-		agentStatus := "NONE"
+		var agentStatus string
 		switch status {
 		case "NO-WORK", "REJECTED":
 			agentStatus = "NONE"
@@ -1531,7 +1531,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 	}
 	reader = bytes.NewReader(payload)
 
-	httpReq, err := http.NewRequest(http.MethodPost, c.baseURL+"/api/tickets/claim", reader)
+	httpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/api/tickets/claim", reader)
 	if err != nil {
 		return TicketRequestResponse{}, err
 	}

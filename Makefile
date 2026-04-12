@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version test test-go test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -13,6 +13,7 @@ help:
 	@printf "Available targets:\n\n"
 	@printf "  make build           Build tk binary into ./bin/tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
+	@printf "  make sync-openapi-version Sync openapi.yaml version with cmd/tk/VERSION.\n"
 	@printf "  make setup           Install development dependencies (Go + Node).\n"
 	@printf "  make setup-go        Download and cache Go module dependencies.\n"
 	@printf "  make setup-node      Install Node dependencies.\n"
@@ -43,6 +44,7 @@ help:
 
 build: 
 	@$(MAKE) bump-version
+	@$(MAKE) sync-openapi-version
 	@mkdir -p bin
 	go build -o ./bin/tk ./cmd/tk
 
@@ -77,6 +79,9 @@ bump-version:
 		patch=$$((patch + 1)); \
 		printf "%s.%s.%s\n" "$$major" "$$minor" "$$patch" > "$(VERSION_FILE)"; \
 	fi
+
+sync-openapi-version:
+	@perl -0pi -e 's/^(  version: ).*/$$1$(VERSION)/m' openapi.yaml
 
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
 INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket

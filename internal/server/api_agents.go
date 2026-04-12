@@ -25,7 +25,17 @@ func (r *router) registerAgentHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			agents, err := store.ListAgents(r.Context(), db)
+			limit := intParam(r, "limit", 100)
+			offset := intParam(r, "offset", 0)
+			if limit <= 0 {
+				writeError(w, http.StatusBadRequest, "limit must be greater than zero")
+				return
+			}
+			if offset < 0 {
+				writeError(w, http.StatusBadRequest, "offset must be zero or greater")
+				return
+			}
+			agents, err := store.ListAgentsPage(r.Context(), db, limit, offset)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return

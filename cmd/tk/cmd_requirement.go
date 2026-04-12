@@ -22,14 +22,12 @@ func runCurate(args []string) error {
 	if err != nil {
 		return err
 	}
-	var sourceIDs []string
 	var titles []string
 	for _, arg := range args {
 		ticket, err := api.GetTicket(arg)
 		if err != nil {
 			return err
 		}
-		sourceIDs = append(sourceIDs, ticket.ID)
 		titles = append(titles, ticket.Title)
 	}
 	title := "Curated requirement"

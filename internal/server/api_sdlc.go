@@ -259,7 +259,11 @@ func (r *router) registerSdlcHandlers() {
 					return
 				}
 				if err := store.ReorderSdlcStages(r.Context(), db, wfID, payload.StageIDs); err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					if errors.Is(err, store.ErrSdlcStageNotFound) {
+						writeError(w, http.StatusBadRequest, err.Error())
+					} else {
+						writeError(w, http.StatusInternalServerError, err.Error())
+					}
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "reordered"})
@@ -279,7 +283,7 @@ func (r *router) registerSdlcHandlers() {
 						writeError(w, http.StatusNotFound, "sdlc not found")
 						return
 					}
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeError(w, http.StatusInternalServerError, err.Error())
 					return
 				}
 				writeJSON(w, http.StatusOK, export)

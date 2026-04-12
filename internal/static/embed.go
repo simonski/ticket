@@ -171,6 +171,7 @@ func parseRole(filename, content string) Role {
 var stageHeadingRe = regexp.MustCompile(`(?m)^###\s+(\S+)\s*$`)
 var orderRe = regexp.MustCompile(`(?m)^order:\s*(\d+)\s*$`)
 var roleRefRe = regexp.MustCompile(`(?m)^\d+\.\s+@(\S+)`)
+var numberedListItemRe = regexp.MustCompile(`^\d+\.`)
 
 // parseSdlc extracts the name, description, and stages from an SDLC markdown file.
 func parseSdlc(filename, content string) Sdlc {
@@ -209,7 +210,7 @@ func parseSdlc(filename, content string) Sdlc {
 				strings.HasPrefix(trimmed, "Roles:") || strings.HasPrefix(trimmed, "Entry ") ||
 				strings.HasPrefix(trimmed, "Exit ") || strings.HasPrefix(trimmed, "Acceptance ") ||
 				strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "#") ||
-				regexp.MustCompile(`^\d+\.`).MatchString(trimmed) {
+				numberedListItemRe.MatchString(trimmed) {
 				continue
 			}
 			stage.Description = trimmed

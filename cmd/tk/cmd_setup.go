@@ -215,7 +215,14 @@ func runSetupExisting(reader *bufio.Reader) error {
 	if resolved.Mode == config.ModeRemote {
 		if promptYN(reader, "verify remote connection?", true) {
 			fmt.Printf("connecting : %s ... ", resolved.ServerURL)
-			resp, err := http.Get(resolved.ServerURL + "/api/healthz")
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, resolved.ServerURL+"/api/healthz", nil)
+			if err != nil {
+				fmt.Println("FAILED")
+				fmt.Printf("  error: %v\n", err)
+				fmt.Println()
+				return nil
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				fmt.Println("FAILED")
 				fmt.Printf("  error: %v\n", err)
@@ -380,7 +387,11 @@ func runSetupRemote(reader *bufio.Reader) error {
 
 	// 2. Verify connectivity
 	fmt.Printf("connecting : %s ... ", serverURL)
-	resp, err := http.Get(serverURL + "/api/healthz") // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", nil) // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Println("FAILED")
 		return fmt.Errorf("could not reach server: %w", err)

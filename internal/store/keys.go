@@ -22,7 +22,7 @@ func normalizeProjectPrefix(prefix string) string {
 
 func validateProjectPrefix(prefix string) error {
 	if !projectPrefixPattern.MatchString(prefix) {
-		return fmt.Errorf("project prefix %q must be 2 to 5 uppercase letters", prefix)
+		return fmt.Errorf("project prefix %q must be 1 to 5 uppercase letters", prefix)
 	}
 	return nil
 }

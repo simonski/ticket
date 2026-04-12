@@ -1,12 +1,12 @@
 # User Guide
 
-`ticket` is a ticket management tool.
+`tk` is a ticket management tool.
 
 This guide describes a single Go binary that provides a server, a CLI, and an embedded web application backed by SQLite.
 
 ## How `ticket` Works
 
-`ticket` has three interfaces:
+`tk` has three interfaces:
 
 1. The server, which owns persistence, authentication, and collaboration.
 2. The CLI, which provides fast and explicit terminal sdlcs.
@@ -31,7 +31,7 @@ Write the local agent instructions template into the current repository:
 tk onboard
 ```
 
-`ticket onboard` prints the embedded onboarding template to stdout.
+`tk onboard` prints the embedded onboarding template to stdout.
 
 Initialize a task sqlite database:
 
@@ -39,9 +39,9 @@ Initialize a task sqlite database:
 tk init
 ```
 
-If `-f` is omitted, `ticket init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` in the current or nearest parent directory).
+If `-f` is omitted, `tk init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` in the current or nearest parent directory).
 
-`ticket init` creates:
+`tk init` creates:
 
 1. an `admin` account
 2. the default project, `Default Project`, with project id `1` and prefix `TK`
@@ -52,6 +52,14 @@ Bootstrap resolution works like this:
 - admin password: `-password` if provided, otherwise a generated random password printed to stdout
 - existing database file: overwritten only when `--force` is supplied
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
+- non-interactive project setup: use `-prefix`, `-name`, and `-git` to rename the default project after bootstrap
+- initial workflow selection: use `-sdlc <name>` to assign one of the built-in SDLCs during init
+
+For example:
+
+```bash
+tk init -prefix CUS -name "Customer Portal" -git https://github.com/acme/customer-portal.git -sdlc agile
+```
 
 Create or restore database snapshots (LOCAL mode):
 
@@ -68,7 +76,7 @@ Start the server:
 tk server
 ```
 
-If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `ticket init`).
+If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `tk init`).
 
 If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
@@ -169,9 +177,9 @@ Log in:
 tk login -username name -password '*******'
 ```
 
-For `ticket register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `ticket register` falls back to `whoami` and `password`.
+For `tk register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `tk register` falls back to `whoami` and `password`.
 
-`ticket login` resolves values in this order:
+`tk login` resolves values in this order:
 
 1. a valid session already stored in `$TICKET_HOME/credentials.json`
 2. the `username` already stored in `$TICKET_HOME/config.json`
@@ -183,12 +191,12 @@ If login fails with `invalid credentials`, the CLI prints that message, prompts 
 
 When prompts are shown, any discovered values are presented as defaults that you can keep or replace.
 
-When `ticket login` prompts for a password in an interactive terminal, typed characters are masked with `*`.
+When `tk login` prompts for a password in an interactive terminal, typed characters are masked with `*`.
 
 On successful login:
 
 - the session token is stored in `$TICKET_HOME/credentials.json`
-- the `username` and `server_url` fields in `$TICKET_HOME/config.json` are updated
+- the `username` and `location` fields in `$TICKET_HOME/config.json` are updated
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -204,21 +212,21 @@ Inspect or clear local CLI config keys:
 
 ```bash
 tk config ls
-tk config rm server
-tk config delete current_project
+tk config rm location
+tk config delete project_id
 ```
 
 Supported local keys are:
 
-- `server`
+- `location`
 - `username`
-- `current_project`
+- `project_id`
 - `current_epic_id`
 
 In REMOTE mode it prints:
 
 - `mode: remote`
-- `server: <TICKET_URL>`
+- `location: <http(s)://server>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
@@ -302,7 +310,7 @@ tk project list
 tk project ls
 ```
 
-`ticket project list` prints the project id, prefix, title, and status, and marks the active project with `*`.
+`tk project list` prints the project id, prefix, title, and status, and marks the active project with `*`.
 
 Select the active project for subsequent commands:
 
@@ -316,7 +324,7 @@ Rename a project's prefix (re-keys all tickets, updates all references):
 tk project rename-prefix NEW
 ```
 
-This changes every ticket key in the active project (e.g. `CUS-T-1` → `NEW-T-1`),
+This changes every ticket key in the active project (e.g. `CUS-1` → `NEW-T-1`),
 including parent references, dependencies, comments, history, and time entries.
 The config is updated automatically. Local mode only.
 
@@ -490,11 +498,11 @@ tk search password reset -allprojects
 Show a single item:
 
 ```bash
-tk get CUS-T-42
-tk get -json CUS-T-42
+tk get CUS-42
+tk get -json CUS-42
 ```
 
-`ticket get` accepts a ticket ID (key such as `CUS-T-42`). It prints the ticket fields directly, including `DependsOn`, the acceptance criteria, `EstimateEffort`, `EstimateComplete`, `CloneOf` when the ticket is a clone, and comments ordered most recent first.
+`ticket get` accepts a ticket ID (key such as `CUS-42`). It prints the ticket fields directly, including `DependsOn`, the acceptance criteria, `EstimateEffort`, `EstimateComplete`, `CloneOf` when the ticket is a clone, and comments ordered most recent first.
 
 Show orphaned items with no parent:
 
@@ -505,19 +513,19 @@ tk orphans
 Assignment commands:
 
 ```bash
-tk assign CUS-T-42 alice
-tk unassign CUS-T-42 alice
+tk assign CUS-42 alice
+tk unassign CUS-42 alice
 tk dependency add 4 1,2,3
 tk dependency remove 4 2
 tk claim
-tk claim -id CUS-T-42
+tk claim -id CUS-42
 tk claim -dry-run
-tk unclaim CUS-T-42
+tk unclaim CUS-42
 tk request
-tk request CUS-T-42
-tk attach CUS-T-17 CUS-E-9
-tk detach CUS-T-17
-tk delete CUS-T-17
+tk request CUS-42
+tk attach CUS-17 CUS-E-9
+tk detach CUS-17
+tk delete CUS-17
 ```
 
 `ticket assign` and `ticket unassign` are admin-only.
@@ -529,26 +537,26 @@ They also fail if the named user does not exist or is disabled.
 New tickets default to not-ready. Mark a ticket as ready before it can be picked up by `claim` or `request`:
 
 ```bash
-tk undraft CUS-T-42      # mark ready for work
-tk draft CUS-T-42        # mark as draft (not ready)
+tk undraft CUS-42      # mark ready for work
+tk draft CUS-42        # mark as draft (not ready)
 ```
 
 Only ready tickets are eligible for automatic assignment. You can still explicitly request a specific not-ready ticket by ID.
 
 `ticket rm` and `ticket delete` remove a ticket permanently. They fail if the ticket still has child tickets.
 
-`ticket request` is the lower-level form of `ticket claim`. It accepts a ticket ID (key such as `CUS-T-42`). If no work can be assigned, the JSON response status is `NO-WORK`. If a specific ticket is requested and cannot be assigned, the JSON response status is `REJECTED`.
+`ticket request` is the lower-level form of `ticket claim`. It accepts a ticket ID (key such as `CUS-42`). If no work can be assigned, the JSON response status is `NO-WORK`. If a specific ticket is requested and cannot be assigned, the JSON response status is `REJECTED`.
 
 Lifecycle commands:
 
 ```bash
-tk design CUS-T-42
-tk develop CUS-T-42
-tk test CUS-T-42
-tk done CUS-T-42
-tk idle CUS-T-42
-tk active CUS-T-42
-tk complete CUS-T-42
+tk design CUS-42
+tk develop CUS-42
+tk test CUS-42
+tk done CUS-42
+tk idle CUS-42
+tk active CUS-42
+tk complete CUS-42
 ```
 
 `ticket complete` keeps the current stage and marks the ticket state as `complete`. Use `ticket done` to move a ticket into terminal `done/complete`.
@@ -558,7 +566,7 @@ Most client-facing commands also support `-json` to pretty-print the JSON respon
 Show the history of any item:
 
 ```bash
-tk history CUS-T-42
+tk history CUS-42
 ```
 
 `ticket history` prints the stored history events for that item.
@@ -715,7 +723,7 @@ Keyboard shortcuts in the board view:
 - when chat capacity is full, new chat input is disabled until the server reports a free slot
 - `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
-- story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `ticket login` plus `ticket create` commands for epics/tasks in the selected project
+- story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `tk login` plus `tk create` commands for epics/tasks in the selected project
 - Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
 ## Command Reference
@@ -817,6 +825,7 @@ tk active -id <key-or-id>
 tk complete -id <key-or-id>
 tk state -id <key-or-id> <state>
 tk update -id <key-or-id> -stage <stage> -state <state>
+tk reject -id <key-or-id>
 tk count
 tk count -project_id <prefix-or-id>
 tk whoami
@@ -834,6 +843,12 @@ tk update -id <key-or-id> -parent_id 12
 tk update -id <key-or-id> -estimate_effort 5
 tk update -id <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
 tk update -id <key-or-id> -stage develop -state active -priority 2 -title "new title"
+
+When you pass `-stage`, the value must be one of the stages in the ticket's current
+workflow. If it is invalid, `tk update` prints the valid stages for that ticket.
+
+`tk reject -id <key-or-id>` sends a ticket back to the first stage in its current
+workflow, sets the state to `idle`, and marks it as draft.
 
 tk sdlc list
 tk sdlc create -name <name> [-d <description>]
@@ -929,4 +944,3 @@ tk agent run -v               # stream LLM I/O to terminal
 
 Only non-draft tickets are eligible for automatic assignment (`tk undraft <id>`).
 Agents are stored in the users table with `user_type=agent`.
-

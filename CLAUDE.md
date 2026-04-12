@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Build and Test
 
 ```bash
@@ -63,7 +61,7 @@ Mode is determined by the `location` field in `.ticket/config.json`: a path or `
 
 ### Data Model
 
-- **Projects** have prefixes (e.g. `CUS`). **Tickets** have human keys (e.g. `CUS-T-42`).
+- **Projects** have prefixes (e.g. `CUS`). **Tickets** have human keys (e.g. `CUS-42`).
 - Ticket types: epic, task, bug, spike, chore, story, note, question, requirement, decision.
 - **SDLCs** define configurable lifecycle processes attached to projects. An SDLC has ordered **stages** (e.g. `design → develop → test → done`) and **roles** (e.g. architect, engineer, QA). Roles are assigned to stages via a stage-role junction table with ordering. SDLCs can be exported/imported as JSON.
 - Ticket lifecycle fields: `stage` (from SDLC), `role` (current role within stage), `state` (`idle | active | success | fail`), `draft` (bool), `complete` (bool), `archived` (bool).
@@ -83,26 +81,17 @@ Contract tests in `libtickettest/contract.go` define a `Factory` pattern and ver
 - Externalise strings to `constants.go` where possible.
 - The authoritative specification is `SPEC.md`; the OpenAPI spec is `openapi.yaml`.
 
-## SDLC (from AGENTS.md)
-
-1. File issues for remaining work
-2. Run quality gates if code changed (`make test`)
-3. Update issue status
-4. **Push to remote** — this is mandatory. Work is NOT complete until `git push` succeeds.
-5. Clean up and hand off context
-
 ## Special Commands
 
-These words as user input trigger specific sdlcs defined in `docs/RULES.md`:
+These words as user input trigger specific sdlcs.
 
 - `spec` — Rebuild SPEC.md and openapi.yaml from the codebase
 - `drift` — Check documentation vs implementation drift
 - `next` — Pick up next ticket or continue current
-- `review` — Read TODO/DESIGN/USER_GUIDE and propose next steps
-- `continue` — Read TODO/DESIGN/USER_GUIDE and continue implementation
+- `review` — Read DESIGN/USER_GUIDE, tickets and propose next steps
+- `continue` — Read TODO/DESIGN/USER_GUIDE and tickets and continue implementation
 - `pr` — File a PR containing the ticket ID
 - `linear` / `walkthrough` — Generate a code walkthrough using showboat
-
 
 **MANDATORY WORKFLOW:**
 
@@ -124,5 +113,3 @@ These words as user input trigger specific sdlcs defined in `docs/RULES.md`:
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
-- read docs/RULES.md

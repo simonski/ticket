@@ -69,13 +69,23 @@ func GetAgentByUUID(ctx context.Context, db *sql.DB, uuid string) (Agent, error)
 }
 
 func ListAgents(ctx context.Context, db *sql.DB) ([]Agent, error) {
+	return ListAgentsPage(ctx, db, 1000, 0)
+}
+
+func ListAgentsPage(ctx context.Context, db *sql.DB, limit, offset int) ([]Agent, error) {
+	if limit <= 0 {
+		return nil, errors.New("limit must be greater than zero")
+	}
+	if offset < 0 {
+		return nil, errors.New("offset must be zero or greater")
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_type = 'agent'
 		ORDER BY username
-		LIMIT 1000
-	`)
+		LIMIT ? OFFSET ?
+	`, limit, offset)
 	if err != nil {
 		return nil, err
 	}

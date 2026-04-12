@@ -96,7 +96,7 @@ func (c *Client) doJSONBasicAuth(method, path, username, password string, body a
 		reader = bytes.NewReader(payload)
 	}
 
-	httpRequest, err := http.NewRequest(method, c.baseURL+path, reader)
+	httpRequest, err := http.NewRequestWithContext(context.Background(), method, c.baseURL+path, reader)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (c *Client) doJSON(method, path string, body any, out any) error {
 		reader = bytes.NewReader(payload)
 	}
 
-	httpRequest, err := http.NewRequest(method, c.baseURL+path, reader)
+	httpRequest, err := http.NewRequestWithContext(context.Background(), method, c.baseURL+path, reader)
 	if err != nil {
 		return err
 	}

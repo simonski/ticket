@@ -48,6 +48,8 @@ type SdlcExport struct {
 	Stages      []SdlcStageExport `json:"stages"`
 }
 
+var ErrSdlcStageNotFound = errors.New("sdlc stage not found in sdlc")
+
 func CreateSdlc(ctx context.Context, db *sql.DB, name, description string) (Sdlc, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -210,7 +212,7 @@ func ReorderSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64, orderedSta
 			return err
 		}
 		if affected == 0 {
-			return fmt.Errorf("sdlc stage %d not found in sdlc %d", id, sdlcID)
+			return fmt.Errorf("%w %d in sdlc %d", ErrSdlcStageNotFound, id, sdlcID)
 		}
 	}
 	return tx.Commit()
