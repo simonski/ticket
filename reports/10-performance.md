@@ -33,6 +33,9 @@ Reviewed `internal/store/`, `internal/server/`, `internal/client/`, and the curr
 Performance slipped slightly because the same medium-severity hotspots are still present and now stand out more clearly against the already-fixed SDLC query work. The system is not broadly slow by design, but it still carries a few avoidable full-scan and unbounded-result paths that will hurt first as data volume grows.
 
 ## Changes since last assessment
+- 2026-04-12 — TK-203 — commit `67b0af3` documented the single-node SQLite scaling ceiling and capacity assumptions in `docs/SLO.md`
+- 2026-04-12 — TK-205 — commit `108ee1f` verified clone-path child loading already uses `WHERE parent_id = ?` instead of a whole-project scan
+- 2026-04-12 — TK-206 — commit `108ee1f` changed child existence checks to `SELECT ... WHERE parent_id = ? LIMIT 1`
 - 2026-04-12 — TK-208 — commit `67b0af3` capped buffered request/response body logging in `internal/server/server.go`
 - The previously fixed SDLC batch-loading improvements remain intact
 - The older full-project scan and unbounded-history issues remain unresolved
@@ -40,8 +43,5 @@ Performance slipped slightly because the same medium-severity hotspots are still
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Single-connection SQLite read bottleneck | Medium | Revisit read concurrency under WAL mode or document the scaling ceiling explicitly |
 | Unbounded ticket history | Medium | Add limit/pagination to `ListHistoryEvents` |
-| Full-project scan in clone path | Medium | Query children by `parent_id` directly |
-| Full-project scan in delete path | Medium | Use `SELECT 1 ... WHERE parent_id = ? LIMIT 1` |
 | Unbounded SDLC/story/label lists | Low | Add consistent default caps and optional offsets |

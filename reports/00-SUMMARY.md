@@ -65,25 +65,20 @@ Since the previous report set, the codebase picked up useful CLI workflow improv
 
 ## Top Priority Action Items
 
-### Critical
-1. **Fix `tk ready` / `tk notready` inversion** — the CLI still maps `ready` to `draft=true`, which is backwards for a core workflow (`cmd/tk/main.go:253-256`)
-2. **Fix TUI state/stage constants** — `ticketStates` still includes `"open"` and `ticketStages` still uses non-store names, causing invalid lifecycle values (`internal/tui/model_forms.go:217-218`)
-3. **Fix coverage gate failures** — the updated QA review still flags threshold failures in core packages and missing API/CLI coverage for SDLC stage-role flows
-
 ### High
-4. **Implement real request counters/histograms or remove the non-working alerting rules** — `docs/SLO.md` references metrics `/metrics` does not export
-5. **Repair doc drift** — prefix length, `tk init` flags, `TICKET_HOME`, and default DB path documentation are stale across the main docs set
-6. **Run `gofmt -w ./...` and fix the remaining static-analysis issues** — 32 files still fail formatting and critical SA4010 findings remain
+1. **Repair doc drift** — prefix length, `tk init` flags, `TICKET_HOME`, and default DB path documentation are stale across the main docs set
+2. **Run `gofmt -w ./...` and fix the remaining static-analysis issues** — repository-wide formatting drift remains
 
 ### Medium
-7. **Finish SDLC-scoped role CRUD under `tk sdlc`** — `role-list` is scoped, but add/get/update/rm still are not
-8. **Complete dark-mode and modal keyboard handling in the SPA** — hardcoded light colors and missing Escape handling remain the top UX issues
-9. **Suppress verbose response-body logging for auth and agent endpoints** — current behavior can still leak tokens or generated passwords in verbose mode
+3. **Complete dark-mode and modal keyboard handling in the SPA** — hardcoded light colors and missing Escape handling remain the top UX issues
 
 ## Resolved Since Publication
 
+- 2026-04-12 — TK-136 — commit `108ee1f` added regression coverage proving `tk ready` clears draft mode and `tk notready` sets it
 - 2026-04-12 — TK-137 — commit `67b0af3` aligned the TUI ticket type/state/stage pickers with the current lifecycle constants in `internal/tui/model_forms.go`
 - 2026-04-12 — TK-138 — commit `67b0af3` restored the enforced Go coverage gates by adding targeted CLI/API/store/server tests and fixing `tk project sdlc 0`
+- 2026-04-12 — TK-139 — commit `67b0af3` removed the stale alerting/metrics claims from `docs/SLO.md` instead of pretending nonexistent counters existed
+- 2026-04-12 — TK-142 — commit `108ee1f` verified `tk sdlc role-add/get/update/rm` are all SDLC-scoped and no longer match the stale report finding
 - 2026-04-12 — TK-144 — commit `67b0af3` capped verbose body capture and suppressed auth/agent request-response bodies in `internal/server/server.go`
 
 ## Cumulative Progress

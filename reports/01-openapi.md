@@ -52,10 +52,9 @@ The OpenAPI spec remains broadly stable in this pass. The earlier SDLC URL and s
 
 - 2026-04-12 — TK-145 — commit `67b0af3` documented `/metrics`, `/api/users/{username}/reset-password`, `/api/projects/{project_id}/set-draft`, `/api/agents/{agent_id}/config`, and `/api/agents/{agent_id}/config/{key}` in `openapi.yaml`
 - 2026-04-12 — TK-147 — commit `67b0af3` removed impossible 401/403/404 responses from `/api/healthz`
+- 2026-04-12 — TK-148 — commit `108ee1f` verified the existing `sync-openapi-version` Makefile target already keeps `openapi.yaml` in sync with `cmd/tk/VERSION`
+- 2026-04-12 — TK-146 — commit `b46cf07` added inline request/response examples for login, projects, ticket CRUD/history/claim flows, and fixed nearby OpenAPI path/response drift
 
 ## Remaining recommendations
 
-| Finding | Severity | Recommendation |
-|---------|----------|----------------|
-| Sparse response examples | Low | Add inline examples to the 10 most-used endpoints (login, list projects, create ticket, get ticket, list tickets, etc.) |
-| Stale spec version | Low | Add a build step or Makefile target to sync openapi.yaml version with `cmd/tk/VERSION` |
+None. The current OpenAPI backlog items from this assessment are now resolved.

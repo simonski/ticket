@@ -60,7 +60,9 @@ The score is held back by pervasive gofmt violations (34 files, worsened since l
 
 ## Changes since last assessment
 
-- No material idiomatic-Go improvements landed in this review window
+- 2026-04-12 — TK-172 — commit `108ee1f` verified the remaining client/setup call sites already use `http.NewRequestWithContext`
+- 2026-04-12 — TK-173 — commit `108ee1f` verified `wfOffset`, `wfStageCursor`, and `wfInStages` are no longer present in `internal/tui/model.go`
+- 2026-04-12 — TK-174 — commit `108ee1f` verified the regexp set in `internal/static/embed.go` is already hoisted to package-level vars
 - The earlier transaction, error-handling, and packaging improvements remain intact
 - gofmt drift and silent-error debt still dominate the remaining recommendations
 
@@ -72,7 +74,4 @@ The score is held back by pervasive gofmt violations (34 files, worsened since l
 | DB opened/closed per method call | Medium | Refactor LocalService and Client to hold a persistent `*sql.DB` |
 | Service interface lacks context.Context | Medium | Add `ctx context.Context` as first param to all Service methods |
 | 73 silently discarded errors | Medium | Audit and handle; at minimum wrap in `log.Printf` |
-| `http.NewRequest` without context | Medium | Switch to `http.NewRequestWithContext` |
-| Unused TUI fields | Low | Remove `wfOffset`, `wfStageCursor`, `wfInStages` |
-| Regexp compiled in loop | Low | Hoist `regexp.MustCompile` at `embed.go:212` to package level |
 | Store errors as HTTP 400 | Low | Distinguish validation errors (400) from DB errors (500) |
