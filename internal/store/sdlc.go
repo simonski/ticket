@@ -69,12 +69,17 @@ func CreateSdlc(ctx context.Context, db *sql.DB, name, description string) (Sdlc
 	return getSdlcRow(ctx, db, id)
 }
 
-func ListSdlcs(ctx context.Context, db *sql.DB) ([]Sdlc, error) {
+func ListSdlcs(ctx context.Context, db *sql.DB, limit, offset int) ([]Sdlc, error) {
+	limit, offset, err := normalizePage(limit, offset, DefaultListLimit)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT sdlc_id, name, description, created_at, updated_at
 		FROM sdlcs
 		ORDER BY name
-	`)
+		LIMIT ? OFFSET ?
+	`, limit, offset)
 	if err != nil {
 		return nil, err
 	}

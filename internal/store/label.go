@@ -50,8 +50,12 @@ func GetLabel(ctx context.Context, db *sql.DB, id int64) (Label, error) {
 	return label, err
 }
 
-func ListLabels(ctx context.Context, db *sql.DB, projectID int64) ([]Label, error) {
-	rows, err := db.QueryContext(ctx, `SELECT label_id, project_id, name, color, created_at FROM labels WHERE project_id = ? ORDER BY name`, projectID)
+func ListLabels(ctx context.Context, db *sql.DB, projectID int64, limit, offset int) ([]Label, error) {
+	limit, offset, err := normalizePage(limit, offset, DefaultListLimit)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, `SELECT label_id, project_id, name, color, created_at FROM labels WHERE project_id = ? ORDER BY name LIMIT ? OFFSET ?`, projectID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

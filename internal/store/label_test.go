@@ -34,7 +34,7 @@ func TestLabelCRUD(t *testing.T) {
 
 	// List
 	_, _ = CreateLabel(context.Background(), db, project.ID, "feature", "#00ff00")
-	labels, err := ListLabels(context.Background(), db, project.ID)
+	labels, err := ListLabels(context.Background(), db, project.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListLabels() error = %v", err)
 	}
@@ -134,5 +134,38 @@ func TestTicketLabels(t *testing.T) {
 	labels, _ = ListTicketLabels(context.Background(), db, ticket.ID)
 	if len(labels) != 0 {
 		t.Fatalf("ListTicketLabels() after label delete len = %d, want 0", len(labels))
+	}
+}
+
+func TestListLabelsPagination(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	project, err := CreateProject(context.Background(), db, "Paged Labels", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		if _, err := CreateLabel(context.Background(), db, project.ID, name, "#123456"); err != nil {
+			t.Fatalf("CreateLabel(%q) error = %v", name, err)
+		}
+	}
+
+	labels, err := ListLabels(context.Background(), db, project.ID, 2, 1)
+	if err != nil {
+		t.Fatalf("ListLabels(limit, offset) error = %v", err)
+	}
+	if len(labels) != 2 {
+		t.Fatalf("ListLabels(limit, offset) len = %d, want 2", len(labels))
+	}
+	if labels[0].Name != "beta" || labels[1].Name != "gamma" {
+		t.Fatalf("ListLabels(limit, offset) = %#v", labels)
+	}
+
+	if _, err := ListLabels(context.Background(), db, project.ID, -1, 0); err == nil {
+		t.Fatal("ListLabels(negative limit) error = nil, want error")
+	}
+	if _, err := ListLabels(context.Background(), db, project.ID, 1, -1); err == nil {
+		t.Fatal("ListLabels(negative offset) error = nil, want error")
 	}
 }

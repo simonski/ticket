@@ -78,7 +78,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("UpdateTicket() estimates = %#v", updated)
 	}
 
-	history, err := ListHistoryEvents(context.Background(), db, ticket.ID)
+	history, err := ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want develop/active", statusUpdated.Stage, statusUpdated.State)
 	}
 
-	history, err = ListHistoryEvents(context.Background(), db, ticket.ID)
+	history, err = ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -850,7 +850,7 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	if comments, err := ListComments(context.Background(), db, ticket.ID); err != nil || len(comments) != 0 {
 		t.Fatalf("ListComments(deleted) = %#v, %v", comments, err)
 	}
-	if history, err := ListHistoryEvents(context.Background(), db, ticket.ID); err != nil || len(history) != 0 {
+	if history, err := ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0); err != nil || len(history) != 0 {
 		t.Fatalf("ListHistoryEvents(deleted) = %#v, %v", history, err)
 	}
 	if deps, err := ListDependencies(context.Background(), db, ticket.ID); err != nil || len(deps) != 0 {
@@ -1528,7 +1528,7 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 		t.Fatalf("Draft = %v, want false", ready.Draft)
 	}
 
-	events, err := ListHistoryEvents(ctx, db, ticket.ID)
+	events, err := ListHistoryEvents(ctx, db, ticket.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -1694,7 +1694,7 @@ func TestTicketHasChildrenUsesExistenceCheck(t *testing.T) {
 func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID string, wantTransitions [][2]string) {
 	t.Helper()
 
-	events, err := ListHistoryEvents(context.Background(), db, taskID)
+	events, err := ListHistoryEvents(context.Background(), db, taskID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents(%s) error = %v", taskID, err)
 	}

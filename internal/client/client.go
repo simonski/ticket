@@ -1,8 +1,8 @@
 package client
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -23,7 +23,6 @@ type Client struct {
 	http    *http.Client
 	mode    string
 }
-
 
 func New(cfg config.Config) *Client {
 	resolved, err := config.ResolveLocation(cfg.Location)
@@ -574,7 +573,7 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
 			CreatedBy:          user.ID,
-			SdlcID:         request.SdlcID,
+			SdlcID:             request.SdlcID,
 		})
 	}
 	var project store.Project
@@ -625,7 +624,7 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 			GitBranch:          request.GitBranch,
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
-			SdlcID:         request.SdlcID,
+			SdlcID:             request.SdlcID,
 		})
 	}
 	var project store.Project
@@ -1362,7 +1361,7 @@ func (c *Client) ListHistory(id string) ([]store.HistoryEvent, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListHistoryEvents(context.Background(), db, id)
+		return store.ListHistoryEvents(context.Background(), db, id, 0, 0)
 	}
 	var events []store.HistoryEvent
 	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id)+"/history", nil, &events)
@@ -1567,7 +1566,6 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 	return response, nil
 }
 
-
 func (c *Client) CreateSdlc(request SdlcRequest) (store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
@@ -1589,7 +1587,7 @@ func (c *Client) ListSdlcs() ([]store.Sdlc, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListSdlcs(context.Background(), db)
+		return store.ListSdlcs(context.Background(), db, 0, 0)
 	}
 	var sdlcs []store.Sdlc
 	err := c.doJSON(http.MethodGet, "/api/sdlcs", nil, &sdlcs)
@@ -1897,7 +1895,7 @@ func (c *Client) ListLabels(projectID int64) ([]store.Label, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListLabels(context.Background(), db, projectID)
+		return store.ListLabels(context.Background(), db, projectID, 0, 0)
 	}
 	var labels []store.Label
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/labels", projectID), nil, &labels)
@@ -1985,7 +1983,7 @@ func (c *Client) ListStories(projectID int64) ([]store.Story, error) {
 			return nil, err
 		}
 		defer db.Close()
-		return store.ListStoriesByProject(context.Background(), db, projectID)
+		return store.ListStoriesByProject(context.Background(), db, projectID, 0, 0)
 	}
 	var stories []store.Story
 	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/stories", projectID), nil, &stories)

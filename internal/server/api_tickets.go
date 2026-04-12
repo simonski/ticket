@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -31,7 +32,11 @@ func (r *router) registerTicketHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		_, state, _ := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
+		_, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		role, err := projectRoleForUser(r.Context(), db, ticketPayload.ProjectID, user)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -247,7 +252,10 @@ func (r *router) registerTicketHandlers() {
 			if _, existed := beforeIDs[ticket.ID]; existed {
 				continue
 			}
-			_ = store.LinkStoryToTicket(r.Context(), db, story.ID, ticket.ID)
+			if err := store.LinkStoryToTicket(r.Context(), db, story.ID, ticket.ID); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 			notify("ticket_created", ticket.ProjectID, ticket.ID)
 			switch strings.ToLower(strings.TrimSpace(ticket.Type)) {
 			case "epic":
@@ -354,9 +362,19 @@ func (r *router) registerTicketHandlers() {
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
-				events, err := store.ListHistoryEvents(r.Context(), db, id)
+				limit, err := queryInt(r, "limit", 0)
 				if err != nil {
-					writeError(w, http.StatusInternalServerError, err.Error())
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				offset, err := queryInt(r, "offset", 0)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				events, err := store.ListHistoryEvents(r.Context(), db, id, limit, offset)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
 				writeJSON(w, http.StatusOK, events)
@@ -526,10 +544,12 @@ func (r *router) registerTicketHandlers() {
 					}
 					ticket, err := store.GetTicket(r.Context(), db, id)
 					if err == nil {
-						_ = store.AddHistoryEvent(r.Context(), db, ticket.ProjectID, id, "comment_added", map[string]any{
+						if err := store.AddHistoryEvent(r.Context(), db, ticket.ProjectID, id, "comment_added", map[string]any{
 							"key":        ticket.ID,
 							"comment_id": comment.ID,
-						}, user.ID)
+						}, user.ID); err != nil {
+							log.Printf("warning: add history event for ticket %s comment %d: %v", ticket.ID, comment.ID, err)
+						}
 						notify("ticket_updated", ticket.ProjectID, ticket.ID)
 					}
 					writeJSON(w, http.StatusCreated, comment)
@@ -879,7 +899,10 @@ func (r *router) registerTicketHandlers() {
 						writeError(w, http.StatusBadRequest, err.Error())
 						return
 					}
-					_ = store.LinkStoryToTicket(r.Context(), db, story.ID, task.ID)
+					if err := store.LinkStoryToTicket(r.Context(), db, story.ID, task.ID); err != nil {
+						writeError(w, http.StatusInternalServerError, err.Error())
+						return
+					}
 					notify("ticket_created", task.ProjectID, task.ID)
 					created++
 				}
@@ -927,7 +950,11 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				ticketPayload = autoProgressTicketLifecycle(ticketPayload, currentTicket, user.Username)
-				stage, state, _ := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
+				stage, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
 				ticket, err := store.UpdateTicket(r.Context(), db, id, store.TicketUpdateParams{
 					Title:              ticketPayload.Title,
 					Description:        ticketPayload.Description,

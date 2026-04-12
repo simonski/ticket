@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -155,6 +156,18 @@ func intParam(r *http.Request, key string, defaultValue int) int {
 		return defaultValue
 	}
 	return value
+}
+
+func queryInt(r *http.Request, key string, defaultValue int) (int, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return defaultValue, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be numeric", key)
+	}
+	return value, nil
 }
 
 func projectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, user store.User) (string, error) {

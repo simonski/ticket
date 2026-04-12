@@ -1937,6 +1937,19 @@ paths:
       operationId: listSdlcs
       security:
         - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of sdlcs to return. Defaults to 100 when omitted or set to 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: offset
+          in: query
+          description: Number of sdlcs to skip before returning results.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Sdlc list
@@ -3252,6 +3265,18 @@ paths:
           schema:
             type: integer
             format: int64
+        - name: limit
+          in: query
+          description: Maximum number of stories to return. Defaults to 100 when omitted or set to 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: offset
+          in: query
+          description: Number of stories to skip before returning results.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Story list
@@ -3521,6 +3546,18 @@ paths:
           schema:
             type: integer
             format: int64
+        - name: limit
+          in: query
+          description: Maximum number of labels to return. Defaults to 100 when omitted or set to 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: offset
+          in: query
+          description: Number of labels to skip before returning results.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: Label list
@@ -3897,6 +3934,18 @@ paths:
           required: true
           schema:
             type: string
+        - name: limit
+          in: query
+          description: Maximum number of history events to return. Defaults to 50 when omitted or set to 0.
+          schema:
+            type: integer
+            minimum: 0
+        - name: offset
+          in: query
+          description: Number of history events to skip before returning results.
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
           description: History events

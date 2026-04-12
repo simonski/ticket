@@ -17,8 +17,9 @@ All project data follows the server data model and API semantics, whether you ar
 Client-side files live under `$TICKET_HOME`.
 
 If `$TICKET_HOME` is not set, `tk` walks up the directory tree from the current
-working directory looking for an existing `.ticket` directory. If none is found,
-`.ticket` in the current directory is used as the default.
+working directory looking for a `.git` directory. When it finds one, it uses
+`.ticket/` at that repository root. If no Git root is found, `.ticket/` in the
+current directory is used as the default.
 
 - `$TICKET_HOME/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
 - `$TICKET_HOME/credentials.json` stores the current session token
@@ -39,7 +40,7 @@ Initialize a task sqlite database:
 tk init
 ```
 
-If `-f` is omitted, `tk init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` in the current or nearest parent directory).
+If `-f` is omitted, `tk init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` at the nearest Git root, or in the current directory when no Git root exists).
 
 `tk init` creates:
 
@@ -54,6 +55,7 @@ Bootstrap resolution works like this:
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 - non-interactive project setup: use `-prefix`, `-name`, and `-git` to rename the default project after bootstrap
 - initial workflow selection: use `-sdlc <name>` to assign one of the built-in SDLCs during init
+- project prefixes must be 1-5 uppercase ASCII letters
 
 For example:
 
@@ -331,9 +333,10 @@ The config is updated automatically. Local mode only.
 ### Per-directory project binding
 
 `tk` automatically locates the right workspace by walking up the directory tree
-from the current working directory looking for an existing `.ticket` directory.
-The first one found is used as `$TICKET_HOME`. This means different directories
-can have separate databases and configs:
+from the current working directory looking for a `.git` directory. The first Git
+root found gets a `.ticket/` workspace. If there is no Git root, `tk` falls back
+to `.ticket/` in the current directory. This means different repositories can
+have separate databases and configs:
 
 ```bash
 cd ~/code/project-1/
@@ -347,8 +350,8 @@ tk add "A new ticket"       # uses project-2's database
 
 The lookup order is:
 1. `$TICKET_HOME` env var if set
-2. Walk up from CWD looking for an existing `.ticket` directory
-3. `.ticket` in the current directory (default if none found)
+2. Walk up from CWD looking for a `.git` directory and use `.ticket/` at that repository root
+3. `.ticket/` in the current directory (default if no Git root is found)
 
 Show project usage:
 

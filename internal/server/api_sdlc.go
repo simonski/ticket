@@ -181,9 +181,19 @@ func (r *router) registerSdlcHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			sdlcs, err := store.ListSdlcs(r.Context(), db)
+			limit, err := queryInt(r, "limit", 0)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			offset, err := queryInt(r, "offset", 0)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			sdlcs, err := store.ListSdlcs(r.Context(), db, limit, offset)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 			writeJSON(w, http.StatusOK, sdlcs)

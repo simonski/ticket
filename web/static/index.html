@@ -17,6 +17,11 @@
         --line: #d8d2c8;
         --accent: #116466;
         --banner-bg: #ece5d9;
+        --control-bg: #fffef9;
+        --control-ink: #1f2a44;
+        --control-line: #bac2d6;
+        --button-bg: #fffef9;
+        --button-line: #c4cfeb;
         --idle: #90a4ae;
         --active: #f57c00;
         --success: #2e7d32;
@@ -29,14 +34,19 @@
           --lane: #1a2236;
           --ticket: #1e2740;
           --ink: #e0e4ed;
-          --muted: #8892a6;
-          --line: #2a3450;
-          --accent: #2ca5a8;
-          --banner-bg: #151c30;
-          --idle: #607d8b;
-          --active: #ff9800;
-          --success: #43a047;
-          --fail: #e53935;
+            --muted: #8892a6;
+            --line: #2a3450;
+            --accent: #2ca5a8;
+            --banner-bg: #151c30;
+            --control-bg: #18223a;
+            --control-ink: #e0e4ed;
+            --control-line: #34405e;
+            --button-bg: #18223a;
+            --button-line: #3a4a6c;
+            --idle: #607d8b;
+            --active: #ff9800;
+            --success: #43a047;
+            --fail: #e53935;
         }
       }
       * { box-sizing: border-box; }
@@ -78,9 +88,11 @@
       .row { display: flex; gap: 0.45rem; flex-wrap: wrap; }
       .stack { display: grid; gap: 0.5rem; }
       input, textarea, select {
-        border: 1px solid #bac2d6;
+        border: 1px solid var(--control-line);
         border-radius: 8px;
         padding: 0.55rem 0.65rem;
+        background: var(--control-bg);
+        color: var(--control-ink);
       }
       .login-card input {
         width: 100%;
@@ -89,11 +101,11 @@
         color: #fff;
       }
       .btn {
-        border: 1px solid #c4cfeb;
+        border: 1px solid var(--button-line);
         border-radius: 999px;
         padding: 0.45rem 0.9rem;
-        background: #fff;
-        color: #1f2a44;
+        background: var(--button-bg);
+        color: var(--control-ink);
         cursor: pointer;
       }
       .btn.primary {
@@ -1289,7 +1301,7 @@
     </div>
 
     <div id="agent-modal-overlay" class="modal-overlay hidden">
-      <div id="agent-modal" class="modal">
+      <div id="agent-modal" class="modal" role="dialog" aria-modal="true" aria-label="Agents">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong>Agents</strong>
         </div>
@@ -1312,7 +1324,7 @@
     </div>
 
     <div id="role-modal-overlay" class="modal-overlay hidden">
-      <div id="role-modal" class="modal">
+      <div id="role-modal" class="modal" role="dialog" aria-modal="true" aria-label="Roles">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong>Roles</strong>
         </div>
@@ -1333,7 +1345,7 @@
       </div>
     </div>
     <div id="team-modal-overlay" class="modal-overlay hidden">
-      <div id="team-modal" class="modal">
+      <div id="team-modal" class="modal" role="dialog" aria-modal="true" aria-label="Teams">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong>Teams</strong>
         </div>
@@ -3237,7 +3249,7 @@
         setAgentStatus("");
         agentModalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
-        agentNameInput.focus();
+        trapModalFocus(agentModalOverlay, agentNameInput);
       }
 
       function renderAgentList() {
@@ -3355,6 +3367,7 @@
       function closeAgentModal() {
         agentModalOverlay.classList.add("hidden");
         document.body.classList.remove("modal-open");
+        restoreModalFocusIfNeeded();
       }
 
       agentSaveBtn.addEventListener("click", async () => {
@@ -3469,7 +3482,7 @@
         setRoleStatus("");
         roleModalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
-        roleTitleInput.focus();
+        trapModalFocus(roleModalOverlay, roleTitleInput);
       }
 
       function renderRoleList() {
@@ -3541,6 +3554,7 @@
       function closeRoleModal() {
         roleModalOverlay.classList.add("hidden");
         document.body.classList.remove("modal-open");
+        restoreModalFocusIfNeeded();
       }
 
       roleSaveBtn.addEventListener("click", async () => {
@@ -3679,7 +3693,7 @@
         setTeamStatus("");
         teamModalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
-        teamNameInput.focus();
+        trapModalFocus(teamModalOverlay, teamNameInput);
       }
 
       function renderTeamList() {
@@ -3869,6 +3883,7 @@
       function closeTeamModal() {
         teamModalOverlay.classList.add("hidden");
         document.body.classList.remove("modal-open");
+        restoreModalFocusIfNeeded();
       }
 
       teamSaveBtn.addEventListener("click", async () => {
@@ -4998,6 +5013,9 @@
         return [
           { overlay: dialogOverlay, close: () => dialogOverlay.classList.add("hidden") },
           { overlay: projModalOverlay, close: closeProjModal },
+          { overlay: agentModalOverlay, close: closeAgentModal },
+          { overlay: roleModalOverlay, close: closeRoleModal },
+          { overlay: teamModalOverlay, close: closeTeamModal },
           { overlay: sdlcModalOverlay, close: () => { sdlcModalOverlay.classList.add("hidden"); document.body.classList.remove("modal-open"); restoreModalFocusIfNeeded(); } },
           { overlay: storyModalOverlay, close: closeStoryModal },
           { overlay: modalOverlay, close: closeModal },

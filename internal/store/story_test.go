@@ -19,7 +19,7 @@ func TestStoryCRUDAndLinking(t *testing.T) {
 	if story.ID == 0 {
 		t.Fatalf("CreateStory() story id = 0")
 	}
-	list, err := ListStoriesByProject(context.Background(), db, project.ID)
+	list, err := ListStoriesByProject(context.Background(), db, project.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListStoriesByProject() error = %v", err)
 	}
@@ -89,5 +89,34 @@ func TestStoryUpdateAndDelete(t *testing.T) {
 	// Delete again should fail
 	if err := DeleteStory(context.Background(), db, story.ID); err == nil {
 		t.Fatal("DeleteStory(deleted) error = nil, want error")
+	}
+}
+
+func TestListStoriesByProjectPagination(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Paged Stories", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	for _, title := range []string{"Story A", "Story B", "Story C"} {
+		if _, err := CreateStory(context.Background(), db, project.ID, title, "desc", ""); err != nil {
+			t.Fatalf("CreateStory(%q) error = %v", title, err)
+		}
+	}
+
+	list, err := ListStoriesByProject(context.Background(), db, project.ID, 2, 1)
+	if err != nil {
+		t.Fatalf("ListStoriesByProject(limit, offset) error = %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("ListStoriesByProject(limit, offset) len = %d, want 2", len(list))
+	}
+
+	if _, err := ListStoriesByProject(context.Background(), db, project.ID, -1, 0); err == nil {
+		t.Fatal("ListStoriesByProject(negative limit) error = nil, want error")
+	}
+	if _, err := ListStoriesByProject(context.Background(), db, project.ID, 1, -1); err == nil {
+		t.Fatal("ListStoriesByProject(negative offset) error = nil, want error")
 	}
 }

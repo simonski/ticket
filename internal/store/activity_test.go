@@ -23,7 +23,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	events, err := ListHistoryEvents(context.Background(), db, ticket.ID)
+	events, err := ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents() error = %v", err)
 	}
@@ -41,7 +41,7 @@ func TestHistoryAndComments(t *testing.T) {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
 
-	events, err = ListHistoryEvents(context.Background(), db, ticket.ID)
+	events, err = ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListHistoryEvents(after update) error = %v", err)
 	}
@@ -120,5 +120,49 @@ func TestListProjectHistory(t *testing.T) {
 	}
 	if len(events) < 1 {
 		t.Fatalf("ListProjectHistory(limit=0) len = %d, want >= 1", len(events))
+	}
+}
+
+func TestListHistoryEventsPagination(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	adminID := testAdminID(t, db)
+	project, err := CreateProject(context.Background(), db, "Paged History", "", "", adminID)
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "History pagination",
+		CreatedBy: adminID,
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
+			Title:       ticket.Title,
+			Description: "rev",
+			ParentID:    ticket.ParentID,
+			UpdatedBy:   adminID,
+		}); err != nil {
+			t.Fatalf("UpdateTicket() error = %v", err)
+		}
+	}
+
+	events, err := ListHistoryEvents(context.Background(), db, ticket.ID, 2, 1)
+	if err != nil {
+		t.Fatalf("ListHistoryEvents(limit, offset) error = %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("ListHistoryEvents(limit, offset) len = %d, want 2", len(events))
+	}
+
+	if _, err := ListHistoryEvents(context.Background(), db, ticket.ID, -1, 0); err == nil {
+		t.Fatal("ListHistoryEvents(negative limit) error = nil, want error")
+	}
+	if _, err := ListHistoryEvents(context.Background(), db, ticket.ID, 1, -1); err == nil {
+		t.Fatal("ListHistoryEvents(negative offset) error = nil, want error")
 	}
 }

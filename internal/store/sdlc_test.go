@@ -24,7 +24,7 @@ func setupSdlcTestDB(t *testing.T) *sql.DB {
 func TestInitSeedsDefaultSdlc(t *testing.T) {
 	t.Parallel()
 	db := setupSdlcTestDB(t)
-	sdlcs, err := ListSdlcs(context.Background(), db)
+	sdlcs, err := ListSdlcs(context.Background(), db, 0, 0)
 	if err != nil {
 		t.Fatalf("ListSdlcs() error = %v", err)
 	}
@@ -46,7 +46,7 @@ func TestInitSeedsDefaultSdlc(t *testing.T) {
 func TestDefaultSdlcHasTwoStages(t *testing.T) {
 	t.Parallel()
 	db := setupSdlcTestDB(t)
-	sdlcs, _ := ListSdlcs(context.Background(), db)
+	sdlcs, _ := ListSdlcs(context.Background(), db, 0, 0)
 	var sdlcID int64
 	for _, w := range sdlcs {
 		if w.Name == "default" {
@@ -197,7 +197,7 @@ func TestSdlcExportImportRoundTrip(t *testing.T) {
 	db := setupSdlcTestDB(t)
 
 	// Find the default sdlc
-	sdlcs, _ := ListSdlcs(context.Background(), db)
+	sdlcs, _ := ListSdlcs(context.Background(), db, 0, 0)
 	var defaultID int64
 	for _, w := range sdlcs {
 		if w.Name == "default" {
@@ -293,5 +293,31 @@ func TestSdlcStageRoles(t *testing.T) {
 	}
 	if got.Stages[0].Roles[0].Title != "BA" {
 		t.Errorf("stage.Roles[0] = %q, want BA", got.Stages[0].Roles[0].Title)
+	}
+}
+
+func TestListSdlcsPagination(t *testing.T) {
+	t.Parallel()
+	db := setupSdlcTestDB(t)
+
+	for _, name := range []string{"alpha flow", "beta flow", "gamma flow"} {
+		if _, err := CreateSdlc(context.Background(), db, name, ""); err != nil {
+			t.Fatalf("CreateSdlc(%q) error = %v", name, err)
+		}
+	}
+
+	sdlcs, err := ListSdlcs(context.Background(), db, 2, 1)
+	if err != nil {
+		t.Fatalf("ListSdlcs(limit, offset) error = %v", err)
+	}
+	if len(sdlcs) != 2 {
+		t.Fatalf("ListSdlcs(limit, offset) len = %d, want 2", len(sdlcs))
+	}
+
+	if _, err := ListSdlcs(context.Background(), db, -1, 0); err == nil {
+		t.Fatal("ListSdlcs(negative limit) error = nil, want error")
+	}
+	if _, err := ListSdlcs(context.Background(), db, 1, -1); err == nil {
+		t.Fatal("ListSdlcs(negative offset) error = nil, want error")
 	}
 }

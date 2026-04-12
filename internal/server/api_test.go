@@ -979,6 +979,11 @@ func TestStoryAPIAndAnalyseFallback(t *testing.T) {
 		t.Fatalf("stories = %#v", stories)
 	}
 
+	badStoriesResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/stories?offset=abc", nil, auth.Token)
+	if badStoriesResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad stories status = %d body=%s", badStoriesResp.Code, badStoriesResp.Body.String())
+	}
+
 	analyseStoryResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories/"+strconv.FormatInt(story.ID, 10)+"/analyse", nil, auth.Token)
 	if analyseStoryResp.Code != http.StatusOK {
 		t.Fatalf("analyse story status = %d body=%s", analyseStoryResp.Code, analyseStoryResp.Body.String())
@@ -1246,6 +1251,21 @@ func TestTaskAPI(t *testing.T) {
 	decodeResponse(t, historyResp, &events)
 	if len(events) < 2 {
 		t.Fatalf("history events = %#v", events)
+	}
+
+	pagedHistoryResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/history?limit=1&offset=1", nil, auth.Token)
+	if pagedHistoryResp.Code != http.StatusOK {
+		t.Fatalf("paged history status = %d body=%s", pagedHistoryResp.Code, pagedHistoryResp.Body.String())
+	}
+	var pagedEvents []store.HistoryEvent
+	decodeResponse(t, pagedHistoryResp, &pagedEvents)
+	if len(pagedEvents) != 1 {
+		t.Fatalf("paged history events = %#v", pagedEvents)
+	}
+
+	badHistoryResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/history?limit=abc", nil, auth.Token)
+	if badHistoryResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad history status = %d body=%s", badHistoryResp.Code, badHistoryResp.Body.String())
 	}
 
 	commentResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/comments", map[string]string{
@@ -2976,6 +2996,11 @@ func TestSdlcAPI(t *testing.T) {
 		t.Fatal("expected at least one default sdlc")
 	}
 
+	badListResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs?offset=abc", nil, token)
+	if badListResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad sdlc list status = %d body=%s", badListResp.Code, badListResp.Body.String())
+	}
+
 	// Create sdlc
 	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs", map[string]string{
 		"name":        "CI Pipeline",
@@ -3059,6 +3084,11 @@ func TestLabelAPI(t *testing.T) {
 	decodeResponse(t, listResp, &labels)
 	if len(labels) < 1 {
 		t.Fatal("expected at least one label")
+	}
+
+	badLabelsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/labels?limit=abc", nil, token)
+	if badLabelsResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad labels status = %d body=%s", badLabelsResp.Code, badLabelsResp.Body.String())
 	}
 
 	// Create a ticket to attach the label to

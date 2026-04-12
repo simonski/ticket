@@ -43,13 +43,18 @@ func AddHistoryEvent(ctx context.Context, db *sql.DB, projectID int64, ticketID 
 	return err
 }
 
-func ListHistoryEvents(ctx context.Context, db *sql.DB, ticketID string) ([]HistoryEvent, error) {
+func ListHistoryEvents(ctx context.Context, db *sql.DB, ticketID string, limit, offset int) ([]HistoryEvent, error) {
+	limit, offset, err := normalizePage(limit, offset, DefaultHistoryLimit)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, project_id, ticket_id, event_type, payload, COALESCE(created_by, ''), created_at
 		FROM ticket_history
 		WHERE ticket_id = ?
 		ORDER BY id
-	`, ticketID)
+		LIMIT ? OFFSET ?
+	`, ticketID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +220,7 @@ func PurgeOldHistory(ctx context.Context, db *sql.DB, retentionDays int) (int64,
 	if retentionDays <= 0 {
 		return 0, nil
 	}
-	result, err := db.ExecContext(ctx, 
+	result, err := db.ExecContext(ctx,
 		`DELETE FROM ticket_history WHERE created_at <= datetime('now', ? || ' days')`,
 		fmt.Sprintf("-%d", retentionDays),
 	)
@@ -224,4 +229,3 @@ func PurgeOldHistory(ctx context.Context, db *sql.DB, retentionDays int) (int64,
 	}
 	return result.RowsAffected()
 }
-

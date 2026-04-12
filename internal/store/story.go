@@ -51,13 +51,18 @@ func CreateStory(ctx context.Context, db *sql.DB, projectID int64, title, descri
 	return GetStory(ctx, db, id)
 }
 
-func ListStoriesByProject(ctx context.Context, db *sql.DB, projectID int64) ([]Story, error) {
+func ListStoriesByProject(ctx context.Context, db *sql.DB, projectID int64, limit, offset int) ([]Story, error) {
+	limit, offset, err := normalizePage(limit, offset, DefaultListLimit)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT story_id, project_id, title, description, status, COALESCE(created_by, ''), created_at, updated_at
 		FROM stories
 		WHERE project_id = ?
 		ORDER BY created_at DESC, story_id DESC
-	`, projectID)
+		LIMIT ? OFFSET ?
+	`, projectID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

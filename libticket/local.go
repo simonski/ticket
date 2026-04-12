@@ -432,7 +432,7 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 		Notes:              request.Notes,
 		Visibility:         request.Visibility,
 		CreatedBy:          user.ID,
-		SdlcID:         request.SdlcID,
+		SdlcID:             request.SdlcID,
 	})
 }
 
@@ -469,7 +469,7 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 		Notes:              request.Notes,
 		Status:             request.Status,
 		Visibility:         request.Visibility,
-		SdlcID:         request.SdlcID,
+		SdlcID:             request.SdlcID,
 	})
 }
 
@@ -1008,7 +1008,7 @@ func (s *LocalService) ListHistory(id string) ([]store.HistoryEvent, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListHistoryEvents(context.Background(), db, id)
+	return store.ListHistoryEvents(context.Background(), db, id, 0, 0)
 }
 
 func (s *LocalService) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
@@ -1153,7 +1153,7 @@ func (s *LocalService) ListSdlcs() ([]store.Sdlc, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListSdlcs(context.Background(), db)
+	return store.ListSdlcs(context.Background(), db, 0, 0)
 }
 
 func (s *LocalService) GetSdlc(id int64) (store.SdlcWithStages, error) {
@@ -1370,7 +1370,7 @@ func (s *LocalService) ListLabels(projectID int64) ([]store.Label, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListLabels(context.Background(), db, projectID)
+	return store.ListLabels(context.Background(), db, projectID, 0, 0)
 }
 
 func (s *LocalService) DeleteLabel(id int64) error {
@@ -1428,7 +1428,7 @@ func (s *LocalService) ListStories(projectID int64) ([]store.Story, error) {
 		return nil, err
 	}
 	defer db.Close()
-	return store.ListStoriesByProject(context.Background(), db, projectID)
+	return store.ListStoriesByProject(context.Background(), db, projectID, 0, 0)
 }
 
 func (s *LocalService) GetStory(id int64) (store.Story, error) {

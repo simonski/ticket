@@ -85,7 +85,7 @@ make test
 ### Quick start (local)
 
 ```bash
-tk init                                          # create .ticket/ workspace
+tk init                                          # create a repo-local .ticket/ workspace
 tk add "First ticket"
 tk list
 ```
@@ -183,7 +183,7 @@ will query and update tickets automatically during coding sessions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the config/database directory |
+| `TICKET_HOME` | Override the config/database directory. Otherwise `tk` uses `.ticket/` at the nearest Git root, or the current directory if no Git root exists |
 | `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
 | `TICKET_USERNAME` | Default username for remote login |
 | `TICKET_PASSWORD` | Default password for remote login |
@@ -380,5 +380,4 @@ graph TB
         SRV --> DB_R[(SQLite)]
     end
 ```
-
 

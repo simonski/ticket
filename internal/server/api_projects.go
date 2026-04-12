@@ -201,9 +201,19 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
-			stories, err := store.ListStoriesByProject(r.Context(), db, project.ID)
+			limit, err := queryInt(r, "limit", 0)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			offset, err := queryInt(r, "offset", 0)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			stories, err := store.ListStoriesByProject(r.Context(), db, project.ID, limit, offset)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 			writeJSON(w, http.StatusOK, stories)
@@ -407,9 +417,19 @@ func (r *router) registerProjectHandlers() {
 			// /api/projects/<id>/labels
 			switch r.Method {
 			case http.MethodGet:
-				labels, err := store.ListLabels(r.Context(), db, projectID)
+				limit, err := queryInt(r, "limit", 0)
 				if err != nil {
-					writeError(w, http.StatusInternalServerError, err.Error())
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				offset, err := queryInt(r, "offset", 0)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				labels, err := store.ListLabels(r.Context(), db, projectID, limit, offset)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, err.Error())
 					return
 				}
 				writeJSON(w, http.StatusOK, labels)
