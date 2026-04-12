@@ -23,34 +23,31 @@ Full read of the script block with targeted searches for: `var` declarations, `i
 - **CSRF token included**: `getCsrfToken()` at line 3159 reads `_csrf` cookie; `headers()` at line 3164 attaches `X-CSRF-Token` to every request
 - **Strict equality only**: 192 `===` comparisons, zero loose `==` comparisons
 - **No `eval`, `new Function`, or `document.write`**
-- **`addEventListener` dominant**: 113 uses vs 9 `.onclick` assignments
+- **No remaining `.onclick =` handlers**: interactive UI actions now use `addEventListener` consistently
 - **`textContent` used for error messages**: all `appStatus.textContent = err.message` patterns are XSS-safe
 - **Custom `uiConfirm`/`uiAlert` dialogs** -- no native `alert()`/`confirm()`
 - **WebSocket reconnect** with fallback polling (lines 4572-4586)
+- **Project modal saves now surface request failures inline**: the create/edit modal wraps project save requests in `try/catch` and writes failures to `projModalError`
+- **Best-effort catches are now documented**: silent `catch {}` sites now explain intentional fallbacks or ignore paths
 
 ### Issues found
 
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `projModalCreate` click handler has no `try/catch` around `call()` -- thrown errors (network, 401, 5xx) go unhandled | Medium | `index.html:5042-5072` | Wrap lines 5067-5071 in try/catch; show error in `projModalError` |
-| `.onclick =` used in 9 places instead of `addEventListener` | Low | `index.html:4118,4287,4311,5176,5182,5213,5246,5275,5283` | Migrate to `addEventListener` for consistency; `.onclick = null` can be replaced with `AbortController` |
-| 8 silent `catch {}` blocks with no logging or comment | Low | `index.html:2630,3064,3813,4561,4719,5444,5534,5571,5650` | Add `// best-effort` comments for intentional ignores (logout, socket.close); add `console.warn` for the capacity polling catch at 5534 and the team fetch catch at 3813 |
 | 4,578-line single `<script>` block | Advisory | `index.html:1603-6181` | Consider splitting into ES modules when the codebase grows further |
 
 ## Verdict
 
-The JavaScript surface remains strong in this pass. The earlier fixes for the `allTickets` ReferenceError, the unescaped `s.sort_order`, and the lingering `var` declarations are still intact, and the remaining issues stay limited to one missing `try/catch`, a few `.onclick` uses, and silent `catch {}` blocks.
+The JavaScript surface remains strong in this pass. The earlier fixes for the `allTickets` ReferenceError, the unescaped `s.sort_order`, and the lingering `var` declarations are still intact, and the previously open operational recommendations are now closed. The only notable follow-up left from this assessment is the advisory-sized single-script architecture.
 
 ## Changes since last assessment
 
-- No material JavaScript regressions were found in this pass
-- The earlier escaping and modern-syntax fixes remain intact
-- The same small error-handling and consistency issues remain open
+- 2026-04-12 — TK-123 — commit `23f436c` documented best-effort `catch {}` paths in `web/static/index.html` so intentional ignores are explicit
+- 2026-04-12 — TK-123 — commit `23f436c` verified project modal saves already surface `call()` failures in `projModalError`
+- 2026-04-12 — TK-123 — commit `23f436c` verified the remaining UI actions use `addEventListener` rather than `.onclick =`
 
 ## Remaining recommendations
 
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| `projModalCreate` missing try/catch | Medium | Wrap `call()` and subsequent awaits in try/catch; display error in modal |
-| `.onclick` pattern (9 occurrences) | Low | Migrate to `addEventListener` for consistency |
-| Silent `catch {}` blocks (8 occurrences) | Low | Add comments or `console.warn` to aid debugging |
+| None | - | Completed on 2026-04-12 via TK-123 in commit `23f436c` |
