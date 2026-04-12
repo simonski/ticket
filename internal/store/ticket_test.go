@@ -1652,6 +1652,45 @@ func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
 	}
 }
 
+func TestTicketHasChildrenUsesExistenceCheck(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+
+	project, err := CreateProject(ctx, db, "Child Check", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	parent, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "epic",
+		Title:     "Parent",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(parent) error = %v", err)
+	}
+	if hasChildren, err := ticketHasChildren(ctx, db, parent.ID); err != nil || hasChildren {
+		t.Fatalf("ticketHasChildren(parent before child) = %v, %v, want false, nil", hasChildren, err)
+	}
+	if _, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID: project.ID,
+		ParentID:  &parent.ID,
+		Type:      "task",
+		Title:     "Child",
+		CreatedBy: "",
+	}); err != nil {
+		t.Fatalf("CreateTicket(child) error = %v", err)
+	}
+	hasChildren, err := ticketHasChildren(ctx, db, parent.ID)
+	if err != nil {
+		t.Fatalf("ticketHasChildren(parent after child) error = %v", err)
+	}
+	if !hasChildren {
+		t.Fatal("ticketHasChildren(parent after child) = false, want true")
+	}
+}
+
 func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID string, wantTransitions [][2]string) {
 	t.Helper()
 

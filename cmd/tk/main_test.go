@@ -2909,6 +2909,41 @@ func TestRunProjectUseAndSdlcHelpPaths(t *testing.T) {
 	}
 }
 
+func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ProjectID: 1,
+		Type:      "task",
+		Title:     "Draft toggle",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	if err := run([]string{"notready", ticket.ID}); err != nil {
+		t.Fatalf("notready error = %v", err)
+	}
+	updated, err := svc.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicket(after notready) error = %v", err)
+	}
+	if !updated.Draft {
+		t.Fatalf("Draft after notready = %v, want true", updated.Draft)
+	}
+
+	if err := run([]string{"ready", ticket.ID}); err != nil {
+		t.Fatalf("ready error = %v", err)
+	}
+	updated, err = svc.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicket(after ready) error = %v", err)
+	}
+	if updated.Draft {
+		t.Fatalf("Draft after ready = %v, want false", updated.Draft)
+	}
+}
+
 func TestRunTicketTreeReturnsRemovalError(t *testing.T) {
 	setupLocalCLI(t)
 	err := run([]string{"ticket", "tree"})

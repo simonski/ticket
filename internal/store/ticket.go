@@ -1287,11 +1287,15 @@ func batchFetchComments(ctx context.Context, db *sql.DB, ids []string) (map[stri
 }
 
 func ticketHasChildren(ctx context.Context, db *sql.DB, id string) (bool, error) {
-	var count int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets WHERE parent_id = ?`, id).Scan(&count); err != nil {
+	var childID string
+	err := db.QueryRowContext(ctx, `SELECT ticket_id FROM tickets WHERE parent_id = ? LIMIT 1`, id).Scan(&childID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
 		return false, err
 	}
-	return count > 0, nil
+	return true, nil
 }
 
 func syncRelatedLifecycle(ctx context.Context, db *sql.DB, actorID string, ids ...*string) error {
