@@ -10,7 +10,7 @@ import (
 	"unicode"
 )
 
-var projectPrefixPattern = regexp.MustCompile(`^[A-Z]{2,5}$`)
+var projectPrefixPattern = regexp.MustCompile(`^[A-Z]{1,5}$`)
 
 func normalizeProjectPrefix(prefix string) string {
 	prefix = strings.TrimSpace(strings.ToUpper(prefix))

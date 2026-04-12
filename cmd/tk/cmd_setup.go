@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -101,6 +102,33 @@ func runSetup(args []string) error {
 		prefix: strings.ToUpper(strings.TrimSpace(*prefixFlag)),
 		name:   strings.TrimSpace(*nameFlag),
 		git:    strings.TrimSpace(*gitFlag),
+	}
+
+	// Validate flags upfront before any setup work.
+	if flags.prefix != "" {
+		if matched, _ := regexp.MatchString(`^[A-Z]{1,5}$`, flags.prefix); !matched {
+			return fmt.Errorf("invalid prefix %q: must be 1-5 uppercase letters", flags.prefix)
+		}
+	}
+	if flags.sdlc != "" {
+		builtinSdlcs, err := static.LoadSdlcs()
+		if err != nil {
+			return fmt.Errorf("could not load SDLCs: %w", err)
+		}
+		found := false
+		for _, s := range builtinSdlcs {
+			if strings.EqualFold(s.Name, flags.sdlc) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			names := make([]string, len(builtinSdlcs))
+			for i, s := range builtinSdlcs {
+				names[i] = strings.ToLower(s.Name)
+			}
+			return fmt.Errorf("unknown sdlc %q: available SDLCs are %s", flags.sdlc, strings.Join(names, ", "))
+		}
 	}
 
 	reader := bufio.NewReader(os.Stdin)

@@ -76,8 +76,8 @@ func TestGenerateTicketKey(t *testing.T) {
 		t.Fatalf("generateTicketKey(ABC) = %q, want ABC-5", key)
 	}
 
-	// Invalid prefix
-	if _, err := generateTicketKey("x", "task", 1); err == nil {
+	// Invalid prefix (contains non-alpha characters)
+	if _, err := generateTicketKey("1!", "task", 1); err == nil {
 		t.Fatal("generateTicketKey(bad prefix) error = nil, want error")
 	}
 

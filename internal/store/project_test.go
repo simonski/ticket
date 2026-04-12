@@ -281,7 +281,7 @@ func TestRenameProjectPrefix(t *testing.T) {
 	}
 
 	// Renaming to an invalid prefix fails.
-	if _, err := RenameProjectPrefix(context.Background(), db, project.ID, "x"); err == nil {
+	if _, err := RenameProjectPrefix(context.Background(), db, project.ID, "1!"); err == nil {
 		t.Fatal("RenameProjectPrefix(invalid) should fail")
 	}
 }
