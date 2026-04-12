@@ -2586,6 +2586,155 @@ func TestRunSdlcRoleCRUD(t *testing.T) {
 	}
 }
 
+func TestRunSdlcStageRoleCommands(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Stage Role Workflow", Description: "workflow for stage role commands"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		StageName:   "triage",
+		Description: "triage",
+		SortOrder:   1,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+	roleA, err := svc.CreateRole(libticket.RoleRequest{
+		SdlcID:      &wf.ID,
+		Title:       "reviewer",
+		Description: "reviews work",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole(roleA) error = %v", err)
+	}
+	roleB, err := svc.CreateRole(libticket.RoleRequest{
+		SdlcID:      &wf.ID,
+		Title:       "qa",
+		Description: "verifies work",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole(roleB) error = %v", err)
+	}
+	sdlcID := strconv.FormatInt(wf.ID, 10)
+	stageID := strconv.FormatInt(stage.ID, 10)
+	roleAID := strconv.FormatInt(roleA.ID, 10)
+	roleBID := strconv.FormatInt(roleB.ID, 10)
+
+	addOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "stage-role-add", "-sdlc_id", sdlcID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
+			t.Fatalf("stage-role-add roleA error = %v", err)
+		}
+		if err := run([]string{"sdlc", "stage-role-add", "-sdlc_id", sdlcID, "-stage_id", stageID, "-role_id", roleBID}); err != nil {
+			t.Fatalf("stage-role-add roleB error = %v", err)
+		}
+	})
+	if !strings.Contains(addOutput, "assigned role") {
+		t.Fatalf("unexpected stage-role-add output:\n%s", addOutput)
+	}
+
+	ordered, err := svc.GetSdlc(wf.ID)
+	if err != nil {
+		t.Fatalf("GetSdlc(after add) error = %v", err)
+	}
+	if len(ordered.Stages) != 1 || len(ordered.Stages[0].Roles) != 2 {
+		t.Fatalf("stage roles after add = %#v", ordered.Stages)
+	}
+
+	orderOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "stage-role-order", "-sdlc_id", sdlcID, "-stage_id", stageID, "-roles", roleBID + "," + roleAID}); err != nil {
+			t.Fatalf("stage-role-order error = %v", err)
+		}
+	})
+	if !strings.Contains(orderOutput, "reordered roles") {
+		t.Fatalf("unexpected stage-role-order output:\n%s", orderOutput)
+	}
+
+	ordered, err = svc.GetSdlc(wf.ID)
+	if err != nil {
+		t.Fatalf("GetSdlc(after reorder) error = %v", err)
+	}
+	if got := []int64{ordered.Stages[0].Roles[0].ID, ordered.Stages[0].Roles[1].ID}; !reflect.DeepEqual(got, []int64{roleB.ID, roleA.ID}) {
+		t.Fatalf("stage role order = %v, want [%d %d]", got, roleB.ID, roleA.ID)
+	}
+
+	removeOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "stage-role-rm", "-sdlc_id", sdlcID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
+			t.Fatalf("stage-role-rm error = %v", err)
+		}
+	})
+	if !strings.Contains(removeOutput, "removed role") {
+		t.Fatalf("unexpected stage-role-rm output:\n%s", removeOutput)
+	}
+
+	ordered, err = svc.GetSdlc(wf.ID)
+	if err != nil {
+		t.Fatalf("GetSdlc(after remove) error = %v", err)
+	}
+	if got := ordered.Stages[0].Roles; len(got) != 1 || got[0].ID != roleB.ID {
+		t.Fatalf("remaining stage roles = %#v, want only roleB", got)
+	}
+}
+
+func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Stage Detail Workflow", Description: "workflow for stage output"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		StageName:   "triage",
+		Description: "triage work",
+		SortOrder:   1,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+	stage, err = svc.UpdateSdlcStage(stage.ID, libticket.SdlcStageRequest{
+		StageName:          "triage",
+		Description:        "triage work",
+		AcceptanceCriteria: "Classify the issue",
+	})
+	if err != nil {
+		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	}
+	role, err := svc.CreateRole(libticket.RoleRequest{
+		SdlcID:      &wf.ID,
+		Title:       "reviewer",
+		Description: "reviews the work",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+	if err := svc.AddSdlcStageRole(wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	}
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "stage-list", "-id", strconv.FormatInt(wf.ID, 10)}); err != nil {
+			t.Fatalf("sdlc stage-list error = %v", err)
+		}
+	})
+	for _, want := range []string{"triage", "reviewer", "triage work"} {
+		if !strings.Contains(listOutput, want) {
+			t.Fatalf("sdlc stage-list missing %q:\n%s", want, listOutput)
+		}
+	}
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "stage-get", "-stage-id", strconv.FormatInt(stage.ID, 10)}); err != nil {
+			t.Fatalf("sdlc stage-get error = %v", err)
+		}
+	})
+	for _, want := range []string{"Stage Name          : triage", "Acceptance Criteria : Classify the issue", "Roles               : reviewer"} {
+		if !strings.Contains(getOutput, want) {
+			t.Fatalf("sdlc stage-get missing %q:\n%s", want, getOutput)
+		}
+	}
+}
+
 func TestRunSdlcCreateAndDelete(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
@@ -2643,6 +2792,120 @@ func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
 	}
 	if got, ok := payload["project_default_draft"].(bool); !ok || !got {
 		t.Fatalf("project_default_draft = %#v, want true", payload["project_default_draft"])
+	}
+}
+
+func TestRunProjectSetDraftUpdatesCurrentProject(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "set-draft", "true"}); err != nil {
+			t.Fatalf("project set-draft true error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "default_draft set to true") {
+		t.Fatalf("unexpected project set-draft output:\n%s", output)
+	}
+
+	project, err := svc.GetProject("1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	if !project.DefaultDraft {
+		t.Fatalf("project.DefaultDraft = %v, want true", project.DefaultDraft)
+	}
+}
+
+func TestRunProjectSdlcSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Project Workflow", Description: "workflow assignment test"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+
+	setOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "sdlc", strconv.FormatInt(wf.ID, 10)}); err != nil {
+			t.Fatalf("project sdlc set error = %v", err)
+		}
+	})
+	if !strings.Contains(setOutput, "set sdlc") {
+		t.Fatalf("unexpected project sdlc set output:\n%s", setOutput)
+	}
+
+	project, err := svc.GetProject("1")
+	if err != nil {
+		t.Fatalf("GetProject(1) after set error = %v", err)
+	}
+	if project.SdlcID == nil || *project.SdlcID != wf.ID {
+		t.Fatalf("project.SdlcID = %#v, want %d", project.SdlcID, wf.ID)
+	}
+
+	clearOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "sdlc", "0"}); err != nil {
+			t.Fatalf("project sdlc clear error = %v", err)
+		}
+	})
+	if !strings.Contains(clearOutput, "cleared sdlc") {
+		t.Fatalf("unexpected project sdlc clear output:\n%s", clearOutput)
+	}
+
+	project, err = svc.GetProject("1")
+	if err != nil {
+		t.Fatalf("GetProject(1) after clear error = %v", err)
+	}
+	if project.SdlcID != nil && *project.SdlcID == wf.ID {
+		t.Fatalf("project.SdlcID = %#v, want cleared custom workflow %d", project.SdlcID, wf.ID)
+	}
+}
+
+func TestRunProjectUseAndSdlcHelpPaths(t *testing.T) {
+	setupLocalCLI(t)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.ProjectID = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+
+	noProjectOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "use"}); err != nil {
+			t.Fatalf("project use with no current project error = %v", err)
+		}
+	})
+	if !strings.Contains(noProjectOutput, "no project set") {
+		t.Fatalf("unexpected project use output:\n%s", noProjectOutput)
+	}
+
+	useOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "use", "1"}); err != nil {
+			t.Fatalf("project use 1 error = %v", err)
+		}
+	})
+	if !strings.Contains(useOutput, "using project") {
+		t.Fatalf("unexpected project use set output:\n%s", useOutput)
+	}
+
+	currentOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "use"}); err != nil {
+			t.Fatalf("project use current error = %v", err)
+		}
+	})
+	if !strings.Contains(currentOutput, "TK") {
+		t.Fatalf("unexpected current project output:\n%s", currentOutput)
+	}
+
+	helpOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "sdlc", "help"}); err != nil {
+			t.Fatalf("project sdlc help error = %v", err)
+		}
+	})
+	if !strings.Contains(helpOutput, "tk project sdlc <sdlc-id>") {
+		t.Fatalf("unexpected project sdlc help output:\n%s", helpOutput)
 	}
 }
 

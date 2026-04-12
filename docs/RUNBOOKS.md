@@ -151,8 +151,10 @@ tk export | gzip > ticket-backup-$(date +%Y%m%d).json.gz
 # Stop the server
 docker compose stop ticket
 
-# Restore
+# Restore the snapshot payload to a temporary file
 gunzip -c ticket-backup-20250718.json.gz > /tmp/ticket-restore.json
+
+# Re-import into the local database used by the current TICKET_HOME
 tk import -i /tmp/ticket-restore.json
 
 # Restart
@@ -165,6 +167,20 @@ tk project ls
 
 > **Note:** `tk import` replaces the local database contents with the snapshot
 > in the file you pass via `-i`.
+
+### Local mode restore checklist
+
+1. Stop any running `tk server` process pointed at the same `.ticket/` directory.
+2. Confirm `TICKET_HOME` (or the repository-local `.ticket/`) matches the target workspace.
+3. Run `tk import -i /path/to/snapshot.json`.
+4. Run `tk status` and `tk project ls` to confirm the workspace reopened cleanly.
+
+### Server mode restore checklist
+
+1. Stop the container or service so no writers are active.
+2. Copy or extract the backup payload onto the host.
+3. Run `tk import -i /path/to/snapshot.json` in the same `TICKET_HOME` used by the server container or process.
+4. Restart the server and confirm `/api/healthz`, `/api/status`, and a basic `tk project ls` call succeed.
 
 ---
 

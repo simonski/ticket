@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 	"strings"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ─── edit form ───────────────────────────────────────────────────────────────
@@ -112,12 +112,12 @@ const (
 )
 
 type projectEditForm struct {
-	project    store.Project
-	title      textinput.Model
-	desc       textarea.Model
-	dor        textarea.Model // Definition of Ready (acceptance_criteria)
-	dod        textarea.Model // Definition of Done (notes)
-	focus      int
+	project store.Project
+	title   textinput.Model
+	desc    textarea.Model
+	dor     textarea.Model // Definition of Ready (acceptance_criteria)
+	dod     textarea.Model // Definition of Done (notes)
+	focus   int
 }
 
 func newProjectEditForm(p store.Project) *projectEditForm {
@@ -213,9 +213,9 @@ const (
 	nfCount = 7
 )
 
-var ticketTypes  = []string{"task", "epic", "story", "bug", "requirement", "decision", "question", "note"}
-var ticketStates = []string{"open", "active", "success", "fail"}
-var ticketStages = []string{"", "planning", "development", "review", "done"}
+var ticketTypes = []string{"task", "epic", "bug", "spike", "chore", "note", "question", "requirement", "decision"}
+var ticketStates = []string{"idle", "active", "success", "fail"}
+var ticketStages = []string{"", "design", "develop", "test", "done"}
 
 type pickerPopup struct {
 	items    []string
@@ -494,7 +494,6 @@ func (m Model) createTicket() tea.Cmd {
 	}
 }
 
-
 // ─── edit / new view ─────────────────────────────────────────────────────────
 
 func (m Model) viewEdit() []string {
@@ -769,5 +768,3 @@ func (m Model) viewForm(title string) []string {
 	lines = append(lines, m.statusBar(inner))
 	return lines
 }
-
-

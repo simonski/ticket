@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -1454,6 +1456,199 @@ func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
 	}
 	if len(ctx.Parents) == 0 {
 		t.Fatal("EnrichTicketContext().Parents = empty, want non-empty")
+	}
+}
+
+func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateSdlc(ctx, db, "Ticket Flow", "")
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	design, err := AddSdlcStage(ctx, db, wf.ID, "design", "design work", "", 0)
+	if err != nil {
+		t.Fatalf("AddSdlcStage(design) error = %v", err)
+	}
+	testStage, err := AddSdlcStage(ctx, db, wf.ID, "test", "test work", "", 1)
+	if err != nil {
+		t.Fatalf("AddSdlcStage(test) error = %v", err)
+	}
+	doneStage, err := AddSdlcStage(ctx, db, wf.ID, "done", "done work", "", 2)
+	if err != nil {
+		t.Fatalf("AddSdlcStage(done) error = %v", err)
+	}
+	designer, err := CreateRole(ctx, db, &wf.ID, "designer", "designs", "ready for test")
+	if err != nil {
+		t.Fatalf("CreateRole(designer) error = %v", err)
+	}
+	tester, err := CreateRole(ctx, db, &wf.ID, "tester", "tests", "ready for done")
+	if err != nil {
+		t.Fatalf("CreateRole(tester) error = %v", err)
+	}
+	if err := AddSdlcStageRole(ctx, db, wf.ID, design.ID, designer.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole(design) error = %v", err)
+	}
+	if err := AddSdlcStageRole(ctx, db, wf.ID, testStage.ID, tester.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole(test) error = %v", err)
+	}
+	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
+		Prefix: "WF",
+		Title:  "Workflow Project",
+		SdlcID: &wf.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Workflow Ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	adminID := testAdminID(t, db)
+
+	drafted, err := SetTicketDraft(ctx, db, ticket.ID, true, "admin", adminID)
+	if err != nil {
+		t.Fatalf("SetTicketDraft(true) error = %v", err)
+	}
+	if !drafted.Draft {
+		t.Fatalf("Draft = %v, want true", drafted.Draft)
+	}
+	ready, err := SetTicketDraft(ctx, db, ticket.ID, false, "admin", adminID)
+	if err != nil {
+		t.Fatalf("SetTicketDraft(false) error = %v", err)
+	}
+	if ready.Draft {
+		t.Fatalf("Draft = %v, want false", ready.Draft)
+	}
+
+	events, err := ListHistoryEvents(ctx, db, ticket.ID)
+	if err != nil {
+		t.Fatalf("ListHistoryEvents() error = %v", err)
+	}
+	actions := map[string]bool{}
+	for _, event := range events {
+		actions[event.EventType] = true
+	}
+	if !actions["marked_draft"] || !actions["marked_ready"] {
+		t.Fatalf("history actions = %#v, want marked_draft and marked_ready", actions)
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, StateSuccess, RenderLifecycleStatus(ticket.Stage, StateSuccess), ticket.ID); err != nil {
+		t.Fatalf("set state success error = %v", err)
+	}
+	advanced, err := NextTicket(ctx, db, ticket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("NextTicket() error = %v", err)
+	}
+	if advanced.Stage != "test" || advanced.RoleID == nil || *advanced.RoleID != tester.ID || advanced.State != StateIdle {
+		t.Fatalf("NextTicket() = %#v, want test stage with tester role idle", advanced)
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, StateFail, RenderLifecycleStatus(advanced.Stage, StateFail), ticket.ID); err != nil {
+		t.Fatalf("set state fail error = %v", err)
+	}
+	regressed, err := PreviousTicket(ctx, db, ticket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("PreviousTicket() error = %v", err)
+	}
+	if regressed.Stage != "design" || regressed.RoleID == nil || *regressed.RoleID != designer.ID || regressed.State != StateIdle {
+		t.Fatalf("PreviousTicket() = %#v, want design stage with designer role idle", regressed)
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, StateSuccess, RenderLifecycleStatus(regressed.Stage, StateSuccess), ticket.ID); err != nil {
+		t.Fatalf("set design success error = %v", err)
+	}
+	if _, err := NextTicket(ctx, db, ticket.ID, "admin", adminID); err != nil {
+		t.Fatalf("NextTicket(design->test) error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, StateSuccess, RenderLifecycleStatus(testStage.StageName, StateSuccess), ticket.ID); err != nil {
+		t.Fatalf("set test success error = %v", err)
+	}
+	completed, err := NextTicket(ctx, db, ticket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("NextTicket(test->done) error = %v", err)
+	}
+	if !completed.Complete || completed.Stage != "done" || completed.State != StateIdle || completed.SdlcStageID == nil || *completed.SdlcStageID != doneStage.ID {
+		t.Fatalf("completed ticket = %#v, want complete done/idle on done stage", completed)
+	}
+}
+
+func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateSdlc(ctx, db, "Stage Validation", "")
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	if _, err := AddSdlcStage(ctx, db, wf.ID, "Design", "", "", 0); err != nil {
+		t.Fatalf("AddSdlcStage(design) error = %v", err)
+	}
+	if _, err := AddSdlcStage(ctx, db, wf.ID, " test ", "", "", 1); err != nil {
+		t.Fatalf("AddSdlcStage(test) error = %v", err)
+	}
+	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
+		Prefix: "REF",
+		Title:  "Ref Project",
+		SdlcID: &wf.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Reference Ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	byExact, err := GetTicketByRef(ctx, db, strings.ToLower(ticket.ID))
+	if err != nil {
+		t.Fatalf("GetTicketByRef(exact) error = %v", err)
+	}
+	if byExact.ID != ticket.ID {
+		t.Fatalf("GetTicketByRef(exact).ID = %q, want %q", byExact.ID, ticket.ID)
+	}
+
+	bySequence, err := GetTicketByRef(ctx, db, "1")
+	if err != nil {
+		t.Fatalf("GetTicketByRef(sequence) error = %v", err)
+	}
+	if bySequence.ID != ticket.ID {
+		t.Fatalf("GetTicketByRef(sequence).ID = %q, want %q", bySequence.ID, ticket.ID)
+	}
+
+	validStage, err := validateTicketStage(ctx, db, ticket, " Test ")
+	if err != nil {
+		t.Fatalf("validateTicketStage(valid) error = %v", err)
+	}
+	if validStage != "test" {
+		t.Fatalf("validateTicketStage(valid) = %q, want %q", validStage, "test")
+	}
+
+	if _, err := validateTicketStage(ctx, db, ticket, "ship"); err == nil || !strings.Contains(err.Error(), `valid stages: design, test`) {
+		t.Fatalf("validateTicketStage(invalid) error = %v", err)
+	}
+
+	names := normalizeStageNames([]SdlcStage{
+		{StageName: "Design"},
+		{StageName: " test "},
+		{StageName: "TEST"},
+		{StageName: ""},
+	})
+	if got, want := names, []string{"design", "test"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalizeStageNames() = %v, want %v", got, want)
 	}
 }
 

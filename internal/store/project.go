@@ -274,6 +274,8 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	nextSdlcID := params.SdlcID
 	if nextSdlcID == nil {
 		nextSdlcID = current.SdlcID
+	} else if *nextSdlcID == 0 {
+		nextSdlcID = nil
 	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE projects

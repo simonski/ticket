@@ -4,8 +4,8 @@
 
 | Service | Target | Measurement |
 |---------|--------|-------------|
-| HTTP API | 99.5% uptime | `ticket_up` metric via `/api/healthz` |
-| WebSocket | 99.0% uptime | Connection success rate |
+| HTTP API | 99.5% uptime | `ticket_up` from authenticated `/metrics` scrapes plus `/api/healthz` probes |
+| WebSocket | 99.0% uptime | Connection success rate from structured logs |
 
 ## Latency
 
@@ -24,7 +24,20 @@
 
 ## Alerting Rules
 
-Recommended Prometheus alerting rules (add to `alerts/ticket.yml`):
+The server exposes a small authenticated Prometheus surface at `/metrics`. Use it
+for liveness/capacity signals, and derive request-rate / latency / 5xx alerts
+from structured logs until request counters are added.
+
+Recommended alert ownership:
+
+| Alert | Owner | Signal Source |
+|-------|-------|---------------|
+| `TicketDown` | Primary on-call | `/metrics` + `/api/healthz` |
+| `OpenTicketBacklogSpike` | Product / delivery owner | `/metrics` |
+| `HighMemoryUsage` | Primary on-call | `/metrics` |
+| `High5xxRate` | Primary on-call | Structured logs |
+
+Example Prometheus alerting rules for the metrics that exist today:
 
 ```yaml
 groups:
@@ -38,13 +51,13 @@ groups:
         annotations:
           summary: "Ticket server is down"
 
-      - alert: HighGoroutineCount
-        expr: go_goroutines > 500
+      - alert: OpenTicketBacklogSpike
+        expr: ticket_open_tickets_total > 5000
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Goroutine count exceeds 500"
+          summary: "Open ticket backlog exceeds expected steady-state range"
 
       - alert: HighMemoryUsage
         expr: go_memstats_alloc_bytes > 512 * 1024 * 1024
@@ -54,14 +67,23 @@ groups:
         annotations:
           summary: "Heap allocation exceeds 512MB"
 
-      - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.01
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "HTTP 5xx error rate exceeds 1%"
 ```
+
+For request latency and 5xx-rate alerting, prefer log-based monitors keyed on
+the server's structured request logs (`path`, `status`, `duration_ms`,
+`request_id`) until dedicated request counters and histograms are added.
+
+## Tracing
+
+The product currently has **no distributed tracing pipeline**. The deliberate
+operational model today is:
+
+- request-scoped correlation via `X-Request-ID`
+- structured API logs with `path`, `status`, and `duration_ms`
+- `/api/healthz` and authenticated `/metrics` for liveness/capacity checks
+
+If deeper cross-service tracing is needed later, add it explicitly rather than
+assuming it exists today.
 
 ## Capacity Guidelines
 
@@ -71,4 +93,4 @@ groups:
 | Memory | 256MB base + ~1MB per concurrent WebSocket |
 | Disk | ~1KB per ticket, ~10KB per ticket with full history |
 | SQLite DB | Recommended max ~500K tickets before considering PostgreSQL |
-| Concurrent connections | Limited by `SetMaxOpenConns` (currently 1 for SQLite write serialization) |
+| Concurrent connections | Limited by `SetMaxOpenConns` (currently 1); treat this as an explicit SQLite scaling ceiling, not an implementation detail |

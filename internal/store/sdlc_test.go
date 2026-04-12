@@ -146,6 +146,52 @@ func TestReorderSdlcStages(t *testing.T) {
 	}
 }
 
+func TestUpdateGetAndListSdlcStage(t *testing.T) {
+	t.Parallel()
+	db := setupSdlcTestDB(t)
+
+	wf, err := CreateSdlc(context.Background(), db, "stage-details", "")
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := AddSdlcStage(context.Background(), db, wf.ID, "triage", "initial review", "", 3)
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+
+	stage, err = UpdateSdlcStage(context.Background(), db, stage.ID, "triage", "updated review", "Clarify the issue")
+	if err != nil {
+		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	}
+	if stage.Description != "updated review" || stage.AcceptanceCriteria != "Clarify the issue" {
+		t.Fatalf("UpdateSdlcStage() = %#v", stage)
+	}
+
+	got, err := GetSdlcStage(context.Background(), db, stage.ID)
+	if err != nil {
+		t.Fatalf("GetSdlcStage() error = %v", err)
+	}
+	if got.ID != stage.ID || got.Description != "updated review" {
+		t.Fatalf("GetSdlcStage() = %#v, want updated stage", got)
+	}
+
+	stages, err := ListSdlcStages(context.Background(), db, wf.ID)
+	if err != nil {
+		t.Fatalf("ListSdlcStages() error = %v", err)
+	}
+	if len(stages) != 1 || stages[0].ID != stage.ID {
+		t.Fatalf("ListSdlcStages() = %#v, want only stage %d", stages, stage.ID)
+	}
+
+	order, err := GetSdlcStageOrder(context.Background(), db, stage.ID)
+	if err != nil {
+		t.Fatalf("GetSdlcStageOrder() error = %v", err)
+	}
+	if order != 3 {
+		t.Fatalf("GetSdlcStageOrder() = %d, want 3", order)
+	}
+}
+
 func TestSdlcExportImportRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := setupSdlcTestDB(t)

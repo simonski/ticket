@@ -1,10 +1,11 @@
 package server
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -294,6 +295,528 @@ func TestChatEnabledConfigAPI(t *testing.T) {
 	chatWSResp := doJSONRequest(t, handler, http.MethodGet, "/api/chat/ws", nil, adminAuth.Token)
 	if chatWSResp.Code != http.StatusForbidden {
 		t.Fatalf("chat ws status = %d, want %d body=%s", chatWSResp.Code, http.StatusForbidden, chatWSResp.Body.String())
+	}
+}
+
+func TestResetPasswordProjectDraftAndAgentConfigAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	if _, err := store.CreateUser(context.Background(), db, "bob", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser(bob) error = %v", err)
+	}
+	if _, err := store.CreateUser(context.Background(), db, "carol", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser(carol) error = %v", err)
+	}
+	carolLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "carol",
+		"password": "password123",
+	}, "")
+	if carolLoginResp.Code != http.StatusOK {
+		t.Fatalf("carol login status = %d, want %d", carolLoginResp.Code, http.StatusOK)
+	}
+	var carolAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, carolLoginResp, &carolAuth)
+
+	unauthorizedReset := doJSONRequest(t, handler, http.MethodPost, "/api/users/bob/reset-password", map[string]string{
+		"password": "new-password-123",
+	}, "")
+	if unauthorizedReset.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized reset status = %d, want %d", unauthorizedReset.Code, http.StatusUnauthorized)
+	}
+
+	resetResp := doJSONRequest(t, handler, http.MethodPost, "/api/users/bob/reset-password", map[string]string{
+		"password": "new-password-123",
+	}, adminToken)
+	if resetResp.Code != http.StatusOK {
+		t.Fatalf("reset password status = %d, want %d body=%s", resetResp.Code, http.StatusOK, resetResp.Body.String())
+	}
+
+	reloginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "bob",
+		"password": "new-password-123",
+	}, "")
+	if reloginResp.Code != http.StatusOK {
+		t.Fatalf("bob relogin status = %d, want %d", reloginResp.Code, http.StatusOK)
+	}
+
+	missingReset := doJSONRequest(t, handler, http.MethodPost, "/api/users/missing/reset-password", map[string]string{
+		"password": "new-password-123",
+	}, adminToken)
+	if missingReset.Code != http.StatusNotFound {
+		t.Fatalf("missing reset status = %d, want %d", missingReset.Code, http.StatusNotFound)
+	}
+
+	unauthorizedDraft := doJSONRequest(t, handler, http.MethodPut, "/api/projects/1/set-draft", map[string]bool{
+		"draft": true,
+	}, "")
+	if unauthorizedDraft.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized set-draft status = %d, want %d", unauthorizedDraft.Code, http.StatusUnauthorized)
+	}
+
+	forbiddenDraft := doJSONRequest(t, handler, http.MethodPut, "/api/projects/1/set-draft", map[string]bool{
+		"draft": true,
+	}, carolAuth.Token)
+	if forbiddenDraft.Code != http.StatusForbidden {
+		t.Fatalf("forbidden set-draft status = %d, want %d", forbiddenDraft.Code, http.StatusForbidden)
+	}
+
+	draftResp := doJSONRequest(t, handler, http.MethodPut, "/api/projects/1/set-draft", map[string]bool{
+		"draft": true,
+	}, adminToken)
+	if draftResp.Code != http.StatusOK {
+		t.Fatalf("set-draft status = %d, want %d body=%s", draftResp.Code, http.StatusOK, draftResp.Body.String())
+	}
+	project, err := store.GetProject(context.Background(), db, "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	if !project.DefaultDraft {
+		t.Fatalf("project.DefaultDraft = %v, want true", project.DefaultDraft)
+	}
+
+	agent, _, err := store.CreateAgent(context.Background(), db, "secret-agent")
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	if _, _, err := store.CreateAgent(context.Background(), db, "secret-agent-2"); err != nil {
+		t.Fatalf("CreateAgent(second) error = %v", err)
+	}
+
+	listAgentsResp := doJSONRequest(t, handler, http.MethodGet, "/api/agents?limit=1&offset=1", nil, adminToken)
+	if listAgentsResp.Code != http.StatusOK {
+		t.Fatalf("list agents status = %d, want %d", listAgentsResp.Code, http.StatusOK)
+	}
+	var agents []store.User
+	decodeResponse(t, listAgentsResp, &agents)
+	if len(agents) != 1 {
+		t.Fatalf("paged agents len = %d, want 1", len(agents))
+	}
+
+	listConfigResp := doJSONRequest(t, handler, http.MethodGet, "/api/agents/"+agent.ID+"/config", nil, adminToken)
+	if listConfigResp.Code != http.StatusOK {
+		t.Fatalf("list agent config status = %d, want %d", listConfigResp.Code, http.StatusOK)
+	}
+	var emptyConfig []store.AgentConfigEntry
+	decodeResponse(t, listConfigResp, &emptyConfig)
+	if len(emptyConfig) != 0 {
+		t.Fatalf("initial agent config len = %d, want 0", len(emptyConfig))
+	}
+
+	setConfigResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents/"+agent.ID+"/config", map[string]string{
+		"key":   "llm",
+		"value": "gpt-5",
+	}, adminToken)
+	if setConfigResp.Code != http.StatusOK {
+		t.Fatalf("set agent config status = %d, want %d body=%s", setConfigResp.Code, http.StatusOK, setConfigResp.Body.String())
+	}
+
+	listConfigResp = doJSONRequest(t, handler, http.MethodGet, "/api/agents/"+agent.ID+"/config", nil, adminToken)
+	if listConfigResp.Code != http.StatusOK {
+		t.Fatalf("list agent config after set status = %d, want %d", listConfigResp.Code, http.StatusOK)
+	}
+	var configEntries []store.AgentConfigEntry
+	decodeResponse(t, listConfigResp, &configEntries)
+	if len(configEntries) != 1 || configEntries[0].Key != "llm" || configEntries[0].Value != "gpt-5" {
+		t.Fatalf("agent config entries = %#v", configEntries)
+	}
+
+	badDeleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/agents/"+agent.ID+"/config", nil, adminToken)
+	if badDeleteResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad delete config status = %d, want %d", badDeleteResp.Code, http.StatusBadRequest)
+	}
+
+	deleteConfigResp := doJSONRequest(t, handler, http.MethodDelete, "/api/agents/"+agent.ID+"/config/llm", nil, adminToken)
+	if deleteConfigResp.Code != http.StatusOK {
+		t.Fatalf("delete agent config status = %d, want %d", deleteConfigResp.Code, http.StatusOK)
+	}
+}
+
+func TestSystemMetricsHealthAndCountAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	healthResp := doJSONRequest(t, handler, http.MethodGet, "/api/healthz", nil, "")
+	if healthResp.Code != http.StatusOK {
+		t.Fatalf("healthz status = %d, want %d", healthResp.Code, http.StatusOK)
+	}
+	var health map[string]string
+	decodeResponse(t, healthResp, &health)
+	if health["status"] != "ok" || health["version"] != "1.2.3" {
+		t.Fatalf("health payload = %#v", health)
+	}
+
+	adminToken := loginAdmin(t, handler)
+
+	metricsUnauthorized := doJSONRequest(t, handler, http.MethodGet, "/metrics", nil, "")
+	if metricsUnauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("metrics unauthorized status = %d, want %d", metricsUnauthorized.Code, http.StatusUnauthorized)
+	}
+
+	metricsResp := doJSONRequest(t, handler, http.MethodGet, "/metrics", nil, adminToken)
+	if metricsResp.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want %d body=%s", metricsResp.Code, http.StatusOK, metricsResp.Body.String())
+	}
+	if got := metricsResp.Header().Get("Content-Type"); got != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Fatalf("metrics content-type = %q", got)
+	}
+	for _, want := range []string{"ticket_up 1", "ticket_projects_total", "ticket_users_total", "go_goroutines"} {
+		if !bytes.Contains(metricsResp.Body.Bytes(), []byte(want)) {
+			t.Fatalf("metrics body missing %q:\n%s", want, metricsResp.Body.String())
+		}
+	}
+
+	countResp := doJSONRequest(t, handler, http.MethodGet, "/api/count", nil, adminToken)
+	if countResp.Code != http.StatusOK {
+		t.Fatalf("count status = %d, want %d", countResp.Code, http.StatusOK)
+	}
+
+	badCountResp := doJSONRequest(t, handler, http.MethodGet, "/api/count?project_id=abc", nil, adminToken)
+	if badCountResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad count status = %d, want %d", badCountResp.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRoleAndTeamManagementAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	alice, err := store.CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	adminUser, err := store.GetUserByUsername(context.Background(), db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	aliceLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if aliceLoginResp.Code != http.StatusOK {
+		t.Fatalf("alice login status = %d, want %d", aliceLoginResp.Code, http.StatusOK)
+	}
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, aliceLoginResp, &aliceAuth)
+
+	createRoleResp := doJSONRequest(t, handler, http.MethodPost, "/api/roles", map[string]string{
+		"title":               "reviewer",
+		"description":         "reviews work",
+		"acceptance_criteria": "approves changes",
+	}, adminToken)
+	if createRoleResp.Code != http.StatusCreated {
+		t.Fatalf("create role status = %d, want %d body=%s", createRoleResp.Code, http.StatusCreated, createRoleResp.Body.String())
+	}
+	var role store.Role
+	decodeResponse(t, createRoleResp, &role)
+
+	listRolesResp := doJSONRequest(t, handler, http.MethodGet, "/api/roles", nil, adminToken)
+	if listRolesResp.Code != http.StatusOK {
+		t.Fatalf("list roles status = %d, want %d", listRolesResp.Code, http.StatusOK)
+	}
+
+	updateRoleResp := doJSONRequest(t, handler, http.MethodPut, "/api/roles/"+strconv.FormatInt(role.ID, 10), map[string]string{
+		"title":               "qa-reviewer",
+		"description":         "reviews and validates",
+		"acceptance_criteria": "approves releases",
+	}, adminToken)
+	if updateRoleResp.Code != http.StatusOK {
+		t.Fatalf("update role status = %d, want %d body=%s", updateRoleResp.Code, http.StatusOK, updateRoleResp.Body.String())
+	}
+
+	createTeamResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams", map[string]string{
+		"name": "Platform",
+	}, adminToken)
+	if createTeamResp.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d, want %d body=%s", createTeamResp.Code, http.StatusCreated, createTeamResp.Body.String())
+	}
+	var team store.Team
+	decodeResponse(t, createTeamResp, &team)
+
+	addMemberResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/users", map[string]string{
+		"user_id":   alice.ID,
+		"role":      store.TeamRoleMember,
+		"job_title": "Engineer",
+	}, adminToken)
+	if addMemberResp.Code != http.StatusOK {
+		t.Fatalf("add team member status = %d, want %d body=%s", addMemberResp.Code, http.StatusOK, addMemberResp.Body.String())
+	}
+
+	listMembersResp := doJSONRequest(t, handler, http.MethodGet, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/users", nil, aliceAuth.Token)
+	if listMembersResp.Code != http.StatusOK {
+		t.Fatalf("list team members status = %d, want %d", listMembersResp.Code, http.StatusOK)
+	}
+	var members []store.TeamMember
+	decodeResponse(t, listMembersResp, &members)
+	if len(members) < 2 {
+		t.Fatalf("team members len = %d, want at least 2", len(members))
+	}
+
+	agent, _, err := store.CreateAgent(context.Background(), db, "team-secret")
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	addAgentResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/agents", map[string]string{
+		"agent_id": agent.ID,
+	}, adminToken)
+	if addAgentResp.Code != http.StatusOK {
+		t.Fatalf("add team agent status = %d, want %d body=%s", addAgentResp.Code, http.StatusOK, addAgentResp.Body.String())
+	}
+
+	listAgentsResp := doJSONRequest(t, handler, http.MethodGet, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/agents", nil, aliceAuth.Token)
+	if listAgentsResp.Code != http.StatusOK {
+		t.Fatalf("list team agents status = %d, want %d", listAgentsResp.Code, http.StatusOK)
+	}
+	var teamAgents []store.TeamAgent
+	decodeResponse(t, listAgentsResp, &teamAgents)
+	if len(teamAgents) != 1 || teamAgents[0].AgentID != agent.ID {
+		t.Fatalf("team agents = %#v", teamAgents)
+	}
+
+	updateTeamResp := doJSONRequest(t, handler, http.MethodPut, "/api/teams/"+strconv.FormatInt(team.ID, 10), map[string]string{
+		"name": "Platform Core",
+	}, adminToken)
+	if updateTeamResp.Code != http.StatusOK {
+		t.Fatalf("update team status = %d, want %d body=%s", updateTeamResp.Code, http.StatusOK, updateTeamResp.Body.String())
+	}
+
+	removeAgentResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/agents/"+agent.ID, nil, adminToken)
+	if removeAgentResp.Code != http.StatusOK {
+		t.Fatalf("remove team agent status = %d, want %d", removeAgentResp.Code, http.StatusOK)
+	}
+
+	removeMemberResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/users/"+alice.ID, nil, adminToken)
+	if removeMemberResp.Code != http.StatusOK {
+		t.Fatalf("remove team member status = %d, want %d", removeMemberResp.Code, http.StatusOK)
+	}
+	removeAdminMemberResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+strconv.FormatInt(team.ID, 10)+"/users/"+adminUser.ID, nil, adminToken)
+	if removeAdminMemberResp.Code != http.StatusOK {
+		t.Fatalf("remove admin team member status = %d, want %d body=%s", removeAdminMemberResp.Code, http.StatusOK, removeAdminMemberResp.Body.String())
+	}
+
+	deleteTeamResp := doJSONRequest(t, handler, http.MethodDelete, "/api/teams/"+strconv.FormatInt(team.ID, 10), nil, adminToken)
+	if deleteTeamResp.Code != http.StatusOK {
+		t.Fatalf("delete team status = %d, want %d", deleteTeamResp.Code, http.StatusOK)
+	}
+
+	deleteRoleResp := doJSONRequest(t, handler, http.MethodDelete, "/api/roles/"+strconv.FormatInt(role.ID, 10), nil, adminToken)
+	if deleteRoleResp.Code != http.StatusOK {
+		t.Fatalf("delete role status = %d, want %d", deleteRoleResp.Code, http.StatusOK)
+	}
+}
+
+func TestProjectTicketsHistoryAndStoriesAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	alice, err := store.CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	team, err := store.CreateTeam(context.Background(), db, "Platform", nil)
+	if err != nil {
+		t.Fatalf("CreateTeam() error = %v", err)
+	}
+	ticket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
+		ProjectID: 1,
+		Type:      "task",
+		Title:     "API project ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	badTicketsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/tickets?limit=abc", nil, adminToken)
+	if badTicketsResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad tickets status = %d, want %d", badTicketsResp.Code, http.StatusBadRequest)
+	}
+
+	ticketsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/tickets?limit=5&offset=0&type=task", nil, adminToken)
+	if ticketsResp.Code != http.StatusOK {
+		t.Fatalf("tickets status = %d, want %d body=%s", ticketsResp.Code, http.StatusOK, ticketsResp.Body.String())
+	}
+	var tickets []store.Ticket
+	decodeResponse(t, ticketsResp, &tickets)
+	found := false
+	for _, item := range tickets {
+		if item.ID == ticket.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("tickets response missing %q", ticket.ID)
+	}
+
+	badHistoryResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/history?limit=abc", nil, adminToken)
+	if badHistoryResp.Code != http.StatusBadRequest {
+		t.Fatalf("bad history status = %d, want %d", badHistoryResp.Code, http.StatusBadRequest)
+	}
+
+	historyResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/history?limit=5", nil, adminToken)
+	if historyResp.Code != http.StatusOK {
+		t.Fatalf("history status = %d, want %d body=%s", historyResp.Code, http.StatusOK, historyResp.Body.String())
+	}
+	var events []store.HistoryEvent
+	decodeResponse(t, historyResp, &events)
+	if len(events) == 0 {
+		t.Fatal("expected project history events")
+	}
+
+	addProjectUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/users", map[string]string{
+		"user_id": alice.ID,
+		"role":    store.ProjectRoleViewer,
+	}, adminToken)
+	if addProjectUserResp.Code != http.StatusOK {
+		t.Fatalf("add project user status = %d, want %d body=%s", addProjectUserResp.Code, http.StatusOK, addProjectUserResp.Body.String())
+	}
+
+	projectUsersResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/users", nil, adminToken)
+	if projectUsersResp.Code != http.StatusOK {
+		t.Fatalf("project users status = %d, want %d", projectUsersResp.Code, http.StatusOK)
+	}
+
+	addProjectTeamResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/teams", map[string]any{
+		"team_id": team.ID,
+		"role":    store.ProjectRoleEditor,
+	}, adminToken)
+	if addProjectTeamResp.Code != http.StatusOK {
+		t.Fatalf("add project team status = %d, want %d body=%s", addProjectTeamResp.Code, http.StatusOK, addProjectTeamResp.Body.String())
+	}
+
+	projectTeamsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/teams", nil, adminToken)
+	if projectTeamsResp.Code != http.StatusOK {
+		t.Fatalf("project teams status = %d, want %d", projectTeamsResp.Code, http.StatusOK)
+	}
+
+	storiesResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/stories", nil, adminToken)
+	if storiesResp.Code != http.StatusOK {
+		t.Fatalf("stories status = %d, want %d body=%s", storiesResp.Code, http.StatusOK, storiesResp.Body.String())
+	}
+	var stories []store.Story
+	decodeResponse(t, storiesResp, &stories)
+	if len(stories) != 0 {
+		t.Fatalf("stories len = %d, want 0 for empty project stories", len(stories))
+	}
+
+	removeProjectTeamResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/1/teams/"+strconv.FormatInt(team.ID, 10), nil, adminToken)
+	if removeProjectTeamResp.Code != http.StatusOK {
+		t.Fatalf("remove project team status = %d, want %d", removeProjectTeamResp.Code, http.StatusOK)
+	}
+
+	removeProjectUserResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/1/users/"+alice.ID, nil, adminToken)
+	if removeProjectUserResp.Code != http.StatusOK {
+		t.Fatalf("remove project user status = %d, want %d", removeProjectUserResp.Code, http.StatusOK)
+	}
+}
+
+func TestSdlcStageRoleAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerResp.Code, http.StatusCreated)
+	}
+	userLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if userLoginResp.Code != http.StatusOK {
+		t.Fatalf("alice login status = %d, want %d", userLoginResp.Code, http.StatusOK)
+	}
+	var userAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, userLoginResp, &userAuth)
+
+	wf, err := store.CreateSdlc(context.Background(), db, "API Workflow", "stage role api test")
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := store.AddSdlcStage(context.Background(), db, wf.ID, "triage", "triage", "", 1)
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+	roleA, err := store.CreateRole(context.Background(), db, &wf.ID, "reviewer", "reviews work", "")
+	if err != nil {
+		t.Fatalf("CreateRole(roleA) error = %v", err)
+	}
+	roleB, err := store.CreateRole(context.Background(), db, &wf.ID, "qa", "verifies work", "")
+	if err != nil {
+		t.Fatalf("CreateRole(roleB) error = %v", err)
+	}
+	stagePath := fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", wf.ID, stage.ID)
+
+	unauthorized := doJSONRequest(t, handler, http.MethodPost, stagePath, map[string]int64{"role_id": roleA.ID}, "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized add status = %d, want %d", unauthorized.Code, http.StatusUnauthorized)
+	}
+
+	forbidden := doJSONRequest(t, handler, http.MethodPost, stagePath, map[string]int64{"role_id": roleA.ID}, userAuth.Token)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("forbidden add status = %d, want %d", forbidden.Code, http.StatusForbidden)
+	}
+
+	invalid := doJSONRequest(t, handler, http.MethodPost, stagePath, map[string]int64{}, adminToken)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid add status = %d, want %d body=%s", invalid.Code, http.StatusBadRequest, invalid.Body.String())
+	}
+
+	added := doJSONRequest(t, handler, http.MethodPost, stagePath, map[string]int64{"role_id": roleA.ID}, adminToken)
+	if added.Code != http.StatusCreated {
+		t.Fatalf("add roleA status = %d, want %d body=%s", added.Code, http.StatusCreated, added.Body.String())
+	}
+	added = doJSONRequest(t, handler, http.MethodPost, stagePath, map[string]int64{"role_id": roleB.ID}, adminToken)
+	if added.Code != http.StatusCreated {
+		t.Fatalf("add roleB status = %d, want %d body=%s", added.Code, http.StatusCreated, added.Body.String())
+	}
+
+	reordered := doJSONRequest(t, handler, http.MethodPut, stagePath, map[string][]int64{"role_ids": []int64{roleB.ID, roleA.ID}}, adminToken)
+	if reordered.Code != http.StatusOK {
+		t.Fatalf("reorder status = %d, want %d body=%s", reordered.Code, http.StatusOK, reordered.Body.String())
+	}
+
+	got, err := store.GetSdlc(context.Background(), db, wf.ID)
+	if err != nil {
+		t.Fatalf("GetSdlc() error = %v", err)
+	}
+	if len(got.Stages) != 1 || len(got.Stages[0].Roles) != 2 {
+		t.Fatalf("GetSdlc() stages = %#v", got.Stages)
+	}
+	if got.Stages[0].Roles[0].ID != roleB.ID || got.Stages[0].Roles[1].ID != roleA.ID {
+		t.Fatalf("role order = %#v, want [%d %d]", got.Stages[0].Roles, roleB.ID, roleA.ID)
+	}
+
+	removed := doJSONRequest(t, handler, http.MethodDelete, fmt.Sprintf("%s/%d", stagePath, roleA.ID), nil, adminToken)
+	if removed.Code != http.StatusOK {
+		t.Fatalf("remove status = %d, want %d body=%s", removed.Code, http.StatusOK, removed.Body.String())
+	}
+
+	got, err = store.GetSdlc(context.Background(), db, wf.ID)
+	if err != nil {
+		t.Fatalf("GetSdlc(after remove) error = %v", err)
+	}
+	if remaining := got.Stages[0].Roles; len(remaining) != 1 || remaining[0].ID != roleB.ID {
+		t.Fatalf("remaining roles = %#v, want only roleB", remaining)
 	}
 }
 
@@ -1885,7 +2408,7 @@ func TestAgentSdlcAPI(t *testing.T) {
 	}
 	var agentPayload struct {
 		Agent    store.Agent `json:"agent"`
-		Password string     `json:"password"`
+		Password string      `json:"password"`
 	}
 	decodeResponse(t, createAgentResp, &agentPayload)
 	agentID := agentPayload.Agent.ID
@@ -2195,7 +2718,7 @@ func TestTeamCRUDAPI(t *testing.T) {
 	}
 	var agentPayload struct {
 		Agent    store.Agent `json:"agent"`
-		Password string     `json:"password"`
+		Password string      `json:"password"`
 	}
 	decodeResponse(t, agentResp, &agentPayload)
 
@@ -2329,7 +2852,6 @@ func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
-
 
 	srv, err := New(":0", db, "1.2.3", false, nil, "")
 	if err != nil {

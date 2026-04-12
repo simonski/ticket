@@ -75,7 +75,7 @@ func runProject(args []string) error {
 			AcceptanceCriteria: *acceptanceCriteria,
 			GitRepository:      strings.TrimSpace(*gitRepository),
 			GitBranch:          strings.TrimSpace(*gitBranch),
-			SdlcID:         wfID,
+			SdlcID:             wfID,
 		})
 		if err != nil {
 			return err
@@ -362,10 +362,7 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 	if err != nil {
 		return fmt.Errorf("usage: %s", usage)
 	}
-	var nextSdlcID *int64
-	if wfIDRaw > 0 {
-		nextSdlcID = &wfIDRaw
-	}
+	nextSdlcID := &wfIDRaw
 	project, err := svc.UpdateProject(current.ID, libticket.ProjectUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
@@ -373,7 +370,7 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 		GitRepository:      current.GitRepository,
 		GitBranch:          current.GitBranch,
 		Status:             current.Status,
-		SdlcID:         nextSdlcID,
+		SdlcID:             nextSdlcID,
 	})
 	if err != nil {
 		return err
@@ -381,7 +378,7 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 	if outputJSON {
 		return printJSON(project)
 	}
-	if nextSdlcID == nil {
+	if wfIDRaw == 0 {
 		fmt.Printf("cleared sdlc from project %s\n", project.Prefix)
 	} else {
 		fmt.Printf("set sdlc %d on project %s\n", wfIDRaw, project.Prefix)
@@ -570,7 +567,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			GitRepository:      nextRepo,
 			GitBranch:          nextBranch,
 			Status:             nextStatus,
-			SdlcID:         nextSdlcID,
+			SdlcID:             nextSdlcID,
 		})
 		if err != nil {
 			return err

@@ -72,6 +72,42 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 	}
 }
 
+func TestSetProjectDefaultDraft(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	project, err := CreateProject(context.Background(), db, "Draft Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	if err := SetProjectDefaultDraft(context.Background(), db, project.ID, true); err != nil {
+		t.Fatalf("SetProjectDefaultDraft(true) error = %v", err)
+	}
+	updated, err := GetProjectByID(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByID() error = %v", err)
+	}
+	if !updated.DefaultDraft {
+		t.Fatalf("DefaultDraft = %v, want true", updated.DefaultDraft)
+	}
+
+	if err := SetProjectDefaultDraft(context.Background(), db, project.ID, false); err != nil {
+		t.Fatalf("SetProjectDefaultDraft(false) error = %v", err)
+	}
+	updated, err = GetProjectByID(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByID() after false error = %v", err)
+	}
+	if updated.DefaultDraft {
+		t.Fatalf("DefaultDraft = %v, want false", updated.DefaultDraft)
+	}
+
+	if err := SetProjectDefaultDraft(context.Background(), db, 9999, true); err != ErrProjectNotFound {
+		t.Fatalf("SetProjectDefaultDraft(missing) error = %v, want %v", err, ErrProjectNotFound)
+	}
+}
+
 func TestGetProjectByPrefix(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

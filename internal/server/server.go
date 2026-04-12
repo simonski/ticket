@@ -214,9 +214,12 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 
 type loggingResponseWriter struct {
 	http.ResponseWriter
-	status int
-	body   bytes.Buffer
+	status        int
+	body          bytes.Buffer
+	bodyTruncated bool
 }
+
+const maxLoggedBodyBytes = 4096
 
 func (w *loggingResponseWriter) WriteHeader(status int) {
 	w.status = status
@@ -227,7 +230,7 @@ func (w *loggingResponseWriter) Write(p []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	_, _ = w.body.Write(p)
+	appendLoggedBody(&w.body, p, &w.bodyTruncated)
 	return w.ResponseWriter.Write(p)
 }
 
@@ -236,6 +239,34 @@ func (w *loggingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return h.Hijack()
 	}
 	return nil, nil, errors.New("response writer does not support hijacking")
+}
+
+func appendLoggedBody(buf *bytes.Buffer, payload []byte, truncated *bool) {
+	if len(payload) == 0 || buf.Len() >= maxLoggedBodyBytes {
+		if len(payload) > 0 && truncated != nil {
+			*truncated = true
+		}
+		return
+	}
+	remaining := maxLoggedBodyBytes - buf.Len()
+	if len(payload) > remaining {
+		_, _ = buf.Write(payload[:remaining])
+		if truncated != nil {
+			*truncated = true
+		}
+		return
+	}
+	_, _ = buf.Write(payload)
+}
+
+func loggedBodyString(buf *bytes.Buffer, truncated bool) string {
+	if buf == nil || buf.Len() == 0 {
+		return ""
+	}
+	if !truncated {
+		return buf.String()
+	}
+	return buf.String() + "…(truncated)"
 }
 
 func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
@@ -255,12 +286,15 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 		// Skip logging request body for sensitive endpoints to avoid leaking credentials.
 		sensitiveEndpoint := strings.Contains(r.URL.Path, "/login") ||
 			strings.Contains(r.URL.Path, "/register") ||
-			strings.Contains(r.URL.Path, "/reset-password")
+			strings.Contains(r.URL.Path, "/reset-password") ||
+			strings.HasPrefix(r.URL.Path, "/api/agents")
 
-		var requestBody []byte
+		var requestBody bytes.Buffer
+		var requestBodyTruncated bool
 		if r.Body != nil && !sensitiveEndpoint {
-			requestBody, _ = io.ReadAll(r.Body)
-			r.Body = io.NopCloser(bytes.NewReader(requestBody))
+			rawRequestBody, _ := io.ReadAll(r.Body)
+			appendLoggedBody(&requestBody, rawRequestBody, &requestBodyTruncated)
+			r.Body = io.NopCloser(bytes.NewReader(rawRequestBody))
 		}
 
 		start := time.Now()
@@ -280,11 +314,11 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 		if q := r.URL.RawQuery; q != "" {
 			attrs = append(attrs, "query", q)
 		}
-		if len(requestBody) > 0 {
-			attrs = append(attrs, "request_body", string(requestBody))
+		if requestBody.Len() > 0 {
+			attrs = append(attrs, "request_body", loggedBodyString(&requestBody, requestBodyTruncated))
 		}
-		if lw.body.Len() > 0 {
-			attrs = append(attrs, "response_body", lw.body.String())
+		if lw.body.Len() > 0 && !sensitiveEndpoint {
+			attrs = append(attrs, "response_body", loggedBodyString(&lw.body, lw.bodyTruncated))
 		}
 		if lw.status >= 500 {
 			logger.Error("api request", attrs...)
