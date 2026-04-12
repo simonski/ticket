@@ -78,8 +78,31 @@ func promptYN(reader *bufio.Reader, question string, defaultYes bool) bool {
 	return line == "y" || line == "yes"
 }
 
+// initFlags holds optional flags passed to tk init that override interactive prompts.
+type initFlags struct {
+	sdlc   string
+	prefix string
+	name   string
+	git    string
+}
+
 func runSetup(args []string) error {
-	_ = args
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	sdlcFlag := fs.String("sdlc", "", "SDLC to assign (e.g. agile, yolo)")
+	prefixFlag := fs.String("prefix", "", "project prefix (e.g. TK, PRJ)")
+	nameFlag := fs.String("name", "", "project name")
+	gitFlag := fs.String("git", "", "git repository URL")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	flags := initFlags{
+		sdlc:   strings.TrimSpace(*sdlcFlag),
+		prefix: strings.ToUpper(strings.TrimSpace(*prefixFlag)),
+		name:   strings.TrimSpace(*nameFlag),
+		git:    strings.TrimSpace(*gitFlag),
+	}
+
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println("tk init")
@@ -106,7 +129,7 @@ func runSetup(args []string) error {
 	if existingSetup() {
 		return runSetupExisting(reader)
 	}
-	return runSetupNew(reader)
+	return runSetupNew(reader, flags)
 }
 
 func existingSetup() bool {
@@ -208,7 +231,11 @@ func runSetupExisting(reader *bufio.Reader) error {
 	return nil
 }
 
-func runSetupNew(reader *bufio.Reader) error {
+func runSetupNew(reader *bufio.Reader, flags ...initFlags) error {
+	var f initFlags
+	if len(flags) > 0 {
+		f = flags[0]
+	}
 	fmt.Println()
 
 	choice := promptChoice(reader, "How do you want to use ticket?", []string{
@@ -219,14 +246,18 @@ func runSetupNew(reader *bufio.Reader) error {
 
 	switch choice {
 	case 0:
-		return runSetupLocal(reader)
+		return runSetupLocal(reader, f)
 	case 1:
 		return runSetupRemote(reader)
 	}
 	return nil
 }
 
-func runSetupLocal(reader *bufio.Reader) error {
+func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
+	var f initFlags
+	if len(flags) > 0 {
+		f = flags[0]
+	}
 	dbPath, err := defaultDatabasePath()
 	if err != nil {
 		return err
@@ -238,18 +269,26 @@ func runSetupLocal(reader *bufio.Reader) error {
 		dirName = dirName[:4]
 	}
 
-	projectPrefix := prompt(reader, "project prefix", dirName)
-	projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
+	projectPrefix := f.prefix
 	if projectPrefix == "" {
-		projectPrefix = dirName
+		projectPrefix = prompt(reader, "project prefix", dirName)
+		projectPrefix = strings.ToUpper(strings.TrimSpace(projectPrefix))
+		if projectPrefix == "" {
+			projectPrefix = dirName
+		}
 	}
-	projectName := prompt(reader, "project name", filepath.Base(cwd))
+	projectName := f.name
+	if projectName == "" {
+		projectName = prompt(reader, "project name", filepath.Base(cwd))
+	}
 
-	var gitRepo string
-	if origin := detectGitOrigin(); origin != "" {
-		fmt.Printf("detected   : git origin %s\n", origin)
-		if promptYN(reader, "set as project git repository?", true) {
-			gitRepo = origin
+	gitRepo := f.git
+	if gitRepo == "" {
+		if origin := detectGitOrigin(); origin != "" {
+			fmt.Printf("detected   : git origin %s\n", origin)
+			if promptYN(reader, "set as project git repository?", true) {
+				gitRepo = origin
+			}
 		}
 	}
 
@@ -299,7 +338,7 @@ func runSetupLocal(reader *bufio.Reader) error {
 	fmt.Printf("  password : %s\n", password)
 	fmt.Println()
 
-	return runSetupPostInit(reader)
+	return runSetupPostInit(reader, f.sdlc)
 }
 
 func runSetupRemote(reader *bufio.Reader) error {
@@ -499,7 +538,11 @@ func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg c
 	return runSetupPostInit(reader)
 }
 
-func runSetupPostInit(reader *bufio.Reader) error {
+func runSetupPostInit(reader *bufio.Reader, sdlcName ...string) error {
+	sdlc := ""
+	if len(sdlcName) > 0 {
+		sdlc = sdlcName[0]
+	}
 	// Detect claude / codex
 	claudePath, _ := exec.LookPath("claude")
 	codexPath, _ := exec.LookPath("codex")
@@ -630,7 +673,7 @@ func runSetupPostInit(reader *bufio.Reader) error {
 	// Check that sdlcs and roles are populated.
 	cfg, cfgErr := config.Load()
 	if cfgErr == nil {
-		if err := runInitCheckDefaults(reader, cfg); err != nil {
+		if err := runInitCheckDefaults(reader, cfg, sdlc); err != nil {
 			fmt.Printf("warning: could not check defaults: %v\n", err)
 		}
 	}
@@ -651,6 +694,10 @@ func runInitDB(args []string) error {
 	passwordFlag := fs.String("password", "", "bootstrap password")
 	force := fs.Bool("force", false, "overwrite the database file if it exists")
 	populate := fs.Bool("populate", false, "seed example projects, stories, tickets, users, and teams")
+	sdlcFlag := fs.String("sdlc", "", "SDLC to assign to the project (e.g. agile, yolo)")
+	prefixFlag := fs.String("prefix", "", "project prefix (e.g. TK, PRJ)")
+	nameFlag := fs.String("name", "", "project name")
+	gitFlag := fs.String("git", "", "git repository URL")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -732,8 +779,31 @@ func runInitDB(args []string) error {
 	// Seed built-in roles and SDLCs on a fresh init.
 	if !dbExists || *force {
 		reader := bufio.NewReader(os.Stdin)
-		if err := runInitCheckDefaults(reader, cfg); err != nil {
+		if err := runInitCheckDefaults(reader, cfg, *sdlcFlag); err != nil {
 			fmt.Printf("warning: could not check defaults: %v\n", err)
+		}
+	}
+
+	// Apply project settings from flags.
+	if *prefixFlag != "" || *nameFlag != "" || *gitFlag != "" {
+		svc, svcErr := resolveService(cfg)
+		if svcErr == nil {
+			update := libticket.ProjectUpdateRequest{}
+			if *nameFlag != "" {
+				update.Title = *nameFlag
+			}
+			if *gitFlag != "" {
+				update.GitRepository = *gitFlag
+			}
+			if _, err := svc.UpdateProject(1, update); err != nil {
+				fmt.Printf("warning: could not update project: %v\n", err)
+			}
+			if *prefixFlag != "" {
+				prefix := strings.ToUpper(strings.TrimSpace(*prefixFlag))
+				if _, err := svc.RenameProjectPrefix(1, prefix); err != nil {
+					fmt.Printf("warning: could not set prefix: %v\n", err)
+				}
+			}
 		}
 	}
 	return nil
@@ -742,7 +812,7 @@ func runInitDB(args []string) error {
 // runInitCheckDefaults checks whether the current project has a sdlc with
 // stages, and whether any roles exist. If not, it seeds them from the
 // built-in role and SDLC templates in internal/static/.
-func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
+func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName string) error {
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
@@ -834,21 +904,35 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config) error {
 		}
 	}
 
-	// List all available SDLCs and let the user choose.
+	// Assign an SDLC to the project.
 	allSdlcs, _ := svc.ListSdlcs()
-	if project.SdlcID == nil && len(allSdlcs) > 0 {
+	needsSdlc := project.SdlcID == nil || sdlcName != ""
+	if needsSdlc && len(allSdlcs) > 0 {
 		var chosenID int64
-		if len(allSdlcs) == 1 {
+		if sdlcName != "" {
+			// Flag provided — find by name.
+			for _, s := range allSdlcs {
+				if strings.EqualFold(s.Name, sdlcName) {
+					chosenID = s.ID
+					break
+				}
+			}
+			if chosenID == 0 {
+				fmt.Printf("  warning: sdlc %q not found, using default\n", sdlcName)
+			}
+		}
+		if chosenID == 0 && len(allSdlcs) == 1 {
 			chosenID = allSdlcs[0].ID
-		} else {
+		}
+		if chosenID == 0 {
 			defaultIdx := 0
 			for i, s := range allSdlcs {
 				if s.Name == defaultSeedName {
 					defaultIdx = i
 				}
 			}
-			// If stdin is a terminal, prompt the user. Otherwise auto-select the default.
-			if term.IsTerminal(int(os.Stdin.Fd())) {
+			// If stdin is a terminal and no flag was given, prompt the user.
+			if sdlcName == "" && term.IsTerminal(int(os.Stdin.Fd())) {
 				fmt.Println()
 				options := make([]string, len(allSdlcs))
 				for i, s := range allSdlcs {
