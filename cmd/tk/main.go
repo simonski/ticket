@@ -13,6 +13,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 var (
@@ -436,6 +437,48 @@ func runSummary(_ []string) error {
 	}
 
 	printStatusBox(lines)
+	return nil
+}
+
+// printSummaryBox renders a compact summary box at the given fixed width.
+// It's used by tk ls when there are few tickets to give context above the table.
+func printSummaryBox(svc libticket.Service, project store.Project, width int) error {
+	all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
+	var openTickets []store.Ticket
+	for _, t := range all {
+		if !t.Complete {
+			openTickets = append(openTickets, t)
+		}
+	}
+	typeCounts := map[string]int{}
+	for _, t := range openTickets {
+		typeCounts[t.Type]++
+	}
+	typeOrder := []string{"task", "epic", "bug", "story", "requirement", "decision", "question", "note"}
+	var typeBreakdown []string
+	for _, t := range typeOrder {
+		if n := typeCounts[t]; n > 0 {
+			label := t + "s"
+			if t == "story" {
+				label = "stories"
+			}
+			typeBreakdown = append(typeBreakdown, fmt.Sprintf("%d %s", n, label))
+		}
+	}
+	ticketVal := fmt.Sprintf("%d open", len(openTickets))
+	if len(typeBreakdown) > 0 {
+		ticketVal += "  (" + strings.Join(typeBreakdown, ", ") + ")"
+	}
+
+	var lines []statusLine
+	lines = append(lines, statusLine{key: "project", value: project.Prefix + " — " + project.Title})
+	if strings.TrimSpace(project.Description) != "" {
+		lines = append(lines, statusLine{key: "description", value: strings.TrimSpace(project.Description)})
+	}
+	lines = append(lines, statusLine{})
+	lines = append(lines, statusLine{key: "open tickets", value: ticketVal})
+
+	printStatusBoxWidth(lines, width)
 	return nil
 }
 

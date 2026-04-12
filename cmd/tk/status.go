@@ -67,6 +67,10 @@ func projectStatusLine(project, source string) statusLine {
 // visual width, then as a styled string (with any ANSI codes) for printing.
 // This keeps the right-hand padding consistent regardless of ANSI content.
 func printStatusBox(lines []statusLine) {
+	printStatusBoxWidth(lines, 0)
+}
+
+func printStatusBoxWidth(lines []statusLine, fixedWidth int) {
 	const keyWidth = 17
 	const padding = 2 // minimum spaces on each side of content
 
@@ -115,6 +119,15 @@ func printStatusBox(lines []statusLine) {
 		}
 	}
 
+	// If a fixed width is provided, use it as the inner content width
+	// (minus borders and padding) so the box matches an external table.
+	if fixedWidth > 0 {
+		targetInner := fixedWidth - 2 // subtract the │ borders
+		contentW := targetInner - padding*2
+		if contentW > maxWidth {
+			maxWidth = contentW
+		}
+	}
 	inner := maxWidth + padding*2
 
 	fmt.Println("╭" + strings.Repeat("─", inner) + "╮")

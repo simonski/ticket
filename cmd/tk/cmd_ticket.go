@@ -449,6 +449,12 @@ func runList(args []string) error {
 			agentUsernames[a.Username] = true
 		}
 	}
+	// When there are few tickets, show a compact summary above the list.
+	if len(tickets) <= 10 && !outputJSON {
+		if err := printSummaryBox(api, project, 0); err == nil {
+			fmt.Println()
+		}
+	}
 	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll)
 	return nil
 }
