@@ -79,7 +79,7 @@ bump-version:
 	fi
 
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
-INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket ./libtickethttp
+INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket
 
 test: test-unit test-integration test-playwright
 
@@ -97,7 +97,6 @@ test-go-cover:
 	for entry in \
 		"./cmd/tk 55" \
 		"./libticket 65" \
-		"./libtickethttp 75" \
 		"./internal/client 55" \
 		"./internal/store 70" \
 		"./internal/server 55" \
