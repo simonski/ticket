@@ -36,6 +36,24 @@ func ticketSortKey(t store.Ticket) int {
 	return s
 }
 
+func ticketIsOpenForList(t store.Ticket) bool {
+	if t.Archived || t.Complete {
+		return false
+	}
+	return strings.TrimSpace(strings.ToLower(t.Stage)) != store.StageDone
+}
+
+func childTicketCounts(children []store.Ticket) (total, open, closed int) {
+	total = len(children)
+	for _, child := range children {
+		if ticketIsOpenForList(child) {
+			open++
+		}
+	}
+	closed = total - open
+	return total, open, closed
+}
+
 func runTicketNS(args []string) error {
 	if len(args) == 0 {
 		return runList(nil)
@@ -379,7 +397,7 @@ func runList(args []string) error {
 	if !*includeAll {
 		open := tickets[:0]
 		for _, t := range tickets {
-			if !t.Complete {
+			if ticketIsOpenForList(t) {
 				open = append(open, t)
 			}
 		}
@@ -623,19 +641,21 @@ func runGet(args []string) error {
 			cloneKey = ticketLabel(c)
 		}
 	}
-	printTicketDetails(ticket, dependencies, history, sdlcStages, ticketLabels, totalTime, parentKey, cloneKey)
-	// Show children if any
+	var children []store.Ticket
+	childTotal, childOpen, childClosed := 0, 0, 0
 	if projectErr == nil {
 		all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, true)
-		var children []store.Ticket
 		for _, t := range all {
 			if t.ParentID != nil && *t.ParentID == ticket.ID {
 				children = append(children, t)
 			}
 		}
-		if len(children) > 0 {
-			printTicketChildren(children)
-		}
+		childTotal, childOpen, childClosed = childTicketCounts(children)
+	}
+	printTicketDetails(ticket, dependencies, history, sdlcStages, ticketLabels, totalTime, parentKey, cloneKey)
+	fmt.Printf("ChildCounts  : total=%d open=%d closed=%d\n", childTotal, childOpen, childClosed)
+	if len(children) > 0 {
+		printTicketChildren(children)
 	}
 	return nil
 }
@@ -1449,7 +1469,6 @@ func runHistory(args []string) error {
 	}
 	return nil
 }
-
 
 func runDependencyCommand(args []string, add bool) error {
 	command := "add-dependency"

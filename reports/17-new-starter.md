@@ -1,63 +1,43 @@
 # New Starter
 
-**Score: 84/100** (was 86)
+**Score: 87/100** (was 88)
 
 ## What is being assessed
 
-Onboarding effectiveness — the full path from first clone to productive contributor, including documentation quality, accuracy, and coverage of the SDLC lifecycle refactor.
+How effectively a new engineer can clone the repo, understand the architecture, run the product and tests, learn the workflow, and avoid common pitfalls without relying on tribal knowledge.
 
 ## Methodology
 
-Read all seven documents in the reading order (README.md, CLAUDE.md, QUICKSTART.md, docs/ONBOARDING.md, TESTING.md, CONTRIBUTING.md, USER_GUIDE.md). Cross-checked claims against actual codebase. Reviewed Phase 2 commits for documentation gaps.
+Reviewed onboarding-facing docs (`README.md`, `CLAUDE.md`, `QUICKSTART*.md`, `TESTING.md`, `docs/ONBOARDING.md`), build/test commands, and the current repository workflow guidance.
 
 ## Findings
 
 ### Passing checks
-- Reading order documented and sequenced — `docs/ONBOARDING.md:25-31`
-- README provides clear product summary — `README.md:1-35`
-- QUICKSTART.md is concrete and runnable — `QUICKSTART.md:19-75`
-- Branching conventions explicit — `CONTRIBUTING.md:46-57`
-- Commit style documented — `CONTRIBUTING.md:60-76`
-- PR process has checklist — `CONTRIBUTING.md:79-95`
-- `make build` version-bump pitfall documented in 3 places
-- Daily dev loop accurate — `ONBOARDING.md:75-92`
-- Testing expectations comprehensive — `TESTING.md` + `CONTRIBUTING.md:99-125`
-- Common pitfalls table solid — `ONBOARDING.md:156-165`
-- `tk` tool usage covered end-to-end
-- Lifecycle stage diagram in README (Mermaid)
-- `make dev` exists and documented
+- **The repo still has a strong top-level doc set** — `README.md`, `CLAUDE.md`, quickstarts, testing docs, and `docs/ONBOARDING.md` give a newcomer several clear entry points
+- **Build and test workflows are explicit** — setup, build, lint, and test commands are documented in `CLAUDE.md` and supported by the Makefile
+- **Architecture and lifecycle concepts are documented** — package roles and lifecycle behavior are explained in `CLAUDE.md`, `SPEC.md`, and `docs/LIFECYCLE.md`
+- **Ticket workflow is discoverable in-repo** — the project uses `tk`, `.ticket/`, and a documented local workflow rather than hiding work tracking elsewhere
 
 ### Issues found
-
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `docs/DESIGN.md` references non-existent `docs/TICKET_LIFECYCLE_SPEC.md` | High | `DESIGN.md:4` | Change to `docs/LIFECYCLE.md` |
-| ONBOARDING.md has no SDLC concepts section — stages, roles, stage-roles unexplained | High | `ONBOARDING.md:105-132` | Add SDLC subsection with examples |
-| USER_GUIDE.md SDLC commands use pre-refactor names | High | `USER_GUIDE.md:838-844` | Update to `stage-add`/`stage-rm`/`stage-order`; add role commands |
-| DESIGN.md ticket model still lists old `open` field | Medium | `DESIGN.md:153` | Replace with `draft`/`complete` |
-| `docs/LIFECYCLE.md` not in reading order | Medium | `ONBOARDING.md:25-31` | Add as item 5 or 6 |
-| README.md doesn't link to `docs/ONBOARDING.md` | Medium | `README.md` | Add link under "Build from source" |
-| ONBOARDING.md points to `cmd/tk/TICKETS.md` as reference — it's an agent template | Medium | `ONBOARDING.md:130-131` | Point to LIFECYCLE.md instead |
-| Command syntax inconsistency between ONBOARDING.md and README.md | Low | `ONBOARDING.md:117-121` | Normalise to shortcut forms |
-| No collaboration patterns section (review turnaround, escalation) | Low | `CONTRIBUTING.md` | Add section |
-| `make dev` not mentioned in ONBOARDING.md daily loop | Low | `ONBOARDING.md:75-92` | Add mention |
+| Reading order is still distributed across several docs instead of one crisp front door | Medium | `README.md`, `docs/ONBOARDING.md` | Add an explicit “read these in order” section in README and onboarding |
+| Some docs still contain stale operational details | Medium | `docs/DESIGN.md`, `SPEC.md`, `docs/RUNBOOKS.md` | Resolve the known doc drift so newcomers do not learn obsolete behavior |
+| The repo workflow expectations are still spread across multiple files | Low | `CLAUDE.md`, `CONTRIBUTING.md`, `docs/ONBOARDING.md` | Consolidate branching/PR/quality-gate expectations into one short section |
+| Hidden gotchas remain around generated artifacts and large mixed-mode surfaces | Low | various docs | Add a concise “common pitfalls” section covering OpenAPI, Playwright, and local-vs-remote mode |
 
 ## Verdict
 
-Foundations remain strong. Score drops 2 points to 84 due to SDLC refactor documentation debt: no ONBOARDING.md section on new concepts, broken DESIGN.md reference, stale USER_GUIDE.md commands. A developer working with `tk sdlc` commands would have to piece together the picture from LIFECYCLE.md — which isn't in the reading order.
+Onboarding is still comparatively strong: a new engineer can get productive without much guesswork, and the repo includes far more internal guidance than most projects of this size. The small regression reflects documentation drift and the fact that the ideal reading sequence is still implied more than explicitly curated.
 
 ## Changes since last assessment
-- Phase 2 SDLC refactor shipped across 6 commits
-- README, QUICKSTART, SPEC, USER_GUIDE partially updated
-- ONBOARDING.md and DESIGN.md not updated for new concepts
+- The onboarding doc set remains broad and useful
+- The main regression comes from stale details in a few core docs rather than missing onboarding material
 
 ## Remaining recommendations
-
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Fix DESIGN.md broken reference | High | Point to `docs/LIFECYCLE.md` |
-| Add SDLC concepts to ONBOARDING.md | High | Subsection with example commands |
-| Update USER_GUIDE.md SDLC commands | High | Correct names + add role commands |
-| Update DESIGN.md ticket model | Medium | Replace `open` with `draft`/`complete` |
-| Add LIFECYCLE.md to reading order | Medium | `ONBOARDING.md:25-31` |
-| Link ONBOARDING.md from README | Medium | Under "Build from source" |
+| No single canonical reading order | Medium | Add a short “start here” sequence in README and onboarding docs |
+| Doc drift in core references | Medium | Refresh DESIGN, SPEC, and RUNBOOKS to match current behavior |
+| Workflow expectations are scattered | Low | Consolidate branch/PR/test expectations into one newcomer section |
+| Common pitfalls are under-surfaced | Low | Add a concise gotchas section for setup, generated files, and test modes |

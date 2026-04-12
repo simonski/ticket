@@ -1,60 +1,68 @@
 # Database
 
-**Score: 72/100** (was 60)
+**Score: 80/100** (was 80)
 
 ## What is being assessed
 
-SQLite schema design, migration strategy, indexes, FK constraints, connection management, query safety, N+1 patterns, and pagination — with focus on new SDLC tables.
+SQLite schema design, migration strategy, indexes, FK constraints, connection management, query safety, N+1 patterns, HMAC/tamper evidence, and pagination support across `internal/store/`.
 
 ## Methodology
 
-Read `internal/store/store.go` in full. Read `ticket.go`, `sdlc.go`, `role.go`, `auth.go`, `goal.go`, `lifecycle.go`. Searched for string concatenation in SQL, pagination, ON DELETE clauses, N+1 patterns.
+Read `internal/store/store.go` (schema, migrations, Open function), `ticket.go` (CRUD, listing, hydration, lifecycle), `sdlc.go` (batch role loading), `lifecycle.go` (batch stage orders), `auth.go` (user deletion cascade), `snapshot.go` (export/import), `encrypt.go` (AES-256-GCM encryption), `agent.go`, `keys.go`. Searched for string concatenation in SQL, CASCADE clauses, pagination patterns, N+1 query loops, and HMAC/integrity mechanisms.
 
 ## Findings
 
 ### Passing checks
-- `SetMaxOpenConns(1)` + `SetMaxIdleConns(1)` with WAL — correct for SQLite (`store.go:26-27`)
-- `PRAGMA journal_mode = WAL` + `busy_timeout = 5000` + `foreign_keys = ON`
-- All DML uses `?` placeholders
-- Ticket list pagination supported — `store.go:903-905`
-- Recursive CTE for ancestor walk — `ticket.go:1049`
-- Batch comment fetch — `ticket.go:1200`
-- SDLC tables have proper FKs and unique constraints
-- `sdlc_stage_roles` PK is `(sdlc_id, stage_id, role_id)`
-- Zombie `agents` table migrated and dropped
+
+- **Connection tuning**: `SetMaxOpenConns(1)` + `SetMaxIdleConns(1)` with WAL mode -- correct for SQLite (`store.go:26-27,32`)
+- **PRAGMAs**: `journal_mode = WAL`, `busy_timeout = 5000`, `foreign_keys = ON` (`store.go:28-36`)
+- **Query parameterisation**: All DML uses `?` placeholders; no user-supplied data in SQL string concatenation. Dynamic `fmt.Sprintf` uses only `IN(...)` placeholder lists or hardcoded table/column names with `quoteIdentifier()` and `#nosec` annotations
+- **Comprehensive indexes**: 38 indexes covering all foreign keys and common filter columns (project_id, parent_id, assignee, stage, state, status, type, draft, complete, archived, role_id, sdlc_stage_id, etc.)
+- **N+1 fixed -- batch stage orders**: `batchGetSdlcStageOrders()` replaces per-child `GetSdlcStageOrder` calls in `recalculateParentLifecycle` (`ticket.go:1289`, `lifecycle.go:119`)
+- **N+1 fixed -- batch stage roles**: `listSdlcStageRolesBatch()` replaces per-stage `ListSdlcStageRoles` loop in `listSdlcStages` (`sdlc.go:354-363`, `sdlc.go:366-397`)
+- **N+1 fixed -- batch comments**: `batchFetchComments()` for ancestor ticket hydration (`ticket.go:1200`)
+- **idx_roles_sdlc_id added**: Previously missing index now present (`store.go:506`)
+- **Assignee cleared on user delete**: `UPDATE tickets SET assignee = '' WHERE assignee = (SELECT username ...)` before deleting user (`auth.go:323-325`)
+- **User deletion cascade**: Full manual cascade in transaction -- anonymises audit trail, clears assignee, deletes sessions/memberships/time entries/messages/comments/agent config (`auth.go:295-365`)
+- **Recursive CTE**: Ancestor walk for parent lifecycle without N+1 (`ticket.go:1049`)
+- **Ticket list pagination**: `Limit` parameter on `TicketListParams` (`ticket.go:903-905`)
+- **AES-256-GCM encryption**: Optional email encryption via `TICKET_ENCRYPTION_KEY` (`encrypt.go`)
+- **Snapshot import FK check**: `PRAGMA foreign_key_check` after import to detect violations (`snapshot.go:169`)
+- **SDLC tables well-structured**: Proper FKs, unique constraints, composite PKs on junction tables
 
 ### Issues found
 
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| N+1 in `recalculateParentLifecycle`: `GetSdlcStageOrder` per child | Medium | `ticket.go:1293,1312`, `lifecycle.go:111` | Batch fetch stage orders |
-| N+1 in `listSdlcStages`: `ListSdlcStageRoles` per stage | Medium | `sdlc.go:281-283` | Single JOIN query |
-| `roles` table missing index on `sdlc_id` | Low | `store.go:175-185` | Add `idx_roles_sdlc_id` |
-| No `ON DELETE` on any FK (50+) — app must manually clean up | Low | `store.go` schema | Add cascades/restricts |
-| `tickets.assignee` not cleared on user delete — orphaned data | Low | `auth.go:247-310` | Add UPDATE before DELETE |
-| `messages`/`goals` tables created in migration not main schema | Low | `store.go:888-925` | Move to main schema block |
-| Hardcoded `LIMIT 1000` in list queries with no pagination | Low | `project.go:126`, `auth.go:211`, `team.go:110` | Add cursor/page pagination |
-| Redundant `sdlc_id` column in `sdlc_stage_roles` | Info | `store.go:423` | Remove; `stage_id` implies sdlc |
+| No `ON DELETE CASCADE/RESTRICT` on any FK (50+) -- app relies on manual cleanup in `DeleteUser` | Medium | `store.go` schema block | Add `ON DELETE CASCADE` to child/junction tables, `ON DELETE RESTRICT` to parent refs; reduces risk of orphaned rows if new delete paths are added |
+| `messages` and `goals` tables created in migration block, not main schema | Low | `store.go:908-944` | Move to main schema DDL for discoverability |
+| No indexes on `messages` table (from_user_id, to_user_id) | Low | `store.go:910-925` | Add `idx_messages_from_user_id`, `idx_messages_to_user_id` |
+| No indexes on `goals` table (project_id) | Low | `store.go:930-944` | Add `idx_goals_project_id` |
+| `TicketListParams` has `Limit` but no `Offset` -- no cursor/page pagination | Low | `ticket.go:95-105` | Add `Offset` or cursor-based pagination for large datasets |
+| Hardcoded `LIMIT 1000` on agent listing with no pagination | Low | `agent.go:77` | Add pagination parameter |
+| `PRAGMA table_info` and `PRAGMA foreign_key_list` use unquoted string concatenation for table names | Low | `store.go:1465,1495,1520` | Use `quoteIdentifier()` consistently; these are internal-only but inconsistent with `snapshot.go` |
+| Redundant `sdlc_id` column in `sdlc_stage_roles` -- derivable from `stage_id` via `sdlc_stages` | Info | `store.go:448-458` | Consider removing; `stage_id` already implies the SDLC |
+| No HMAC/tamper evidence on snapshot export | Info | `snapshot.go:53-102` | Add HMAC signature field to `Snapshot` struct for integrity verification on import |
+| `history_events` and `ticket_history` are structurally identical tables | Info | `store.go:293-317` | Consider consolidating into one table with a source/category column |
 
 ## Verdict
 
-Score improves +12 from 60 to 72. The SDLC refactor added well-structured tables with proper FK/indexes. Recursive CTE and batch comment fetch are genuine improvements. Remaining: two N+1 patterns, missing FK cascades, orphaned assignee on delete.
+The database posture remains stable in this pass. The earlier N+1 fixes, added `idx_roles_sdlc_id`, and improved delete cleanup remain intact, and the remaining issues are still mainly structural: missing FK cascade rules, a few missing indexes on migration-created tables, and limited pagination support.
 
 ## Changes since last assessment
-- Zombie `agents` table resolved — migrated and dropped
-- Recursive CTE for ancestor walk (+)
-- Batch comment hydration added (+)
-- SDLC tables well-indexed and constrained (+)
-- Two new N+1 patterns from SDLC code (-)
-- `assignee` on user delete still not cleared
+
+- No material database changes landed in this review window
+- The earlier N+1 and indexing improvements remain intact
+- Missing FK cascades and limited pagination remain the main structural gaps
 
 ## Remaining recommendations
 
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Batch `GetSdlcStageOrder` calls | High | Single `IN (...)` query |
-| Replace per-stage `ListSdlcStageRoles` loop | High | Single JOIN query |
-| Add `idx_roles_sdlc_id` index | Medium | `store.go` schema |
-| Add `ON DELETE CASCADE` to SDLC FKs | Medium | `store.go:418-433` |
-| Clear `assignee` on user delete | Medium | `auth.go:243` |
-| Add pagination to list functions | Low | Replace `LIMIT 1000` |
+| Add `ON DELETE CASCADE` to junction/child FKs | Medium | Rebuild tables with cascade rules to prevent orphan accumulation |
+| Add indexes on `messages` (from/to user_id) | Low | `CREATE INDEX idx_messages_from_user_id ...` |
+| Add index on `goals` (project_id) | Low | `CREATE INDEX idx_goals_project_id ...` |
+| Add `Offset` to `TicketListParams` | Low | Enable page/cursor pagination for ticket listings |
+| Replace `LIMIT 1000` in agent listing | Low | Add proper pagination parameter |
+| Move `messages`/`goals` DDL to main schema | Low | Improves discoverability and consistency |
+| Add HMAC to snapshot export | Info | Sign exported snapshots for tamper detection on import |

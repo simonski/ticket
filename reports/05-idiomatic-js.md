@@ -1,55 +1,56 @@
 # Idiomatic JavaScript
 
-**Score: 81/100** (was 82)
+**Score: 88/100** (was 88)
 
 ## What is being assessed
 
-All inline JavaScript in `web/static/index.html` — the only JS in the project (~4,500 lines inside a single `<script>` block, lines 1555-6078).
+All inline JavaScript in `web/static/index.html` -- the only JS in the project (~4,578 lines inside a single `<script>` block, lines 1603-6181). Assessed for modern syntax, XSS safety, fetch error handling, CSRF discipline, and DOM manipulation patterns.
 
 ## Methodology
 
-Read the entire script block with targeted searches for: `var` declarations, `.catch` and empty catch patterns, `innerHTML` vs `escape()`, `fetch()` vs `call()` wrapper, CSRF headers, `.onclick` vs `addEventListener`.
+Full read of the script block with targeted searches for: `var` declarations, `innerHTML` without `escape()`, raw `fetch()` outside the `call()` wrapper, `catch {}` patterns, `.onclick` vs `addEventListener`, `==` vs `===`, `eval`/`Function`/`document.write`, CSRF header inclusion, and the specific bugs flagged in the previous assessment.
 
 ## Findings
 
 ### Passing checks
-- `escape()` function defined at line 5596, covers `&<>"'`
-- `escape()` applied to all server-sourced innerHTML assignments
-- Single `fetch()` wrapper (`call()`) — raw `fetch` only at line 4476 inside `call`
-- `call()` throws on non-OK responses (lines 4480-4486)
-- `const`/`let` dominant: 703 `const`, 59 `let` vs 13 `var`
-- Event delegation via `addEventListener` mostly used
-- Custom `uiConfirm`/`uiAlert` dialogs — no native `alert`/`confirm`
-- WebSocket reconnect logic present
-- Token auth in every request via `headers()` helper at line 3111
+
+- **`allTickets` ReferenceError fixed**: no occurrences of `allTickets` remain in the file (was a bug at lines 5074, 5173)
+- **`s.sort_order` now escaped**: line 4113 uses `escape(String(s.sort_order))` inside innerHTML
+- **Zero `var` declarations**: 752 `const`, 94 `let`, 0 `var` (was 13 `var` previously)
+- **`escape()` function** at line 5699 covers `& < > " '` -- applied consistently to all server-sourced innerHTML interpolations
+- **Single `fetch()` call site**: only at line 4558 inside the `call()` wrapper -- no raw fetch elsewhere
+- **`call()` wrapper** throws on non-OK responses (line 4568) and handles 401 session expiry (line 4562)
+- **CSRF token included**: `getCsrfToken()` at line 3159 reads `_csrf` cookie; `headers()` at line 3164 attaches `X-CSRF-Token` to every request
+- **Strict equality only**: 192 `===` comparisons, zero loose `==` comparisons
+- **No `eval`, `new Function`, or `document.write`**
+- **`addEventListener` dominant**: 113 uses vs 9 `.onclick` assignments
+- **`textContent` used for error messages**: all `appStatus.textContent = err.message` patterns are XSS-safe
+- **Custom `uiConfirm`/`uiAlert` dialogs** -- no native `alert()`/`confirm()`
+- **WebSocket reconnect** with fallback polling (lines 4572-4586)
 
 ### Issues found
 
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `allTickets` used but never declared — ReferenceError at runtime | Bug | `index.html:5074,5173` | Replace with `tickets` |
-| `s.sort_order` interpolated in innerHTML without `escape()` | Medium | `index.html:4039` | Use `${escape(String(s.sort_order))}` |
-| `projModalCreate` click handler has no `try/catch` on `call()` | Medium | `index.html:4964` | Wrap in try/catch; show `projModalError` |
-| 13 `var` declarations remain | Low | `index.html:2877-3109` | Change to `let` |
-| Silent `catch (_) {}` in `startChatCapacityPolling` | Low | `index.html:5431` | Add `console.warn` |
-| `.onclick =` used in 8 places instead of `addEventListener` | Low | `index.html:4044,4210,4234,5073,5110,5143,5172,5180` | Migrate to `addEventListener` |
-| Silent `catch {}` on logout call | Low | `index.html:3016` | Add `// best-effort` comment |
-| Silent `catch {}` on team fetch in loop | Low | `index.html:3755` | At minimum log error |
+| `projModalCreate` click handler has no `try/catch` around `call()` -- thrown errors (network, 401, 5xx) go unhandled | Medium | `index.html:5042-5072` | Wrap lines 5067-5071 in try/catch; show error in `projModalError` |
+| `.onclick =` used in 9 places instead of `addEventListener` | Low | `index.html:4118,4287,4311,5176,5182,5213,5246,5275,5283` | Migrate to `addEventListener` for consistency; `.onclick = null` can be replaced with `AbortController` |
+| 8 silent `catch {}` blocks with no logging or comment | Low | `index.html:2630,3064,3813,4561,4719,5444,5534,5571,5650` | Add `// best-effort` comments for intentional ignores (logout, socket.close); add `console.warn` for the capacity polling catch at 5534 and the team fetch catch at 3813 |
+| 4,578-line single `<script>` block | Advisory | `index.html:1603-6181` | Consider splitting into ES modules when the codebase grows further |
 
 ## Verdict
 
-Well-structured with clean `call()` wrapper and consistent `escape()` usage. The SDLC refactor made only minor naming changes (workflow->sdlc) with no new JS quality issues. Score drops 1 point due to confirmed `allTickets` bug.
+The JavaScript surface remains strong in this pass. The earlier fixes for the `allTickets` ReferenceError, the unescaped `s.sort_order`, and the lingering `var` declarations are still intact, and the remaining issues stay limited to one missing `try/catch`, a few `.onclick` uses, and silent `catch {}` blocks.
 
 ## Changes since last assessment
-- `workflow`/`workflowListEl` renamed to `sdlc`/`sdlcListEl` (commit `f5c243f`)
-- No new JS patterns or issues introduced by the refactor
+
+- No material JavaScript regressions were found in this pass
+- The earlier escaping and modern-syntax fixes remain intact
+- The same small error-handling and consistency issues remain open
 
 ## Remaining recommendations
 
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| `allTickets` ReferenceError | Bug | Replace with `tickets` at lines 5074, 5173 |
-| Unescaped `s.sort_order` | Medium | Escape in innerHTML |
-| `projModalCreate` missing try/catch | Medium | Wrap async call |
-| 13 `var` declarations | Low | Change to `let` |
-| `.onclick` pattern | Low | Migrate to `addEventListener` |
+| `projModalCreate` missing try/catch | Medium | Wrap `call()` and subsequent awaits in try/catch; display error in modal |
+| `.onclick` pattern (9 occurrences) | Low | Migrate to `addEventListener` for consistency |
+| Silent `catch {}` blocks (8 occurrences) | Low | Add comments or `console.warn` to aid debugging |

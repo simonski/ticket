@@ -19,6 +19,7 @@ import (
 const (
 	ansiReset = "\033[0m"
 	ansiBold  = "\033[1m"
+	ansiDim   = "\033[2m"
 	ansiGreen = "\033[32m"
 	ansiRed   = "\033[31m"
 	ansiGray  = "\033[90m"
@@ -260,12 +261,49 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 
 func printTicketChildren(children []store.Ticket) {
 	fmt.Println("Children     :")
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	rowColors := make([]string, 0, len(children))
 	for _, c := range children {
 		symbol := formatTicketStatusSymbol(c.Status, true)
 		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, c.ID, c.Type, c.Status, c.Title)
+		rowColors = append(rowColors, childTicketColor(c))
 	}
 	_ = w.Flush()
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	useColor := isTerminal() && !noColorOutput
+	for i, line := range lines {
+		if useColor && i < len(rowColors) && rowColors[i] != "" {
+			fmt.Printf("%s%s%s\n", rowColors[i], line, ansiReset)
+			continue
+		}
+		fmt.Println(line)
+	}
+}
+
+func childTicketColor(ticket store.Ticket) string {
+	if !ticketIsOpenForList(ticket) {
+		return ansiDim + ansiGray
+	}
+
+	state := strings.TrimSpace(strings.ToLower(ticket.State))
+	if state == "" {
+		_, parsedState, err := store.ParseLifecycleStatus(ticket.Status)
+		if err == nil {
+			state = parsedState
+		}
+	}
+
+	switch state {
+	case store.StateActive:
+		return ansiWhite
+	case store.StateIdle:
+		return ansiGray
+	case store.StateFail:
+		return ansiRed
+	default:
+		return ansiGray
+	}
 }
 
 func renderSdlcProgress(currentStage string, stages []store.SdlcStage) string {

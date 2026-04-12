@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1438,6 +1438,63 @@ func TestRunListArchivedVisibilityAndColumn(t *testing.T) {
 	}
 }
 
+func TestRunListShowsOpenChildUnderOpenEpic(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Parent Epic"})
+	childID := createLocalTask(t, []string{"add", "-parent", epicID, "Child Task"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+
+	if !strings.Contains(output, ticketLabelByID(t, epicID)) {
+		t.Fatalf("list output missing open epic:\n%s", output)
+	}
+	if !strings.Contains(output, ticketLabelByID(t, childID)) {
+		t.Fatalf("list output missing open child ticket:\n%s", output)
+	}
+}
+
+func TestRunListHidesDoneStageTicketEvenWhenIncomplete(t *testing.T) {
+	setupLocalCLI(t)
+
+	doneID := createLocalTask(t, []string{"epic", "Done But Incomplete"})
+	openID := createLocalTask(t, []string{"add", "Still Open"})
+
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		t.Fatalf("ResolveURL() error = %v", err)
+	}
+	db, err := store.Open(resolved.DBPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`
+		UPDATE tickets
+		SET stage = ?, state = ?, status = ?, complete = 0
+		WHERE ticket_id = ?
+	`, store.StageDone, store.StateIdle, store.RenderLifecycleStatus(store.StageDone, store.StateIdle), doneID); err != nil {
+		t.Fatalf("forcing done-stage ticket state error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"list"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+
+	if strings.Contains(output, ticketLabelByID(t, doneID)) {
+		t.Fatalf("list output should hide done-stage ticket:\n%s", output)
+	}
+	if !strings.Contains(output, ticketLabelByID(t, openID)) {
+		t.Fatalf("list output missing open ticket:\n%s", output)
+	}
+}
+
 func TestRunUserListShowsUserTable(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -1792,6 +1849,33 @@ func TestRunGetAcceptsPositionalID(t *testing.T) {
 	// no id at all should still fail
 	if err := run([]string{"get"}); err == nil || !strings.Contains(err.Error(), "usage:") {
 		t.Fatalf("expected usage error for missing id, got %v", err)
+	}
+}
+
+func TestRunGetShowsChildCounts(t *testing.T) {
+	setupLocalCLI(t)
+
+	parentID := createLocalTask(t, []string{"epic", "Parent Epic"})
+	openChildID := createLocalTask(t, []string{"add", "-parent", parentID, "Open Child"})
+	closedChildID := createLocalTask(t, []string{"add", "-parent", parentID, "Closed Child"})
+	if err := run([]string{"close", "-id", closedChildID}); err != nil {
+		t.Fatalf("close child error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", parentID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "ChildCounts  : total=2 open=1 closed=1") {
+		t.Fatalf("get output missing child counts:\n%s", output)
+	}
+	if !strings.Contains(output, ticketLabelByID(t, openChildID)) {
+		t.Fatalf("get output missing open child row:\n%s", output)
+	}
+	if !strings.Contains(output, ticketLabelByID(t, closedChildID)) {
+		t.Fatalf("get output missing closed child row:\n%s", output)
 	}
 }
 
@@ -2605,16 +2689,16 @@ func TestBuildAgentPrompt(t *testing.T) {
 	}
 	role := store.Role{Title: "Developer", Description: "Ship features", AcceptanceCriteria: "Quality code"}
 	wf := store.SdlcWithStages{
-		Sdlc: store.Sdlc{Name: "Standard"},
-		Stages:  []store.SdlcStage{{StageName: "develop"}, {StageName: "develop"}, {StageName: "test"}},
+		Sdlc:   store.Sdlc{Name: "Standard"},
+		Stages: []store.SdlcStage{{StageName: "develop"}, {StageName: "develop"}, {StageName: "test"}},
 	}
 	project := store.Project{Prefix: "TK", Title: "Test Project", GitRepository: "github.com/test/repo"}
 	resp := libticket.AgentWorkResponse{
-		Status:   "NEW",
-		Ticket:   &ticket,
-		Project:  &project,
-		Sdlc: &wf,
-		Role:     &role,
+		Status:  "NEW",
+		Ticket:  &ticket,
+		Project: &project,
+		Sdlc:    &wf,
+		Role:    &role,
 	}
 	prompt := buildAgentPrompt(resp)
 	for _, want := range []string{"Test Task", "Some description", "Must pass", "Developer", "Ship features", "Standard", "develop", "develop", "Test Project", "github.com/test/repo"} {
@@ -4036,11 +4120,11 @@ func TestPrintAgentTableNonEmpty(t *testing.T) {
 	tk := "PROJ-1"
 	statuses := []store.AgentStatus{
 		{
-			Agent:        store.Agent{ID: "uuid-1", Username: "bot-a", Enabled: true, Status: "idle", LastSeen: "2025-01-01T00:00:00Z"},
-			TicketKey:    &tk,
-			ProjectName:  "MyProject",
-			SdlcName: "default",
-			RoleTitle:    "developer",
+			Agent:       store.Agent{ID: "uuid-1", Username: "bot-a", Enabled: true, Status: "idle", LastSeen: "2025-01-01T00:00:00Z"},
+			TicketKey:   &tk,
+			ProjectName: "MyProject",
+			SdlcName:    "default",
+			RoleTitle:   "developer",
 		},
 		{
 			Agent: store.Agent{ID: "uuid-2", Username: "bot-b", Enabled: false, Status: "disabled"},
@@ -4091,6 +4175,7 @@ func TestPrintTicketChildrenOutput(t *testing.T) {
 	children := []store.Ticket{
 		{ID: "PROJ-1", Type: "task", Status: "develop/idle", Title: "Child One"},
 		{ID: "PROJ-2", Type: "bug", Status: "develop/active", Title: "Child Two"},
+		{ID: "PROJ-3", Type: "task", Status: "done/idle", Stage: store.StageDone, State: store.StateIdle, Complete: true, Title: "Child Three"},
 	}
 	out := captureStdout(t, func() {
 		printTicketChildren(children)
@@ -4098,10 +4183,22 @@ func TestPrintTicketChildrenOutput(t *testing.T) {
 	if !strings.Contains(out, "Children") {
 		t.Fatalf("printTicketChildren missing header:\n%s", out)
 	}
-	for _, want := range []string{"PROJ-1", "PROJ-2", "Child One", "Child Two"} {
+	for _, want := range []string{"PROJ-1", "PROJ-2", "PROJ-3", "Child One", "Child Two", "Child Three"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("printTicketChildren missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestChildTicketColorByState(t *testing.T) {
+	if got := childTicketColor(store.Ticket{State: store.StateActive, Stage: store.StageDevelop}); got != ansiWhite {
+		t.Fatalf("active child color = %q, want %q", got, ansiWhite)
+	}
+	if got := childTicketColor(store.Ticket{State: store.StateIdle, Stage: store.StageDevelop}); got != ansiGray {
+		t.Fatalf("idle child color = %q, want %q", got, ansiGray)
+	}
+	if got := childTicketColor(store.Ticket{State: store.StateIdle, Stage: store.StageDone, Complete: true}); got != ansiDim+ansiGray {
+		t.Fatalf("done child color = %q, want %q", got, ansiDim+ansiGray)
 	}
 }
 
@@ -4691,73 +4788,73 @@ func TestQuickstartServer(t *testing.T) {
 }
 
 func TestBuildTreeDisplayOrdersChildrenUnderParents(t *testing.T) {
-// Three tickets: epic (no parent), and two tasks under it.
-epicID := "TK-1"
-childAID := "TK-2"
-childBID := "TK-3"
-tickets := []store.Ticket{
-{ID: childAID, ParentID: &epicID},
-{ID: epicID},
-{ID: childBID, ParentID: &epicID},
-}
+	// Three tickets: epic (no parent), and two tasks under it.
+	epicID := "TK-1"
+	childAID := "TK-2"
+	childBID := "TK-3"
+	tickets := []store.Ticket{
+		{ID: childAID, ParentID: &epicID},
+		{ID: epicID},
+		{ID: childBID, ParentID: &epicID},
+	}
 
-ordered, prefix := buildTreeDisplay(tickets)
+	ordered, prefix := buildTreeDisplay(tickets)
 
-if len(ordered) != 3 {
-t.Fatalf("expected 3 tickets, got %d", len(ordered))
-}
-// Epic must be first.
-if ordered[0].ID != epicID {
-t.Errorf("expected epic %s first, got %s", epicID, ordered[0].ID)
-}
-// Both children must follow.
-childIDs := map[string]bool{ordered[1].ID: true, ordered[2].ID: true}
-if !childIDs[childAID] || !childIDs[childBID] {
-t.Errorf("expected children %s and %s after epic, got %s and %s", childAID, childBID, ordered[1].ID, ordered[2].ID)
-}
-// Epic has no prefix.
-if prefix[epicID] != "" {
-t.Errorf("epic should have empty prefix, got %q", prefix[epicID])
-}
-// Last child uses └─.
-lastID := ordered[2].ID
-if !strings.HasPrefix(prefix[lastID], "└─") {
-t.Errorf("last child should have └─ prefix, got %q", prefix[lastID])
-}
-// Non-last child uses ├─.
-firstChildID := ordered[1].ID
-if !strings.HasPrefix(prefix[firstChildID], "├─") {
-t.Errorf("non-last child should have ├─ prefix, got %q", prefix[firstChildID])
-}
+	if len(ordered) != 3 {
+		t.Fatalf("expected 3 tickets, got %d", len(ordered))
+	}
+	// Epic must be first.
+	if ordered[0].ID != epicID {
+		t.Errorf("expected epic %s first, got %s", epicID, ordered[0].ID)
+	}
+	// Both children must follow.
+	childIDs := map[string]bool{ordered[1].ID: true, ordered[2].ID: true}
+	if !childIDs[childAID] || !childIDs[childBID] {
+		t.Errorf("expected children %s and %s after epic, got %s and %s", childAID, childBID, ordered[1].ID, ordered[2].ID)
+	}
+	// Epic has no prefix.
+	if prefix[epicID] != "" {
+		t.Errorf("epic should have empty prefix, got %q", prefix[epicID])
+	}
+	// Last child uses └─.
+	lastID := ordered[2].ID
+	if !strings.HasPrefix(prefix[lastID], "└─") {
+		t.Errorf("last child should have └─ prefix, got %q", prefix[lastID])
+	}
+	// Non-last child uses ├─.
+	firstChildID := ordered[1].ID
+	if !strings.HasPrefix(prefix[firstChildID], "├─") {
+		t.Errorf("non-last child should have ├─ prefix, got %q", prefix[firstChildID])
+	}
 }
 
 func TestBuildTreeDisplayOrphansTreatedAsRoots(t *testing.T) {
-// Child whose parent is NOT in the list → appears as root with no prefix.
-outsideParent := "TK-99"
-childID := "TK-2"
-tickets := []store.Ticket{
-{ID: childID, ParentID: &outsideParent},
-}
+	// Child whose parent is NOT in the list → appears as root with no prefix.
+	outsideParent := "TK-99"
+	childID := "TK-2"
+	tickets := []store.Ticket{
+		{ID: childID, ParentID: &outsideParent},
+	}
 
-ordered, prefix := buildTreeDisplay(tickets)
+	ordered, prefix := buildTreeDisplay(tickets)
 
-if len(ordered) != 1 || ordered[0].ID != childID {
-t.Fatalf("expected single orphan ticket, got %v", ordered)
-}
-if prefix[childID] != "" {
-t.Errorf("orphan should have empty prefix, got %q", prefix[childID])
-}
+	if len(ordered) != 1 || ordered[0].ID != childID {
+		t.Fatalf("expected single orphan ticket, got %v", ordered)
+	}
+	if prefix[childID] != "" {
+		t.Errorf("orphan should have empty prefix, got %q", prefix[childID])
+	}
 }
 
 func TestTicketSortKeyCompleteTicketsSinkToBottom(t *testing.T) {
-active := store.Ticket{Stage: store.StageDesign, State: store.StateActive}
-idle := store.Ticket{Stage: store.StageDesign, State: store.StateIdle}
-done := store.Ticket{Stage: store.StageDone, State: store.StateSuccess}
+	active := store.Ticket{Stage: store.StageDesign, State: store.StateActive}
+	idle := store.Ticket{Stage: store.StageDesign, State: store.StateIdle}
+	done := store.Ticket{Stage: store.StageDone, State: store.StateSuccess}
 
-if ticketSortKey(active) >= ticketSortKey(idle) {
-t.Error("active should sort before idle")
-}
-if ticketSortKey(idle) >= ticketSortKey(done) {
-t.Error("idle should sort before done")
-}
+	if ticketSortKey(active) >= ticketSortKey(idle) {
+		t.Error("active should sort before idle")
+	}
+	if ticketSortKey(idle) >= ticketSortKey(done) {
+		t.Error("idle should sort before done")
+	}
 }

@@ -1,57 +1,64 @@
 # OpenAPI
 
-**Score: 68/100** (was 64)
+**Score: 78/100** (was 78)
 
 ## What is being assessed
 
-The OpenAPI spec at `openapi.yaml` against actual HTTP route registrations in `internal/server/`. Completeness of operationIds, request/response schemas, examples, and accuracy of URL paths — with focus on the SDLC lifecycle refactor additions.
+The `openapi.yaml` specification file for the Ticket API. This assessment checks completeness (all server routes documented), correctness (URL patterns match implementation), schema quality (response schemas, examples), and consistency (client, server, and spec all agree).
 
 ## Methodology
 
-Counted all `operationId` entries in `openapi.yaml` (109 total across 83 paths). Enumerated all `mux.HandleFunc` registrations and traced sub-route dispatch. Compared spec paths against code paths, checked schema completeness and example coverage.
+1. Read `openapi.yaml` and counted operationIds.
+2. Extracted every `mux.HandleFunc` route from `internal/server/api_*.go` (auth, system, users, agents, roles, sdlc, teams, projects, tickets).
+3. Cross-referenced server routes against openapi.yaml paths.
+4. Verified SDLC endpoint URLs match between server, client (`internal/client/client.go`), and openapi.yaml.
+5. Checked stage-role URL structure alignment between client and server.
+6. Reviewed schema definitions, `$ref` usage, and examples.
+7. Checked for new endpoints related to recent changes (libticket merge, tk init flags).
 
 ## Findings
 
 ### Passing checks
-- 109 `operationId` values present, no duplicates
-- All 16 tag groups defined with descriptions (`openapi.yaml:21-49`)
-- All SDLC/stage/stage-role endpoints have typed request and response schemas
-- `Ticket` schema includes new lifecycle fields: `sdlc_stage_id`, `role_id`, `previous_sdlc_stage_id`, `previous_role_id`, `draft`
-- `Project` schema includes `sdlc_id`
-- Standard error responses consistently applied on all SDLC operations
-- Component-level examples defined for User, Project, Ticket, Login
+
+- **113 operationIds** defined, covering a comprehensive API surface.
+- **SDLC URL mismatch resolved**: All SDLC endpoints now consistently use `/api/sdlcs` (plural) across server, client, SPA, and openapi.yaml. The previous `/api/sdlc` vs `/api/sdlcs` mismatch from v3 is fixed.
+- **Stage-role URLs aligned**: Server registers `/api/sdlcs/stages/roles/{sdlcId}/{stageId}[/{roleId}]`. Client uses the same pattern (`/api/sdlcs/stages/roles/%d/%d` and `.../%d/%d/%d`). OpenAPI documents `/api/sdlcs/stages/roles/{sdlc_id}/{stage_id}` and `.../{role_id}`. All three agree.
+- **23 component schemas** defined (User, Agent, Project, Ticket, Sdlc, SdlcExport, SdlcStage, Team, TeamMember, Role, Label, Comment, Dependency, TimeEntry, Story, HistoryEvent, ProjectMember, ProjectTeamMember, CountSummary, StatusResponse, AuthResponse, AgentWorkResponse, TicketRequestResponse).
+- **101 `$ref` usages** for schema reuse across the spec.
+- **8 named examples** provided in the components section.
+- **Error responses** consistently documented using `$ref` to shared response components (BadRequest, Unauthorized, Forbidden, NotFound, InternalServerError).
+- **Security schemes** correctly documented: BearerAuth, CookieAuth, BasicAuth.
+- **Tags** well-organized across 16 categories.
+- **No new API drift**: Recent codebase changes (libticket merge, `tk init` flags) did not introduce new API endpoints.
 
 ### Issues found
 
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| All SDLC paths use `/api/sdlc/` in spec but `/api/sdlcs/` (plural) in code — every SDLC call will 404 | Critical | `openapi.yaml:1673-2143` vs `api_sdlc.go:19-171` | Rename all `/api/sdlc/` to `/api/sdlcs/` |
-| Stage-role URL structure differs: spec uses nested REST paths, code uses flat `/api/sdlcs/stages/roles/{sdlcId}/{stageId}` | Critical | `openapi.yaml:1997-2143` vs `api_sdlc.go:68-135` | Align spec to flat route structure |
-| Four ticket action routes missing: `POST /api/tickets/{ref}/close`, `/open`, `/ready`, `/notready` | High | `api_tickets.go:579,603,673,696` | Add operations to spec |
-| `GET /metrics` undocumented | High | `api_system.go:32` | Document endpoint |
-| `addSdlcStage` request body has ghost `role_id` field not accepted by code | High | `openapi.yaml:1858` vs `api_types.go:39-43` | Remove from spec or implement |
-| `{project_id}` typed as `integer/int64` but code accepts string prefix | Medium | `openapi.yaml:2638` vs `store/project.go:182-204` | Change type to `string` or document |
-| Optional `message` body on action endpoints undocumented | Medium | `api_tickets.go:562-736` | Add optional requestBody |
-| `ListSdlcs` returns `[]Sdlc` without stages but spec schema implies stages array | Medium | `openapi.yaml:265-268` vs `api_sdlc.go:144` | Split into Summary/Detail schemas |
-| `importSdlc` request body is bare `type: object` | Medium | `openapi.yaml:1746-1748` | Define `SdlcExport` component schema |
-| Dead `Conflict` (409) and `MethodNotAllowed` (405) response components | Low | `openapi.yaml:613,619` | Remove or use |
-| `TicketExample` uses `open: true` — field doesn't exist | Low | `openapi.yaml:672` | Change to `complete: false` |
+| `/metrics` endpoint missing from spec | Medium | `api_system.go:32` registers `GET /metrics` (Prometheus format) | Add `/metrics` path with `text/plain` response content type |
+| `/api/users/{username}/reset-password` missing from spec | Medium | `api_users.go:91` handles `POST /api/users/{username}/reset-password` | Add path with password request body and User response schema |
+| `/api/projects/{project_id}/set-draft` missing from spec | Medium | `api_projects.go:429` handles `PUT /api/projects/{project_id}/set-draft` | Add path with `{draft: boolean}` request body |
+| `/api/agents/{agent_id}/config` (GET/POST) missing from spec | Medium | `api_agents.go:409` handles agent config CRUD | Add path for listing and setting agent config entries |
+| `/api/agents/{agent_id}/config/{key}` (DELETE) missing from spec | Medium | `api_agents.go:432` handles config key deletion | Add path for deleting individual agent config keys |
+| Only 4 inline examples across 113 operations | Low | Throughout openapi.yaml | Add response examples to high-traffic endpoints (ticket CRUD, project list, login) |
+| `healthz` endpoint documents 401/403/404 error responses it cannot produce | Low | openapi.yaml line 741-750 | Remove inapplicable error responses from unauthenticated endpoint |
+| Version in spec (`0.1.708`) likely stale | Low | openapi.yaml line 9 | Automate version sync with `cmd/tk/VERSION` |
 
 ## Verdict
 
-The spec improved with 30+ new SDLC operations and typed schemas. However, every SDLC path has the wrong URL prefix (`/api/sdlc` vs `/api/sdlcs`), making spec-generated clients unable to call any SDLC endpoint.
+The OpenAPI spec remains broadly stable in this pass. The earlier SDLC URL and stage-role alignment fixes are still intact across server, client, SPA, and spec, schema coverage remains solid with 23 component schemas and strong `$ref` reuse, and the main remaining gap is still the five undocumented server endpoints plus thin example coverage.
 
 ## Changes since last assessment
-- Added 10 new SDLC paths, 3 stage-role operations, 6 ticket lifecycle operations
-- Added `Sdlc`, `SdlcStage` schemas and lifecycle fields on Ticket/Project
-- New URL mismatch discovered (singular vs plural)
+
+- No material OpenAPI changes landed in this review window
+- The earlier SDLC URL and stage-role alignment fixes remain intact
+- The same five undocumented endpoints remain the primary spec drift
 
 ## Remaining recommendations
 
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| `/api/sdlc` vs `/api/sdlcs` mismatch | Critical | Find-replace in `openapi.yaml` |
-| Stage-role URL structure | Critical | Align spec to flat route |
-| 4 undocumented ticket actions | High | Add to spec |
-| Ghost `role_id` on `addSdlcStage` | High | Remove from spec |
-| `SdlcExport` schema missing | High | Define as named component |
+| 5 undocumented server endpoints | Medium | Add `/metrics`, `/api/users/{username}/reset-password`, `/api/projects/{project_id}/set-draft`, `/api/agents/{agent_id}/config`, `/api/agents/{agent_id}/config/{key}` to openapi.yaml |
+| Sparse response examples | Low | Add inline examples to the 10 most-used endpoints (login, list projects, create ticket, get ticket, list tickets, etc.) |
+| Inapplicable error codes on healthz | Low | Remove 401/403/404 from `/api/healthz` -- it has no auth requirement |
+| Stale spec version | Low | Add a build step or Makefile target to sync openapi.yaml version with `cmd/tk/VERSION` |

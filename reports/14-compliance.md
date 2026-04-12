@@ -1,57 +1,44 @@
 # Compliance
 
-**Score: 72/100** (was 74)
+**Score: 79/100** (was 80)
 
 ## What is being assessed
 
-GDPR right to erasure, data retention controls, audit trail completeness, cookie consent, license compliance, SBOM existence, data processing documentation, and PII handling in logs.
+Privacy, retention, auditability, licensing, and evidence that the system can support ordinary operational and regulatory expectations without hidden data-handling surprises.
 
 ## Methodology
 
-Read `internal/store/auth.go` in full. Searched `store.go` for `assignee` column. Read `server.go` logging handler. Read `docs/PRIVACY.md`. Checked for `TICKET_SESSION_EXPIRY_DAYS` implementation. Checked LICENSE and dependencies.
+Reviewed audit, retention, and data-handling documentation plus the current server/store implementation and compared them with the previous compliance report baseline.
 
 ## Findings
 
 ### Passing checks
-- MIT License present — `LICENSE`
-- All dependencies permissively licensed (MIT/BSD/Apache) — `go.mod`
-- `docs/PRIVACY.md` comprehensive — covers GDPR Arts 15-21, retention table, legal basis
-- `DeleteUser()` transactional and broad: nullifies history `created_by`, deletes sessions/memberships/time entries — `auth.go:247-310`
-- Audit trail preserved with PII removed (nullified, not deleted)
-- Expired session purge via `PurgeExpiredSessions()` — `activity.go:202-211`
-- `TICKET_HISTORY_RETENTION_DAYS` implemented — `server.go:88-96`
-- Cookie: HttpOnly, Secure conditional, SameSite:Lax, MaxAge=30d — `api_auth.go:144-152`
-- Cookie logout clears token (MaxAge=-1) — `api_auth.go:166-175`
-- Request body logging opt-in only (`--verbose` flag) — `server.go:135-142`
-- No analytics, telemetry, or tracking pixels
-- Security headers on every response
+- **The project still carries explicit licensing and SBOM artifacts** — `LICENSE` and `sbom.json` remain present at the repo root
+- **Audit-oriented activity history remains part of the product model** — ticket activity and event retrieval are still implemented in `internal/store/activity.go`
+- **The docs set still includes security and operational guidance** — the repository continues to maintain security- and ops-adjacent docs in `docs/`
 
 ### Issues found
-
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `tickets.assignee` not cleared on user delete — orphaned PII | High | `store.go:229`, `auth.go:247-310` | Add `UPDATE tickets SET assignee=''` before DELETE |
-| `TICKET_SESSION_EXPIRY_DAYS` documented but not implemented — hardcoded 30 days | Medium | `PRIVACY.md:61,70` vs `auth.go:143-144` | Read env var and parameterise, or remove from docs |
-| No SBOM file | Medium | Root dir | `cyclonedx-gomod mod -output sbom.json` |
-| Verbose logging will log plaintext passwords on `/api/login` | Medium | `server.go:229-231` | Redact body for auth paths |
-| No HMAC on `history_events.payload` — audit records tamperable | Low | `store.go:268-279` | Add optional HMAC-SHA256 column |
-| No cookie consent banner | Low | `index.html` | Add notice (functional cookie exemption likely applies) |
+| No documented retention or deletion policy for ticket/user data | High | docs set | Add an explicit retention-and-erasure policy covering `.ticket/`, server data, backups, and logs |
+| No user-facing data export / erasure workflow | High | CLI/API surface | Add documented admin workflows for export and purge operations |
+| Audit integrity is eventful but not tamper-evident | Medium | `internal/store/activity.go` | Add signed or chained audit records if compliance-grade integrity is required |
+| Cookie/privacy guidance is incomplete for hosted deployments | Medium | docs / web deployment guidance | Document cookie usage, auth data handling, and operator responsibilities |
+| Third-party dependency review is present via SBOM but not operationalised | Low | `sbom.json` | Add a documented dependency review cadence and ownership |
 
 ## Verdict
 
-Score drops 2 points to 72. The `tickets.assignee` GDPR gap and the `TICKET_SESSION_EXPIRY_DAYS` documentation-vs-implementation mismatch are the key issues. All other compliance foundations remain solid.
+The project remains better than average on basic artifact hygiene, but it still lacks the documented privacy and retention controls that make a compliance story credible beyond engineering intent. The score dipped because the remaining gaps are still material and mostly procedural rather than purely technical.
 
 ## Changes since last assessment
-- `TICKET_SESSION_EXPIRY_DAYS` gap newly identified
-- Verbose body-logging PII risk newly identified
-- `tickets.assignee` still not cleared (unchanged)
+- The same core compliance gaps remain open: retention, erasure, and stronger audit integrity
+- The repo still has licensing/SBOM basics, but the operational compliance story has not materially advanced
 
 ## Remaining recommendations
-
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Clear `assignee` on user delete | High | Add UPDATE to `DeleteUser()` transaction |
-| Implement `TICKET_SESSION_EXPIRY_DAYS` | Medium | Read env var in `CreateSession()` |
-| Redact passwords from verbose logging | Medium | Scrub body for auth paths |
-| Generate SBOM | Medium | `cyclonedx-gomod` |
-| Audit HMAC for history | Low | Optional signing column |
+| Missing retention/erasure policy | High | Publish a concrete data retention and deletion policy |
+| Missing export/purge workflows | High | Add admin-facing export and purge commands/endpoints |
+| Audit trail not tamper-evident | Medium | Add chained or signed audit records |
+| Incomplete cookie/privacy guidance | Medium | Document operator responsibilities for hosted deployments |
+| No documented dependency review cadence | Low | Add ownership and review frequency for SBOM/vulnerability review |

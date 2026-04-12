@@ -1,64 +1,74 @@
 # Security
 
-**Score: 65/100** (was 65)
+**Score: 82/100** (was 82)
 
 ## What is being assessed
 
-Authentication, access control, cookie security, CSRF protection, rate limiting, WebSocket security, container security, and data protection.
+Authentication, authorization, password hashing, account lockout, CSRF protection, cookie security, rate limiting, HTTP server hardening, container security, data protection (encryption at rest, env masking), vulnerability management, and graceful shutdown.
 
 ## Methodology
 
-Read `internal/password/hash.go`, `internal/server/api_auth.go`, `ratelimit.go`, `server.go`, `api_system.go`, `realtime.go`, `chat_ws.go`, `api_helpers.go`, `internal/store/auth.go`, `encrypt.go`, `compose.yaml`, `Dockerfile`.
+Static analysis of `internal/password/hash.go`, `internal/server/server.go`, `api.go`, `api_auth.go`, `api_system.go`, `api_router.go`, `api_teams.go`, `api_projects.go`, `ratelimit.go`, `realtime.go`, `internal/store/auth.go`, `internal/store/encrypt.go`, `compose.yaml`, `Dockerfile`, `Makefile`, and `.github/workflows/makefile.yaml`. Compared all findings against the previous assessment (score 65).
 
 ## Findings
 
 ### Passing checks
-- Argon2ID password hashing (64 MB, 4 iterations, 2 parallelism, 16-byte salt, constant-time compare) — `internal/password/hash.go`
-- 32-byte CSPRNG session tokens with 30-day expiry and server-side revocation — `internal/store/auth.go:135-149`
-- Cookie flags: `HttpOnly: true`, `SameSite: Lax`, `Secure: r.TLS != nil` — `api_auth.go:144-152`
-- Session invalidation on password reset — `auth.go:334`
-- Rate limiting on login/register: 10 req/min/IP — `api.go:14`
-- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, CSP — `server.go:146-153`
-- All SQL parameterised throughout `internal/store/`
-- Role-based access control: `requireUser`/`requireAdmin`, per-project roles — `api_helpers.go:120-195`
-- WebSocket origin validation — `realtime.go:136-156`
-- WS auth checked before upgrade — `api_auth.go:25-80`
-- Non-root container, multi-stage build — `Dockerfile:20-22`
-- AES-256-GCM email encryption — `encrypt.go`
-- `ReadHeaderTimeout: 30s` — `server.go:37`
+
+- **Argon2id password hashing** with production-grade parameters (64 MB memory, 4 iterations, 2 parallelism, 16-byte CSPRNG salt, 32-byte key, constant-time compare) -- `internal/password/hash.go`
+- **Account lockout** implemented: 10 failed attempts triggers 15-minute lock; counters reset on success or expiry -- `internal/store/auth.go:109-173`
+- **CSRF double-submit cookie** middleware on all `/api/` state-changing endpoints; constant-time token comparison; login/register/agent-register exempt; Bearer/Basic auth exempt -- `internal/server/server.go:297-379`
+- **Session tokens**: 32-byte CSPRNG, base64url-encoded, 30-day expiry, server-side revocation, session invalidation on password reset -- `internal/store/auth.go:176-198, 369-394`
+- **Cookie flags**: `HttpOnly: true`, `SameSite: Lax`, `Secure: r.TLS != nil` on `ticket_token` cookie; CSRF cookie is non-HttpOnly (by design, JS reads it) with `SameSite: Strict` -- `api_auth.go:144-152`, `server.go:329-336`
+- **Rate limiting** on login and register: 10 requests per minute per IP, with stale-key eviction to prevent unbounded map growth -- `ratelimit.go`, `api_auth.go:87, 119`
+- **HTTP timeouts**: `ReadHeaderTimeout: 30s`, `ReadTimeout: 60s`, `IdleTimeout: 120s`. `WriteTimeout` intentionally omitted to avoid killing long-lived WebSocket connections (documented in code) -- `server.go:38-45`
+- **SIGTERM graceful shutdown**: `signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)` with 30-second drain; `Server.Shutdown()` stops reaper goroutines and chat heartbeat -- `cmd/tk/cmd_setup.go:1344-1360`, `server.go:193-197`
+- **Security headers**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, Content-Security-Policy -- `server.go:169-176`
+- **Body size limit**: 1 MB via `http.MaxBytesReader` on all non-GET/HEAD requests -- `server.go:178-186`
+- **Panic recovery middleware** prevents stack traces leaking to clients -- `server.go:157-167`
+- **`/metrics` endpoint authenticated**: requires `requireUser` -- `api_system.go:33-35`
+- **WebSocket Origin validation** prevents cross-origin hijacking; auth checked before upgrade -- `realtime.go:146-170`, `api_auth.go:25-36`
+- **WebSocket project-scoped broadcast**: clients subscribe to a `project_id`; broadcast filters by project -- `realtime.go:39, 77, 133-141`
+- **Team-based access control**: team ownership checks via `TeamRoleForUser`; project visibility scoped to user via `ListProjectsVisibleToUser` -- `api_teams.go`, `api_projects.go:27`
+- **Role-based access control**: `requireUser`/`requireAdmin` guards on all state-changing endpoints
+- **All SQL parameterised** throughout `internal/store/`
+- **AES-256-GCM encryption** for email addresses at rest via `TICKET_ENCRYPTION_KEY` env var -- `internal/store/encrypt.go`
+- **Non-root container** with multi-stage build, dedicated `ticket` user -- `Dockerfile:22-25`
+- **Container hardening**: `cap_drop: [ALL]`, `pids_limit: 200`, `no-new-privileges`, memory/CPU limits, health check -- `compose.yaml:12-29`
+- **govulncheck** in CI pipeline and Makefile -- `.github/workflows/makefile.yaml:37-38`, `Makefile:53`
+- **Sensitive endpoint logging suppression**: login/register/reset-password request bodies are not logged -- `server.go:256-258`
+- **Expired session purge** runs daily -- `server.go:84-120`
+- **Minimum password length** enforced (8 characters) -- `store/auth.go:88`
 
 ### Issues found
 
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No CSRF protection on state-changing endpoints | High | All `api_*.go` | Add `gorilla/csrf` or double-submit cookie |
-| No account lockout after failed logins | High | `api_auth.go:113-137` | Add `failed_attempts`/`locked_until` columns |
-| `/metrics` unauthenticated — exposes counts and heap stats | Medium | `api_system.go:32-74` | Add `requireAdmin` guard |
-| Cross-project WebSocket broadcast | Medium | `realtime.go:66-80` | Filter by `projectIDs` on `liveClient` |
-| `context.Background()` in WS handler | Low-Med | `chat_ws.go:168,177` | Derive context from WS lifecycle |
-| Missing `WriteTimeout`/`ReadTimeout`/`IdleTimeout` | Medium | `server.go:34-38` | Add timeouts; exempt WS via hijack |
-| No request body size limit | Medium | Various handlers | Use `http.MaxBytesReader` |
-| `X-Forwarded-For` spoofing bypasses rate limiter | Medium | `ratelimit.go:49-51` | Only trust with configured trusted-proxy CIDR |
-| Container hardening absent (cap_drop, pids_limit) | Medium | `compose.yaml` | Add security options |
-| CSP allows `unsafe-inline` | Low | `server.go:150` | Replace with nonces |
+| `WriteTimeout` omitted on HTTP server | Low | `server.go:43-44` | Consider a reverse proxy (nginx/Caddy) with write timeouts in front; the omission is documented and justified for WebSocket support but leaves non-WS responses without a write deadline |
+| Rate limiter uses `r.RemoteAddr` only, no `X-Forwarded-For` awareness | Medium | `ratelimit.go:59-65` | Behind a reverse proxy, all requests appear from one IP; add configurable trusted-proxy CIDR to extract real client IP |
+| CSP allows `unsafe-inline` for scripts and styles | Low | `server.go:173` | Replace with nonce-based CSP to mitigate XSS via inline injection |
+| CSRF cookie `Secure` flag depends on `r.TLS != nil` | Low | `server.go:335` | Behind a TLS-terminating proxy, `r.TLS` is nil so cookie is sent without Secure; consider a config flag or trust `X-Forwarded-Proto` |
+| Encryption key padding/truncation to 32 bytes | Low | `internal/store/encrypt.go:21-24` | Reject keys that are not exactly 32 bytes rather than silently padding/truncating, which weakens entropy if a short key is provided |
+| No general API rate limiting beyond auth endpoints | Low | `api.go:14` | Add per-user or global rate limiting for write-heavy endpoints to prevent abuse |
+| Dockerfile base images not pinned to SHA256 digest | Low | `Dockerfile:3, 17` | Pin `golang:1.26-alpine` and `alpine:3.21` to `@sha256:...` for reproducible, tamper-resistant builds |
 
 ## Verdict
 
-Core auth primitives are strong. The Origin-check on WebSocket closes cross-origin hijacking. Score unchanged at 65: new cross-project leak and persistent CSRF/lockout/metrics gaps offset the WS origin fix.
+The security posture remains strong in this pass. CSRF, account lockout, authenticated metrics, timeouts, body limits, graceful shutdown, and container hardening all remain in place, while the remaining issues stay concentrated in deployment-layer hardening such as trusted-proxy awareness, CSP nonces, and image pinning.
 
 ## Changes since last assessment
-- WebSocket Origin validation fixed — `realtime.go:136-156`
-- All other previous findings unchanged
+
+- No material security regressions were found in this pass
+- The earlier CSRF, lockout, timeout, and container-hardening improvements remain intact
+- The same medium/low deployment-hardening recommendations remain open
 
 ## Remaining recommendations
 
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| CSRF protection | High | Add middleware to all state-changing routes |
-| Account lockout | High | Lock 15 min after 10 failures |
-| `/metrics` unauthenticated | Medium | Gate with `requireAdmin` |
-| Cross-project WS broadcast | Medium | Filter by project |
-| HTTP timeouts | Medium | Set Write/Read/IdleTimeout |
-| Body size limit | Medium | `http.MaxBytesReader` in JSON handlers |
-| X-Forwarded-For trust | Medium | Trusted-proxy CIDR |
-| Container hardening | Medium | `cap_drop: [ALL]`, `pids_limit: 200` |
+| Rate limiter ignores `X-Forwarded-For` | Medium | Add trusted-proxy CIDR config; extract real IP only from trusted sources |
+| CSP `unsafe-inline` | Low | Migrate to nonce-based CSP for scripts and styles |
+| CSRF `Secure` flag behind TLS proxy | Low | Detect TLS termination via `X-Forwarded-Proto` or config flag |
+| Encryption key padding | Low | Validate key is exactly 32 bytes; reject otherwise |
+| No general API rate limiting | Low | Add per-user throttle on write endpoints |
+| Dockerfile images not SHA-pinned | Low | Pin base images to digest for supply-chain integrity |
+| Missing `WriteTimeout` | Low | Add a reverse proxy with write timeouts or implement per-handler deadlines for non-WS routes |
