@@ -321,6 +321,103 @@ func runSdlc(args []string) error {
 		}
 		printRoleTable(filtered)
 		return nil
+	case "role-add":
+		fs := flag.NewFlagSet("sdlc role-add", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		title := fs.String("title", "", "role title")
+		description := fs.String("description", "", "role description")
+		ac := fs.String("ac", "", "role acceptance criteria")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
+			return errors.New("usage: tk sdlc role-add -sdlc_id <id> -title <title> [-description <text>] [-ac <text>]")
+		}
+		role, err := svc.CreateRole(libticket.RoleRequest{
+			SdlcID:             sdlcID,
+			Title:              strings.TrimSpace(*title),
+			Description:        strings.TrimSpace(*description),
+			AcceptanceCriteria: strings.TrimSpace(*ac),
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(role)
+		}
+		fmt.Printf("created sdlc role #%d %s\n", role.ID, role.Title)
+		return nil
+	case "role-get":
+		fs := flag.NewFlagSet("sdlc role-get", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		roleID := fs.Int64("role_id", 0, "role id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || *roleID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: tk sdlc role-get -sdlc_id <id> -role_id <id>")
+		}
+		role, err := sdlcScopedRole(svc, *sdlcID, *roleID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(role)
+		}
+		printRoleDetail(role)
+		return nil
+	case "role-update":
+		fs := flag.NewFlagSet("sdlc role-update", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		roleID := fs.Int64("role_id", 0, "role id")
+		title := fs.String("title", "", "role title")
+		description := fs.String("description", "", "role description")
+		ac := fs.String("ac", "", "role acceptance criteria")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || *roleID == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
+			return errors.New("usage: tk sdlc role-update -sdlc_id <id> -role_id <id> -title <title> [-description <text>] [-ac <text>]")
+		}
+		if _, err := sdlcScopedRole(svc, *sdlcID, *roleID); err != nil {
+			return err
+		}
+		role, err := svc.UpdateRole(*roleID, libticket.RoleRequest{
+			SdlcID:             sdlcID,
+			Title:              strings.TrimSpace(*title),
+			Description:        strings.TrimSpace(*description),
+			AcceptanceCriteria: strings.TrimSpace(*ac),
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(role)
+		}
+		fmt.Printf("updated sdlc role #%d %s\n", role.ID, role.Title)
+		return nil
+	case "role-rm":
+		fs := flag.NewFlagSet("sdlc role-rm", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		sdlcID := fs.Int64("sdlc_id", 0, "sdlc id")
+		roleID := fs.Int64("role_id", 0, "role id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *sdlcID == 0 || *roleID == 0 || fs.NArg() != 0 {
+			return errors.New("usage: tk sdlc role-rm -sdlc_id <id> -role_id <id>")
+		}
+		if _, err := sdlcScopedRole(svc, *sdlcID, *roleID); err != nil {
+			return err
+		}
+		if err := svc.DeleteRole(*roleID); err != nil {
+			return err
+		}
+		fmt.Printf("deleted sdlc role #%d\n", *roleID)
+		return nil
 	case "stage-role-add":
 		fs := flag.NewFlagSet("sdlc stage-role-add", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -447,13 +544,42 @@ func printSdlcDetail(wf store.SdlcWithStages) {
 	fmt.Printf("Description : %s\n", wf.Description)
 	fmt.Printf("Stages      :\n")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLES\tDESCRIPTION")
+	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLES\tDESCRIPTION\tACCEPTANCE CRITERIA")
 	for _, s := range wf.Stages {
 		var roleNames []string
 		for _, r := range s.Roles {
 			roleNames = append(roleNames, r.Title)
 		}
-		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description)
+		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description, s.AcceptanceCriteria)
 	}
 	_ = w.Flush()
+}
+
+func sdlcScopedRole(svc libticket.Service, sdlcID, roleID int64) (store.Role, error) {
+	roles, err := svc.ListRoles()
+	if err != nil {
+		return store.Role{}, err
+	}
+	for _, role := range roles {
+		if role.ID != roleID {
+			continue
+		}
+		if role.SdlcID != nil && *role.SdlcID == sdlcID {
+			return role, nil
+		}
+		break
+	}
+	return store.Role{}, fmt.Errorf("role %d not found in sdlc %d", roleID, sdlcID)
+}
+
+func printRoleDetail(role store.Role) {
+	fmt.Printf("ID:                  %d\n", role.ID)
+	if role.SdlcID != nil {
+		fmt.Printf("SDLC ID:             %d\n", *role.SdlcID)
+	}
+	fmt.Printf("Title:               %s\n", role.Title)
+	fmt.Printf("Description:         %s\n", role.Description)
+	fmt.Printf("Acceptance Criteria: %s\n", role.AcceptanceCriteria)
+	fmt.Printf("Created:             %s\n", role.CreatedAt)
+	fmt.Printf("Updated:             %s\n", role.UpdatedAt)
 }

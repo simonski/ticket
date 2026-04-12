@@ -116,11 +116,16 @@ Notes:
 ### Project
 
 - `project_id`
+- `prefix`
 - `title`
 - `description`
 - `acceptance_criteria`
 - `git_repository`
 - `git_branch`
+- `notes`
+- `visibility`
+- `default_draft`
+- `sdlc_id`
 - `created_at`
 - `created_by`
 - `status`
@@ -187,7 +192,7 @@ Model notes:
 
 - `parent_id` is nullable and supports hierarchical work
 - tickets are orphaned when `parent_id` is null
-- stories are separate first-class entities stored in `stories` and linked to tickets through `story_ticket_links`; they are not a ticket `type`
+- stories are separate first-class entities stored in `stories` and linked to tickets through `story_ticket_links`
 - ticket creation accepts either a positional title or `-title`
 - `acceptance_criteria` is captured directly on the task record
 - `estimate_effort` is an integer assessment of task effort

@@ -83,7 +83,7 @@ func runTicketNS(args []string) error {
 	case "get", "show":
 		return runGet(args[1:])
 	case "tree":
-		return runGet(args[1:]) // TODO: dedicated tree view
+		return errors.New("tk ticket tree was a placeholder alias and has been removed; use `tk get` for details or the web hierarchy view for nested browsing")
 
 	// Edit (TUI)
 	case "edit":
@@ -144,6 +144,8 @@ func runTicketNS(args []string) error {
 		return runSetTicketDraft(args[1:], true)
 	case "notready":
 		return runSetTicketDraft(args[1:], false)
+	case "reject":
+		return runRejectTicket(args[1:])
 	case "clone", "cp":
 		return runClone(args[1:])
 	case "delete", "rm":
@@ -196,6 +198,7 @@ Commands:
   unarchive -id <id>                          Unarchive
   ready    -id <id>                           Mark ready for work
   notready -id <id>                          Mark not ready
+  reject   -id <id>                           Send ticket back to the first workflow stage as draft
   clone    -id <id>                           Duplicate
   delete   -id <id>                           Delete permanently
 
@@ -314,6 +317,82 @@ func resolveLifecycleInput(status, stage, state string) (string, string, error) 
 		return "", "", nil
 	}
 	return store.ParseLifecycleStatus(status)
+}
+
+func ticketWorkflowStageNames(svc libticket.Service, ticket store.Ticket) ([]string, error) {
+	if ticket.SdlcStageID != nil {
+		stage, err := svc.GetSdlcStage(*ticket.SdlcStageID)
+		if err == nil {
+			stages, err := svc.ListSdlcStages(stage.SdlcID)
+			if err != nil {
+				return nil, err
+			}
+			if names := normalizeWorkflowStageNames(stages); len(names) > 0 {
+				return names, nil
+			}
+		}
+	}
+	if ticket.SdlcID != nil {
+		stages, err := svc.ListSdlcStages(*ticket.SdlcID)
+		if err != nil {
+			return nil, err
+		}
+		if names := normalizeWorkflowStageNames(stages); len(names) > 0 {
+			return names, nil
+		}
+	}
+	if ticket.ParentID != nil {
+		parent, err := svc.GetTicket(*ticket.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		return ticketWorkflowStageNames(svc, parent)
+	}
+	project, err := svc.GetProject(strconv.FormatInt(ticket.ProjectID, 10))
+	if err != nil {
+		return nil, err
+	}
+	if project.SdlcID != nil {
+		stages, err := svc.ListSdlcStages(*project.SdlcID)
+		if err != nil {
+			return nil, err
+		}
+		if names := normalizeWorkflowStageNames(stages); len(names) > 0 {
+			return names, nil
+		}
+	}
+	return []string{store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone}, nil
+}
+
+func normalizeWorkflowStageNames(stages []store.SdlcStage) []string {
+	names := make([]string, 0, len(stages))
+	seen := make(map[string]bool, len(stages))
+	for _, stage := range stages {
+		name := strings.ToLower(strings.TrimSpace(stage.StageName))
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
+
+func validateTicketStageInput(svc libticket.Service, ticket store.Ticket, stage string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(stage))
+	if normalized == "" {
+		return "", nil
+	}
+	validStages, err := ticketWorkflowStageNames(svc, ticket)
+	if err != nil {
+		return "", err
+	}
+	for _, validStage := range validStages {
+		if normalized == validStage {
+			return normalized, nil
+		}
+	}
+	return "", fmt.Errorf("invalid stage %q; valid stages: %s", stage, strings.Join(validStages, ", "))
 }
 
 // expandListShortFlags expands combined POSIX-style boolean flags for the
@@ -976,7 +1055,7 @@ func runUnsetParent(args []string, command string) error {
 }
 
 func runUpdate(args []string) error {
-	usage := "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
+	usage := "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -991,6 +1070,7 @@ func runUpdate(args []string) error {
 	estimateEffort := fs.Int("estimate_effort", 0, "estimated effort")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
 	status := fs.String("status", "", "rendered ticket status (<stage>/<state>)")
+	stage := fs.String("stage", "", "ticket stage")
 	state := fs.String("state", "", "ticket state")
 	parentIDRaw := fs.String("parent_id", "", "ticket parent id")
 	message := fs.String("m", "", "comment to attach")
@@ -1016,10 +1096,11 @@ func runUpdate(args []string) error {
 	hasEstimateEffort := containsFlag(args, "-estimate_effort")
 	hasEstimateComplete := containsFlag(args, "-estimate_complete")
 	hasStatus := containsFlag(args, "-status")
+	hasStage := containsFlag(args, "-stage")
 	hasState := containsFlag(args, "-state")
 	hasParentID := containsFlag(args, "-parent_id")
 	hasType := containsFlag(args, "-type") || containsFlag(args, "-t")
-	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasState && !hasParentID && !hasType {
+	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID && !hasType {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -1042,7 +1123,6 @@ func runUpdate(args []string) error {
 		GitBranch:          current.GitBranch,
 		ParentID:           current.ParentID,
 		Assignee:           current.Assignee,
-		State:              current.State,
 		Priority:           current.Priority,
 		Order:              current.Order,
 		EstimateEffort:     current.EstimateEffort,
@@ -1079,11 +1159,19 @@ func runUpdate(args []string) error {
 		next.EstimateComplete = *estimateComplete
 	}
 	if hasStatus {
-		_, resolvedState, err := resolveLifecycleInput(*status, "", "")
+		resolvedStage, resolvedState, err := resolveLifecycleInput(*status, "", "")
 		if err != nil {
 			return err
 		}
+		next.Stage = resolvedStage
 		next.State = resolvedState
+	}
+	if hasStage {
+		resolvedStage, err := validateTicketStageInput(svc, current, *stage)
+		if err != nil {
+			return err
+		}
+		next.Stage = resolvedStage
 	}
 	if hasState {
 		next.State = *state

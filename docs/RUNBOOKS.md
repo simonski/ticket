@@ -1,6 +1,6 @@
 # Runbooks
 
-Operational playbooks for common `ticket` server scenarios. Each runbook
+Operational playbooks for common `tk` server scenarios. Each runbook
 describes symptoms, diagnosis steps, and resolution.
 
 ---
@@ -46,7 +46,7 @@ tk register -username admin -password <secret>
 tk login -username admin -password <secret>
 
 # 7. Create the first project
-tk project new -title "My Project" --prefix MP
+tk project new -title "My Project" -prefix MP
 ```
 
 **Checklist before going live:**
@@ -115,10 +115,10 @@ See [Backup and restore](#backup-and-restore).
 If no backup exists but the server can start:
 
 ```bash
-tk export > /tmp/ticket-export-$(date +%Y%m%d).json
+tk export -o /tmp/ticket-export-$(date +%Y%m%d).json
 # Then restore into a fresh DB:
 tk initdb
-tk import /tmp/ticket-export-$(date +%Y%m%d).json
+tk import -i /tmp/ticket-export-$(date +%Y%m%d).json
 ```
 
 ---
@@ -152,7 +152,8 @@ tk export | gzip > ticket-backup-$(date +%Y%m%d).json.gz
 docker compose stop ticket
 
 # Restore
-gunzip -c ticket-backup-20250718.json.gz | tk import --overwrite
+gunzip -c ticket-backup-20250718.json.gz > /tmp/ticket-restore.json
+tk import -i /tmp/ticket-restore.json
 
 # Restart
 docker compose start ticket
@@ -162,8 +163,8 @@ curl http://localhost:8080/api/healthz
 tk project ls
 ```
 
-> **Note:** `tk import` uses upsert semantics — it does not delete existing
-> data. Use `--overwrite` to replace records that already exist.
+> **Note:** `tk import` replaces the local database contents with the snapshot
+> in the file you pass via `-i`.
 
 ---
 

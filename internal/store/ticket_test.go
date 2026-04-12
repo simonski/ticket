@@ -169,6 +169,20 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if len(limited) != 1 {
 		t.Fatalf("ListTickets(limited) len = %d, want 1", len(limited))
 	}
+	offset, err := ListTickets(context.Background(), db, TicketListParams{
+		ProjectID: project.ID,
+		Limit:     1,
+		Offset:    1,
+	})
+	if err != nil {
+		t.Fatalf("ListTickets(offset) error = %v", err)
+	}
+	if len(offset) != 1 {
+		t.Fatalf("ListTickets(offset) len = %d, want 1", len(offset))
+	}
+	if offset[0].ID == limited[0].ID {
+		t.Fatalf("ListTickets(offset) returned %#v, want a different ticket than %#v", offset[0], limited[0])
+	}
 
 	got, err := GetTicketByProject(context.Background(), db, project.ID, ticket.ID)
 	if err != nil {
@@ -799,6 +813,23 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	if _, err := AddDependency(context.Background(), db, project.ID, ticket.ID, dependency.ID, ""); err != nil {
 		t.Fatalf("AddDependency() error = %v", err)
 	}
+	label, err := CreateLabel(context.Background(), db, project.ID, "priority", "#ff0000")
+	if err != nil {
+		t.Fatalf("CreateLabel() error = %v", err)
+	}
+	if err := AddTicketLabel(context.Background(), db, ticket.ID, label.ID); err != nil {
+		t.Fatalf("AddTicketLabel() error = %v", err)
+	}
+	if _, err := LogTime(context.Background(), db, ticket.ID, adminID, 30, "cleanup"); err != nil {
+		t.Fatalf("LogTime() error = %v", err)
+	}
+	story, err := CreateStory(context.Background(), db, project.ID, "Delete Story", "", "")
+	if err != nil {
+		t.Fatalf("CreateStory() error = %v", err)
+	}
+	if err := LinkStoryToTicket(context.Background(), db, story.ID, ticket.ID); err != nil {
+		t.Fatalf("LinkStoryToTicket() error = %v", err)
+	}
 
 	if err := DeleteTicket(context.Background(), db, ticket.ID); err != nil {
 		t.Fatalf("DeleteTicket() error = %v", err)
@@ -822,6 +853,19 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	}
 	if deps, err := ListDependencies(context.Background(), db, ticket.ID); err != nil || len(deps) != 0 {
 		t.Fatalf("ListDependencies(deleted) = %#v, %v", deps, err)
+	}
+	if labels, err := ListTicketLabels(context.Background(), db, ticket.ID); err != nil || len(labels) != 0 {
+		t.Fatalf("ListTicketLabels(deleted) = %#v, %v", labels, err)
+	}
+	if entries, err := ListTimeEntries(context.Background(), db, ticket.ID); err != nil || len(entries) != 0 {
+		t.Fatalf("ListTimeEntries(deleted) = %#v, %v", entries, err)
+	}
+	var storyLinks int
+	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM story_ticket_links WHERE story_id = ?`, story.ID).Scan(&storyLinks); err != nil {
+		t.Fatalf("story_ticket_links count query error = %v", err)
+	}
+	if storyLinks != 0 {
+		t.Fatalf("story_ticket_links count = %d, want 0 after ticket delete", storyLinks)
 	}
 }
 

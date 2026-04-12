@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -142,6 +143,18 @@ func bearerToken(r *http.Request) string {
 		return strings.TrimSpace(cookie.Value)
 	}
 	return ""
+}
+
+func intParam(r *http.Request, key string, defaultValue int) int {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return defaultValue
+	}
+	return value
 }
 
 func projectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, user store.User) (string, error) {

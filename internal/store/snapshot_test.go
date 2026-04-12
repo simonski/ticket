@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -176,5 +177,73 @@ func TestNormalizeImportValue(t *testing.T) {
 	// string passes through
 	if got := normalizeImportValue("foo"); got != "foo" {
 		t.Fatalf("normalizeImportValue(string) = %v", got)
+	}
+}
+
+func TestExportSnapshotSignsWhenEncryptionKeyIsConfigured(t *testing.T) {
+	t.Setenv("TICKET_ENCRYPTION_KEY", "test-key-for-encryption-32bytes!")
+
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Signed Export", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Signed Ticket",
+		CreatedBy: "",
+	}); err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	snapshot, err := ExportSnapshot(context.Background(), db)
+	if err != nil {
+		t.Fatalf("ExportSnapshot() error = %v", err)
+	}
+	if strings.TrimSpace(snapshot.Signature) == "" {
+		t.Fatal("expected signed snapshot when TICKET_ENCRYPTION_KEY is set")
+	}
+}
+
+func TestImportSnapshotRejectsTamperedSignedSnapshot(t *testing.T) {
+	t.Setenv("TICKET_ENCRYPTION_KEY", "test-key-for-encryption-32bytes!")
+
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Signed Import", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Original Title",
+		CreatedBy: "",
+	}); err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	snapshot, err := ExportSnapshot(context.Background(), db)
+	if err != nil {
+		t.Fatalf("ExportSnapshot() error = %v", err)
+	}
+	ticketsTable := snapshot.Tables["tickets"]
+	titleColumn := -1
+	for i, column := range ticketsTable.Columns {
+		if column == "title" {
+			titleColumn = i
+			break
+		}
+	}
+	if titleColumn == -1 || len(ticketsTable.Rows) == 0 {
+		t.Fatalf("tickets snapshot missing title column or rows: %#v", ticketsTable.Columns)
+	}
+	ticketsTable.Rows[0][titleColumn] = "Tampered Title"
+	snapshot.Tables["tickets"] = ticketsTable
+
+	target := testDB(t)
+	err = ImportSnapshot(context.Background(), target, snapshot)
+	if err == nil || !strings.Contains(err.Error(), "snapshot signature verification failed") {
+		t.Fatalf("ImportSnapshot(tampered) error = %v, want signature verification failure", err)
 	}
 }

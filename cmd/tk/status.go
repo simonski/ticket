@@ -11,6 +11,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 // statusEnvVars returns the relevant environment variable names and their
@@ -31,6 +32,24 @@ func resolveCurrentProject(cfg config.Config) (project, source string) {
 		return cfg.ProjectID, cfgPath
 	}
 	return "", ""
+}
+
+func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (project, source, sdlcName string, defaultDraft *bool) {
+	project, source = resolveCurrentProject(cfg)
+	if project == "" || svc == nil {
+		return project, source, "", nil
+	}
+	currentProject, err := svc.GetProject(project)
+	if err != nil {
+		return project, source, "", nil
+	}
+	if currentProject.SdlcID != nil {
+		if wf, err := svc.GetSdlc(*currentProject.SdlcID); err == nil {
+			sdlcName = wf.Name
+		}
+	}
+	defaultDraft = &currentProject.DefaultDraft
+	return project, source, sdlcName, defaultDraft
 }
 
 // statusLine is a key/value row for the status box.
@@ -177,8 +196,9 @@ func runRemoteStatus(cfg config.Config) error {
 	cfgPath, _ := config.Path()
 	envVars := statusEnvVars()
 	project, projectSource := resolveCurrentProject(cfg)
+	project, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
-		return printJSON(map[string]any{
+		payload := map[string]any{
 			"location":       cfg.Location,
 			"TICKET_HOME":    envVars["TICKET_HOME"],
 			"config_file":    cfgPath,
@@ -187,7 +207,14 @@ func runRemoteStatus(cfg config.Config) error {
 			"username":       username,
 			"authenticated":  authenticated,
 			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
-		})
+		}
+		if sdlcName != "" {
+			payload["project_sdlc"] = sdlcName
+		}
+		if defaultDraft != nil {
+			payload["project_default_draft"] = *defaultDraft
+		}
+		return printJSON(payload)
 	}
 	lines := []statusLine{
 		envStatusLine("TICKET_HOME", envVars["TICKET_HOME"]),
@@ -196,6 +223,8 @@ func runRemoteStatus(cfg config.Config) error {
 		{},
 		{key: "config_file", value: cfgPath},
 		projectStatusLine(project, projectSource),
+		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
+		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
 		connectionStatusLine(err == nil),
@@ -215,10 +244,14 @@ func runLocalStatus() error {
 	cfgPath, _ := config.Path()
 	envVars := statusEnvVars()
 	cfg, _ := config.Load()
-	project, projectSource := resolveCurrentProject(cfg)
+	svc, svcErr := resolveService(cfg)
+	if svcErr != nil {
+		svc = nil
+	}
+	project, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
-		return printJSON(map[string]any{
+		payload := map[string]any{
 			"db_path":         dbPath,
 			"TICKET_HOME":     envVars["TICKET_HOME"],
 			"TICKET_USERNAME": envVars["TICKET_USERNAME"],
@@ -227,7 +260,14 @@ func runLocalStatus() error {
 			"project_source":  projectSource,
 			"db_exists":       dbExists,
 			"connection":      map[bool]string{true: "success", false: "failure"}[connErr == nil],
-		})
+		}
+		if sdlcName != "" {
+			payload["project_sdlc"] = sdlcName
+		}
+		if defaultDraft != nil {
+			payload["project_default_draft"] = *defaultDraft
+		}
+		return printJSON(payload)
 	}
 	lines := []statusLine{
 		envStatusLine("TICKET_HOME", envVars["TICKET_HOME"]),
@@ -237,6 +277,8 @@ func runLocalStatus() error {
 		{key: "db_path", value: dbPath},
 		{key: "config_file", value: cfgPath},
 		projectStatusLine(project, projectSource),
+		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
+		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
 		connectionStatusLine(connErr == nil),
 	}
@@ -245,6 +287,20 @@ func runLocalStatus() error {
 		fmt.Println("hint: run tk init")
 	}
 	return connErr
+}
+
+func valueOrDefault(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+func boolString(value *bool) string {
+	if value == nil {
+		return "(unknown)"
+	}
+	return fmt.Sprintf("%t", *value)
 }
 
 func localStatusCheck(dbPath string) error {

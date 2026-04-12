@@ -988,8 +988,10 @@
           </div>
         </form>
         <form id="register-form" class="stack hidden">
-          <input id="register-user" placeholder="username" required />
-          <input id="register-pass" type="password" placeholder="password" required />
+          <label for="register-user">Username</label>
+          <input id="register-user" placeholder="username" autocomplete="username" required />
+          <label for="register-pass">Password</label>
+          <input id="register-pass" type="password" placeholder="password" autocomplete="new-password" required />
           <div class="row">
             <button class="btn" type="submit">Create Account</button>
             <button id="hide-register" class="link" type="button">Back to login</button>
@@ -1247,29 +1249,38 @@
       </div>
     </div>
 
-    <div id="proj-modal-overlay" class="modal-overlay hidden">
-      <div id="proj-modal" class="modal">
+      <div id="proj-modal-overlay" class="modal-overlay hidden">
+        <div id="proj-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="proj-modal-heading">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="proj-modal-heading">New Project</strong>
         </div>
-        <div class="stack" style="margin-top:0.6rem;">
-          <select id="proj-modal-select">
-            <option value="">Create new project...</option>
-          </select>
-          <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="8" autocomplete="off" style="text-transform:uppercase;" />
-          <input id="proj-modal-title" placeholder="title" autocomplete="off" />
-          <select id="proj-modal-visibility">
-            <option value="private">private</option>
-            <option value="public">public</option>
-          </select>
-          <select id="proj-modal-sdlc">
-            <option value="">No SDLC (default lifecycle)</option>
-          </select>
-          <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
-          <input id="proj-modal-git-branch" placeholder="git branch (optional)" autocomplete="off" />
-          <textarea id="proj-modal-description" placeholder="description (optional)"></textarea>
-          <textarea id="proj-modal-ac" placeholder="acceptance criteria (optional)"></textarea>
-          <div id="proj-modal-error" class="muted" style="color:var(--danger,#c0392b);display:none;"></div>
+          <div class="stack" style="margin-top:0.6rem;">
+            <label for="proj-modal-select">Project</label>
+            <select id="proj-modal-select">
+              <option value="">Create new project...</option>
+            </select>
+            <label for="proj-modal-prefix">Prefix</label>
+            <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="8" autocomplete="off" style="text-transform:uppercase;" />
+            <label for="proj-modal-title">Title</label>
+            <input id="proj-modal-title" placeholder="title" autocomplete="off" />
+            <label for="proj-modal-visibility">Visibility</label>
+            <select id="proj-modal-visibility">
+              <option value="private">private</option>
+              <option value="public">public</option>
+            </select>
+            <label for="proj-modal-sdlc">SDLC</label>
+            <select id="proj-modal-sdlc">
+              <option value="">No SDLC (default lifecycle)</option>
+            </select>
+            <label for="proj-modal-git-repository">Git Repository</label>
+            <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
+            <label for="proj-modal-git-branch">Git Branch</label>
+            <input id="proj-modal-git-branch" placeholder="git branch (optional)" autocomplete="off" />
+            <label for="proj-modal-description">Description</label>
+            <textarea id="proj-modal-description" placeholder="description (optional)"></textarea>
+            <label for="proj-modal-ac">Acceptance Criteria</label>
+            <textarea id="proj-modal-ac" placeholder="acceptance criteria (optional)"></textarea>
+            <div id="proj-modal-error" class="muted" role="alert" style="color:var(--danger,#c0392b);display:none;"></div>
           <div class="row">
             <button id="proj-modal-create" class="btn" type="button">Create Project</button>
           </div>
@@ -1367,14 +1378,16 @@
       </div>
     </div>
 
-    <div id="story-modal-overlay" class="modal-overlay hidden">
-      <div id="story-modal" class="modal">
+      <div id="story-modal-overlay" class="modal-overlay hidden">
+        <div id="story-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="story-modal-heading">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="story-modal-heading">Story</strong>
         </div>
-        <div class="stack" style="margin-top:0.6rem;">
-          <input id="story-title" placeholder="story title" autocomplete="off" />
-          <textarea id="story-description" placeholder="high-level requirement"></textarea>
+          <div class="stack" style="margin-top:0.6rem;">
+            <label for="story-title">Story Title</label>
+            <input id="story-title" placeholder="story title" autocomplete="off" />
+            <label for="story-description">Description</label>
+            <textarea id="story-description" placeholder="high-level requirement"></textarea>
           <div class="row">
             <button id="story-save" class="btn" type="button">Create Story</button>
             <button id="story-analyse" class="btn" type="button">Analyse</button>
@@ -1384,8 +1397,8 @@
       </div>
     </div>
 
-    <div id="modal-overlay" class="modal-overlay hidden">
-      <div id="ticket-modal" class="modal">
+      <div id="modal-overlay" class="modal-overlay hidden">
+        <div id="ticket-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="modal-title">Ticket</strong>
         </div>
@@ -1461,8 +1474,8 @@
                 <td class="field-label">Parent ID</td>
                 <td class="field-value">
                   <div class="row" style="gap:0.3rem; align-items:center;">
-                    <input id="ticket-parent-id" type="number" placeholder="parent ticket id" style="flex:1;">
-                    <span id="ticket-parent-link" class="muted" style="font-size:0.85rem;cursor:pointer;"></span>
+                  <input id="ticket-parent-id" type="number" placeholder="parent ticket id" style="flex:1;">
+                  <span id="ticket-parent-link" class="muted" role="button" tabindex="0" style="font-size:0.85rem;cursor:pointer;"></span>
                   </div>
                 </td>
               </tr>
@@ -1523,8 +1536,8 @@
         </div>
       </div>
     </div>
-    <div id="sdlc-modal-overlay" class="modal-overlay hidden">
-      <div id="sdlc-modal" class="modal">
+      <div id="sdlc-modal-overlay" class="modal-overlay hidden">
+        <div id="sdlc-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="sdlc-modal-title">
         <div class="row" style="justify-content:space-between; align-items:center;">
           <strong id="sdlc-modal-title">New SDLC</strong>
         </div>
@@ -1553,10 +1566,10 @@
         </div>
       </div>
     </div>
-    <div id="settings-modal-overlay" class="modal-overlay hidden">
-      <div id="settings-modal" class="modal">
-        <div class="row" style="justify-content:space-between; align-items:center;">
-          <strong>Settings</strong>
+      <div id="settings-modal-overlay" class="modal-overlay hidden">
+        <div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <strong id="settings-modal-title">Settings</strong>
         </div>
         <div class="stack" style="margin-top:0.6rem;">
           <label class="row" style="justify-content:space-between;">
@@ -1799,6 +1812,7 @@
 
       function closeSettingsModal() {
         settingsModalOverlay.classList.add("hidden");
+        restoreModalFocusIfNeeded();
       }
 
       function dismissPanelPopups() {
@@ -2013,6 +2027,7 @@
         try {
           renderer = new window.THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
         } catch { /* WebGL unavailable; fall back to the 2D renderer */ }
+        if (!renderer) {
           return {
             ctx,
             render() {
@@ -2739,6 +2754,7 @@
         try {
           tvGraph.renderer = new window.THREE.WebGLRenderer({ canvas: tvCanvas, alpha: true, antialias: true });
         } catch { /* WebGL unavailable; skip the ticket vision canvas */ }
+        if (!tvGraph.renderer) {
           return;
         }
         tvGraph.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -4095,7 +4111,7 @@
         }
         sdlcModalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
-        sdlcNameInput.focus();
+        trapModalFocus(sdlcModalOverlay, sdlcNameInput);
       }
 
       async function loadSdlcStages(wfID) {
@@ -4191,12 +4207,14 @@
       sdlcModalCloseBtn.addEventListener("click", () => {
         sdlcModalOverlay.classList.add("hidden");
         document.body.classList.remove("modal-open");
+        restoreModalFocusIfNeeded();
       });
 
       sdlcModalOverlay.addEventListener("click", (event) => {
         if (event.target === sdlcModalOverlay) {
           sdlcModalOverlay.classList.add("hidden");
           document.body.classList.remove("modal-open");
+          restoreModalFocusIfNeeded();
         }
       });
 
@@ -4383,11 +4401,12 @@
         }
         setStoryStatus("");
         storyModalOverlay.classList.remove("hidden");
-        storyTitleInput.focus();
+        trapModalFocus(storyModalOverlay, storyTitleInput);
       }
 
       function closeStoryModal() {
         storyModalOverlay.classList.add("hidden");
+        restoreModalFocusIfNeeded();
       }
 
       function renderStoriesPanel() {
@@ -4967,6 +4986,61 @@
       const projModalCreate = document.getElementById("proj-modal-create");
       let projModalMode = "create";
       let projModalProjectID = 0;
+      const modalFocusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      let modalRestoreFocusEl = null;
+
+      function firstFocusableInOverlay(overlay) {
+        if (!overlay) return null;
+        return Array.from(overlay.querySelectorAll(modalFocusableSelector)).find((node) => node.offsetParent !== null);
+      }
+
+      function visibleModalConfigs() {
+        return [
+          { overlay: dialogOverlay, close: () => dialogOverlay.classList.add("hidden") },
+          { overlay: projModalOverlay, close: closeProjModal },
+          { overlay: sdlcModalOverlay, close: () => { sdlcModalOverlay.classList.add("hidden"); document.body.classList.remove("modal-open"); restoreModalFocusIfNeeded(); } },
+          { overlay: storyModalOverlay, close: closeStoryModal },
+          { overlay: modalOverlay, close: closeModal },
+          { overlay: settingsModalOverlay, close: closeSettingsModal },
+        ].filter((cfg) => cfg.overlay && !cfg.overlay.classList.contains("hidden"));
+      }
+
+      function trapModalFocus(overlay, preferredFocus) {
+        if (!overlay) return;
+        modalRestoreFocusEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        requestAnimationFrame(() => {
+          const target = preferredFocus || firstFocusableInOverlay(overlay);
+          if (target && typeof target.focus === "function") target.focus();
+        });
+      }
+
+      function restoreModalFocusIfNeeded() {
+        if (visibleModalConfigs().length) return;
+        if (modalRestoreFocusEl && typeof modalRestoreFocusEl.focus === "function") {
+          modalRestoreFocusEl.focus();
+        }
+        modalRestoreFocusEl = null;
+      }
+
+      document.addEventListener("keydown", (event) => {
+        const openModals = visibleModalConfigs();
+        if (!openModals.length) return;
+        const activeModal = openModals[openModals.length - 1];
+        if (event.key === "Escape") {
+          event.preventDefault();
+          activeModal.close();
+          return;
+        }
+        if (event.key !== "Tab") return;
+        const focusable = Array.from(activeModal.overlay.querySelectorAll(modalFocusableSelector)).filter((node) => node.offsetParent !== null);
+        if (!focusable.length) return;
+        const currentIndex = focusable.indexOf(document.activeElement);
+        const nextIndex = event.shiftKey
+          ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+          : (currentIndex === -1 || currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+        event.preventDefault();
+        focusable[nextIndex].focus();
+      });
 
       async function populateProjModalSdlcSelector(selectedSdlcID = 0) {
         if (!projModalSdlc) return;
@@ -5013,7 +5087,7 @@
         projModalError.style.display = "none";
         projModalError.textContent = "";
         projModalOverlay.classList.remove("hidden");
-        projModalPrefix.focus();
+        trapModalFocus(projModalOverlay, projModalPrefix);
       }
 
       function openProjectEditModal(project) {
@@ -5034,11 +5108,12 @@
         projModalError.style.display = "none";
         projModalError.textContent = "";
         projModalOverlay.classList.remove("hidden");
-        projModalTitle.focus();
+        trapModalFocus(projModalOverlay, projModalTitle);
       }
 
       function closeProjModal() {
         projModalOverlay.classList.add("hidden");
+        restoreModalFocusIfNeeded();
       }
 
       projModalCreate.addEventListener("click", async () => {
@@ -5102,6 +5177,7 @@
         draft = null;
         clearTimeout(autosaveTimer);
         autosaveTimer = null;
+        restoreModalFocusIfNeeded();
       }
 
       function openNew() {
@@ -5125,7 +5201,7 @@
         modalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
         mainContent.classList.add("modal-open");
-        document.getElementById("ticket-title").focus();
+        trapModalFocus(modalOverlay, document.getElementById("ticket-title"));
       }
 
       function openEdit(ticket) {
@@ -5135,7 +5211,7 @@
         modalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
         mainContent.classList.add("modal-open");
-        document.getElementById("ticket-title").focus();
+        trapModalFocus(modalOverlay, document.getElementById("ticket-title"));
         loadTicketLabels(ticket.ticket_id);
         loadTicketTime(ticket.ticket_id);
         loadTicketDeps(ticket.ticket_id);
@@ -5183,6 +5259,12 @@
         if (ticket.parent_id) {
           freshParentLink.textContent = "↗ open parent";
           freshParentLink.addEventListener("click", () => {
+            const parent = tickets.find(t => t.ticket_id === ticket.parent_id);
+            if (parent) openEdit(parent);
+          });
+          freshParentLink.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
             const parent = tickets.find(t => t.ticket_id === ticket.parent_id);
             if (parent) openEdit(parent);
           });

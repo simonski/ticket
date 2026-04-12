@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +24,7 @@ type SnapshotTable struct {
 type Snapshot struct {
 	SchemaVersion string                   `json:"schema_version"`
 	ExportedAt    string                   `json:"exported_at"`
+	Signature     string                   `json:"signature,omitempty"`
 	Tables        map[string]SnapshotTable `json:"tables"`
 }
 
@@ -99,6 +103,11 @@ func ExportSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
 			Rows:    tableRows,
 		}
 	}
+	if signature, err := signSnapshot(snapshot); err != nil {
+		return Snapshot{}, err
+	} else if signature != "" {
+		snapshot.Signature = signature
+	}
 	return snapshot, nil
 }
 
@@ -112,6 +121,9 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 	if snapshot.Tables == nil {
 		return errors.New("snapshot tables are required")
 	}
+	if err := verifySnapshotSignature(snapshot); err != nil {
+		return err
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -120,8 +132,8 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 		_ = tx.Rollback()
 		return cause
 	}
-	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return rollback(err)
+	if _, execErr := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
+		return rollback(execErr)
 	}
 	for i := len(snapshotTableOrder) - 1; i >= 0; i-- {
 		table := snapshotTableOrder[i]
@@ -191,7 +203,7 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 }
 
 func tableColumnNames(ctx context.Context, db *sql.DB, table string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(` + quoteIdentifier(table) + `)`)
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+quoteIdentifier(table)+`)`)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +228,48 @@ func tableColumnNames(ctx context.Context, db *sql.DB, table string) ([]string, 
 		return nil, fmt.Errorf("table not found: %s", table)
 	}
 	return columns, nil
+}
+
+func signSnapshot(snapshot Snapshot) (string, error) {
+	key := encryptionKey()
+	if len(key) == 0 {
+		return "", nil
+	}
+	payload, err := snapshotSignaturePayload(snapshot)
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, key)
+	if _, err := mac.Write(payload); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(mac.Sum(nil)), nil
+}
+
+func verifySnapshotSignature(snapshot Snapshot) error {
+	if strings.TrimSpace(snapshot.Signature) == "" {
+		return nil
+	}
+	expected, err := signSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	if expected == "" {
+		return errors.New("TICKET_ENCRYPTION_KEY required to verify snapshot signature")
+	}
+	if !hmac.Equal([]byte(expected), []byte(strings.TrimSpace(snapshot.Signature))) {
+		return errors.New("snapshot signature verification failed")
+	}
+	return nil
+}
+
+func snapshotSignaturePayload(snapshot Snapshot) ([]byte, error) {
+	unsigned := Snapshot{
+		SchemaVersion: snapshot.SchemaVersion,
+		ExportedAt:    snapshot.ExportedAt,
+		Tables:        snapshot.Tables,
+	}
+	return json.Marshal(unsigned)
 }
 
 func quoteIdentifier(name string) string {

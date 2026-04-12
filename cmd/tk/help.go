@@ -65,7 +65,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"status": {
 		usage:   "tk status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration, then performs a connectivity check.", "Remote mode prints `mode`, `server`, `username`, `authenticated`, then calls the remote status endpoint.", "Local mode prints `mode`, `db_path`, `db_exists`, then opens the database and verifies the schema is usable."},
+		details: []string{"Prints the current effective configuration, then performs a connectivity check.", "Both local and remote output include the active project, its current SDLC name, and whether new tickets default to draft mode.", "Local mode also prints `db_path` / `db_exists`; remote mode also prints `username` / `authenticated`."},
 		example: "tk status",
 	},
 	"help": {
@@ -144,7 +144,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage: "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
+		usage: "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
 		details: []string{
 			"-id <id>: required; ticket id or key",
 			"-title <title>: set title",
@@ -153,14 +153,15 @@ var helpIndex = map[string]commandHelp{
 			"-ac <acceptance-criteria>: set acceptance criteria",
 			"-priority <n>: set numeric priority",
 			"-order <n>: set numeric sort order",
+			"-stage <stage>: set the stage; valid stages come from the ticket's current workflow",
 			"-state <state>: valid values [idle, active, success, fail]; setting success auto-advances to next sdlc stage",
-			"-status <stage/state>: set state from rendered status format",
+			"-status <stage/state>: set both stage and state from rendered status format",
 			"-parent_id <id>: set parent ticket id",
 			"-estimate_effort <n>: set numeric estimate effort",
 			"-estimate_complete <rfc3339>: set completion timestamp (example 2026-03-31T17:00:00Z)",
 			"-t <type> / -type <type>: change the ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision)",
 		},
-		example: "tk update -id 42 -title \"Customer Portal\" -status develop/active -priority 2 -estimate_effort 5",
+		example: "tk update -id 42 -stage develop -state active -priority 2 -estimate_effort 5",
 	},
 	"set-parent": {
 		usage:   "tk set-parent [-id] <id> <parent-id>",
@@ -333,7 +334,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk role ls",
 	},
 	"sdlc": {
-		usage:   "tk sdlc <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
+		usage:   "tk sdlc <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|role-list|role-add|role-get|role-update|role-rm|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
 		details: []string{"Admin command for managing sdlcs and their stages.", "Run `tk sdlc help` for the full verb list."},
 		example: "tk sdlc ls",
 	},
@@ -418,9 +419,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk accept requirement 3",
 	},
 	"reject": {
-		usage:   "tk reject requirement <id>",
-		details: []string{"Marks a requirement as rejected (state=fail) in the idea pipeline.", "Requires the `requirement` sub-noun before the id."},
-		example: "tk reject requirement 3",
+		usage:   "tk reject <id>\n  tk reject requirement <id>",
+		details: []string{"`tk reject <id>` sends a ticket back to the first stage in its current workflow, marks it as draft, and sets the state to idle.", "`tk reject requirement <id>` keeps the requirement shortcut that marks a requirement as rejected in the idea pipeline."},
+		example: "tk reject TK-T-42",
 	},
 	"revise": {
 		usage:   "tk revise requirement <id>",
@@ -584,6 +585,10 @@ Commands:
   remove-stage -stage-id <id>         Remove a stage
   reorder-stages -id <wf-id> <ids>    Reorder stages
   role-list  -id <sdlc_id>                            List roles scoped to a sdlc
+  role-add   -sdlc_id X -title "Role" [-description "..."] [-ac "..."]  Create a role scoped to a sdlc
+  role-get   -sdlc_id X -role_id Y                    Show one sdlc-scoped role
+  role-update -sdlc_id X -role_id Y -title "Role" [-description "..."] [-ac "..."]  Update a sdlc-scoped role
+  role-rm    -sdlc_id X -role_id Y                    Delete a sdlc-scoped role
   stage-role-add -sdlc_id X -stage_id Y -role_id Z   Assign a role to a stage
   stage-role-rm  -sdlc_id X -stage_id Y -role_id Z   Remove a role from a stage
   stage-role-order -sdlc_id X -stage_id Y -roles 1,2  Reorder roles in a stage

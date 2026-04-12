@@ -258,12 +258,12 @@ func runSetTicketArchived(args []string, archived bool) error {
 	return nil
 }
 
-func runSetTicketDraft(args []string, ready bool) error {
-	command := "notready"
-	if ready {
-		command = "ready"
+func runSetTicketDraft(args []string, undraft bool) error {
+	command := "draft"
+	if undraft {
+		command = "undraft"
 	}
-	usage := fmt.Sprintf("ticket %s [-id] <id> [-m comment]", command)
+	usage := fmt.Sprintf("tk %s [-id] <id> [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -288,11 +288,73 @@ func runSetTicketDraft(args []string, ready bool) error {
 		return err
 	}
 	var updated store.Ticket
-	if ready {
+	if undraft {
 		updated, err = svc.ReadyTicket(ticket.ID, *message)
 	} else {
 		updated, err = svc.NotReadyTicket(ticket.ID, *message)
 	}
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	printTicket(updated)
+	return nil
+}
+
+func runRejectTicket(args []string) error {
+	usage := "tk reject [-id] <id> [-m comment]"
+	fs := flag.NewFlagSet("reject", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	message := fs.String("m", "", "comment to attach")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: " + usage)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	current, err := svc.GetTicket(idVal)
+	if err != nil {
+		return err
+	}
+	validStages, err := ticketWorkflowStageNames(svc, current)
+	if err != nil {
+		return err
+	}
+	if len(validStages) == 0 {
+		return errors.New("current workflow has no stages")
+	}
+	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
+		Title:              current.Title,
+		Description:        current.Description,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		GitRepository:      current.GitRepository,
+		GitBranch:          current.GitBranch,
+		ParentID:           current.ParentID,
+		Assignee:           current.Assignee,
+		Stage:              validStages[0],
+		State:              store.StateIdle,
+		Priority:           current.Priority,
+		Order:              current.Order,
+		EstimateEffort:     current.EstimateEffort,
+		EstimateComplete:   current.EstimateComplete,
+		Type:               current.Type,
+	})
+	if err != nil {
+		return err
+	}
+	updated, err = svc.DraftTicket(updated.ID, *message)
 	if err != nil {
 		return err
 	}

@@ -17,45 +17,45 @@ var (
 )
 
 type Ticket struct {
-	ID                    string    `json:"ticket_id"`
-	ProjectID             int64     `json:"project_id"`
-	ParentID              *string   `json:"parent_id,omitempty"`
-	CloneOf               *string   `json:"clone_of,omitempty"`
-	Type                  string    `json:"type"`
-	Title                 string    `json:"title"`
-	Description           string    `json:"description"`
-	AcceptanceCriteria    string    `json:"acceptance_criteria"`
-	GitRepository         string    `json:"git_repository"`
-	GitBranch             string    `json:"git_branch"`
-	SdlcID                *int64   `json:"sdlc_id,omitempty"`
-	SdlcStageID           *int64   `json:"sdlc_stage_id,omitempty"`
-	RoleID                *int64   `json:"role_id,omitempty"`
-	Stage                 string    `json:"stage"`
-	State                 string    `json:"state"`
-	Status                string    `json:"status"`
-	Priority              int       `json:"priority"`
-	Order                 int       `json:"order"`
-	EstimateEffort        int       `json:"estimate_effort"`
-	EstimateComplete      string    `json:"estimate_complete,omitempty"`
-	HealthScore           int       `json:"health_score"`
-	Assignee              string    `json:"assignee"`
-	Author                string    `json:"author"`
-	Comments              []Comment `json:"comments,omitempty"`
-	Draft                 bool      `json:"draft"`
-	Complete              bool      `json:"complete"`
-	Archived              bool      `json:"archived"`
-	PreviousSdlcStageID  *int64   `json:"previous_sdlc_stage_id,omitempty"`
-	PreviousRoleID        *int64   `json:"previous_role_id,omitempty"`
-	CreatedBy             string    `json:"created_by"`
-	CreatedAt             string    `json:"created_at"`
-	UpdatedAt             string    `json:"updated_at"`
+	ID                  string    `json:"ticket_id"`
+	ProjectID           int64     `json:"project_id"`
+	ParentID            *string   `json:"parent_id,omitempty"`
+	CloneOf             *string   `json:"clone_of,omitempty"`
+	Type                string    `json:"type"`
+	Title               string    `json:"title"`
+	Description         string    `json:"description"`
+	AcceptanceCriteria  string    `json:"acceptance_criteria"`
+	GitRepository       string    `json:"git_repository"`
+	GitBranch           string    `json:"git_branch"`
+	SdlcID              *int64    `json:"sdlc_id,omitempty"`
+	SdlcStageID         *int64    `json:"sdlc_stage_id,omitempty"`
+	RoleID              *int64    `json:"role_id,omitempty"`
+	Stage               string    `json:"stage"`
+	State               string    `json:"state"`
+	Status              string    `json:"status"`
+	Priority            int       `json:"priority"`
+	Order               int       `json:"order"`
+	EstimateEffort      int       `json:"estimate_effort"`
+	EstimateComplete    string    `json:"estimate_complete,omitempty"`
+	HealthScore         int       `json:"health_score"`
+	Assignee            string    `json:"assignee"`
+	Author              string    `json:"author"`
+	Comments            []Comment `json:"comments,omitempty"`
+	Draft               bool      `json:"draft"`
+	Complete            bool      `json:"complete"`
+	Archived            bool      `json:"archived"`
+	PreviousSdlcStageID *int64    `json:"previous_sdlc_stage_id,omitempty"`
+	PreviousRoleID      *int64    `json:"previous_role_id,omitempty"`
+	CreatedBy           string    `json:"created_by"`
+	CreatedAt           string    `json:"created_at"`
+	UpdatedAt           string    `json:"updated_at"`
 }
 
 type TicketCreateParams struct {
 	ProjectID          int64
 	ParentID           *string
 	CloneOf            *string
-	SdlcID         *int64
+	SdlcID             *int64
 	Type               string
 	Title              string
 	Description        string
@@ -101,6 +101,7 @@ type TicketListParams struct {
 	Search          string
 	Assignee        string
 	Limit           int
+	Offset          int
 	IncludeArchived bool
 }
 
@@ -333,9 +334,9 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	sdlcStageID := current.SdlcStageID
 	// Direct stage override (e.g. drag-and-drop on the board)
 	if explicitStage {
-		nextStage := strings.ToLower(strings.TrimSpace(params.Stage))
-		if !ValidStage(nextStage) {
-			return Ticket{}, fmt.Errorf("invalid stage %q", params.Stage)
+		nextStage, err := validateTicketStage(ctx, db, current, params.Stage)
+		if err != nil {
+			return Ticket{}, err
 		}
 		if nextStage != current.Stage {
 			stage = nextStage
@@ -900,9 +901,19 @@ func ListTickets(ctx context.Context, db *sql.DB, params TicketListParams) ([]Ti
 	if params.Limit < 0 {
 		return nil, errors.New("limit must be zero or greater")
 	}
+	if params.Offset < 0 {
+		return nil, errors.New("offset must be zero or greater")
+	}
 	if params.Limit > 0 {
 		query += ` LIMIT ?`
 		args = append(args, params.Limit)
+	}
+	if params.Offset > 0 {
+		if params.Limit == 0 {
+			query += ` LIMIT -1`
+		}
+		query += ` OFFSET ?`
+		args = append(args, params.Offset)
 	}
 
 	rows, err := db.QueryContext(ctx, query, args...)
@@ -1188,6 +1199,50 @@ func scanTicket(s scanner) (Ticket, error) {
 	return ticket, nil
 }
 
+func validateTicketStage(ctx context.Context, db *sql.DB, ticket Ticket, stage string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(stage))
+	if normalized == "" {
+		return "", nil
+	}
+	validStages, err := validStagesForTicket(ctx, db, ticket)
+	if err != nil {
+		return "", err
+	}
+	for _, validStage := range validStages {
+		if normalized == validStage {
+			return normalized, nil
+		}
+	}
+	return "", fmt.Errorf("invalid stage %q; valid stages: %s", stage, strings.Join(validStages, ", "))
+}
+
+func validStagesForTicket(ctx context.Context, db *sql.DB, ticket Ticket) ([]string, error) {
+	if wfID := ResolveSdlcID(ctx, db, ticket); wfID != nil {
+		stages, err := ListSdlcStages(ctx, db, *wfID)
+		if err != nil {
+			return nil, err
+		}
+		if names := normalizeStageNames(stages); len(names) > 0 {
+			return names, nil
+		}
+	}
+	return []string{StageDesign, StageDevelop, StageTest, StageDone}, nil
+}
+
+func normalizeStageNames(stages []SdlcStage) []string {
+	names := make([]string, 0, len(stages))
+	seen := make(map[string]bool, len(stages))
+	for _, stage := range stages {
+		name := strings.ToLower(strings.TrimSpace(stage.StageName))
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
+
 func hydrateTicket(ctx context.Context, db *sql.DB, ticket Ticket) (Ticket, error) {
 	comments, err := ListComments(ctx, db, ticket.ID)
 	if err != nil {
@@ -1467,7 +1522,6 @@ func nullableString(v *string) any {
 	}
 	return *v
 }
-
 
 func validateTicketAssignmentChange(currentAssignee, nextAssignee, actorUsername, actorRole string) error {
 	currentAssignee = strings.TrimSpace(currentAssignee)
@@ -1874,10 +1928,10 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 
 // TicketContext holds a ticket and all surrounding context needed to work on it.
 type TicketContext struct {
-	Project  *Project            `json:"project,omitempty"`
-	Parents  []Ticket            `json:"parents,omitempty"`
-	Sdlc *SdlcWithStages `json:"sdlc,omitempty"`
-	Role     *Role               `json:"role,omitempty"`
+	Project *Project        `json:"project,omitempty"`
+	Parents []Ticket        `json:"parents,omitempty"`
+	Sdlc    *SdlcWithStages `json:"sdlc,omitempty"`
+	Role    *Role           `json:"role,omitempty"`
 }
 
 // ResolveSdlcID returns the effective sdlc ID for a ticket by walking:

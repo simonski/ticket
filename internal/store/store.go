@@ -286,8 +286,8 @@ CREATE TABLE IF NOT EXISTS story_ticket_links (
 	ticket_id TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(story_id, ticket_id),
-	FOREIGN KEY(story_id) REFERENCES stories(story_id),
-	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id)
+	FOREIGN KEY(story_id) REFERENCES stories(story_id) ON DELETE CASCADE,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS history_events (
@@ -298,8 +298,8 @@ CREATE TABLE IF NOT EXISTS history_events (
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
@@ -311,8 +311,8 @@ CREATE TABLE IF NOT EXISTS ticket_history (
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
@@ -322,7 +322,7 @@ CREATE TABLE IF NOT EXISTS comments (
 	user_id TEXT NOT NULL,
 	comment TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(item_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(item_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
@@ -333,9 +333,9 @@ CREATE TABLE IF NOT EXISTS dependencies (
 	depends_on TEXT NOT NULL,
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(project_id) REFERENCES projects(project_id),
-	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
-	FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+	FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
@@ -417,8 +417,8 @@ CREATE TABLE IF NOT EXISTS ticket_labels (
 	label_id INTEGER NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(ticket_id, label_id),
-	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
-	FOREIGN KEY(label_id) REFERENCES labels(label_id)
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+	FOREIGN KEY(label_id) REFERENCES labels(label_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS time_entries (
@@ -428,7 +428,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
 	minutes INTEGER NOT NULL,
 	note TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
@@ -455,6 +455,33 @@ CREATE TABLE IF NOT EXISTS sdlc_stage_roles (
 	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
 	FOREIGN KEY(stage_id) REFERENCES sdlc_stages(sdlc_stage_id),
 	FOREIGN KEY(role_id) REFERENCES roles(role_id)
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+	message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	from_user_id TEXT NOT NULL,
+	to_user_id TEXT NOT NULL,
+	title TEXT NOT NULL DEFAULT '',
+	body TEXT NOT NULL DEFAULT '',
+	medium TEXT NOT NULL DEFAULT 'dm',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	sent_at TEXT NOT NULL DEFAULT '',
+	received_at TEXT NOT NULL DEFAULT '',
+	FOREIGN KEY(from_user_id) REFERENCES users(user_id),
+	FOREIGN KEY(to_user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS goals (
+	goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
+	eta TEXT NOT NULL DEFAULT '',
+	priority INTEGER NOT NULL DEFAULT 1,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -499,6 +526,9 @@ CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_messages_from_user_id ON messages(from_user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_to_user_id ON messages(to_user_id);
+CREATE INDEX IF NOT EXISTS idx_goals_project_id ON goals(project_id);
 
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
@@ -610,6 +640,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	// Fix dependent tables whose FK constraints still reference tickets_old_int.
 	if err := fixStaleFKsAfterTicketIDMigration(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureCascadeTicketChildren(ctx, db); err != nil {
 		return err
 	}
 
@@ -901,45 +934,6 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if !columnExists(ctx, db, "users", "email_confirmed_at") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN email_confirmed_at TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	// Messages table
-	if !tableExists(ctx, db, "messages") {
-		if _, err := db.ExecContext(ctx, `
-			CREATE TABLE messages (
-				message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-				from_user_id TEXT NOT NULL,
-				to_user_id TEXT NOT NULL,
-				title TEXT NOT NULL DEFAULT '',
-				body TEXT NOT NULL DEFAULT '',
-				medium TEXT NOT NULL DEFAULT 'dm',
-				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				sent_at TEXT NOT NULL DEFAULT '',
-				received_at TEXT NOT NULL DEFAULT '',
-				FOREIGN KEY(from_user_id) REFERENCES users(user_id),
-				FOREIGN KEY(to_user_id) REFERENCES users(user_id)
-			)
-		`); err != nil {
-			return err
-		}
-	}
-	// Project goals
-	if !tableExists(ctx, db, "goals") {
-		if _, err := db.ExecContext(ctx, `
-			CREATE TABLE goals (
-				goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
-				project_id INTEGER NOT NULL,
-				title TEXT NOT NULL,
-				description TEXT NOT NULL DEFAULT '',
-				notes TEXT NOT NULL DEFAULT '',
-				eta TEXT NOT NULL DEFAULT '',
-				priority INTEGER NOT NULL DEFAULT 1,
-				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY(project_id) REFERENCES projects(project_id)
-			)
-		`); err != nil {
 			return err
 		}
 	}
@@ -1341,6 +1335,70 @@ func fixStaleFKsAfterTicketIDMigration(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+func ensureCascadeTicketChildren(ctx context.Context, db *sql.DB) error {
+	type tableMigration struct {
+		name     string
+		refTable string
+		create   string
+	}
+	migrations := []tableMigration{
+		{
+			name:     "history_events",
+			refTable: "tickets",
+			create:   `CREATE TABLE history_events (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(created_by) REFERENCES users(user_id))`,
+		},
+		{
+			name:     "ticket_history",
+			refTable: "tickets",
+			create:   `CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(created_by) REFERENCES users(user_id))`,
+		},
+		{
+			name:     "comments",
+			refTable: "tickets",
+			create:   `CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, user_id TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(item_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES users(user_id))`,
+		},
+		{
+			name:     "dependencies",
+			refTable: "tickets",
+			create:   `CREATE TABLE dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, depends_on TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(created_by) REFERENCES users(user_id))`,
+		},
+		{
+			name:     "story_ticket_links",
+			refTable: "tickets",
+			create:   `CREATE TABLE story_ticket_links (story_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(story_id, ticket_id), FOREIGN KEY(story_id) REFERENCES stories(story_id) ON DELETE CASCADE, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE)`,
+		},
+		{
+			name:     "ticket_labels",
+			refTable: "tickets",
+			create:   `CREATE TABLE ticket_labels (ticket_id TEXT NOT NULL, label_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(ticket_id, label_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(label_id) REFERENCES labels(label_id) ON DELETE CASCADE)`,
+		},
+		{
+			name:     "time_entries",
+			refTable: "tickets",
+			create:   `CREATE TABLE time_entries (time_entry_id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, minutes INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES users(user_id))`,
+		},
+	}
+	for _, m := range migrations {
+		if !tableExists(ctx, db, m.name) || tableHasFKDeleteAction(ctx, db, m.name, m.refTable, "CASCADE") {
+			continue
+		}
+		tmp := m.name + "_cascade_tmp"
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, m.name, tmp)); err != nil {
+			return fmt.Errorf("rename %s: %w", m.name, err)
+		}
+		if _, err := db.ExecContext(ctx, m.create); err != nil {
+			return fmt.Errorf("create %s: %w", m.name, err)
+		}
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s SELECT * FROM %s`, m.name, tmp)); err != nil {
+			return fmt.Errorf("copy %s: %w", m.name, err)
+		}
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`DROP TABLE %s`, tmp)); err != nil {
+			return fmt.Errorf("drop %s: %w", tmp, err)
+		}
+	}
+	return nil
+}
+
 func parseTicketSequence(key string) int64 {
 	parts := strings.Split(strings.TrimSpace(key), "-")
 	switch len(parts) {
@@ -1462,7 +1520,7 @@ func fixStaleForeignKeys(ctx context.Context, db *sql.DB) error {
 
 // tableHsFKTo returns true if the table has a foreign key referencing the given table.
 func tableHsFKTo(ctx context.Context, db *sql.DB, tableName, refTable string) bool {
-	rows, err := db.QueryContext(ctx, fmt.Sprintf(`PRAGMA foreign_key_list(%s)`, tableName))
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`PRAGMA foreign_key_list(%s)`, quoteIdentifier(tableName)))
 	if err != nil {
 		return false
 	}
@@ -1485,6 +1543,31 @@ func tableHsFKTo(ctx context.Context, db *sql.DB, tableName, refTable string) bo
 	return false
 }
 
+func tableHasFKDeleteAction(ctx context.Context, db *sql.DB, tableName, refTable, action string) bool {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`PRAGMA foreign_key_list(%s)`, quoteIdentifier(tableName)))
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return false
+		}
+		ref, refOK := vals[2].(string)
+		onDelete, deleteOK := vals[6].(string)
+		if refOK && deleteOK && ref == refTable && strings.EqualFold(onDelete, action) {
+			return true
+		}
+	}
+	return false
+}
+
 func tableExists(ctx context.Context, db *sql.DB, tableName string) bool {
 	var count int
 	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, tableName).Scan(&count)
@@ -1492,7 +1575,7 @@ func tableExists(ctx context.Context, db *sql.DB, tableName string) bool {
 }
 
 func columnExists(ctx context.Context, db *sql.DB, tableName, columnName string) bool {
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+tableName+`)`)
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+quoteIdentifier(tableName)+`)`)
 	if err != nil {
 		return false
 	}
@@ -1517,7 +1600,7 @@ func columnExists(ctx context.Context, db *sql.DB, tableName, columnName string)
 // columnType returns the declared type of a column (e.g. "TEXT", "INTEGER").
 // Returns "" if the table or column does not exist.
 func columnType(ctx context.Context, db *sql.DB, tableName, columnName string) string {
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+tableName+`)`)
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+quoteIdentifier(tableName)+`)`)
 	if err != nil {
 		return ""
 	}

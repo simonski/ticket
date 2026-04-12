@@ -51,7 +51,7 @@ func (r *router) registerProjectHandlers() {
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
-				SdlcID:         projectPayload.SdlcID,
+				SdlcID:             projectPayload.SdlcID,
 			})
 			if err != nil {
 				writeError(w, http.StatusBadRequest, err.Error())
@@ -103,6 +103,13 @@ func (r *router) registerProjectHandlers() {
 					return
 				}
 			}
+			offset := 0
+			if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+				if _, err := fmt.Sscan(raw, &offset); err != nil {
+					writeError(w, http.StatusBadRequest, "offset must be numeric")
+					return
+				}
+			}
 			includeArchived := false
 			if raw := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("include_archived"))); raw == "1" || raw == "true" || raw == "yes" {
 				includeArchived = true
@@ -116,6 +123,7 @@ func (r *router) registerProjectHandlers() {
 				Search:          r.URL.Query().Get("q"),
 				Assignee:        r.URL.Query().Get("assignee"),
 				Limit:           limit,
+				Offset:          offset,
 				IncludeArchived: includeArchived,
 			})
 			if err != nil {
@@ -569,7 +577,7 @@ func (r *router) registerProjectHandlers() {
 				GitBranch:          projectPayload.GitBranch,
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
-				SdlcID:         projectPayload.SdlcID,
+				SdlcID:             projectPayload.SdlcID,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {

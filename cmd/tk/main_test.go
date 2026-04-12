@@ -1879,6 +1879,124 @@ func TestRunGetShowsChildCounts(t *testing.T) {
 	}
 }
 
+func TestRunDraftAndUndraftToggleDraftFlag(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Draft Me"})
+
+	if err := run([]string{"draft", "-id", taskID}); err != nil {
+		t.Fatalf("draft error = %v", err)
+	}
+
+	draftOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
+			t.Fatalf("get after draft error = %v", err)
+		}
+	})
+	if !strings.Contains(draftOutput, "Draft        : true") {
+		t.Fatalf("draft output missing draft=true:\n%s", draftOutput)
+	}
+
+	if err := run([]string{"undraft", "-id", taskID}); err != nil {
+		t.Fatalf("undraft error = %v", err)
+	}
+
+	undraftOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
+			t.Fatalf("get after undraft error = %v", err)
+		}
+	})
+	if !strings.Contains(undraftOutput, "Draft        : false") {
+		t.Fatalf("undraft output missing draft=false:\n%s", undraftOutput)
+	}
+}
+
+func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
+	setupLocalCLI(t)
+	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
+
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ProjectID: 1,
+		Type:      "task",
+		Title:     "Workflow Stage Ticket",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	if err := run([]string{"update", "-id", ticket.ID, "-stage", "build"}); err != nil {
+		t.Fatalf("update stage error = %v", err)
+	}
+
+	updated, err := svc.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicket(updated) error = %v", err)
+	}
+	if updated.Stage != "build" || updated.State != store.StateIdle {
+		t.Fatalf("updated lifecycle = %s/%s, want build/idle", updated.Stage, updated.State)
+	}
+
+	err = run([]string{"update", "-id", ticket.ID, "-stage", "xxxx"})
+	if err == nil {
+		t.Fatal("update invalid stage error = nil, want error")
+	}
+	want := `invalid stage "xxxx"; valid stages: triage, build, verify`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("update invalid stage error = %v, want substring %q", err, want)
+	}
+}
+
+func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
+	setupLocalCLI(t)
+	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
+
+	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ProjectID: 1,
+		Type:      "task",
+		Title:     "Reject Me",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	advanced, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		Title:              ticket.Title,
+		Description:        ticket.Description,
+		AcceptanceCriteria: ticket.AcceptanceCriteria,
+		GitRepository:      ticket.GitRepository,
+		GitBranch:          ticket.GitBranch,
+		ParentID:           ticket.ParentID,
+		Assignee:           "admin",
+		Stage:              "build",
+		State:              store.StateActive,
+		Priority:           ticket.Priority,
+		Order:              ticket.Order,
+		EstimateEffort:     ticket.EstimateEffort,
+		EstimateComplete:   ticket.EstimateComplete,
+		Type:               ticket.Type,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket(build/active) error = %v", err)
+	}
+	if advanced.Stage != "build" {
+		t.Fatalf("advanced stage = %q, want build", advanced.Stage)
+	}
+
+	if err := run([]string{"reject", "-id", ticket.ID}); err != nil {
+		t.Fatalf("reject error = %v", err)
+	}
+
+	rejected, err := svc.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicket(rejected) error = %v", err)
+	}
+	if rejected.Stage != "triage" || rejected.State != store.StateIdle {
+		t.Fatalf("rejected lifecycle = %s/%s, want triage/idle", rejected.Stage, rejected.State)
+	}
+	if !rejected.Draft {
+		t.Fatal("rejected ticket should be draft")
+	}
+}
+
 func TestRunTaskCreateSupportsInterspersedFlags(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -2359,6 +2477,115 @@ func TestRunSdlcGetShowsStages(t *testing.T) {
 	}
 }
 
+func TestRunSdlcGetShowsStageAcceptanceCriteria(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "AC Workflow", Description: "workflow with stage acceptance criteria"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		StageName:   "triage",
+		Description: "triage",
+		SortOrder:   1,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+	if _, err := svc.UpdateSdlcStage(stage.ID, libticket.SdlcStageRequest{
+		StageName:          "triage",
+		Description:        "triage",
+		AcceptanceCriteria: "Clarified with the product owner",
+	}); err != nil {
+		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "get", "-id", strconv.FormatInt(wf.ID, 10)}); err != nil {
+			t.Fatalf("sdlc get error = %v", err)
+		}
+	})
+	for _, want := range []string{"ACCEPTANCE CRITERIA", "Clarified with the product owner"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("sdlc get missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunSdlcRoleCRUD(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Role Workflow", Description: "workflow for scoped roles"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	sdlcID := strconv.FormatInt(wf.ID, 10)
+
+	createOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "role-add", "-sdlc_id", sdlcID, "-title", "reviewer", "-description", "Reviews work", "-ac", "Approves the release"}); err != nil {
+			t.Fatalf("sdlc role-add error = %v", err)
+		}
+	})
+	if !strings.Contains(createOutput, "created sdlc role") || !strings.Contains(createOutput, "reviewer") {
+		t.Fatalf("unexpected sdlc role-add output:\n%s", createOutput)
+	}
+
+	var created store.Role
+	roles, err := svc.ListRoles()
+	if err != nil {
+		t.Fatalf("ListRoles() error = %v", err)
+	}
+	for _, role := range roles {
+		if role.Title == "reviewer" && role.SdlcID != nil && *role.SdlcID == wf.ID {
+			created = role
+			break
+		}
+	}
+	if created.ID == 0 {
+		t.Fatal("expected scoped sdlc role to be created")
+	}
+	roleID := strconv.FormatInt(created.ID, 10)
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "role-get", "-sdlc_id", sdlcID, "-role_id", roleID}); err != nil {
+			t.Fatalf("sdlc role-get error = %v", err)
+		}
+	})
+	for _, want := range []string{"Title:               reviewer", "Acceptance Criteria: Approves the release"} {
+		if !strings.Contains(getOutput, want) {
+			t.Fatalf("sdlc role-get missing %q:\n%s", want, getOutput)
+		}
+	}
+
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "role-update", "-sdlc_id", sdlcID, "-role_id", roleID, "-title", "qa-reviewer", "-description", "Reviews work", "-ac", "Ships the release"}); err != nil {
+			t.Fatalf("sdlc role-update error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, "updated sdlc role") || !strings.Contains(updateOutput, "qa-reviewer") {
+		t.Fatalf("unexpected sdlc role-update output:\n%s", updateOutput)
+	}
+
+	deleteOutput := captureStdout(t, func() {
+		if err := run([]string{"sdlc", "role-rm", "-sdlc_id", sdlcID, "-role_id", roleID}); err != nil {
+			t.Fatalf("sdlc role-rm error = %v", err)
+		}
+	})
+	if !strings.Contains(deleteOutput, "deleted sdlc role") {
+		t.Fatalf("unexpected sdlc role-rm output:\n%s", deleteOutput)
+	}
+
+	roles, err = svc.ListRoles()
+	if err != nil {
+		t.Fatalf("ListRoles(after delete) error = %v", err)
+	}
+	for _, role := range roles {
+		if role.ID == created.ID {
+			t.Fatalf("expected role %d to be deleted", created.ID)
+		}
+	}
+}
+
 func TestRunSdlcCreateAndDelete(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
@@ -2377,6 +2604,58 @@ func TestRunSdlcCreateAndDelete(t *testing.T) {
 	})
 	if !strings.Contains(output, "custom") {
 		t.Fatalf("sdlc list missing custom:\n%s", output)
+	}
+}
+
+func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
+	setupLocalCLI(t)
+	svc := attachWorkflowToDefaultProject(t, "triage", "build", "done")
+	project, err := svc.GetProject("1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	if err := svc.SetProjectDefaultDraft(project.ID, true); err != nil {
+		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"status"}); err != nil {
+			t.Fatalf("status error = %v", err)
+		}
+	})
+	for _, want := range []string{"project_sdlc", "Custom Workflow", "project_default_draft", "true"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+
+	jsonOutput := captureStdout(t, func() {
+		if err := run([]string{"status", "-json"}); err != nil {
+			t.Fatalf("status --json error = %v", err)
+		}
+	})
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonOutput), &payload); err != nil {
+		t.Fatalf("json.Unmarshal(status) error = %v\noutput=%s", err, jsonOutput)
+	}
+	if got := payload["project_sdlc"]; got != "Custom Workflow" {
+		t.Fatalf("project_sdlc = %#v, want %q", got, "Custom Workflow")
+	}
+	if got, ok := payload["project_default_draft"].(bool); !ok || !got {
+		t.Fatalf("project_default_draft = %#v, want true", payload["project_default_draft"])
+	}
+}
+
+func TestRunTicketTreeReturnsRemovalError(t *testing.T) {
+	setupLocalCLI(t)
+	err := run([]string{"ticket", "tree"})
+	if err == nil {
+		t.Fatal("ticket tree should fail")
+	}
+	for _, want := range []string{"placeholder alias", "use `tk get`"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("ticket tree error missing %q: %v", want, err)
+		}
 	}
 }
 
@@ -2518,6 +2797,48 @@ func createLocalTask(t *testing.T, args []string) string {
 		t.Fatalf("ParseInt(%q) error = %v", lines[0], err)
 	}
 	return id
+}
+
+func localCLIService(t *testing.T) libticket.Service {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+	return svc
+}
+
+func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticket.Service {
+	t.Helper()
+	svc := localCLIService(t)
+	wf, err := svc.CreateSdlc(libticket.SdlcRequest{
+		Name:        "Custom Workflow",
+		Description: "custom workflow for tests",
+	})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	for i, stageName := range stageNames {
+		if _, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+			StageName:   stageName,
+			Description: stageName,
+			SortOrder:   i,
+		}); err != nil {
+			t.Fatalf("AddSdlcStage(%q) error = %v", stageName, err)
+		}
+	}
+	project, err := svc.GetProject("1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	if _, err := svc.UpdateProject(project.ID, libticket.ProjectUpdateRequest{SdlcID: &wf.ID}); err != nil {
+		t.Fatalf("UpdateProject(sdlc) error = %v", err)
+	}
+	return svc
 }
 
 // deleteTicketConfirmed performs the two-step ticket deletion: first call generates

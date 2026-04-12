@@ -11,19 +11,19 @@ tickets around is for later.  If the datamodel, apis and CLI are all working, al
 
 A project is the top-level container in which all tickets and the SDLC are stored.
 
-- Has a **title**, **description**, **prefix** (2-5 uppercase letters for ticket IDs).
+- Has a **title**, **description**, **prefix** (1-5 uppercase ASCII letters for ticket IDs).
 - Has exactly one **sdlc** which describes how a ticket "progreses" through its lifecycle
 - A sdlc can be exported/imported as JSON to share across projects.
 
 A project has defaults for new commands
     draft: (bool) - if true, new tickets start in draft mode.
 
-```
-tk project create "My Project"
-tk project list
+```bash
+tk project new -title "My Project"
+tk project ls
 tk project use <prefix>
-tk project set-sdlc -project_id X -sdlc_id Y
-tk project set-draft true|false
+tk project sdlc <sdlc_id>
+tk project set-draft true
 ```
 
 ---
@@ -37,13 +37,13 @@ A sdlc defines the ordered sequence of **stages** a ticket moves through, and th
 - A sdlc has one or more **roles**.
 - Each stage can have one or more roles assigned to it.
 
-```
-tk sdlc list
+```bash
+tk sdlc ls
 tk sdlc create -name "Agile v1.0" -d "Standard agile process"
-tk sdlc get -sdlc_id <sdlc_id>
-tk sdlc export -sdlc_id <sdlc_id> -o sdlc_agile.json
-tk sdlc import -f sdlc_agile.json
-tk project set-sdlc -project_id X -sdlc_id Y
+tk sdlc get -id <sdlc_id>
+tk sdlc export -id <sdlc_id> -o sdlc_agile.json
+tk sdlc import -file sdlc_agile.json
+tk project sdlc <sdlc_id>
 ```
 
 ---
@@ -61,15 +61,15 @@ A stage represents a phase of work within an sdlc.  Visually they would be rende
 
 Example stages: `design` -> `develop` -> `test` -> `done`.
 
-```
-tk sdlc stage-list -sdlc_id <sdlc_id>
-tk sdlc stage-add -sdlc_id <sdlc_id> -name develop
-tk sdlc stage-get -sdlc_id <sdlc_id> -stage_id <stage_id>
-tk sdlc stage-update -sdlc_id <sdlc_id> -stage_id <stage_id> -name MyName
-tk sdlc stage-update -sdlc_id <sdlc_id> -stage_id <stage_id> -description "My description"
-tk sdlc stage-update -sdlc_id <sdlc_id> -stage_id <stage_id> -ac "My acceptance criteria"
-tk sdlc stage-rm -sdlc_id <sdlc_id> -stage_id <stage_id>
-tk sdlc stage-order -sdlc_id <sdlc_id> -stages <stage_id1,stage_id2,stage_id3>
+```bash
+tk sdlc stage-list -id <sdlc_id>
+tk sdlc stage-add -id <sdlc_id> -name develop
+tk sdlc stage-get -stage-id <stage_id>
+tk sdlc stage-update -stage-id <stage_id> -name MyName
+tk sdlc stage-update -stage-id <stage_id> -d "My description"
+tk sdlc stage-update -stage-id <stage_id> -ac "My acceptance criteria"
+tk sdlc stage-rm -stage-id <stage_id>
+tk sdlc stage-order -id <sdlc_id> <stage_id1,stage_id2,stage_id3>
 ```
 
 As a minimum in any SDLC there are TWO stages - "develop" and "done".   

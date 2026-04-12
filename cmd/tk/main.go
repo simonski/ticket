@@ -211,9 +211,14 @@ func run(args []string) error {
 	case "previous", "prev":
 		return runPrevious(trimmedArgs[1:])
 	case "draft":
-		return runSetTicketDraft(trimmedArgs[1:], true)
-	case "undraft":
 		return runSetTicketDraft(trimmedArgs[1:], false)
+	case "undraft":
+		return runSetTicketDraft(trimmedArgs[1:], true)
+	case "reject":
+		if len(trimmedArgs) > 1 && trimmedArgs[1] == "requirement" {
+			return runRequirementStatus("rejected", trimmedArgs[1:])
+		}
+		return runRejectTicket(trimmedArgs[1:])
 	case "assign":
 		return runAssign(trimmedArgs[1:])
 	case "unassign":
@@ -266,8 +271,6 @@ func run(args []string) error {
 		return runReview(trimmedArgs[1:])
 	case "accept":
 		return runRequirementStatus("accepted", trimmedArgs[1:])
-	case "reject":
-		return runRequirementStatus("rejected", trimmedArgs[1:])
 	case "revise":
 		return runRevise(trimmedArgs[1:])
 	case "decision":
@@ -438,7 +441,6 @@ func runSummary(_ []string) error {
 	printStatusBox(lines)
 	return nil
 }
-
 
 // timeAgo returns a human-friendly relative time string.
 func timeAgo(ts string, now time.Time) string {

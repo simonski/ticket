@@ -27,10 +27,11 @@ type Project struct {
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	Visibility         string `json:"visibility"`
+	DefaultDraft       bool   `json:"default_draft"`
 	CreatedBy          string `json:"created_by"`
 	CreatedAt          string `json:"created_at"`
 	UpdatedAt          string `json:"updated_at"`
-	SdlcID         *int64 `json:"sdlc_id,omitempty"`
+	SdlcID             *int64 `json:"sdlc_id,omitempty"`
 }
 
 type ProjectCreateParams struct {
@@ -43,7 +44,7 @@ type ProjectCreateParams struct {
 	Notes              string
 	Visibility         string
 	CreatedBy          string
-	SdlcID         *int64
+	SdlcID             *int64
 }
 
 type ProjectUpdateParams struct {
@@ -55,7 +56,7 @@ type ProjectUpdateParams struct {
 	Notes              string
 	Status             string
 	Visibility         string
-	SdlcID         *int64
+	SdlcID             *int64
 }
 
 func CreateProject(ctx context.Context, db *sql.DB, title, description, acceptanceCriteria string, createdBy string) (Project, error) {
@@ -123,7 +124,7 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 		limit = 1000
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		ORDER BY created_at, project_id
 		LIMIT ?
@@ -136,7 +137,7 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 	projects := make([]Project, 0)
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -159,7 +160,7 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.sdlc_id
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.sdlc_id
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -174,7 +175,7 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 	projects := make([]Project, 0)
 	for rows.Next() {
 		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -192,12 +193,12 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 		return GetProjectByID(ctx, db, id)
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
 	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -208,12 +209,12 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 
 func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		WHERE project_id = ?
 	`, id)
 	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
