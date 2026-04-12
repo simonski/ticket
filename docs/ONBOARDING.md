@@ -7,14 +7,29 @@ fully productive in under 30 minutes.
 
 ## Contents
 
-1. [Reading order](#reading-order)
-2. [Prerequisites](#prerequisites)
-3. [Clone and setup](#clone-and-setup)
-4. [Daily development loop](#daily-development-loop)
-5. [Ticket sdlc](#ticket-sdlc)
-6. [Running tests](#running-tests)
-7. [Common pitfalls](#common-pitfalls)
-8. [Getting help](#getting-help)
+1. [Start here](#start-here)
+2. [Reading order](#reading-order)
+3. [Prerequisites](#prerequisites)
+4. [Clone and setup](#clone-and-setup)
+5. [Daily development loop](#daily-development-loop)
+6. [Ticket sdlc](#ticket-sdlc)
+7. [Workflow expectations](#workflow-expectations)
+8. [Running tests](#running-tests)
+9. [Common pitfalls](#common-pitfalls)
+10. [Getting help](#getting-help)
+
+---
+
+## Start here
+
+If you only need the shortest path to productivity, use this order:
+
+1. Read `README.md` for the product shape and local/server modes.
+2. Run `make setup` and `make test` from a clean clone.
+3. Read `CLAUDE.md` for the package map, architecture, and build/test commands.
+4. Skim `CONTRIBUTING.md` before opening a branch or PR.
+
+Then come back to this guide for the deeper reading order and day-to-day workflow.
 
 ---
 
@@ -37,7 +52,7 @@ Read these documents in order — each one builds on the last:
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Go | 1.21+ | https://go.dev/dl/ |
+| Go | 1.26+ | https://go.dev/dl/ |
 | Node.js | 18+ | https://nodejs.org/ |
 | Git | any | https://git-scm.com/ |
 | `gh` (optional) | any | https://cli.github.com/ |
@@ -113,13 +128,13 @@ The project tracks its own work using the `tk` CLI tool (an alias for the
 tk ls
 
 # Pick up the next ticket
-tk ls --status develop/idle --type task
+tk ls -status develop/idle -type task
 
 # Mark a ticket active when you start
-tk state TK-XXX active
+tk active -id TK-XXX
 
 # Mark it complete when done
-tk state TK-XXX success
+tk complete -id TK-XXX
 
 # Create a new bug
 tk bug -title "Fix login redirect loop"
@@ -128,8 +143,8 @@ tk bug -title "Fix login redirect loop"
 tk get TK-XXX
 ```
 
-See `cmd/tk/TICKETS.md` for the complete sdlc reference including the
-lifecycle (design → develop → test → done) and stage/state combinations.
+See `docs/LIFECYCLE.md` for the lifecycle reference and `USER_GUIDE.md` for the
+full CLI and web workflow reference.
 
 ### SDLC entities
 
@@ -160,6 +175,20 @@ See `docs/LIFECYCLE.md` for the full SDLC reference.
 
 ---
 
+## Workflow expectations
+
+Use this as the short newcomer checklist before you open a PR:
+
+1. **Create a focused branch** - use `feature/TK-123-short-name`, `fix/TK-123-short-name`, `docs/short-name`, or `chore/short-name`.
+2. **Keep commits traceable** - prefer subjects like `TK-123: fix lifecycle reopen path`.
+3. **Run the local gates before review** - for code changes, run `make lint` and `make test-go-cover`; run `make test` when browser behavior changed.
+4. **Update the matching docs** - user-visible behavior belongs in `USER_GUIDE.md`; architecture or storage changes belong in `docs/DESIGN.md`; API/spec changes should update `SPEC.md` and `openapi.yaml` in the same change.
+5. **Keep the PR narrow** - one concern per PR, rebase or squash before merge, and include the `TK-XXX` reference in the PR title or description.
+
+`CONTRIBUTING.md` has the full version of these rules; this section is the quick start for new contributors.
+
+---
+
 ## Running tests
 
 ```bash
@@ -184,11 +213,14 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 | Pitfall | Fix |
 |---------|-----|
 | `make build` bumps the version unexpectedly | Use `go build -o ./bin/tk ./cmd/tk` for dev builds |
-| Tests fail with "no such file or directory" on Playwright | Run `make setup-playwright` first |
+| Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
 | `tk` command not found | Run `go build -o ./bin/tk ./cmd/tk` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
-| DB conflicts on `git pull` | The `.ticket/ticket.db` file is tracked in git. Always run `git checkout -- .ticket/ticket.db` before `git pull --rebase` to avoid merge conflicts on the binary file |
+| `tk` is talking to the wrong backend | Run `tk status` first. Local mode uses `.ticket/config.json` + `.ticket/ticket.db`; remote mode uses the `location` entry in `.ticket/config.json` |
+| API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo SDLC commands, run the `spec` workflow |
+| `.ticket/ticket.db` blocks a rebase or pull | The repo tracks `.ticket/ticket.db`. If you do not need your local ticket state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
 | `make test` times out | Playwright tests require a local server; the Makefile starts one automatically, but if port 8080 is already in use the tests will hang — kill any running `ticket` server first |
-| Import cycle errors | The dependency flow must be `cmd → libticket → internal/store`. Nothing in `internal/` may import `cmd/` |
+| Local and remote mode behave differently | Read `tk status` before debugging. The same CLI can talk directly to SQLite or to a server depending on `.ticket/config.json` |
+| Import cycle errors | The dependency flow must be `cmd -> libticket -> internal/store`. Nothing in `internal/` may import `cmd/` |
 | Coverage threshold failure | Run `make test-go-cover` to see which package is below threshold; add tests or adjust the threshold in the Makefile with a comment explaining why |
 
 ---

@@ -37,11 +37,16 @@ docker compose up -d
 curl http://localhost:8080/api/healthz
 # Expected: {"status":"ok","version":"0.1.x"}
 
-# 5. Create the first admin user (via CLI connecting to the running server)
-ticket register --server http://localhost:8080 --username admin --password <secret>
+# 5. Configure the CLI for the running server
+tk init
+# Choose "Remote server" and enter http://localhost:8080 when prompted.
 
-# 6. Create the first project
-ticket project new --server http://localhost:8080 --title "My Project" --prefix MP
+# 6. Create the first admin user, then log in
+tk register -username admin -password <secret>
+tk login -username admin -password <secret>
+
+# 7. Create the first project
+tk project new -title "My Project" --prefix MP
 ```
 
 **Checklist before going live:**
@@ -154,7 +159,7 @@ docker compose start ticket
 
 # Verify
 curl http://localhost:8080/api/healthz
-ticket project ls
+tk project ls
 ```
 
 > **Note:** `tk import` uses upsert semantics — it does not delete existing
@@ -169,20 +174,20 @@ ticket project ls
 ### Check account status
 
 ```bash
-ticket user get --username <username>
-# Look for: enabled: false
+tk user ls | grep "<username>"
+# Confirm the user exists and whether it needs re-enabling.
 ```
 
 ### Re-enable a disabled account
 
 ```bash
-ticket user enable --username <username>
+tk user enable -username <username>
 ```
 
 ### Reset a password
 
 ```bash
-ticket user password --username <username> --password <new-password>
+tk user reset-password -username <username> -password <new-password>
 ```
 
 ### Clear IP rate limit (if triggered by brute-force protection)
@@ -191,8 +196,8 @@ The rate limiter resets after 1 minute. If a legitimate user is blocked:
 1. Wait 60 seconds and retry.
 2. If using a reverse proxy, check that `X-Forwarded-For` is being set
    correctly — a shared proxy IP can cause false positives.
-3. Configure `TRUSTED_PROXIES` env var to only trust forwarded IPs from your
-   known proxy.
+3. The current limiter still keys from the observed remote address, so a shared
+   proxy IP can affect multiple users until the limiter window expires.
 
 ---
 
@@ -214,8 +219,12 @@ docker compose restart ticket
 ### Manually reset a stuck agent
 
 ```bash
-ticket agent update --id <agent-id> --status idle
+tk agent ls
 ```
+
+There is currently no dedicated CLI command to force an agent back to `idle`.
+Use the restart path above to trigger the reaper immediately, or wait for the
+next reaper cycle.
 
 ### Increase reaper threshold
 
@@ -231,11 +240,11 @@ If agents legitimately run longer, increase the threshold and rebuild.
 ### Check ticket count
 
 ```bash
-ticket ticket ls --json | jq length
+tk ls -json | jq length
 ```
 
 Large projects (>10,000 tickets) will be slow on unbounded list queries. Apply
-pagination: `--limit 100 --offset 0`.
+a server-side limit with `-n 100` while investigating.
 
 ### Check disk I/O
 

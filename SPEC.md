@@ -1,7 +1,7 @@
 # Ticket — System Specification
 
-**Version:** 0.1.708
-**Date:** 2026-03-28
+**Version:** 0.1.774
+**Date:** 2026-04-12
 
 This document is the authoritative specification for the `ticket` system. It is
 designed so that an agent or team can rebuild the codebase, documentation, and
@@ -24,8 +24,8 @@ work. It is delivered as a single Go binary that provides:
 
 The system operates in two modes:
 
-- **Local mode** — Direct SQLite access via a local file (`$TICKET_HOME/ticket.db`)
-- **Remote mode** — HTTP client connecting to a running server (`TICKET_URL`)
+- **Local mode** — Direct SQLite access via the path resolved from `.ticket/config.json` (`location`) or the default `<ticket-home>/ticket.db`
+- **Remote mode** — HTTP client connecting to the `http(s)://...` URL stored in `.ticket/config.json`
 
 ---
 
@@ -119,7 +119,7 @@ Top-level namespace and container for tickets.
 | Field | Type | Constraints |
 |-------|------|-------------|
 | project_id | INTEGER | Primary key, autoincrement |
-| prefix | TEXT | 3–5 uppercase ASCII letters, unique |
+| prefix | TEXT | 1-5 uppercase ASCII letters, unique |
 | title | TEXT | Required, unique |
 | description | TEXT | Default empty |
 | acceptance_criteria | TEXT | Default empty |
@@ -196,11 +196,13 @@ Examples: `CUS-E-12`, `CUS-T-143`, `OPS-B-9`
 | bug | B | No |
 | spike | S | No |
 | chore | C | No |
-| story | Y | No |
 | note | N | No |
 | question | Q | No |
 | requirement | R | No |
 | decision | D | No |
+
+Stories are first-class records in their own table (see section 5.18) and link
+to tickets through `story_ticket_links`; they are not a valid ticket `type`.
 
 #### 5.4.3 Ticket Hierarchy
 
@@ -605,7 +607,6 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 | Variable | Purpose |
 |----------|---------|
 | `TICKET_HOME` | Config/database directory |
-| `TICKET_URL` | Server URL (enables remote mode) |
 | `TICKET_USERNAME` | Default username |
 | `TICKET_PASSWORD` | Default password |
 | `AGENT_ID` | Agent UUID for worker mode |
@@ -614,17 +615,19 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 ### 11.2 Config Resolution
 
-1. If `TICKET_URL` is set to `http(s)://...` → **remote mode** (HTTP client)
-2. Otherwise → **local mode** (SQLite at `$TICKET_HOME/ticket.db`)
+1. Load `location` from `$TICKET_HOME/config.json`
+2. If `location` is `http://...` or `https://...` -> **remote mode**
+3. If `location` is `file://...` or a bare path -> **local mode** using that path
+4. If `location` is empty -> **local mode** at `<ticket-home>/ticket.db`
 
 `TICKET_HOME` resolution:
 1. `$TICKET_HOME` environment variable
-2. Walk up directory tree looking for `.ticket/` directory
+2. Walk up directory tree looking for `.git/`, then use `.ticket/` at that repository root
 3. Fall back to `.ticket/` in current directory
 
 ### 11.3 Config Files
 
-- `$TICKET_HOME/config.json` — client defaults (server_url, token, username, current_project, TUI state)
+- `$TICKET_HOME/config.json` — client defaults (`location`, `username`, current project/epic, TUI state)
 - `$TICKET_HOME/credentials.json` — auth token (remote mode)
 - `$TICKET_HOME/ticket.db` — SQLite database (local mode)
 
@@ -638,7 +641,7 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk init` | Initialize database with admin user and default project |
+| `tk init` | Initialize local workspace or configure remote mode; supports `-prefix`, `-name`, `-git`, and `-sdlc` for non-interactive project setup |
 | `tk server` | Start HTTP server and web UI on :8080 |
 | `tk version` | Show version |
 | `tk upgrade` | Check for newer version from GitHub |

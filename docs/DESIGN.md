@@ -11,15 +11,16 @@ document is rewritten.
 
 It is designed for small teams that want low-friction ticket tracking without separate infrastructure for the API, database, and web UI. The product combines a server, a terminal-first CLI, and an embedded web application around one shared data model.
 
-The system has three interfaces:
+The system has four interfaces:
 
 1. A server that owns persistence, authentication, and collaboration.
 2. A CLI for fast, explicit terminal sdlcs.
-3. An embedded web application for browsing, editing, and status management.
+3. A TUI for interactive terminal navigation and editing.
+4. An embedded web application for browsing, editing, and status management.
 
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
-Client-side files are stored under `$TICKET_HOME`. If `$TICKET_HOME` is not set, `tk` walks up the directory tree from the current working directory looking for an existing `.ticket` directory; if none is found, `.ticket` in the current directory is used as the default.
+Client-side files are stored under `$TICKET_HOME`. If `$TICKET_HOME` is not set, `tk` walks up from the current working directory looking for a `.git` directory and then uses `.ticket/` at that repository root. If no git root is found, `.ticket/` in the current directory is used as the fallback.
 
 ## Product Principles
 
@@ -179,11 +180,14 @@ Supported `type` values:
 - `chore`
 - `note`
 - `question`
+- `requirement`
+- `decision`
 
 Model notes:
 
 - `parent_id` is nullable and supports hierarchical work
 - tickets are orphaned when `parent_id` is null
+- stories are separate first-class entities stored in `stories` and linked to tickets through `story_ticket_links`; they are not a ticket `type`
 - ticket creation accepts either a positional title or `-title`
 - `acceptance_criteria` is captured directly on the task record
 - `estimate_effort` is an integer assessment of task effort
@@ -192,8 +196,8 @@ Model notes:
 
 CLI creation defaults:
 
-- `ticket add`, `ticket create`, and `ticket new` are the same command
-- `ticket list` and `ticket ls` are the same command
+- `tk add`, `tk create`, and `tk new` are the same command
+- `tk list` and `tk ls` are the same command
 - if `-type` / `-t` is omitted, the type defaults to `task`
 - if `-priority` / `-p` is omitted, the priority defaults to `1`
 - if `-assignee` / `-a` is omitted, the assignee is blank
@@ -294,9 +298,9 @@ Typical history events:
 
 The product must support local initialization of a SQLite database from the CLI.
 
-The bootstrap command is `ticket init`.
+The bootstrap command is `tk init`.
 
-`ticket init` must:
+`tk init` must:
 
 1. create the schema in a new SQLite database
 2. create an `admin` account
@@ -306,13 +310,13 @@ The bootstrap command is `ticket init`.
 Representative flow:
 
 ```bash
-ticket init -f ticket.db --force -password secret --populate
+tk init -f ticket.db --force -password secret --populate
 ```
 
 Bootstrap defaults:
 
 - admin username is always `admin`
-- if `-f` is omitted, the SQLite database is created at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`)
+- if `-f` is omitted, the SQLite database is created at the default local path (`$TICKET_HOME/ticket.db`, with `TICKET_HOME` resolved from the repo root or current working directory)
 - admin password comes from `-password` when supplied
 - if `-password` is omitted, the CLI generates a random password and prints it to stdout
 - if `--force` is supplied, any existing SQLite database file is overwritten
@@ -345,7 +349,7 @@ Responsibilities:
 
 The default local server should listen on `http://localhost:8080`.
 
-If `tk server` is run without `-f`, it must open the SQLite database at the default local path (`~/.config/ticket/ticket.db`, overridable via `TICKET_URL=file:///path/to/ticket.db`).
+If `tk server` is run without `-f`, it must open the SQLite database at the default local path (`$TICKET_HOME/ticket.db`).
 
 If `tk server` is run with `-v`, it must print verbose request and response details to stdout.
 When chat is active, `-v` must also print chat process telemetry, including:
@@ -371,44 +375,44 @@ The first release must support:
 Representative commands:
 
 ```bash
-ticket onboard
+tk onboard
 tk version
-ticket user create --username alice --password secret
-ticket user ls
-ticket user delete --username alice
-ticket user enable --username alice
-ticket user disable --username alice
+tk user new -username alice -password secret
+tk user ls
+tk user rm -username alice
+tk user enable -username alice
+tk user disable -username alice
 
 # Agent Commands
-ticket agent request [flags]
-ticket agent run -id <uuid> -url http://localhost:8080  # password from AGENT_PASSWORD env or prompt
+tk agent request [flags]
+tk agent run -id <uuid>  # password from AGENT_PASSWORD env or prompt
 
 # Agent Admin Commands
-ticket agent create [-password <p>]  # UUID auto-generated
-ticket agent ls
-ticket agent update -id <uuid> -password <p>
-ticket agent enable -id <uuid>
-ticket agent disable -id <uuid>
-ticket agent delete -id <uuid>
-ticket agent reset-password -id <uuid> [-password <p>]
-ticket agent config-set -id <uuid> <key> <value>
-ticket agent config-ls -id <uuid>
-ticket agent config-rm -id <uuid> <key>
+tk agent new [-password <p>]  # UUID auto-generated
+tk agent ls
+tk agent update -id <uuid> -password <p>
+tk agent enable -id <uuid>
+tk agent disable -id <uuid>
+tk agent rm -id <uuid>
+tk agent reset-password -id <uuid> [-password <p>]
+tk agent config-set -id <uuid> <key> <value>
+tk agent config-ls -id <uuid>
+tk agent config-rm -id <uuid> <key>
 
-ticket register
-ticket login
+tk register
+tk login
 tk status
-ticket logout
+tk logout
 ```
 
-`ticket onboard` must print the embedded `cmd/tk/TICKETS.md` template to stdout.
+`tk onboard` must print the embedded onboarding instructions to stdout.
 
 `tk status` must always print the current effective configuration first, then perform a mode-appropriate connectivity check.
 
 In REMOTE mode it must print at least:
 
 - `mode: remote`
-- `server: <TICKET_URL>`
+- `server: <configured http(s) location>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
@@ -444,51 +448,51 @@ The LOCAL result must then print:
 
 If the database does not exist in LOCAL mode, `tk status` must also print:
 
-- `hint: run ticket init`
+- `hint: run tk init`
 
 If `-nocolor` is set, the same output must be printed without ANSI colors.
 
-`ticket count` must query the server and print aggregate counts for users and work item types. Without a project filter it must also print the project count. With `-project_id <id>` it must scope work item counts to that project.
+`tk count` must query the server and print aggregate counts for users and work item types. Without a project filter it must also print the project count. With `-project_id <id>` it must scope work item counts to that project.
 
 The CLI must resolve credentials from `-username` and `-password` first, then `TICKET_USERNAME` and `TICKET_PASSWORD`, and finally default to OS `whoami` and `password`.
 
-The CLI must resolve the server URL from `-url` first, then `TICKET_URL`, then saved config, and finally default to `http://localhost:8080`.
+The CLI must resolve the server URL from `-url` first, then saved config (`location`), and otherwise require remote mode to be configured via `tk init`.
 
-`ticket config` must support:
+`tk config` must support:
 
-- `ticket config ls|list` to print local config keys and values
-- `ticket config rm|delete <key>` to clear a local config key
-- supported removable keys: `server`, `username`, `current_project`, `current_epic_id`
+- `tk config ls|list` to print local config keys and values
+- `tk config rm|delete <key>` to clear a local config key
+- supported removable keys: `location`, `username`, `project_id`, `current_epic_id`
 
 The CLI must expose `tk version`, which prints the semantic version embedded into the binary at build time.
 
-`ticket init` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.
+`tk init` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.
 
 Admin-only user-management requests must be rejected by the server when the caller is authenticated but not an admin. Those requests must return HTTP 403 with an error explaining that the user is not an admin.
 
-When `ticket` is run without arguments, the CLI should print a colored ASCII-art `TICKET` banner above the main usage text.
+When `tk` is run without arguments, the CLI should print a colored ASCII-art `TICKET` banner above the main usage text.
 
 When `tk server` starts, it should print the same colored ASCII-art `TICKET` banner before the startup message.
 
 Below that banner, `tk server` must print the embedded version and the resolved task database path.
 
-The CLI stores non-sensitive client defaults in `$TICKET_CONFIG_DIR/config.json` and session credentials in `$TICKET_CONFIG_DIR/credentials.json`.
+The CLI stores non-sensitive client defaults in `$TICKET_HOME/config.json` and session credentials in `$TICKET_HOME/credentials.json`.
 
-`ticket login` must:
+`tk login` must:
 
-1. check `$TICKET_CONFIG_DIR/credentials.json` first and reuse that session if it is still valid
-2. check the `username` in `$TICKET_CONFIG_DIR/config.json`
+1. check `$TICKET_HOME/credentials.json` first and reuse that session if it is still valid
+2. check the `username` in `$TICKET_HOME/config.json`
 3. check `-username` and `-password`, then `TICKET_USERNAME` and `TICKET_PASSWORD`
 4. prompt for any missing values
 5. when prompting, use the discovered values as editable defaults
 6. print `invalid credentials` on an invalid-login response before prompting for a retry
 7. when prompting for a password in an interactive terminal, echo `*` characters instead of the raw password
-8. on success, write the session token to `$TICKET_CONFIG_DIR/credentials.json`
-9. on success, update the `username` and `server_url` keys in `$TICKET_CONFIG_DIR/config.json`
+8. on success, write the session token to `$TICKET_HOME/credentials.json`
+9. on success, update the `username` and `location` keys in `$TICKET_HOME/config.json`
 
-`ticket register` must create the account but must not create or persist a logged-in session.
+`tk register` must create the account but must not create or persist a logged-in session.
 
-`ticket logout` must remove `$TICKET_CONFIG_DIR/credentials.json`.
+`tk logout` must remove `$TICKET_HOME/credentials.json`.
 
 ### Project Management
 
@@ -502,23 +506,17 @@ Users must be able to:
 Representative commands:
 
 ```bash
-ticket project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Launch criteria"
-ticket project init                          # create/associate project from current directory
-ticket project list
-ticket project ls
-ticket project use CUS
-ticket project get CUS
-ticket project
-ticket project CUS update -title "Customer Portal"
-ticket project CUS update -description "Portal backlog"
-ticket project CUS update -ac "Launch criteria"
-ticket project CUS enable
-ticket project CUS disable
+tk project new -prefix CUS -title "Customer Portal"
+tk project init
+tk project ls
+tk project use CUS
+tk project get CUS
+tk project rename-prefix NEW
 ```
 
-`ticket project list` should show at least the project id, prefix, title, and status, and indicate which project is current in the local CLI context.
+`tk project ls` should show at least the project id, prefix, title, and status, and indicate which project is current in the local CLI context.
 
-All `ticket <command> create` commands must return to STDOUT the newly created ID, if they succeed.
+All `tk <command> new` commands must return to STDOUT the newly created ID, if they succeed.
 
 The selected project should be remembered locally by the CLI.
 
@@ -531,19 +529,19 @@ Users must be able to create tasks, bugs, and epics.
 Representative commands:
 
 ```bash
-ticket add "Customers can reset their password."
-ticket create "Customers can reset their password."
-ticket new "Customers can reset their password."
-ticket bug "Reset token fails after first use."
-ticket epic "Authentication"
-ticket create -t task -p 1 -a alice -d "Add audit event" "Add password reset audit event"
+tk add "Customers can reset their password."
+tk create "Customers can reset their password."
+tk new "Customers can reset their password."
+tk bug "Reset token fails after first use."
+tk epic "Authentication"
+tk create -t task -p 1 -a alice -d "Add audit event" "Add password reset audit event"
 ```
 
 Behavior notes:
 
-- `ticket add`, `ticket create`, and `ticket new` are aliases
-- `ticket list` and `ticket ls` are aliases
-- `ticket list -n <limit>` applies a server-side limit, with `0` meaning no limit
+- `tk add`, `tk create`, and `tk new` are aliases
+- `tk list` and `tk ls` are aliases
+- `tk list -n <limit>` applies a server-side limit, with `0` meaning no limit
 - task creation defaults are `type=task`, `priority=1`, blank assignee, blank description, blank parent, and current project
 - `-ac` stores acceptance criteria on the task
 - each item records project, creator, timestamps, status, and revision history
@@ -562,23 +560,23 @@ Users must be able to:
 Representative commands:
 
 ```bash
-ticket list
-ticket ls
-ticket list --type bug
-ticket list --status develop/idle
-ticket search "password reset"
-ticket search "password reset" -allprojects
-ticket get CUS-T-42
-ticket orphans
+tk list
+tk ls
+tk list -type bug
+tk list -status develop/idle
+tk search "password reset"
+tk search "password reset" -allprojects
+tk get CUS-T-42
+tk orphans
 ```
 
-`ticket search` should search the active project by default. If `-allprojects` is supplied, it should search across all projects.
+`tk search` should search the active project by default. If `-allprojects` is supplied, it should search across all projects.
 
 The CLI should support `-json` on client-facing commands and pretty-print the response JSON.
 
-`ticket get <key-or-id>` should print a flat detail view with the fields `ID`, `Type`, `Description`, `ParentID`, `CloneOf` when present, `ProjectID`, `Title`, `Assignee`, `Order`, `EstimateEffort`, `EstimateComplete`, `DependsOn`, `Status`, `Priority`, `Created`, `LastModified`, `Acceptance Criteria`, and a `Comments` section ordered most recent first.
+`tk get <key-or-id>` should print a flat detail view with the fields `ID`, `Type`, `Description`, `ParentID`, `CloneOf` when present, `ProjectID`, `Title`, `Assignee`, `Order`, `EstimateEffort`, `EstimateComplete`, `DependsOn`, `Status`, `Priority`, `Created`, `LastModified`, `Acceptance Criteria`, and a `Comments` section ordered most recent first.
 
-`ticket list` should render a readable table that includes at least the id, type, status, assignee, priority, and title.
+`tk list` should render a readable table that includes at least the id, type, status, assignee, priority, and title.
 
 ### SDLC And Lifecycle Management
 
@@ -599,19 +597,19 @@ Assignment sdlcs must support:
 - `ticket unassign <key-or-id> <name>` for admins
 - `ticket dependency add <key-or-id> <dependency-id[,dependency-id...]>`
 - `ticket dependency remove <key-or-id> <dependency-id[,dependency-id...]>`
-- `ticket request [<key-or-id>]` for the caller
-- `ticket claim` or `ticket claim -id <key-or-id>` for the caller
-- `ticket claim -dry-run` for preview without mutation
-- `ticket unclaim <key-or-id>` for the caller
-- `ticket attach <key-or-id> <parent-key-or-id>`
-- `ticket detach <key-or-id>`
-- `ticket rm <key-or-id>`
-- `ticket delete <key-or-id>`
-- `ticket list -u <name>` / `ticket ls -u <name>` for assignee filtering
-- `ticket design <key-or-id>`
-- `ticket develop <key-or-id>`
-- `ticket test <key-or-id>`
-- `ticket done <key-or-id>`
+- `tk request [<key-or-id>]` for the caller
+- `tk claim` or `tk claim -id <key-or-id>` for the caller
+- `tk claim -dry-run` for preview without mutation
+- `tk unclaim <key-or-id>` for the caller
+- `tk attach <key-or-id> <parent-key-or-id>`
+- `tk detach <key-or-id>`
+- `tk rm <key-or-id>`
+- `tk delete <key-or-id>`
+- `tk list -u <name>` / `tk ls -u <name>` for assignee filtering
+- `tk design <key-or-id>`
+- `tk develop <key-or-id>`
+- `tk test <key-or-id>`
+- `tk done <key-or-id>`
 - `ticket idle <key-or-id>`
 - `ticket active <key-or-id>`
 - `ticket complete <key-or-id>`
@@ -685,16 +683,16 @@ Requirements:
 Representative command set:
 
 ```bash
-ticket project create -prefix CUS -title "Customer Portal"
-ticket project use CUS
+tk project new -prefix CUS -title "Customer Portal"
+tk project use CUS
 
-ticket epic "Authentication"
-ticket add "Customers can reset their password."
-ticket bug "Reset token expires immediately."
-ticket list
-ticket get CUS-T-42
-ticket search "password reset"
-ticket history CUS-T-42
+tk epic "Authentication"
+tk add "Customers can reset their password."
+tk bug "Reset token expires immediately."
+tk ls
+tk get CUS-T-42
+tk search "password reset"
+tk history CUS-T-42
 ```
 
 The CLI should support only the aliases that are part of the documented command surface.
@@ -776,7 +774,7 @@ The web UI should make these activities easy:
 - `/api/status` returns `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - admins update chat limits through `POST /api/config/chat_limits`
 - stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
-- story analysis uses the `StoryReview` role and an external Codex process with remote-mode `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) to run `ticket login` + `ticket create` breakdown commands for epics/tasks; story is marked `ready_for_review`
+- story analysis uses the `StoryReview` role and an external Codex process with remote-mode `tk` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) to run `tk login` + `tk create` breakdown commands for epics/tasks; story is marked `ready_for_review`
 - epic analysis uses the `EpicReview` role to generate child implementation tickets
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes
