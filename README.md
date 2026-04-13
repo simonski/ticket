@@ -169,6 +169,9 @@ tk agent run -llm codex                # use codex
 tk agent run -v                        # stream LLM I/O to terminal
 ```
 
+Custom `-llm` binaries are only allowed when explicitly added to
+`TICKET_AGENT_ALLOWED_LLM_BINARIES` (comma-separated names).
+
 Only non-draft tickets are eligible. Use `tk undraft -id <id>` to make a ticket available.
 
 ### Claude Code skill
@@ -191,6 +194,11 @@ will query and update tickets automatically during coding sessions.
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override the LLM command (default: `claude`) |
+| `TICKET_AGENT_ALLOWED_LLM_BINARIES` | Additional allow-listed binary names for `tk agent run -llm` (default allow-list: `claude`, `codex`) |
+
+`TICKET_CHAT_CMD` and `TICKET_ANALYSE_CMD` execute server-side processes. Treat
+them as trusted operator-only configuration and never source their values from
+untrusted input.
 
 ---
 

@@ -104,25 +104,19 @@ The remaining highest-risk item is the CLI `--llm` flag command injection vector
 
 The next clear gains would come from nonce-based CSP, tighter username validation, stronger encryption-key handling, trusted-proxy-aware rate limiting, and HSTS.
 
-## Changes since last assessment
+## TK-121 implementation commits
 
-- No material new infoSec controls landed in this pass
-- The previously improved CSRF, lockout, timeout, and shutdown posture remains intact
-- The highest-risk remaining finding is still the user-controlled CLI `--llm` executable path
-
-## Remaining recommendations
-
-| Finding | Severity | Recommendation |
-|---------|----------|----------------|
-| CLI `--llm` command injection | High | Allow-list known agent binaries; reject shell metacharacters in binary name |
-| Encryption key pad/truncate weakness | Medium | Use HKDF to derive key; reject raw keys shorter than 32 bytes |
-| CSP `unsafe-inline` | Medium | Migrate to nonce-based CSP for scripts and styles |
-| WebSocket token in query string | Medium | Use cookie auth for WebSocket or document and mitigate log exposure |
-| Rate limiter proxy bypass | Medium | Add trusted-proxy CIDR config; parse X-Forwarded-For conditionally |
-| Server command env vars | Medium | Document security requirements; consider allow-listing executables |
-| HTTP client without timeout | Low | Set explicit 30s timeout on `internal/client` HTTP client |
-| Username character validation | Low | Restrict to `^[a-zA-Z0-9._-]+$` |
-| Docker image digest pinning | Low | Pin base images to `@sha256:` digests |
-| Watchtower socket exposure | Low | Add `no-new-privileges`, `read_only`, or use socket proxy |
-| HSTS header | Informational | Add `Strict-Transport-Security` when serving over TLS |
-| `__Host-` cookie prefix | Informational | Use `__Host-` prefix for CSRF and session cookies when Secure |
+| Ticket | Recommendation | Commit | Status |
+|--------|----------------|--------|--------|
+| TK-156 | Allow-list known agent binaries; reject shell metacharacters in binary name | `0c33ada` | Done |
+| TK-157 | Use HKDF to derive key; reject raw keys shorter than 32 bytes | `bf9062b` | Done |
+| TK-158 | Migrate to nonce-based CSP for scripts and styles | `f64d009` (audit confirmation) | Done |
+| TK-159 | Use cookie auth for WebSocket or document and mitigate log exposure | `ca92b5f` | Done |
+| TK-160 | Add trusted-proxy CIDR config; parse X-Forwarded-For conditionally | `1b398f4` (audit confirmation) | Done |
+| TK-161 | Document security requirements; consider allow-listing executables | `(this commit)` | Done |
+| TK-162 | Set explicit 30s timeout on `internal/client` HTTP client | `8778bc8` | Done |
+| TK-163 | Restrict to `^[a-zA-Z0-9._-]+$` | `25ca883` | Done |
+| TK-164 | Pin base images to `@sha256:` digests | `69d171f` (audit confirmation) | Done |
+| TK-165 | Add `no-new-privileges`, `read_only`, or use socket proxy | `4430649` | Done |
+| TK-166 | Add `Strict-Transport-Security` when serving over TLS | `ab75c48` | Done |
+| TK-167 | Use `__Host-` prefix for CSRF and session cookies when Secure | `b432ff2` | Done |
