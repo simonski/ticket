@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -29,9 +30,9 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 		projectID = "1"
 	}
 
-	project, err := svc.GetProject(projectID)
+	project, err := svc.GetProject(context.Background(), projectID)
 	if err != nil && projectID != "1" {
-		project, err = svc.GetProject("1")
+		project, err = svc.GetProject(context.Background(), "1")
 		if err == nil {
 			projectID = "1"
 		}

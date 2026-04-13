@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -214,8 +215,8 @@ const (
 )
 
 var ticketTypes = []string{"task", "epic", "bug", "spike", "chore", "note", "question", "requirement", "decision"}
-var ticketStates = []string{"idle", "active", "success", "fail"}
-var ticketStages = []string{"", "design", "develop", "test", "done"}
+var ticketStates = []string{store.StateIdle, store.StateActive, store.StateSuccess, store.StateFail}
+var ticketStages = []string{"", store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone}
 
 type pickerPopup struct {
 	items    []string
@@ -257,8 +258,8 @@ func makeNewTicketForm() *newTicketForm {
 		desc:       desc,
 		acceptCrit: ac,
 		ticketType: "task",
-		state:      "idle",
-		stage:      "design",
+		state:      store.StateIdle,
+		stage:      store.StageDesign,
 		focus:      nfTitle,
 	}
 }
@@ -456,7 +457,7 @@ func (m Model) saveTicket() tea.Cmd {
 	svc := m.svc
 	cfg := m.cfg
 	return func() tea.Msg {
-		_, err := svc.UpdateTicket(id, req)
+		_, err := svc.UpdateTicket(context.Background(), id, req)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -486,7 +487,7 @@ func (m Model) createTicket() tea.Cmd {
 		Stage:              f.stage,
 	}
 	return func() tea.Msg {
-		t, err := svc.CreateTicket(req)
+		t, err := svc.CreateTicket(context.Background(), req)
 		if err != nil {
 			return errMsg{err}
 		}

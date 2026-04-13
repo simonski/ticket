@@ -61,7 +61,7 @@ func newStarField() []star3D {
 	for i := range stars {
 		stars[i] = randomStar()
 		stars[i].z = rand.Float64()*4.5 + 0.3 // #nosec G404 -- math/rand is sufficient for cosmetic animation
-		stars[i].t = rand.Float64() * 20.0     // #nosec G404
+		stars[i].t = rand.Float64() * 20.0    // #nosec G404
 	}
 	return stars
 }

@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -227,7 +227,9 @@ func runSetupExisting(reader *bufio.Reader) error {
 				fmt.Println("FAILED")
 				fmt.Printf("  error: %v\n", err)
 			} else {
-				_ = resp.Body.Close()
+				if closeErr := resp.Body.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: failed to close response body: %v\n", closeErr)
+				}
 				if resp.StatusCode == http.StatusOK {
 					fmt.Println("OK")
 				} else {
@@ -350,7 +352,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	}
 	// Update the default project (created by store.Init) with the user's settings
 	// rather than creating a second project.
-	project, err := svc.UpdateProject(1, libticket.ProjectUpdateRequest{
+	project, err := svc.UpdateProject(context.Background(), 1, libticket.ProjectUpdateRequest{
 		Title:         projectName,
 		GitRepository: gitRepo,
 	})
@@ -359,7 +361,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	}
 	// Rename the prefix if different from the default.
 	if projectPrefix != project.Prefix {
-		if _, renameErr := svc.RenameProjectPrefix(1, projectPrefix); renameErr != nil {
+		if _, renameErr := svc.RenameProjectPrefix(context.Background(), 1, projectPrefix); renameErr != nil {
 			fmt.Printf("  warning: could not set prefix %q: %v\n", projectPrefix, renameErr)
 		} else {
 			project.Prefix = projectPrefix
@@ -396,7 +398,9 @@ func runSetupRemote(reader *bufio.Reader) error {
 		fmt.Println("FAILED")
 		return fmt.Errorf("could not reach server: %w", err)
 	}
-	_ = resp.Body.Close()
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to close response body: %v\n", closeErr)
+	}
 	if resp.StatusCode != http.StatusOK {
 		fmt.Println("FAILED")
 		return fmt.Errorf("server returned status %d", resp.StatusCode)
@@ -437,19 +441,22 @@ func runSetupRemote(reader *bufio.Reader) error {
 		return err
 	}
 
-	cfg, _ = config.Load()
+	cfg, err = config.Load()
+	if err != nil {
+		return err
+	}
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
 	}
 
 	if !hasAccount {
-		if _, err := svc.Register(username, password); err != nil {
+		if _, err := svc.Register(context.Background(), username, password); err != nil {
 			return fmt.Errorf("registration failed: %w", err)
 		}
 		fmt.Printf("  registered user: %s\n", username)
 	}
-	_, token, err := svc.Login(username, password)
+	_, token, err := svc.Login(context.Background(), username, password)
 	if err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
@@ -469,13 +476,16 @@ func runSetupRemote(reader *bufio.Reader) error {
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-	cfg, _ = config.Load()
+	cfg, err = config.Load()
+	if err != nil {
+		return err
+	}
 	svc, err = resolveService(cfg)
 	if err != nil {
 		return err
 	}
 
-	projects, err := svc.ListProjects()
+	projects, err := svc.ListProjects(context.Background())
 	if err != nil {
 		return fmt.Errorf("could not list projects: %w", err)
 	}
@@ -560,7 +570,7 @@ func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg c
 		}
 	}
 
-	project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 		Prefix:        prefix,
 		Title:         title,
 		GitRepository: gitRepo,
@@ -694,10 +704,16 @@ func runSetupPostInit(reader *bufio.Reader, sdlcName ...string) error {
 					fmt.Printf("  warning: could not open .gitignore: %v\n", appendErr)
 				} else {
 					if len(data) > 0 && data[len(data)-1] != '\n' {
-						_, _ = f.WriteString("\n")
+						if _, err := f.WriteString("\n"); err != nil {
+							fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %v\n", err)
+						}
 					}
-					_, _ = f.WriteString(credEntry + "\n")
-					_ = f.Close()
+					if _, err := f.WriteString(credEntry + "\n"); err != nil {
+						fmt.Fprintf(os.Stderr, "warning: could not update .gitignore: %v\n", err)
+					}
+					if err := f.Close(); err != nil {
+						fmt.Fprintf(os.Stderr, "warning: could not close .gitignore: %v\n", err)
+					}
 					fmt.Printf("  added: %s to .gitignore\n", credEntry)
 				}
 			}
@@ -777,7 +793,9 @@ func runInitDB(args []string) error {
 				return err
 			}
 			if err := seedExampleData(db); err != nil {
-				_ = db.Close()
+				if closeErr := db.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: failed to close database: %v\n", closeErr)
+				}
 				return err
 			}
 			if err := db.Close(); err != nil {
@@ -834,12 +852,12 @@ func runInitDB(args []string) error {
 			if *gitFlag != "" {
 				update.GitRepository = *gitFlag
 			}
-			if _, err := svc.UpdateProject(1, update); err != nil {
+			if _, err := svc.UpdateProject(context.Background(), 1, update); err != nil {
 				fmt.Printf("warning: could not update project: %v\n", err)
 			}
 			if *prefixFlag != "" {
 				prefix := strings.ToUpper(strings.TrimSpace(*prefixFlag))
-				if _, err := svc.RenameProjectPrefix(1, prefix); err != nil {
+				if _, err := svc.RenameProjectPrefix(context.Background(), 1, prefix); err != nil {
 					fmt.Printf("warning: could not set prefix: %v\n", err)
 				}
 			}
@@ -858,7 +876,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 	}
 
 	// ── Roles (seed first — SDLCs reference them) ────────────────────────
-	existingRoles, err := svc.ListRoles()
+	existingRoles, err := svc.ListRoles(context.Background())
 	if err != nil {
 		return err
 	}
@@ -873,7 +891,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 			fmt.Printf("  warning: could not load built-in roles: %v\n", loadErr)
 		} else {
 			for _, r := range builtinRoles {
-				created, rErr := svc.CreateRole(libticket.RoleRequest{
+				created, rErr := svc.CreateRole(context.Background(), libticket.RoleRequest{
 					Title:              r.Title,
 					Description:        r.Description,
 					AcceptanceCriteria: r.AcceptanceCriteria,
@@ -892,7 +910,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 	}
 
 	// ── SDLC ─────────────────────────────────────────────────────────────
-	project, err := svc.GetProject(cfg.ProjectID)
+	project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -914,14 +932,22 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 	}
 	// Remove the bootstrap "default" SDLC created by store.Init if it's
 	// not one of the static seed SDLCs.
-	existingSdlcs, _ := svc.ListSdlcs()
+	existingSdlcs, err := svc.ListSdlcs(context.Background())
+	if err != nil {
+		return err
+	}
 	for _, s := range existingSdlcs {
 		if !seedNames[strings.ToLower(s.Name)] {
-			_ = svc.DeleteSdlc(s.ID)
+			if delErr := svc.DeleteSdlc(context.Background(), s.ID); delErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not delete SDLC %q: %v\n", s.Name, delErr)
+			}
 		}
 	}
 	// Now create the real SDLCs from static files.
-	existingSdlcs, _ = svc.ListSdlcs()
+	existingSdlcs, err = svc.ListSdlcs(context.Background())
+	if err != nil {
+		return err
+	}
 	existingNames := make(map[string]bool)
 	for _, s := range existingSdlcs {
 		existingNames[strings.ToLower(s.Name)] = true
@@ -930,7 +956,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 		if existingNames[strings.ToLower(seed.Name)] {
 			continue
 		}
-		wf, wfErr := svc.CreateSdlc(libticket.SdlcRequest{
+		wf, wfErr := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
 			Name:        seed.Name,
 			Description: seed.Description,
 		})
@@ -944,7 +970,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 	}
 
 	// Assign an SDLC to the project.
-	allSdlcs, _ := svc.ListSdlcs()
+	allSdlcs, _ := svc.ListSdlcs(context.Background())
 	needsSdlc := project.SdlcID == nil || sdlcName != ""
 	if needsSdlc && len(allSdlcs) > 0 {
 		var chosenID int64
@@ -975,7 +1001,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 				fmt.Println()
 				options := make([]string, len(allSdlcs))
 				for i, s := range allSdlcs {
-					sdlcDetail, _ := svc.GetSdlc(s.ID)
+					sdlcDetail, _ := svc.GetSdlc(context.Background(), s.ID)
 					stageNames := make([]string, len(sdlcDetail.Stages))
 					for j, st := range sdlcDetail.Stages {
 						stageNames[j] = st.StageName
@@ -994,18 +1020,18 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 		}
 		projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
 		if parseErr == nil {
-			if _, pErr := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{SdlcID: &chosenID}); pErr != nil {
+			if _, pErr := svc.UpdateProject(context.Background(), projectID, libticket.ProjectUpdateRequest{SdlcID: &chosenID}); pErr != nil {
 				fmt.Printf("  warning: could not assign sdlc: %v\n", pErr)
 			}
 		}
-		chosen, _ := svc.GetSdlc(chosenID)
+		chosen, _ := svc.GetSdlc(context.Background(), chosenID)
 		stageNames := make([]string, len(chosen.Stages))
 		for i, s := range chosen.Stages {
 			stageNames[i] = s.StageName
 		}
 		fmt.Printf("sdlc       : %q (%s)\n", chosen.Name, strings.Join(stageNames, " → "))
 	} else if project.SdlcID != nil {
-		wf, wfErr := svc.GetSdlc(*project.SdlcID)
+		wf, wfErr := svc.GetSdlc(context.Background(), *project.SdlcID)
 		if wfErr == nil {
 			fmt.Printf("sdlc       : %q (%d stages)\n", wf.Name, len(wf.Stages))
 		}
@@ -1017,7 +1043,7 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 // seedSdlcStages creates stages and assigns roles from an SDLC seed template.
 func seedSdlcStages(svc libticket.Service, sdlcID int64, seed static.Sdlc, roleIDByRef map[string]int64) error {
 	for _, s := range seed.Stages {
-		stage, err := svc.AddSdlcStage(sdlcID, libticket.SdlcStageRequest{
+		stage, err := svc.AddSdlcStage(context.Background(), sdlcID, libticket.SdlcStageRequest{
 			StageName:   s.Name,
 			Description: s.Description,
 			SortOrder:   s.Order,
@@ -1028,7 +1054,7 @@ func seedSdlcStages(svc libticket.Service, sdlcID int64, seed static.Sdlc, roleI
 		// Assign roles to the stage.
 		for _, roleRef := range s.Roles {
 			if rid, ok := roleIDByRef[roleRef.RoleRef]; ok {
-				if err := svc.AddSdlcStageRole(sdlcID, stage.ID, rid); err != nil {
+				if err := svc.AddSdlcStageRole(context.Background(), sdlcID, stage.ID, rid); err != nil {
 					fmt.Printf("  warning: could not assign role %q to stage %q: %v\n", roleRef.RoleRef, s.Name, err)
 				}
 			}

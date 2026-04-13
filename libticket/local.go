@@ -7,7 +7,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"os"
+	"sync"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
@@ -17,6 +19,9 @@ import (
 // Obtain one via NewLocal after loading a config with a local location.
 type LocalService struct {
 	cfg config.Config
+
+	dbMu sync.Mutex
+	db   *sql.DB
 }
 
 // resolveRequestLifecycle derives the canonical stage+state pair from the three
@@ -37,7 +42,7 @@ func NewLocal(cfg config.Config) *LocalService {
 	return &LocalService{cfg: cfg}
 }
 
-func (s *LocalService) Status() (StatusResponse, error) {
+func (s *LocalService) Status(ctx context.Context) (StatusResponse, error) {
 	resolved, err := config.ResolveURL()
 	if err != nil {
 		return StatusResponse{}, err
@@ -46,15 +51,14 @@ func (s *LocalService) Status() (StatusResponse, error) {
 	if _, err := os.Stat(path); err != nil {
 		return StatusResponse{}, err
 	}
-	db, err := store.Open(path)
+	db, err := s.openDB()
 	if err != nil {
 		return StatusResponse{}, err
 	}
-	defer db.Close()
-	user, err := store.GetUserByUsername(context.Background(), db, LocalUsername())
+	user, err := store.GetUserByUsername(ctx, db, LocalUsername())
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		enabled, regErr := store.RegistrationEnabled(context.Background(), db)
+		enabled, regErr := store.RegistrationEnabled(ctx, db)
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
@@ -62,13 +66,13 @@ func (s *LocalService) Status() (StatusResponse, error) {
 	case err != nil:
 		return StatusResponse{}, err
 	case !user.Enabled:
-		enabled, regErr := store.RegistrationEnabled(context.Background(), db)
+		enabled, regErr := store.RegistrationEnabled(ctx, db)
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
 		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
 	}
-	enabled, err := store.RegistrationEnabled(context.Background(), db)
+	enabled, err := store.RegistrationEnabled(ctx, db)
 	if err != nil {
 		return StatusResponse{}, err
 	}
@@ -80,234 +84,211 @@ func (s *LocalService) Status() (StatusResponse, error) {
 	}, nil
 }
 
-func (s *LocalService) SetRegistrationEnabled(enabled bool) error {
+func (s *LocalService) SetRegistrationEnabled(ctx context.Context, enabled bool) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.SetRegistrationEnabled(context.Background(), db, enabled)
+	return store.SetRegistrationEnabled(ctx, db, enabled)
 }
 
-func (s *LocalService) Register(username, password string) (store.User, error) {
+func (s *LocalService) Register(ctx context.Context, username, password string) (store.User, error) {
 	return store.User{}, errors.New("ticket register requires remote mode (run tk init to configure)")
 }
 
-func (s *LocalService) Login(username, password string) (store.User, string, error) {
+func (s *LocalService) Login(ctx context.Context, username, password string) (store.User, string, error) {
 	return store.User{}, "", errors.New("ticket login requires remote mode (run tk init to configure)")
 }
 
-func (s *LocalService) Logout() error {
+func (s *LocalService) Logout(ctx context.Context) error {
 	return errors.New("ticket logout requires remote mode (run tk init to configure)")
 }
 
-func (s *LocalService) Count(projectID *int64) (CountSummary, error) {
+func (s *LocalService) Count(ctx context.Context, projectID *int64) (CountSummary, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return CountSummary{}, err
 	}
-	defer db.Close()
-	return store.CountEverything(context.Background(), db, projectID)
+	return store.CountEverything(ctx, db, projectID)
 }
 
-func (s *LocalService) CreateUser(username, password string) (store.User, error) {
+func (s *LocalService) CreateUser(ctx context.Context, username, password string) (store.User, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.User{}, err
 	}
-	defer db.Close()
-	return store.CreateUser(context.Background(), db, username, password, "user")
+	return store.CreateUser(ctx, db, username, password, "user")
 }
 
-func (s *LocalService) SetUserEnabled(username string, enabled bool) error {
+func (s *LocalService) SetUserEnabled(ctx context.Context, username string, enabled bool) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.SetUserEnabled(context.Background(), db, username, enabled)
+	return store.SetUserEnabled(ctx, db, username, enabled)
 }
 
-func (s *LocalService) ListUsers() ([]store.User, error) {
+func (s *LocalService) ListUsers(ctx context.Context) ([]store.User, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListUsers(context.Background(), db, 0)
+	return store.ListUsers(ctx, db, 0)
 }
 
-func (s *LocalService) DeleteUser(username string) error {
+func (s *LocalService) DeleteUser(ctx context.Context, username string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteUser(context.Background(), db, username)
+	return store.DeleteUser(ctx, db, username)
 }
 
-func (s *LocalService) ResetUserPassword(username, newPassword string) (store.User, error) {
+func (s *LocalService) ResetUserPassword(ctx context.Context, username, newPassword string) (store.User, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.User{}, err
 	}
-	defer db.Close()
-	return store.ResetUserPassword(context.Background(), db, username, newPassword)
+	return store.ResetUserPassword(ctx, db, username, newPassword)
 }
 
-func (s *LocalService) CreateRole(request RoleRequest) (store.Role, error) {
+func (s *LocalService) CreateRole(ctx context.Context, request RoleRequest) (store.Role, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Role{}, err
 	}
-	defer db.Close()
-	return store.CreateRole(context.Background(), db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
+	return store.CreateRole(ctx, db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
 }
 
-func (s *LocalService) ListRoles() ([]store.Role, error) {
+func (s *LocalService) ListRoles(ctx context.Context) ([]store.Role, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListRoles(context.Background(), db, 0)
+	return store.ListRoles(ctx, db, 0)
 }
 
-func (s *LocalService) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
+func (s *LocalService) UpdateRole(ctx context.Context, id int64, request RoleRequest) (store.Role, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Role{}, err
 	}
-	defer db.Close()
-	return store.UpdateRole(context.Background(), db, id, request.Title, request.Description, request.AcceptanceCriteria)
+	return store.UpdateRole(ctx, db, id, request.Title, request.Description, request.AcceptanceCriteria)
 }
 
-func (s *LocalService) DeleteRole(id int64) error {
+func (s *LocalService) DeleteRole(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteRole(context.Background(), db, id)
+	return store.DeleteRole(ctx, db, id)
 }
 
-func (s *LocalService) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
+func (s *LocalService) CreateAgent(ctx context.Context, request AgentCreateRequest) (store.Agent, string, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, "", err
 	}
-	defer db.Close()
-	return store.CreateAgent(context.Background(), db, request.Password)
+	return store.CreateAgent(ctx, db, request.Password)
 }
 
-func (s *LocalService) SetAgentEnabled(id string, enabled bool) (store.Agent, error) {
+func (s *LocalService) SetAgentEnabled(ctx context.Context, id string, enabled bool) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, err
 	}
-	defer db.Close()
-	return store.SetAgentEnabled(context.Background(), db, id, enabled)
+	return store.SetAgentEnabled(ctx, db, id, enabled)
 }
 
-func (s *LocalService) ListAgents() ([]store.Agent, error) {
+func (s *LocalService) ListAgents(ctx context.Context) ([]store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListAgents(context.Background(), db)
+	return store.ListAgents(ctx, db)
 }
 
-func (s *LocalService) ListAgentStatuses() ([]store.AgentStatus, error) {
+func (s *LocalService) ListAgentStatuses(ctx context.Context) ([]store.AgentStatus, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListAgentStatuses(context.Background(), db)
+	return store.ListAgentStatuses(ctx, db)
 }
 
-func (s *LocalService) UpdateAgent(id string, request AgentUpdateRequest) (store.Agent, error) {
+func (s *LocalService) UpdateAgent(ctx context.Context, id string, request AgentUpdateRequest) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, err
 	}
-	defer db.Close()
-	return store.UpdateAgent(context.Background(), db, id, store.AgentUpdateParams{
+	return store.UpdateAgent(ctx, db, id, store.AgentUpdateParams{
 		Password: request.Password,
 	})
 }
 
-func (s *LocalService) DeleteAgent(id string) error {
+func (s *LocalService) DeleteAgent(ctx context.Context, id string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteAgent(context.Background(), db, id)
+	return store.DeleteAgent(ctx, db, id)
 }
 
-func (s *LocalService) SetAgentConfig(agentID string, key, value string) error {
+func (s *LocalService) SetAgentConfig(ctx context.Context, agentID string, key, value string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.SetAgentConfig(context.Background(), db, agentID, key, value)
+	return store.SetAgentConfig(ctx, db, agentID, key, value)
 }
 
-func (s *LocalService) ListAgentConfig(agentID string) ([]store.AgentConfigEntry, error) {
+func (s *LocalService) ListAgentConfig(ctx context.Context, agentID string) ([]store.AgentConfigEntry, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListAgentConfig(context.Background(), db, agentID)
+	return store.ListAgentConfig(ctx, db, agentID)
 }
 
-func (s *LocalService) DeleteAgentConfig(agentID string, key string) error {
+func (s *LocalService) DeleteAgentConfig(ctx context.Context, agentID string, key string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteAgentConfig(context.Background(), db, agentID, key)
+	return store.DeleteAgentConfig(ctx, db, agentID, key)
 }
 
-func (s *LocalService) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
+func (s *LocalService) RegisterAgent(ctx context.Context, request AgentRegisterRequest) (store.Agent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, err
 	}
-	defer db.Close()
-	agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
+	agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
 	if err != nil {
 		return store.Agent{}, err
 	}
-	return store.TouchAgent(context.Background(), db, agent.ID, "online")
+	return store.TouchAgent(ctx, db, agent.ID, "online")
 }
 
-func (s *LocalService) HeartbeatAgent(agentID, password, status string) error {
+func (s *LocalService) HeartbeatAgent(ctx context.Context, agentID, password, status string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	agent, err := store.AuthenticateAgent(context.Background(), db, agentID, password)
+	agent, err := store.AuthenticateAgent(ctx, db, agentID, password)
 	if err != nil {
 		return err
 	}
-	_, err = store.TouchAgent(context.Background(), db, agent.ID, status)
+	_, err = store.TouchAgent(ctx, db, agent.ID, status)
 	return err
 }
 
-func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
+func (s *LocalService) RequestAgentWork(ctx context.Context, request AgentRequest) (AgentWorkResponse, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
-	defer db.Close()
-	agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
+	agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
@@ -316,7 +297,7 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 		projectID = 0
 	}
 	if request.TicketID == nil && projectID == 0 {
-		projects, err := store.ListProjects(context.Background(), db, 0)
+		projects, err := store.ListProjects(ctx, db, 0)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
@@ -327,11 +308,11 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 			}
 		}
 	}
-	currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(context.Background(), db, projectID, agent.Username)
+	currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(ctx, db, projectID, agent.Username)
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
-	ticket, status, err := store.RequestTicket(context.Background(), db, store.TicketRequestParams{
+	ticket, status, err := store.RequestTicket(ctx, db, store.TicketRequestParams{
 		ProjectID: projectID,
 		TicketID:  request.TicketID,
 		Username:  agent.Username,
@@ -355,18 +336,22 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 		agentStatus = status
 	}
 	if status == "ASSIGNED" && agentStatus == "NEW" {
-		_, _ = store.TouchAgent(context.Background(), db, agent.ID, "working")
+		if _, err := store.TouchAgent(ctx, db, agent.ID, "working"); err != nil {
+			log.Printf("libticket: touch agent %s status=working: %v", agent.ID, err)
+		}
 	} else {
-		_, _ = store.TouchAgent(context.Background(), db, agent.ID, "soliciting")
+		if _, err := store.TouchAgent(ctx, db, agent.ID, "soliciting"); err != nil {
+			log.Printf("libticket: touch agent %s status=soliciting: %v", agent.ID, err)
+		}
 	}
 	response := AgentWorkResponse{Status: agentStatus, Parents: []store.Ticket{}}
 	if agentStatus == "NEW" || agentStatus == "CURRENT" {
-		project, err := store.GetProjectByID(context.Background(), db, ticket.ProjectID)
+		project, err := store.GetProjectByID(ctx, db, ticket.ProjectID)
 		if err == nil {
 			response.Project = &project
 		}
 		response.Ticket = &ticket
-		parents, err := store.ListTicketParents(context.Background(), db, ticket.ID)
+		parents, err := store.ListTicketParents(ctx, db, ticket.ID)
 		if err == nil {
 			response.Parents = parents
 		}
@@ -374,21 +359,20 @@ func (s *LocalService) RequestAgentWork(request AgentRequest) (AgentWorkResponse
 	return response, nil
 }
 
-func (s *LocalService) AgentUpdateTicket(id string, request AgentTicketUpdateRequest) (store.Ticket, error) {
+func (s *LocalService) AgentUpdateTicket(ctx context.Context, id string, request AgentTicketUpdateRequest) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
+	agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	current, err := store.GetTicket(context.Background(), db, id)
+	current, err := store.GetTicket(ctx, db, id)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	updated, err := store.UpdateTicket(context.Background(), db, id, store.TicketUpdateParams{
+	updated, err := store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
 		Title:              current.Title,
 		Description:        request.Result,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -408,21 +392,22 @@ func (s *LocalService) AgentUpdateTicket(id string, request AgentTicketUpdateReq
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	_, _ = store.TouchAgent(context.Background(), db, agent.ID, "soliciting")
+	if _, err := store.TouchAgent(ctx, db, agent.ID, "soliciting"); err != nil {
+		log.Printf("libticket: touch agent %s status=soliciting: %v", agent.ID, err)
+	}
 	return updated, nil
 }
 
-func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Project, error) {
+func (s *LocalService) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Project{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Project{}, err
 	}
-	return store.CreateProjectWithParams(context.Background(), db, store.ProjectCreateParams{
+	return store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
 		Prefix:             request.Prefix,
 		Title:              request.Title,
 		Description:        request.Description,
@@ -436,31 +421,28 @@ func (s *LocalService) CreateProject(request ProjectCreateRequest) (store.Projec
 	})
 }
 
-func (s *LocalService) ListProjects() ([]store.Project, error) {
+func (s *LocalService) ListProjects(ctx context.Context) ([]store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListProjects(context.Background(), db, 0)
+	return store.ListProjects(ctx, db, 0)
 }
 
-func (s *LocalService) GetProject(id string) (store.Project, error) {
+func (s *LocalService) GetProject(ctx context.Context, id string) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Project{}, err
 	}
-	defer db.Close()
-	return store.GetProject(context.Background(), db, id)
+	return store.GetProject(ctx, db, id)
 }
 
-func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (store.Project, error) {
+func (s *LocalService) UpdateProject(ctx context.Context, id int64, request ProjectUpdateRequest) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Project{}, err
 	}
-	defer db.Close()
-	return store.UpdateProjectWithParams(context.Background(), db, id, store.ProjectUpdateParams{
+	return store.UpdateProjectWithParams(ctx, db, id, store.ProjectUpdateParams{
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
@@ -473,198 +455,177 @@ func (s *LocalService) UpdateProject(id int64, request ProjectUpdateRequest) (st
 	})
 }
 
-func (s *LocalService) DeleteProject(id int64) error {
+func (s *LocalService) DeleteProject(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteProject(context.Background(), db, id)
+	return store.DeleteProject(ctx, db, id)
 }
 
-func (s *LocalService) RenameProjectPrefix(id int64, newPrefix string) (int, error) {
+func (s *LocalService) RenameProjectPrefix(ctx context.Context, id int64, newPrefix string) (int, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close()
-	return store.RenameProjectPrefix(context.Background(), db, id, newPrefix)
+	return store.RenameProjectPrefix(ctx, db, id, newPrefix)
 }
 
-func (s *LocalService) SetProjectEnabled(id int64, enabled bool) (store.Project, error) {
+func (s *LocalService) SetProjectEnabled(ctx context.Context, id int64, enabled bool) (store.Project, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Project{}, err
 	}
-	defer db.Close()
-	return store.SetProjectStatus(context.Background(), db, id, enabled)
+	return store.SetProjectStatus(ctx, db, id, enabled)
 }
 
-func (s *LocalService) SetProjectDefaultDraft(projectID int64, draft bool) error {
+func (s *LocalService) SetProjectDefaultDraft(ctx context.Context, projectID int64, draft bool) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.SetProjectDefaultDraft(context.Background(), db, projectID, draft)
+	return store.SetProjectDefaultDraft(ctx, db, projectID, draft)
 }
 
-func (s *LocalService) AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
+func (s *LocalService) AddProjectMember(ctx context.Context, projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.ProjectMember{}, err
 	}
-	defer db.Close()
-	return store.AddProjectMember(context.Background(), db, projectID, request.UserID, request.Role)
+	return store.AddProjectMember(ctx, db, projectID, request.UserID, request.Role)
 }
 
-func (s *LocalService) RemoveProjectMember(projectID int64, userID string) error {
+func (s *LocalService) RemoveProjectMember(ctx context.Context, projectID int64, userID string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveProjectMember(context.Background(), db, projectID, userID)
+	return store.RemoveProjectMember(ctx, db, projectID, userID)
 }
 
-func (s *LocalService) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
+func (s *LocalService) ListProjectMembers(ctx context.Context, projectID int64) ([]store.ProjectMember, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListProjectMembers(context.Background(), db, projectID)
+	return store.ListProjectMembers(ctx, db, projectID)
 }
 
-func (s *LocalService) AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+func (s *LocalService) AddProjectTeamMember(ctx context.Context, projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.ProjectTeamMember{}, err
 	}
-	defer db.Close()
-	return store.AddProjectTeamMember(context.Background(), db, projectID, request.TeamID, request.Role)
+	return store.AddProjectTeamMember(ctx, db, projectID, request.TeamID, request.Role)
 }
 
-func (s *LocalService) RemoveProjectTeamMember(projectID, teamID int64) error {
+func (s *LocalService) RemoveProjectTeamMember(ctx context.Context, projectID, teamID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveProjectTeamMember(context.Background(), db, projectID, teamID)
+	return store.RemoveProjectTeamMember(ctx, db, projectID, teamID)
 }
 
-func (s *LocalService) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+func (s *LocalService) ListProjectTeamMembers(ctx context.Context, projectID int64) ([]store.ProjectTeamMember, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListProjectTeamMembers(context.Background(), db, projectID)
+	return store.ListProjectTeamMembers(ctx, db, projectID)
 }
 
-func (s *LocalService) CreateTeam(request TeamRequest) (store.Team, error) {
+func (s *LocalService) CreateTeam(ctx context.Context, request TeamRequest) (store.Team, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Team{}, err
 	}
-	defer db.Close()
-	return store.CreateTeam(context.Background(), db, request.Name, request.ParentTeamID)
+	return store.CreateTeam(ctx, db, request.Name, request.ParentTeamID)
 }
 
-func (s *LocalService) ListTeams() ([]store.Team, error) {
+func (s *LocalService) ListTeams(ctx context.Context) ([]store.Team, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListTeams(context.Background(), db, 0)
+	return store.ListTeams(ctx, db, 0)
 }
 
-func (s *LocalService) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
+func (s *LocalService) UpdateTeam(ctx context.Context, id int64, request TeamRequest) (store.Team, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Team{}, err
 	}
-	defer db.Close()
-	return store.UpdateTeam(context.Background(), db, id, request.Name, request.ParentTeamID)
+	return store.UpdateTeam(ctx, db, id, request.Name, request.ParentTeamID)
 }
 
-func (s *LocalService) DeleteTeam(id int64) error {
+func (s *LocalService) DeleteTeam(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteTeam(context.Background(), db, id)
+	return store.DeleteTeam(ctx, db, id)
 }
 
-func (s *LocalService) AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
+func (s *LocalService) AddTeamMember(ctx context.Context, teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.TeamMember{}, err
 	}
-	defer db.Close()
-	return store.AddTeamMember(context.Background(), db, teamID, request.UserID, request.Role, request.JobTitle)
+	return store.AddTeamMember(ctx, db, teamID, request.UserID, request.Role, request.JobTitle)
 }
 
-func (s *LocalService) RemoveTeamMember(teamID int64, userID string) error {
+func (s *LocalService) RemoveTeamMember(ctx context.Context, teamID int64, userID string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveTeamMember(context.Background(), db, teamID, userID)
+	return store.RemoveTeamMember(ctx, db, teamID, userID)
 }
 
-func (s *LocalService) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+func (s *LocalService) ListTeamMembers(ctx context.Context, teamID int64) ([]store.TeamMember, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListTeamMembers(context.Background(), db, teamID)
+	return store.ListTeamMembers(ctx, db, teamID)
 }
 
-func (s *LocalService) AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error) {
+func (s *LocalService) AddTeamAgent(ctx context.Context, teamID int64, agentID string) (store.TeamAgent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.TeamAgent{}, err
 	}
-	defer db.Close()
-	return store.AddTeamAgent(context.Background(), db, teamID, agentID)
+	return store.AddTeamAgent(ctx, db, teamID, agentID)
 }
 
-func (s *LocalService) RemoveTeamAgent(teamID int64, agentID string) error {
+func (s *LocalService) RemoveTeamAgent(ctx context.Context, teamID int64, agentID string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveTeamAgent(context.Background(), db, teamID, agentID)
+	return store.RemoveTeamAgent(ctx, db, teamID, agentID)
 }
 
-func (s *LocalService) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+func (s *LocalService) ListTeamAgents(ctx context.Context, teamID int64) ([]store.TeamAgent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListTeamAgents(context.Background(), db, teamID)
+	return store.ListTeamAgents(ctx, db, teamID)
 }
 
-func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, error) {
+func (s *LocalService) CreateTicket(ctx context.Context, request TicketCreateRequest) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
 	_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-	ticket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
+	ticket, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
 		ProjectID:          request.ProjectID,
 		ParentID:           request.ParentID,
 		CloneOf:            request.CloneOf,
@@ -686,24 +647,23 @@ func (s *LocalService) CreateTicket(request TicketCreateRequest) (store.Ticket, 
 		return ticket, err
 	}
 	if request.Message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, request.Message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, request.Message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) ListTickets(projectID int64) ([]store.Ticket, error) {
-	return s.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
+func (s *LocalService) ListTickets(ctx context.Context, projectID int64) ([]store.Ticket, error) {
+	return s.ListTicketsFiltered(ctx, projectID, "", "", "", "", "", "", 0, false)
 }
 
-func (s *LocalService) ListTicketsFiltered(projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
+func (s *LocalService) ListTicketsFiltered(ctx context.Context, projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListTickets(context.Background(), db, store.TicketListParams{
+	return store.ListTickets(ctx, db, store.TicketListParams{
 		ProjectID:       projectID,
 		Type:            ticketType,
 		Stage:           stage,
@@ -716,18 +676,17 @@ func (s *LocalService) ListTicketsFiltered(projectID int64, ticketType, stage, s
 	})
 }
 
-func (s *LocalService) UpdateTicket(id string, request TicketUpdateRequest) (store.Ticket, error) {
+func (s *LocalService) UpdateTicket(ctx context.Context, id string, request TicketUpdateRequest) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
 	stage, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-	ticket, err := store.UpdateTicket(context.Background(), db, id, store.TicketUpdateParams{
+	ticket, err := store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
@@ -751,172 +710,163 @@ func (s *LocalService) UpdateTicket(id string, request TicketUpdateRequest) (sto
 		return ticket, err
 	}
 	if request.Message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, request.Message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, request.Message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) CloseTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) CloseTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
 	// Add comment before close — AddComment rejects closed tickets.
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, id, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, id, user.ID, message); err != nil {
 			return store.Ticket{}, err
 		}
 	}
-	return store.SetTicketComplete(context.Background(), db, id, true, user.Username, user.ID)
+	return store.SetTicketComplete(ctx, db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) OpenTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) OpenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketComplete(context.Background(), db, id, false, user.Username, user.ID)
+	ticket, err := store.SetTicketComplete(ctx, db, id, false, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) ArchiveTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) ArchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
 	// Add comment before archive — AddComment rejects archived tickets.
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, id, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, id, user.ID, message); err != nil {
 			return store.Ticket{}, err
 		}
 	}
-	return store.SetTicketArchived(context.Background(), db, id, true, user.Username, user.ID)
+	return store.SetTicketArchived(ctx, db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) UnarchiveTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) UnarchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketArchived(context.Background(), db, id, false, user.Username, user.ID)
+	ticket, err := store.SetTicketArchived(ctx, db, id, false, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) ReadyTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) ReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketDraft(context.Background(), db, id, false, user.Username, user.ID)
+	ticket, err := store.SetTicketDraft(ctx, db, id, false, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) NotReadyTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) NotReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.SetTicketDraft(context.Background(), db, id, true, user.Username, user.ID)
+	ticket, err := store.SetTicketDraft(ctx, db, id, true, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error) {
+func (s *LocalService) SetTicketSdlc(ctx context.Context, id string, sdlcID int64) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	return store.SetTicketSdlc(context.Background(), db, id, sdlcID)
+	return store.SetTicketSdlc(ctx, db, id, sdlcID)
 }
 
-func (s *LocalService) UnsetTicketSdlc(id string) (store.Ticket, error) {
+func (s *LocalService) UnsetTicketSdlc(ctx context.Context, id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	return store.UnsetTicketSdlc(context.Background(), db, id)
+	return store.UnsetTicketSdlc(ctx, db, id)
 }
 
-func (s *LocalService) DeleteTicket(id string) error {
+func (s *LocalService) DeleteTicket(ctx context.Context, id string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteTicket(context.Background(), db, id)
+	return store.DeleteTicket(ctx, db, id)
 }
 
-func (s *LocalService) SetTicketParent(id string, parentID string, message string) (store.Ticket, error) {
-	current, err := s.GetTicketByID(id)
+func (s *LocalService) SetTicketParent(ctx context.Context, id string, parentID string, message string) (store.Ticket, error) {
+	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return s.UpdateTicket(id, TicketUpdateRequest{
+	return s.UpdateTicket(ctx, id, TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -932,21 +882,20 @@ func (s *LocalService) SetTicketParent(id string, parentID string, message strin
 	})
 }
 
-func (s *LocalService) SetTicketHealth(id string, score int) (store.Ticket, error) {
+func (s *LocalService) SetTicketHealth(ctx context.Context, id string, score int) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	return store.SetTicketHealth(context.Background(), db, id, score)
+	return store.SetTicketHealth(ctx, db, id, score)
 }
 
-func (s *LocalService) UnsetTicketParent(id string, message string) (store.Ticket, error) {
-	current, err := s.GetTicketByID(id)
+func (s *LocalService) UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error) {
+	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return s.UpdateTicket(id, TicketUpdateRequest{
+	return s.UpdateTicket(ctx, id, TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -962,132 +911,125 @@ func (s *LocalService) UnsetTicketParent(id string, message string) (store.Ticke
 	})
 }
 
-func (s *LocalService) GetTicketByID(id string) (store.Ticket, error) {
+func (s *LocalService) GetTicketByID(ctx context.Context, id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	return store.GetTicket(context.Background(), db, id)
+	return store.GetTicket(ctx, db, id)
 }
 
-func (s *LocalService) GetTicket(ref string) (store.Ticket, error) {
+func (s *LocalService) GetTicket(ctx context.Context, ref string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	return store.GetTicketByRef(context.Background(), db, ref)
+	return store.GetTicketByRef(ctx, db, ref)
 }
 
-func (s *LocalService) CloneTicket(id string, message string) (store.Ticket, error) {
+func (s *LocalService) CloneTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	ticket, err := store.CloneTicket(context.Background(), db, id, user.Username, user.ID)
+	ticket, err := store.CloneTicket(ctx, db, id, user.Username, user.ID)
 	if err != nil {
 		return ticket, err
 	}
 	if message != "" {
-		if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+		if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 			return ticket, err
 		}
 	}
 	return ticket, nil
 }
 
-func (s *LocalService) ListHistory(id string) ([]store.HistoryEvent, error) {
+func (s *LocalService) ListHistory(ctx context.Context, id string) ([]store.HistoryEvent, error) {
+	return s.ListHistoryPaged(ctx, id, 0, 0)
+}
+
+func (s *LocalService) ListHistoryPaged(ctx context.Context, id string, limit, offset int) ([]store.HistoryEvent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListHistoryEvents(context.Background(), db, id, 0, 0)
+	return store.ListHistoryEvents(ctx, db, id, limit, offset)
 }
 
-func (s *LocalService) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
-	return s.ListProjectHistoryFiltered(projectID, limit, store.HistoryFilter{})
+func (s *LocalService) ListProjectHistory(ctx context.Context, projectID int64, limit int) ([]store.HistoryEvent, error) {
+	return s.ListProjectHistoryFiltered(ctx, projectID, limit, store.HistoryFilter{})
 }
 
-func (s *LocalService) ListProjectHistoryFiltered(projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
+func (s *LocalService) ListProjectHistoryFiltered(ctx context.Context, projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListProjectHistoryFiltered(context.Background(), db, projectID, limit, filter)
+	return store.ListProjectHistoryFiltered(ctx, db, projectID, limit, filter)
 }
 
-func (s *LocalService) AddComment(id string, comment string) (store.Comment, error) {
+func (s *LocalService) AddComment(ctx context.Context, id string, comment string) (store.Comment, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Comment{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Comment{}, err
 	}
-	return store.AddComment(context.Background(), db, id, user.ID, comment)
+	return store.AddComment(ctx, db, id, user.ID, comment)
 }
 
-func (s *LocalService) ListComments(id string) ([]store.Comment, error) {
+func (s *LocalService) ListComments(ctx context.Context, id string) ([]store.Comment, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListComments(context.Background(), db, id)
+	return store.ListComments(ctx, db, id)
 }
 
-func (s *LocalService) AddDependency(request DependencyRequest) (store.Dependency, error) {
+func (s *LocalService) AddDependency(ctx context.Context, request DependencyRequest) (store.Dependency, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Dependency{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Dependency{}, err
 	}
-	return store.AddDependency(context.Background(), db, request.ProjectID, request.TicketID, request.DependsOn, user.ID)
+	return store.AddDependency(ctx, db, request.ProjectID, request.TicketID, request.DependsOn, user.ID)
 }
 
-func (s *LocalService) RemoveDependency(request DependencyRequest) error {
+func (s *LocalService) RemoveDependency(ctx context.Context, request DependencyRequest) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteDependency(context.Background(), db, request.ProjectID, request.TicketID, request.DependsOn)
+	return store.DeleteDependency(ctx, db, request.ProjectID, request.TicketID, request.DependsOn)
 }
 
-func (s *LocalService) ListDependencies(id string) ([]store.Dependency, error) {
+func (s *LocalService) ListDependencies(ctx context.Context, id string) ([]store.Dependency, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListDependencies(context.Background(), db, id)
+	return store.ListDependencies(ctx, db, id)
 }
 
-func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestResponse, error) {
+func (s *LocalService) RequestTicket(ctx context.Context, request TicketRequest) (TicketRequestResponse, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return TicketRequestResponse{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return TicketRequestResponse{}, err
 	}
-	ticket, status, err := store.RequestTicket(context.Background(), db, store.TicketRequestParams{
+	ticket, status, err := store.RequestTicket(ctx, db, store.TicketRequestParams{
 		ProjectID: request.ProjectID,
 		TicketID:  request.TicketID,
 		TicketRef: request.TicketRef,
@@ -1101,7 +1043,7 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 	response := TicketRequestResponse{Status: status}
 	if status == "ASSIGNED" || status == "AVAILABLE" {
 		response.Ticket = &ticket
-		ctx := store.EnrichTicketContext(context.Background(), db, ticket)
+		ctx := store.EnrichTicketContext(ctx, db, ticket)
 		response.Project = ctx.Project
 		response.Parents = ctx.Parents
 		response.Sdlc = ctx.Sdlc
@@ -1111,349 +1053,327 @@ func (s *LocalService) RequestTicket(request TicketRequest) (TicketRequestRespon
 }
 
 func (s *LocalService) openDB() (*sql.DB, error) {
+	s.dbMu.Lock()
+	defer s.dbMu.Unlock()
+	if s.db != nil {
+		return s.db, nil
+	}
 	resolved, err := config.ResolveURL()
 	if err != nil {
 		return nil, err
 	}
-	return store.Open(resolved.DBPath)
+	db, err := store.Open(resolved.DBPath)
+	if err != nil {
+		return nil, err
+	}
+	s.db = db
+	return s.db, nil
 }
 
-func (s *LocalService) localUser(db *sql.DB) (store.User, error) {
+func (s *LocalService) localUser(ctx context.Context, db *sql.DB) (store.User, error) {
 	username := LocalUsername()
-	if user, err := store.GetUserByUsername(context.Background(), db, username); err == nil {
+	if user, err := store.GetUserByUsername(ctx, db, username); err == nil {
 		if user.Enabled {
 			return user, nil
 		}
-		if err := store.SetUserEnabled(context.Background(), db, username, true); err != nil {
+		if err := store.SetUserEnabled(ctx, db, username, true); err != nil {
 			return store.User{}, err
 		}
-		return store.GetUserByUsername(context.Background(), db, username)
+		return store.GetUserByUsername(ctx, db, username)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.User{}, err
 	}
-	return store.CreateUser(context.Background(), db, username, "local-mode", "admin")
+	return store.CreateUser(ctx, db, username, "local-mode", "admin")
 }
 
 func LocalUsername() string {
 	return "admin"
 }
 
-func (s *LocalService) CreateSdlc(request SdlcRequest) (store.Sdlc, error) {
+func (s *LocalService) CreateSdlc(ctx context.Context, request SdlcRequest) (store.Sdlc, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Sdlc{}, err
 	}
-	defer db.Close()
-	return store.CreateSdlc(context.Background(), db, request.Name, request.Description)
+	return store.CreateSdlc(ctx, db, request.Name, request.Description)
 }
 
-func (s *LocalService) ListSdlcs() ([]store.Sdlc, error) {
+func (s *LocalService) ListSdlcs(ctx context.Context) ([]store.Sdlc, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListSdlcs(context.Background(), db, 0, 0)
+	return store.ListSdlcs(ctx, db, 0, 0)
 }
 
-func (s *LocalService) GetSdlc(id int64) (store.SdlcWithStages, error) {
+func (s *LocalService) GetSdlc(ctx context.Context, id int64) (store.SdlcWithStages, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.SdlcWithStages{}, err
 	}
-	defer db.Close()
-	return store.GetSdlc(context.Background(), db, id)
+	return store.GetSdlc(ctx, db, id)
 }
 
-func (s *LocalService) DeleteSdlc(id int64) error {
+func (s *LocalService) DeleteSdlc(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteSdlc(context.Background(), db, id)
+	return store.DeleteSdlc(ctx, db, id)
 }
 
-func (s *LocalService) AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+func (s *LocalService) AddSdlcStage(ctx context.Context, sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.SdlcStage{}, err
 	}
-	defer db.Close()
-	return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
+	return store.AddSdlcStage(ctx, db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
 }
 
-func (s *LocalService) UpdateSdlcStage(stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+func (s *LocalService) UpdateSdlcStage(ctx context.Context, stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.SdlcStage{}, err
 	}
-	defer db.Close()
-	return store.UpdateSdlcStage(context.Background(), db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
+	return store.UpdateSdlcStage(ctx, db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
 }
 
-func (s *LocalService) GetSdlcStage(stageID int64) (store.SdlcStage, error) {
+func (s *LocalService) GetSdlcStage(ctx context.Context, stageID int64) (store.SdlcStage, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.SdlcStage{}, err
 	}
-	defer db.Close()
-	return store.GetSdlcStage(context.Background(), db, stageID)
+	return store.GetSdlcStage(ctx, db, stageID)
 }
 
-func (s *LocalService) ListSdlcStages(sdlcID int64) ([]store.SdlcStage, error) {
+func (s *LocalService) ListSdlcStages(ctx context.Context, sdlcID int64) ([]store.SdlcStage, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListSdlcStages(context.Background(), db, sdlcID)
+	return store.ListSdlcStages(ctx, db, sdlcID)
 }
 
-func (s *LocalService) RemoveSdlcStage(stageID int64) error {
+func (s *LocalService) RemoveSdlcStage(ctx context.Context, stageID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveSdlcStage(context.Background(), db, stageID)
+	return store.RemoveSdlcStage(ctx, db, stageID)
 }
 
-func (s *LocalService) ReorderSdlcStages(sdlcID int64, stageIDs []int64) error {
+func (s *LocalService) ReorderSdlcStages(ctx context.Context, sdlcID int64, stageIDs []int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.ReorderSdlcStages(context.Background(), db, sdlcID, stageIDs)
+	return store.ReorderSdlcStages(ctx, db, sdlcID, stageIDs)
 }
 
-func (s *LocalService) ExportSdlc(id int64) (store.SdlcExport, error) {
+func (s *LocalService) ExportSdlc(ctx context.Context, id int64) (store.SdlcExport, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.SdlcExport{}, err
 	}
-	defer db.Close()
-	return store.ExportSdlc(context.Background(), db, id)
+	return store.ExportSdlc(ctx, db, id)
 }
 
-func (s *LocalService) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
+func (s *LocalService) ImportSdlc(ctx context.Context, export store.SdlcExport) (store.Sdlc, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Sdlc{}, err
 	}
-	defer db.Close()
-	return store.ImportSdlc(context.Background(), db, export)
+	return store.ImportSdlc(ctx, db, export)
 }
 
-func (s *LocalService) AddSdlcStageRole(sdlcID, stageID, roleID int64) error {
+func (s *LocalService) AddSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.AddSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+	return store.AddSdlcStageRole(ctx, db, sdlcID, stageID, roleID)
 }
 
-func (s *LocalService) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
+func (s *LocalService) RemoveSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+	return store.RemoveSdlcStageRole(ctx, db, sdlcID, stageID, roleID)
 }
 
-func (s *LocalService) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error {
+func (s *LocalService) ReorderSdlcStageRoles(ctx context.Context, sdlcID, stageID int64, roleIDs []int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.ReorderSdlcStageRoles(context.Background(), db, sdlcID, stageID, roleIDs)
+	return store.ReorderSdlcStageRoles(ctx, db, sdlcID, stageID, roleIDs)
 }
 
-func (s *LocalService) CompleteTicket(id string, message string) (store.Ticket, error) {
-	return s.CloseTicket(id, message)
+func (s *LocalService) CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return s.CloseTicket(ctx, id, message)
 }
 
-func (s *LocalService) ReopenTicket(id string, message string) (store.Ticket, error) {
-	return s.OpenTicket(id, message)
+func (s *LocalService) ReopenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return s.OpenTicket(ctx, id, message)
 }
 
-func (s *LocalService) DraftTicket(id string, message string) (store.Ticket, error) {
-	return s.NotReadyTicket(id, message)
+func (s *LocalService) DraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return s.NotReadyTicket(ctx, id, message)
 }
 
-func (s *LocalService) UndraftTicket(id string, message string) (store.Ticket, error) {
-	return s.ReadyTicket(id, message)
+func (s *LocalService) UndraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return s.ReadyTicket(ctx, id, message)
 }
 
-func (s *LocalService) NextTicket(id string) (store.Ticket, error) {
+func (s *LocalService) NextTicket(ctx context.Context, id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.NextTicket(context.Background(), db, id, user.Username, user.ID)
+	return store.NextTicket(ctx, db, id, user.Username, user.ID)
 }
 
-func (s *LocalService) PreviousTicket(id string) (store.Ticket, error) {
+func (s *LocalService) PreviousTicket(ctx context.Context, id string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return store.PreviousTicket(context.Background(), db, id, user.Username, user.ID)
+	return store.PreviousTicket(ctx, db, id, user.Username, user.ID)
 }
 
-func (s *LocalService) LogTime(ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
+func (s *LocalService) LogTime(ctx context.Context, ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.TimeEntry{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.TimeEntry{}, err
 	}
-	return store.LogTime(context.Background(), db, ticketID, user.ID, request.Minutes, request.Note)
+	return store.LogTime(ctx, db, ticketID, user.ID, request.Minutes, request.Note)
 }
 
-func (s *LocalService) ListTimeEntries(ticketID string) ([]store.TimeEntry, error) {
+func (s *LocalService) ListTimeEntries(ctx context.Context, ticketID string) ([]store.TimeEntry, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListTimeEntries(context.Background(), db, ticketID)
+	return store.ListTimeEntries(ctx, db, ticketID)
 }
 
-func (s *LocalService) DeleteTimeEntry(id int64) error {
+func (s *LocalService) DeleteTimeEntry(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteTimeEntry(context.Background(), db, id)
+	return store.DeleteTimeEntry(ctx, db, id)
 }
 
-func (s *LocalService) TotalTimeForTicket(ticketID string) (int, error) {
+func (s *LocalService) TotalTimeForTicket(ctx context.Context, ticketID string) (int, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return 0, err
 	}
-	defer db.Close()
-	return store.TotalTimeForTicket(context.Background(), db, ticketID)
+	return store.TotalTimeForTicket(ctx, db, ticketID)
 }
 
-func (s *LocalService) CreateLabel(projectID int64, request LabelRequest) (store.Label, error) {
+func (s *LocalService) CreateLabel(ctx context.Context, projectID int64, request LabelRequest) (store.Label, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Label{}, err
 	}
-	defer db.Close()
-	return store.CreateLabel(context.Background(), db, projectID, request.Name, request.Color)
+	return store.CreateLabel(ctx, db, projectID, request.Name, request.Color)
 }
 
-func (s *LocalService) ListLabels(projectID int64) ([]store.Label, error) {
+func (s *LocalService) ListLabels(ctx context.Context, projectID int64) ([]store.Label, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListLabels(context.Background(), db, projectID, 0, 0)
+	return store.ListLabels(ctx, db, projectID, 0, 0)
 }
 
-func (s *LocalService) DeleteLabel(id int64) error {
+func (s *LocalService) DeleteLabel(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteLabel(context.Background(), db, id)
+	return store.DeleteLabel(ctx, db, id)
 }
 
-func (s *LocalService) AddTicketLabel(ticketID string, labelID int64) error {
+func (s *LocalService) AddTicketLabel(ctx context.Context, ticketID string, labelID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.AddTicketLabel(context.Background(), db, ticketID, labelID)
+	return store.AddTicketLabel(ctx, db, ticketID, labelID)
 }
 
-func (s *LocalService) RemoveTicketLabel(ticketID string, labelID int64) error {
+func (s *LocalService) RemoveTicketLabel(ctx context.Context, ticketID string, labelID int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.RemoveTicketLabel(context.Background(), db, ticketID, labelID)
+	return store.RemoveTicketLabel(ctx, db, ticketID, labelID)
 }
 
-func (s *LocalService) ListTicketLabels(ticketID string) ([]store.Label, error) {
+func (s *LocalService) ListTicketLabels(ctx context.Context, ticketID string) ([]store.Label, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListTicketLabels(context.Background(), db, ticketID)
+	return store.ListTicketLabels(ctx, db, ticketID)
 }
 
-func (s *LocalService) CreateStory(projectID int64, title, description string) (store.Story, error) {
+func (s *LocalService) CreateStory(ctx context.Context, projectID int64, title, description string) (store.Story, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Story{}, err
 	}
-	defer db.Close()
-	user, err := s.localUser(db)
+	user, err := s.localUser(ctx, db)
 	if err != nil {
 		return store.Story{}, err
 	}
-	return store.CreateStory(context.Background(), db, projectID, title, description, user.ID)
+	return store.CreateStory(ctx, db, projectID, title, description, user.ID)
 }
 
-func (s *LocalService) ListStories(projectID int64) ([]store.Story, error) {
+func (s *LocalService) ListStories(ctx context.Context, projectID int64) ([]store.Story, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
-	return store.ListStoriesByProject(context.Background(), db, projectID, 0, 0)
+	return store.ListStoriesByProject(ctx, db, projectID, 0, 0)
 }
 
-func (s *LocalService) GetStory(id int64) (store.Story, error) {
+func (s *LocalService) GetStory(ctx context.Context, id int64) (store.Story, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Story{}, err
 	}
-	defer db.Close()
-	return store.GetStory(context.Background(), db, id)
+	return store.GetStory(ctx, db, id)
 }
 
-func (s *LocalService) UpdateStory(id int64, title, description string) (store.Story, error) {
+func (s *LocalService) UpdateStory(ctx context.Context, id int64, title, description string) (store.Story, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Story{}, err
 	}
-	defer db.Close()
-	return store.UpdateStory(context.Background(), db, id, title, description)
+	return store.UpdateStory(ctx, db, id, title, description)
 }
 
-func (s *LocalService) DeleteStory(id int64) error {
+func (s *LocalService) DeleteStory(ctx context.Context, id int64) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return store.DeleteStory(context.Background(), db, id)
+	return store.DeleteStory(ctx, db, id)
 }

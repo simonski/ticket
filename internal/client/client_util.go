@@ -1,8 +1,8 @@
 package client
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -28,30 +28,40 @@ func resolveRequestLifecycle(status, stage, state string) (string, string, error
 }
 
 func (c *Client) openLocalDB() (*sql.DB, error) {
+	c.localDBMu.Lock()
+	defer c.localDBMu.Unlock()
+	if c.localDB != nil {
+		return c.localDB, nil
+	}
 	resolved, err := config.ResolveURL()
 	if err != nil {
 		return nil, err
 	}
-	return store.Open(resolved.DBPath)
+	db, err := store.Open(resolved.DBPath)
+	if err != nil {
+		return nil, err
+	}
+	c.localDB = db
+	return c.localDB, nil
 }
 
-func (c *Client) localUser(db *sql.DB) (store.User, error) {
-	return ensureLocalUser(db, localUsername())
+func (c *Client) localUser(ctx context.Context, db *sql.DB) (store.User, error) {
+	return ensureLocalUser(ctx, db, localUsername())
 }
 
-func ensureLocalUser(db *sql.DB, username string) (store.User, error) {
-	if user, err := store.GetUserByUsername(context.Background(), db, username); err == nil {
+func ensureLocalUser(ctx context.Context, db *sql.DB, username string) (store.User, error) {
+	if user, err := store.GetUserByUsername(ctx, db, username); err == nil {
 		if user.Enabled {
 			return user, nil
 		}
-		if err := store.SetUserEnabled(context.Background(), db, username, true); err != nil {
+		if err := store.SetUserEnabled(ctx, db, username, true); err != nil {
 			return store.User{}, err
 		}
-		return store.GetUserByUsername(context.Background(), db, username)
+		return store.GetUserByUsername(ctx, db, username)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return store.User{}, err
 	}
-	user, err := store.CreateUser(context.Background(), db, username, "local-mode", "admin")
+	user, err := store.CreateUser(ctx, db, username, "local-mode", "admin")
 	if err != nil {
 		return store.User{}, err
 	}
@@ -84,7 +94,7 @@ func friendlyConnectionError(err error, baseURL string) error {
 }
 
 // doJSONBasicAuth is like doJSON but uses HTTP Basic Auth instead of Bearer token.
-func (c *Client) doJSONBasicAuth(method, path, username, password string, body any, out any) error {
+func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, password string, body any, out any) error {
 	var reader *bytes.Reader
 	if body == nil {
 		reader = bytes.NewReader(nil)
@@ -96,7 +106,7 @@ func (c *Client) doJSONBasicAuth(method, path, username, password string, body a
 		reader = bytes.NewReader(payload)
 	}
 
-	httpRequest, err := http.NewRequestWithContext(context.Background(), method, c.baseURL+path, reader)
+	httpRequest, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
 		return err
 	}
@@ -127,7 +137,7 @@ func (c *Client) doJSONBasicAuth(method, path, username, password string, body a
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func (c *Client) doJSON(method, path string, body any, out any) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
 	var reader *bytes.Reader
 	if body == nil {
 		reader = bytes.NewReader(nil)
@@ -139,7 +149,7 @@ func (c *Client) doJSON(method, path string, body any, out any) error {
 		reader = bytes.NewReader(payload)
 	}
 
-	httpRequest, err := http.NewRequestWithContext(context.Background(), method, c.baseURL+path, reader)
+	httpRequest, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
 		return err
 	}

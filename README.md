@@ -183,10 +183,11 @@ will query and update tickets automatically during coding sessions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the config/database directory. Otherwise `tk` uses `.ticket/` at the nearest Git root, or the current directory if no Git root exists |
+| `TICKET_HOME` | Override the config/database directory. Otherwise `tk` uses `.ticket/` at the nearest Git root, or `.ticket/` in the current directory if no Git root exists |
 | `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
 | `TICKET_USERNAME` | Default username for remote login |
 | `TICKET_PASSWORD` | Default password for remote login |
+| `TICKET_TRUSTED_PROXY_CIDRS` | Comma-separated CIDRs trusted as reverse proxies for `X-Forwarded-For`/`X-Forwarded-Proto` handling |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override the LLM command (default: `claude`) |
@@ -380,4 +381,3 @@ graph TB
         SRV --> DB_R[(SQLite)]
     end
 ```
-

@@ -36,7 +36,7 @@ func (r *router) registerAuthHandlers() {
 		}
 		if err := websocketServe(live, w, r); err != nil {
 			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -71,7 +71,7 @@ func (r *router) registerAuthHandlers() {
 		}
 		if err := websocketServeChat(w, r, db, chatLog); err != nil {
 			if strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "upgrade") {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, err.Error())
@@ -104,7 +104,7 @@ func (r *router) registerAuthHandlers() {
 		}
 		user, err := store.RegisterUser(r.Context(), db, credentials.Username, credentials.Password)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeStoreError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusCreated, user)
@@ -141,12 +141,12 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set when TLS is active; HttpOnly and SameSite are present
+		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set for TLS or trusted TLS-terminating proxies
 			Name:     "ticket_token",
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   r.TLS != nil,
+			Secure:   requestIsSecure(r),
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   60 * 60 * 24 * 30,
 		})
@@ -163,12 +163,12 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set when TLS is active; HttpOnly and SameSite are present
+		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set for TLS or trusted TLS-terminating proxies
 			Name:     "ticket_token",
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   r.TLS != nil,
+			Secure:   requestIsSecure(r),
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   -1,
 		})

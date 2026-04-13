@@ -1,6 +1,5 @@
 # ── Stage 1: build ───────────────────────────────────────────────────────────
-# TODO: pin to @sha256: digest for reproducible builds
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26-alpine@sha256:c2a1f7b2095d046ae14b286b18413a05bb82c9bca9b25fe7ff5efef0f0826166 AS builder
 
 WORKDIR /src
 
@@ -13,8 +12,7 @@ COPY . .
 RUN go build -o /out/tk ./cmd/tk
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
-# TODO: pin to @sha256: digest for reproducible builds
-FROM alpine:3.21
+FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
 
 RUN apk add --no-cache ca-certificates
 

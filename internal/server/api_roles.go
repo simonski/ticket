@@ -40,7 +40,7 @@ func (r *router) registerRoleHandlers() {
 			}
 			role, err := store.CreateRole(r.Context(), db, payload.SdlcID, payload.Title, payload.Description, payload.AcceptanceCriteria)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, role)
@@ -73,7 +73,7 @@ func (r *router) registerRoleHandlers() {
 					writeError(w, http.StatusNotFound, "role not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, role)
@@ -83,7 +83,7 @@ func (r *router) registerRoleHandlers() {
 					writeError(w, http.StatusNotFound, "role not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

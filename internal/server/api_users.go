@@ -39,7 +39,7 @@ func (r *router) registerUserHandlers() {
 			}
 			user, err := store.CreateUser(r.Context(), db, credentials.Username, credentials.Password, "user")
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, user)
@@ -102,7 +102,7 @@ func (r *router) registerUserHandlers() {
 					writeError(w, http.StatusNotFound, "user not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, user)

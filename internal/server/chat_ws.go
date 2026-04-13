@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -141,10 +142,14 @@ func websocketServeChat(w http.ResponseWriter, r *http.Request, db *sql.DB, logf
 		}
 		switch opcode {
 		case 0x8:
-			_ = writeWebSocketFrame(client.conn, 0x8, nil)
+			if err := writeWebSocketFrame(client.conn, 0x8, nil); err != nil {
+				log.Printf("server: write chat websocket close frame: %v", err)
+			}
 			return nil
 		case 0x9:
-			_ = writeWebSocketFrame(client.conn, 0xA, payload)
+			if err := writeWebSocketFrame(client.conn, 0xA, payload); err != nil {
+				return nil
+			}
 		case 0x1:
 			var message chatInboundMessage
 			if err := json.Unmarshal(payload, &message); err != nil {
@@ -664,12 +669,16 @@ func (b *chatProcessBridge) Close() {
 		}
 		b.mu.Lock()
 		if b.stdin != nil {
-			_ = b.stdin.Close()
+			if err := b.stdin.Close(); err != nil {
+				log.Printf("server: close chat bridge stdin: %v", err)
+			}
 			b.stdin = nil
 		}
 		b.mu.Unlock()
 		if b.cmd != nil && b.cmd.Process != nil {
-			_ = b.cmd.Process.Kill()
+			if err := b.cmd.Process.Kill(); err != nil {
+				log.Printf("server: kill chat bridge process: %v", err)
+			}
 		}
 	})
 }

@@ -45,12 +45,12 @@ func (r *router) registerTeamHandlers() {
 			}
 			team, err := store.CreateTeam(r.Context(), db, payload.Name, payload.ParentTeamID)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			// The creator is always an owner of the new team.
 			if _, err := store.AddTeamMember(r.Context(), db, team.ID, user.ID, store.TeamRoleOwner, ""); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, team)
@@ -82,7 +82,7 @@ func (r *router) registerTeamHandlers() {
 				writeError(w, http.StatusNotFound, "team not found")
 				return
 			}
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeStoreError(w, err)
 			return
 		}
 		canManageTeam := user.Role == "admin"
@@ -109,7 +109,7 @@ func (r *router) registerTeamHandlers() {
 				}
 				updated, err := store.UpdateTeam(r.Context(), db, team.ID, payload.Name, payload.ParentTeamID)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, updated)
@@ -123,7 +123,7 @@ func (r *router) registerTeamHandlers() {
 						writeError(w, http.StatusNotFound, "team not found")
 						return
 					}
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -165,7 +165,7 @@ func (r *router) registerTeamHandlers() {
 				}
 				member, err := store.AddTeamMember(r.Context(), db, team.ID, payload.UserID, payload.Role, payload.JobTitle)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, member)
@@ -190,7 +190,7 @@ func (r *router) registerTeamHandlers() {
 					writeError(w, http.StatusNotFound, err.Error())
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -231,7 +231,7 @@ func (r *router) registerTeamHandlers() {
 				}
 				item, err := store.AddTeamAgent(r.Context(), db, team.ID, payload.AgentID)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, item)
@@ -256,7 +256,7 @@ func (r *router) registerTeamHandlers() {
 					writeError(w, http.StatusNotFound, "team agent assignment not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

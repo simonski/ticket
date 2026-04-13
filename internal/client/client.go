@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
@@ -22,6 +23,9 @@ type Client struct {
 	token   string
 	http    *http.Client
 	mode    string
+
+	localDBMu sync.Mutex
+	localDB   *sql.DB
 }
 
 func New(cfg config.Config) *Client {
@@ -38,38 +42,38 @@ func New(cfg config.Config) *Client {
 	}
 }
 
-func (c *Client) Register(username, password string) (store.User, error) {
+func (c *Client) Register(ctx context.Context, username, password string) (store.User, error) {
 	if c.mode == config.ModeLocal {
 		return store.User{}, errors.New("ticket register requires remote mode (run tk init to configure)")
 	}
 	var user store.User
-	err := c.doJSON(http.MethodPost, "/api/register", map[string]string{
+	err := c.doJSON(ctx, http.MethodPost, "/api/register", map[string]string{
 		"username": username,
 		"password": password,
 	}, &user)
 	return user, err
 }
 
-func (c *Client) Login(username, password string) (AuthResponse, error) {
+func (c *Client) Login(ctx context.Context, username, password string) (AuthResponse, error) {
 	if c.mode == config.ModeLocal {
 		return AuthResponse{}, errors.New("ticket login requires remote mode (run tk init to configure)")
 	}
 	var response AuthResponse
-	err := c.doJSON(http.MethodPost, "/api/login", map[string]string{
+	err := c.doJSON(ctx, http.MethodPost, "/api/login", map[string]string{
 		"username": username,
 		"password": password,
 	}, &response)
 	return response, err
 }
 
-func (c *Client) Logout() error {
+func (c *Client) Logout(ctx context.Context) error {
 	if c.mode == config.ModeLocal {
 		return errors.New("ticket logout requires remote mode (run tk init to configure)")
 	}
-	return c.doJSON(http.MethodPost, "/api/logout", nil, nil)
+	return c.doJSON(ctx, http.MethodPost, "/api/logout", nil, nil)
 }
 
-func (c *Client) Status() (StatusResponse, error) {
+func (c *Client) Status(ctx context.Context) (StatusResponse, error) {
 	if c.mode == config.ModeLocal {
 		resolved, err := config.ResolveURL()
 		if err != nil {
@@ -78,14 +82,13 @@ func (c *Client) Status() (StatusResponse, error) {
 		if _, err := os.Stat(resolved.DBPath); err != nil {
 			return StatusResponse{}, err
 		}
-		db, err := store.Open(resolved.DBPath)
+		db, err := c.openLocalDB()
 		if err != nil {
 			return StatusResponse{}, err
 		}
-		defer db.Close()
 
-		user, err := store.GetUserByUsername(context.Background(), db, localUsername())
-		registrationEnabled, regErr := store.RegistrationEnabled(context.Background(), db)
+		user, err := store.GetUserByUsername(ctx, db, localUsername())
+		registrationEnabled, regErr := store.RegistrationEnabled(ctx, db)
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
@@ -105,342 +108,319 @@ func (c *Client) Status() (StatusResponse, error) {
 		}, nil
 	}
 	var status StatusResponse
-	err := c.doJSON(http.MethodGet, "/api/status", nil, &status)
+	err := c.doJSON(ctx, http.MethodGet, "/api/status", nil, &status)
 	return status, err
 }
 
-func (c *Client) Count(projectID *int64) (CountSummary, error) {
+func (c *Client) Count(ctx context.Context, projectID *int64) (CountSummary, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return CountSummary{}, err
 		}
-		defer db.Close()
-		return store.CountEverything(context.Background(), db, projectID)
+		return store.CountEverything(ctx, db, projectID)
 	}
 	var summary CountSummary
 	path := "/api/count"
 	if projectID != nil {
 		path = fmt.Sprintf("/api/count?project_id=%d", *projectID)
 	}
-	err := c.doJSON(http.MethodGet, path, nil, &summary)
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &summary)
 	return summary, err
 }
 
-func (c *Client) SetRegistrationEnabled(enabled bool) error {
+func (c *Client) SetRegistrationEnabled(ctx context.Context, enabled bool) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.SetRegistrationEnabled(context.Background(), db, enabled)
+		return store.SetRegistrationEnabled(ctx, db, enabled)
 	}
-	return c.doJSON(http.MethodPost, "/api/config/registration", map[string]any{"enabled": enabled}, nil)
+	return c.doJSON(ctx, http.MethodPost, "/api/config/registration", map[string]any{"enabled": enabled}, nil)
 }
 
-func (c *Client) CreateUser(username, password string) (store.User, error) {
+func (c *Client) CreateUser(ctx context.Context, username, password string) (store.User, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.User{}, err
 		}
-		defer db.Close()
-		return store.CreateUser(context.Background(), db, username, password, "user")
+		return store.CreateUser(ctx, db, username, password, "user")
 	}
 	var user store.User
-	err := c.doJSON(http.MethodPost, "/api/users", map[string]string{
+	err := c.doJSON(ctx, http.MethodPost, "/api/users", map[string]string{
 		"username": username,
 		"password": password,
 	}, &user)
 	return user, err
 }
 
-func (c *Client) SetUserEnabled(username string, enabled bool) error {
+func (c *Client) SetUserEnabled(ctx context.Context, username string, enabled bool) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.SetUserEnabled(context.Background(), db, username, enabled)
+		return store.SetUserEnabled(ctx, db, username, enabled)
 	}
 	action := "disable"
 	if enabled {
 		action = "enable"
 	}
-	return c.doJSON(http.MethodPost, "/api/users/"+username+"/"+action, nil, nil)
+	return c.doJSON(ctx, http.MethodPost, "/api/users/"+username+"/"+action, nil, nil)
 }
 
-func (c *Client) ListUsers() ([]store.User, error) {
+func (c *Client) ListUsers(ctx context.Context) ([]store.User, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListUsers(context.Background(), db, 0)
+		return store.ListUsers(ctx, db, 0)
 	}
 	var users []store.User
-	err := c.doJSON(http.MethodGet, "/api/users", nil, &users)
+	err := c.doJSON(ctx, http.MethodGet, "/api/users", nil, &users)
 	return users, err
 }
 
-func (c *Client) DeleteUser(username string) error {
+func (c *Client) DeleteUser(ctx context.Context, username string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteUser(context.Background(), db, username)
+		return store.DeleteUser(ctx, db, username)
 	}
-	return c.doJSON(http.MethodDelete, "/api/users/"+username, nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, "/api/users/"+username, nil, nil)
 }
 
-func (c *Client) ResetUserPassword(username, newPassword string) (store.User, error) {
+func (c *Client) ResetUserPassword(ctx context.Context, username, newPassword string) (store.User, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.User{}, err
 		}
-		defer db.Close()
-		return store.ResetUserPassword(context.Background(), db, username, newPassword)
+		return store.ResetUserPassword(ctx, db, username, newPassword)
 	}
 	var user store.User
-	err := c.doJSON(http.MethodPost, "/api/users/"+username+"/reset-password", map[string]string{"password": newPassword}, &user)
+	err := c.doJSON(ctx, http.MethodPost, "/api/users/"+username+"/reset-password", map[string]string{"password": newPassword}, &user)
 	return user, err
 }
 
-func (c *Client) CreateRole(request RoleRequest) (store.Role, error) {
+func (c *Client) CreateRole(ctx context.Context, request RoleRequest) (store.Role, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Role{}, err
 		}
-		defer db.Close()
-		return store.CreateRole(context.Background(), db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
+		return store.CreateRole(ctx, db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
 	}
 	var role store.Role
-	err := c.doJSON(http.MethodPost, "/api/roles", request, &role)
+	err := c.doJSON(ctx, http.MethodPost, "/api/roles", request, &role)
 	return role, err
 }
 
-func (c *Client) ListRoles() ([]store.Role, error) {
+func (c *Client) ListRoles(ctx context.Context) ([]store.Role, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListRoles(context.Background(), db, 0)
+		return store.ListRoles(ctx, db, 0)
 	}
 	var roles []store.Role
-	err := c.doJSON(http.MethodGet, "/api/roles", nil, &roles)
+	err := c.doJSON(ctx, http.MethodGet, "/api/roles", nil, &roles)
 	return roles, err
 }
 
-func (c *Client) UpdateRole(id int64, request RoleRequest) (store.Role, error) {
+func (c *Client) UpdateRole(ctx context.Context, id int64, request RoleRequest) (store.Role, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Role{}, err
 		}
-		defer db.Close()
-		return store.UpdateRole(context.Background(), db, id, request.Title, request.Description, request.AcceptanceCriteria)
+		return store.UpdateRole(ctx, db, id, request.Title, request.Description, request.AcceptanceCriteria)
 	}
 	var role store.Role
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/roles/%d", id), request, &role)
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/roles/%d", id), request, &role)
 	return role, err
 }
 
-func (c *Client) DeleteRole(id int64) error {
+func (c *Client) DeleteRole(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteRole(context.Background(), db, id)
+		return store.DeleteRole(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/roles/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/roles/%d", id), nil, nil)
 }
 
-func (c *Client) CreateAgent(request AgentCreateRequest) (store.Agent, string, error) {
+func (c *Client) CreateAgent(ctx context.Context, request AgentCreateRequest) (store.Agent, string, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Agent{}, "", err
 		}
-		defer db.Close()
-		return store.CreateAgent(context.Background(), db, request.Password)
+		return store.CreateAgent(ctx, db, request.Password)
 	}
 	var response struct {
 		Agent    store.Agent `json:"agent"`
 		Password string      `json:"password"`
 	}
-	err := c.doJSON(http.MethodPost, "/api/agents", request, &response)
+	err := c.doJSON(ctx, http.MethodPost, "/api/agents", request, &response)
 	return response.Agent, response.Password, err
 }
 
-func (c *Client) SetAgentEnabled(id string, enabled bool) (store.Agent, error) {
+func (c *Client) SetAgentEnabled(ctx context.Context, id string, enabled bool) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Agent{}, err
 		}
-		defer db.Close()
-		return store.SetAgentEnabled(context.Background(), db, id, enabled)
+		return store.SetAgentEnabled(ctx, db, id, enabled)
 	}
 	action := "disable"
 	if enabled {
 		action = "enable"
 	}
 	var agent store.Agent
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%s/%s", id, action), nil, &agent)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/agents/%s/%s", id, action), nil, &agent)
 	return agent, err
 }
 
-func (c *Client) ListAgents() ([]store.Agent, error) {
+func (c *Client) ListAgents(ctx context.Context) ([]store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListAgents(context.Background(), db)
+		return store.ListAgents(ctx, db)
 	}
 	var agents []store.Agent
-	err := c.doJSON(http.MethodGet, "/api/agents", nil, &agents)
+	err := c.doJSON(ctx, http.MethodGet, "/api/agents", nil, &agents)
 	return agents, err
 }
 
-func (c *Client) ListAgentStatuses() ([]store.AgentStatus, error) {
+func (c *Client) ListAgentStatuses(ctx context.Context) ([]store.AgentStatus, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListAgentStatuses(context.Background(), db)
+		return store.ListAgentStatuses(ctx, db)
 	}
 	var statuses []store.AgentStatus
-	err := c.doJSON(http.MethodGet, "/api/agents/statuses", nil, &statuses)
+	err := c.doJSON(ctx, http.MethodGet, "/api/agents/statuses", nil, &statuses)
 	return statuses, err
 }
 
-func (c *Client) UpdateAgent(id string, request AgentUpdateRequest) (store.Agent, error) {
+func (c *Client) UpdateAgent(ctx context.Context, id string, request AgentUpdateRequest) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Agent{}, err
 		}
-		defer db.Close()
-		return store.UpdateAgent(context.Background(), db, id, store.AgentUpdateParams{
+		return store.UpdateAgent(ctx, db, id, store.AgentUpdateParams{
 			Password: request.Password,
 		})
 	}
 	var agent store.Agent
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/agents/%s", id), request, &agent)
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/agents/%s", id), request, &agent)
 	return agent, err
 }
 
-func (c *Client) DeleteAgent(id string) error {
+func (c *Client) DeleteAgent(ctx context.Context, id string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteAgent(context.Background(), db, id)
+		return store.DeleteAgent(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%s", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/agents/%s", id), nil, nil)
 }
 
-func (c *Client) SetAgentConfig(agentID string, key, value string) error {
+func (c *Client) SetAgentConfig(ctx context.Context, agentID string, key, value string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.SetAgentConfig(context.Background(), db, agentID, key, value)
+		return store.SetAgentConfig(ctx, db, agentID, key, value)
 	}
-	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/agents/%s/config", agentID), map[string]string{"key": key, "value": value}, nil)
+	return c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/agents/%s/config", agentID), map[string]string{"key": key, "value": value}, nil)
 }
 
-func (c *Client) ListAgentConfig(agentID string) ([]store.AgentConfigEntry, error) {
+func (c *Client) ListAgentConfig(ctx context.Context, agentID string) ([]store.AgentConfigEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListAgentConfig(context.Background(), db, agentID)
+		return store.ListAgentConfig(ctx, db, agentID)
 	}
 	var entries []store.AgentConfigEntry
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/agents/%s/config", agentID), nil, &entries)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/agents/%s/config", agentID), nil, &entries)
 	return entries, err
 }
 
-func (c *Client) DeleteAgentConfig(agentID string, key string) error {
+func (c *Client) DeleteAgentConfig(ctx context.Context, agentID string, key string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteAgentConfig(context.Background(), db, agentID, key)
+		return store.DeleteAgentConfig(ctx, db, agentID, key)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/agents/%s/config/%s", agentID, key), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/agents/%s/config/%s", agentID, key), nil, nil)
 }
 
-func (c *Client) RegisterAgent(request AgentRegisterRequest) (store.Agent, error) {
+func (c *Client) RegisterAgent(ctx context.Context, request AgentRegisterRequest) (store.Agent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Agent{}, err
 		}
-		defer db.Close()
-		agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
+		agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
 		if err != nil {
 			return store.Agent{}, err
 		}
-		return store.TouchAgent(context.Background(), db, agent.ID, "online")
+		return store.TouchAgent(ctx, db, agent.ID, "online")
 	}
 	var response struct {
 		Agent store.Agent `json:"agent"`
 	}
-	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/register", request.ID, request.Password, nil, &response)
+	err := c.doJSONBasicAuth(ctx, http.MethodPost, "/api/agents/register", request.ID, request.Password, nil, &response)
 	return response.Agent, err
 }
 
-func (c *Client) HeartbeatAgent(agentID, password, status string) error {
+func (c *Client) HeartbeatAgent(ctx context.Context, agentID, password, status string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		agent, err := store.AuthenticateAgent(context.Background(), db, agentID, password)
+		agent, err := store.AuthenticateAgent(ctx, db, agentID, password)
 		if err != nil {
 			return err
 		}
-		_, err = store.TouchAgent(context.Background(), db, agent.ID, status)
+		_, err = store.TouchAgent(ctx, db, agent.ID, status)
 		return err
 	}
 	var response struct{}
-	return c.doJSONBasicAuth(http.MethodPost, "/api/agents/heartbeat", agentID, password, map[string]string{"status": status}, &response)
+	return c.doJSONBasicAuth(ctx, http.MethodPost, "/api/agents/heartbeat", agentID, password, map[string]string{"status": status}, &response)
 }
 
-func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, error) {
+func (c *Client) RequestAgentWork(ctx context.Context, request AgentRequest) (AgentWorkResponse, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
-		defer db.Close()
-		agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
+		agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
@@ -449,7 +429,7 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 			projectID = 0
 		}
 		if projectID == 0 {
-			projects, err := store.ListProjects(context.Background(), db, 0)
+			projects, err := store.ListProjects(ctx, db, 0)
 			if err != nil {
 				return AgentWorkResponse{}, err
 			}
@@ -460,11 +440,11 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 				}
 			}
 		}
-		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(context.Background(), db, projectID, agent.Username)
+		currentAssigned, hadCurrent, err := store.CurrentAssignedTicketForUser(ctx, db, projectID, agent.Username)
 		if err != nil {
 			return AgentWorkResponse{}, err
 		}
-		ticket, status, err := store.RequestTicket(context.Background(), db, store.TicketRequestParams{
+		ticket, status, err := store.RequestTicket(ctx, db, store.TicketRequestParams{
 			ProjectID: projectID,
 			TicketID:  request.TicketID,
 			Username:  agent.Username,
@@ -489,12 +469,12 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 		}
 		response := AgentWorkResponse{Status: agentStatus, Parents: []store.Ticket{}}
 		if agentStatus == "NEW" || agentStatus == "CURRENT" {
-			project, err := store.GetProjectByID(context.Background(), db, ticket.ProjectID)
+			project, err := store.GetProjectByID(ctx, db, ticket.ProjectID)
 			if err == nil {
 				response.Project = &project
 			}
 			response.Ticket = &ticket
-			parents, err := store.ListTicketParents(context.Background(), db, ticket.ID)
+			parents, err := store.ListTicketParents(ctx, db, ticket.ID)
 			if err == nil {
 				response.Parents = parents
 			}
@@ -509,26 +489,25 @@ func (c *Client) RequestAgentWork(request AgentRequest) (AgentWorkResponse, erro
 	if request.TicketID != nil {
 		body["ticket_id"] = *request.TicketID
 	}
-	err := c.doJSONBasicAuth(http.MethodPost, "/api/agents/request", request.ID, request.Password, body, &response)
+	err := c.doJSONBasicAuth(ctx, http.MethodPost, "/api/agents/request", request.ID, request.Password, body, &response)
 	return response, err
 }
 
-func (c *Client) AgentUpdateTicket(id string, request AgentTicketUpdateRequest) (store.Ticket, error) {
+func (c *Client) AgentUpdateTicket(ctx context.Context, id string, request AgentTicketUpdateRequest) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		agent, err := store.AuthenticateAgent(context.Background(), db, request.ID, request.Password)
+		agent, err := store.AuthenticateAgent(ctx, db, request.ID, request.Password)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		current, err := store.GetTicket(context.Background(), db, id)
+		current, err := store.GetTicket(ctx, db, id)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		return store.UpdateTicket(context.Background(), db, id, store.TicketUpdateParams{
+		return store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
 			Title:              current.Title,
 			Description:        request.Result,
 			AcceptanceCriteria: current.AcceptanceCriteria,
@@ -548,22 +527,21 @@ func (c *Client) AgentUpdateTicket(id string, request AgentTicketUpdateRequest) 
 	}
 	var ticket store.Ticket
 	body := map[string]string{"result": request.Result}
-	err := c.doJSONBasicAuth(http.MethodPost, fmt.Sprintf("/api/agents/tickets/%s/update", id), request.ID, request.Password, body, &ticket)
+	err := c.doJSONBasicAuth(ctx, http.MethodPost, fmt.Sprintf("/api/agents/tickets/%s/update", id), request.ID, request.Password, body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, error) {
+func (c *Client) CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Project{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Project{}, err
 		}
-		return store.CreateProjectWithParams(context.Background(), db, store.ProjectCreateParams{
+		return store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
 			Prefix:             request.Prefix,
 			Title:              request.Title,
 			Description:        request.Description,
@@ -577,46 +555,43 @@ func (c *Client) CreateProject(request ProjectCreateRequest) (store.Project, err
 		})
 	}
 	var project store.Project
-	err := c.doJSON(http.MethodPost, "/api/projects", request, &project)
+	err := c.doJSON(ctx, http.MethodPost, "/api/projects", request, &project)
 	return project, err
 }
 
-func (c *Client) ListProjects() ([]store.Project, error) {
+func (c *Client) ListProjects(ctx context.Context) ([]store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListProjects(context.Background(), db, 0)
+		return store.ListProjects(ctx, db, 0)
 	}
 	var projects []store.Project
-	err := c.doJSON(http.MethodGet, "/api/projects", nil, &projects)
+	err := c.doJSON(ctx, http.MethodGet, "/api/projects", nil, &projects)
 	return projects, err
 }
 
-func (c *Client) GetProject(id string) (store.Project, error) {
+func (c *Client) GetProject(ctx context.Context, id string) (store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Project{}, err
 		}
-		defer db.Close()
-		return store.GetProject(context.Background(), db, id)
+		return store.GetProject(ctx, db, id)
 	}
 	var project store.Project
-	err := c.doJSON(http.MethodGet, "/api/projects/"+id, nil, &project)
+	err := c.doJSON(ctx, http.MethodGet, "/api/projects/"+id, nil, &project)
 	return project, err
 }
 
-func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Project, error) {
+func (c *Client) UpdateProject(ctx context.Context, id int64, request ProjectUpdateRequest) (store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Project{}, err
 		}
-		defer db.Close()
-		return store.UpdateProjectWithParams(context.Background(), db, id, store.ProjectUpdateParams{
+		return store.UpdateProjectWithParams(ctx, db, id, store.ProjectUpdateParams{
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
@@ -628,279 +603,259 @@ func (c *Client) UpdateProject(id int64, request ProjectUpdateRequest) (store.Pr
 		})
 	}
 	var project store.Project
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/projects/%d", id), request, &project)
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/projects/%d", id), request, &project)
 	return project, err
 }
 
-func (c *Client) SetProjectEnabled(id int64, enabled bool) (store.Project, error) {
+func (c *Client) SetProjectEnabled(ctx context.Context, id int64, enabled bool) (store.Project, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Project{}, err
 		}
-		defer db.Close()
-		return store.SetProjectStatus(context.Background(), db, id, enabled)
+		return store.SetProjectStatus(ctx, db, id, enabled)
 	}
 	action := "disable"
 	if enabled {
 		action = "enable"
 	}
 	var project store.Project
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/%s", id, action), nil, &project)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/%s", id, action), nil, &project)
 	return project, err
 }
 
-func (c *Client) SetProjectDefaultDraft(projectID int64, draft bool) error {
+func (c *Client) SetProjectDefaultDraft(ctx context.Context, projectID int64, draft bool) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.SetProjectDefaultDraft(context.Background(), db, projectID, draft)
+		return store.SetProjectDefaultDraft(ctx, db, projectID, draft)
 	}
-	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/projects/%d/set-draft", projectID), map[string]bool{"draft": draft}, nil)
+	return c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/projects/%d/set-draft", projectID), map[string]bool{"draft": draft}, nil)
 }
 
-func (c *Client) DeleteProject(id int64) error {
+func (c *Client) DeleteProject(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteProject(context.Background(), db, id)
+		return store.DeleteProject(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/projects/%d", id), nil, nil)
 }
 
-func (c *Client) AddProjectMember(projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
+func (c *Client) AddProjectMember(ctx context.Context, projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.ProjectMember{}, err
 		}
-		defer db.Close()
-		return store.AddProjectMember(context.Background(), db, projectID, request.UserID, request.Role)
+		return store.AddProjectMember(ctx, db, projectID, request.UserID, request.Role)
 	}
 	var member store.ProjectMember
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/users", projectID), request, &member)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/users", projectID), request, &member)
 	return member, err
 }
 
-func (c *Client) RemoveProjectMember(projectID int64, userID string) error {
+func (c *Client) RemoveProjectMember(ctx context.Context, projectID int64, userID string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveProjectMember(context.Background(), db, projectID, userID)
+		return store.RemoveProjectMember(ctx, db, projectID, userID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/users/%s", projectID, userID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/projects/%d/users/%s", projectID, userID), nil, nil)
 }
 
-func (c *Client) ListProjectMembers(projectID int64) ([]store.ProjectMember, error) {
+func (c *Client) ListProjectMembers(ctx context.Context, projectID int64) ([]store.ProjectMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListProjectMembers(context.Background(), db, projectID)
+		return store.ListProjectMembers(ctx, db, projectID)
 	}
 	var members []store.ProjectMember
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/users", projectID), nil, &members)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/users", projectID), nil, &members)
 	return members, err
 }
 
-func (c *Client) AddProjectTeamMember(projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
+func (c *Client) AddProjectTeamMember(ctx context.Context, projectID int64, request ProjectTeamMemberRequest) (store.ProjectTeamMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.ProjectTeamMember{}, err
 		}
-		defer db.Close()
-		return store.AddProjectTeamMember(context.Background(), db, projectID, request.TeamID, request.Role)
+		return store.AddProjectTeamMember(ctx, db, projectID, request.TeamID, request.Role)
 	}
 	var member store.ProjectTeamMember
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/teams", projectID), request, &member)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/teams", projectID), request, &member)
 	return member, err
 }
 
-func (c *Client) RemoveProjectTeamMember(projectID, teamID int64) error {
+func (c *Client) RemoveProjectTeamMember(ctx context.Context, projectID, teamID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveProjectTeamMember(context.Background(), db, projectID, teamID)
+		return store.RemoveProjectTeamMember(ctx, db, projectID, teamID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/projects/%d/teams/%d", projectID, teamID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/projects/%d/teams/%d", projectID, teamID), nil, nil)
 }
 
-func (c *Client) ListProjectTeamMembers(projectID int64) ([]store.ProjectTeamMember, error) {
+func (c *Client) ListProjectTeamMembers(ctx context.Context, projectID int64) ([]store.ProjectTeamMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListProjectTeamMembers(context.Background(), db, projectID)
+		return store.ListProjectTeamMembers(ctx, db, projectID)
 	}
 	var members []store.ProjectTeamMember
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/teams", projectID), nil, &members)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/teams", projectID), nil, &members)
 	return members, err
 }
 
-func (c *Client) CreateTeam(request TeamRequest) (store.Team, error) {
+func (c *Client) CreateTeam(ctx context.Context, request TeamRequest) (store.Team, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Team{}, err
 		}
-		defer db.Close()
-		return store.CreateTeam(context.Background(), db, request.Name, request.ParentTeamID)
+		return store.CreateTeam(ctx, db, request.Name, request.ParentTeamID)
 	}
 	var team store.Team
-	err := c.doJSON(http.MethodPost, "/api/teams", request, &team)
+	err := c.doJSON(ctx, http.MethodPost, "/api/teams", request, &team)
 	return team, err
 }
 
-func (c *Client) ListTeams() ([]store.Team, error) {
+func (c *Client) ListTeams(ctx context.Context) ([]store.Team, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListTeams(context.Background(), db, 0)
+		return store.ListTeams(ctx, db, 0)
 	}
 	var teams []store.Team
-	err := c.doJSON(http.MethodGet, "/api/teams", nil, &teams)
+	err := c.doJSON(ctx, http.MethodGet, "/api/teams", nil, &teams)
 	return teams, err
 }
 
-func (c *Client) UpdateTeam(id int64, request TeamRequest) (store.Team, error) {
+func (c *Client) UpdateTeam(ctx context.Context, id int64, request TeamRequest) (store.Team, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Team{}, err
 		}
-		defer db.Close()
-		return store.UpdateTeam(context.Background(), db, id, request.Name, request.ParentTeamID)
+		return store.UpdateTeam(ctx, db, id, request.Name, request.ParentTeamID)
 	}
 	var team store.Team
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/teams/%d", id), request, &team)
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/teams/%d", id), request, &team)
 	return team, err
 }
 
-func (c *Client) DeleteTeam(id int64) error {
+func (c *Client) DeleteTeam(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteTeam(context.Background(), db, id)
+		return store.DeleteTeam(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/teams/%d", id), nil, nil)
 }
 
-func (c *Client) AddTeamMember(teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
+func (c *Client) AddTeamMember(ctx context.Context, teamID int64, request TeamMemberRequest) (store.TeamMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.TeamMember{}, err
 		}
-		defer db.Close()
-		return store.AddTeamMember(context.Background(), db, teamID, request.UserID, request.Role, request.JobTitle)
+		return store.AddTeamMember(ctx, db, teamID, request.UserID, request.Role, request.JobTitle)
 	}
 	var member store.TeamMember
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/users", teamID), request, &member)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/teams/%d/users", teamID), request, &member)
 	return member, err
 }
 
-func (c *Client) RemoveTeamMember(teamID int64, userID string) error {
+func (c *Client) RemoveTeamMember(ctx context.Context, teamID int64, userID string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveTeamMember(context.Background(), db, teamID, userID)
+		return store.RemoveTeamMember(ctx, db, teamID, userID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/users/%s", teamID, userID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/teams/%d/users/%s", teamID, userID), nil, nil)
 }
 
-func (c *Client) ListTeamMembers(teamID int64) ([]store.TeamMember, error) {
+func (c *Client) ListTeamMembers(ctx context.Context, teamID int64) ([]store.TeamMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListTeamMembers(context.Background(), db, teamID)
+		return store.ListTeamMembers(ctx, db, teamID)
 	}
 	var members []store.TeamMember
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/teams/%d/users", teamID), nil, &members)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/teams/%d/users", teamID), nil, &members)
 	return members, err
 }
 
-func (c *Client) AddTeamAgent(teamID int64, agentID string) (store.TeamAgent, error) {
+func (c *Client) AddTeamAgent(ctx context.Context, teamID int64, agentID string) (store.TeamAgent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.TeamAgent{}, err
 		}
-		defer db.Close()
-		return store.AddTeamAgent(context.Background(), db, teamID, agentID)
+		return store.AddTeamAgent(ctx, db, teamID, agentID)
 	}
 	var item store.TeamAgent
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/teams/%d/agents", teamID), map[string]string{"agent_id": agentID}, &item)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/teams/%d/agents", teamID), map[string]string{"agent_id": agentID}, &item)
 	return item, err
 }
 
-func (c *Client) RemoveTeamAgent(teamID int64, agentID string) error {
+func (c *Client) RemoveTeamAgent(ctx context.Context, teamID int64, agentID string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveTeamAgent(context.Background(), db, teamID, agentID)
+		return store.RemoveTeamAgent(ctx, db, teamID, agentID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/teams/%d/agents/%s", teamID, agentID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/teams/%d/agents/%s", teamID, agentID), nil, nil)
 }
 
-func (c *Client) ListTeamAgents(teamID int64) ([]store.TeamAgent, error) {
+func (c *Client) ListTeamAgents(ctx context.Context, teamID int64) ([]store.TeamAgent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListTeamAgents(context.Background(), db, teamID)
+		return store.ListTeamAgents(ctx, db, teamID)
 	}
 	var items []store.TeamAgent
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/teams/%d/agents", teamID), nil, &items)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/teams/%d/agents", teamID), nil, &items)
 	return items, err
 }
 
-func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error) {
+func (c *Client) CreateTicket(ctx context.Context, request TicketCreateRequest) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
 		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		ticket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
+		ticket, err := store.CreateTicket(ctx, db, store.TicketCreateParams{
 			ProjectID:          request.ProjectID,
 			ParentID:           request.ParentID,
 			CloneOf:            request.CloneOf,
@@ -922,29 +877,28 @@ func (c *Client) CreateTicket(request TicketCreateRequest) (store.Ticket, error)
 			return ticket, err
 		}
 		if request.Message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, request.Message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, request.Message); err != nil {
 				return ticket, err
 			}
 		}
 		return ticket, nil
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets", request, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets", request, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ListTickets(projectID int64) ([]store.Ticket, error) {
-	return c.ListTicketsFiltered(projectID, "", "", "", "", "", "", 0, false)
+func (c *Client) ListTickets(ctx context.Context, projectID int64) ([]store.Ticket, error) {
+	return c.ListTicketsFiltered(ctx, projectID, "", "", "", "", "", "", 0, false)
 }
 
-func (c *Client) ListTicketsFiltered(projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
+func (c *Client) ListTicketsFiltered(ctx context.Context, projectID int64, ticketType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListTickets(context.Background(), db, store.TicketListParams{
+		return store.ListTickets(ctx, db, store.TicketListParams{
 			ProjectID:       projectID,
 			Type:            ticketType,
 			Stage:           stage,
@@ -986,23 +940,22 @@ func (c *Client) ListTicketsFiltered(projectID int64, ticketType, stage, state, 
 	if encoded := values.Encode(); encoded != "" {
 		path += "?" + encoded
 	}
-	err := c.doJSON(http.MethodGet, path, nil, &tickets)
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &tickets)
 	return tickets, err
 }
 
-func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Ticket, error) {
+func (c *Client) UpdateTicket(ctx context.Context, id string, request TicketUpdateRequest) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
 		_, state, _ := resolveRequestLifecycle(request.Status, request.Stage, request.State)
-		ticket, err := store.UpdateTicket(context.Background(), db, id, store.TicketUpdateParams{
+		ticket, err := store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
 			Title:              request.Title,
 			Description:        request.Description,
 			AcceptanceCriteria: request.AcceptanceCriteria,
@@ -1024,61 +977,59 @@ func (c *Client) UpdateTicket(id string, request TicketUpdateRequest) (store.Tic
 			return ticket, err
 		}
 		if request.Message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, request.Message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, request.Message); err != nil {
 				return ticket, err
 			}
 		}
 		return ticket, nil
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPut, "/api/tickets/"+url.PathEscape(id), request, &ticket)
+	err := c.doJSON(ctx, http.MethodPut, "/api/tickets/"+url.PathEscape(id), request, &ticket)
 	return ticket, err
 }
 
-func (c *Client) CloseTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) CloseTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, id, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, id, user.ID, message); err != nil {
 				return store.Ticket{}, err
 			}
 		}
-		return store.SetTicketComplete(context.Background(), db, id, true, user.Username, user.ID)
+		return store.SetTicketComplete(ctx, db, id, true, user.Username, user.ID)
 	}
 	var body any
 	if message != "" {
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/close", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/close", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) OpenTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) OpenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketComplete(context.Background(), db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketComplete(ctx, db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1089,54 +1040,52 @@ func (c *Client) OpenTicket(id string, message string) (store.Ticket, error) {
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/open", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/open", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ArchiveTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) ArchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, id, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, id, user.ID, message); err != nil {
 				return store.Ticket{}, err
 			}
 		}
-		return store.SetTicketArchived(context.Background(), db, id, true, user.Username, user.ID)
+		return store.SetTicketArchived(ctx, db, id, true, user.Username, user.ID)
 	}
 	var body any
 	if message != "" {
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/archive", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/archive", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) UnarchiveTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) UnarchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketArchived(context.Background(), db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketArchived(ctx, db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1147,27 +1096,26 @@ func (c *Client) UnarchiveTicket(id string, message string) (store.Ticket, error
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/unarchive", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/unarchive", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ReadyTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) ReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketDraft(context.Background(), db, id, false, user.Username, user.ID)
+		ticket, err := store.SetTicketDraft(ctx, db, id, false, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1178,27 +1126,26 @@ func (c *Client) ReadyTicket(id string, message string) (store.Ticket, error) {
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/ready", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/ready", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) NotReadyTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) NotReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.SetTicketDraft(context.Background(), db, id, true, user.Username, user.ID)
+		ticket, err := store.SetTicketDraft(ctx, db, id, true, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1209,56 +1156,53 @@ func (c *Client) NotReadyTicket(id string, message string) (store.Ticket, error)
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/notready", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/notready", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) SetTicketSdlc(id string, sdlcID int64) (store.Ticket, error) {
+func (c *Client) SetTicketSdlc(ctx context.Context, id string, sdlcID int64) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		return store.SetTicketSdlc(context.Background(), db, id, sdlcID)
+		return store.SetTicketSdlc(ctx, db, id, sdlcID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/sdlc", map[string]int64{"sdlc_id": sdlcID}, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/sdlc", map[string]int64{"sdlc_id": sdlcID}, &ticket)
 	return ticket, err
 }
 
-func (c *Client) UnsetTicketSdlc(id string) (store.Ticket, error) {
+func (c *Client) UnsetTicketSdlc(ctx context.Context, id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		return store.UnsetTicketSdlc(context.Background(), db, id)
+		return store.UnsetTicketSdlc(ctx, db, id)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id)+"/sdlc", nil, &ticket)
+	err := c.doJSON(ctx, http.MethodDelete, "/api/tickets/"+url.PathEscape(id)+"/sdlc", nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) DeleteTicket(id string) error {
+func (c *Client) DeleteTicket(ctx context.Context, id string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteTicket(context.Background(), db, id)
+		return store.DeleteTicket(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, "/api/tickets/"+url.PathEscape(id), nil, nil)
 }
 
-func (c *Client) SetTicketParent(id, parentID string, message string) (store.Ticket, error) {
-	current, err := c.GetTicketByID(id)
+func (c *Client) SetTicketParent(ctx context.Context, id, parentID string, message string) (store.Ticket, error) {
+	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return c.UpdateTicket(id, TicketUpdateRequest{
+	return c.UpdateTicket(ctx, id, TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -1274,12 +1218,12 @@ func (c *Client) SetTicketParent(id, parentID string, message string) (store.Tic
 	})
 }
 
-func (c *Client) UnsetTicketParent(id string, message string) (store.Ticket, error) {
-	current, err := c.GetTicketByID(id)
+func (c *Client) UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error) {
+	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return c.UpdateTicket(id, TicketUpdateRequest{
+	return c.UpdateTicket(ctx, id, TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -1295,51 +1239,48 @@ func (c *Client) UnsetTicketParent(id string, message string) (store.Ticket, err
 	})
 }
 
-func (c *Client) GetTicketByID(id string) (store.Ticket, error) {
+func (c *Client) GetTicketByID(ctx context.Context, id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		return store.GetTicket(context.Background(), db, id)
+		return store.GetTicket(ctx, db, id)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id), nil, &ticket)
+	err := c.doJSON(ctx, http.MethodGet, "/api/tickets/"+url.PathEscape(id), nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) GetTicket(ref string) (store.Ticket, error) {
+func (c *Client) GetTicket(ctx context.Context, ref string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		return store.GetTicketByRef(context.Background(), db, ref)
+		return store.GetTicketByRef(ctx, db, ref)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(strings.TrimSpace(ref)), nil, &ticket)
+	err := c.doJSON(ctx, http.MethodGet, "/api/tickets/"+url.PathEscape(strings.TrimSpace(ref)), nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) CloneTicket(id string, message string) (store.Ticket, error) {
+func (c *Client) CloneTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		ticket, err := store.CloneTicket(context.Background(), db, id, user.Username, user.ID)
+		ticket, err := store.CloneTicket(ctx, db, id, user.Username, user.ID)
 		if err != nil {
 			return ticket, err
 		}
 		if message != "" {
-			if _, err := store.AddComment(context.Background(), db, ticket.ID, user.ID, message); err != nil {
+			if _, err := store.AddComment(ctx, db, ticket.ID, user.ID, message); err != nil {
 				return ticket, err
 			}
 		}
@@ -1350,36 +1291,49 @@ func (c *Client) CloneTicket(id string, message string) (store.Ticket, error) {
 		body = messageRequest{Message: message}
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/clone", body, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(id)+"/clone", body, &ticket)
 	return ticket, err
 }
 
-func (c *Client) ListHistory(id string) ([]store.HistoryEvent, error) {
+func (c *Client) ListHistory(ctx context.Context, id string) ([]store.HistoryEvent, error) {
+	return c.ListHistoryPaged(ctx, id, 0, 0)
+}
+
+func (c *Client) ListHistoryPaged(ctx context.Context, id string, limit, offset int) ([]store.HistoryEvent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListHistoryEvents(context.Background(), db, id, 0, 0)
+		return store.ListHistoryEvents(ctx, db, id, limit, offset)
+	}
+	path := "/api/tickets/" + url.PathEscape(id) + "/history"
+	params := url.Values{}
+	if limit != 0 {
+		params.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	if offset != 0 {
+		params.Set("offset", fmt.Sprintf("%d", offset))
+	}
+	if encoded := params.Encode(); encoded != "" {
+		path += "?" + encoded
 	}
 	var events []store.HistoryEvent
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(id)+"/history", nil, &events)
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &events)
 	return events, err
 }
 
-func (c *Client) ListProjectHistory(projectID int64, limit int) ([]store.HistoryEvent, error) {
-	return c.ListProjectHistoryFiltered(projectID, limit, store.HistoryFilter{})
+func (c *Client) ListProjectHistory(ctx context.Context, projectID int64, limit int) ([]store.HistoryEvent, error) {
+	return c.ListProjectHistoryFiltered(ctx, projectID, limit, store.HistoryFilter{})
 }
 
-func (c *Client) ListProjectHistoryFiltered(projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
+func (c *Client) ListProjectHistoryFiltered(ctx context.Context, projectID int64, limit int, filter store.HistoryFilter) ([]store.HistoryEvent, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListProjectHistoryFiltered(context.Background(), db, projectID, limit, filter)
+		return store.ListProjectHistoryFiltered(ctx, db, projectID, limit, filter)
 	}
 	if limit <= 0 {
 		limit = 10
@@ -1396,112 +1350,105 @@ func (c *Client) ListProjectHistoryFiltered(projectID int64, limit int, filter s
 		params.Set("team_id", fmt.Sprintf("%d", filter.TeamID))
 	}
 	var events []store.HistoryEvent
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/history?%s", projectID, params.Encode()), nil, &events)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/history?%s", projectID, params.Encode()), nil, &events)
 	return events, err
 }
 
-func (c *Client) AddComment(id string, comment string) (store.Comment, error) {
+func (c *Client) AddComment(ctx context.Context, id string, comment string) (store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Comment{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Comment{}, err
 		}
-		return store.AddComment(context.Background(), db, id, user.ID, comment)
+		return store.AddComment(ctx, db, id, user.ID, comment)
 	}
 	var created store.Comment
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/comments", id), CommentCreateRequest{Comment: comment}, &created)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/comments", id), CommentCreateRequest{Comment: comment}, &created)
 	return created, err
 }
 
-func (c *Client) ListComments(id string) ([]store.Comment, error) {
+func (c *Client) ListComments(ctx context.Context, id string) ([]store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListComments(context.Background(), db, id)
+		return store.ListComments(ctx, db, id)
 	}
 	var comments []store.Comment
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%s/comments", id), nil, &comments)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/tickets/%s/comments", id), nil, &comments)
 	return comments, err
 }
 
-func (c *Client) SetTicketHealth(id string, score int) (store.Ticket, error) {
+func (c *Client) SetTicketHealth(ctx context.Context, id string, score int) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		return store.SetTicketHealth(context.Background(), db, id, score)
+		return store.SetTicketHealth(ctx, db, id, score)
 	}
 	var updated store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/health", id), TicketHealthRequest{Score: score}, &updated)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/health", id), TicketHealthRequest{Score: score}, &updated)
 	return updated, err
 }
 
-func (c *Client) AddDependency(request DependencyRequest) (store.Dependency, error) {
+func (c *Client) AddDependency(ctx context.Context, request DependencyRequest) (store.Dependency, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Dependency{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Dependency{}, err
 		}
-		return store.AddDependency(context.Background(), db, request.ProjectID, request.TicketID, request.DependsOn, user.ID)
+		return store.AddDependency(ctx, db, request.ProjectID, request.TicketID, request.DependsOn, user.ID)
 	}
 	var dependency store.Dependency
-	err := c.doJSON(http.MethodPost, "/api/dependencies", request, &dependency)
+	err := c.doJSON(ctx, http.MethodPost, "/api/dependencies", request, &dependency)
 	return dependency, err
 }
 
-func (c *Client) RemoveDependency(request DependencyRequest) error {
+func (c *Client) RemoveDependency(ctx context.Context, request DependencyRequest) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteDependency(context.Background(), db, request.ProjectID, request.TicketID, request.DependsOn)
+		return store.DeleteDependency(ctx, db, request.ProjectID, request.TicketID, request.DependsOn)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/dependencies?project_id=%d&ticket_id=%s&depends_on=%s", request.ProjectID, request.TicketID, request.DependsOn), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/dependencies?project_id=%d&ticket_id=%s&depends_on=%s", request.ProjectID, request.TicketID, request.DependsOn), nil, nil)
 }
 
-func (c *Client) ListDependencies(id string) ([]store.Dependency, error) {
+func (c *Client) ListDependencies(ctx context.Context, id string) ([]store.Dependency, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListDependencies(context.Background(), db, id)
+		return store.ListDependencies(ctx, db, id)
 	}
 	var dependencies []store.Dependency
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/tickets/%s/dependencies", id), nil, &dependencies)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/tickets/%s/dependencies", id), nil, &dependencies)
 	return dependencies, err
 }
 
-func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, error) {
+func (c *Client) RequestTicket(ctx context.Context, request TicketRequest) (TicketRequestResponse, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return TicketRequestResponse{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return TicketRequestResponse{}, err
 		}
-		ticket, status, err := store.RequestTicket(context.Background(), db, store.TicketRequestParams{
+		ticket, status, err := store.RequestTicket(ctx, db, store.TicketRequestParams{
 			ProjectID: request.ProjectID,
 			TicketID:  request.TicketID,
 			TicketRef: request.TicketRef,
@@ -1515,7 +1462,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 		response := TicketRequestResponse{Status: status}
 		if status == "ASSIGNED" || status == "AVAILABLE" {
 			response.Ticket = &ticket
-			ctx := store.EnrichTicketContext(context.Background(), db, ticket)
+			ctx := store.EnrichTicketContext(ctx, db, ticket)
 			response.Project = ctx.Project
 			response.Parents = ctx.Parents
 			response.Sdlc = ctx.Sdlc
@@ -1530,7 +1477,7 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 	}
 	reader = bytes.NewReader(payload)
 
-	httpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/api/tickets/claim", reader)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/tickets/claim", reader)
 	if err != nil {
 		return TicketRequestResponse{}, err
 	}
@@ -1566,389 +1513,362 @@ func (c *Client) RequestTicket(request TicketRequest) (TicketRequestResponse, er
 	return response, nil
 }
 
-func (c *Client) CreateSdlc(request SdlcRequest) (store.Sdlc, error) {
+func (c *Client) CreateSdlc(ctx context.Context, request SdlcRequest) (store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Sdlc{}, err
 		}
-		defer db.Close()
-		return store.CreateSdlc(context.Background(), db, request.Name, request.Description)
+		return store.CreateSdlc(ctx, db, request.Name, request.Description)
 	}
 	var wf store.Sdlc
-	err := c.doJSON(http.MethodPost, "/api/sdlcs", request, &wf)
+	err := c.doJSON(ctx, http.MethodPost, "/api/sdlcs", request, &wf)
 	return wf, err
 }
 
-func (c *Client) ListSdlcs() ([]store.Sdlc, error) {
+func (c *Client) ListSdlcs(ctx context.Context) ([]store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListSdlcs(context.Background(), db, 0, 0)
+		return store.ListSdlcs(ctx, db, 0, 0)
 	}
 	var sdlcs []store.Sdlc
-	err := c.doJSON(http.MethodGet, "/api/sdlcs", nil, &sdlcs)
+	err := c.doJSON(ctx, http.MethodGet, "/api/sdlcs", nil, &sdlcs)
 	return sdlcs, err
 }
 
-func (c *Client) GetSdlc(id int64) (store.SdlcWithStages, error) {
+func (c *Client) GetSdlc(ctx context.Context, id int64) (store.SdlcWithStages, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.SdlcWithStages{}, err
 		}
-		defer db.Close()
-		return store.GetSdlc(context.Background(), db, id)
+		return store.GetSdlc(ctx, db, id)
 	}
 	var wf store.SdlcWithStages
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/%d", id), nil, &wf)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/sdlcs/%d", id), nil, &wf)
 	return wf, err
 }
 
-func (c *Client) DeleteSdlc(id int64) error {
+func (c *Client) DeleteSdlc(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteSdlc(context.Background(), db, id)
+		return store.DeleteSdlc(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/sdlcs/%d", id), nil, nil)
 }
 
-func (c *Client) AddSdlcStage(sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+func (c *Client) AddSdlcStage(ctx context.Context, sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.SdlcStage{}, err
 		}
-		defer db.Close()
-		return store.AddSdlcStage(context.Background(), db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
+		return store.AddSdlcStage(ctx, db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
 	}
 	var stage store.SdlcStage
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages", sdlcID), request, &stage)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages", sdlcID), request, &stage)
 	return stage, err
 }
 
-func (c *Client) UpdateSdlcStage(stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
+func (c *Client) UpdateSdlcStage(ctx context.Context, stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.SdlcStage{}, err
 		}
-		defer db.Close()
-		return store.UpdateSdlcStage(context.Background(), db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
+		return store.UpdateSdlcStage(ctx, db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
 	}
 	var stage store.SdlcStage
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), request, &stage)
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), request, &stage)
 	return stage, err
 }
 
-func (c *Client) GetSdlcStage(stageID int64) (store.SdlcStage, error) {
+func (c *Client) GetSdlcStage(ctx context.Context, stageID int64) (store.SdlcStage, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.SdlcStage{}, err
 		}
-		defer db.Close()
-		return store.GetSdlcStage(context.Background(), db, stageID)
+		return store.GetSdlcStage(ctx, db, stageID)
 	}
 	var stage store.SdlcStage
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), nil, &stage)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), nil, &stage)
 	return stage, err
 }
 
-func (c *Client) ListSdlcStages(sdlcID int64) ([]store.SdlcStage, error) {
+func (c *Client) ListSdlcStages(ctx context.Context, sdlcID int64) ([]store.SdlcStage, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListSdlcStages(context.Background(), db, sdlcID)
+		return store.ListSdlcStages(ctx, db, sdlcID)
 	}
 	// Derive from GetSdlc
 	var wf store.SdlcWithStages
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/%d", sdlcID), nil, &wf)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/sdlcs/%d", sdlcID), nil, &wf)
 	if err != nil {
 		return nil, err
 	}
 	return wf.Stages, nil
 }
 
-func (c *Client) RemoveSdlcStage(stageID int64) error {
+func (c *Client) RemoveSdlcStage(ctx context.Context, stageID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveSdlcStage(context.Background(), db, stageID)
+		return store.RemoveSdlcStage(ctx, db, stageID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), nil, nil)
 }
 
-func (c *Client) ReorderSdlcStages(sdlcID int64, stageIDs []int64) error {
+func (c *Client) ReorderSdlcStages(ctx context.Context, sdlcID int64, stageIDs []int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.ReorderSdlcStages(context.Background(), db, sdlcID, stageIDs)
+		return store.ReorderSdlcStages(ctx, db, sdlcID, stageIDs)
 	}
-	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/%d/reorder", sdlcID), SdlcReorderRequest{StageIDs: stageIDs}, nil)
+	return c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/sdlcs/%d/reorder", sdlcID), SdlcReorderRequest{StageIDs: stageIDs}, nil)
 }
 
-func (c *Client) ExportSdlc(id int64) (store.SdlcExport, error) {
+func (c *Client) ExportSdlc(ctx context.Context, id int64) (store.SdlcExport, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.SdlcExport{}, err
 		}
-		defer db.Close()
-		return store.ExportSdlc(context.Background(), db, id)
+		return store.ExportSdlc(ctx, db, id)
 	}
 	var export store.SdlcExport
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/sdlcs/%d/export", id), nil, &export)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/sdlcs/%d/export", id), nil, &export)
 	return export, err
 }
 
-func (c *Client) ImportSdlc(export store.SdlcExport) (store.Sdlc, error) {
+func (c *Client) ImportSdlc(ctx context.Context, export store.SdlcExport) (store.Sdlc, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Sdlc{}, err
 		}
-		defer db.Close()
-		return store.ImportSdlc(context.Background(), db, export)
+		return store.ImportSdlc(ctx, db, export)
 	}
 	var wf store.Sdlc
-	err := c.doJSON(http.MethodPost, "/api/sdlcs/import", export, &wf)
+	err := c.doJSON(ctx, http.MethodPost, "/api/sdlcs/import", export, &wf)
 	return wf, err
 }
 
-func (c *Client) AddSdlcStageRole(sdlcID, stageID, roleID int64) error {
+func (c *Client) AddSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.AddSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+		return store.AddSdlcStageRole(ctx, db, sdlcID, stageID, roleID)
 	}
-	return c.doJSON(http.MethodPost, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", sdlcID, stageID), map[string]int64{"role_id": roleID}, nil)
+	return c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", sdlcID, stageID), map[string]int64{"role_id": roleID}, nil)
 }
 
-func (c *Client) RemoveSdlcStageRole(sdlcID, stageID, roleID int64) error {
+func (c *Client) RemoveSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveSdlcStageRole(context.Background(), db, sdlcID, stageID, roleID)
+		return store.RemoveSdlcStageRole(ctx, db, sdlcID, stageID, roleID)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d/%d", sdlcID, stageID, roleID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d/%d", sdlcID, stageID, roleID), nil, nil)
 }
 
-func (c *Client) ReorderSdlcStageRoles(sdlcID, stageID int64, roleIDs []int64) error {
+func (c *Client) ReorderSdlcStageRoles(ctx context.Context, sdlcID, stageID int64, roleIDs []int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.ReorderSdlcStageRoles(context.Background(), db, sdlcID, stageID, roleIDs)
+		return store.ReorderSdlcStageRoles(ctx, db, sdlcID, stageID, roleIDs)
 	}
-	return c.doJSON(http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", sdlcID, stageID), map[string][]int64{"role_ids": roleIDs}, nil)
+	return c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", sdlcID, stageID), map[string][]int64{"role_ids": roleIDs}, nil)
 }
 
-func (c *Client) CompleteTicket(id string, message string) (store.Ticket, error) {
-	return c.CloseTicket(id, message)
+func (c *Client) CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return c.CloseTicket(ctx, id, message)
 }
 
-func (c *Client) ReopenTicket(id string, message string) (store.Ticket, error) {
-	return c.OpenTicket(id, message)
+func (c *Client) ReopenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return c.OpenTicket(ctx, id, message)
 }
 
-func (c *Client) DraftTicket(id string, message string) (store.Ticket, error) {
-	return c.NotReadyTicket(id, message)
+func (c *Client) DraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return c.NotReadyTicket(ctx, id, message)
 }
 
-func (c *Client) UndraftTicket(id string, message string) (store.Ticket, error) {
-	return c.ReadyTicket(id, message)
+func (c *Client) UndraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+	return c.ReadyTicket(ctx, id, message)
 }
 
-func (c *Client) NextTicket(id string) (store.Ticket, error) {
+func (c *Client) NextTicket(ctx context.Context, id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, _ := c.localUser(db)
-		return store.NextTicket(context.Background(), db, id, user.Username, user.ID)
+		user, _ := c.localUser(ctx, db)
+		return store.NextTicket(ctx, db, id, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/next", id), nil, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/next", id), nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) PreviousTicket(id string) (store.Ticket, error) {
+func (c *Client) PreviousTicket(ctx context.Context, id string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Ticket{}, err
 		}
-		defer db.Close()
-		user, _ := c.localUser(db)
-		return store.PreviousTicket(context.Background(), db, id, user.Username, user.ID)
+		user, _ := c.localUser(ctx, db)
+		return store.PreviousTicket(ctx, db, id, user.Username, user.ID)
 	}
 	var ticket store.Ticket
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/tickets/%s/previous", id), nil, &ticket)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/previous", id), nil, &ticket)
 	return ticket, err
 }
 
-func (c *Client) LogTime(ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
+func (c *Client) LogTime(ctx context.Context, ticketID string, request TimeEntryRequest) (store.TimeEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.TimeEntry{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.TimeEntry{}, err
 		}
-		return store.LogTime(context.Background(), db, ticketID, user.ID, request.Minutes, request.Note)
+		return store.LogTime(ctx, db, ticketID, user.ID, request.Minutes, request.Note)
 	}
 	var entry store.TimeEntry
-	err := c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/time", request, &entry)
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/time", request, &entry)
 	return entry, err
 }
 
-func (c *Client) ListTimeEntries(ticketID string) ([]store.TimeEntry, error) {
+func (c *Client) ListTimeEntries(ctx context.Context, ticketID string) ([]store.TimeEntry, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListTimeEntries(context.Background(), db, ticketID)
+		return store.ListTimeEntries(ctx, db, ticketID)
 	}
 	var entries []store.TimeEntry
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time", nil, &entries)
+	err := c.doJSON(ctx, http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time", nil, &entries)
 	return entries, err
 }
 
-func (c *Client) DeleteTimeEntry(id int64) error {
+func (c *Client) DeleteTimeEntry(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteTimeEntry(context.Background(), db, id)
+		return store.DeleteTimeEntry(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/time/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/time/%d", id), nil, nil)
 }
 
-func (c *Client) TotalTimeForTicket(ticketID string) (int, error) {
+func (c *Client) TotalTimeForTicket(ctx context.Context, ticketID string) (int, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return 0, err
 		}
-		defer db.Close()
-		return store.TotalTimeForTicket(context.Background(), db, ticketID)
+		return store.TotalTimeForTicket(ctx, db, ticketID)
 	}
 	var result struct {
 		Total int `json:"total"`
 	}
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time/total", nil, &result)
+	err := c.doJSON(ctx, http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/time/total", nil, &result)
 	return result.Total, err
 }
 
-func (c *Client) CreateLabel(projectID int64, request LabelRequest) (store.Label, error) {
+func (c *Client) CreateLabel(ctx context.Context, projectID int64, request LabelRequest) (store.Label, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Label{}, err
 		}
-		defer db.Close()
-		return store.CreateLabel(context.Background(), db, projectID, request.Name, request.Color)
+		return store.CreateLabel(ctx, db, projectID, request.Name, request.Color)
 	}
 	var label store.Label
-	err := c.doJSON(http.MethodPost, fmt.Sprintf("/api/projects/%d/labels", projectID), request, &label)
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/labels", projectID), request, &label)
 	return label, err
 }
 
-func (c *Client) ListLabels(projectID int64) ([]store.Label, error) {
+func (c *Client) ListLabels(ctx context.Context, projectID int64) ([]store.Label, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListLabels(context.Background(), db, projectID, 0, 0)
+		return store.ListLabels(ctx, db, projectID, 0, 0)
 	}
 	var labels []store.Label
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/labels", projectID), nil, &labels)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/labels", projectID), nil, &labels)
 	return labels, err
 }
 
-func (c *Client) DeleteLabel(id int64) error {
+func (c *Client) DeleteLabel(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteLabel(context.Background(), db, id)
+		return store.DeleteLabel(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/labels/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/labels/%d", id), nil, nil)
 }
 
-func (c *Client) AddTicketLabel(ticketID string, labelID int64) error {
+func (c *Client) AddTicketLabel(ctx context.Context, ticketID string, labelID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.AddTicketLabel(context.Background(), db, ticketID, labelID)
+		return store.AddTicketLabel(ctx, db, ticketID, labelID)
 	}
-	return c.doJSON(http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", map[string]int64{"label_id": labelID}, nil)
+	return c.doJSON(ctx, http.MethodPost, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", map[string]int64{"label_id": labelID}, nil)
 }
 
-func (c *Client) RemoveTicketLabel(ticketID string, labelID int64) error {
+func (c *Client) RemoveTicketLabel(ctx context.Context, ticketID string, labelID int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.RemoveTicketLabel(context.Background(), db, ticketID, labelID)
+		return store.RemoveTicketLabel(ctx, db, ticketID, labelID)
 	}
-	return c.doJSON(http.MethodDelete, "/api/tickets/"+url.PathEscape(ticketID)+"/labels/"+fmt.Sprintf("%d", labelID), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, "/api/tickets/"+url.PathEscape(ticketID)+"/labels/"+fmt.Sprintf("%d", labelID), nil, nil)
 }
 
-func (c *Client) ListTicketLabels(ticketID string) ([]store.Label, error) {
+func (c *Client) ListTicketLabels(ctx context.Context, ticketID string) ([]store.Label, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListTicketLabels(context.Background(), db, ticketID)
+		return store.ListTicketLabels(ctx, db, ticketID)
 	}
 	var labels []store.Label
-	err := c.doJSON(http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", nil, &labels)
+	err := c.doJSON(ctx, http.MethodGet, "/api/tickets/"+url.PathEscape(ticketID)+"/labels", nil, &labels)
 	return labels, err
 }
 
@@ -1958,74 +1878,69 @@ type storyRequest struct {
 	Description string `json:"description"`
 }
 
-func (c *Client) CreateStory(projectID int64, title, description string) (store.Story, error) {
+func (c *Client) CreateStory(ctx context.Context, projectID int64, title, description string) (store.Story, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Story{}, err
 		}
-		defer db.Close()
-		user, err := c.localUser(db)
+		user, err := c.localUser(ctx, db)
 		if err != nil {
 			return store.Story{}, err
 		}
-		return store.CreateStory(context.Background(), db, projectID, title, description, user.ID)
+		return store.CreateStory(ctx, db, projectID, title, description, user.ID)
 	}
 	var created store.Story
-	err := c.doJSON(http.MethodPost, "/api/stories", storyRequest{ProjectID: projectID, Title: title, Description: description}, &created)
+	err := c.doJSON(ctx, http.MethodPost, "/api/stories", storyRequest{ProjectID: projectID, Title: title, Description: description}, &created)
 	return created, err
 }
 
-func (c *Client) ListStories(projectID int64) ([]store.Story, error) {
+func (c *Client) ListStories(ctx context.Context, projectID int64) ([]store.Story, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return nil, err
 		}
-		defer db.Close()
-		return store.ListStoriesByProject(context.Background(), db, projectID, 0, 0)
+		return store.ListStoriesByProject(ctx, db, projectID, 0, 0)
 	}
 	var stories []store.Story
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/projects/%d/stories", projectID), nil, &stories)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/stories", projectID), nil, &stories)
 	return stories, err
 }
 
-func (c *Client) GetStory(id int64) (store.Story, error) {
+func (c *Client) GetStory(ctx context.Context, id int64) (store.Story, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Story{}, err
 		}
-		defer db.Close()
-		return store.GetStory(context.Background(), db, id)
+		return store.GetStory(ctx, db, id)
 	}
 	var story store.Story
-	err := c.doJSON(http.MethodGet, fmt.Sprintf("/api/stories/%d", id), nil, &story)
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/stories/%d", id), nil, &story)
 	return story, err
 }
 
-func (c *Client) UpdateStory(id int64, title, description string) (store.Story, error) {
+func (c *Client) UpdateStory(ctx context.Context, id int64, title, description string) (store.Story, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return store.Story{}, err
 		}
-		defer db.Close()
-		return store.UpdateStory(context.Background(), db, id, title, description)
+		return store.UpdateStory(ctx, db, id, title, description)
 	}
 	var updated store.Story
-	err := c.doJSON(http.MethodPut, fmt.Sprintf("/api/stories/%d", id), storyRequest{Title: title, Description: description}, &updated)
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/stories/%d", id), storyRequest{Title: title, Description: description}, &updated)
 	return updated, err
 }
 
-func (c *Client) DeleteStory(id int64) error {
+func (c *Client) DeleteStory(ctx context.Context, id int64) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
 			return err
 		}
-		defer db.Close()
-		return store.DeleteStory(context.Background(), db, id)
+		return store.DeleteStory(ctx, db, id)
 	}
-	return c.doJSON(http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
 }

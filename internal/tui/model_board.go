@@ -2,11 +2,11 @@ package tui
 
 import (
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/simonski/ticket/internal/store"
 	"strings"
 	"time"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ─── board (kanban) ──────────────────────────────────────────────────────────
@@ -305,5 +305,3 @@ func (m Model) viewBoard() []string {
 	lines = append(lines, m.statusBar(inner))
 	return lines
 }
-
-

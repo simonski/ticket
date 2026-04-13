@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -55,5 +56,12 @@ func TestDecryptEmailWithoutKeyFails(t *testing.T) {
 
 	if _, err := DecryptEmail("enc:somedata"); err == nil {
 		t.Fatal("DecryptEmail(enc: without key) error = nil, want error")
+	}
+}
+
+func TestEncryptEmailWithInvalidKeyLengthFails(t *testing.T) {
+	t.Setenv("TICKET_ENCRYPTION_KEY", "short")
+	if _, err := EncryptEmail("user@example.com"); err == nil || !strings.Contains(err.Error(), "exactly 32 bytes") {
+		t.Fatalf("EncryptEmail() error = %v, want key length error", err)
 	}
 }

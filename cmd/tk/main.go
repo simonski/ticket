@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -317,7 +318,7 @@ func runSummary(_ []string) error {
 	_ = cfg
 
 	// All tickets for this project (non-archived), then keep only open ones
-	all, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
+	all, _ := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, false)
 	var allTickets []store.Ticket
 	var activeTickets []store.Ticket
 	for _, t := range all {
@@ -421,9 +422,9 @@ func runSummary(_ []string) error {
 
 	// System counts
 	lines = append(lines, statusLine{})
-	projects, _ := svc.ListProjects()
-	users, _ := svc.ListUsers()
-	agents, _ := svc.ListAgents()
+	projects, _ := svc.ListProjects(context.Background())
+	users, _ := svc.ListUsers(context.Background())
+	agents, _ := svc.ListAgents(context.Background())
 	lines = append(lines, statusLine{key: "projects", value: fmt.Sprintf("%d", len(projects))})
 	lines = append(lines, statusLine{key: "users", value: fmt.Sprintf("%d", len(users))})
 	lines = append(lines, statusLine{key: "agents", value: fmt.Sprintf("%d", len(agents))})

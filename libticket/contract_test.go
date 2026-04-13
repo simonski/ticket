@@ -4,6 +4,7 @@
 package libticket_test
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("project-task-request-clone-comment-dependency", func(t *testing.T) {
 		svc := factory(t)
 
-		projects, err := svc.ListProjects()
+		projects, err := svc.ListProjects(context.Background())
 		if err != nil {
 			t.Fatalf("ListProjects() error = %v", err)
 		}
@@ -32,7 +33,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ListProjects() returned no projects")
 		}
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:              "Contract Project",
 			Description:        "Description",
 			AcceptanceCriteria: "AC",
@@ -44,7 +45,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateProject() = %#v", project)
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Contract Task",
@@ -56,12 +57,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() = %#v", ticket)
 		}
 
-		if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
+		if _, err := svc.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
 
 		// Ticket starts at design/idle. Advance to develop/idle so it's claimable.
-		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -71,7 +72,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("UpdateTicket(design->develop) error = %v", err)
 		}
 
-		response, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID})
+		response, err := svc.RequestTicket(context.Background(), libticket.TicketRequest{ProjectID: project.ID})
 		if err != nil {
 			t.Fatalf("RequestTicket() error = %v", err)
 		}
@@ -84,7 +85,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RequestTicket().Ticket.Status = %q, want develop/active", response.Ticket.Status)
 		}
 
-		comment, err := svc.AddComment(ticket.ID, "contract comment")
+		comment, err := svc.AddComment(context.Background(), ticket.ID, "contract comment")
 		if err != nil {
 			t.Fatalf("AddComment() error = %v", err)
 		}
@@ -92,7 +93,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddComment() = %#v", comment)
 		}
 
-		comments, err := svc.ListComments(ticket.ID)
+		comments, err := svc.ListComments(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("ListComments() error = %v", err)
 		}
@@ -103,7 +104,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListComments() = %#v", comments)
 		}
 
-		other, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		other, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Dependency Task",
@@ -112,7 +113,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket(other) error = %v", err)
 		}
 
-		dependency, err := svc.AddDependency(libticket.DependencyRequest{
+		dependency, err := svc.AddDependency(context.Background(), libticket.DependencyRequest{
 			ProjectID: project.ID,
 			TicketID:  ticket.ID,
 			DependsOn: other.ID,
@@ -124,7 +125,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddDependency() = %#v", dependency)
 		}
 
-		dependencies, err := svc.ListDependencies(ticket.ID)
+		dependencies, err := svc.ListDependencies(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("ListDependencies() error = %v", err)
 		}
@@ -132,7 +133,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListDependencies() len = %d, want 1", len(dependencies))
 		}
 
-		if err := svc.RemoveDependency(libticket.DependencyRequest{
+		if err := svc.RemoveDependency(context.Background(), libticket.DependencyRequest{
 			ProjectID: project.ID,
 			TicketID:  ticket.ID,
 			DependsOn: other.ID,
@@ -140,7 +141,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RemoveDependency() error = %v", err)
 		}
 
-		cloned, err := svc.CloneTicket(ticket.ID, "")
+		cloned, err := svc.CloneTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("CloneTicket() error = %v", err)
 		}
@@ -151,7 +152,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CloneTicket().Status = %q, want design/idle", cloned.Status)
 		}
 
-		status, err := svc.Status()
+		status, err := svc.Status(context.Background())
 		if err != nil {
 			t.Fatalf("Status() error = %v", err)
 		}
@@ -163,7 +164,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("project-update-and-enable-disable", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:              "Project A",
 			Description:        "Before",
 			AcceptanceCriteria: "AC1",
@@ -172,7 +173,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		updated, err := svc.UpdateProject(project.ID, libticket.ProjectUpdateRequest{
+		updated, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{
 			Title:              "Project B",
 			Description:        "After",
 			AcceptanceCriteria: "AC2",
@@ -184,7 +185,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("UpdateProject() = %#v", updated)
 		}
 
-		disabled, err := svc.SetProjectEnabled(project.ID, false)
+		disabled, err := svc.SetProjectEnabled(context.Background(), project.ID, false)
 		if err != nil {
 			t.Fatalf("SetProjectEnabled(false) error = %v", err)
 		}
@@ -192,7 +193,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("SetProjectEnabled(false).Status = %q, want closed", disabled.Status)
 		}
 
-		enabled, err := svc.SetProjectEnabled(project.ID, true)
+		enabled, err := svc.SetProjectEnabled(context.Background(), project.ID, true)
 		if err != nil {
 			t.Fatalf("SetProjectEnabled(true) error = %v", err)
 		}
@@ -204,12 +205,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("task-filter-history-and-closed-ticket-rules", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Tasks"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Tasks"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID:   project.ID,
 			Type:        "bug",
 			Title:       "Bug task",
@@ -221,12 +222,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Ticket starts at design/idle (4-stage SDLC: design, develop, test, done)
 		// Mark ready, advance to develop/idle, then request
-		if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
+		if _, err := svc.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
 
 		// Advance design -> develop
-		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -236,7 +237,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("UpdateTicket(design->develop) error = %v", err)
 		}
 
-		requested, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID, TicketID: &ticket.ID})
+		requested, err := svc.RequestTicket(context.Background(), libticket.TicketRequest{ProjectID: project.ID, TicketID: &ticket.ID})
 		if err != nil {
 			t.Fatalf("RequestTicket() error = %v", err)
 		}
@@ -244,7 +245,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("RequestTicket() = %#v", requested)
 		}
 
-		filtered, err := svc.ListTicketsFiltered(project.ID, "bug", "", "", "develop/active", "find", requested.Ticket.Assignee, 10, false)
+		filtered, err := svc.ListTicketsFiltered(context.Background(), project.ID, "bug", "", "", "develop/active", "find", requested.Ticket.Assignee, 10, false)
 		if err != nil {
 			t.Fatalf("ListTicketsFiltered() error = %v", err)
 		}
@@ -254,7 +255,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Advance through stages to reach done/success
 		// develop/active -> state=success -> test/idle
-		advancedToTest, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		advancedToTest, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -269,7 +270,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// test/idle -> state=success -> done/idle
-		advancedToDone, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		advancedToDone, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -284,7 +285,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// done -> state=success -> done/success (final stage, no further advance)
-		completed, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		completed, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -298,7 +299,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("UpdateTicket(done->success).Status = %q, want done/success", completed.Status)
 		}
 
-		history, err := svc.ListHistory(ticket.ID)
+		history, err := svc.ListHistory(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("ListHistory() error = %v", err)
 		}
@@ -306,7 +307,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ListHistory() returned no history")
 		}
 
-		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -320,18 +321,18 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("negative-paths", func(t *testing.T) {
 		svc := factory(t)
 
-		if _, err := svc.GetProject("999999"); err == nil {
+		if _, err := svc.GetProject(context.Background(), "999999"); err == nil {
 			t.Fatal("GetProject(missing) error = nil")
 		}
-		if _, err := svc.GetTicket("999999"); err == nil {
+		if _, err := svc.GetTicket(context.Background(), "999999"); err == nil {
 			t.Fatal("GetTicket(missing) error = nil")
 		}
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Negative"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Negative"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Negative Task",
@@ -340,7 +341,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -350,7 +351,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("UpdateTicket(invalid state) error = nil")
 		}
 
-		if err := svc.RemoveDependency(libticket.DependencyRequest{
+		if err := svc.RemoveDependency(context.Background(), libticket.DependencyRequest{
 			ProjectID: project.ID,
 			TicketID:  ticket.ID,
 			DependsOn: "NONEXISTENT-42",
@@ -358,11 +359,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("RemoveDependency(missing) error = nil")
 		}
 
-		if _, err := svc.CreateUser("someone-else", "secret12"); err != nil {
+		if _, err := svc.CreateUser(context.Background(), "someone-else", "secret12"); err != nil {
 			t.Fatalf("CreateUser(someone-else) error = %v", err)
 		}
 
-		assignedElsewhere, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		assignedElsewhere, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Assigned Elsewhere",
@@ -371,7 +372,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CreateTicket(assigned) error = %v", err)
 		}
-		rejected, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID, TicketID: &assignedElsewhere.ID})
+		rejected, err := svc.RequestTicket(context.Background(), libticket.TicketRequest{ProjectID: project.ID, TicketID: &assignedElsewhere.ID})
 		if err != nil {
 			t.Fatalf("RequestTicket(rejected) error = %v", err)
 		}
@@ -387,14 +388,14 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Assign Rules"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Assign Rules"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
-		if _, err := svc.CreateUser("bob", "secret12"); err != nil {
+		if _, err := svc.CreateUser(context.Background(), "bob", "secret12"); err != nil {
 			t.Fatalf("CreateUser(bob) error = %v", err)
 		}
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Assigned to bob",
@@ -403,7 +404,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if err != nil {
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
-		if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -417,12 +418,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("labels", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Labels"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Labels"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		label, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: "bug", Color: "red"})
+		label, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{Name: "bug", Color: "red"})
 		if err != nil {
 			t.Fatalf("CreateLabel() error = %v", err)
 		}
@@ -430,12 +431,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateLabel() = %#v", label)
 		}
 
-		label2, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: "feature", Color: "blue"})
+		label2, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{Name: "feature", Color: "blue"})
 		if err != nil {
 			t.Fatalf("CreateLabel(feature) error = %v", err)
 		}
 
-		labels, err := svc.ListLabels(project.ID)
+		labels, err := svc.ListLabels(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListLabels() error = %v", err)
 		}
@@ -443,7 +444,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListLabels() len = %d, want 2", len(labels))
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Labeled Task",
@@ -452,14 +453,14 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		if err := svc.AddTicketLabel(ticket.ID, label.ID); err != nil {
+		if err := svc.AddTicketLabel(context.Background(), ticket.ID, label.ID); err != nil {
 			t.Fatalf("AddTicketLabel() error = %v", err)
 		}
-		if err := svc.AddTicketLabel(ticket.ID, label2.ID); err != nil {
+		if err := svc.AddTicketLabel(context.Background(), ticket.ID, label2.ID); err != nil {
 			t.Fatalf("AddTicketLabel(feature) error = %v", err)
 		}
 
-		ticketLabels, err := svc.ListTicketLabels(ticket.ID)
+		ticketLabels, err := svc.ListTicketLabels(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("ListTicketLabels() error = %v", err)
 		}
@@ -467,10 +468,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListTicketLabels() len = %d, want 2", len(ticketLabels))
 		}
 
-		if err := svc.RemoveTicketLabel(ticket.ID, label.ID); err != nil {
+		if err := svc.RemoveTicketLabel(context.Background(), ticket.ID, label.ID); err != nil {
 			t.Fatalf("RemoveTicketLabel() error = %v", err)
 		}
-		ticketLabels, err = svc.ListTicketLabels(ticket.ID)
+		ticketLabels, err = svc.ListTicketLabels(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("ListTicketLabels() after remove error = %v", err)
 		}
@@ -478,10 +479,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListTicketLabels() after remove len = %d, want 1", len(ticketLabels))
 		}
 
-		if err := svc.DeleteLabel(label2.ID); err != nil {
+		if err := svc.DeleteLabel(context.Background(), label2.ID); err != nil {
 			t.Fatalf("DeleteLabel() error = %v", err)
 		}
-		labels, err = svc.ListLabels(project.ID)
+		labels, err = svc.ListLabels(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListLabels() after delete error = %v", err)
 		}
@@ -493,12 +494,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("time-tracking", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Time"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Time"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Timed Task",
@@ -507,7 +508,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		entry1, err := svc.LogTime(ticket.ID, libticket.TimeEntryRequest{Minutes: 30, Note: "morning"})
+		entry1, err := svc.LogTime(context.Background(), ticket.ID, libticket.TimeEntryRequest{Minutes: 30, Note: "morning"})
 		if err != nil {
 			t.Fatalf("LogTime() error = %v", err)
 		}
@@ -515,12 +516,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("LogTime() = %#v", entry1)
 		}
 
-		entry2, err := svc.LogTime(ticket.ID, libticket.TimeEntryRequest{Minutes: 45, Note: "afternoon"})
+		entry2, err := svc.LogTime(context.Background(), ticket.ID, libticket.TimeEntryRequest{Minutes: 45, Note: "afternoon"})
 		if err != nil {
 			t.Fatalf("LogTime(2) error = %v", err)
 		}
 
-		entries, err := svc.ListTimeEntries(ticket.ID)
+		entries, err := svc.ListTimeEntries(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("ListTimeEntries() error = %v", err)
 		}
@@ -528,7 +529,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListTimeEntries() len = %d, want 2", len(entries))
 		}
 
-		total, err := svc.TotalTimeForTicket(ticket.ID)
+		total, err := svc.TotalTimeForTicket(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("TotalTimeForTicket() error = %v", err)
 		}
@@ -536,11 +537,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("TotalTimeForTicket() = %d, want 75", total)
 		}
 
-		if err := svc.DeleteTimeEntry(entry2.ID); err != nil {
+		if err := svc.DeleteTimeEntry(context.Background(), entry2.ID); err != nil {
 			t.Fatalf("DeleteTimeEntry() error = %v", err)
 		}
 
-		total, err = svc.TotalTimeForTicket(ticket.ID)
+		total, err = svc.TotalTimeForTicket(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("TotalTimeForTicket() after delete error = %v", err)
 		}
@@ -552,7 +553,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("user-management-and-request-no-work", func(t *testing.T) {
 		svc := factory(t)
 
-		user, err := svc.CreateUser("alice", "secret12")
+		user, err := svc.CreateUser(context.Background(), "alice", "secret12")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
@@ -560,7 +561,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateUser() = %#v", user)
 		}
 
-		users, err := svc.ListUsers()
+		users, err := svc.ListUsers(context.Background())
 		if err != nil {
 			t.Fatalf("ListUsers() error = %v", err)
 		}
@@ -575,21 +576,21 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListUsers() missing alice: %#v", users)
 		}
 
-		if err := svc.SetUserEnabled("alice", false); err != nil {
+		if err := svc.SetUserEnabled(context.Background(), "alice", false); err != nil {
 			t.Fatalf("SetUserEnabled(false) error = %v", err)
 		}
-		if err := svc.SetUserEnabled("alice", true); err != nil {
+		if err := svc.SetUserEnabled(context.Background(), "alice", true); err != nil {
 			t.Fatalf("SetUserEnabled(true) error = %v", err)
 		}
-		if err := svc.DeleteUser("alice"); err != nil {
+		if err := svc.DeleteUser(context.Background(), "alice"); err != nil {
 			t.Fatalf("DeleteUser() error = %v", err)
 		}
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Empty"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Empty"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
-		response, err := svc.RequestTicket(libticket.TicketRequest{ProjectID: project.ID})
+		response, err := svc.RequestTicket(context.Background(), libticket.TicketRequest{ProjectID: project.ID})
 		if err != nil {
 			t.Fatalf("RequestTicket(no work) error = %v", err)
 		}
@@ -601,12 +602,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("ticket-lifecycle-close-open-archive-delete", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Lifecycle"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Lifecycle"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Lifecycle Task",
@@ -616,7 +617,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// GetTicketByID
-		got, err := svc.GetTicketByID(ticket.ID)
+		got, err := svc.GetTicketByID(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("GetTicketByID() error = %v", err)
 		}
@@ -625,7 +626,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Close/Open
-		closed, err := svc.CloseTicket(ticket.ID, "")
+		closed, err := svc.CloseTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("CloseTicket() error = %v", err)
 		}
@@ -633,7 +634,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("CloseTicket() should set complete=true")
 		}
 
-		opened, err := svc.OpenTicket(ticket.ID, "")
+		opened, err := svc.OpenTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("OpenTicket() error = %v", err)
 		}
@@ -642,7 +643,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Archive/Unarchive
-		archived, err := svc.ArchiveTicket(ticket.ID, "")
+		archived, err := svc.ArchiveTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("ArchiveTicket() error = %v", err)
 		}
@@ -650,7 +651,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ArchiveTicket().Archived = false, want true")
 		}
 
-		unarchived, err := svc.UnarchiveTicket(ticket.ID, "")
+		unarchived, err := svc.UnarchiveTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("UnarchiveTicket() error = %v", err)
 		}
@@ -659,7 +660,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// SetTicketHealth
-		healthy, err := svc.SetTicketHealth(ticket.ID, 3)
+		healthy, err := svc.SetTicketHealth(context.Background(), ticket.ID, 3)
 		if err != nil {
 			t.Fatalf("SetTicketHealth() error = %v", err)
 		}
@@ -668,7 +669,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// SetTicketParent / UnsetTicketParent
-		child, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		child, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Child Task",
@@ -677,7 +678,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket(child) error = %v", err)
 		}
 
-		parented, err := svc.SetTicketParent(child.ID, ticket.ID, "")
+		parented, err := svc.SetTicketParent(context.Background(), child.ID, ticket.ID, "")
 		if err != nil {
 			t.Fatalf("SetTicketParent() error = %v", err)
 		}
@@ -685,7 +686,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("SetTicketParent().ParentID = %v, want %s", parented.ParentID, ticket.ID)
 		}
 
-		unparented, err := svc.UnsetTicketParent(child.ID, "")
+		unparented, err := svc.UnsetTicketParent(context.Background(), child.ID, "")
 		if err != nil {
 			t.Fatalf("UnsetTicketParent() error = %v", err)
 		}
@@ -694,10 +695,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// DeleteTicket
-		if err := svc.DeleteTicket(child.ID); err != nil {
+		if err := svc.DeleteTicket(context.Background(), child.ID); err != nil {
 			t.Fatalf("DeleteTicket() error = %v", err)
 		}
-		if _, err := svc.GetTicketByID(child.ID); err == nil {
+		if _, err := svc.GetTicketByID(context.Background(), child.ID); err == nil {
 			t.Fatal("GetTicketByID(deleted) error = nil")
 		}
 	})
@@ -705,7 +706,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("sdlc-crud-and-stages", func(t *testing.T) {
 		svc := factory(t)
 
-		wf, err := svc.CreateSdlc(libticket.SdlcRequest{
+		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
 			Name:        "test-sdlc",
 			Description: "A test sdlc",
 		})
@@ -716,7 +717,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateSdlc().Name = %q", wf.Name)
 		}
 
-		sdlcs, err := svc.ListSdlcs()
+		sdlcs, err := svc.ListSdlcs(context.Background())
 		if err != nil {
 			t.Fatalf("ListSdlcs() error = %v", err)
 		}
@@ -730,7 +731,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListSdlcs() missing created sdlc")
 		}
 
-		stage1, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		stage1, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 			StageName: "alpha",
 			SortOrder: 0,
 		})
@@ -738,7 +739,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddSdlcStage(alpha) error = %v", err)
 		}
 
-		stage2, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		stage2, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 			StageName: "beta",
 			SortOrder: 1,
 		})
@@ -746,7 +747,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddSdlcStage(beta) error = %v", err)
 		}
 
-		withStages, err := svc.GetSdlc(wf.ID)
+		withStages, err := svc.GetSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("GetSdlc() error = %v", err)
 		}
@@ -755,11 +756,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Reorder stages
-		if err := svc.ReorderSdlcStages(wf.ID, []int64{stage2.ID, stage1.ID}); err != nil {
+		if err := svc.ReorderSdlcStages(context.Background(), wf.ID, []int64{stage2.ID, stage1.ID}); err != nil {
 			t.Fatalf("ReorderSdlcStages() error = %v", err)
 		}
 
-		reordered, err := svc.GetSdlc(wf.ID)
+		reordered, err := svc.GetSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("GetSdlc() after reorder error = %v", err)
 		}
@@ -768,7 +769,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Export/Import
-		exported, err := svc.ExportSdlc(wf.ID)
+		exported, err := svc.ExportSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("ExportSdlc() error = %v", err)
 		}
@@ -777,7 +778,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		exported.Name = "imported-sdlc"
-		imported, err := svc.ImportSdlc(exported)
+		imported, err := svc.ImportSdlc(context.Background(), exported)
 		if err != nil {
 			t.Fatalf("ImportSdlc() error = %v", err)
 		}
@@ -786,11 +787,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// RemoveSdlcStage
-		if err := svc.RemoveSdlcStage(stage1.ID); err != nil {
+		if err := svc.RemoveSdlcStage(context.Background(), stage1.ID); err != nil {
 			t.Fatalf("RemoveSdlcStage() error = %v", err)
 		}
 
-		afterRemove, err := svc.GetSdlc(wf.ID)
+		afterRemove, err := svc.GetSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("GetSdlc() after remove error = %v", err)
 		}
@@ -799,7 +800,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// DeleteSdlc
-		if err := svc.DeleteSdlc(wf.ID); err != nil {
+		if err := svc.DeleteSdlc(context.Background(), wf.ID); err != nil {
 			t.Fatalf("DeleteSdlc() error = %v", err)
 		}
 	})
@@ -807,7 +808,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("role-crud", func(t *testing.T) {
 		svc := factory(t)
 
-		role, err := svc.CreateRole(libticket.RoleRequest{
+		role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 			Title:              "Tester",
 			Description:        "Ensure quality",
 			AcceptanceCriteria: "Find bugs",
@@ -819,7 +820,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateRole().Title = %q", role.Title)
 		}
 
-		roles, err := svc.ListRoles()
+		roles, err := svc.ListRoles(context.Background())
 		if err != nil {
 			t.Fatalf("ListRoles() error = %v", err)
 		}
@@ -833,7 +834,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ListRoles() missing created role")
 		}
 
-		updated, err := svc.UpdateRole(role.ID, libticket.RoleRequest{
+		updated, err := svc.UpdateRole(context.Background(), role.ID, libticket.RoleRequest{
 			Title:              "Senior Tester",
 			Description:        "Lead quality",
 			AcceptanceCriteria: "Zero defects",
@@ -845,7 +846,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("UpdateRole().Title = %q", updated.Title)
 		}
 
-		if err := svc.DeleteRole(role.ID); err != nil {
+		if err := svc.DeleteRole(context.Background(), role.ID); err != nil {
 			t.Fatalf("DeleteRole() error = %v", err)
 		}
 	})
@@ -854,7 +855,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		svc := factory(t)
 
 		// Create an SDLC
-		wf, err := svc.CreateSdlc(libticket.SdlcRequest{
+		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
 			Name:        "stage-role-sdlc",
 			Description: "sdlc for stage-role tests",
 		})
@@ -863,7 +864,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Add two stages
-		stage1, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		stage1, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 			StageName: "design",
 			SortOrder: 0,
 		})
@@ -871,7 +872,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddSdlcStage(design) error = %v", err)
 		}
 
-		_, err = svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		_, err = svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 			StageName: "develop",
 			SortOrder: 1,
 		})
@@ -880,7 +881,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Create two roles
-		roleA, err := svc.CreateRole(libticket.RoleRequest{
+		roleA, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 			Title:       "Analyst",
 			Description: "Requirements analysis",
 		})
@@ -888,7 +889,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateRole(Analyst) error = %v", err)
 		}
 
-		roleB, err := svc.CreateRole(libticket.RoleRequest{
+		roleB, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 			Title:       "Developer",
 			Description: "Implementation",
 		})
@@ -897,15 +898,15 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Assign both roles to stage1
-		if err := svc.AddSdlcStageRole(wf.ID, stage1.ID, roleA.ID); err != nil {
+		if err := svc.AddSdlcStageRole(context.Background(), wf.ID, stage1.ID, roleA.ID); err != nil {
 			t.Fatalf("AddSdlcStageRole(Analyst) error = %v", err)
 		}
-		if err := svc.AddSdlcStageRole(wf.ID, stage1.ID, roleB.ID); err != nil {
+		if err := svc.AddSdlcStageRole(context.Background(), wf.ID, stage1.ID, roleB.ID); err != nil {
 			t.Fatalf("AddSdlcStageRole(Developer) error = %v", err)
 		}
 
 		// Verify roles via GetSdlc
-		got, err := svc.GetSdlc(wf.ID)
+		got, err := svc.GetSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("GetSdlc() error = %v", err)
 		}
@@ -927,10 +928,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Reorder roles: swap order
-		if err := svc.ReorderSdlcStageRoles(wf.ID, stage1.ID, []int64{roleB.ID, roleA.ID}); err != nil {
+		if err := svc.ReorderSdlcStageRoles(context.Background(), wf.ID, stage1.ID, []int64{roleB.ID, roleA.ID}); err != nil {
 			t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
 		}
-		reordered, err := svc.GetSdlc(wf.ID)
+		reordered, err := svc.GetSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("GetSdlc() after reorder error = %v", err)
 		}
@@ -945,10 +946,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Remove roleA from stage
-		if err := svc.RemoveSdlcStageRole(wf.ID, stage1.ID, roleA.ID); err != nil {
+		if err := svc.RemoveSdlcStageRole(context.Background(), wf.ID, stage1.ID, roleA.ID); err != nil {
 			t.Fatalf("RemoveSdlcStageRole() error = %v", err)
 		}
-		afterRemove, err := svc.GetSdlc(wf.ID)
+		afterRemove, err := svc.GetSdlc(context.Background(), wf.ID)
 		if err != nil {
 			t.Fatalf("GetSdlc() after remove error = %v", err)
 		}
@@ -966,15 +967,15 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Cleanup
-		_ = svc.DeleteSdlc(wf.ID)
-		_ = svc.DeleteRole(roleA.ID)
-		_ = svc.DeleteRole(roleB.ID)
+		_ = svc.DeleteSdlc(context.Background(), wf.ID)
+		_ = svc.DeleteRole(context.Background(), roleA.ID)
+		_ = svc.DeleteRole(context.Background(), roleB.ID)
 	})
 
 	t.Run("team-crud-and-membership", func(t *testing.T) {
 		svc := factory(t)
 
-		team, err := svc.CreateTeam(libticket.TeamRequest{Name: "Platform"})
+		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{Name: "Platform"})
 		if err != nil {
 			t.Fatalf("CreateTeam() error = %v", err)
 		}
@@ -982,7 +983,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTeam().Name = %q", team.Name)
 		}
 
-		teams, err := svc.ListTeams()
+		teams, err := svc.ListTeams(context.Background())
 		if err != nil {
 			t.Fatalf("ListTeams() error = %v", err)
 		}
@@ -996,7 +997,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ListTeams() missing created team")
 		}
 
-		updatedTeam, err := svc.UpdateTeam(team.ID, libticket.TeamRequest{Name: "Infrastructure"})
+		updatedTeam, err := svc.UpdateTeam(context.Background(), team.ID, libticket.TeamRequest{Name: "Infrastructure"})
 		if err != nil {
 			t.Fatalf("UpdateTeam() error = %v", err)
 		}
@@ -1005,12 +1006,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Team members
-		user, err := svc.CreateUser("team-member", "secret12")
+		user, err := svc.CreateUser(context.Background(), "team-member", "secret12")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
 
-		member, err := svc.AddTeamMember(team.ID, libticket.TeamMemberRequest{
+		member, err := svc.AddTeamMember(context.Background(), team.ID, libticket.TeamMemberRequest{
 			UserID: user.ID,
 			Role:   "member",
 		})
@@ -1021,17 +1022,17 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("AddTeamMember().UserID = %s", member.UserID)
 		}
 
-		members, err := svc.ListTeamMembers(team.ID)
+		members, err := svc.ListTeamMembers(context.Background(), team.ID)
 		if err != nil {
 			t.Fatalf("ListTeamMembers() error = %v", err)
 		}
 		memberCountBefore := len(members)
 
-		if err := svc.RemoveTeamMember(team.ID, user.ID); err != nil {
+		if err := svc.RemoveTeamMember(context.Background(), team.ID, user.ID); err != nil {
 			t.Fatalf("RemoveTeamMember() error = %v", err)
 		}
 
-		membersAfter, err := svc.ListTeamMembers(team.ID)
+		membersAfter, err := svc.ListTeamMembers(context.Background(), team.ID)
 		if err != nil {
 			t.Fatalf("ListTeamMembers() after remove error = %v", err)
 		}
@@ -1041,10 +1042,10 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Remove remaining members before deleting team (HTTP adds creator as member)
 		for _, m := range membersAfter {
-			_ = svc.RemoveTeamMember(team.ID, m.UserID)
+			_ = svc.RemoveTeamMember(context.Background(), team.ID, m.UserID)
 		}
 
-		if err := svc.DeleteTeam(team.ID); err != nil {
+		if err := svc.DeleteTeam(context.Background(), team.ID); err != nil {
 			t.Fatalf("DeleteTeam() error = %v", err)
 		}
 	})
@@ -1052,7 +1053,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("count", func(t *testing.T) {
 		svc := factory(t)
 
-		summary, err := svc.Count(nil)
+		summary, err := svc.Count(context.Background(), nil)
 		if err != nil {
 			t.Fatalf("Count() error = %v", err)
 		}
@@ -1060,11 +1061,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("Count().Projects = 0, want > 0")
 		}
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Counted"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Counted"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
-		if _, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		if _, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Count Me",
@@ -1072,7 +1073,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		scoped, err := svc.Count(&project.ID)
+		scoped, err := svc.Count(context.Background(), &project.ID)
 		if err != nil {
 			t.Fatalf("Count(projectID) error = %v", err)
 		}
@@ -1085,7 +1086,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		svc := factory(t)
 
 		// Create agent
-		agent, password, err := svc.CreateAgent(libticket.AgentCreateRequest{})
+		agent, password, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
@@ -1097,7 +1098,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// List agents
-		agents, err := svc.ListAgents()
+		agents, err := svc.ListAgents(context.Background())
 		if err != nil {
 			t.Fatalf("ListAgents() error = %v", err)
 		}
@@ -1113,7 +1114,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 
 		// Update agent password
 		newPass := "new-password"
-		_, err = svc.UpdateAgent(agent.ID, libticket.AgentUpdateRequest{
+		_, err = svc.UpdateAgent(context.Background(), agent.ID, libticket.AgentUpdateRequest{
 			Password: &newPass,
 		})
 		if err != nil {
@@ -1121,7 +1122,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Disable agent
-		disabled, err := svc.SetAgentEnabled(agent.ID, false)
+		disabled, err := svc.SetAgentEnabled(context.Background(), agent.ID, false)
 		if err != nil {
 			t.Fatalf("SetAgentEnabled(false) error = %v", err)
 		}
@@ -1130,7 +1131,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Re-enable
-		enabled, err := svc.SetAgentEnabled(agent.ID, true)
+		enabled, err := svc.SetAgentEnabled(context.Background(), agent.ID, true)
 		if err != nil {
 			t.Fatalf("SetAgentEnabled(true) error = %v", err)
 		}
@@ -1139,7 +1140,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Delete agent
-		if err := svc.DeleteAgent(agent.ID); err != nil {
+		if err := svc.DeleteAgent(context.Background(), agent.ID); err != nil {
 			t.Fatalf("DeleteAgent() error = %v", err)
 		}
 	})
@@ -1148,7 +1149,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		svc := factory(t)
 
 		// Create an agent with known password
-		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{
+		agent, _, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{
 			Password: "secret123",
 		})
 		if err != nil {
@@ -1156,7 +1157,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Register (authenticate) the agent
-		registered, err := svc.RegisterAgent(libticket.AgentRegisterRequest{
+		registered, err := svc.RegisterAgent(context.Background(), libticket.AgentRegisterRequest{
 			ID:       agent.ID,
 			Password: "secret123",
 		})
@@ -1168,7 +1169,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Request work (no tickets — expect NONE)
-		resp, err := svc.RequestAgentWork(libticket.AgentRequest{
+		resp, err := svc.RequestAgentWork(context.Background(), libticket.AgentRequest{
 			ID:       agent.ID,
 			Password: "secret123",
 		})
@@ -1180,13 +1181,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Cleanup
-		_ = svc.DeleteAgent(agent.ID)
+		_ = svc.DeleteAgent(context.Background(), agent.ID)
 	})
 
 	t.Run("project-member-management", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:       "Member Test Project",
 			Description: "For testing project members",
 		})
@@ -1195,20 +1196,20 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// List members (may include creator)
-		membersBefore, err := svc.ListProjectMembers(project.ID)
+		membersBefore, err := svc.ListProjectMembers(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListProjectMembers() error = %v", err)
 		}
 		countBefore := len(membersBefore)
 
 		// Create a user to add as member
-		user, err := svc.CreateUser("projmember", "pass1234!")
+		user, err := svc.CreateUser(context.Background(), "projmember", "pass1234!")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
 
 		// Add project member
-		member, err := svc.AddProjectMember(project.ID, libticket.ProjectMemberRequest{
+		member, err := svc.AddProjectMember(context.Background(), project.ID, libticket.ProjectMemberRequest{
 			UserID: user.ID,
 			Role:   "editor",
 		})
@@ -1220,7 +1221,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// List members (should have one more)
-		membersAfter, err := svc.ListProjectMembers(project.ID)
+		membersAfter, err := svc.ListProjectMembers(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListProjectMembers() error = %v", err)
 		}
@@ -1229,12 +1230,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Remove project member
-		if err := svc.RemoveProjectMember(project.ID, user.ID); err != nil {
+		if err := svc.RemoveProjectMember(context.Background(), project.ID, user.ID); err != nil {
 			t.Fatalf("RemoveProjectMember() error = %v", err)
 		}
 
 		// Verify removed
-		membersEnd, err := svc.ListProjectMembers(project.ID)
+		membersEnd, err := svc.ListProjectMembers(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListProjectMembers() error = %v", err)
 		}
@@ -1242,13 +1243,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListProjectMembers() count after remove = %d, want %d", len(membersEnd), countBefore)
 		}
 
-		_ = svc.DeleteUser("projmember")
+		_ = svc.DeleteUser(context.Background(), "projmember")
 	})
 
 	t.Run("project-team-member-management", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:       "Team Member Test Project",
 			Description: "For testing project team members",
 		})
@@ -1256,20 +1257,20 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		team, err := svc.CreateTeam(libticket.TeamRequest{Name: "projteam"})
+		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{Name: "projteam"})
 		if err != nil {
 			t.Fatalf("CreateTeam() error = %v", err)
 		}
 
 		// List project teams (initially empty or minimal)
-		teamsBefore, err := svc.ListProjectTeamMembers(project.ID)
+		teamsBefore, err := svc.ListProjectTeamMembers(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListProjectTeamMembers() error = %v", err)
 		}
 		countBefore := len(teamsBefore)
 
 		// Add team to project
-		ptm, err := svc.AddProjectTeamMember(project.ID, libticket.ProjectTeamMemberRequest{
+		ptm, err := svc.AddProjectTeamMember(context.Background(), project.ID, libticket.ProjectTeamMemberRequest{
 			TeamID: team.ID,
 			Role:   "editor",
 		})
@@ -1281,7 +1282,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// List project teams (should have one more)
-		teamsAfter, err := svc.ListProjectTeamMembers(project.ID)
+		teamsAfter, err := svc.ListProjectTeamMembers(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListProjectTeamMembers() error = %v", err)
 		}
@@ -1290,29 +1291,29 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Remove team from project
-		if err := svc.RemoveProjectTeamMember(project.ID, team.ID); err != nil {
+		if err := svc.RemoveProjectTeamMember(context.Background(), project.ID, team.ID); err != nil {
 			t.Fatalf("RemoveProjectTeamMember() error = %v", err)
 		}
 
 		// Cleanup
-		_ = svc.DeleteTeam(team.ID)
+		_ = svc.DeleteTeam(context.Background(), team.ID)
 	})
 
 	t.Run("team-agent-management", func(t *testing.T) {
 		svc := factory(t)
 
-		team, err := svc.CreateTeam(libticket.TeamRequest{Name: "agent-team"})
+		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{Name: "agent-team"})
 		if err != nil {
 			t.Fatalf("CreateTeam() error = %v", err)
 		}
 
-		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{})
+		agent, _, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
 
 		// Add agent to team
-		ta, err := svc.AddTeamAgent(team.ID, agent.ID)
+		ta, err := svc.AddTeamAgent(context.Background(), team.ID, agent.ID)
 		if err != nil {
 			t.Fatalf("AddTeamAgent() error = %v", err)
 		}
@@ -1321,7 +1322,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// List team agents
-		agents, err := svc.ListTeamAgents(team.ID)
+		agents, err := svc.ListTeamAgents(context.Background(), team.ID)
 		if err != nil {
 			t.Fatalf("ListTeamAgents() error = %v", err)
 		}
@@ -1330,23 +1331,23 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Remove agent from team
-		if err := svc.RemoveTeamAgent(team.ID, agent.ID); err != nil {
+		if err := svc.RemoveTeamAgent(context.Background(), team.ID, agent.ID); err != nil {
 			t.Fatalf("RemoveTeamAgent() error = %v", err)
 		}
 
 		// Cleanup
-		_ = svc.DeleteAgent(agent.ID)
-		_ = svc.DeleteTeam(team.ID)
+		_ = svc.DeleteAgent(context.Background(), agent.ID)
+		_ = svc.DeleteTeam(context.Background(), team.ID)
 	})
 
 	t.Run("registration-toggle", func(t *testing.T) {
 		svc := factory(t)
 
 		// Toggle registration
-		if err := svc.SetRegistrationEnabled(false); err != nil {
+		if err := svc.SetRegistrationEnabled(context.Background(), false); err != nil {
 			t.Fatalf("SetRegistrationEnabled(false) error = %v", err)
 		}
-		if err := svc.SetRegistrationEnabled(true); err != nil {
+		if err := svc.SetRegistrationEnabled(context.Background(), true); err != nil {
 			t.Fatalf("SetRegistrationEnabled(true) error = %v", err)
 		}
 	})
@@ -1354,7 +1355,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("list-tickets-unfiltered", func(t *testing.T) {
 		svc := factory(t)
 
-		projects, err := svc.ListProjects()
+		projects, err := svc.ListProjects(context.Background())
 		if err != nil {
 			t.Fatalf("ListProjects() error = %v", err)
 		}
@@ -1363,7 +1364,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// ListTickets (unfiltered wrapper)
-		tickets, err := svc.ListTickets(projects[0].ID)
+		tickets, err := svc.ListTickets(context.Background(), projects[0].ID)
 		if err != nil {
 			t.Fatalf("ListTickets() error = %v", err)
 		}
@@ -1373,12 +1374,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("story-crud", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "Stories"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Stories"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		story, err := svc.CreateStory(project.ID, "User Login", "As a user I want to log in")
+		story, err := svc.CreateStory(context.Background(), project.ID, "User Login", "As a user I want to log in")
 		if err != nil {
 			t.Fatalf("CreateStory() error = %v", err)
 		}
@@ -1386,12 +1387,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateStory() = %#v", story)
 		}
 
-		story2, err := svc.CreateStory(project.ID, "User Logout", "As a user I want to log out")
+		story2, err := svc.CreateStory(context.Background(), project.ID, "User Logout", "As a user I want to log out")
 		if err != nil {
 			t.Fatalf("CreateStory(2) error = %v", err)
 		}
 
-		stories, err := svc.ListStories(project.ID)
+		stories, err := svc.ListStories(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListStories() error = %v", err)
 		}
@@ -1399,7 +1400,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListStories() len = %d, want 2", len(stories))
 		}
 
-		got, err := svc.GetStory(story.ID)
+		got, err := svc.GetStory(context.Background(), story.ID)
 		if err != nil {
 			t.Fatalf("GetStory() error = %v", err)
 		}
@@ -1407,7 +1408,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("GetStory().Title = %q, want User Login", got.Title)
 		}
 
-		updated, err := svc.UpdateStory(story.ID, "User Login V2", "Updated description")
+		updated, err := svc.UpdateStory(context.Background(), story.ID, "User Login V2", "Updated description")
 		if err != nil {
 			t.Fatalf("UpdateStory() error = %v", err)
 		}
@@ -1415,11 +1416,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("UpdateStory() = %#v", updated)
 		}
 
-		if err := svc.DeleteStory(story2.ID); err != nil {
+		if err := svc.DeleteStory(context.Background(), story2.ID); err != nil {
 			t.Fatalf("DeleteStory() error = %v", err)
 		}
 
-		storiesAfter, err := svc.ListStories(project.ID)
+		storiesAfter, err := svc.ListStories(context.Background(), project.ID)
 		if err != nil {
 			t.Fatalf("ListStories() after delete error = %v", err)
 		}
@@ -1431,7 +1432,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("delete-project", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:       "To Delete",
 			Description: "Will be deleted",
 		})
@@ -1439,11 +1440,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		if err := svc.DeleteProject(project.ID); err != nil {
+		if err := svc.DeleteProject(context.Background(), project.ID); err != nil {
 			t.Fatalf("DeleteProject() error = %v", err)
 		}
 
-		if _, err := svc.GetProject(strconv.FormatInt(project.ID, 10)); err == nil {
+		if _, err := svc.GetProject(context.Background(), strconv.FormatInt(project.ID, 10)); err == nil {
 			t.Fatal("GetProject(deleted) error = nil")
 		}
 	})
@@ -1451,12 +1452,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("not-ready-ticket", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "NotReady"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "NotReady"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Ready Then Not",
@@ -1465,7 +1466,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		readied, err := svc.ReadyTicket(ticket.ID, "")
+		readied, err := svc.ReadyTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
 		}
@@ -1473,7 +1474,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ReadyTicket() should clear draft flag")
 		}
 
-		unreadied, err := svc.NotReadyTicket(ticket.ID, "")
+		unreadied, err := svc.NotReadyTicket(context.Background(), ticket.ID, "")
 		if err != nil {
 			t.Fatalf("NotReadyTicket() error = %v", err)
 		}
@@ -1485,7 +1486,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("set-unset-ticket-sdlc", func(t *testing.T) {
 		svc := factory(t)
 
-		wf, err := svc.CreateSdlc(libticket.SdlcRequest{
+		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
 			Name:        "ticket-wf",
 			Description: "For ticket sdlc test",
 		})
@@ -1493,12 +1494,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateSdlc() error = %v", err)
 		}
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "WF Ticket"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "WF Ticket"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "Sdlc Task",
@@ -1507,7 +1508,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		withWF, err := svc.SetTicketSdlc(ticket.ID, wf.ID)
+		withWF, err := svc.SetTicketSdlc(context.Background(), ticket.ID, wf.ID)
 		if err != nil {
 			t.Fatalf("SetTicketSdlc() error = %v", err)
 		}
@@ -1515,7 +1516,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("SetTicketSdlc().SdlcID = %v, want %d", withWF.SdlcID, wf.ID)
 		}
 
-		withoutWF, err := svc.UnsetTicketSdlc(ticket.ID)
+		withoutWF, err := svc.UnsetTicketSdlc(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("UnsetTicketSdlc() error = %v", err)
 		}
@@ -1524,26 +1525,26 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Cleanup
-		_ = svc.DeleteSdlc(wf.ID)
+		_ = svc.DeleteSdlc(context.Background(), wf.ID)
 	})
 
 	t.Run("agent-config", func(t *testing.T) {
 		svc := factory(t)
 
-		agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{})
+		agent, _, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{})
 		if err != nil {
 			t.Fatalf("CreateAgent() error = %v", err)
 		}
 
-		if err := svc.SetAgentConfig(agent.ID, "model", "gpt-4"); err != nil {
+		if err := svc.SetAgentConfig(context.Background(), agent.ID, "model", "gpt-4"); err != nil {
 			t.Fatalf("SetAgentConfig() error = %v", err)
 		}
 
-		if err := svc.SetAgentConfig(agent.ID, "temperature", "0.7"); err != nil {
+		if err := svc.SetAgentConfig(context.Background(), agent.ID, "temperature", "0.7"); err != nil {
 			t.Fatalf("SetAgentConfig(temperature) error = %v", err)
 		}
 
-		configs, err := svc.ListAgentConfig(agent.ID)
+		configs, err := svc.ListAgentConfig(context.Background(), agent.ID)
 		if err != nil {
 			t.Fatalf("ListAgentConfig() error = %v", err)
 		}
@@ -1551,11 +1552,11 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("ListAgentConfig() len = %d, want 2", len(configs))
 		}
 
-		if err := svc.DeleteAgentConfig(agent.ID, "model"); err != nil {
+		if err := svc.DeleteAgentConfig(context.Background(), agent.ID, "model"); err != nil {
 			t.Fatalf("DeleteAgentConfig() error = %v", err)
 		}
 
-		configsAfter, err := svc.ListAgentConfig(agent.ID)
+		configsAfter, err := svc.ListAgentConfig(context.Background(), agent.ID)
 		if err != nil {
 			t.Fatalf("ListAgentConfig() after delete error = %v", err)
 		}
@@ -1564,13 +1565,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Cleanup
-		_ = svc.DeleteAgent(agent.ID)
+		_ = svc.DeleteAgent(context.Background(), agent.ID)
 	})
 
 	t.Run("agent-statuses", func(t *testing.T) {
 		svc := factory(t)
 
-		statuses, err := svc.ListAgentStatuses()
+		statuses, err := svc.ListAgentStatuses(context.Background())
 		if err != nil {
 			t.Fatalf("ListAgentStatuses() error = %v", err)
 		}
@@ -1580,13 +1581,13 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("project-history", func(t *testing.T) {
 		svc := factory(t)
 
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{Title: "History"})
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "History"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
 		}
 
 		// Create a ticket to generate history events
-		ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
 			Title:     "History Task",
@@ -1596,7 +1597,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 		_ = ticket
 
-		history, err := svc.ListProjectHistory(project.ID, 10)
+		history, err := svc.ListProjectHistory(context.Background(), project.ID, 10)
 		if err != nil {
 			t.Fatalf("ListProjectHistory() error = %v", err)
 		}
@@ -1604,7 +1605,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatal("ListProjectHistory() returned no history")
 		}
 
-		filtered, err := svc.ListProjectHistoryFiltered(project.ID, 10, store.HistoryFilter{})
+		filtered, err := svc.ListProjectHistoryFiltered(context.Background(), project.ID, 10, store.HistoryFilter{})
 		if err != nil {
 			t.Fatalf("ListProjectHistoryFiltered() error = %v", err)
 		}
@@ -1616,7 +1617,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("reset-user-password", func(t *testing.T) {
 		svc := factory(t)
 
-		user, err := svc.CreateUser("resetme", "oldpass1")
+		user, err := svc.CreateUser(context.Background(), "resetme", "oldpass1")
 		if err != nil {
 			t.Fatalf("CreateUser() error = %v", err)
 		}
@@ -1624,7 +1625,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateUser().Username = %q", user.Username)
 		}
 
-		updated, err := svc.ResetUserPassword("resetme", "newpass1")
+		updated, err := svc.ResetUserPassword(context.Background(), "resetme", "newpass1")
 		if err != nil {
 			t.Fatalf("ResetUserPassword() error = %v", err)
 		}
@@ -1633,6 +1634,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Cleanup
-		_ = svc.DeleteUser("resetme")
+		_ = svc.DeleteUser(context.Background(), "resetme")
 	})
 }

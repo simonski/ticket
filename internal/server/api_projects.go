@@ -54,7 +54,7 @@ func (r *router) registerProjectHandlers() {
 				SdlcID:             projectPayload.SdlcID,
 			})
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			notify("project_created", project.ID, "")
@@ -127,7 +127,7 @@ func (r *router) registerProjectHandlers() {
 				IncludeArchived: includeArchived,
 			})
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, tasks)
@@ -203,17 +203,17 @@ func (r *router) registerProjectHandlers() {
 			}
 			limit, err := queryInt(r, "limit", 0)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			offset, err := queryInt(r, "offset", 0)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			stories, err := store.ListStoriesByProject(r.Context(), db, project.ID, limit, offset)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, stories)
@@ -256,7 +256,7 @@ func (r *router) registerProjectHandlers() {
 						writeError(w, http.StatusNotFound, err.Error())
 						return
 					}
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				notify("project_users_updated", project.ID, "")
@@ -277,7 +277,7 @@ func (r *router) registerProjectHandlers() {
 				}
 				member, err := store.AddProjectMember(r.Context(), db, project.ID, payload.UserID, payload.Role)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				notify("project_users_updated", project.ID, "")
@@ -337,7 +337,7 @@ func (r *router) registerProjectHandlers() {
 						writeError(w, http.StatusNotFound, "project team membership not found")
 						return
 					}
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				notify("project_users_updated", project.ID, "")
@@ -358,7 +358,7 @@ func (r *router) registerProjectHandlers() {
 				}
 				member, err := store.AddProjectTeamMember(r.Context(), db, project.ID, payload.TeamID, payload.Role)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				notify("project_users_updated", project.ID, "")
@@ -405,7 +405,7 @@ func (r *router) registerProjectHandlers() {
 							writeError(w, http.StatusNotFound, "label not found")
 							return
 						}
-						writeError(w, http.StatusBadRequest, err.Error())
+						writeStoreError(w, err)
 						return
 					}
 					writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -419,17 +419,17 @@ func (r *router) registerProjectHandlers() {
 			case http.MethodGet:
 				limit, err := queryInt(r, "limit", 0)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				offset, err := queryInt(r, "offset", 0)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				labels, err := store.ListLabels(r.Context(), db, projectID, limit, offset)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, labels)
@@ -439,12 +439,12 @@ func (r *router) registerProjectHandlers() {
 					Color string `json:"color"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				label, err := store.CreateLabel(r.Context(), db, projectID, req.Name, req.Color)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusCreated, label)
@@ -604,7 +604,7 @@ func (r *router) registerProjectHandlers() {
 					writeError(w, http.StatusNotFound, err.Error())
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			notify("project_updated", project.ID, "")

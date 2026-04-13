@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -13,21 +14,24 @@ import (
 
 // encryptionKey returns the 32-byte AES key from the TICKET_ENCRYPTION_KEY
 // environment variable. Returns nil if unset (encryption disabled).
-func encryptionKey() []byte {
+func encryptionKey() ([]byte, error) {
 	raw := strings.TrimSpace(os.Getenv("TICKET_ENCRYPTION_KEY"))
 	if raw == "" {
-		return nil
+		return nil, nil
 	}
-	// Pad or truncate to 32 bytes for AES-256
-	key := make([]byte, 32)
-	copy(key, []byte(raw))
-	return key
+	if len(raw) != 32 {
+		return nil, fmt.Errorf("TICKET_ENCRYPTION_KEY must be exactly 32 bytes")
+	}
+	return []byte(raw), nil
 }
 
 // EncryptEmail encrypts an email address using AES-256-GCM.
 // If no encryption key is configured, the plaintext is returned as-is.
 func EncryptEmail(plaintext string) (string, error) {
-	key := encryptionKey()
+	key, err := encryptionKey()
+	if err != nil {
+		return "", err
+	}
 	if key == nil {
 		return plaintext, nil
 	}
@@ -53,7 +57,10 @@ func DecryptEmail(stored string) (string, error) {
 	if !strings.HasPrefix(stored, "enc:") {
 		return stored, nil
 	}
-	key := encryptionKey()
+	key, err := encryptionKey()
+	if err != nil {
+		return "", err
+	}
 	if key == nil {
 		return "", errors.New("TICKET_ENCRYPTION_KEY required to decrypt email")
 	}

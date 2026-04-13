@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,12 +40,12 @@ func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (pro
 	if project == "" || svc == nil {
 		return project, source, "", nil
 	}
-	currentProject, err := svc.GetProject(project)
+	currentProject, err := svc.GetProject(context.Background(), project)
 	if err != nil {
 		return project, source, "", nil
 	}
 	if currentProject.SdlcID != nil {
-		if wf, err := svc.GetSdlc(*currentProject.SdlcID); err == nil {
+		if wf, err := svc.GetSdlc(context.Background(), *currentProject.SdlcID); err == nil {
 			sdlcName = wf.Name
 		}
 	}
@@ -187,7 +188,7 @@ func runRemoteStatus(cfg config.Config) error {
 	if err != nil {
 		return err
 	}
-	status, err := svc.Status()
+	status, err := svc.Status(context.Background())
 	authenticated := err == nil && status.Authenticated
 	username := strings.TrimSpace(cfg.Username)
 	if status.User != nil {

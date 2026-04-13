@@ -23,18 +23,18 @@ type Resolved struct {
 }
 
 type Config struct {
-	Location  string `json:"location"`
-	Token     string `json:"token"`
-	Username  string `json:"username"`
-	ProjectID string `json:"project_id"`
-	CurrentEpicID  string `json:"current_epic_id"`
+	Location      string `json:"location"`
+	Token         string `json:"token"`
+	Username      string `json:"username"`
+	ProjectID     string `json:"project_id"`
+	CurrentEpicID string `json:"current_epic_id"`
 
 	// TUI state — persisted between sessions by default.
 	// Set TUIDisablePersist=true to skip save/restore.
-	TUIDisablePersist bool    `json:"tui_disable_persist,omitempty"`
-	TUITheme          string  `json:"tui_theme,omitempty"`
-	TUIMode           string  `json:"tui_mode,omitempty"`   // "summary" | "projects" | "ideas" | "list" | "settings"
-	TUICursor         int     `json:"tui_cursor,omitempty"`
+	TUIDisablePersist bool     `json:"tui_disable_persist,omitempty"`
+	TUITheme          string   `json:"tui_theme,omitempty"`
+	TUIMode           string   `json:"tui_mode,omitempty"` // "summary" | "projects" | "ideas" | "list" | "settings"
+	TUICursor         int      `json:"tui_cursor,omitempty"`
 	TUIExpandedEpics  []string `json:"tui_expanded_epics,omitempty"`
 
 	// Temporary delete confirmation state

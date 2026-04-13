@@ -3,6 +3,8 @@ package server
 import (
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -57,9 +59,66 @@ func (rl *rateLimiter) allow(key string) bool {
 }
 
 func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
+	remote := remoteIPFromAddr(r.RemoteAddr)
+	if remote == nil {
 		return r.RemoteAddr
 	}
-	return host
+	trusted := trustedProxyCIDRsFromEnv()
+	if len(trusted) == 0 || !ipInTrustedRanges(remote, trusted) {
+		return remote.String()
+	}
+	xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+	if xff == "" {
+		return remote.String()
+	}
+	parts := strings.Split(xff, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := strings.TrimSpace(parts[i])
+		candidate := net.ParseIP(part)
+		if candidate == nil {
+			continue
+		}
+		if !ipInTrustedRanges(candidate, trusted) {
+			return candidate.String()
+		}
+	}
+	return remote.String()
+}
+
+func remoteIPFromAddr(remoteAddr string) net.IP {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	return net.ParseIP(strings.TrimSpace(host))
+}
+
+func trustedProxyCIDRsFromEnv() []*net.IPNet {
+	raw := strings.TrimSpace(os.Getenv("TICKET_TRUSTED_PROXY_CIDRS"))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	ranges := make([]*net.IPNet, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		_, cidr, err := net.ParseCIDR(trimmed)
+		if err != nil {
+			continue
+		}
+		ranges = append(ranges, cidr)
+	}
+	return ranges
+}
+
+func ipInTrustedRanges(ip net.IP, trusted []*net.IPNet) bool {
+	for _, cidr := range trusted {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

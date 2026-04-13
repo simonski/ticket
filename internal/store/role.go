@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"strings"
 )
 
@@ -177,7 +178,10 @@ func DeleteRole(ctx context.Context, db *sql.DB, id int64) error {
 func AddSdlcStageRole(ctx context.Context, db *sql.DB, sdlcID, stageID, roleID int64) error {
 	// Auto-assign sort_order as max+1
 	var maxOrder int
-	_ = db.QueryRowContext(ctx, `SELECT COALESCE(MAX(sort_order), -1) FROM sdlc_stage_roles WHERE sdlc_id = ? AND stage_id = ?`, sdlcID, stageID).Scan(&maxOrder)
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(sort_order), -1) FROM sdlc_stage_roles WHERE sdlc_id = ? AND stage_id = ?`, sdlcID, stageID).Scan(&maxOrder); err != nil {
+		log.Printf("store: read max stage role sort order (sdlc=%d stage=%d): %v", sdlcID, stageID, err)
+		maxOrder = -1
+	}
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO sdlc_stage_roles (sdlc_id, stage_id, role_id, sort_order)
 		VALUES (?, ?, ?, ?)

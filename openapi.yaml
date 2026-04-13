@@ -6,7 +6,7 @@ info:
     All endpoints are under `/api/`. Authentication uses Bearer tokens,
     cookies (`ticket_token`), or query parameter (`?token=`).
     Agent endpoints use HTTP Basic Auth (agent UUID + password).
-  version: 0.1.774
+.1.775
   contact:
     name: Simon Gauld
     url: https://github.com/simonski/ticket

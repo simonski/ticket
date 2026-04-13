@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
+	"modernc.org/sqlite"
 )
 
 func resolveLifecycleRequest(status, stage, state string) (string, string, error) {
@@ -220,6 +222,27 @@ func canWriteProject(role string) bool {
 	}
 }
 
+func writeStoreError(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		writeError(w, http.StatusNotFound, err.Error())
+	case isDatabaseError(err):
+		writeError(w, http.StatusInternalServerError, err.Error())
+	default:
+		writeError(w, http.StatusBadRequest, err.Error())
+	}
+}
+
+func isDatabaseError(err error) bool {
+	var sqliteErr *sqlite.Error
+	return errors.As(err, &sqliteErr) ||
+		errors.Is(err, sql.ErrTxDone) ||
+		errors.Is(err, sql.ErrConnDone)
+}
+
 func canManageProjectUsers(role string) bool {
 	return role == store.ProjectRoleOwner
 }
@@ -227,7 +250,9 @@ func canManageProjectUsers(role string) bool {
 func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(payload)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Printf("server: writeJSON encode error: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, statusCode int, message string) {

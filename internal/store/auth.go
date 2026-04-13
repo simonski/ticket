@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -146,7 +147,9 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 			return User{}, ErrAccountLocked
 		}
 		// Lock period expired — reset for a clean slate.
-		_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?`, user.ID)
+		if _, execErr := db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?`, user.ID); execErr != nil {
+			log.Printf("store: reset expired lockout for user %s: %v", user.ID, execErr)
+		}
 		failedAttempts = 0
 	}
 
@@ -157,18 +160,24 @@ func AuthenticateUser(ctx context.Context, db *sql.DB, username, plainPassword s
 	if !ok {
 		failedAttempts++
 		if failedAttempts >= maxFailedLoginAttempts {
-			_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = ?, locked_until = datetime('now', ?) WHERE user_id = ?`,
-				failedAttempts, lockoutDuration, user.ID)
+			if _, execErr := db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = ?, locked_until = datetime('now', ?) WHERE user_id = ?`,
+				failedAttempts, lockoutDuration, user.ID); execErr != nil {
+				log.Printf("store: persist lockout for user %s: %v", user.ID, execErr)
+			}
 		} else {
-			_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = ? WHERE user_id = ?`,
-				failedAttempts, user.ID)
+			if _, execErr := db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = ? WHERE user_id = ?`,
+				failedAttempts, user.ID); execErr != nil {
+				log.Printf("store: persist failed login attempt for user %s: %v", user.ID, execErr)
+			}
 		}
 		return User{}, ErrInvalidCredentials
 	}
 
 	// Successful authentication — reset failed attempts.
 	if failedAttempts > 0 {
-		_, _ = db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?`, user.ID)
+		if _, execErr := db.ExecContext(ctx, `UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?`, user.ID); execErr != nil {
+			log.Printf("store: reset failed login attempts for user %s: %v", user.ID, execErr)
+		}
 	}
 	return user, nil
 }
@@ -316,7 +325,7 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE ticket_history SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
 		return err
-	}	// Nullify ticket creator reference (nullable FK).
+	} // Nullify ticket creator reference (nullable FK).
 	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
 		return err
 	}

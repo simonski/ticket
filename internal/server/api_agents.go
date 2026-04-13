@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -53,7 +55,7 @@ func (r *router) registerAgentHandlers() {
 			}
 			agent, generatedPassword, err := store.CreateAgent(r.Context(), db, payload.Password)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, map[string]any{
@@ -105,7 +107,7 @@ func (r *router) registerAgentHandlers() {
 					writeAuthError(w, err)
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			agent, err = store.TouchAgent(r.Context(), db, agent.ID, "online")
@@ -132,13 +134,15 @@ func (r *router) registerAgentHandlers() {
 					writeAuthError(w, err)
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			var payload struct {
 				Status string `json:"status"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&payload)
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+				log.Printf("server: decode agent heartbeat payload: %v", err)
+			}
 			status := strings.TrimSpace(payload.Status)
 			if status == "" {
 				status = agent.Status // keep current status
@@ -168,7 +172,9 @@ func (r *router) registerAgentHandlers() {
 				ConfigUpdatedAt string  `json:"config_updated_at,omitempty"`
 			}
 			// Body is optional — may be empty for simple requests.
-			_ = json.NewDecoder(r.Body).Decode(&payload)
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+				log.Printf("server: decode agent request payload: %v", err)
+			}
 			vlog := func(format string, args ...any) {
 				if verbose && output != nil {
 					fmt.Fprintf(output, "AGENT %s\n", fmt.Sprintf(format, args...))
@@ -182,7 +188,7 @@ func (r *router) registerAgentHandlers() {
 					writeAuthError(w, err)
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			vlog("agent=%q authenticated (id=%s)", agent.Username, agent.ID)
@@ -223,7 +229,7 @@ func (r *router) registerAgentHandlers() {
 			})
 			if err != nil {
 				vlog("RequestTicket error: %v", err)
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			vlog("RequestTicket result: status=%s ticket_id=%s", status, ticket.ID)
@@ -255,10 +261,14 @@ func (r *router) registerAgentHandlers() {
 				agentStatus = status
 			}
 			if status == "ASSIGNED" && agentStatus == "NEW" {
-				_, _ = store.TouchAgent(r.Context(), db, agent.ID, "working")
+				if _, err := store.TouchAgent(r.Context(), db, agent.ID, "working"); err != nil {
+					log.Printf("server: touch agent %s status=working: %v", agent.ID, err)
+				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 			} else {
-				_, _ = store.TouchAgent(r.Context(), db, agent.ID, "soliciting")
+				if _, err := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); err != nil {
+					log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, err)
+				}
 			}
 			// Check if config should be included in response.
 			// Include config if: 1) it has changed since last poll, or 2) a new ticket is assigned
@@ -281,7 +291,7 @@ func (r *router) registerAgentHandlers() {
 				"project":           nil,
 				"ticket":            nil,
 				"parents":           []store.Ticket{},
-				"sdlc":          nil,
+				"sdlc":              nil,
 				"role":              nil,
 				"config":            configMap,
 				"config_updated_at": configUpdatedAt,
@@ -326,7 +336,7 @@ func (r *router) registerAgentHandlers() {
 					writeAuthError(w, err)
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			current, err := store.GetTicket(r.Context(), db, ticketID)
@@ -335,7 +345,7 @@ func (r *router) registerAgentHandlers() {
 					writeError(w, http.StatusNotFound, "ticket not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			updated, err := store.UpdateTicket(r.Context(), db, ticketID, store.TicketUpdateParams{
@@ -356,17 +366,21 @@ func (r *router) registerAgentHandlers() {
 				ActorRole:          "admin",
 			})
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
-			_ = store.AddHistoryEvent(r.Context(), db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
+			if err := store.AddHistoryEvent(r.Context(), db, updated.ProjectID, updated.ID, "agent_completed", map[string]any{
 				"key":       updated.ID,
 				"agent":     agent.Username,
 				"result":    payload.Result,
 				"new_stage": updated.Stage,
 				"new_state": updated.State,
-			}, agent.ID)
-			_, _ = store.TouchAgent(r.Context(), db, agent.ID, "soliciting")
+			}, agent.ID); err != nil {
+				log.Printf("server: add agent completion history for ticket %s: %v", updated.ID, err)
+			}
+			if _, err := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); err != nil {
+				log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, err)
+			}
 			notify("ticket_updated", updated.ProjectID, updated.ID)
 			writeJSON(w, http.StatusOK, updated)
 			return
@@ -397,7 +411,7 @@ func (r *router) registerAgentHandlers() {
 						writeError(w, http.StatusNotFound, "agent not found")
 						return
 					}
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, updated)
@@ -407,7 +421,7 @@ func (r *router) registerAgentHandlers() {
 						writeError(w, http.StatusNotFound, "agent not found")
 						return
 					}
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -435,7 +449,7 @@ func (r *router) registerAgentHandlers() {
 					return
 				}
 				if err := store.SetAgentConfig(r.Context(), db, id, payload.Key, payload.Value); err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -445,7 +459,7 @@ func (r *router) registerAgentHandlers() {
 					return
 				}
 				if err := store.DeleteAgentConfig(r.Context(), db, id, parts[2]); err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -471,7 +485,7 @@ func (r *router) registerAgentHandlers() {
 					writeError(w, http.StatusNotFound, "agent not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, updated)

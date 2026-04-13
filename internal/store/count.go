@@ -40,7 +40,7 @@ func CountEverything(ctx context.Context, db *sql.DB, projectID *int64) (CountSu
 		query += ` WHERE project_id = ?`
 		rows, err = db.QueryContext(ctx, query+` GROUP BY type, stage, state ORDER BY type, stage, state`, *projectID)
 	} else {
-		rows, err = db.QueryContext(ctx, query + ` GROUP BY type, stage, state ORDER BY type, stage, state`)
+		rows, err = db.QueryContext(ctx, query+` GROUP BY type, stage, state ORDER BY type, stage, state`)
 	}
 	if err != nil {
 		return CountSummary{}, err

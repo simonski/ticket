@@ -57,7 +57,9 @@ func readPasswordPrompt(reader *bufio.Reader, in io.Reader, out io.Writer) (stri
 		return "", err
 	}
 	defer func() {
-		_ = term.Restore(int(inFile.Fd()), oldState) // #nosec G115
+		if restoreErr := term.Restore(int(inFile.Fd()), oldState); restoreErr != nil { // #nosec G115
+			fmt.Fprintf(out, "warning: failed to restore terminal state: %v\n", restoreErr)
+		}
 	}()
 
 	var buf []byte

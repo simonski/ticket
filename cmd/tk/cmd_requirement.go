@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -24,7 +25,7 @@ func runCurate(args []string) error {
 	}
 	var titles []string
 	for _, arg := range args {
-		ticket, err := api.GetTicket(arg)
+		ticket, err := api.GetTicket(context.Background(), arg)
 		if err != nil {
 			return err
 		}
@@ -34,7 +35,7 @@ func runCurate(args []string) error {
 	if len(titles) > 0 {
 		title = titles[0]
 	}
-	requirement, err := api.CreateTicket(libticket.TicketCreateRequest{
+	requirement, err := api.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID:   project.ID,
 		Type:        "requirement",
 		Title:       title,
@@ -77,7 +78,7 @@ func runReview(args []string) error {
 		stageFilter = f.stage
 		stateFilter = f.state
 	}
-	tickets, err := api.ListTicketsFiltered(project.ID, "requirement", stageFilter, stateFilter, "", "", "", 0, false)
+	tickets, err := api.ListTicketsFiltered(context.Background(), project.ID, "requirement", stageFilter, stateFilter, "", "", "", 0, false)
 	if err != nil {
 		return err
 	}
@@ -108,11 +109,11 @@ func runRevise(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(args[1])
+	current, err := svc.GetTicket(context.Background(), args[1])
 	if err != nil {
 		return err
 	}
-	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(context.Background(), current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title + " (revised)",
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -241,7 +242,7 @@ func runReqShape(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(*id)
+	current, err := svc.GetTicket(context.Background(), *id)
 	if err != nil {
 		return err
 	}
@@ -266,7 +267,7 @@ func runReqShape(args []string) error {
 	if *ac != "" {
 		update.AcceptanceCriteria = *ac
 	}
-	updated, err := svc.UpdateTicket(current.ID, update)
+	updated, err := svc.UpdateTicket(context.Background(), current.ID, update)
 	if err != nil {
 		return err
 	}
@@ -321,7 +322,7 @@ func runReqBreak(args []string) error {
 	if err != nil {
 		return err
 	}
-	req, err := svc.GetTicket(*id)
+	req, err := svc.GetTicket(context.Background(), *id)
 	if err != nil {
 		return err
 	}
@@ -330,7 +331,7 @@ func runReqBreak(args []string) error {
 	}
 
 	// List all tickets in the project, filter to children of this requirement.
-	tickets, err := svc.ListTicketsFiltered(req.ProjectID, "", "", "", "", "", "", 0, false)
+	tickets, err := svc.ListTicketsFiltered(context.Background(), req.ProjectID, "", "", "", "", "", "", 0, false)
 	if err != nil {
 		return err
 	}
@@ -344,7 +345,7 @@ func runReqBreak(args []string) error {
 	if *reset {
 		// Delete all unpinned children — for now, delete all (pin not yet tracked).
 		for _, child := range children {
-			if err := svc.DeleteTicket(child.ID); err != nil {
+			if err := svc.DeleteTicket(context.Background(), child.ID); err != nil {
 				return fmt.Errorf("failed to delete %s: %w", child.ID, err)
 			}
 			fmt.Printf("deleted %s: %s\n", child.ID, child.Title)
@@ -390,7 +391,7 @@ func runDecision(args []string) error {
 		if err != nil {
 			return err
 		}
-		ticket, err := api.CreateTicket(libticket.TicketCreateRequest{
+		ticket, err := api.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID:   project.ID,
 			Type:        "decision",
 			Title:       args[1],
@@ -406,7 +407,7 @@ func runDecision(args []string) error {
 		if err != nil {
 			return err
 		}
-		tickets, err := api.ListTicketsFiltered(project.ID, "decision", "", "", "", "", "", 0, false)
+		tickets, err := api.ListTicketsFiltered(context.Background(), project.ID, "decision", "", "", "", "", "", 0, false)
 		if err != nil {
 			return err
 		}

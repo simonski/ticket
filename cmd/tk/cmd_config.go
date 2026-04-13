@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -25,7 +26,7 @@ func runConfig(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := svc.SetRegistrationEnabled(true); err != nil {
+		if err := svc.SetRegistrationEnabled(context.Background(), true); err != nil {
 			return err
 		}
 		fmt.Println("registration_enabled=true")
@@ -38,7 +39,7 @@ func runConfig(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := svc.SetRegistrationEnabled(false); err != nil {
+		if err := svc.SetRegistrationEnabled(context.Background(), false); err != nil {
 			return err
 		}
 		fmt.Println("registration_enabled=false")
@@ -73,7 +74,7 @@ func runConfig(args []string) error {
 			if err != nil {
 				return err
 			}
-			status, err := svc.Status()
+			status, err := svc.Status(context.Background())
 			if err != nil {
 				return err
 			}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,7 +34,7 @@ func runRegister(args []string) error {
 	if err != nil {
 		return err
 	}
-	user, err := svc.Register(username, password)
+	user, err := svc.Register(context.Background(), username, password)
 	if err != nil {
 		return err
 	}
@@ -72,7 +73,7 @@ func runLogin(args []string) error {
 	}
 
 	if cfg.Token != "" {
-		status, err := svc.Status()
+		status, err := svc.Status(context.Background())
 		if err == nil && status.Authenticated && status.User != nil {
 			cfg.Username = status.User.Username
 			if err := config.Save(cfg); err != nil {
@@ -90,7 +91,7 @@ func runLogin(args []string) error {
 	password = resolveLoginPassword(*passwordFlag)
 
 	if username != "" && password != "" {
-		user, token, err := svc.Login(username, password)
+		user, token, err := svc.Login(context.Background(), username, password)
 		if err == nil {
 			return finishLogin(cfg, user, token)
 		}
@@ -104,7 +105,7 @@ func runLogin(args []string) error {
 	if err != nil {
 		return err
 	}
-	user, token, err := svc.Login(username, password)
+	user, token, err := svc.Login(context.Background(), username, password)
 	if err != nil {
 		return err
 	}
@@ -138,7 +139,7 @@ func runLogout(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := svc.Logout(); err != nil {
+	if err := svc.Logout(context.Background()); err != nil {
 		if clearErr := config.ClearCredentials(); clearErr != nil {
 			return clearErr
 		}
@@ -201,11 +202,11 @@ func runCount(args []string) error {
 	var projectFilter *int64
 	if *projectID != 0 {
 		projectFilter = projectID
-		if _, err := svc.GetProject(fmt.Sprintf("%d", *projectID)); err != nil {
+		if _, err := svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectID)); err != nil {
 			return err
 		}
 	}
-	summary, err := svc.Count(projectFilter)
+	summary, err := svc.Count(context.Background(), projectFilter)
 	if err != nil {
 		return err
 	}
@@ -236,7 +237,7 @@ func runWhoami(args []string) error {
 	if username == "" {
 		username = "admin"
 	}
-	users, _ := svc.ListUsers()
+	users, _ := svc.ListUsers(context.Background())
 	var currentUser *store.User
 	for _, u := range users {
 		if u.Username == username {
@@ -267,7 +268,7 @@ func runWhoami(args []string) error {
 	// Projects with user role
 	fmt.Println()
 	fmt.Println("PROJECTS")
-	projects, err := svc.ListProjects()
+	projects, err := svc.ListProjects(context.Background())
 	if err != nil {
 		fmt.Println("  (unable to list projects)")
 		return nil
@@ -283,7 +284,7 @@ func runWhoami(args []string) error {
 		}
 		role := ""
 		if currentUser != nil {
-			members, _ := svc.ListProjectMembers(p.ID)
+			members, _ := svc.ListProjectMembers(context.Background(), p.ID)
 			for _, m := range members {
 				if m.UserID == currentUser.ID {
 					role = m.Role
@@ -328,7 +329,7 @@ func runUser(args []string) error {
 		if err != nil {
 			return err
 		}
-		user, err := svc.CreateUser(username, password)
+		user, err := svc.CreateUser(context.Background(), username, password)
 		if err != nil {
 			return err
 		}
@@ -347,7 +348,7 @@ func runUser(args []string) error {
 		if *username == "" {
 			return errors.New("user rm/delete/del requires -username")
 		}
-		if err := svc.DeleteUser(*username); err != nil {
+		if err := svc.DeleteUser(context.Background(), *username); err != nil {
 			return err
 		}
 		if outputJSON {
@@ -365,7 +366,7 @@ func runUser(args []string) error {
 		if *username == "" {
 			return errors.New("user enable/disable requires -username")
 		}
-		if err := svc.SetUserEnabled(*username, args[0] == "enable"); err != nil {
+		if err := svc.SetUserEnabled(context.Background(), *username, args[0] == "enable"); err != nil {
 			return err
 		}
 		if outputJSON {
@@ -374,7 +375,7 @@ func runUser(args []string) error {
 		fmt.Printf("%sd user %s\n", args[0], *username)
 		return nil
 	case "list", "ls":
-		users, err := svc.ListUsers()
+		users, err := svc.ListUsers(context.Background())
 		if err != nil {
 			return err
 		}
@@ -402,7 +403,7 @@ func runUser(args []string) error {
 			}
 			pw = generated
 		}
-		user, err := svc.ResetUserPassword(strings.TrimSpace(*username), pw)
+		user, err := svc.ResetUserPassword(context.Background(), strings.TrimSpace(*username), pw)
 		if err != nil {
 			return err
 		}

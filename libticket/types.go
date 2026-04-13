@@ -2,7 +2,7 @@ package libticket
 
 import "github.com/simonski/ticket/internal/store"
 
-// StatusResponse is returned by Service.Status() and describes server health,
+// StatusResponse is returned by Service.Status and describes server health,
 // authentication state, and the currently authenticated user if applicable.
 type StatusResponse struct {
 	Status              string      `json:"status"`
@@ -24,7 +24,7 @@ type ProjectCreateRequest struct {
 	GitBranch          string `json:"git_branch"`
 	Notes              string `json:"notes"`
 	Visibility         string `json:"visibility"`
-	SdlcID         *int64 `json:"sdlc_id,omitempty"`
+	SdlcID             *int64 `json:"sdlc_id,omitempty"`
 }
 
 type ProjectUpdateRequest struct {
@@ -36,7 +36,7 @@ type ProjectUpdateRequest struct {
 	Notes              string `json:"notes"`
 	Status             string `json:"status"`
 	Visibility         string `json:"visibility"`
-	SdlcID         *int64 `json:"sdlc_id,omitempty"`
+	SdlcID             *int64 `json:"sdlc_id,omitempty"`
 }
 
 type ProjectMemberRequest struct {
@@ -90,20 +90,20 @@ type TicketCreateRequest struct {
 	ProjectID          int64   `json:"project_id"`
 	ParentID           *string `json:"parent_id,omitempty"`
 	CloneOf            *string `json:"clone_of,omitempty"`
-	Type               string `json:"type"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	Priority           int    `json:"priority"`
-	EstimateEffort     int    `json:"estimate_effort"`
-	EstimateComplete   string `json:"estimate_complete,omitempty"`
-	Assignee           string `json:"assignee"`
-	Status             string `json:"status,omitempty"`
-	Stage              string `json:"stage,omitempty"`
-	State              string `json:"state,omitempty"`
-	Message            string `json:"message,omitempty"`
+	Type               string  `json:"type"`
+	Title              string  `json:"title"`
+	Description        string  `json:"description"`
+	AcceptanceCriteria string  `json:"acceptance_criteria"`
+	GitRepository      string  `json:"git_repository"`
+	GitBranch          string  `json:"git_branch"`
+	Priority           int     `json:"priority"`
+	EstimateEffort     int     `json:"estimate_effort"`
+	EstimateComplete   string  `json:"estimate_complete,omitempty"`
+	Assignee           string  `json:"assignee"`
+	Status             string  `json:"status,omitempty"`
+	Stage              string  `json:"stage,omitempty"`
+	State              string  `json:"state,omitempty"`
+	Message            string  `json:"message,omitempty"`
 }
 
 type TicketUpdateRequest struct {
@@ -113,16 +113,16 @@ type TicketUpdateRequest struct {
 	GitRepository      string  `json:"git_repository"`
 	GitBranch          string  `json:"git_branch"`
 	ParentID           *string `json:"parent_id,omitempty"`
-	Assignee           string `json:"assignee"`
-	Status             string `json:"status,omitempty"`
-	Stage              string `json:"stage,omitempty"`
-	State              string `json:"state,omitempty"`
-	Priority           int    `json:"priority"`
-	Order              int    `json:"order"`
-	EstimateEffort     int    `json:"estimate_effort"`
-	EstimateComplete   string `json:"estimate_complete,omitempty"`
-	Message            string `json:"message,omitempty"`
-	Type               string `json:"type,omitempty"`
+	Assignee           string  `json:"assignee"`
+	Status             string  `json:"status,omitempty"`
+	Stage              string  `json:"stage,omitempty"`
+	State              string  `json:"state,omitempty"`
+	Priority           int     `json:"priority"`
+	Order              int     `json:"order"`
+	EstimateEffort     int     `json:"estimate_effort"`
+	EstimateComplete   string  `json:"estimate_complete,omitempty"`
+	Message            string  `json:"message,omitempty"`
+	Type               string  `json:"type,omitempty"`
 }
 
 type CommentCreateRequest struct {
@@ -138,17 +138,17 @@ type DependencyRequest struct {
 type TicketRequest struct {
 	ProjectID int64   `json:"project_id,omitempty"`
 	TicketID  *string `json:"ticket_id,omitempty"`
-	TicketRef string `json:"ticket_ref,omitempty"`
-	DryRun    bool   `json:"dry_run,omitempty"`
+	TicketRef string  `json:"ticket_ref,omitempty"`
+	DryRun    bool    `json:"dry_run,omitempty"`
 }
 
 type TicketRequestResponse struct {
-	Status   string                    `json:"status"`
-	Ticket   *store.Ticket             `json:"ticket,omitempty"`
-	Project  *store.Project            `json:"project,omitempty"`
-	Parents  []store.Ticket            `json:"parents,omitempty"`
-	Sdlc *store.SdlcWithStages `json:"sdlc,omitempty"`
-	Role     *store.Role               `json:"role,omitempty"`
+	Status  string                `json:"status"`
+	Ticket  *store.Ticket         `json:"ticket,omitempty"`
+	Project *store.Project        `json:"project,omitempty"`
+	Parents []store.Ticket        `json:"parents,omitempty"`
+	Sdlc    *store.SdlcWithStages `json:"sdlc,omitempty"`
+	Role    *store.Role           `json:"role,omitempty"`
 }
 
 type AgentCreateRequest struct {
@@ -176,8 +176,8 @@ type AgentRequest struct {
 	Password        string  `json:"password"`
 	ProjectID       int64   `json:"project_id,omitempty"`
 	TicketID        *string `json:"ticket_id,omitempty"`
-	DryRun          bool   `json:"dry_run,omitempty"`
-	ConfigUpdatedAt string `json:"config_updated_at,omitempty"` // timestamp of last config received
+	DryRun          bool    `json:"dry_run,omitempty"`
+	ConfigUpdatedAt string  `json:"config_updated_at,omitempty"` // timestamp of last config received
 }
 
 type AgentTicketUpdateRequest struct {
@@ -187,12 +187,12 @@ type AgentTicketUpdateRequest struct {
 }
 
 type AgentWorkResponse struct {
-	Status          string                    `json:"status"`
-	Project         *store.Project            `json:"project"`
-	Ticket          *store.Ticket             `json:"ticket"`
-	Parents         []store.Ticket            `json:"parents"`
-	Sdlc        *store.SdlcWithStages `json:"sdlc,omitempty"`
-	Role            *store.Role               `json:"role,omitempty"`
-	Config          map[string]string         `json:"config,omitempty"`           // agent config (if changed or ticket assigned)
-	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"` // timestamp of config state
+	Status          string                `json:"status"`
+	Project         *store.Project        `json:"project"`
+	Ticket          *store.Ticket         `json:"ticket"`
+	Parents         []store.Ticket        `json:"parents"`
+	Sdlc            *store.SdlcWithStages `json:"sdlc,omitempty"`
+	Role            *store.Role           `json:"role,omitempty"`
+	Config          map[string]string     `json:"config,omitempty"`            // agent config (if changed or ticket assigned)
+	ConfigUpdatedAt string                `json:"config_updated_at,omitempty"` // timestamp of config state
 }

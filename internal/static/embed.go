@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strconv"
@@ -107,7 +108,9 @@ func SeedDatabase(ctx context.Context, db *sql.DB) error {
 			}
 			for _, roleRef := range s.Roles {
 				if rid, ok := roleIDByRef[roleRef.RoleRef]; ok {
-					_ = store.AddSdlcStageRole(ctx, db, wf.ID, stage.ID, rid)
+					if err := store.AddSdlcStageRole(ctx, db, wf.ID, stage.ID, rid); err != nil {
+						log.Printf("static: add stage role mapping sdlc=%d stage=%d role=%d: %v", wf.ID, stage.ID, rid, err)
+					}
 				}
 			}
 		}
@@ -199,7 +202,12 @@ func parseSdlc(filename, content string) Sdlc {
 
 		// Extract order.
 		if m := orderRe.FindStringSubmatch(body); m != nil {
-			stage.Order, _ = strconv.Atoi(m[1])
+			order, err := strconv.Atoi(m[1])
+			if err != nil {
+				log.Printf("static: parse stage order %q in %s: %v", m[1], filename, err)
+			} else {
+				stage.Order = order
+			}
 		}
 
 		// Extract first non-heading, non-order text line as description.

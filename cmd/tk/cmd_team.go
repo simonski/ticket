@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,7 +32,7 @@ func runTeam(args []string) error {
 		fmt.Println(teamUsage)
 		return nil
 	case "list", "ls":
-		teams, err := svc.ListTeams()
+		teams, err := svc.ListTeams(context.Background())
 		if err != nil {
 			return err
 		}
@@ -55,7 +56,7 @@ func runTeam(args []string) error {
 		if *parentID > 0 {
 			parent = parentID
 		}
-		team, err := svc.CreateTeam(libticket.TeamRequest{
+		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{
 			Name:         strings.TrimSpace(*name),
 			ParentTeamID: parent,
 		})
@@ -83,7 +84,7 @@ func runTeam(args []string) error {
 		if *parentID > 0 {
 			parent = parentID
 		}
-		team, err := svc.UpdateTeam(*id, libticket.TeamRequest{
+		team, err := svc.UpdateTeam(context.Background(), *id, libticket.TeamRequest{
 			Name:         strings.TrimSpace(*name),
 			ParentTeamID: parent,
 		})
@@ -105,7 +106,7 @@ func runTeam(args []string) error {
 		if *id == 0 || fs.NArg() != 0 {
 			return errors.New("usage: tk team delete -id <id>")
 		}
-		if err := svc.DeleteTeam(*id); err != nil {
+		if err := svc.DeleteTeam(context.Background(), *id); err != nil {
 			return err
 		}
 		if outputJSON {
@@ -126,7 +127,7 @@ func runTeam(args []string) error {
 		if *teamID == 0 || *userID == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
 			return errors.New("usage: tk team add-user -team_id <id> -user_id <id> -role <member|owner> [-job_title <title>]")
 		}
-		member, err := svc.AddTeamMember(*teamID, libticket.TeamMemberRequest{
+		member, err := svc.AddTeamMember(context.Background(), *teamID, libticket.TeamMemberRequest{
 			UserID:   *userID,
 			Role:     strings.TrimSpace(*role),
 			JobTitle: strings.TrimSpace(*jobTitle),
@@ -150,7 +151,7 @@ func runTeam(args []string) error {
 		if *teamID == 0 || *userID == "" || fs.NArg() != 0 {
 			return errors.New("usage: tk team remove-user -team_id <id> -user_id <id>")
 		}
-		if err := svc.RemoveTeamMember(*teamID, *userID); err != nil {
+		if err := svc.RemoveTeamMember(context.Background(), *teamID, *userID); err != nil {
 			return err
 		}
 		if outputJSON {
@@ -168,7 +169,7 @@ func runTeam(args []string) error {
 		if *teamID == 0 || fs.NArg() != 0 {
 			return errors.New("usage: tk team users -team_id <id>")
 		}
-		members, err := svc.ListTeamMembers(*teamID)
+		members, err := svc.ListTeamMembers(context.Background(), *teamID)
 		if err != nil {
 			return err
 		}
@@ -188,7 +189,7 @@ func runTeam(args []string) error {
 		if *teamID == 0 || *agentID == "" || fs.NArg() != 0 {
 			return errors.New("usage: tk team add-agent -team_id <id> -agent_id <uuid>")
 		}
-		item, err := svc.AddTeamAgent(*teamID, *agentID)
+		item, err := svc.AddTeamAgent(context.Background(), *teamID, *agentID)
 		if err != nil {
 			return err
 		}
@@ -208,7 +209,7 @@ func runTeam(args []string) error {
 		if *teamID == 0 || *agentID == "" || fs.NArg() != 0 {
 			return errors.New("usage: tk team remove-agent -team_id <id> -agent_id <uuid>")
 		}
-		if err := svc.RemoveTeamAgent(*teamID, *agentID); err != nil {
+		if err := svc.RemoveTeamAgent(context.Background(), *teamID, *agentID); err != nil {
 			return err
 		}
 		if outputJSON {
@@ -226,7 +227,7 @@ func runTeam(args []string) error {
 		if *teamID == 0 || fs.NArg() != 0 {
 			return errors.New("usage: tk team agents -team_id <id>")
 		}
-		items, err := svc.ListTeamAgents(*teamID)
+		items, err := svc.ListTeamAgents(context.Background(), *teamID)
 		if err != nil {
 			return err
 		}
@@ -298,7 +299,7 @@ func runRole(args []string) error {
 		fmt.Println(roleUsage)
 		return nil
 	case "list", "ls":
-		roles, err := svc.ListRoles()
+		roles, err := svc.ListRoles(context.Background())
 		if err != nil {
 			return err
 		}
@@ -324,7 +325,7 @@ func runRole(args []string) error {
 		if *id == 0 {
 			return errors.New("usage: tk role get -id <id>")
 		}
-		roles, err := svc.ListRoles()
+		roles, err := svc.ListRoles(context.Background())
 		if err != nil {
 			return err
 		}
@@ -355,10 +356,10 @@ func runRole(args []string) error {
 		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
 			return errors.New("usage: tk role create -title <title> [-description <text>] [-ac <text>]")
 		}
-		role, err := svc.CreateRole(libticket.RoleRequest{
-			Title:      strings.TrimSpace(*title),
-			Description: strings.TrimSpace(*description),
-			AcceptanceCriteria:      strings.TrimSpace(*ac),
+		role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
+			Title:              strings.TrimSpace(*title),
+			Description:        strings.TrimSpace(*description),
+			AcceptanceCriteria: strings.TrimSpace(*ac),
 		})
 		if err != nil {
 			return err
@@ -381,10 +382,10 @@ func runRole(args []string) error {
 		if *id == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
 			return errors.New("usage: tk role update -id <id> -title <title> [-description <text>] [-ac <text>]")
 		}
-		role, err := svc.UpdateRole(*id, libticket.RoleRequest{
-			Title:      strings.TrimSpace(*title),
-			Description: strings.TrimSpace(*description),
-			AcceptanceCriteria:      strings.TrimSpace(*ac),
+		role, err := svc.UpdateRole(context.Background(), *id, libticket.RoleRequest{
+			Title:              strings.TrimSpace(*title),
+			Description:        strings.TrimSpace(*description),
+			AcceptanceCriteria: strings.TrimSpace(*ac),
 		})
 		if err != nil {
 			return err
@@ -404,7 +405,7 @@ func runRole(args []string) error {
 		if *id == 0 || fs.NArg() != 0 {
 			return errors.New("usage: tk role delete -id <id>")
 		}
-		if err := svc.DeleteRole(*id); err != nil {
+		if err := svc.DeleteRole(context.Background(), *id); err != nil {
 			return err
 		}
 		if outputJSON {

@@ -365,4 +365,3 @@ func TestLoadInvalidJSONUsesDefaults(t *testing.T) {
 		t.Fatalf("Load().Location = %q, want empty default", cfg.Location)
 	}
 }
-

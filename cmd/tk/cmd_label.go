@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,7 +23,7 @@ func runLabel(args []string) error {
 	}
 	switch args[0] {
 	case "list", "ls":
-		labels, err := svc.ListLabels(project.ID)
+		labels, err := svc.ListLabels(context.Background(), project.ID)
 		if err != nil {
 			return err
 		}
@@ -53,7 +54,7 @@ func runLabel(args []string) error {
 		if *name == "" {
 			return errors.New("usage: tk label create <name> [-color <color>]")
 		}
-		label, err := svc.CreateLabel(project.ID, libticket.LabelRequest{Name: *name, Color: *color})
+		label, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{Name: *name, Color: *color})
 		if err != nil {
 			return err
 		}
@@ -80,7 +81,7 @@ func runLabel(args []string) error {
 		if _, err := fmt.Sscan(idStr, &id); err != nil {
 			return errors.New("label id must be numeric")
 		}
-		return svc.DeleteLabel(id)
+		return svc.DeleteLabel(context.Background(), id)
 	case "add":
 		fs := flag.NewFlagSet("label add", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -104,7 +105,7 @@ func runLabel(args []string) error {
 		} else {
 			return errors.New("usage: tk label add -id <ticket-id> <label-id>")
 		}
-		return svc.AddTicketLabel(ticketID, labelID)
+		return svc.AddTicketLabel(context.Background(), ticketID, labelID)
 	case "remove":
 		fs := flag.NewFlagSet("label remove", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -127,7 +128,7 @@ func runLabel(args []string) error {
 		} else {
 			return errors.New("usage: tk label remove -id <ticket-id> <label-id>")
 		}
-		return svc.RemoveTicketLabel(ticketID, labelID)
+		return svc.RemoveTicketLabel(context.Background(), ticketID, labelID)
 	case "show":
 		fs := flag.NewFlagSet("label show", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -143,7 +144,7 @@ func runLabel(args []string) error {
 			return errors.New("usage: tk label show -id <ticket-id>")
 		}
 		ticketID := idStr
-		labels, err := svc.ListTicketLabels(ticketID)
+		labels, err := svc.ListTicketLabels(context.Background(), ticketID)
 		if err != nil {
 			return err
 		}
@@ -189,7 +190,7 @@ func runTime(args []string) error {
 		if *ticketID == "" || *minutes <= 0 {
 			return errors.New("usage: tk time log -id <ticket-id> -m <minutes> [-note <text>]")
 		}
-		entry, err := svc.LogTime(*ticketID, libticket.TimeEntryRequest{Minutes: *minutes, Note: *note})
+		entry, err := svc.LogTime(context.Background(), *ticketID, libticket.TimeEntryRequest{Minutes: *minutes, Note: *note})
 		if err != nil {
 			return err
 		}
@@ -212,7 +213,7 @@ func runTime(args []string) error {
 		if ticketID == "" {
 			return errors.New("usage: tk time list -id <ticket-id>")
 		}
-		entries, err := svc.ListTimeEntries(ticketID)
+		entries, err := svc.ListTimeEntries(context.Background(), ticketID)
 		if err != nil {
 			return err
 		}
@@ -243,7 +244,7 @@ func runTime(args []string) error {
 		if ticketID == "" {
 			return errors.New("usage: tk time total -id <ticket-id>")
 		}
-		total, err := svc.TotalTimeForTicket(ticketID)
+		total, err := svc.TotalTimeForTicket(context.Background(), ticketID)
 		if err != nil {
 			return err
 		}
@@ -274,7 +275,7 @@ func runTime(args []string) error {
 		if id == 0 {
 			return errors.New("usage: tk time delete -id <entry-id>")
 		}
-		return svc.DeleteTimeEntry(id)
+		return svc.DeleteTimeEntry(context.Background(), id)
 	default:
 		return fmt.Errorf("unknown time command %q; see: ticket time help", args[0])
 	}

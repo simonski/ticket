@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -50,7 +51,7 @@ func runAgent(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		agent, generatedPassword, err := svc.CreateAgent(libticket.AgentCreateRequest{
+		agent, generatedPassword, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{
 			Password: strings.TrimSpace(*password),
 		})
 		if err != nil {
@@ -63,7 +64,7 @@ func runAgent(args []string) error {
 		fmt.Printf("password: %s\n", generatedPassword)
 		return nil
 	case "ls", "list":
-		statuses, err := svc.ListAgentStatuses()
+		statuses, err := svc.ListAgentStatuses(context.Background())
 		if err != nil {
 			return err
 		}
@@ -88,7 +89,7 @@ func runAgent(args []string) error {
 		if trimmed == "" {
 			return errors.New("agent update requires -password")
 		}
-		agent, err := svc.UpdateAgent(dbID, libticket.AgentUpdateRequest{
+		agent, err := svc.UpdateAgent(context.Background(), dbID, libticket.AgentUpdateRequest{
 			Password: &trimmed,
 		})
 		if err != nil {
@@ -110,7 +111,7 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := svc.DeleteAgent(dbID); err != nil {
+		if err := svc.DeleteAgent(context.Background(), dbID); err != nil {
 			return err
 		}
 		if outputJSON {
@@ -129,7 +130,7 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		agent, err := svc.SetAgentEnabled(dbID, args[0] == "enable")
+		agent, err := svc.SetAgentEnabled(context.Background(), dbID, args[0] == "enable")
 		if err != nil {
 			return err
 		}
@@ -193,7 +194,7 @@ func runAgent(args []string) error {
 			Password: agentPassword,
 		}
 		fmt.Printf("[agent] REGISTER request: ID=%s Password=%s\n", registerRequest.ID, strings.Repeat("*", len(registerRequest.Password)))
-		agent, err := svc.RegisterAgent(registerRequest)
+		agent, err := svc.RegisterAgent(context.Background(), registerRequest)
 		if err != nil {
 			return err
 		}
@@ -212,7 +213,7 @@ func runAgent(args []string) error {
 			if agentVerbose {
 				fmt.Printf("[agent] requesting work (project=%d)\n", *projectID)
 			}
-			response, err := svc.RequestAgentWork(libticket.AgentRequest{
+			response, err := svc.RequestAgentWork(context.Background(), libticket.AgentRequest{
 				ID:              agentIDVal,
 				Password:        agentPassword,
 				ProjectID:       *projectID,
@@ -294,7 +295,7 @@ func runAgent(args []string) error {
 				for {
 					select {
 					case <-ticker.C:
-						if err := svc.HeartbeatAgent(agentIDVal, agentPassword, "working"); err != nil {
+						if err := svc.HeartbeatAgent(context.Background(), agentIDVal, agentPassword, "working"); err != nil {
 							if agentVerbose {
 								fmt.Printf("[agent] heartbeat error: %v\n", err)
 							}
@@ -316,7 +317,7 @@ func runAgent(args []string) error {
 			if agentVerbose {
 				fmt.Printf("[agent] submitting result for %s (%d bytes)\n", ticketLabel(*ticket), len(result))
 			}
-			updated, err := svc.AgentUpdateTicket(ticket.ID, libticket.AgentTicketUpdateRequest{
+			updated, err := svc.AgentUpdateTicket(context.Background(), ticket.ID, libticket.AgentTicketUpdateRequest{
 				ID:       agentIDVal,
 				Password: agentPassword,
 				Result:   strings.TrimSpace(result),
@@ -385,7 +386,7 @@ func runAgent(args []string) error {
 			requestedID = id
 		}
 		for i := 0; *loop == 0 || i < *loop; i++ {
-			response, err := svc.RequestAgentWork(libticket.AgentRequest{
+			response, err := svc.RequestAgentWork(context.Background(), libticket.AgentRequest{
 				ID:       reqAgentIDVal,
 				Password: agentPassword,
 				TicketID: requestedID,
@@ -422,7 +423,7 @@ func runAgent(args []string) error {
 			}
 			pw = generated
 		}
-		agent, err := svc.UpdateAgent(dbID, libticket.AgentUpdateRequest{Password: &pw})
+		agent, err := svc.UpdateAgent(context.Background(), dbID, libticket.AgentUpdateRequest{Password: &pw})
 		if err != nil {
 			return err
 		}
@@ -449,7 +450,7 @@ func runAgent(args []string) error {
 		if fs.NArg() < 2 {
 			return errors.New("usage: tk agent config-set -id <agent-uuid> <key> <value>")
 		}
-		if err := svc.SetAgentConfig(dbID, fs.Arg(0), fs.Arg(1)); err != nil {
+		if err := svc.SetAgentConfig(context.Background(), dbID, fs.Arg(0), fs.Arg(1)); err != nil {
 			return err
 		}
 		fmt.Printf("%s=%s\n", fs.Arg(0), fs.Arg(1))
@@ -465,7 +466,7 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		entries, err := svc.ListAgentConfig(dbID)
+		entries, err := svc.ListAgentConfig(context.Background(), dbID)
 		if err != nil {
 			return err
 		}
@@ -494,7 +495,7 @@ func runAgent(args []string) error {
 		if fs.NArg() < 1 {
 			return errors.New("usage: tk agent config-rm -id <agent-uuid> <key>")
 		}
-		if err := svc.DeleteAgentConfig(dbID, fs.Arg(0)); err != nil {
+		if err := svc.DeleteAgentConfig(context.Background(), dbID, fs.Arg(0)); err != nil {
 			return err
 		}
 		fmt.Printf("deleted %s\n", fs.Arg(0))
@@ -743,7 +744,9 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 					}
 				}
 			} else {
-				_, _ = os.Stdout.Write(chunk)
+				if _, err := os.Stdout.Write(chunk); err != nil {
+					return "", err
+				}
 			}
 		}
 		if readErr != nil {

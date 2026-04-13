@@ -40,19 +40,19 @@ func runHealth(args []string) error {
 		if err != nil {
 			return err
 		}
-		projectTickets, err := api.ListTickets(project.ID)
+		projectTickets, err := api.ListTickets(context.Background(), project.ID)
 		if err != nil {
 			return err
 		}
 
 		results := make([]map[string]any, 0, len(projectTickets))
 		for _, ticket := range projectTickets {
-			comments, err := svc.ListComments(ticket.ID)
+			comments, err := svc.ListComments(context.Background(), ticket.ID)
 			if err != nil {
 				return err
 			}
 			checks := ticketHealthCheck(ticket, comments)
-			updated, err := svc.SetTicketHealth(ticket.ID, checks.score)
+			updated, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score)
 			if err != nil {
 				return err
 			}
@@ -94,17 +94,17 @@ func runHealth(args []string) error {
 		return nil
 	}
 
-	ticket, err := svc.GetTicket(idVal)
+	ticket, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
-	comments, err := svc.ListComments(ticket.ID)
+	comments, err := svc.ListComments(context.Background(), ticket.ID)
 	if err != nil {
 		return err
 	}
 
 	checks := ticketHealthCheck(ticket, comments)
-	updated, err := svc.SetTicketHealth(ticket.ID, checks.score)
+	updated, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score)
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ Targets:
 		if *id == 0 {
 			*id = project.ID
 		}
-		proj, err := svc.GetProject(strconv.FormatInt(*id, 10))
+		proj, err := svc.GetProject(context.Background(), strconv.FormatInt(*id, 10))
 		if err != nil {
 			return fmt.Errorf("project %d not found: %w", *id, err)
 		}
@@ -231,7 +231,7 @@ Targets:
 		if proj.SdlcID == nil {
 			fmt.Println("[WARN] Project has no sdlc assigned")
 		} else {
-			wf, err := svc.GetSdlc(*proj.SdlcID)
+			wf, err := svc.GetSdlc(context.Background(), *proj.SdlcID)
 			if err == nil {
 				fmt.Printf("Sdlc: %s (%d stages)\n", wf.Name, len(wf.Stages))
 				for _, s := range wf.Stages {
@@ -249,7 +249,7 @@ Targets:
 		}
 
 		// Ticket stats
-		tickets, err := svc.ListTickets(proj.ID)
+		tickets, err := svc.ListTickets(context.Background(), proj.ID)
 		if err != nil {
 			return err
 		}
@@ -305,9 +305,9 @@ Targets:
 				if t.Complete || t.Archived {
 					continue
 				}
-				comments, _ := svc.ListComments(t.ID)
+				comments, _ := svc.ListComments(context.Background(), t.ID)
 				checks := ticketHealthCheck(t, comments)
-				if _, err := svc.SetTicketHealth(t.ID, checks.score); err != nil {
+				if _, err := svc.SetTicketHealth(context.Background(), t.ID, checks.score); err != nil {
 					fmt.Printf("  [ERR] %s: %v\n", t.ID, err)
 				} else {
 					fmt.Printf("  %s: score %d/4\n", t.ID, checks.score)
@@ -327,7 +327,7 @@ Targets:
 		if err != nil || idVal == "" {
 			return errors.New("usage: tk doctor ticket [-id] <id>")
 		}
-		ticket, err := svc.GetTicket(idVal)
+		ticket, err := svc.GetTicket(context.Background(), idVal)
 		if err != nil {
 			return err
 		}
@@ -344,7 +344,9 @@ Targets:
 		if resolved, err := config.ResolveURL(); err == nil && resolved.DBPath != "" {
 			if db, err := store.Open(resolved.DBPath); err == nil {
 				ctx = store.EnrichTicketContext(context.Background(), db, ticket)
-				_ = db.Close()
+				if closeErr := db.Close(); closeErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not close database: %v\n", closeErr)
+				}
 			}
 		}
 
@@ -403,7 +405,7 @@ Targets:
 				desc, _ := reader.ReadString('\n')
 				desc = strings.TrimSpace(desc)
 				if desc != "" {
-					if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{Description: desc}); err != nil {
+					if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{Description: desc}); err != nil {
 						fmt.Printf("  [ERR] %v\n", err)
 					} else {
 						fmt.Println("  Updated.")
@@ -417,7 +419,7 @@ Targets:
 				ac, _ := reader.ReadString('\n')
 				ac = strings.TrimSpace(ac)
 				if ac != "" {
-					if _, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{AcceptanceCriteria: ac}); err != nil {
+					if _, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{AcceptanceCriteria: ac}); err != nil {
 						fmt.Printf("  [ERR] %v\n", err)
 					} else {
 						fmt.Println("  Updated.")
@@ -427,7 +429,7 @@ Targets:
 		}
 		if ticket.Draft && ticket.State == store.StateIdle {
 			if promptYN(reader, "Mark ticket as ready?", false) {
-				if _, err := svc.ReadyTicket(ticket.ID, ""); err != nil {
+				if _, err := svc.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
 					fmt.Printf("  [ERR] %v\n", err)
 				} else {
 					fmt.Println("  Marked ready.")
@@ -436,9 +438,9 @@ Targets:
 		}
 
 		// Health score
-		comments, _ := svc.ListComments(ticket.ID)
+		comments, _ := svc.ListComments(context.Background(), ticket.ID)
 		checks := ticketHealthCheck(ticket, comments)
-		if _, err := svc.SetTicketHealth(ticket.ID, checks.score); err == nil {
+		if _, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score); err == nil {
 			fmt.Printf("\nHealth score: %d/4\n", checks.score)
 		}
 		return nil

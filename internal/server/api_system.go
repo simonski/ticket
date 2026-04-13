@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"runtime"
 	"strings"
@@ -43,9 +44,15 @@ func (r *router) registerSystemHandlers() {
 		runtime.ReadMemStats(&ms)
 
 		var ticketCount, projectCount, userCount int
-		_ = db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE open = 1`).Scan(&ticketCount)
-		_ = db.QueryRow(`SELECT COUNT(*) FROM projects`).Scan(&projectCount)
-		_ = db.QueryRow(`SELECT COUNT(*) FROM users WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL`).Scan(&userCount)
+		if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE open = 1`).Scan(&ticketCount); err != nil {
+			log.Printf("server: load ticket count metric: %v", err)
+		}
+		if err := db.QueryRow(`SELECT COUNT(*) FROM projects`).Scan(&projectCount); err != nil {
+			log.Printf("server: load project count metric: %v", err)
+		}
+		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL`).Scan(&userCount); err != nil {
+			log.Printf("server: load user count metric: %v", err)
+		}
 
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		fmt.Fprintf(w, "# HELP ticket_up Is the ticket server running\n")

@@ -32,7 +32,7 @@ func (r *router) registerSdlcHandlers() {
 		}
 		wf, err := store.ImportSdlc(r.Context(), db, export)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeStoreError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusCreated, wf)
@@ -61,7 +61,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusNotFound, "sdlc stage not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, stage)
@@ -81,7 +81,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusNotFound, "sdlc stage not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, stage)
@@ -95,7 +95,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusNotFound, "sdlc stage not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -137,7 +137,7 @@ func (r *router) registerSdlcHandlers() {
 				return
 			}
 			if err := store.AddSdlcStageRole(r.Context(), db, sdlcID, stageID, payload.RoleID); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, map[string]string{"status": "assigned"})
@@ -152,7 +152,7 @@ func (r *router) registerSdlcHandlers() {
 				return
 			}
 			if err := store.RemoveSdlcStageRole(r.Context(), db, sdlcID, stageID, roleID); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
@@ -165,7 +165,7 @@ func (r *router) registerSdlcHandlers() {
 				return
 			}
 			if err := store.ReorderSdlcStageRoles(r.Context(), db, sdlcID, stageID, payload.RoleIDs); err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "reordered"})
@@ -183,17 +183,17 @@ func (r *router) registerSdlcHandlers() {
 			}
 			limit, err := queryInt(r, "limit", 0)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			offset, err := queryInt(r, "offset", 0)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			sdlcs, err := store.ListSdlcs(r.Context(), db, limit, offset)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, sdlcs)
@@ -209,7 +209,7 @@ func (r *router) registerSdlcHandlers() {
 			}
 			wf, err := store.CreateSdlc(r.Context(), db, payload.Name, payload.Description)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, wf)
@@ -249,7 +249,7 @@ func (r *router) registerSdlcHandlers() {
 				}
 				stage, err := store.AddSdlcStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.AcceptanceCriteria, payload.SortOrder)
 				if err != nil {
-					writeError(w, http.StatusBadRequest, err.Error())
+					writeStoreError(w, err)
 					return
 				}
 				writeJSON(w, http.StatusCreated, stage)
@@ -270,7 +270,7 @@ func (r *router) registerSdlcHandlers() {
 				}
 				if err := store.ReorderSdlcStages(r.Context(), db, wfID, payload.StageIDs); err != nil {
 					if errors.Is(err, store.ErrSdlcStageNotFound) {
-						writeError(w, http.StatusBadRequest, err.Error())
+						writeStoreError(w, err)
 					} else {
 						writeError(w, http.StatusInternalServerError, err.Error())
 					}
@@ -313,7 +313,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusNotFound, "sdlc not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, wf)
@@ -323,7 +323,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusNotFound, "sdlc not found")
 					return
 				}
-				writeError(w, http.StatusBadRequest, err.Error())
+				writeStoreError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

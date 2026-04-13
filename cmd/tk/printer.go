@@ -52,7 +52,9 @@ func rowColor(status string) string {
 
 func printProject(project store.Project) {
 	if outputJSON {
-		_ = printJSON(project)
+		if err := printJSON(project); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not print project JSON: %v\n", err)
+		}
 		return
 	}
 	fmt.Printf("project: %s\n", project.Title)
@@ -109,7 +111,9 @@ func ticketLabel(ticket store.Ticket) string {
 
 func printTicket(ticket store.Ticket) {
 	if outputJSON {
-		_ = printJSON(ticket)
+		if err := printJSON(ticket); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not print ticket JSON: %v\n", err)
+		}
 		return
 	}
 	fmt.Printf("ticket: %s\n", ticket.Title)
@@ -269,7 +273,9 @@ func printTicketChildren(children []store.Ticket) {
 		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, c.ID, c.Type, c.Status, c.Title)
 		rowColors = append(rowColors, childTicketColor(c))
 	}
-	_ = w.Flush()
+	if err := w.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not flush child ticket table: %v\n", err)
+	}
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	useColor := isTerminal() && !noColorOutput
 	for i, line := range lines {
@@ -489,7 +495,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	for _, t := range tickets {
 		fmt.Fprintln(mw, makeDataRow(t, titleSentinel))
 	}
-	_ = mw.Flush()
+	if err := mw.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not flush ticket width probe: %v\n", err)
+	}
 
 	mLines := strings.Split(strings.TrimRight(mBuf.String(), "\n"), "\n")
 
@@ -557,7 +565,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	for _, t := range tickets {
 		fmt.Fprintln(bw, makeDataRow(t, padToWidth(t.Title, titleW)))
 	}
-	_ = bw.Flush()
+	if err := bw.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not flush ticket table: %v\n", err)
+	}
 
 	rawLines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
@@ -760,7 +770,9 @@ func printBoxTable(header string, rows []string) {
 	for _, l := range lines {
 		fmt.Fprintln(w, l)
 	}
-	_ = w.Flush()
+	if err := w.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not flush table: %v\n", err)
+	}
 	formatted := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
 	if !isTerminal() {

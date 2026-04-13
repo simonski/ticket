@@ -1,13 +1,14 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 	"strings"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ─── sdlc key handler ─────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					order := len(wf.Stages)
 					m.wfAddingStage = false
 					return m, func() tea.Msg {
-						_, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+						_, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 							StageName: name,
 							SortOrder: order,
 						})
@@ -120,7 +121,7 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			stage := m.sdlcs[wfIdx].Stages[stageIdx]
 			svc := m.svc
 			return m, func() tea.Msg {
-				if err := svc.RemoveSdlcStage(stage.ID); err != nil {
+				if err := svc.RemoveSdlcStage(context.Background(), stage.ID); err != nil {
 					return errMsg{err}
 				}
 				return loadSdlcs(svc)()
@@ -140,7 +141,7 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			wfID := wf.ID
 			m.wfCursor--
 			return m, func() tea.Msg {
-				if err := svc.ReorderSdlcStages(wfID, ids); err != nil {
+				if err := svc.ReorderSdlcStages(context.Background(), wfID, ids); err != nil {
 					return errMsg{err}
 				}
 				return loadSdlcs(svc)()
@@ -161,7 +162,7 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				wfID := wf.ID
 				m.wfCursor++
 				return m, func() tea.Msg {
-					if err := svc.ReorderSdlcStages(wfID, ids); err != nil {
+					if err := svc.ReorderSdlcStages(context.Background(), wfID, ids); err != nil {
 						return errMsg{err}
 					}
 					return loadSdlcs(svc)()
@@ -176,16 +177,15 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-
 func loadSdlcs(svc libticket.Service) tea.Cmd {
 	return func() tea.Msg {
-		wfs, err := svc.ListSdlcs()
+		wfs, err := svc.ListSdlcs(context.Background())
 		if err != nil {
 			return errMsg{err}
 		}
 		var result []store.SdlcWithStages
 		for _, wf := range wfs {
-			ws, err := svc.GetSdlc(wf.ID)
+			ws, err := svc.GetSdlc(context.Background(), wf.ID)
 			if err != nil {
 				continue
 			}
@@ -263,5 +263,3 @@ func (m Model) viewSdlcs() []string {
 	lines = append(lines, m.statusBar(inner))
 	return lines
 }
-
-

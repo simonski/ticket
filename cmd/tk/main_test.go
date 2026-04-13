@@ -305,7 +305,7 @@ func TestRunHealthExecutePersistsScores(t *testing.T) {
 	for _, id := range tasks {
 		task, err := svcGetTicket(t, id)
 		if err != nil {
-			t.Fatalf("svc.GetTicket(%s) error = %v", id, err)
+			t.Fatalf("svc.GetTicket(context.Background(), %s) error = %v", id, err)
 		}
 		if task.HealthScore == 0 {
 			t.Fatalf("ticket %s health score = %d", id, task.HealthScore)
@@ -1915,7 +1915,7 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 	setupLocalCLI(t)
 	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
 
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Workflow Stage Ticket",
@@ -1928,7 +1928,7 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 		t.Fatalf("update stage error = %v", err)
 	}
 
-	updated, err := svc.GetTicket(ticket.ID)
+	updated, err := svc.GetTicket(context.Background(), ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(updated) error = %v", err)
 	}
@@ -1950,7 +1950,7 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 	setupLocalCLI(t)
 	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
 
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Reject Me",
@@ -1958,7 +1958,7 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	advanced, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+	advanced, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 		Title:              ticket.Title,
 		Description:        ticket.Description,
 		AcceptanceCriteria: ticket.AcceptanceCriteria,
@@ -1985,7 +1985,7 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 		t.Fatalf("reject error = %v", err)
 	}
 
-	rejected, err := svc.GetTicket(ticket.ID)
+	rejected, err := svc.GetTicket(context.Background(), ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(rejected) error = %v", err)
 	}
@@ -2294,6 +2294,9 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	if !strings.Contains(historyOutput, "created task") {
 		t.Fatalf("history output = %q", historyOutput)
 	}
+	if err := run([]string{"history", "-offset", "1"}); err == nil || !strings.Contains(err.Error(), "offset is only supported") {
+		t.Fatalf("history -offset without id error = %v", err)
+	}
 
 	getOutput := captureStdout(t, func() {
 		if err := run([]string{"get", "-id", taskID}); err != nil {
@@ -2480,11 +2483,11 @@ func TestRunSdlcGetShowsStages(t *testing.T) {
 func TestRunSdlcGetShowsStageAcceptanceCriteria(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "AC Workflow", Description: "workflow with stage acceptance criteria"})
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "AC Workflow", Description: "workflow with stage acceptance criteria"})
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 		StageName:   "triage",
 		Description: "triage",
 		SortOrder:   1,
@@ -2492,7 +2495,7 @@ func TestRunSdlcGetShowsStageAcceptanceCriteria(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
-	if _, err := svc.UpdateSdlcStage(stage.ID, libticket.SdlcStageRequest{
+	if _, err := svc.UpdateSdlcStage(context.Background(), stage.ID, libticket.SdlcStageRequest{
 		StageName:          "triage",
 		Description:        "triage",
 		AcceptanceCriteria: "Clarified with the product owner",
@@ -2515,7 +2518,7 @@ func TestRunSdlcGetShowsStageAcceptanceCriteria(t *testing.T) {
 func TestRunSdlcRoleCRUD(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Role Workflow", Description: "workflow for scoped roles"})
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Role Workflow", Description: "workflow for scoped roles"})
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
@@ -2531,7 +2534,7 @@ func TestRunSdlcRoleCRUD(t *testing.T) {
 	}
 
 	var created store.Role
-	roles, err := svc.ListRoles()
+	roles, err := svc.ListRoles(context.Background())
 	if err != nil {
 		t.Fatalf("ListRoles() error = %v", err)
 	}
@@ -2575,7 +2578,7 @@ func TestRunSdlcRoleCRUD(t *testing.T) {
 		t.Fatalf("unexpected sdlc role-rm output:\n%s", deleteOutput)
 	}
 
-	roles, err = svc.ListRoles()
+	roles, err = svc.ListRoles(context.Background())
 	if err != nil {
 		t.Fatalf("ListRoles(after delete) error = %v", err)
 	}
@@ -2589,11 +2592,11 @@ func TestRunSdlcRoleCRUD(t *testing.T) {
 func TestRunSdlcStageRoleCommands(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Stage Role Workflow", Description: "workflow for stage role commands"})
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Stage Role Workflow", Description: "workflow for stage role commands"})
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 		StageName:   "triage",
 		Description: "triage",
 		SortOrder:   1,
@@ -2601,7 +2604,7 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
-	roleA, err := svc.CreateRole(libticket.RoleRequest{
+	roleA, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 		SdlcID:      &wf.ID,
 		Title:       "reviewer",
 		Description: "reviews work",
@@ -2609,7 +2612,7 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRole(roleA) error = %v", err)
 	}
-	roleB, err := svc.CreateRole(libticket.RoleRequest{
+	roleB, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 		SdlcID:      &wf.ID,
 		Title:       "qa",
 		Description: "verifies work",
@@ -2634,7 +2637,7 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("unexpected stage-role-add output:\n%s", addOutput)
 	}
 
-	ordered, err := svc.GetSdlc(wf.ID)
+	ordered, err := svc.GetSdlc(context.Background(), wf.ID)
 	if err != nil {
 		t.Fatalf("GetSdlc(after add) error = %v", err)
 	}
@@ -2651,7 +2654,7 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("unexpected stage-role-order output:\n%s", orderOutput)
 	}
 
-	ordered, err = svc.GetSdlc(wf.ID)
+	ordered, err = svc.GetSdlc(context.Background(), wf.ID)
 	if err != nil {
 		t.Fatalf("GetSdlc(after reorder) error = %v", err)
 	}
@@ -2668,7 +2671,7 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("unexpected stage-role-rm output:\n%s", removeOutput)
 	}
 
-	ordered, err = svc.GetSdlc(wf.ID)
+	ordered, err = svc.GetSdlc(context.Background(), wf.ID)
 	if err != nil {
 		t.Fatalf("GetSdlc(after remove) error = %v", err)
 	}
@@ -2680,11 +2683,11 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Stage Detail Workflow", Description: "workflow for stage output"})
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Stage Detail Workflow", Description: "workflow for stage output"})
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 		StageName:   "triage",
 		Description: "triage work",
 		SortOrder:   1,
@@ -2692,7 +2695,7 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddSdlcStage() error = %v", err)
 	}
-	stage, err = svc.UpdateSdlcStage(stage.ID, libticket.SdlcStageRequest{
+	stage, err = svc.UpdateSdlcStage(context.Background(), stage.ID, libticket.SdlcStageRequest{
 		StageName:          "triage",
 		Description:        "triage work",
 		AcceptanceCriteria: "Classify the issue",
@@ -2700,7 +2703,7 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateSdlcStage() error = %v", err)
 	}
-	role, err := svc.CreateRole(libticket.RoleRequest{
+	role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 		SdlcID:      &wf.ID,
 		Title:       "reviewer",
 		Description: "reviews the work",
@@ -2708,7 +2711,7 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := svc.AddSdlcStageRole(wf.ID, stage.ID, role.ID); err != nil {
+	if err := svc.AddSdlcStageRole(context.Background(), wf.ID, stage.ID, role.ID); err != nil {
 		t.Fatalf("AddSdlcStageRole() error = %v", err)
 	}
 
@@ -2759,11 +2762,11 @@ func TestRunSdlcCreateAndDelete(t *testing.T) {
 func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
 	setupLocalCLI(t)
 	svc := attachWorkflowToDefaultProject(t, "triage", "build", "done")
-	project, err := svc.GetProject("1")
+	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) error = %v", err)
 	}
-	if err := svc.SetProjectDefaultDraft(project.ID, true); err != nil {
+	if err := svc.SetProjectDefaultDraft(context.Background(), project.ID, true); err != nil {
 		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
 	}
 
@@ -2808,7 +2811,7 @@ func TestRunProjectSetDraftUpdatesCurrentProject(t *testing.T) {
 		t.Fatalf("unexpected project set-draft output:\n%s", output)
 	}
 
-	project, err := svc.GetProject("1")
+	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) error = %v", err)
 	}
@@ -2820,7 +2823,7 @@ func TestRunProjectSetDraftUpdatesCurrentProject(t *testing.T) {
 func TestRunProjectSdlcSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Project Workflow", Description: "workflow assignment test"})
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Project Workflow", Description: "workflow assignment test"})
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
@@ -2834,7 +2837,7 @@ func TestRunProjectSdlcSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 		t.Fatalf("unexpected project sdlc set output:\n%s", setOutput)
 	}
 
-	project, err := svc.GetProject("1")
+	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) after set error = %v", err)
 	}
@@ -2851,7 +2854,7 @@ func TestRunProjectSdlcSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 		t.Fatalf("unexpected project sdlc clear output:\n%s", clearOutput)
 	}
 
-	project, err = svc.GetProject("1")
+	project, err = svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) after clear error = %v", err)
 	}
@@ -2912,7 +2915,7 @@ func TestRunProjectUseAndSdlcHelpPaths(t *testing.T) {
 func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Draft toggle",
@@ -2924,7 +2927,7 @@ func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
 	if err := run([]string{"notready", ticket.ID}); err != nil {
 		t.Fatalf("notready error = %v", err)
 	}
-	updated, err := svc.GetTicket(ticket.ID)
+	updated, err := svc.GetTicket(context.Background(), ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(after notready) error = %v", err)
 	}
@@ -2935,7 +2938,7 @@ func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
 	if err := run([]string{"ready", ticket.ID}); err != nil {
 		t.Fatalf("ready error = %v", err)
 	}
-	updated, err = svc.GetTicket(ticket.ID)
+	updated, err = svc.GetTicket(context.Background(), ticket.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(after ready) error = %v", err)
 	}
@@ -3113,7 +3116,7 @@ func localCLIService(t *testing.T) libticket.Service {
 func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticket.Service {
 	t.Helper()
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
 		Name:        "Custom Workflow",
 		Description: "custom workflow for tests",
 	})
@@ -3121,7 +3124,7 @@ func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticke
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
 	for i, stageName := range stageNames {
-		if _, err := svc.AddSdlcStage(wf.ID, libticket.SdlcStageRequest{
+		if _, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
 			StageName:   stageName,
 			Description: stageName,
 			SortOrder:   i,
@@ -3129,11 +3132,11 @@ func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticke
 			t.Fatalf("AddSdlcStage(%q) error = %v", stageName, err)
 		}
 	}
-	project, err := svc.GetProject("1")
+	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) error = %v", err)
 	}
-	if _, err := svc.UpdateProject(project.ID, libticket.ProjectUpdateRequest{SdlcID: &wf.ID}); err != nil {
+	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{SdlcID: &wf.ID}); err != nil {
 		t.Fatalf("UpdateProject(sdlc) error = %v", err)
 	}
 	return svc
@@ -3171,9 +3174,9 @@ func ticketLabelByID(t *testing.T, id string) string {
 	if err != nil {
 		t.Fatalf("resolveService() error = %v", err)
 	}
-	task, err := svc.GetTicket(id)
+	task, err := svc.GetTicket(context.Background(), id)
 	if err != nil {
-		t.Fatalf("svc.GetTicket(%s) error = %v", id, err)
+		t.Fatalf("svc.GetTicket(context.Background(), %s) error = %v", id, err)
 	}
 	return task.ID
 }
@@ -3200,7 +3203,7 @@ func svcGetTicket(t *testing.T, ref string) (store.Ticket, error) {
 	if err != nil {
 		return store.Ticket{}, err
 	}
-	return svc.GetTicket(ref)
+	return svc.GetTicket(context.Background(), ref)
 }
 
 func parseTicketReferenceToID(ref string) (string, error) {
@@ -3216,7 +3219,7 @@ func parseTicketReferenceToID(ref string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	task, err := svc.GetTicket(ref)
+	task, err := svc.GetTicket(context.Background(), ref)
 	if err != nil {
 		return "", err
 	}

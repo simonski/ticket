@@ -155,10 +155,14 @@ func runStoryBreakdownViaTicketCLI(db *sql.DB, project store.Project, story stor
 		return err
 	}
 	if _, err := stdin.Write([]byte(prompt + "\n")); err != nil {
-		_ = stdin.Close()
+		if closeErr := stdin.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
 		return err
 	}
-	_ = stdin.Close()
+	if err := stdin.Close(); err != nil {
+		return err
+	}
 	if err := cmd.Wait(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
@@ -204,10 +208,14 @@ func runRoleJSONAnalysis(db *sql.DB, roleTitle, prompt string, target any) error
 		return err
 	}
 	if _, err := stdin.Write([]byte(fullPrompt + "\n")); err != nil {
-		_ = stdin.Close()
+		if closeErr := stdin.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
 		return err
 	}
-	_ = stdin.Close()
+	if err := stdin.Close(); err != nil {
+		return err
+	}
 	if err := cmd.Wait(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -67,7 +68,7 @@ func updateTicketStage(idArg, stage string, message ...string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(idArg)
+	current, err := svc.GetTicket(context.Background(), idArg)
 	if err != nil {
 		return err
 	}
@@ -75,7 +76,7 @@ func updateTicketStage(idArg, stage string, message ...string) error {
 	if len(message) > 0 {
 		msg = message[0]
 	}
-	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(context.Background(), current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -107,7 +108,7 @@ func updateTicketState(idArg, state string, message ...string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(idArg)
+	current, err := svc.GetTicket(context.Background(), idArg)
 	if err != nil {
 		return err
 	}
@@ -121,7 +122,7 @@ func updateTicketState(idArg, state string, message ...string) error {
 func updateTicketLifecycleRequest(svc libticket.Service, id string, current store.Ticket, state string, message ...string) error {
 	assignee := current.Assignee
 	if state == store.StateActive && strings.TrimSpace(assignee) == "" {
-		status, err := svc.Status()
+		status, err := svc.Status(context.Background())
 		if err == nil && status.User != nil && strings.TrimSpace(status.User.Username) != "" {
 			assignee = status.User.Username
 		} else {
@@ -132,7 +133,7 @@ func updateTicketLifecycleRequest(svc libticket.Service, id string, current stor
 	if len(message) > 0 {
 		msg = message[0]
 	}
-	updated, err := svc.UpdateTicket(id, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(context.Background(), id, libticket.TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -193,15 +194,15 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(idVal)
+	ticket, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
 	var updated store.Ticket
 	if closed {
-		updated, err = svc.CloseTicket(ticket.ID, *message)
+		updated, err = svc.CloseTicket(context.Background(), ticket.ID, *message)
 	} else {
-		updated, err = svc.OpenTicket(ticket.ID, *message)
+		updated, err = svc.OpenTicket(context.Background(), ticket.ID, *message)
 	}
 	if err != nil {
 		return err
@@ -238,15 +239,15 @@ func runSetTicketArchived(args []string, archived bool) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(idVal)
+	ticket, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
 	var updated store.Ticket
 	if archived {
-		updated, err = svc.ArchiveTicket(ticket.ID, *message)
+		updated, err = svc.ArchiveTicket(context.Background(), ticket.ID, *message)
 	} else {
-		updated, err = svc.UnarchiveTicket(ticket.ID, *message)
+		updated, err = svc.UnarchiveTicket(context.Background(), ticket.ID, *message)
 	}
 	if err != nil {
 		return err
@@ -283,15 +284,15 @@ func runSetTicketDraft(args []string, undraft bool) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(idVal)
+	ticket, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
 	var updated store.Ticket
 	if undraft {
-		updated, err = svc.ReadyTicket(ticket.ID, *message)
+		updated, err = svc.ReadyTicket(context.Background(), ticket.ID, *message)
 	} else {
-		updated, err = svc.NotReadyTicket(ticket.ID, *message)
+		updated, err = svc.NotReadyTicket(context.Background(), ticket.ID, *message)
 	}
 	if err != nil {
 		return err
@@ -324,7 +325,7 @@ func runRejectTicket(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(idVal)
+	current, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
@@ -335,7 +336,7 @@ func runRejectTicket(args []string) error {
 	if len(validStages) == 0 {
 		return errors.New("current workflow has no stages")
 	}
-	updated, err := svc.UpdateTicket(current.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(context.Background(), current.ID, libticket.TicketUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -354,7 +355,7 @@ func runRejectTicket(args []string) error {
 	if err != nil {
 		return err
 	}
-	updated, err = svc.DraftTicket(updated.ID, *message)
+	updated, err = svc.DraftTicket(context.Background(), updated.ID, *message)
 	if err != nil {
 		return err
 	}
@@ -385,7 +386,7 @@ func runComplete(args []string) error {
 	if err != nil {
 		return err
 	}
-	updated, err := svc.CompleteTicket(idVal, *message)
+	updated, err := svc.CompleteTicket(context.Background(), idVal, *message)
 	if err != nil {
 		return err
 	}
@@ -416,7 +417,7 @@ func runReopen(args []string) error {
 	if err != nil {
 		return err
 	}
-	updated, err := svc.ReopenTicket(idVal, *message)
+	updated, err := svc.ReopenTicket(context.Background(), idVal, *message)
 	if err != nil {
 		return err
 	}
@@ -446,11 +447,11 @@ func runNext(args []string) error {
 	if err != nil {
 		return err
 	}
-	before, err := svc.GetTicket(idVal)
+	before, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
-	updated, err := svc.NextTicket(before.ID)
+	updated, err := svc.NextTicket(context.Background(), before.ID)
 	if err != nil {
 		return err
 	}
@@ -484,11 +485,11 @@ func runPrevious(args []string) error {
 	if err != nil {
 		return err
 	}
-	before, err := svc.GetTicket(idVal)
+	before, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
-	updated, err := svc.PreviousTicket(before.ID)
+	updated, err := svc.PreviousTicket(context.Background(), before.ID)
 	if err != nil {
 		return err
 	}

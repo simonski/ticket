@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
@@ -84,7 +85,9 @@ func ExportSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
 				target[i] = &scanned[i]
 			}
 			if err := rows.Scan(target...); err != nil {
-				_ = rows.Close()
+				if closeErr := rows.Close(); closeErr != nil {
+					log.Printf("store: close snapshot rows after scan failure (table=%s): %v", table, closeErr)
+				}
 				return Snapshot{}, err
 			}
 			row := make([]any, len(columns))
@@ -94,10 +97,14 @@ func ExportSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
 			tableRows = append(tableRows, row)
 		}
 		if err := rows.Err(); err != nil {
-			_ = rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				log.Printf("store: close snapshot rows after iteration failure (table=%s): %v", table, closeErr)
+			}
 			return Snapshot{}, err
 		}
-		_ = rows.Close()
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Printf("store: close snapshot rows (table=%s): %v", table, closeErr)
+		}
 		snapshot.Tables[table] = SnapshotTable{
 			Columns: append([]string{}, columns...),
 			Rows:    tableRows,
@@ -129,7 +136,9 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 		return err
 	}
 	rollback := func(cause error) error {
-		_ = tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			log.Printf("store: rollback import snapshot transaction: %v", rollbackErr)
+		}
 		return cause
 	}
 	if _, execErr := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
@@ -231,7 +240,10 @@ func tableColumnNames(ctx context.Context, db *sql.DB, table string) ([]string, 
 }
 
 func signSnapshot(snapshot Snapshot) (string, error) {
-	key := encryptionKey()
+	key, err := encryptionKey()
+	if err != nil {
+		return "", err
+	}
 	if len(key) == 0 {
 		return "", nil
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -68,7 +69,7 @@ func runProject(args []string) error {
 		if *sdlcID > 0 {
 			wfID = sdlcID
 		}
-		project, err := svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Prefix:             *prefix,
 			Title:              *title,
 			Description:        *description,
@@ -91,7 +92,7 @@ func runProject(args []string) error {
 		printProject(project)
 		return nil
 	case "list", "ls":
-		projects, err := svc.ListProjects()
+		projects, err := svc.ListProjects(context.Background())
 		if err != nil {
 			return err
 		}
@@ -99,7 +100,7 @@ func runProject(args []string) error {
 			return printJSON(projects)
 		}
 		sdlcNames := map[int64]string{}
-		if wfs, err := svc.ListSdlcs(); err == nil {
+		if wfs, err := svc.ListSdlcs(context.Background()); err == nil {
 			for _, wf := range wfs {
 				sdlcNames[wf.ID] = wf.Name
 			}
@@ -110,7 +111,7 @@ func runProject(args []string) error {
 		if len(args) != 2 {
 			return errors.New("usage: tk project get <id>")
 		}
-		project, err := svc.GetProject(args[1])
+		project, err := svc.GetProject(context.Background(), args[1])
 		if err != nil {
 			return err
 		}
@@ -126,7 +127,7 @@ func runProject(args []string) error {
 				fmt.Println("no project set")
 				return nil
 			}
-			project, err := svc.GetProject(cfg.ProjectID)
+			project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 			if err != nil {
 				fmt.Println(cfg.ProjectID)
 				return nil
@@ -134,7 +135,7 @@ func runProject(args []string) error {
 			fmt.Printf("%s — %s\n", project.Prefix, project.Title)
 			return nil
 		}
-		project, err := svc.GetProject(args[1])
+		project, err := svc.GetProject(context.Background(), args[1])
 		if err != nil {
 			return err
 		}
@@ -160,7 +161,9 @@ func runProject(args []string) error {
 			fs.String("git-branch", "", "")
 			fs.String("status", "", "")
 			fs.Int64("sdlc", 0, "")
-			_ = fs.Parse(args[1:])
+			if err := fs.Parse(args[1:]); err != nil {
+				return err
+			}
 			if *idFlag > 0 {
 				return runProjectByID(svc, *idFlag, args)
 			}
@@ -168,7 +171,7 @@ func runProject(args []string) error {
 		if cfg.ProjectID == "" {
 			return errors.New("no current project set; use: tk project use <id>")
 		}
-		project, err := svc.GetProject(cfg.ProjectID)
+		project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -195,13 +198,13 @@ func runProject(args []string) error {
 			if cfg.ProjectID == "" {
 				return errors.New("no current project set; use: tk project use <id>")
 			}
-			project, err := svc.GetProject(cfg.ProjectID)
+			project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 			if err != nil {
 				return err
 			}
 			pid = project.ID
 		}
-		if err := svc.SetProjectDefaultDraft(pid, draft); err != nil {
+		if err := svc.SetProjectDefaultDraft(context.Background(), pid, draft); err != nil {
 			return err
 		}
 		fmt.Printf("default_draft set to %v\n", draft)
@@ -219,12 +222,12 @@ func runProject(args []string) error {
 		if cfg.ProjectID == "" {
 			return errors.New("no current project set; use: tk project use <id>")
 		}
-		project, err := svc.GetProject(cfg.ProjectID)
+		project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 		if err != nil {
 			return err
 		}
 		oldPrefix := project.Prefix
-		count, err := svc.RenameProjectPrefix(project.ID, newPrefix)
+		count, err := svc.RenameProjectPrefix(context.Background(), project.ID, newPrefix)
 		if err != nil {
 			return err
 		}
@@ -254,7 +257,7 @@ func runProject(args []string) error {
 		if strings.TrimSpace(*id) == "" {
 			return errors.New("usage: tk project rm [-id] <id> [--confirm <token>]")
 		}
-		project, err := svc.GetProject(strings.TrimSpace(*id))
+		project, err := svc.GetProject(context.Background(), strings.TrimSpace(*id))
 		if err != nil {
 			return err
 		}
@@ -264,7 +267,7 @@ func runProject(args []string) error {
 			if err != nil {
 				return err
 			}
-			tickets, _ := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, true)
+			tickets, _ := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, true)
 			fmt.Printf("project  : %s — %s\n", project.Prefix, project.Title)
 			fmt.Printf("tickets  : %d\n", len(tickets))
 			fmt.Printf("\nThis will permanently delete the project and all associated data.\n")
@@ -279,7 +282,7 @@ func runProject(args []string) error {
 		if *confirm != cfg.DeleteConfirmToken || fmt.Sprintf("%d", project.ID) != cfg.DeleteConfirmProject {
 			return errors.New("invalid confirmation token")
 		}
-		if err := svc.DeleteProject(project.ID); err != nil {
+		if err := svc.DeleteProject(context.Background(), project.ID); err != nil {
 			return err
 		}
 		// Clear stored token and switch project if needed
@@ -321,10 +324,10 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	}
 
 	// Try to find existing project by prefix
-	project, err := svc.GetProject(*prefix)
+	project, err := svc.GetProject(context.Background(), *prefix)
 	if err != nil {
 		// Project doesn't exist — create it
-		project, err = svc.CreateProject(libticket.ProjectCreateRequest{
+		project, err = svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Prefix:      *prefix,
 			Title:       *title,
 			Description: *description,
@@ -354,7 +357,7 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 	if cfg.ProjectID == "" {
 		return errors.New("no current project set; use: tk project use <id>")
 	}
-	current, err := svc.GetProject(cfg.ProjectID)
+	current, err := svc.GetProject(context.Background(), cfg.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -363,7 +366,7 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 		return fmt.Errorf("usage: %s", usage)
 	}
 	nextSdlcID := &wfIDRaw
-	project, err := svc.UpdateProject(current.ID, libticket.ProjectUpdateRequest{
+	project, err := svc.UpdateProject(context.Background(), current.ID, libticket.ProjectUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
@@ -399,7 +402,7 @@ func runProjectAddUser(svc libticket.Service, args []string) error {
 	if *userID == "" || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
 		return errors.New("usage: tk project add-user -user_id <id> -project_id <id> -role <viewer|editor|owner>")
 	}
-	member, err := svc.AddProjectMember(*projectID, libticket.ProjectMemberRequest{
+	member, err := svc.AddProjectMember(context.Background(), *projectID, libticket.ProjectMemberRequest{
 		UserID: *userID,
 		Role:   strings.TrimSpace(*role),
 	})
@@ -424,7 +427,7 @@ func runProjectRemoveUser(svc libticket.Service, args []string) error {
 	if *userID == "" || *projectID == 0 || fs.NArg() != 0 {
 		return errors.New("usage: tk project remove-user -user_id <id> -project_id <id>")
 	}
-	if err := svc.RemoveProjectMember(*projectID, *userID); err != nil {
+	if err := svc.RemoveProjectMember(context.Background(), *projectID, *userID); err != nil {
 		return err
 	}
 	if outputJSON {
@@ -446,7 +449,7 @@ func runProjectAddTeam(svc libticket.Service, args []string) error {
 	if *teamID == 0 || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
 		return errors.New("usage: tk project add-team -team_id <id> -project_id <id> -role <viewer|editor|owner>")
 	}
-	member, err := svc.AddProjectTeamMember(*projectID, libticket.ProjectTeamMemberRequest{
+	member, err := svc.AddProjectTeamMember(context.Background(), *projectID, libticket.ProjectTeamMemberRequest{
 		TeamID: *teamID,
 		Role:   strings.TrimSpace(*role),
 	})
@@ -471,7 +474,7 @@ func runProjectRemoveTeam(svc libticket.Service, args []string) error {
 	if *teamID == 0 || *projectID == 0 || fs.NArg() != 0 {
 		return errors.New("usage: tk project remove-team -team_id <id> -project_id <id>")
 	}
-	if err := svc.RemoveProjectTeamMember(*projectID, *teamID); err != nil {
+	if err := svc.RemoveProjectTeamMember(context.Background(), *projectID, *teamID); err != nil {
 		return err
 	}
 	if outputJSON {
@@ -491,7 +494,7 @@ func parseProjectCommandID(raw string) (int64, bool) {
 
 func runProjectByID(svc libticket.Service, projectID int64, args []string) error {
 	if len(args) == 0 {
-		project, err := svc.GetProject(strconv.FormatInt(projectID, 10))
+		project, err := svc.GetProject(context.Background(), strconv.FormatInt(projectID, 10))
 		if err != nil {
 			return err
 		}
@@ -523,7 +526,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		if containsFlag(args[1:], "-git") && !containsFlag(args[1:], "-git-repository") {
 			gitRepository = gitShort
 		}
-		current, err := svc.GetProject(strconv.FormatInt(projectID, 10))
+		current, err := svc.GetProject(context.Background(), strconv.FormatInt(projectID, 10))
 		if err != nil {
 			return err
 		}
@@ -560,7 +563,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		} else {
 			nextSdlcID = current.SdlcID
 		}
-		project, err := svc.UpdateProject(projectID, libticket.ProjectUpdateRequest{
+		project, err := svc.UpdateProject(context.Background(), projectID, libticket.ProjectUpdateRequest{
 			Title:              *title,
 			Description:        nextDescription,
 			AcceptanceCriteria: nextAC,
@@ -578,7 +581,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		printProject(project)
 		return nil
 	case "enable":
-		project, err := svc.SetProjectEnabled(projectID, true)
+		project, err := svc.SetProjectEnabled(context.Background(), projectID, true)
 		if err != nil {
 			return err
 		}
@@ -591,7 +594,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		if err := guardProjectClose(svc, projectID); err != nil {
 			return err
 		}
-		project, err := svc.SetProjectEnabled(projectID, false)
+		project, err := svc.SetProjectEnabled(context.Background(), projectID, false)
 		if err != nil {
 			return err
 		}
@@ -610,7 +613,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 // open projects to switch to.
 func guardProjectClose(svc libticket.Service, projectID int64) error {
 	cfg, _ := config.Load()
-	projects, err := svc.ListProjects()
+	projects, err := svc.ListProjects(context.Background())
 	if err != nil {
 		return err
 	}

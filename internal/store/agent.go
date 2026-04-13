@@ -261,11 +261,11 @@ func ReapStaleAgents(ctx context.Context, db *sql.DB, thresholdMinutes int) (int
 
 // AgentStatus holds an agent and its currently assigned ticket (if any).
 type AgentStatus struct {
-	Agent        Agent   `json:"agent"`
-	TicketKey    *string `json:"ticket_key,omitempty"`
-	ProjectName  string  `json:"project_name,omitempty"`
-	SdlcName string  `json:"sdlc_name,omitempty"`
-	RoleTitle    string  `json:"role_title,omitempty"`
+	Agent       Agent   `json:"agent"`
+	TicketKey   *string `json:"ticket_key,omitempty"`
+	ProjectName string  `json:"project_name,omitempty"`
+	SdlcName    string  `json:"sdlc_name,omitempty"`
+	RoleTitle   string  `json:"role_title,omitempty"`
 }
 
 // ListAgentStatuses returns all agents with their currently assigned active ticket.

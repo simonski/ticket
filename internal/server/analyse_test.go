@@ -65,9 +65,9 @@ func TestBuildStoryAnalyseCLIInstructionsContainsTicketCommands(t *testing.T) {
 		Title:  "App",
 	}
 	role := store.Role{
-		Title:      "StoryReview",
-		Description: "Find coherent breakdowns.",
-		AcceptanceCriteria:      "Produce actionable tickets.",
+		Title:              "StoryReview",
+		Description:        "Find coherent breakdowns.",
+		AcceptanceCriteria: "Produce actionable tickets.",
 	}
 	prompt := buildStoryAnalyseCLIInstructions(story, project, role)
 	for _, want := range []string{

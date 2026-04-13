@@ -1,6 +1,10 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"os"
+
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/internal/tui"
@@ -23,7 +27,10 @@ func runGUI(themeID string) error {
 
 	var project store.Project
 	if cfg.ProjectID != "" {
-		project, _ = svc.GetProject(cfg.ProjectID)
+		project, err = svc.GetProject(context.Background(), cfg.ProjectID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not load project %s: %v\n", cfg.ProjectID, err)
+		}
 	}
 
 	return tui.Run(svc, cfg, project, themeID)

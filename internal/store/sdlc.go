@@ -331,7 +331,11 @@ func getSdlcStageRow(ctx context.Context, db *sql.DB, id int64) (SdlcStage, erro
 		&s.AcceptanceCriteria, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return SdlcStage{}, err
 	}
-	s.Roles, _ = ListSdlcStageRoles(ctx, db, s.SdlcID, s.ID)
+	roles, err := ListSdlcStageRoles(ctx, db, s.SdlcID, s.ID)
+	if err != nil {
+		return SdlcStage{}, err
+	}
+	s.Roles = roles
 	return s, nil
 }
 

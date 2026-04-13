@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,19 +27,27 @@ func Open(path string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON;`); err != nil {
-		_ = db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("store: close db after foreign_keys pragma failure: %v", closeErr)
+		}
 		return nil, err
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode = WAL;`); err != nil {
-		_ = db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("store: close db after journal_mode pragma failure: %v", closeErr)
+		}
 		return nil, err
 	}
 	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout = 5000;`); err != nil {
-		_ = db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("store: close db after busy_timeout pragma failure: %v", closeErr)
+		}
 		return nil, err
 	}
 	if err := createSchema(ctx, db); err != nil {
-		_ = db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("store: close db after schema creation failure: %v", closeErr)
+		}
 		return nil, err
 	}
 	return db, nil
@@ -106,7 +115,9 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		sdlc, sErr := CreateSdlc(ctx, db, "default", "Minimal bootstrap SDLC")
 		if sErr == nil {
 			for i, name := range []string{StageDevelop, StageDone} {
-				_, _ = AddSdlcStage(ctx, db, sdlc.ID, name, "", "", i)
+				if _, stageErr := AddSdlcStage(ctx, db, sdlc.ID, name, "", "", i); stageErr != nil {
+					return stageErr
+				}
 			}
 		}
 	}
@@ -864,11 +875,23 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			var agentIDs []int64
 			for agentRows.Next() {
 				var id int64
-				if err := agentRows.Scan(&id); err == nil {
-					agentIDs = append(agentIDs, id)
+				if scanErr := agentRows.Scan(&id); scanErr != nil {
+					if closeErr := agentRows.Close(); closeErr != nil {
+						log.Printf("store: close agent rows after scan failure: %v", closeErr)
+					}
+					return scanErr
 				}
+				agentIDs = append(agentIDs, id)
 			}
-			_ = agentRows.Close()
+			if rowsErr := agentRows.Err(); rowsErr != nil {
+				if closeErr := agentRows.Close(); closeErr != nil {
+					log.Printf("store: close agent rows after iteration failure: %v", closeErr)
+				}
+				return rowsErr
+			}
+			if closeErr := agentRows.Close(); closeErr != nil {
+				log.Printf("store: close agent rows: %v", closeErr)
+			}
 			for _, id := range agentIDs {
 				u := generateAgentUUID()
 				if _, err := db.ExecContext(ctx, `UPDATE agents SET uuid = ? WHERE agent_id = ?`, u, id); err != nil {
@@ -1156,12 +1179,22 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 	for rows.Next() {
 		var m idMapping
 		if err := rows.Scan(&m.oldID, &m.key); err != nil {
-			_ = rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				log.Printf("store: close ticket mapping rows after scan failure: %v", closeErr)
+			}
 			return err
 		}
 		mappings = append(mappings, m)
 	}
-	_ = rows.Close()
+	if rowsErr := rows.Err(); rowsErr != nil {
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Printf("store: close ticket mapping rows after iteration failure: %v", closeErr)
+		}
+		return rowsErr
+	}
+	if closeErr := rows.Close(); closeErr != nil {
+		log.Printf("store: close ticket mapping rows: %v", closeErr)
+	}
 
 	// Recreate tickets table with TEXT PRIMARY KEY, without key column.
 	if _, err := db.ExecContext(ctx, `ALTER TABLE tickets RENAME TO tickets_old_int`); err != nil {

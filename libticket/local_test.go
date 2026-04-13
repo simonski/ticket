@@ -1,6 +1,7 @@
 package libticket_test
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -34,7 +35,7 @@ func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	status, err := svc.Status()
+	status, err := svc.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
@@ -50,13 +51,13 @@ func TestLocalServiceRemoteAuthCommandsFail(t *testing.T) {
 	t.Parallel()
 	svc := libticket.NewLocal(config.Config{})
 
-	if _, err := svc.Register("alice", "secret12"); err == nil {
+	if _, err := svc.Register(context.Background(), "alice", "secret12"); err == nil {
 		t.Fatal("Register() error = nil, want remote-mode error")
 	}
-	if _, _, err := svc.Login("alice", "secret12"); err == nil {
+	if _, _, err := svc.Login(context.Background(), "alice", "secret12"); err == nil {
 		t.Fatal("Login() error = nil, want remote-mode error")
 	}
-	if err := svc.Logout(); err == nil {
+	if err := svc.Logout(context.Background()); err == nil {
 		t.Fatal("Logout() error = nil, want remote-mode error")
 	}
 }
@@ -67,7 +68,7 @@ func TestLocalServiceStatusFailsWhenDatabaseMissing(t *testing.T) {
 	t.Setenv("TICKET_HOME", tempDir)
 
 	svc := libticket.NewLocal(config.Config{})
-	if _, err := svc.Status(); err == nil {
+	if _, err := svc.Status(context.Background()); err == nil {
 		t.Fatal("Status() error = nil, want missing database error")
 	}
 }
@@ -94,7 +95,7 @@ func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	projects, err := svc.ListProjects()
+	projects, err := svc.ListProjects(context.Background())
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
@@ -113,16 +114,16 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	parent, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "epic", Title: "Parent"})
+	parent, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "epic", Title: "Parent"})
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	child, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "Child"})
+	child, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "Child"})
 	if err != nil {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
 
-	updated, err := svc.SetTicketParent(child.ID, parent.ID, "")
+	updated, err := svc.SetTicketParent(context.Background(), child.ID, parent.ID, "")
 	if err != nil {
 		t.Fatalf("SetTicketParent() error = %v", err)
 	}
@@ -130,7 +131,7 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("SetTicketParent() = %#v", updated)
 	}
 
-	detached, err := svc.UnsetTicketParent(child.ID, "")
+	detached, err := svc.UnsetTicketParent(context.Background(), child.ID, "")
 	if err != nil {
 		t.Fatalf("UnsetTicketParent() error = %v", err)
 	}
@@ -149,11 +150,11 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	parent, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "epic", Title: "Parent"})
+	parent, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "epic", Title: "Parent"})
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID:          1,
 		Type:               "task",
 		Title:              "Child",
@@ -167,7 +168,7 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
 	// Assign the ticket directly and set it active.
-	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 		Title:              "Updated Child",
 		Description:        "new description",
 		AcceptanceCriteria: "new ac",
@@ -200,7 +201,7 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Unassigned local task",
@@ -212,11 +213,11 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 	// Advance through all stages: design -> develop -> test -> done (4-stage SDLC)
 	// Each state=success on a non-final stage auto-advances to next stage with state=idle
 	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
-		ticket, err = svc.GetTicketByID(ticket.ID)
+		ticket, err = svc.GetTicketByID(context.Background(), ticket.ID)
 		if err != nil {
 			t.Fatalf("GetTicketByID() error = %v", err)
 		}
-		updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+		updated, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 			Title:       ticket.Title,
 			Description: ticket.Description,
 			ParentID:    ticket.ParentID,
@@ -242,7 +243,7 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 	}
 
 	svc := libticket.NewLocal(config.Config{})
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Delete me",
@@ -250,10 +251,10 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if err := svc.DeleteTicket(ticket.ID); err != nil {
+	if err := svc.DeleteTicket(context.Background(), ticket.ID); err != nil {
 		t.Fatalf("DeleteTicket() error = %v", err)
 	}
-	if _, err := svc.GetTicketByID(ticket.ID); !errors.Is(err, store.ErrTicketNotFound) {
+	if _, err := svc.GetTicketByID(context.Background(), ticket.ID); !errors.Is(err, store.ErrTicketNotFound) {
 		t.Fatalf("GetTicket(deleted) error = %v, want ErrTicketNotFound", err)
 	}
 }
@@ -270,21 +271,21 @@ func newLocalSvc(t *testing.T) libticket.Service {
 }
 func TestLocalServiceDeleteProject(t *testing.T) {
 	svc := newLocalSvc(t)
-	projects, err := svc.ListProjects()
+	projects, err := svc.ListProjects(context.Background())
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
 	if len(projects) == 0 {
 		t.Fatal("no projects to delete")
 	}
-	if err := svc.DeleteProject(projects[0].ID); err != nil {
+	if err := svc.DeleteProject(context.Background(), projects[0].ID); err != nil {
 		t.Fatalf("DeleteProject() error = %v", err)
 	}
 }
 
 func TestLocalServiceResetUserPassword(t *testing.T) {
 	svc := newLocalSvc(t)
-	user, err := svc.ResetUserPassword("admin", "newsecret")
+	user, err := svc.ResetUserPassword(context.Background(), "admin", "newsecret")
 	if err != nil {
 		t.Fatalf("ResetUserPassword() error = %v", err)
 	}
@@ -293,18 +294,17 @@ func TestLocalServiceResetUserPassword(t *testing.T) {
 	}
 }
 
-
 func TestLocalServiceNotReadyTicket(t *testing.T) {
 	svc := newLocalSvc(t)
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "Ready test"})
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "Ready test"})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	_, err = svc.ReadyTicket(ticket.ID, "")
+	_, err = svc.ReadyTicket(context.Background(), ticket.ID, "")
 	if err != nil {
 		t.Fatalf("ReadyTicket() error = %v", err)
 	}
-	updated, err := svc.NotReadyTicket(ticket.ID, "")
+	updated, err := svc.NotReadyTicket(context.Background(), ticket.ID, "")
 	if err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}
@@ -315,22 +315,22 @@ func TestLocalServiceNotReadyTicket(t *testing.T) {
 
 func TestLocalServiceSetUnsetTicketSdlc(t *testing.T) {
 	svc := newLocalSvc(t)
-	wf, err := svc.CreateSdlc(libticket.SdlcRequest{Name: "Test WF"})
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Test WF"})
 	if err != nil {
 		t.Fatalf("CreateSdlc() error = %v", err)
 	}
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "WF test"})
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "WF test"})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	updated, err := svc.SetTicketSdlc(ticket.ID, wf.ID)
+	updated, err := svc.SetTicketSdlc(context.Background(), ticket.ID, wf.ID)
 	if err != nil {
 		t.Fatalf("SetTicketSdlc() error = %v", err)
 	}
 	if updated.SdlcID == nil || *updated.SdlcID != wf.ID {
 		t.Fatalf("SetTicketSdlc() sdlc_id = %v, want %d", updated.SdlcID, wf.ID)
 	}
-	unset, err := svc.UnsetTicketSdlc(ticket.ID)
+	unset, err := svc.UnsetTicketSdlc(context.Background(), ticket.ID)
 	if err != nil {
 		t.Fatalf("UnsetTicketSdlc() error = %v", err)
 	}
@@ -341,7 +341,7 @@ func TestLocalServiceSetUnsetTicketSdlc(t *testing.T) {
 
 func TestLocalServiceListAgentStatuses(t *testing.T) {
 	svc := newLocalSvc(t)
-	statuses, err := svc.ListAgentStatuses()
+	statuses, err := svc.ListAgentStatuses(context.Background())
 	if err != nil {
 		t.Fatalf("ListAgentStatuses() error = %v", err)
 	}
@@ -353,24 +353,24 @@ func TestLocalServiceListAgentStatuses(t *testing.T) {
 
 func TestLocalServiceAgentConfig(t *testing.T) {
 	svc := newLocalSvc(t)
-	agent, _, err := svc.CreateAgent(libticket.AgentCreateRequest{})
+	agent, _, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{})
 	if err != nil {
 		t.Fatalf("CreateAgent() error = %v", err)
 	}
-	if err := svc.SetAgentConfig(agent.ID, "poll_interval", "5"); err != nil {
+	if err := svc.SetAgentConfig(context.Background(), agent.ID, "poll_interval", "5"); err != nil {
 		t.Fatalf("SetAgentConfig() error = %v", err)
 	}
-	entries, err := svc.ListAgentConfig(agent.ID)
+	entries, err := svc.ListAgentConfig(context.Background(), agent.ID)
 	if err != nil {
 		t.Fatalf("ListAgentConfig() error = %v", err)
 	}
 	if len(entries) != 1 || entries[0].Key != "poll_interval" || entries[0].Value != "5" {
 		t.Fatalf("ListAgentConfig() = %v, want [{poll_interval 5}]", entries)
 	}
-	if err := svc.DeleteAgentConfig(agent.ID, "poll_interval"); err != nil {
+	if err := svc.DeleteAgentConfig(context.Background(), agent.ID, "poll_interval"); err != nil {
 		t.Fatalf("DeleteAgentConfig() error = %v", err)
 	}
-	entries, err = svc.ListAgentConfig(agent.ID)
+	entries, err = svc.ListAgentConfig(context.Background(), agent.ID)
 	if err != nil {
 		t.Fatalf("ListAgentConfig() after delete error = %v", err)
 	}
@@ -381,7 +381,7 @@ func TestLocalServiceAgentConfig(t *testing.T) {
 
 func TestLocalServiceStoryCRUD(t *testing.T) {
 	svc := newLocalSvc(t)
-	story, err := svc.CreateStory(1, "Test Story", "Story description")
+	story, err := svc.CreateStory(context.Background(), 1, "Test Story", "Story description")
 	if err != nil {
 		t.Fatalf("CreateStory() error = %v", err)
 	}
@@ -389,7 +389,7 @@ func TestLocalServiceStoryCRUD(t *testing.T) {
 		t.Fatalf("CreateStory().Title = %q, want %q", story.Title, "Test Story")
 	}
 
-	stories, err := svc.ListStories(1)
+	stories, err := svc.ListStories(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListStories() error = %v", err)
 	}
@@ -397,7 +397,7 @@ func TestLocalServiceStoryCRUD(t *testing.T) {
 		t.Fatalf("ListStories() len = %d, want 1", len(stories))
 	}
 
-	got, err := svc.GetStory(story.ID)
+	got, err := svc.GetStory(context.Background(), story.ID)
 	if err != nil {
 		t.Fatalf("GetStory() error = %v", err)
 	}
@@ -405,7 +405,7 @@ func TestLocalServiceStoryCRUD(t *testing.T) {
 		t.Fatalf("GetStory().Title = %q, want %q", got.Title, "Test Story")
 	}
 
-	updated, err := svc.UpdateStory(story.ID, "Updated Story", "New desc")
+	updated, err := svc.UpdateStory(context.Background(), story.ID, "Updated Story", "New desc")
 	if err != nil {
 		t.Fatalf("UpdateStory() error = %v", err)
 	}
@@ -413,10 +413,10 @@ func TestLocalServiceStoryCRUD(t *testing.T) {
 		t.Fatalf("UpdateStory().Title = %q, want %q", updated.Title, "Updated Story")
 	}
 
-	if err := svc.DeleteStory(story.ID); err != nil {
+	if err := svc.DeleteStory(context.Background(), story.ID); err != nil {
 		t.Fatalf("DeleteStory() error = %v", err)
 	}
-	stories, err = svc.ListStories(1)
+	stories, err = svc.ListStories(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListStories() after delete error = %v", err)
 	}
@@ -427,7 +427,7 @@ func TestLocalServiceStoryCRUD(t *testing.T) {
 
 func TestLocalServiceListProjectHistory(t *testing.T) {
 	svc := newLocalSvc(t)
-	_, err := svc.ListProjectHistory(1, 100)
+	_, err := svc.ListProjectHistory(context.Background(), 1, 100)
 	if err != nil {
 		t.Fatalf("ListProjectHistory() error = %v", err)
 	}

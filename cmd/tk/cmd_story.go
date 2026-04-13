@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -48,7 +49,7 @@ func runStory(args []string) error {
 		if strings.TrimSpace(*title) == "" {
 			return errors.New("usage: tk story create -title <title> [-d description]")
 		}
-		story, err := svc.CreateStory(project.ID, *title, *description)
+		story, err := svc.CreateStory(context.Background(), project.ID, *title, *description)
 		if err != nil {
 			return err
 		}
@@ -58,7 +59,7 @@ func runStory(args []string) error {
 		fmt.Printf("story %d: %s\n", story.ID, story.Title)
 		return nil
 	case "list", "ls":
-		stories, err := svc.ListStories(project.ID)
+		stories, err := svc.ListStories(context.Background(), project.ID)
 		if err != nil {
 			return err
 		}
@@ -70,8 +71,7 @@ func runStory(args []string) error {
 		for _, s := range stories {
 			fmt.Fprintf(w, "%d\t%s\t%s\n", s.ID, s.Status, s.Title)
 		}
-		_ = w.Flush()
-		return nil
+		return w.Flush()
 	case "get":
 		if len(args) != 2 {
 			return errors.New("usage: tk story get <id>")
@@ -80,7 +80,7 @@ func runStory(args []string) error {
 		if _, err := fmt.Sscan(args[1], &id); err != nil {
 			return fmt.Errorf("invalid story id %q", args[1])
 		}
-		story, err := svc.GetStory(id)
+		story, err := svc.GetStory(context.Background(), id)
 		if err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func runStory(args []string) error {
 			return err
 		}
 		// Fetch current to use as defaults
-		current, err := svc.GetStory(id)
+		current, err := svc.GetStory(context.Background(), id)
 		if err != nil {
 			return err
 		}
@@ -121,7 +121,7 @@ func runStory(args []string) error {
 		if strings.TrimSpace(*description) == "" {
 			*description = current.Description
 		}
-		story, err := svc.UpdateStory(id, *title, *description)
+		story, err := svc.UpdateStory(context.Background(), id, *title, *description)
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func runStory(args []string) error {
 		if _, err := fmt.Sscan(args[1], &id); err != nil {
 			return fmt.Errorf("invalid story id %q", args[1])
 		}
-		if err := svc.DeleteStory(id); err != nil {
+		if err := svc.DeleteStory(context.Background(), id); err != nil {
 			return err
 		}
 		fmt.Printf("deleted story %d\n", id)
@@ -160,7 +160,7 @@ func runEpic(args []string) error {
 			if err != nil {
 				return err
 			}
-			ticket, err := svc.GetTicket(args[1])
+			ticket, err := svc.GetTicket(context.Background(), args[1])
 			if err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func runEpic(args []string) error {
 			if err != nil {
 				return err
 			}
-			epics, err := svc.ListTicketsFiltered(project.ID, "epic", "", "", "", "", "", 0, false)
+			epics, err := svc.ListTicketsFiltered(context.Background(), project.ID, "epic", "", "", "", "", "", 0, false)
 			if err != nil {
 				return err
 			}
@@ -209,8 +209,7 @@ func runEpic(args []string) error {
 				}
 				fmt.Fprintf(w, "%s%s\t%s\t%s\n", active, t.ID, t.Status, t.Title)
 			}
-			_ = w.Flush()
-			return nil
+			return w.Flush()
 		}
 	}
 	return runTypedTicketCreate("epic", args)

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -87,7 +88,9 @@ func (h *liveHub) broadcast(event liveEvent) {
 func (c *liveClient) close() {
 	c.once.Do(func() {
 		close(c.done)
-		_ = c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("server: close live websocket connection: %v", err)
+		}
 	})
 }
 
@@ -125,11 +128,16 @@ func websocketServe(hub *liveHub, w http.ResponseWriter, r *http.Request) error 
 		}
 		switch opcode {
 		case 0x8:
-			_ = writeWebSocketFrame(client.conn, 0x8, nil)
+			if err := writeWebSocketFrame(client.conn, 0x8, nil); err != nil {
+				log.Printf("server: write websocket close frame: %v", err)
+			}
 			hub.remove(client)
 			return nil
 		case 0x9:
-			_ = writeWebSocketFrame(client.conn, 0xA, payload)
+			if err := writeWebSocketFrame(client.conn, 0xA, payload); err != nil {
+				hub.remove(client)
+				return nil
+			}
 		case 0x1: // text frame — handle subscribe messages
 			var msg struct {
 				Type      string `json:"type"`
@@ -184,12 +192,22 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, error) 
 		return nil, err
 	}
 	accept := websocketAcceptKey(key)
-	_, _ = fmt.Fprintf(rw, "HTTP/1.1 101 Switching Protocols\r\n")
-	_, _ = fmt.Fprintf(rw, "Upgrade: websocket\r\n")
-	_, _ = fmt.Fprintf(rw, "Connection: Upgrade\r\n")
-	_, _ = fmt.Fprintf(rw, "Sec-WebSocket-Accept: %s\r\n\r\n", accept)
+	if _, err := fmt.Fprintf(rw, "HTTP/1.1 101 Switching Protocols\r\n"); err != nil {
+		return nil, err
+	}
+	if _, err := fmt.Fprintf(rw, "Upgrade: websocket\r\n"); err != nil {
+		return nil, err
+	}
+	if _, err := fmt.Fprintf(rw, "Connection: Upgrade\r\n"); err != nil {
+		return nil, err
+	}
+	if _, err := fmt.Fprintf(rw, "Sec-WebSocket-Accept: %s\r\n\r\n", accept); err != nil {
+		return nil, err
+	}
 	if err := rw.Flush(); err != nil {
-		_ = conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Printf("server: close websocket conn after flush failure: %v", closeErr)
+		}
 		return nil, err
 	}
 	return conn, nil

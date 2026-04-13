@@ -609,6 +609,7 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 | `TICKET_HOME` | Config/database directory |
 | `TICKET_USERNAME` | Default username |
 | `TICKET_PASSWORD` | Default password |
+| `TICKET_TRUSTED_PROXY_CIDRS` | Comma-separated CIDRs trusted for forwarded proxy headers |
 | `AGENT_ID` | Agent UUID for worker mode |
 | `AGENT_PASSWORD` | Agent password |
 | `TICKET_AGENT_LLM` | LLM command override |

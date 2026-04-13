@@ -19,18 +19,18 @@ const (
 
 // Theme holds all colour values for a visual theme.
 type Theme struct {
-	ID         ThemeID
-	Name       string
-	Bg         lipgloss.Color
-	Fg         lipgloss.Color
-	Accent     lipgloss.Color
-	Muted      lipgloss.Color
-	Border     lipgloss.Color
-	SelBg      lipgloss.Color
-	SelFg      lipgloss.Color
-	Header     lipgloss.Color
-	StatusBg   lipgloss.Color
-	StatusFg   lipgloss.Color
+	ID       ThemeID
+	Name     string
+	Bg       lipgloss.Color
+	Fg       lipgloss.Color
+	Accent   lipgloss.Color
+	Muted    lipgloss.Color
+	Border   lipgloss.Color
+	SelBg    lipgloss.Color
+	SelFg    lipgloss.Color
+	Header   lipgloss.Color
+	StatusBg lipgloss.Color
+	StatusFg lipgloss.Color
 	// ECG pulse colours (gradient from dim to bright)
 	PulseGrad []lipgloss.Color
 	HasPulse  bool

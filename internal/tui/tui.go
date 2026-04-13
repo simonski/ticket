@@ -2,6 +2,8 @@
 package tui
 
 import (
+	"log"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
@@ -115,5 +117,7 @@ func saveTUIState(cfg config.Config, m Model) {
 	}
 	cfg.TUIExpandedEpics = expanded
 
-	_ = config.Save(cfg)
+	if err := config.Save(cfg); err != nil {
+		log.Printf("tui: save session state: %v", err)
+	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
 )
@@ -20,7 +21,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [-f <db-path>] [-force] [-password <password>] [-populate]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db in the current directory).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "Alias: `tk init`."},
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
 		example: "tk initdb -f /path/to/ticket.db -force -password secret -populate",
 	},
 	"export": {
@@ -35,7 +36,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"server": {
 		usage:   "tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_HOME (default: .ticket/ticket.db in the current directory).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
 		example: "tk server -f /path/to/ticket.db -p 9999 -v",
 	},
 	"version": {
@@ -384,8 +385,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk board",
 	},
 	"history": {
-		usage:   "tk history [-id] <id>",
-		details: []string{"Shows the lifecycle history of a ticket: every stage/state transition with timestamp and actor.", "Events are listed in chronological order from oldest to newest."},
+		usage:   "tk history [-n <limit>] [-offset <offset>] [-id <id>|<id>]",
+		details: []string{"Shows lifecycle history events for a ticket or recent project history when no id is given.", "Per-ticket history supports pagination via `-n` and `-offset`.", "`-user_id`, `-agent_id`, and `-team_id` filters apply to project history mode (no ticket id)."},
 		example: "tk history TK-42",
 	},
 	"stage": {
@@ -399,8 +400,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk ls -t bug -stage develop",
 	},
 	"init": {
-		usage:   "tk init [-f <db-path>] [-force] [-password <password>] [-populate]",
-		details: []string{"Alias for `tk initdb`. Creates a new SQLite database and bootstraps the admin account.", "If the database already exists, re-initialises the config to point to it without overwriting data."},
+		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-sdlc <name>]",
+		details: []string{"Interactive setup for local or remote mode.", "In local mode, initializes `$TICKET_HOME/ticket.db`, generates an admin password, and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
 		example: "tk init",
 	},
 	"curate": {
@@ -513,7 +514,9 @@ func printCommandUsageRows(b *strings.Builder, rows [][2]string, commandWidth in
 	for _, row := range rows {
 		fmt.Fprintf(w, "  %-*s\t%s\n", commandWidth, row[0], row[1])
 	}
-	_ = w.Flush()
+	if err := w.Flush(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not flush help table: %v\n", err)
+	}
 }
 
 // ---------------------------------------------------------------------------

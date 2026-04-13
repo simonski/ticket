@@ -1,6 +1,7 @@
 package libticket_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net"
@@ -28,7 +29,7 @@ func TestHTTPServiceStatusUnauthenticated(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
 	svc := libticket.NewHTTP(config.Config{Location: fixture.server.URL})
-	status, err := svc.Status()
+	status, err := svc.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
@@ -41,7 +42,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
 	svc := libticket.NewHTTP(config.Config{Location: fixture.server.URL})
-	user, err := svc.Register("alice", "secret12")
+	user, err := svc.Register(context.Background(), "alice", "secret12")
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -49,7 +50,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 		t.Fatalf("Register() = %#v", user)
 	}
 
-	loggedIn, token, err := svc.Login("alice", "secret12")
+	loggedIn, token, err := svc.Login(context.Background(), "alice", "secret12")
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
@@ -58,7 +59,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 	}
 
 	authed := libticket.NewHTTP(config.Config{Location: fixture.server.URL, Token: token, Username: "alice"})
-	status, err := authed.Status()
+	status, err := authed.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status(authenticated) error = %v", err)
 	}
@@ -66,7 +67,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 		t.Fatalf("Status(authenticated) = %#v", status)
 	}
 
-	if err := authed.Logout(); err != nil {
+	if err := authed.Logout(context.Background()); err != nil {
 		t.Fatalf("Logout() error = %v", err)
 	}
 }
@@ -74,7 +75,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 func TestHTTPServiceSetTicketParent(t *testing.T) {
 	_, svc := newRemoteFixture(t)
 
-	parent, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	parent, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "epic",
 		Title:     "Parent",
@@ -82,7 +83,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	child, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	child, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Child",
@@ -91,7 +92,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("CreateTicket(child) error = %v", err)
 	}
 
-	updated, err := svc.SetTicketParent(child.ID, parent.ID, "")
+	updated, err := svc.SetTicketParent(context.Background(), child.ID, parent.ID, "")
 	if err != nil {
 		t.Fatalf("SetTicketParent() error = %v", err)
 	}
@@ -99,7 +100,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("SetTicketParent() = %#v", updated)
 	}
 
-	detached, err := svc.UnsetTicketParent(child.ID, "")
+	detached, err := svc.UnsetTicketParent(context.Background(), child.ID, "")
 	if err != nil {
 		t.Fatalf("UnsetTicketParent() error = %v", err)
 	}
@@ -111,7 +112,7 @@ func TestHTTPServiceSetTicketParent(t *testing.T) {
 func TestHTTPServiceDeleteTicket(t *testing.T) {
 	_, svc := newRemoteFixture(t)
 
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
 		Title:     "Delete me",
@@ -119,10 +120,10 @@ func TestHTTPServiceDeleteTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if err := svc.DeleteTicket(ticket.ID); err != nil {
+	if err := svc.DeleteTicket(context.Background(), ticket.ID); err != nil {
 		t.Fatalf("DeleteTicket() error = %v", err)
 	}
-	if _, err := svc.GetTicketByID(ticket.ID); !errors.Is(err, store.ErrTicketNotFound) && (err == nil || err.Error() != "ticket not found") {
+	if _, err := svc.GetTicketByID(context.Background(), ticket.ID); !errors.Is(err, store.ErrTicketNotFound) && (err == nil || err.Error() != "ticket not found") {
 		t.Fatalf("GetTicket(deleted) error = %v, want ticket not found", err)
 	}
 }
@@ -130,7 +131,7 @@ func TestHTTPServiceDeleteTicket(t *testing.T) {
 func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	_, svc := newRemoteFixture(t)
 
-	parent, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	parent, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "epic",
 		Title:     "Parent",
@@ -138,7 +139,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
 	}
-	ticket, err := svc.CreateTicket(libticket.TicketCreateRequest{
+	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID:          1,
 		Type:               "task",
 		Title:              "Child",
@@ -152,7 +153,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 		t.Fatalf("CreateTicket(task) error = %v", err)
 	}
 	// Assign the ticket directly and set it active.
-	updated, err := svc.UpdateTicket(ticket.ID, libticket.TicketUpdateRequest{
+	updated, err := svc.UpdateTicket(context.Background(), ticket.ID, libticket.TicketUpdateRequest{
 		Title:              "Updated Child",
 		Description:        "new description",
 		AcceptanceCriteria: "new ac",
@@ -179,7 +180,7 @@ func TestHTTPServiceCountRequiresAuth(t *testing.T) {
 	fixture, _ := newRemoteFixture(t)
 
 	svc := libticket.NewHTTP(config.Config{Location: fixture.server.URL})
-	if _, err := svc.Count(nil); err == nil {
+	if _, err := svc.Count(context.Background(), nil); err == nil {
 		t.Fatal("Count() error = nil, want auth error")
 	}
 }
@@ -193,7 +194,7 @@ func TestHTTPServicePropagatesMalformedJSON(t *testing.T) {
 	defer server.Close()
 
 	svc := libticket.NewHTTP(config.Config{Location: server.URL})
-	if _, err := svc.Status(); err == nil {
+	if _, err := svc.Status(context.Background()); err == nil {
 		t.Fatal("Status() error = nil, want JSON decode error")
 	}
 }
@@ -206,7 +207,7 @@ func TestHTTPServicePropagatesNonJSONErrorBody(t *testing.T) {
 	defer server.Close()
 
 	svc := libticket.NewHTTP(config.Config{Location: server.URL})
-	if _, err := svc.Count(nil); err == nil {
+	if _, err := svc.Count(context.Background(), nil); err == nil {
 		t.Fatal("Count() error = nil, want HTTP status error")
 	}
 }
@@ -221,7 +222,7 @@ func TestHTTPServiceHandlesNetworkFailure(t *testing.T) {
 	_ = listener.Close()
 
 	svc := libticket.NewHTTP(config.Config{Location: "http://" + addr})
-	if _, err := svc.Status(); err == nil {
+	if _, err := svc.Status(context.Background()); err == nil {
 		t.Fatal("Status() error = nil, want network error")
 	}
 }
@@ -255,7 +256,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *libticket.HTTPService) {
 	t.Cleanup(httpServer.Close)
 
 	raw := client.New(config.Config{Location: httpServer.URL})
-	auth, err := raw.Login("admin", "secret12")
+	auth, err := raw.Login(context.Background(), "admin", "secret12")
 	if err != nil {
 		t.Fatalf("raw Login() error = %v", err)
 	}

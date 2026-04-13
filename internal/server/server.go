@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -140,6 +142,8 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 
 	var handler http.Handler = mux
 	handler = csrfMiddleware(handler)
+	handler = writeThrottleMiddleware(handler, db, newRateLimiter(writeRateLimitFromEnv(), time.Minute))
+	handler = requestTimeoutMiddleware(handler, requestTimeoutFromEnv())
 	handler = recoverMiddleware(handler)
 	handler = bodySizeLimitHandler(handler)
 	handler = securityHeadersHandler(handler)
@@ -152,6 +156,86 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 		handler = loggingHandler(handler, logger)
 	}
 	return handler, nil
+}
+
+func writeRateLimitFromEnv() int {
+	const defaultLimit = 120
+	raw := strings.TrimSpace(os.Getenv("TICKET_WRITE_RATE_LIMIT"))
+	if raw == "" {
+		return defaultLimit
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return defaultLimit
+	}
+	return value
+}
+
+func writeThrottleMiddleware(next http.Handler, db *sql.DB, limiter *rateLimiter) http.Handler {
+	writeExemptPaths := map[string]bool{
+		"/api/login":           true,
+		"/api/register":        true,
+		"/api/agents/register": true,
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if limiter == nil || !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if writeExemptPaths[r.URL.Path] {
+			next.ServeHTTP(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			// continue
+		default:
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		key := "ip:" + clientIP(r)
+		if token := bearerToken(r); token != "" {
+			if user, err := store.GetUserByToken(r.Context(), db, token); err == nil && strings.TrimSpace(user.ID) != "" {
+				key = "user:" + strings.TrimSpace(user.ID)
+			}
+		}
+
+		if !limiter.allow(key) {
+			writeError(w, http.StatusTooManyRequests, "too many requests")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requestTimeoutFromEnv() time.Duration {
+	const defaultTimeout = 30 * time.Second
+	raw := strings.TrimSpace(os.Getenv("TICKET_REQUEST_TIMEOUT_SECONDS"))
+	if raw == "" {
+		return defaultTimeout
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return defaultTimeout
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func requestTimeoutMiddleware(next http.Handler, timeout time.Duration) http.Handler {
+	if timeout <= 0 {
+		return next
+	}
+	timeoutHandler := http.TimeoutHandler(next, timeout, `{"error":"request timeout"}`)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/ws", "/api/chat/ws":
+			next.ServeHTTP(w, r)
+			return
+		default:
+			timeoutHandler.ServeHTTP(w, r)
+		}
+	})
 }
 
 func recoverMiddleware(next http.Handler) http.Handler {
@@ -168,11 +252,33 @@ func recoverMiddleware(next http.Handler) http.Handler {
 
 func securityHeadersHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nonce := cspNonce()
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
-		next.ServeHTTP(w, r)
+		w.Header().Set("Content-Security-Policy",
+			fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'nonce-%s'", nonce, nonce))
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cspNonceKey{}, nonce)))
 	})
+}
+
+type cspNonceKey struct{}
+
+func cspNonceFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if nonce, ok := ctx.Value(cspNonceKey{}).(string); ok {
+		return nonce
+	}
+	return ""
+}
+
+func cspNonce() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(buf)
 }
 
 func bodySizeLimitHandler(next http.Handler) http.Handler {
@@ -199,7 +305,21 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			next.ServeHTTP(w, r)
+			data, err := fs.ReadFile(staticFS, "index.html")
+			if err != nil {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			nonce := cspNonceFromContext(r.Context())
+			indexHTML := string(data)
+			if nonce != "" {
+				indexHTML = strings.Replace(indexHTML, "<style>", fmt.Sprintf(`<style nonce="%s">`, nonce), 1)
+				indexHTML = strings.Replace(indexHTML, "<script>", fmt.Sprintf(`<script nonce="%s">`, nonce), 1)
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if _, err := io.WriteString(w, indexHTML); err != nil {
+				slog.Error("write spa index response", "error", err)
+			}
 			return
 		}
 		if _, err := fs.Stat(staticFS, r.URL.Path[1:]); err == nil {
@@ -250,13 +370,13 @@ func appendLoggedBody(buf *bytes.Buffer, payload []byte, truncated *bool) {
 	}
 	remaining := maxLoggedBodyBytes - buf.Len()
 	if len(payload) > remaining {
-		_, _ = buf.Write(payload[:remaining])
+		buf.Write(payload[:remaining])
 		if truncated != nil {
 			*truncated = true
 		}
 		return
 	}
-	_, _ = buf.Write(payload)
+	buf.Write(payload)
 }
 
 func loggedBodyString(buf *bytes.Buffer, truncated bool) string {
@@ -345,7 +465,10 @@ func csrfMiddleware(next http.Handler) http.Handler {
 
 	generateToken := func() string {
 		b := make([]byte, 32)
-		_, _ = rand.Read(b)
+		if _, err := rand.Read(b); err != nil {
+			slog.Error("generate csrf token", "error", err)
+			return strings.ReplaceAll(uuid.NewString(), "-", "")
+		}
 		return hex.EncodeToString(b)
 	}
 
@@ -366,7 +489,7 @@ func csrfMiddleware(next http.Handler) http.Handler {
 					Path:     "/",
 					HttpOnly: false, // JS must read it
 					SameSite: http.SameSiteStrictMode,
-					Secure:   r.TLS != nil,
+					Secure:   requestIsSecure(r),
 				})
 			}
 			next.ServeHTTP(w, r)
@@ -410,4 +533,20 @@ func csrfMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// requestIsSecure reports whether the inbound request should be treated as HTTPS.
+// It supports TLS-terminating proxies by honoring X-Forwarded-Proto=https.
+func requestIsSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		return false
+	}
+	if comma := strings.Index(proto, ","); comma >= 0 {
+		proto = strings.TrimSpace(proto[:comma])
+	}
+	return strings.EqualFold(proto, "https")
 }

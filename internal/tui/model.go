@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -32,9 +34,9 @@ const (
 	modeProjectPicker
 	modeProjects // new: inline projects panel (replaces the modal modeProjectPicker)
 	modeProjectEdit
-	modeIdeas     // new: list of top-level non-epic tickets (m.toplevel)
+	modeIdeas // new: list of top-level non-epic tickets (m.toplevel)
 	modeSdlcs // sdlc list with expandable stages
-	modeBoard     // kanban board: tickets by stage columns
+	modeBoard // kanban board: tickets by stage columns
 )
 
 // tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Sdlcs > Config.
@@ -73,7 +75,6 @@ type listItem struct {
 	hasChildren bool
 	expanded    bool
 }
-
 
 // ─── main model ──────────────────────────────────────────────────────────────
 
@@ -118,19 +119,19 @@ type Model struct {
 	ideasOffset int
 
 	// sdlcs panel
-	sdlcs        []store.SdlcWithStages
-	wfCursor     int
-	wfExpanded   map[int64]bool // expanded sdlc IDs
+	sdlcs         []store.SdlcWithStages
+	wfCursor      int
+	wfExpanded    map[int64]bool // expanded sdlc IDs
 	wfAddingStage bool
-	wfStageInput textinput.Model
+	wfStageInput  textinput.Model
 
 	// board (kanban)
-	boardCol      int            // active column index
-	boardRow      int            // cursor row within the active column
-	boardOffset   int            // scroll offset within the active column
-	boardCols     []boardColumn  // columns built from sdlc stages
-	boardInHeader bool           // true when focus is on the stage header row
-	boardInTabBar bool           // true when focus is on the panel tab bar
+	boardCol      int           // active column index
+	boardRow      int           // cursor row within the active column
+	boardOffset   int           // scroll offset within the active column
+	boardCols     []boardColumn // columns built from sdlc stages
+	boardInHeader bool          // true when focus is on the stage header row
+	boardInTabBar bool          // true when focus is on the panel tab bar
 
 	// animation
 	ecg       ecgState
@@ -162,16 +163,16 @@ func newModel(svc libticket.Service, cfg config.Config, th Theme) Model {
 	ci.Placeholder = "enter command..."
 	ci.CharLimit = 200
 	return Model{
-		svc:      svc,
-		cfg:      cfg,
-		theme:    th,
-		mode:     modeIntro,
-		intro:    newIntroState(),
-		lastTick: time.Now(),
+		svc:        svc,
+		cfg:        cfg,
+		theme:      th,
+		mode:       modeIntro,
+		intro:      newIntroState(),
+		lastTick:   time.Now(),
 		expanded:   map[string]bool{},
 		wfExpanded: map[int64]bool{},
 		cmdInput:   ci,
-		ecg:      ecgState{params: th.ECGStyle},
+		ecg:        ecgState{params: th.ECGStyle},
 	}
 }
 
@@ -552,8 +553,6 @@ func (m Model) handleKeyDetail(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-
-
 func (m Model) handleKeySummary(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q":
@@ -718,7 +717,7 @@ func (m Model) saveProject() tea.Cmd {
 	}
 	svc := m.svc
 	return func() tea.Msg {
-		_, err := svc.UpdateProject(id, req)
+		_, err := svc.UpdateProject(context.Background(), id, req)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -851,14 +850,13 @@ func (m Model) switchProject(p store.Project) tea.Cmd {
 // loadProjects returns a Cmd that fetches all projects.
 func loadProjects(svc libticket.Service) tea.Cmd {
 	return func() tea.Msg {
-		projects, err := svc.ListProjects()
+		projects, err := svc.ListProjects(context.Background())
 		if err != nil {
 			return errMsg{err}
 		}
 		return projectsLoadedMsg(projects)
 	}
 }
-
 
 // ─── View ─────────────────────────────────────────────────────────────────────
 
@@ -1044,7 +1042,7 @@ func (m Model) statusBar(w int) string {
 			modeProjects:      "↑↓ nav · space switch · enter/e edit · esc back",
 			modeProjectEdit:   "tab next · enter save · ctrl+s save · esc cancel",
 			modeIdeas:         "↑↓/wasd · enter · e edit · n new · esc back",
-			modeSdlcs:     "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
+			modeSdlcs:         "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
 		}
 		hint := hints[m.mode]
 		text = " " + moon + "  " + hint
@@ -1594,11 +1592,11 @@ func loadTickets(svc libticket.Service, cfg config.Config) tea.Cmd {
 }
 
 func loadTicketsSync(svc libticket.Service, cfg config.Config) treeLoadedMsg {
-	project, err := svc.GetProject(cfg.ProjectID)
+	project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 	if err != nil {
 		return treeLoadedMsg{}
 	}
-	all, err := svc.ListTicketsFiltered(project.ID, "", "", "", "", "", "", 0, false)
+	all, err := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, false)
 	if err != nil {
 		return treeLoadedMsg{}
 	}
@@ -1663,7 +1661,7 @@ func flattenTree(nodes []treeNode, toplevel []store.Ticket, expanded map[string]
 
 func checkUpdate(svc libticket.Service) tea.Cmd {
 	return func() tea.Msg {
-		status, err := svc.Status()
+		status, err := svc.Status(context.Background())
 		if err != nil {
 			return nil
 		}
@@ -1813,7 +1811,9 @@ func (m Model) panelEntryCmd() tea.Cmd {
 		cfg.TUIMode = modeToString(m.mode)
 		m.cfg = cfg
 		cmds = append(cmds, func() tea.Msg {
-			_ = config.Save(cfg)
+			if err := config.Save(cfg); err != nil {
+				log.Printf("tui: save mode: %v", err)
+			}
 			return nil
 		})
 	}
@@ -1837,7 +1837,9 @@ func (m Model) saveExpandedState() tea.Cmd {
 	cfg := m.cfg
 	cfg.TUIExpandedEpics = ids
 	return func() tea.Msg {
-		_ = config.Save(cfg)
+		if err := config.Save(cfg); err != nil {
+			log.Printf("tui: save expanded state: %v", err)
+		}
 		return nil
 	}
 }
