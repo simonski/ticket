@@ -401,6 +401,56 @@ func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 	}
 }
 
+func TestRunSkillPrintsEmbeddedSkillTemplateToStdout(t *testing.T) {
+	tempDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir(tempDir) error = %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
+
+	output := captureStdout(t, func() {
+		if err := runSkill(nil); err != nil {
+			t.Fatalf("runSkill() error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "# tk Ticket Management Skill") {
+		t.Fatalf("runSkill() did not print embedded skill template:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected SKILL.md to not be created; stat err = %v", err)
+	}
+}
+
+func TestRunSkillDoesNotRequireTicketInit(t *testing.T) {
+	tempDir := t.TempDir()
+	previousHome := os.Getenv("TICKET_HOME")
+	if err := os.Setenv("TICKET_HOME", filepath.Join(tempDir, ".ticket")); err != nil {
+		t.Fatalf("Setenv(TICKET_HOME) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if previousHome == "" {
+			_ = os.Unsetenv("TICKET_HOME")
+			return
+		}
+		_ = os.Setenv("TICKET_HOME", previousHome)
+	})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"skill"}); err != nil {
+			t.Fatalf("run(skill) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "# tk Ticket Management Skill") {
+		t.Fatalf("run(skill) output missing skill content:\n%s", output)
+	}
+}
+
 func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{

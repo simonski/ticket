@@ -19,6 +19,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Prints ticket CLI instructions to stdout for use by agents.", "Usage: tk onboard > TICKET.md"},
 		example: "tk onboard > TICKET.md",
 	},
+	"skill": {
+		usage:   "tk skill",
+		details: []string{"Prints the embedded tk SKILL.md template to stdout.", "Usage: tk skill > SKILL.md"},
+		example: "tk skill > SKILL.md",
+	},
 	"initdb": {
 		usage:   "tk initdb [-f <db-path>] [-force] [-password <password>] [-populate]",
 		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
@@ -496,6 +501,7 @@ func renderRootUsage() string {
 		{"import", "Import entities from a JSON snapshot"},
 		{"version", "Print the current version"},
 		{"upgrade", "Check for a newer version"},
+		{"skill", "Print the embedded SKILL.md template"},
 		{"help", "Show command help"},
 	}
 	b.WriteString("\n" + h + "SYSTEM" + r + "\n")

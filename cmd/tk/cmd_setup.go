@@ -45,6 +45,20 @@ func runOnboard(args []string) error {
 	return nil
 }
 
+func runSkill(args []string) error {
+	if len(args) != 0 {
+		return errors.New("usage: tk skill")
+	}
+	if outputJSON {
+		return printJSON(map[string]string{"status": "ok", "content": tkSkillContent})
+	}
+	fmt.Print(tkSkillContent)
+	if !strings.HasSuffix(tkSkillContent, "\n") {
+		fmt.Println()
+	}
+	return nil
+}
+
 // tkSkillContent is installed into ~/.claude/skills/tk/SKILL.md so that
 // Claude Code automatically knows about the tk CLI while working in any project.
 //

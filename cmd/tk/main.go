@@ -35,8 +35,8 @@ func envValue(name string) string {
 //go:embed VERSION
 var embeddedVersion string
 
-//go:embed TICKETS.md
-var embeddedAgents string
+	//go:embed TICKETS.md
+	var embeddedAgents string
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -102,7 +102,7 @@ func run(args []string) error {
 
 	// Commands that don't require an initialised .ticket folder.
 	noInitRequired := map[string]bool{
-		"init": true, "setup": true, "help": true, "version": true, "upgrade": true,
+		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "skill": true,
 	}
 	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envRemoteOverride {
 		home, homeErr := config.Home()
@@ -118,6 +118,8 @@ func run(args []string) error {
 		return runSummary(trimmedArgs[1:])
 	case "onboard":
 		return runOnboard(trimmedArgs[1:])
+	case "skill":
+		return runSkill(trimmedArgs[1:])
 	case "init":
 		return runSetup(trimmedArgs[1:])
 	case "initdb":
