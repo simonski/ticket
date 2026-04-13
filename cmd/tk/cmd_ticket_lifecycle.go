@@ -264,7 +264,7 @@ func runSetTicketDraft(args []string, undraft bool) error {
 	if undraft {
 		command = "undraft"
 	}
-	usage := fmt.Sprintf("tk %s [-id] <id> [-m comment]", command)
+	usage := fmt.Sprintf("tk %s [-id <id>] <id> [<id> ...] [-m comment]", command)
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -272,8 +272,18 @@ func runSetTicketDraft(args []string, undraft bool) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	idVal, rest, err := resolveIDFlag(*id, fs.Args())
-	if err != nil || len(rest) != 0 {
+	ids := make([]string, 0, 1+len(fs.Args()))
+	if trimmed := strings.TrimSpace(*id); trimmed != "" {
+		ids = append(ids, trimmed)
+	}
+	for _, arg := range fs.Args() {
+		trimmed := strings.TrimSpace(arg)
+		if trimmed == "" {
+			continue
+		}
+		ids = append(ids, trimmed)
+	}
+	if len(ids) == 0 {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -284,23 +294,32 @@ func runSetTicketDraft(args []string, undraft bool) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(context.Background(), idVal)
-	if err != nil {
-		return err
-	}
-	var updated store.Ticket
-	if undraft {
-		updated, err = svc.ReadyTicket(context.Background(), ticket.ID, *message)
-	} else {
-		updated, err = svc.NotReadyTicket(context.Background(), ticket.ID, *message)
-	}
-	if err != nil {
-		return err
+	updatedTickets := make([]store.Ticket, 0, len(ids))
+	for _, idVal := range ids {
+		ticket, getErr := svc.GetTicket(context.Background(), idVal)
+		if getErr != nil {
+			return getErr
+		}
+		var updated store.Ticket
+		if undraft {
+			updated, err = svc.ReadyTicket(context.Background(), ticket.ID, *message)
+		} else {
+			updated, err = svc.NotReadyTicket(context.Background(), ticket.ID, *message)
+		}
+		if err != nil {
+			return err
+		}
+		updatedTickets = append(updatedTickets, updated)
 	}
 	if outputJSON {
-		return printJSON(updated)
+		if len(updatedTickets) == 1 {
+			return printJSON(updatedTickets[0])
+		}
+		return printJSON(updatedTickets)
 	}
-	printTicket(updated)
+	for _, updated := range updatedTickets {
+		printTicket(updated)
+	}
 	return nil
 }
 

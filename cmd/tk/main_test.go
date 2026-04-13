@@ -2146,6 +2146,44 @@ func TestRunDraftAndUndraftToggleDraftFlag(t *testing.T) {
 	}
 }
 
+func TestRunDraftAndUndraftAcceptMultipleTicketIDs(t *testing.T) {
+	setupLocalCLI(t)
+
+	firstID := createLocalTask(t, []string{"add", "Batch Draft 1"})
+	secondID := createLocalTask(t, []string{"add", "Batch Draft 2"})
+	thirdID := createLocalTask(t, []string{"add", "Batch Draft 3"})
+
+	if err := run([]string{"draft", firstID, secondID, thirdID}); err != nil {
+		t.Fatalf("draft multiple error = %v", err)
+	}
+
+	for _, id := range []string{firstID, secondID, thirdID} {
+		output := captureStdout(t, func() {
+			if err := run([]string{"get", "-id", id}); err != nil {
+				t.Fatalf("get after draft error = %v", err)
+			}
+		})
+		if !hasDetailField(output, "Draft", "true") {
+			t.Fatalf("draft output missing draft=true for %s:\n%s", id, output)
+		}
+	}
+
+	if err := run([]string{"undraft", firstID, secondID, thirdID}); err != nil {
+		t.Fatalf("undraft multiple error = %v", err)
+	}
+
+	for _, id := range []string{firstID, secondID, thirdID} {
+		output := captureStdout(t, func() {
+			if err := run([]string{"get", "-id", id}); err != nil {
+				t.Fatalf("get after undraft error = %v", err)
+			}
+		})
+		if !hasDetailField(output, "Draft", "false") {
+			t.Fatalf("undraft output missing draft=false for %s:\n%s", id, output)
+		}
+	}
+}
+
 func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 	setupLocalCLI(t)
 	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
