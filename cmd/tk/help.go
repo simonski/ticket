@@ -581,8 +581,8 @@ Commands:
   rm       -id <id>                   Delete a sdlc
   set      -ticket <id> -sdlc <id> Set sdlc on a ticket (overrides inherited)
   unset    -ticket <id>               Clear sdlc from a ticket (inherit from parent/project)
-  add-stage    -id <wf-id> -name <n>  Add a stage
-  stage-update -stage-id <id> -name <n> [-d desc] [-ac criteria]  Update a stage
+  add-stage    -id <wf-id> -name <n> [-wow text] [-dor text] [-dod text]  Add a stage
+  stage-update -stage-id <id> -name <n> [-wow text] [-dor text] [-dod text] [-d desc] [-ac criteria]  Update a stage
   stage-get    -stage-id <id>         Show stage details
   stage-list   -id <sdlc_id>         List stages in a sdlc
   remove-stage -stage-id <id>         Remove a stage

@@ -103,17 +103,27 @@ func runSdlc(args []string) error {
 		wfID := fs.Int64("id", 0, "sdlc id")
 		name := fs.String("name", "", "stage name")
 		desc := fs.String("d", "", "stage description")
+		wow := fs.String("wow", "", "ways of working")
+		dor := fs.String("dor", "", "definition of ready")
+		dod := fs.String("dod", "", "definition of done")
 		order := fs.Int("order", 0, "sort order")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *wfID == 0 || *name == "" {
-			return errors.New("usage: tk sdlc add-stage -id <sdlc_id> -name <stage> [-d <desc>] [-order <n>]")
+			return errors.New("usage: tk sdlc add-stage -id <sdlc_id> -name <stage> [-d <desc>] [-wow <wow>] [-dor <ready>] [-dod <done>] [-order <n>]")
+		}
+		stageWoW := strings.TrimSpace(*wow)
+		if stageWoW == "" {
+			stageWoW = *desc
 		}
 		stage, err := svc.AddSdlcStage(context.Background(), *wfID, libticket.SdlcStageRequest{
-			StageName:   *name,
-			Description: *desc,
-			SortOrder:   *order,
+			StageName:         *name,
+			Description:       stageWoW,
+			WaysOfWorking:     stageWoW,
+			DefinitionOfReady: *dor,
+			DefinitionOfDone:  *dod,
+			SortOrder:         *order,
 		})
 		if err != nil {
 			return err
@@ -130,16 +140,30 @@ func runSdlc(args []string) error {
 		name := fs.String("name", "", "stage name")
 		desc := fs.String("d", "", "stage description")
 		ac := fs.String("ac", "", "acceptance criteria")
+		wow := fs.String("wow", "", "ways of working")
+		dor := fs.String("dor", "", "definition of ready")
+		dod := fs.String("dod", "", "definition of done")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *stageID == 0 || *name == "" {
-			return errors.New("usage: tk sdlc stage-update -stage-id <id> -name <name> [-d <desc>] [-ac <criteria>]")
+			return errors.New("usage: tk sdlc stage-update -stage-id <id> -name <name> [-d <desc>] [-ac <criteria>] [-wow <wow>] [-dor <ready>] [-dod <done>]")
+		}
+		stageWoW := strings.TrimSpace(*wow)
+		if stageWoW == "" {
+			stageWoW = *desc
+		}
+		stageDoR := strings.TrimSpace(*dor)
+		if stageDoR == "" {
+			stageDoR = *ac
 		}
 		stage, err := svc.UpdateSdlcStage(context.Background(), *stageID, libticket.SdlcStageRequest{
 			StageName:          *name,
-			Description:        *desc,
-			AcceptanceCriteria: *ac,
+			Description:        stageWoW,
+			AcceptanceCriteria: stageDoR,
+			WaysOfWorking:      stageWoW,
+			DefinitionOfReady:  stageDoR,
+			DefinitionOfDone:   *dod,
 		})
 		if err != nil {
 			return err
@@ -518,15 +542,18 @@ func printStageTable(stages []store.SdlcStage) {
 		for _, r := range s.Roles {
 			roleNames = append(roleNames, r.Title)
 		}
-		rows = append(rows, fmt.Sprintf("%d\t%d\t%s\t%s\t%s", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description))
+		rows = append(rows, fmt.Sprintf("%d\t%d\t%s\t%s\t%s\t%s\t%s", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description, stageDoRValue(s), s.DefinitionOfDone))
 	}
-	printBoxTable("ORDER\tID\tSTAGE\tROLES\tDESCRIPTION", rows)
+	printBoxTable("ORDER\tID\tSTAGE\tROLES\tWOW\tDOR\tDOD", rows)
 }
 
 func printStageDetail(s store.SdlcStage) {
 	fmt.Printf("ID                  : %d\n", s.ID)
 	fmt.Printf("SDLC ID             : %d\n", s.SdlcID)
 	fmt.Printf("Stage Name          : %s\n", s.StageName)
+	fmt.Printf("WoW                 : %s\n", s.Description)
+	fmt.Printf("DoR                 : %s\n", stageDoRValue(s))
+	fmt.Printf("DoD                 : %s\n", s.DefinitionOfDone)
 	fmt.Printf("Description         : %s\n", s.Description)
 	fmt.Printf("Acceptance Criteria : %s\n", s.AcceptanceCriteria)
 	fmt.Printf("Sort Order          : %d\n", s.SortOrder)
@@ -545,17 +572,24 @@ func printSdlcDetail(wf store.SdlcWithStages) {
 	fmt.Printf("Description : %s\n", wf.Description)
 	fmt.Printf("Stages      :\n")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLES\tDESCRIPTION\tACCEPTANCE CRITERIA")
+	fmt.Fprintln(w, "  ORDER\tID\tSTAGE\tROLES\tWOW\tDOR\tDOD\tDESCRIPTION\tACCEPTANCE CRITERIA")
 	for _, s := range wf.Stages {
 		var roleNames []string
 		for _, r := range s.Roles {
 			roleNames = append(roleNames, r.Title)
 		}
-		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description, s.AcceptanceCriteria)
+		fmt.Fprintf(w, "  %d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", s.SortOrder, s.ID, s.StageName, strings.Join(roleNames, ", "), s.Description, stageDoRValue(s), s.DefinitionOfDone, s.Description, s.AcceptanceCriteria)
 	}
 	if err := w.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not flush SDLC stage table: %v\n", err)
 	}
+}
+
+func stageDoRValue(s store.SdlcStage) string {
+	if strings.TrimSpace(s.DefinitionOfReady) != "" {
+		return s.DefinitionOfReady
+	}
+	return s.AcceptanceCriteria
 }
 
 func sdlcScopedRole(svc libticket.Service, sdlcID, roleID int64) (store.Role, error) {

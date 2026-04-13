@@ -75,7 +75,15 @@ func (r *router) registerSdlcHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			stage, err := store.UpdateSdlcStage(r.Context(), db, stageID, payload.StageName, payload.Description, payload.AcceptanceCriteria)
+			wow := strings.TrimSpace(payload.WaysOfWorking)
+			if wow == "" {
+				wow = payload.Description
+			}
+			dor := strings.TrimSpace(payload.DefinitionOfReady)
+			if dor == "" {
+				dor = payload.AcceptanceCriteria
+			}
+			stage, err := store.UpdateSdlcStageWithDefinitions(r.Context(), db, stageID, payload.StageName, wow, dor, payload.DefinitionOfDone)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "sdlc stage not found")
@@ -247,7 +255,15 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				stage, err := store.AddSdlcStage(r.Context(), db, wfID, payload.StageName, payload.Description, payload.AcceptanceCriteria, payload.SortOrder)
+				wow := strings.TrimSpace(payload.WaysOfWorking)
+				if wow == "" {
+					wow = payload.Description
+				}
+				dor := strings.TrimSpace(payload.DefinitionOfReady)
+				if dor == "" {
+					dor = payload.AcceptanceCriteria
+				}
+				stage, err := store.AddSdlcStageWithDefinitions(r.Context(), db, wfID, payload.StageName, wow, dor, payload.DefinitionOfDone, payload.SortOrder)
 				if err != nil {
 					writeStoreError(w, err)
 					return
