@@ -399,7 +399,7 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 	help := renderCommandHelp("user")
 	for _, want := range []string{
-		"tk user <create|ls|list|rm|delete|enable|disable>",
+		"tk user <create|new|ls|list|rm|delete|enable|disable>",
 		"user is not an admin",
 		"tk user create -username alice -password secret",
 	} {
@@ -4776,6 +4776,28 @@ func TestRunUserCRUD(t *testing.T) {
 	})
 	if strings.Contains(listOut2, "newuser") {
 		t.Fatalf("user list still shows deleted user:\n%s", listOut2)
+	}
+}
+
+func TestRunUserNewAliasCreatesUser(t *testing.T) {
+	setupLocalCLI(t)
+
+	createOut := captureStdout(t, func() {
+		if err := run([]string{"user", "new", "-username", "aliasuser", "-password", "testpass1"}); err != nil {
+			t.Fatalf("user new error = %v", err)
+		}
+	})
+	if !strings.Contains(createOut, "aliasuser") {
+		t.Fatalf("user new output missing username:\n%s", createOut)
+	}
+
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"user", "list"}); err != nil {
+			t.Fatalf("user list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "aliasuser") {
+		t.Fatalf("user list missing alias-created user:\n%s", listOut)
 	}
 }
 

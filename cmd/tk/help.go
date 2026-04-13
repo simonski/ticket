@@ -305,7 +305,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk request-dryrun 42",
 	},
 	"user": {
-		usage:   "tk user <create|ls|list|rm|delete|enable|disable>",
+		usage:   "tk user <create|new|ls|list|rm|delete|enable|disable>",
 		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`."},
 		example: "tk user create -username alice -password secret",
 	},

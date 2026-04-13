@@ -317,7 +317,7 @@ func runUser(args []string) error {
 	}
 
 	switch args[0] {
-	case "create":
+	case "create", "new":
 		fs := flag.NewFlagSet("user create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		usernameFlag := fs.String("username", "", "username")
