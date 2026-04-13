@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
@@ -44,6 +45,17 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 	}
 	if !status.Authenticated || status.User == nil || status.User.Username != "alice" || status.ServerVersion != "1.2.3" {
 		t.Fatalf("Status() = %#v", status)
+	}
+}
+
+func TestNewSetsHTTPTimeout(t *testing.T) {
+	t.Parallel()
+	api := New(config.Config{Location: "http://example.com"})
+	if api.http == nil {
+		t.Fatal("New().http = nil")
+	}
+	if api.http.Timeout != 30*time.Second {
+		t.Fatalf("New().http.Timeout = %s, want %s", api.http.Timeout, 30*time.Second)
 	}
 }
 
