@@ -705,6 +705,50 @@ func TestRunUsesRemoteEnvOverrideWithoutTicketInit(t *testing.T) {
 	}
 }
 
+func TestRunListWithRemoteEnvOverrideDoesNotCreateLocalConfigDirs(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "adminpass"); err != nil {
+		t.Fatalf("store.Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+	handler, err := server.Handler(db, "test", false, nil, "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir(tempDir) error = %v", err)
+	}
+	defer func() { _ = os.Chdir(originalWD) }()
+
+	t.Setenv("TICKET_HOME", "")
+	t.Setenv("TICKET_URL", ts.URL)
+	t.Setenv("TICKET_USERNAME", "admin")
+	t.Setenv("TICKET_PASSWORD", "adminpass")
+
+	if err := run([]string{"ls"}); err != nil {
+		t.Fatalf("run(ls) error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tempDir, ".ticket")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no local .ticket directory in env-only remote mode, stat error=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "http:")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no unexpected http: directory in env-only remote mode, stat error=%v", err)
+	}
+}
+
 func TestEmbeddedVersionMatchesBuildVersionFile(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("VERSION"))
 	if err != nil {
