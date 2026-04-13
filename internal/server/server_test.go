@@ -133,6 +133,23 @@ func TestCSRFCookieSecureWithForwardedProto(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersAddsHSTSWhenSecure(t *testing.T) {
+	t.Parallel()
+
+	handler := securityHeadersHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if got := resp.Header().Get("Strict-Transport-Security"); got == "" {
+		t.Fatal("Strict-Transport-Security header = empty, want value for secure request")
+	}
+}
+
 func TestRequestTimeoutMiddlewareTimesOutNonWebSocket(t *testing.T) {
 	t.Parallel()
 	handler := requestTimeoutMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
