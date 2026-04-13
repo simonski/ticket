@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,8 @@ var (
 	ErrForbidden          = errors.New("forbidden")
 	ErrAdminRequired      = errors.New("user is not an admin")
 	ErrAccountLocked      = errors.New("account locked, try again later")
+
+	usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 )
 
 const (
@@ -84,6 +87,9 @@ func createUser(ctx context.Context, db *sql.DB, username, plainPassword, role s
 	username = strings.TrimSpace(username)
 	if username == "" || plainPassword == "" {
 		return User{}, errors.New("username and password are required")
+	}
+	if !usernamePattern.MatchString(username) {
+		return User{}, errors.New("username contains invalid characters")
 	}
 	if len(plainPassword) < 8 {
 		return User{}, errors.New("password must be at least 8 characters")

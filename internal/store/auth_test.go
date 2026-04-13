@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,6 +47,15 @@ func TestAuthLifecycle(t *testing.T) {
 	}
 	if _, err := GetUserByToken(context.Background(), db, token); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("GetUserByToken() after logout error = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestRegisterUserRejectsInvalidUsernameCharacters(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	if _, err := RegisterUser(context.Background(), db, "bad user!", "password123"); err == nil || !strings.Contains(err.Error(), "invalid characters") {
+		t.Fatalf("RegisterUser(invalid username) error = %v, want invalid character error", err)
 	}
 }
 
