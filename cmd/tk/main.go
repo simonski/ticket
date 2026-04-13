@@ -61,6 +61,7 @@ func run(args []string) error {
 	var guiTheme string
 	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
 	explicitServerDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "server" && dbOverride != ""
+	envRemoteOverride := config.HasRemoteEnvOverride()
 	if explicitServerDB {
 		trimmedArgs = append([]string{"server", "-f", dbOverride}, trimmedArgs[1:]...)
 	}
@@ -103,7 +104,7 @@ func run(args []string) error {
 	noInitRequired := map[string]bool{
 		"init": true, "setup": true, "help": true, "version": true, "upgrade": true,
 	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB {
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envRemoteOverride {
 		home, homeErr := config.Home()
 		if homeErr != nil || !dirExists(home) {
 			return fmt.Errorf("fatal: not a ticket folder — run `tk init` first")

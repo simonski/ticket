@@ -51,12 +51,23 @@ func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
+// HasRemoteEnvOverride returns true when remote mode is explicitly configured
+// via environment variables only.
+func HasRemoteEnvOverride() bool {
+	return envValue("TICKET_URL") != "" &&
+		envValue("TICKET_USERNAME") != "" &&
+		envValue("TICKET_PASSWORD") != ""
+}
+
 // ResolveURL determines mode and target from the Location field in config.json.
 //
 //	file:///path/to/ticket.db  → local mode
 //	http(s)://host             → remote mode
 //	(empty)                    → local mode, DBPath = <Home()>/ticket.db
 func ResolveURL() (Resolved, error) {
+	if HasRemoteEnvOverride() {
+		return ResolveLocation(envValue("TICKET_URL"))
+	}
 	cfg, _ := Load()
 	return ResolveLocation(cfg.Location)
 }
@@ -178,7 +189,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	cfg.Token = creds.Token
+	if HasRemoteEnvOverride() {
+		cfg.Location = envValue("TICKET_URL")
+		cfg.Username = envValue("TICKET_USERNAME")
+		cfg.Token = ""
+	} else {
+		cfg.Token = creds.Token
+	}
 
 	return cfg, nil
 }

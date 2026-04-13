@@ -181,6 +181,10 @@ tk login -username name -password '*******'
 
 For `tk register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `tk register` falls back to `whoami` and `password`.
 
+If `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
+values override local `.ticket/config.json` and stored credentials for remote
+commands.
+
 `tk login` resolves values in this order:
 
 1. a valid session already stored in `$TICKET_HOME/credentials.json`

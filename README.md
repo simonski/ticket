@@ -202,6 +202,9 @@ will query and update tickets automatically during coding sessions.
 them as trusted operator-only configuration and never source their values from
 untrusted input.
 
+When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, `tk`
+uses those values for remote mode even when local `.ticket/config.json` exists.
+
 ---
 
 ## Architecture

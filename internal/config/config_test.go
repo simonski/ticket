@@ -188,6 +188,58 @@ func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
 	}
 }
 
+func TestResolveURLUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
+	t.Setenv("TICKET_USERNAME", "alice")
+	t.Setenv("TICKET_PASSWORD", "secret12")
+
+	resolved, err := ResolveURL()
+	if err != nil {
+		t.Fatalf("ResolveURL() error = %v", err)
+	}
+	if resolved.Mode != ModeRemote {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeRemote)
+	}
+	if resolved.ServerURL != "https://tickets.example.com" {
+		t.Fatalf("ServerURL = %q, want env URL", resolved.ServerURL)
+	}
+}
+
+func TestLoadUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db","username":"local-user"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+	if err := SaveCredentials(Credentials{Token: "persisted-token"}); err != nil {
+		t.Fatalf("SaveCredentials() error = %v", err)
+	}
+
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
+	t.Setenv("TICKET_USERNAME", "alice")
+	t.Setenv("TICKET_PASSWORD", "secret12")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != "https://tickets.example.com" {
+		t.Fatalf("Load().Location = %q, want env URL", cfg.Location)
+	}
+	if cfg.Username != "alice" {
+		t.Fatalf("Load().Username = %q, want env username", cfg.Username)
+	}
+	if cfg.Token != "" {
+		t.Fatalf("Load().Token = %q, want empty when env override is active", cfg.Token)
+	}
+}
+
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
 

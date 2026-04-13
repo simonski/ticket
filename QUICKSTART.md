@@ -120,3 +120,6 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 
 When `TICKET_URL` is set the CLI communicates with a running `tk server`
 rather than opening the local database directly.
+
+When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
+values take precedence over local `.ticket/config.json` and credentials.

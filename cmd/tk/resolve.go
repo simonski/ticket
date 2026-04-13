@@ -58,14 +58,20 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	effectiveCfg := cfg
+	if config.HasRemoteEnvOverride() {
+		effectiveCfg.Location = resolved.ServerURL
+		effectiveCfg.Username = envValue("TICKET_USERNAME")
+		effectiveCfg.Token = ""
+	}
 	switch resolved.Mode {
 	case config.ModeLocal:
-		return libticket.NewLocal(cfg), nil
+		return libticket.NewLocal(effectiveCfg), nil
 	case config.ModeRemote:
 		if resolved.ServerURL == "" {
 			return nil, errors.New("remote mode requires a location (run tk init to configure)")
 		}
-		return libticket.NewHTTP(cfg), nil
+		return libticket.NewHTTP(effectiveCfg), nil
 	default:
 		return nil, fmt.Errorf("unsupported mode %q", resolved.Mode)
 	}
