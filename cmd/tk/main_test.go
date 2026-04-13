@@ -1227,7 +1227,7 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("project create error = %v", err)
 		}
 	})
-	for _, want := range []string{"project: Project A", "prefix: PRA", "status: open", "acceptance_criteria: AC"} {
+	for _, want := range []string{"project: Project A", "prefix: PRA", "status: open", "wow: Desc", "dor: AC", "acceptance_criteria: AC"} {
 		if !strings.Contains(createOutput, want) {
 			t.Fatalf("project create output missing %q:\n%s", want, createOutput)
 		}
@@ -1247,7 +1247,7 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("project update error = %v", err)
 		}
 	})
-	for _, want := range []string{"project: Project B", "description: Updated", "acceptance_criteria: AC2"} {
+	for _, want := range []string{"project: Project B", "wow: Updated", "dor: AC2", "description: Updated", "acceptance_criteria: AC2"} {
 		if !strings.Contains(updateOutput, want) {
 			t.Fatalf("project update output missing %q:\n%s", want, updateOutput)
 		}

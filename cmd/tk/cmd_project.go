@@ -50,6 +50,9 @@ func runProject(args []string) error {
 		title := fs.String("title", "", "project title")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
+		wow := fs.String("wow", "", "ways of working")
+		dor := fs.String("dor", "", "definition of ready")
+		dod := fs.String("dod", "", "definition of done")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitBranch := fs.String("git-branch", "", "project git branch")
 		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
@@ -57,7 +60,7 @@ func runProject(args []string) error {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-description text] [-ac text] [-sdlc id]")
+			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-wow text] [-dor text] [-dod text] [-description text] [-ac text] [-sdlc id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -69,11 +72,20 @@ func runProject(args []string) error {
 		if *sdlcID > 0 {
 			wfID = sdlcID
 		}
+		projectWoW := strings.TrimSpace(*wow)
+		if projectWoW == "" {
+			projectWoW = *description
+		}
+		projectDoR := strings.TrimSpace(*dor)
+		if projectDoR == "" {
+			projectDoR = *acceptanceCriteria
+		}
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Prefix:             *prefix,
 			Title:              *title,
-			Description:        *description,
-			AcceptanceCriteria: *acceptanceCriteria,
+			Description:        projectWoW,
+			AcceptanceCriteria: projectDoR,
+			Notes:              strings.TrimSpace(*dod),
 			GitRepository:      strings.TrimSpace(*gitRepository),
 			GitBranch:          strings.TrimSpace(*gitBranch),
 			SdlcID:             wfID,
@@ -313,6 +325,8 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	prefix := fs.String("prefix", strings.ToUpper(dirName[:min(3, len(dirName))]), "project prefix (default: first 3 chars of dir name)")
 	title := fs.String("title", dirName, "project title (default: directory name)")
 	description := fs.String("description", dirName, "project description (default: directory name)")
+	dor := fs.String("dor", "", "definition of ready")
+	dod := fs.String("dod", "", "definition of done")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -331,6 +345,8 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 			Prefix:      *prefix,
 			Title:       *title,
 			Description: *description,
+			AcceptanceCriteria: strings.TrimSpace(*dor),
+			Notes:       strings.TrimSpace(*dod),
 		})
 		if err != nil {
 			return err
@@ -512,6 +528,9 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		title := fs.String("title", "", "project title")
 		description := fs.String("description", "", "project description")
 		acceptanceCriteria := fs.String("ac", "", "project acceptance criteria")
+		wow := fs.String("wow", "", "ways of working")
+		dor := fs.String("dor", "", "definition of ready")
+		dod := fs.String("dod", "", "definition of done")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
 		gitBranch := fs.String("git-branch", "", "project git branch")
@@ -532,6 +551,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		}
 		nextDescription := current.Description
 		nextAC := current.AcceptanceCriteria
+		nextNotes := current.Notes
 		nextRepo := current.GitRepository
 		nextBranch := current.GitBranch
 		nextStatus := current.Status
@@ -540,6 +560,15 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		}
 		if containsFlag(args[1:], "-ac") {
 			nextAC = *acceptanceCriteria
+		}
+		if containsFlag(args[1:], "-wow") {
+			nextDescription = strings.TrimSpace(*wow)
+		}
+		if containsFlag(args[1:], "-dor") {
+			nextAC = strings.TrimSpace(*dor)
+		}
+		if containsFlag(args[1:], "-dod") {
+			nextNotes = strings.TrimSpace(*dod)
 		}
 		if containsFlag(args[1:], "-git-repository") || containsFlag(args[1:], "-git") {
 			nextRepo = strings.TrimSpace(*gitRepository)
@@ -567,6 +596,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			Title:              *title,
 			Description:        nextDescription,
 			AcceptanceCriteria: nextAC,
+			Notes:              nextNotes,
 			GitRepository:      nextRepo,
 			GitBranch:          nextBranch,
 			Status:             nextStatus,

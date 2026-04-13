@@ -62,10 +62,16 @@ func printProject(project store.Project) {
 	fmt.Printf("prefix: %s\n", project.Prefix)
 	fmt.Printf("status: %s\n", project.Status)
 	if project.Description != "" {
+		fmt.Printf("wow: %s\n", project.Description)
 		fmt.Printf("description: %s\n", project.Description)
 	}
 	if project.AcceptanceCriteria != "" {
+		fmt.Printf("dor: %s\n", project.AcceptanceCriteria)
 		fmt.Printf("acceptance_criteria: %s\n", project.AcceptanceCriteria)
+	}
+	if project.Notes != "" {
+		fmt.Printf("dod: %s\n", project.Notes)
+		fmt.Printf("notes: %s\n", project.Notes)
 	}
 	if project.GitRepository != "" {
 		fmt.Printf("git_repository: %s\n", project.GitRepository)
