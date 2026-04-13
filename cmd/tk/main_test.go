@@ -387,6 +387,7 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	for _, want := range []string{
 		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
 		"the server uses the database path from TICKET_HOME",
+		"If `-f` is provided, that exact database file is used directly",
 		"tk server -f /path/to/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
@@ -626,6 +627,30 @@ func TestExtractDBOverride(t *testing.T) {
 	}
 	if got := strings.Join(args, " "); got != "status -nocolor" {
 		t.Fatalf("extractDBOverride() args = %q", got)
+	}
+}
+
+func TestRunServerWithExplicitDBBypassesTicketHomeCheck(t *testing.T) {
+	tempDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir(tempDir) error = %v", err)
+	}
+	defer func() { _ = os.Chdir(originalWD) }()
+
+	// Ensure no implicit workspace/env context is available.
+	t.Setenv("TICKET_HOME", "")
+	dbPath := filepath.Join(tempDir, "missing", "ticket.db")
+
+	err = run([]string{"server", "-f", dbPath})
+	if err == nil {
+		t.Fatal("run(server -f) error = nil, want failure opening explicit DB path")
+	}
+	if strings.Contains(err.Error(), "not a ticket folder") {
+		t.Fatalf("run(server -f) should bypass ticket home inference check, got: %v", err)
 	}
 }
 

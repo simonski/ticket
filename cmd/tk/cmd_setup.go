@@ -1331,11 +1331,7 @@ func runServer(args []string) error {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	defaultDBPath, err := defaultDatabasePath()
-	if err != nil {
-		return err
-	}
-	dbPath := fs.String("f", defaultDBPath, "SQLite database file")
+	dbPath := fs.String("f", "", "SQLite database file")
 	addr := fs.String("addr", ":8080", "HTTP listen address")
 	port := fs.Int("p", 0, "HTTP listen port (shorthand for -addr :<port>)")
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
@@ -1343,6 +1339,24 @@ func runServer(args []string) error {
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	explicitDBPath := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "f" {
+			explicitDBPath = true
+		}
+	})
+	resolvedDBPath := strings.TrimSpace(*dbPath)
+	if explicitDBPath {
+		if resolvedDBPath == "" {
+			return errors.New("missing value for -f")
+		}
+	} else {
+		defaultDBPath, err := defaultDatabasePath()
+		if err != nil {
+			return err
+		}
+		resolvedDBPath = defaultDBPath
 	}
 
 	listenAddr := strings.TrimSpace(*addr)
@@ -1356,7 +1370,7 @@ func runServer(args []string) error {
 		listenAddr = fmt.Sprintf(":%d", *port)
 	}
 
-	db, err := store.Open(*dbPath)
+	db, err := store.Open(resolvedDBPath)
 	if err != nil {
 		return err
 	}
@@ -1369,7 +1383,7 @@ func runServer(args []string) error {
 
 	fmt.Print(renderBanner())
 	fmt.Printf("VERSION    %s\n", strings.TrimSpace(embeddedVersion))
-	fmt.Printf("TICKETDB   %s\n\n", *dbPath)
+	fmt.Printf("TICKETDB   %s\n\n", resolvedDBPath)
 	fmt.Printf("serving tk on http://localhost%s\n", listenAddr)
 
 	// Run the server in a goroutine so we can listen for shutdown signals.

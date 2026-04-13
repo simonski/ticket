@@ -36,7 +36,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"server": {
 		usage:   "tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "If `-f` is provided, that exact database file is used directly (no TICKET_HOME/env inference for database selection).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
 		example: "tk server -f /path/to/ticket.db -p 9999 -v",
 	},
 	"version": {

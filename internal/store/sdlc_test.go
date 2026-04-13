@@ -192,6 +192,32 @@ func TestUpdateGetAndListSdlcStage(t *testing.T) {
 	}
 }
 
+func TestSdlcStageDefinitionsCRUD(t *testing.T) {
+	t.Parallel()
+	db := setupSdlcTestDB(t)
+
+	wf, err := CreateSdlc(context.Background(), db, "stage-defs", "")
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+
+	stage, err := AddSdlcStageWithDefinitions(context.Background(), db, wf.ID, "develop", "ways", "ready", "done", 0)
+	if err != nil {
+		t.Fatalf("AddSdlcStageWithDefinitions() error = %v", err)
+	}
+	if stage.Description != "ways" || stage.AcceptanceCriteria != "ready" || stage.DefinitionOfReady != "ready" || stage.DefinitionOfDone != "done" {
+		t.Fatalf("added stage = %#v", stage)
+	}
+
+	stage, err = UpdateSdlcStageWithDefinitions(context.Background(), db, stage.ID, "develop", "ways-2", "ready-2", "done-2")
+	if err != nil {
+		t.Fatalf("UpdateSdlcStageWithDefinitions() error = %v", err)
+	}
+	if stage.Description != "ways-2" || stage.AcceptanceCriteria != "ready-2" || stage.DefinitionOfReady != "ready-2" || stage.DefinitionOfDone != "done-2" {
+		t.Fatalf("updated stage = %#v", stage)
+	}
+}
+
 func TestSdlcExportImportRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := setupSdlcTestDB(t)

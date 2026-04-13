@@ -60,8 +60,12 @@ func run(args []string) error {
 	}
 	var guiTheme string
 	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
+	explicitServerDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "server" && dbOverride != ""
+	if explicitServerDB {
+		trimmedArgs = append([]string{"server", "-f", dbOverride}, trimmedArgs[1:]...)
+	}
 	// -f /path/to/dir (or db file) sets TICKET_HOME to the directory
-	if dbOverride != "" {
+	if dbOverride != "" && !explicitServerDB {
 		absPath, pathErr := filepath.Abs(dbOverride)
 		if pathErr != nil {
 			return pathErr
@@ -75,9 +79,12 @@ func run(args []string) error {
 			return err
 		}
 	}
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return err
+	var resolved config.Resolved
+	if !explicitServerDB {
+		resolved, err = config.ResolveURL()
+		if err != nil {
+			return err
+		}
 	}
 	// -g launches the TUI (may appear before or after other args)
 	if guiTheme != "" || (len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui")) {
@@ -96,7 +103,7 @@ func run(args []string) error {
 	noInitRequired := map[string]bool{
 		"init": true, "setup": true, "help": true, "version": true, "upgrade": true,
 	}
-	if !noInitRequired[trimmedArgs[0]] {
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB {
 		home, homeErr := config.Home()
 		if homeErr != nil || !dirExists(home) {
 			return fmt.Errorf("fatal: not a ticket folder — run `tk init` first")
