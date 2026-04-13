@@ -208,7 +208,7 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 	}
 }
 
-func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, sdlcStages []store.SdlcStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string) {
+func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, sdlcStages []store.SdlcStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string, childTotal, childOpen, childClosed int) {
 	dependsOn := formatDependsOn(dependencies)
 
 	type ticketField struct {
@@ -287,6 +287,7 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 			fmt.Printf("  - [%s] %s\n", event.CreatedAt, formatHistoryEvent(event))
 		}
 	}
+	fmt.Printf("%-*s : total=%d open=%d closed=%d\n", maxLabelWidth, "ChildCounts", childTotal, childOpen, childClosed)
 }
 
 func printTicketChildren(children []store.Ticket) {

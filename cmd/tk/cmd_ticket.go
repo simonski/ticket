@@ -736,8 +736,7 @@ func runGet(args []string) error {
 		}
 		childTotal, childOpen, childClosed = childTicketCounts(children)
 	}
-	printTicketDetails(ticket, dependencies, history, sdlcStages, ticketLabels, totalTime, parentKey, cloneKey)
-	fmt.Printf("ChildCounts  : total=%d open=%d closed=%d\n", childTotal, childOpen, childClosed)
+	printTicketDetails(ticket, dependencies, history, sdlcStages, ticketLabels, totalTime, parentKey, cloneKey, childTotal, childOpen, childClosed)
 	if len(children) > 0 {
 		printTicketChildren(children)
 	}

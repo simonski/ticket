@@ -1257,7 +1257,7 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 			},
 		}, nil, []store.HistoryEvent{
 			{EventType: "ticket_created", CreatedAt: "2026-03-01 12:00:00", CreatedBy: "test-user", Payload: "{\"status\":\"develop/idle\"}"},
-		}, nil, nil, 0, "", "")
+		}, nil, nil, 0, "", "", 0, 0, 0)
 	})
 
 	for _, tc := range []struct {
@@ -2103,7 +2103,7 @@ func TestRunGetShowsChildCounts(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "ChildCounts  : total=2 open=1 closed=1") {
+	if !hasDetailField(output, "ChildCounts", "total=2 open=1 closed=1") {
 		t.Fatalf("get output missing child counts:\n%s", output)
 	}
 	if !strings.Contains(output, ticketLabelByID(t, openChildID)) {
@@ -2111,6 +2111,42 @@ func TestRunGetShowsChildCounts(t *testing.T) {
 	}
 	if !strings.Contains(output, ticketLabelByID(t, closedChildID)) {
 		t.Fatalf("get output missing closed child row:\n%s", output)
+	}
+}
+
+func TestRunGetAlignsDetailColumns(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "-ac", "Aligned output check", "Alignment Ticket"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+
+	lines := strings.Split(output, "\n")
+	colonIndex := -1
+	for _, line := range lines {
+		if !strings.Contains(line, " : ") {
+			continue
+		}
+		if strings.HasPrefix(line, "  - ") { // history/comment rows
+			continue
+		}
+		idx := strings.Index(line, " : ")
+		if idx < 0 {
+			continue
+		}
+		if colonIndex == -1 {
+			colonIndex = idx
+			continue
+		}
+		if idx != colonIndex {
+			t.Fatalf("misaligned detail line %q (index %d, want %d)\n%s", line, idx, colonIndex, output)
+		}
+	}
+	if colonIndex == -1 {
+		t.Fatalf("no detail lines found in output:\n%s", output)
 	}
 }
 
