@@ -2725,6 +2725,8 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 		StageName:          "triage",
 		Description:        "triage work",
 		AcceptanceCriteria: "Classify the issue",
+		DefinitionOfReady:  "Classify the issue",
+		DefinitionOfDone:   "Issue routed with owner and priority",
 	})
 	if err != nil {
 		t.Fatalf("UpdateSdlcStage() error = %v", err)
@@ -2757,7 +2759,14 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 			t.Fatalf("sdlc stage-get error = %v", err)
 		}
 	})
-	for _, want := range []string{"Stage Name          : triage", "Acceptance Criteria : Classify the issue", "Roles               : reviewer"} {
+	for _, want := range []string{
+		"Stage Name          : triage",
+		"WoW                 : triage work",
+		"DoR                 : Classify the issue",
+		"DoD                 : Issue routed with owner and priority",
+		"Acceptance Criteria : Classify the issue",
+		"Roles               : reviewer",
+	} {
 		if !strings.Contains(getOutput, want) {
 			t.Fatalf("sdlc stage-get missing %q:\n%s", want, getOutput)
 		}

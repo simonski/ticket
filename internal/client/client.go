@@ -1572,7 +1572,15 @@ func (c *Client) AddSdlcStage(ctx context.Context, sdlcID int64, request SdlcSta
 		if err != nil {
 			return store.SdlcStage{}, err
 		}
-		return store.AddSdlcStage(ctx, db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
+		wow := request.WaysOfWorking
+		if strings.TrimSpace(wow) == "" {
+			wow = request.Description
+		}
+		dor := request.DefinitionOfReady
+		if strings.TrimSpace(dor) == "" {
+			dor = request.AcceptanceCriteria
+		}
+		return store.AddSdlcStageWithDefinitions(ctx, db, sdlcID, request.StageName, wow, dor, request.DefinitionOfDone, request.SortOrder)
 	}
 	var stage store.SdlcStage
 	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/sdlcs/%d/stages", sdlcID), request, &stage)
@@ -1585,7 +1593,15 @@ func (c *Client) UpdateSdlcStage(ctx context.Context, stageID int64, request Sdl
 		if err != nil {
 			return store.SdlcStage{}, err
 		}
-		return store.UpdateSdlcStage(ctx, db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
+		wow := request.WaysOfWorking
+		if strings.TrimSpace(wow) == "" {
+			wow = request.Description
+		}
+		dor := request.DefinitionOfReady
+		if strings.TrimSpace(dor) == "" {
+			dor = request.AcceptanceCriteria
+		}
+		return store.UpdateSdlcStageWithDefinitions(ctx, db, stageID, request.StageName, wow, dor, request.DefinitionOfDone)
 	}
 	var stage store.SdlcStage
 	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/sdlcs/stages/%d", stageID), request, &stage)

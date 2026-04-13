@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/simonski/ticket/internal/config"
@@ -1127,7 +1128,15 @@ func (s *LocalService) AddSdlcStage(ctx context.Context, sdlcID int64, request S
 	if err != nil {
 		return store.SdlcStage{}, err
 	}
-	return store.AddSdlcStage(ctx, db, sdlcID, request.StageName, request.Description, request.AcceptanceCriteria, request.SortOrder)
+	wow := request.WaysOfWorking
+	if strings.TrimSpace(wow) == "" {
+		wow = request.Description
+	}
+	dor := request.DefinitionOfReady
+	if strings.TrimSpace(dor) == "" {
+		dor = request.AcceptanceCriteria
+	}
+	return store.AddSdlcStageWithDefinitions(ctx, db, sdlcID, request.StageName, wow, dor, request.DefinitionOfDone, request.SortOrder)
 }
 
 func (s *LocalService) UpdateSdlcStage(ctx context.Context, stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
@@ -1135,7 +1144,15 @@ func (s *LocalService) UpdateSdlcStage(ctx context.Context, stageID int64, reque
 	if err != nil {
 		return store.SdlcStage{}, err
 	}
-	return store.UpdateSdlcStage(ctx, db, stageID, request.StageName, request.Description, request.AcceptanceCriteria)
+	wow := request.WaysOfWorking
+	if strings.TrimSpace(wow) == "" {
+		wow = request.Description
+	}
+	dor := request.DefinitionOfReady
+	if strings.TrimSpace(dor) == "" {
+		dor = request.AcceptanceCriteria
+	}
+	return store.UpdateSdlcStageWithDefinitions(ctx, db, stageID, request.StageName, wow, dor, request.DefinitionOfDone)
 }
 
 func (s *LocalService) GetSdlcStage(ctx context.Context, stageID int64) (store.SdlcStage, error) {

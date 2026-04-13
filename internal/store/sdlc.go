@@ -22,6 +22,8 @@ type SdlcStage struct {
 	StageName          string `json:"stage_name"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	DefinitionOfReady  string `json:"definition_of_ready"`
+	DefinitionOfDone   string `json:"definition_of_done"`
 	SortOrder          int    `json:"sort_order"`
 	Roles              []Role `json:"roles,omitempty"`
 	CreatedAt          string `json:"created_at"`
@@ -134,14 +136,18 @@ func DeleteSdlc(ctx context.Context, db *sql.DB, id int64) error {
 }
 
 func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, description, acceptanceCriteria string, sortOrder int) (SdlcStage, error) {
+	return AddSdlcStageWithDefinitions(ctx, db, sdlcID, stageName, description, acceptanceCriteria, "", sortOrder)
+}
+
+func AddSdlcStageWithDefinitions(ctx context.Context, db *sql.DB, sdlcID int64, stageName, wow, dor, dod string, sortOrder int) (SdlcStage, error) {
 	stageName = strings.TrimSpace(stageName)
 	if stageName == "" {
 		return SdlcStage{}, errors.New("stage name is required")
 	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO sdlc_stages (sdlc_id, stage_name, description, acceptance_criteria, sort_order, updated_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, sdlcID, stageName, strings.TrimSpace(description), strings.TrimSpace(acceptanceCriteria), sortOrder)
+		INSERT INTO sdlc_stages (sdlc_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, sdlcID, stageName, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), sortOrder)
 	if err != nil {
 		return SdlcStage{}, err
 	}
@@ -153,15 +159,19 @@ func AddSdlcStage(ctx context.Context, db *sql.DB, sdlcID int64, stageName, desc
 }
 
 func UpdateSdlcStage(ctx context.Context, db *sql.DB, stageID int64, name, description, acceptanceCriteria string) (SdlcStage, error) {
+	return UpdateSdlcStageWithDefinitions(ctx, db, stageID, name, description, acceptanceCriteria, "")
+}
+
+func UpdateSdlcStageWithDefinitions(ctx context.Context, db *sql.DB, stageID int64, name, wow, dor, dod string) (SdlcStage, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return SdlcStage{}, errors.New("stage name is required")
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE sdlc_stages
-		SET stage_name = ?, description = ?, acceptance_criteria = ?, updated_at = CURRENT_TIMESTAMP
+		SET stage_name = ?, description = ?, acceptance_criteria = ?, definition_of_ready = ?, definition_of_done = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE sdlc_stage_id = ?
-	`, name, strings.TrimSpace(description), strings.TrimSpace(acceptanceCriteria), stageID)
+	`, name, strings.TrimSpace(wow), strings.TrimSpace(dor), strings.TrimSpace(dor), strings.TrimSpace(dod), stageID)
 	if err != nil {
 		return SdlcStage{}, err
 	}
@@ -322,13 +332,13 @@ func getSdlcRow(ctx context.Context, db *sql.DB, id int64) (Sdlc, error) {
 
 func getSdlcStageRow(ctx context.Context, db *sql.DB, id int64) (SdlcStage, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT sdlc_stage_id, sdlc_id, stage_name, description, acceptance_criteria, sort_order, created_at, updated_at
+		SELECT sdlc_stage_id, sdlc_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, created_at, updated_at
 		FROM sdlc_stages
 		WHERE sdlc_stage_id = ?
 	`, id)
 	var s SdlcStage
 	if err := row.Scan(&s.ID, &s.SdlcID, &s.StageName, &s.Description,
-		&s.AcceptanceCriteria, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return SdlcStage{}, err
 	}
 	roles, err := ListSdlcStageRoles(ctx, db, s.SdlcID, s.ID)
@@ -341,7 +351,7 @@ func getSdlcStageRow(ctx context.Context, db *sql.DB, id int64) (SdlcStage, erro
 
 func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT sdlc_stage_id, sdlc_id, stage_name, description, acceptance_criteria, sort_order, created_at, updated_at
+		SELECT sdlc_stage_id, sdlc_id, stage_name, description, acceptance_criteria, definition_of_ready, definition_of_done, sort_order, created_at, updated_at
 		FROM sdlc_stages
 		WHERE sdlc_id = ?
 		ORDER BY sort_order, sdlc_stage_id
@@ -354,7 +364,7 @@ func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage,
 	for rows.Next() {
 		var s SdlcStage
 		if err := rows.Scan(&s.ID, &s.SdlcID, &s.StageName, &s.Description,
-			&s.AcceptanceCriteria, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		stages = append(stages, s)

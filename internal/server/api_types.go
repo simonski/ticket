@@ -39,6 +39,9 @@ type sdlcStageRequest struct {
 	StageName          string `json:"stage_name"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
+	WaysOfWorking      string `json:"wow"`
+	DefinitionOfReady  string `json:"dor"`
+	DefinitionOfDone   string `json:"dod"`
 	SortOrder          int    `json:"sort_order"`
 }
 
