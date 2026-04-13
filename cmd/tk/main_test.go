@@ -782,6 +782,12 @@ func TestRunUpgradeReportsLocalVersionNewerThanRepo(t *testing.T) {
 	if !strings.Contains(output, "Your local copy is newer than the repo") {
 		t.Fatalf("runUpgrade() output = %q", output)
 	}
+	if !strings.Contains(output, "Local version: "+strings.TrimSpace(embeddedVersion)) {
+		t.Fatalf("runUpgrade() output missing local version:\n%s", output)
+	}
+	if !strings.Contains(output, "Repo version:  0.0.1") {
+		t.Fatalf("runUpgrade() output missing repo version:\n%s", output)
+	}
 }
 
 func TestCompareVersions(t *testing.T) {

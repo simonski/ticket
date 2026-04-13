@@ -30,6 +30,9 @@ func runUpgrade(args []string) error {
 		return errors.New("Unable to check for updates right now. Check your network connection and try again.")
 	}
 
+	fmt.Printf("Local version: %s\n", localVersion)
+	fmt.Printf("Repo version:  %s\n", repoVersion)
+
 	switch compareVersions(localVersion, repoVersion) {
 	case 0:
 		fmt.Printf("You are on the latest version (%s)\n", localVersion)
