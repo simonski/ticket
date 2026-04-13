@@ -300,7 +300,7 @@ Most teams use `ticket` in this order:
 Create a project:
 
 ```bash
-tk project create -prefix CUS -title "Customer Portal" -description "Portal backlog" -ac "Portal launch criteria"
+tk project create -prefix CUS -title "Customer Portal" -wow "Portal ways of working" -dor "Portal launch criteria" -dod "Launch done criteria"
 ```
 
 The project is now the default project.
@@ -374,6 +374,9 @@ Update a project:
 tk project CUS update -title "New project title"
 tk project CUS update -description "The new description"
 tk project CUS update -ac "The acceptance criteria"
+tk project CUS update -wow "Updated ways of working"
+tk project CUS update -dor "Updated definition of ready"
+tk project CUS update -dod "Updated definition of done"
 ```
 
 Enable or disable a project:
@@ -772,6 +775,7 @@ tk agent config-ls -id <uuid>
 tk agent config-rm -id <uuid> <key>
 
 tk project create -prefix ABC -title "..."
+tk project create -prefix ABC -title "..." -wow "Ways of working" -dor "Definition of ready" -dod "Definition of done"
 tk project init
 tk project list
 tk project ls
@@ -782,6 +786,9 @@ tk project <prefix-or-id>
 tk project <prefix-or-id> update -title "..."
 tk project <prefix-or-id> update -description "..."
 tk project <prefix-or-id> update -ac "..."
+tk project <prefix-or-id> update -wow "..."
+tk project <prefix-or-id> update -dor "..."
+tk project <prefix-or-id> update -dod "..."
 tk project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
 tk project <prefix-or-id> update -git-branch "main"
 tk project <prefix-or-id> enable
@@ -804,6 +811,7 @@ tk list -u <name>
 tk search "..."
 tk search "..." -allprojects
 tk get -id <key-or-id>
+tk prompt <key-or-id>
 tk edit [-id] <key-or-id>
 tk history <key-or-id>
 tk health <key-or-id>
@@ -861,7 +869,8 @@ tk sdlc list
 tk sdlc create -name <name> [-d <description>]
 tk sdlc get -id <id>
 tk sdlc delete -id <id>
-tk sdlc add-stage -id <sdlc-id> -name <name> [-d <desc>] [-order <n>]
+tk sdlc add-stage -id <sdlc-id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-order <n>]
+tk sdlc stage-update -stage-id <id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-ac <criteria>]
 tk sdlc remove-stage -stage-id <id>
 tk sdlc reorder-stages -id <sdlc-id> <stage_id,stage_id,...>
 tk sdlc export -id <id> [-o <file>]

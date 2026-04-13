@@ -23,7 +23,7 @@ Best for solo use, small projects, or getting started quickly.
 
 ```bash
 tk init
-tk project create -prefix MY -title "My Project"
+tk project create -prefix MY -title "My Project" -wow "Team working agreement" -dor "Ready to start criteria" -dod "Done criteria"
 tk project use MY
 tk add "First ticket"
 tk list
@@ -75,6 +75,7 @@ tk complete -id CUS-T-1              # mark ticket complete
 
 tk claim    -id CUS-T-1              # assign to yourself
 tk request                            # get the next available ticket
+tk prompt CUS-T-1                     # build a plaintext execution prompt
 ```
 
 ---
@@ -119,4 +120,3 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 
 When `TICKET_URL` is set the CLI communicates with a running `tk server`
 rather than opening the local database directly.
-

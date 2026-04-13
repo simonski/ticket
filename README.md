@@ -86,6 +86,7 @@ make test
 
 ```bash
 tk init                                          # create a repo-local .ticket/ workspace
+tk project create -prefix MY -title "My Project" -wow "Team ways of working" -dor "Ready criteria" -dod "Done criteria"
 tk add "First ticket"
 tk list
 ```
@@ -123,6 +124,7 @@ tk epic "Authentication"                  # create an epic
 tk idea new "Add dark mode"               # capture a requirement
 tk ls                                     # list open tickets
 tk summary                                # daily starting-point overview
+tk prompt MY-T-1                          # build a plaintext execution prompt
 ```
 
 ### Ticket lifecycle
