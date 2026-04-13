@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,14 +36,35 @@ func New(cfg config.Config) *Client {
 		resolved = config.Resolved{Mode: config.ModeLocal}
 	}
 	baseURL := strings.TrimRight(resolved.ServerURL, "/")
+	timeout := 30 * time.Second
+	if resolved.Mode == config.ModeRemote {
+		timeout = remoteTimeoutFromEnv()
+	}
 	return &Client{
 		baseURL: baseURL,
 		token:   cfg.Token,
 		http: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: timeout,
 		},
 		mode: resolved.Mode,
 	}
+}
+
+func remoteTimeoutFromEnv() time.Duration {
+	seconds := 5
+	raw := strings.TrimSpace(os.Getenv("TICKET_TIMEOUT"))
+	if raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			seconds = parsed
+		}
+	}
+	if seconds < 1 {
+		seconds = 1
+	}
+	if seconds > 30 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func (c *Client) Register(ctx context.Context, username, password string) (store.User, error) {

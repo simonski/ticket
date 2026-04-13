@@ -146,6 +146,45 @@ func TestNewSetsHTTPTimeout(t *testing.T) {
 	if api.http == nil {
 		t.Fatal("New().http = nil")
 	}
+	if api.http.Timeout != 5*time.Second {
+		t.Fatalf("New().http.Timeout = %s, want %s", api.http.Timeout, 5*time.Second)
+	}
+}
+
+func TestNewSetsHTTPTimeoutFromEnvClamped(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+		want time.Duration
+	}{
+		{name: "unset defaults to five", env: "", want: 5 * time.Second},
+		{name: "within range", env: "12", want: 12 * time.Second},
+		{name: "below one", env: "0", want: 1 * time.Second},
+		{name: "negative", env: "-5", want: 1 * time.Second},
+		{name: "above thirty", env: "99", want: 30 * time.Second},
+		{name: "invalid", env: "abc", want: 5 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.env == "" {
+				t.Setenv("TICKET_TIMEOUT", "")
+			} else {
+				t.Setenv("TICKET_TIMEOUT", tc.env)
+			}
+			api := New(config.Config{Location: "http://example.com"})
+			if api.http.Timeout != tc.want {
+				t.Fatalf("New().http.Timeout = %s, want %s (env=%q)", api.http.Timeout, tc.want, tc.env)
+			}
+		})
+	}
+}
+
+func TestNewLocalModeKeepsDefaultTimeout(t *testing.T) {
+	t.Parallel()
+	api := New(config.Config{})
+	if api.http == nil {
+		t.Fatal("New().http = nil")
+	}
 	if api.http.Timeout != 30*time.Second {
 		t.Fatalf("New().http.Timeout = %s, want %s", api.http.Timeout, 30*time.Second)
 	}

@@ -118,6 +118,7 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 | `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
 | `TICKET_USERNAME` | Default username for login/register |
 | `TICKET_PASSWORD` | Default password for login/register |
+| `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |

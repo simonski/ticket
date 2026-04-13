@@ -725,6 +725,7 @@ func printTicketEnvironment() {
 		"TICKET_URL",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
+		"TICKET_TIMEOUT",
 		"AGENT_ID",
 		"AGENT_PASSWORD",
 		"TICKET_AGENT_LLM",

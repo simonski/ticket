@@ -209,6 +209,7 @@ will query and update tickets automatically during coding sessions.
 | `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
 | `TICKET_USERNAME` | Default username for remote login |
 | `TICKET_PASSWORD` | Default password for remote login |
+| `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
 | `TICKET_TRUSTED_PROXY_CIDRS` | Comma-separated CIDRs trusted as reverse proxies for `X-Forwarded-For`/`X-Forwarded-Proto` handling |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
