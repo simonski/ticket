@@ -3685,6 +3685,96 @@ func TestRunEpicUseRejectsNonEpic(t *testing.T) {
 	}
 }
 
+func TestRunEpicGetReturnsExistingEpicAndDoesNotCreateTicket(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Lookup Epic"})
+
+	cfg, svc, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		t.Fatalf("resolveCurrentProjectClient() error = %v", err)
+	}
+	before, err := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, true)
+	if err != nil {
+		t.Fatalf("ListTicketsFiltered(before) error = %v", err)
+	}
+	_ = cfg
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"epic", "get", epicID}); err != nil {
+			t.Fatalf("epic get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Title", "Lookup Epic") {
+		t.Fatalf("epic get output missing epic details:\n%s", output)
+	}
+
+	after, err := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, true)
+	if err != nil {
+		t.Fatalf("ListTicketsFiltered(after) error = %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("epic get should not create tickets: before=%d after=%d", len(before), len(after))
+	}
+}
+
+func TestRunEpicGetRejectsNonEpic(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Not an epic"})
+	err := run([]string{"epic", "get", taskID})
+	if err == nil {
+		t.Fatal("expected error when getting a non-epic ticket via epic get")
+	}
+	if !strings.Contains(err.Error(), "is not an epic") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunBugGetReturnsExistingBugAndDoesNotCreateTicket(t *testing.T) {
+	setupLocalCLI(t)
+
+	bugID := createLocalTask(t, []string{"bug", "Lookup Bug"})
+	_, svc, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		t.Fatalf("resolveCurrentProjectClient() error = %v", err)
+	}
+	before, err := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, true)
+	if err != nil {
+		t.Fatalf("ListTicketsFiltered(before) error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"bug", "get", bugID}); err != nil {
+			t.Fatalf("bug get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Title", "Lookup Bug") {
+		t.Fatalf("bug get output missing bug details:\n%s", output)
+	}
+
+	after, err := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, true)
+	if err != nil {
+		t.Fatalf("ListTicketsFiltered(after) error = %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("bug get should not create tickets: before=%d after=%d", len(before), len(after))
+	}
+}
+
+func TestRunBugGetRejectsNonBug(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Not a bug"})
+	err := run([]string{"bug", "get", epicID})
+	if err == nil {
+		t.Fatal("expected error when getting a non-bug ticket via bug get")
+	}
+	if !strings.Contains(err.Error(), "is not a bug") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunEpicClearResetsEpicID(t *testing.T) {
 	setupLocalCLI(t)
 

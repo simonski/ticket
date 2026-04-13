@@ -366,22 +366,22 @@ var helpIndex = map[string]commandHelp{
 	},
 	"bug": {
 		usage:   "tk bug \"title\" [flags]",
-		details: []string{"Shortcut for `tk add -type bug`. Accepts the same flags as `tk add`."},
+		details: []string{"Shortcut for `tk add -type bug`. Accepts the same flags as `tk add`.", "Use `tk bug get <id>` to fetch an existing bug without creating a new ticket."},
 		example: "tk bug \"Reset token expires immediately\"",
 	},
 	"epic": {
 		usage:   "tk epic \"title\" [flags]",
-		details: []string{"Shortcut for `tk add -type epic`. Accepts the same flags as `tk add`."},
+		details: []string{"Shortcut for `tk add -type epic`. Accepts the same flags as `tk add`.", "Epic subcommands: `tk epic get <id>`, `tk epic use <id>`, `tk epic clear`, and `tk epic ls`."},
 		example: "tk epic \"Authentication\"",
 	},
 	"note": {
 		usage:   "tk note \"title\" [flags]",
-		details: []string{"Shortcut for `tk add -type note`. Accepts the same flags as `tk add`.", "Use notes to capture lightweight information that doesn't fit other ticket types."},
+		details: []string{"Shortcut for `tk add -type note`. Accepts the same flags as `tk add`.", "Use notes to capture lightweight information that doesn't fit other ticket types.", "Use `tk note get <id>` to fetch an existing note."},
 		example: "tk note \"Remember to update the README\"",
 	},
 	"question": {
 		usage:   "tk question \"title\" [flags]",
-		details: []string{"Shortcut for `tk add -type question`. Accepts the same flags as `tk add`.", "Use questions to track open decisions that need answering."},
+		details: []string{"Shortcut for `tk add -type question`. Accepts the same flags as `tk add`.", "Use questions to track open decisions that need answering.", "Use `tk question get <id>` to fetch an existing question."},
 		example: "tk question \"Should we use Postgres or SQLite?\"",
 	},
 	"board": {

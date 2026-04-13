@@ -149,9 +149,14 @@ func runStory(args []string) error {
 }
 
 func runEpic(args []string) error {
-	// Subcommands: use <id>, clear, list/ls — otherwise fall through to create
+	// Subcommands: get/use <id>, clear, list/ls — otherwise fall through to create
 	if len(args) > 0 {
 		switch args[0] {
+		case "get":
+			if len(args) != 2 {
+				return errors.New("usage: tk epic get <id>")
+			}
+			return runTypedTicketGet("epic", args[1])
 		case "use":
 			if len(args) != 2 {
 				return errors.New("usage: tk epic use <id>")

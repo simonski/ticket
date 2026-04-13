@@ -1910,7 +1910,39 @@ func runDeleteTicket(args []string) error {
 }
 
 func runTypedTicketCreate(ticketType string, args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "get", "show":
+			if len(args) != 2 {
+				return fmt.Errorf("usage: tk %s get <id>", ticketType)
+			}
+			return runTypedTicketGet(ticketType, args[1])
+		}
+	}
 	return runTicketCreate(append([]string{"-type", ticketType}, args...))
+}
+
+func runTypedTicketGet(ticketType, id string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	ticket, err := svc.GetTicket(context.Background(), id)
+	if err != nil {
+		return err
+	}
+	if ticket.Type != ticketType {
+		article := "a"
+		if strings.HasPrefix(ticketType, "a") || strings.HasPrefix(ticketType, "e") || strings.HasPrefix(ticketType, "i") || strings.HasPrefix(ticketType, "o") || strings.HasPrefix(ticketType, "u") {
+			article = "an"
+		}
+		return fmt.Errorf("ticket %s is not %s %s", id, article, ticketType)
+	}
+	return runGet([]string{"-id", id})
 }
 
 type ticketCreateOptions struct {
