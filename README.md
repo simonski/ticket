@@ -149,11 +149,27 @@ Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ```bash
 tk server                  # start on :8080
+tk server -f ./team.db     # use this exact database file
 ```
 
 Opens a Kanban board with live WebSocket updates at `http://localhost:8080`.
 
 See [QUICKSTART_SERVER.md](./QUICKSTART_SERVER.md) for multi-user server setup.
+
+### Remote client quick setup
+
+Use this when the server is already running (including from another laptop):
+
+```bash
+export TICKET_URL=http://server-host:8080
+export TICKET_USERNAME=alice
+export TICKET_PASSWORD=secret12
+tk status
+tk whoami
+```
+
+With all three env vars set, `tk` uses remote mode directly and does not require
+`tk init` or local `.ticket/config.json`.
 
 ---
 
@@ -204,6 +220,9 @@ untrusted input.
 
 When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, `tk`
 uses those values for remote mode even when local `.ticket/config.json` exists.
+
+For the server process, `tk server -f <db-file>` uses the exact file you pass
+and does not infer database location from env vars or `TICKET_HOME`.
 
 ---
 

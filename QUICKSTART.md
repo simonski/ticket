@@ -35,12 +35,16 @@ Run an HTTP server with multi-user auth, a web Kanban board, WebSocket live
 updates, and AI agent support. Best for teams, shared backlogs, and CI/CD.
 
 ```bash
-tk init
 tk server                              # start on :8080 (leave this running)
+# or pick an explicit DB file:
+tk server -f ./team.db
 # in another terminal:
 export TICKET_URL=http://localhost:8080
-tk register -username alice -password secret
-tk login    -username alice -password secret
+export TICKET_USERNAME=alice
+export TICKET_PASSWORD=secret
+tk register                            # uses env username/password
+tk login                               # uses env username/password
+tk status
 ```
 
 ---
@@ -123,3 +127,5 @@ rather than opening the local database directly.
 
 When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
 values take precedence over local `.ticket/config.json` and credentials.
+
+In that env-trio mode, client commands do not require `tk init`.

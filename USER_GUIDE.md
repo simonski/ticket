@@ -79,6 +79,7 @@ tk server
 ```
 
 If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `tk init`).
+If `-f` is provided, `tk server` uses that exact database file and does not infer DB location from env vars or `TICKET_HOME`.
 
 If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
@@ -107,6 +108,18 @@ If you are using the CLI against a running server on another host, configure TIC
 ```bash
 export TICKET_URL=http://your-server:8080
 ```
+
+For env-first remote mode (no local init/config required), set all three:
+
+```bash
+export TICKET_URL=http://your-server:8080
+export TICKET_USERNAME=alice
+export TICKET_PASSWORD=secret12
+tk status
+tk whoami
+```
+
+When all three are set, remote mode takes precedence over local `.ticket/config.json`.
 
 As an admin create users:
 
