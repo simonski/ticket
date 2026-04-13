@@ -22,10 +22,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		token := strings.TrimSpace(r.URL.Query().Get("token"))
-		if token == "" {
-			token = bearerToken(r)
-		}
+		token := bearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -48,10 +45,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		token := strings.TrimSpace(r.URL.Query().Get("token"))
-		if token == "" {
-			token = bearerToken(r)
-		}
+		token := bearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
