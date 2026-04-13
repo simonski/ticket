@@ -169,7 +169,8 @@ tk whoami
 ```
 
 With all three env vars set, `tk` uses remote mode directly and does not require
-`tk init` or local `.ticket/config.json`.
+`tk init` or local `.ticket/config.json`, and `tk login` is optional for normal
+CLI calls (the client auto-authenticates per session when needed).
 
 ---
 

@@ -700,6 +700,9 @@ func TestRunUsesRemoteEnvOverrideWithoutTicketInit(t *testing.T) {
 	if !strings.Contains(output, "username : admin") {
 		t.Fatalf("whoami output missing remote user identity:\n%s", output)
 	}
+	if !strings.Contains(output, "role     : admin") {
+		t.Fatalf("whoami output missing authenticated remote role:\n%s", output)
+	}
 }
 
 func TestEmbeddedVersionMatchesBuildVersionFile(t *testing.T) {

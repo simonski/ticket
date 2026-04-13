@@ -129,3 +129,4 @@ When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
 values take precedence over local `.ticket/config.json` and credentials.
 
 In that env-trio mode, client commands do not require `tk init`.
+`tk login` is optional in that mode because remote calls auto-authenticate.

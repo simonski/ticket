@@ -51,7 +51,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only. Logs into the server and stores the session token in $TICKET_HOME/credentials.json.", "When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those values override local config and are used directly.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
+		details: []string{"Remote mode only. Logs into the server and stores the session token in $TICKET_HOME/credentials.json.", "When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those values override local config and are used directly; `tk login` is optional for regular API calls in that mode.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
 		example: "tk login -username simon -password secret -url http://localhost:8080",
 	},
 	"register": {

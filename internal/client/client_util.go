@@ -138,33 +138,58 @@ func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, pa
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
-	var reader *bytes.Reader
-	if body == nil {
-		reader = bytes.NewReader(nil)
-	} else {
-		payload, err := json.Marshal(body)
+	var payload []byte
+	if body != nil {
+		encoded, err := json.Marshal(body)
 		if err != nil {
 			return err
 		}
-		reader = bytes.NewReader(payload)
+		payload = encoded
 	}
 
-	httpRequest, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
+	if c.shouldAutoAuthenticate(path) && c.token == "" {
+		if err := c.authenticateFromEnvironment(ctx); err != nil {
+			return err
+		}
+	}
+
+	send := func(token string) (*http.Response, error) {
+		httpRequest, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(payload))
+		if err != nil {
+			return nil, err
+		}
+		if body != nil {
+			httpRequest.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			httpRequest.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := c.http.Do(httpRequest)
+		if err != nil {
+			return nil, friendlyConnectionError(err, c.baseURL)
+		}
+		return resp, nil
+	}
+
+	resp, err := send(c.token)
 	if err != nil {
 		return err
 	}
-	if body != nil {
-		httpRequest.Header.Set("Content-Type", "application/json")
-	}
-	if c.token != "" {
-		httpRequest.Header.Set("Authorization", "Bearer "+c.token)
-	}
-
-	resp, err := c.http.Do(httpRequest)
-	if err != nil {
-		return friendlyConnectionError(err, c.baseURL)
-	}
 	defer resp.Body.Close()
+
+	// Env-based remote auth behaves like a stateless client: if token expired,
+	// refresh it and retry once.
+	if resp.StatusCode == http.StatusUnauthorized && c.shouldAutoAuthenticate(path) {
+		c.token = ""
+		if err := c.authenticateFromEnvironment(ctx); err == nil && c.token != "" {
+			resp.Body.Close()
+			resp, err = send(c.token)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+		}
+	}
 
 	if resp.StatusCode >= 400 {
 		var apiErr struct {
@@ -180,4 +205,30 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func (c *Client) shouldAutoAuthenticate(path string) bool {
+	if c.mode != config.ModeRemote || !config.HasRemoteEnvOverride() {
+		return false
+	}
+	switch path {
+	case "/api/login", "/api/register":
+		return false
+	default:
+		return true
+	}
+}
+
+func (c *Client) authenticateFromEnvironment(ctx context.Context) error {
+	username := getenvFirst("TICKET_USERNAME")
+	password := getenvFirst("TICKET_PASSWORD")
+	if username == "" || password == "" {
+		return errors.New("TICKET_USERNAME and TICKET_PASSWORD are required when TICKET_URL is set")
+	}
+	response, err := c.Login(ctx, username, password)
+	if err != nil {
+		return err
+	}
+	c.token = response.Token
+	return nil
 }

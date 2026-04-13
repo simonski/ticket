@@ -120,6 +120,8 @@ tk whoami
 ```
 
 When all three are set, remote mode takes precedence over local `.ticket/config.json`.
+In this mode, `tk login` is optional for normal commands because the client
+auto-authenticates when issuing remote API calls.
 
 As an admin create users:
 
