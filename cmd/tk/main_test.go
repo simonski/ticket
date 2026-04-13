@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"reflect"
 	"strconv"
 	"strings"
@@ -22,6 +23,16 @@ import (
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
+
+func hasDetailLabel(output, label string) bool {
+	pattern := `(?m)^` + regexp.QuoteMeta(label) + `\s+:`
+	return regexp.MustCompile(pattern).MatchString(output)
+}
+
+func hasDetailField(output, label, value string) bool {
+	pattern := `(?m)^` + regexp.QuoteMeta(label) + `\s+:\s` + regexp.QuoteMeta(value) + `$`
+	return regexp.MustCompile(pattern).MatchString(output)
+}
 
 // setTestLocation writes a config.json to the test's TICKET_HOME with the given location.
 func setTestLocation(t *testing.T, location string) {
@@ -174,7 +185,7 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 			t.Fatalf("run(get restored) error = %v", err)
 		}
 	})
-	if !strings.Contains(getOutput, "Key          :") {
+	if !hasDetailLabel(getOutput, "Key") {
 		t.Fatalf("restored get output missing key field:\n%s", getOutput)
 	}
 }
@@ -1104,25 +1115,36 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 		}, nil, nil, 0, "", "")
 	})
 
+	for _, tc := range []struct {
+		label string
+		value string
+	}{
+		{label: "Type", value: "task"},
+		{label: "Description", value: "Example description"},
+		{label: "Title", value: "Example Task"},
+		{label: "Assignee", value: ""},
+		{label: "Order", value: "0"},
+		{label: "EstimateEffort", value: "3"},
+		{label: "EstimateComplete", value: "2026-04-01T12:00:00Z"},
+		{label: "DependsOn", value: "[]"},
+		{label: "Status", value: "develop/idle"},
+		{label: "Stage", value: "develop"},
+		{label: "State", value: "idle"},
+		{label: "Priority", value: "1"},
+		{label: "Created", value: "2026-03-01 12:00:00"},
+		{label: "LastModified", value: "2026-03-02 09:30:00"},
+	} {
+		if !hasDetailField(output, tc.label, tc.value) {
+			t.Fatalf("printTicketDetails() missing %s field:\n%s", tc.label, output)
+		}
+	}
+	if !hasDetailLabel(output, "Acceptance Criteria") || !strings.Contains(output, "- does the thing") {
+		t.Fatalf("printTicketDetails() missing acceptance criteria:\n%s", output)
+	}
 	for _, want := range []string{
-		"Type         : task",
-		"Description  : Example description",
-		"Title        : Example Task",
-		"Assignee     : ",
-		"Order        : 0",
-		"EstimateEffort   : 3",
-		"EstimateComplete : 2026-04-01T12:00:00Z",
-		"DependsOn    : []",
-		"Status       : develop/idle",
-		"Stage        : develop",
-		"State        : idle",
-		"Priority     : 1",
-		"Created      : 2026-03-01 12:00:00",
-		"LastModified : 2026-03-02 09:30:00",
-		"Acceptance Criteria : - does the thing",
-		"Comments     :",
+		"Comments",
 		"[2026-03-02 10:00:00] alice: latest comment",
-		"History      :",
+		"History",
 		"[2026-03-01 12:00:00] created",
 	} {
 		if !strings.Contains(output, want) {
@@ -1525,10 +1547,22 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{"Title        : Ticket Alpha", "Description  : findable description", "Acceptance Criteria : ship it", "EstimateEffort   : 8", "EstimateComplete : 2026-04-20T17:00:00Z", "latest note"} {
-		if !strings.Contains(getOutput, want) {
-			t.Fatalf("get output missing %q:\n%s", want, getOutput)
+	for _, tc := range []struct {
+		label string
+		value string
+	}{
+		{label: "Title", value: "Ticket Alpha"},
+		{label: "Description", value: "findable description"},
+		{label: "Acceptance Criteria", value: "ship it"},
+		{label: "EstimateEffort", value: "8"},
+		{label: "EstimateComplete", value: "2026-04-20T17:00:00Z"},
+	} {
+		if !hasDetailField(getOutput, tc.label, tc.value) {
+			t.Fatalf("get output missing %s field:\n%s", tc.label, getOutput)
 		}
+	}
+	if !strings.Contains(getOutput, "latest note") {
+		t.Fatalf("get output missing latest note:\n%s", getOutput)
 	}
 
 	searchOutput := captureStdout(t, func() {
@@ -1655,9 +1689,8 @@ func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
 				t.Fatalf("get error = %v", err)
 			}
 		})
-		want := "Parent       : " + ticketLabelByID(t, epicID)
-		if !strings.Contains(getOutput, want) {
-			t.Fatalf("get output missing %q:\n%s", want, getOutput)
+		if !hasDetailField(getOutput, "Parent", ticketLabelByID(t, epicID)) {
+			t.Fatalf("get output missing parent field:\n%s", getOutput)
 		}
 	}
 }
@@ -1788,19 +1821,22 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{
-		"Title        : Ticket Beta",
-		"Description  : new description",
-		"Parent       : " + ticketLabelByID(t, parentID),
-		"Order        : 7",
-		"EstimateEffort   : 5",
-		"EstimateComplete : 2026-04-15T12:00:00Z",
-		"Status       : design/active",
-		"Priority     : 3",
-		"Acceptance Criteria : new ac",
+	for _, tc := range []struct {
+		label string
+		value string
+	}{
+		{label: "Title", value: "Ticket Beta"},
+		{label: "Description", value: "new description"},
+		{label: "Parent", value: ticketLabelByID(t, parentID)},
+		{label: "Order", value: "7"},
+		{label: "EstimateEffort", value: "5"},
+		{label: "EstimateComplete", value: "2026-04-15T12:00:00Z"},
+		{label: "Status", value: "design/active"},
+		{label: "Priority", value: "3"},
+		{label: "Acceptance Criteria", value: "new ac"},
 	} {
-		if !strings.Contains(getOutput, want) {
-			t.Fatalf("get output missing %q:\n%s", want, getOutput)
+		if !hasDetailField(getOutput, tc.label, tc.value) {
+			t.Fatalf("get output missing %s field:\n%s", tc.label, getOutput)
 		}
 	}
 }
@@ -1819,7 +1855,7 @@ func TestRunUpdateSupportsDescriptionAlias(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	if !strings.Contains(output, "Description  : updated description") {
+	if !hasDetailField(output, "Description", "updated description") {
 		t.Fatalf("get output = %q", output)
 	}
 }
@@ -1893,7 +1929,7 @@ func TestRunDraftAndUndraftToggleDraftFlag(t *testing.T) {
 			t.Fatalf("get after draft error = %v", err)
 		}
 	})
-	if !strings.Contains(draftOutput, "Draft        : true") {
+	if !hasDetailField(draftOutput, "Draft", "true") {
 		t.Fatalf("draft output missing draft=true:\n%s", draftOutput)
 	}
 
@@ -1906,7 +1942,7 @@ func TestRunDraftAndUndraftToggleDraftFlag(t *testing.T) {
 			t.Fatalf("get after undraft error = %v", err)
 		}
 	})
-	if !strings.Contains(undraftOutput, "Draft        : false") {
+	if !hasDetailField(undraftOutput, "Draft", "false") {
 		t.Fatalf("undraft output missing draft=false:\n%s", undraftOutput)
 	}
 }
@@ -2007,13 +2043,8 @@ func TestRunTaskCreateSupportsInterspersedFlags(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{
-		"Title        : the thing",
-		"Type         : epic",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("interspersed add output missing %q:\n%s", want, output)
-		}
+	if !hasDetailField(output, "Title", "the thing") || !hasDetailField(output, "Type", "epic") {
+		t.Fatalf("interspersed add output missing required fields:\n%s", output)
 	}
 }
 
@@ -2027,14 +2058,17 @@ func TestRunTypedTaskCreateSupportsEstimateFlags(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{
-		"Title        : Estimated Epic",
-		"Type         : epic",
-		"EstimateEffort   : 8",
-		"EstimateComplete : 2026-04-20T17:00:00Z",
+	for _, tc := range []struct {
+		label string
+		value string
+	}{
+		{label: "Title", value: "Estimated Epic"},
+		{label: "Type", value: "epic"},
+		{label: "EstimateEffort", value: "8"},
+		{label: "EstimateComplete", value: "2026-04-20T17:00:00Z"},
 	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("typed create output missing %q:\n%s", want, output)
+		if !hasDetailField(output, tc.label, tc.value) {
+			t.Fatalf("typed create output missing %s field:\n%s", tc.label, output)
 		}
 	}
 }
@@ -2062,14 +2096,8 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{
-		"Title        : foo",
-		"Type         : epic",
-		"Key          :",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("default project fallback output missing %q:\n%s", want, output)
-		}
+	if !hasDetailField(output, "Title", "foo") || !hasDetailField(output, "Type", "epic") || !hasDetailLabel(output, "Key") {
+		t.Fatalf("default project fallback output missing expected fields:\n%s", output)
 	}
 
 	reloaded, err := config.Load()
@@ -2303,10 +2331,8 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 			t.Fatalf("get error = %v", err)
 		}
 	})
-	for _, want := range []string{"History      :", "created task"} {
-		if !strings.Contains(getOutput, want) {
-			t.Fatalf("get output missing %q:\n%s", want, getOutput)
-		}
+	if !hasDetailLabel(getOutput, "History") || !strings.Contains(getOutput, "created task") {
+		t.Fatalf("get output missing history:\n%s", getOutput)
 	}
 
 	orphansOutput := captureStdout(t, func() {
