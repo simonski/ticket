@@ -15,7 +15,12 @@ services:
   watchtower:
     image: containrrr/watchtower:latest
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.50"
     command: --interval 300
     read_only: true
     security_opt:
