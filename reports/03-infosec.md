@@ -113,7 +113,7 @@ The next clear gains would come from nonce-based CSP, tighter username validatio
 | TK-158 | Migrate to nonce-based CSP for scripts and styles | `f64d009` (audit confirmation) | Done |
 | TK-159 | Use cookie auth for WebSocket or document and mitigate log exposure | `ca92b5f` | Done |
 | TK-160 | Add trusted-proxy CIDR config; parse X-Forwarded-For conditionally | `1b398f4` (audit confirmation) | Done |
-| TK-161 | Document security requirements; consider allow-listing executables | `(this commit)` | Done |
+| TK-161 | Document security requirements; consider allow-listing executables | `d302834` | Done |
 | TK-162 | Set explicit 30s timeout on `internal/client` HTTP client | `8778bc8` | Done |
 | TK-163 | Restrict to `^[a-zA-Z0-9._-]+$` | `25ca883` | Done |
 | TK-164 | Pin base images to `@sha256:` digests | `69d171f` (audit confirmation) | Done |
