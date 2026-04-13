@@ -230,7 +230,7 @@ func TestSetTicketHealth(t *testing.T) {
 	if reloaded.HealthScore != 3 {
 		t.Fatalf("GetTicket().HealthScore = %d, want 3", reloaded.HealthScore)
 	}
-	if _, err := SetTicketHealth(context.Background(), db, ticket.ID, 6); err == nil {
+	if _, err := SetTicketHealth(context.Background(), db, ticket.ID, 11); err == nil {
 		t.Fatalf("SetTicketHealth(out of range) = nil, want error")
 	}
 	if _, err := SetTicketHealth(context.Background(), db, "9999", 1); !errors.Is(err, ErrTicketNotFound) {

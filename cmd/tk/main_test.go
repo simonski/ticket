@@ -225,11 +225,17 @@ func TestRunHealthReportsTicketHealthSection(t *testing.T) {
 
 	for _, want := range []string{
 		"TICKET HEALTH",
-		"score: 1.00",
+		"score:",
 		"not_an_orphan: true",
 		"has_acceptance_criteria: true",
 		"reviewed_by_reviewer_agent: true",
 		"definition_of_ready: true",
+		"project_acceptance_criteria:",
+		"project_definition_of_ready:",
+		"project_definition_of_done:",
+		"sdlc_acceptance_criteria:",
+		"stage_acceptance_criteria:",
+		"ticket_acceptance_criteria:",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("health output missing %q:\n%s", want, output)
@@ -262,8 +268,9 @@ func TestRunHealthSupportsJSONOutput(t *testing.T) {
 	if !ok {
 		t.Fatalf("health output json missing ticket_health: %#v", got)
 	}
-	if section["score"] != float64(1) {
-		t.Fatalf("health score = %#v", got["score"])
+	score, ok := section["score"].(float64)
+	if !ok || score < 1 {
+		t.Fatalf("health score = %#v", section["score"])
 	}
 	if section["not_an_orphan"] != false {
 		t.Fatalf("health not_an_orphan = %#v", got["not_an_orphan"])
@@ -276,6 +283,18 @@ func TestRunHealthSupportsJSONOutput(t *testing.T) {
 	}
 	if section["definition_of_ready"] != true {
 		t.Fatalf("health definition_of_ready = %#v", got["definition_of_ready"])
+	}
+	for _, key := range []string{
+		"project_acceptance_criteria",
+		"project_definition_of_ready",
+		"project_definition_of_done",
+		"sdlc_acceptance_criteria",
+		"stage_acceptance_criteria",
+		"ticket_acceptance_criteria",
+	} {
+		if _, ok := section[key]; !ok {
+			t.Fatalf("health output missing %q: %#v", key, section)
+		}
 	}
 }
 

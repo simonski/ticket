@@ -816,8 +816,8 @@ func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 }
 
 func SetTicketHealth(ctx context.Context, db *sql.DB, id string, score int) (Ticket, error) {
-	if score < 0 || score > 4 {
-		return Ticket{}, errors.New("health score must be between 0 and 4")
+	if score < 0 || score > 10 {
+		return Ticket{}, errors.New("health score must be between 0 and 10")
 	}
 	current, err := GetTicket(ctx, db, id)
 	if err != nil {

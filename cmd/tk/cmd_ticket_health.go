@@ -51,7 +51,10 @@ func runHealth(args []string) error {
 			if err != nil {
 				return err
 			}
-			checks := ticketHealthCheck(ticket, comments)
+			checks, err := ticketHealthCheck(context.Background(), svc, ticket, comments)
+			if err != nil {
+				return err
+			}
 			updated, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score)
 			if err != nil {
 				return err
@@ -64,6 +67,12 @@ func runHealth(args []string) error {
 				"has_acceptance_criteria":    checks.hasAC,
 				"reviewed_by_reviewer_agent": checks.reviewedByReviewer,
 				"definition_of_ready":        checks.ready,
+				"project_acceptance_criteria": checks.projectAC,
+				"project_definition_of_ready": checks.projectDoR,
+				"project_definition_of_done":  checks.projectDoD,
+				"sdlc_acceptance_criteria":    checks.sdlcAC,
+				"stage_acceptance_criteria":   checks.stageAC,
+				"ticket_acceptance_criteria":  checks.ticketAC,
 				"persisted_score":            updated.HealthScore,
 			}
 			results = append(results, result)
@@ -86,7 +95,7 @@ func runHealth(args []string) error {
 				label = key
 			}
 			if score, ok := result["score"].(int); ok {
-				fmt.Printf("%s\t%.2f\n", label, float64(score)/4.0)
+				fmt.Printf("%s\t%.2f\n", label, float64(score)/float64(checksTotal()))
 			} else {
 				fmt.Printf("%s\t%s\n", label, fmt.Sprintf("%v", result["score"]))
 			}
@@ -103,7 +112,10 @@ func runHealth(args []string) error {
 		return err
 	}
 
-	checks := ticketHealthCheck(ticket, comments)
+	checks, err := ticketHealthCheck(context.Background(), svc, ticket, comments)
+	if err != nil {
+		return err
+	}
 	updated, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score)
 	if err != nil {
 		return err
@@ -114,6 +126,12 @@ func runHealth(args []string) error {
 		"has_acceptance_criteria":    checks.hasAC,
 		"reviewed_by_reviewer_agent": checks.reviewedByReviewer,
 		"definition_of_ready":        checks.ready,
+		"project_acceptance_criteria": checks.projectAC,
+		"project_definition_of_ready": checks.projectDoR,
+		"project_definition_of_done":  checks.projectDoD,
+		"sdlc_acceptance_criteria":    checks.sdlcAC,
+		"stage_acceptance_criteria":   checks.stageAC,
+		"ticket_acceptance_criteria":  checks.ticketAC,
 	}
 	if outputJSON {
 		return printJSON(map[string]any{
@@ -126,11 +144,17 @@ func runHealth(args []string) error {
 		})
 	}
 	fmt.Println("TICKET HEALTH")
-	fmt.Printf("score: %.2f\n", float64(checks.score)/4.0)
+	fmt.Printf("score: %.2f\n", float64(checks.score)/float64(checksTotal()))
 	fmt.Printf("not_an_orphan: %t\n", checks.notOrphan)
 	fmt.Printf("has_acceptance_criteria: %t\n", checks.hasAC)
 	fmt.Printf("reviewed_by_reviewer_agent: %t\n", checks.reviewedByReviewer)
 	fmt.Printf("definition_of_ready: %t\n", checks.ready)
+	fmt.Printf("project_acceptance_criteria: %t\n", checks.projectAC)
+	fmt.Printf("project_definition_of_ready: %t\n", checks.projectDoR)
+	fmt.Printf("project_definition_of_done: %t\n", checks.projectDoD)
+	fmt.Printf("sdlc_acceptance_criteria: %t\n", checks.sdlcAC)
+	fmt.Printf("stage_acceptance_criteria: %t\n", checks.stageAC)
+	fmt.Printf("ticket_acceptance_criteria: %t\n", checks.ticketAC)
 	return nil
 }
 
@@ -140,11 +164,18 @@ type ticketHealthResult struct {
 	hasAC              bool
 	reviewedByReviewer bool
 	ready              bool
+	projectAC          bool
+	projectDoR         bool
+	projectDoD         bool
+	sdlcAC             bool
+	stageAC            bool
+	ticketAC           bool
 }
 
-func ticketHealthCheck(ticket store.Ticket, comments []store.Comment) ticketHealthResult {
+func ticketHealthCheck(ctx context.Context, svc libticket.Service, ticket store.Ticket, comments []store.Comment) (ticketHealthResult, error) {
 	notOrphan := ticket.Type == "epic" || ticket.ParentID != nil
-	hasAC := strings.TrimSpace(ticket.AcceptanceCriteria) != ""
+	ticketAC := strings.TrimSpace(ticket.AcceptanceCriteria) != ""
+	hasAC := ticketAC
 	reviewedByReviewer := hasReviewerAgentComment(comments)
 	ready := ticket.Status == "develop/idle"
 	if !ready {
@@ -153,7 +184,42 @@ func ticketHealthCheck(ticket store.Ticket, comments []store.Comment) ticketHeal
 			ready = stage == store.StageDevelop && state == store.StateIdle
 		}
 	}
-	checks := []bool{notOrphan, hasAC, reviewedByReviewer, ready}
+
+	project, err := svc.GetProject(ctx, strconv.FormatInt(ticket.ProjectID, 10))
+	if err != nil {
+		return ticketHealthResult{}, err
+	}
+	projectAC := strings.TrimSpace(project.AcceptanceCriteria) != ""
+	// Project DoR currently maps to the project's acceptance criteria field.
+	projectDoR := projectAC
+	projectDoD := strings.TrimSpace(project.Notes) != ""
+
+	sdlcAC := false
+	stageAC := false
+	sdlcID := ticket.SdlcID
+	if sdlcID == nil {
+		sdlcID = project.SdlcID
+	}
+	if sdlcID != nil {
+		wf, wfErr := svc.GetSdlc(ctx, *sdlcID)
+		if wfErr != nil {
+			return ticketHealthResult{}, wfErr
+		}
+		sdlcAC = strings.TrimSpace(wf.Description) != ""
+		stage, stageErr := resolveStageForPrompt(ctx, svc, ticket, project)
+		if stageErr != nil {
+			return ticketHealthResult{}, stageErr
+		}
+		if stage != nil {
+			stageAC = strings.TrimSpace(stage.DefinitionOfReady) != "" || strings.TrimSpace(stage.AcceptanceCriteria) != ""
+		}
+	}
+
+	checks := []bool{
+		notOrphan, hasAC, reviewedByReviewer, ready,
+		projectAC, projectDoR, projectDoD,
+		sdlcAC, stageAC, ticketAC,
+	}
 	score := 0
 	for _, ok := range checks {
 		if ok {
@@ -166,7 +232,17 @@ func ticketHealthCheck(ticket store.Ticket, comments []store.Comment) ticketHeal
 		hasAC:              hasAC,
 		reviewedByReviewer: reviewedByReviewer,
 		ready:              ready,
-	}
+		projectAC:          projectAC,
+		projectDoR:         projectDoR,
+		projectDoD:         projectDoD,
+		sdlcAC:             sdlcAC,
+		stageAC:            stageAC,
+		ticketAC:           ticketAC,
+	}, nil
+}
+
+func checksTotal() int {
+	return 10
 }
 
 func hasReviewerAgentComment(comments []store.Comment) bool {
@@ -306,11 +382,15 @@ Targets:
 					continue
 				}
 				comments, _ := svc.ListComments(context.Background(), t.ID)
-				checks := ticketHealthCheck(t, comments)
+				checks, checkErr := ticketHealthCheck(context.Background(), svc, t, comments)
+				if checkErr != nil {
+					fmt.Printf("  [ERR] %s: %v\n", t.ID, checkErr)
+					continue
+				}
 				if _, err := svc.SetTicketHealth(context.Background(), t.ID, checks.score); err != nil {
 					fmt.Printf("  [ERR] %s: %v\n", t.ID, err)
 				} else {
-					fmt.Printf("  %s: score %d/4\n", t.ID, checks.score)
+					fmt.Printf("  %s: score %d/%d\n", t.ID, checks.score, checksTotal())
 				}
 			}
 		}
@@ -439,9 +519,12 @@ Targets:
 
 		// Health score
 		comments, _ := svc.ListComments(context.Background(), ticket.ID)
-		checks := ticketHealthCheck(ticket, comments)
+		checks, checkErr := ticketHealthCheck(context.Background(), svc, ticket, comments)
+		if checkErr != nil {
+			return checkErr
+		}
 		if _, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score); err == nil {
-			fmt.Printf("\nHealth score: %d/4\n", checks.score)
+			fmt.Printf("\nHealth score: %d/%d\n", checks.score, checksTotal())
 		}
 		return nil
 
