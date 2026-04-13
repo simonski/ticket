@@ -21,6 +21,7 @@ LICENSE
 
 # Local data
 .ticket/
+.env*
 *.db
 *.db-shm
 *.db-wal
