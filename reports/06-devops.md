@@ -58,13 +58,13 @@ The DevOps posture remains strong in this pass. Go version alignment, CI linting
 - The earlier CI alignment and lint/cache improvements remain intact
 - The same supply-chain and deploy-compose hardening work remains open
 
-## Remaining recommendations
+## Recommendation implementation evidence (TK-124)
 
-| Finding | Severity | Recommendation |
-|---------|----------|----------------|
-| Pin GitHub Actions to SHA digests | Medium | Prevents supply-chain compromise of action versions |
-| Pin Docker base images to SHA digests | Medium | Ensures reproducible, tamper-resistant builds |
-| Harden deploy compose (resource limits, read-only socket) | Medium | `deploy/compose.yaml` watchtower needs limits and `:ro` on socket |
-| Add `.env*` to `.dockerignore` | Low | Prevent accidental secret inclusion in image |
-| Add Playwright tests to CI | Low | Browser tests run locally but not in pipeline |
-| Guard against duplicate releases | Low | Check if release exists before `gh release create` |
+| Finding | Ticket | Commit | Result |
+|---------|--------|--------|--------|
+| Pin GitHub Actions to SHA digests | TK-179 | `4c36b0d` | Pinned `actions/checkout`, `actions/setup-go`, and `docker/login-action` to immutable commit SHAs in CI workflow |
+| Pin Docker base images to SHA digests | TK-180 | `79d42e8` | Verified builder and runtime base images are pinned to `@sha256:` digests in `Dockerfile` |
+| Harden deploy compose (resource limits, read-only socket) | TK-181 | `4c94bba` | Added `:ro` Docker socket mount and `deploy.resources.limits` for watchtower |
+| Add `.env*` to `.dockerignore` | TK-182 | `def9462` | Added `.env*` to `.dockerignore` to reduce accidental secret inclusion |
+| Add Playwright tests to CI | TK-183 | `1b9bfe4` | Added dedicated Playwright job and made publish depend on it |
+| Guard against duplicate releases | TK-184 | `50785ce` | Added preflight `gh release view` guard before `gh release create` |

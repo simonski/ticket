@@ -193,6 +193,10 @@ release-formula:
 	@echo "Formula written to homebrew/ticket.rb"
 
 release-publish: release-build release-checksums release-sbom release-formula
+	@if gh release view v$(VERSION) --repo $(GITHUB_REPO) >/dev/null 2>&1; then \
+		echo "Release v$(VERSION) already exists; aborting."; \
+		exit 1; \
+	fi
 	@echo "Creating GitHub release v$(VERSION)..."
 	@gh release create v$(VERSION) \
 		--repo $(GITHUB_REPO) \
