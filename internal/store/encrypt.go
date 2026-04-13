@@ -3,7 +3,9 @@ package store
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -12,17 +14,21 @@ import (
 	"strings"
 )
 
-// encryptionKey returns the 32-byte AES key from the TICKET_ENCRYPTION_KEY
-// environment variable. Returns nil if unset (encryption disabled).
+// encryptionKey derives a 32-byte AES key from TICKET_ENCRYPTION_KEY using HKDF-SHA256.
+// Returns nil if unset (encryption disabled).
 func encryptionKey() ([]byte, error) {
 	raw := strings.TrimSpace(os.Getenv("TICKET_ENCRYPTION_KEY"))
 	if raw == "" {
 		return nil, nil
 	}
-	if len(raw) != 32 {
-		return nil, fmt.Errorf("TICKET_ENCRYPTION_KEY must be exactly 32 bytes")
+	if len(raw) < 32 {
+		return nil, fmt.Errorf("TICKET_ENCRYPTION_KEY must be at least 32 bytes")
 	}
-	return []byte(raw), nil
+	key, err := hkdf.Key(sha256.New, []byte(raw), nil, "ticket/email-key/v1", 32)
+	if err != nil {
+		return nil, fmt.Errorf("derive encryption key: %w", err)
+	}
+	return key, nil
 }
 
 // EncryptEmail encrypts an email address using AES-256-GCM.

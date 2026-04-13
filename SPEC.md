@@ -534,7 +534,7 @@ Claim is a server-mediated assignment using the authenticated user.
 
 - **Registration:** username + password → Argon2id hash → stored in DB
 - **Login:** verify hash → create session → return token
-- **Session validation:** Bearer token in `Authorization` header, or `ticket_token` cookie, or `?token=` query param
+- **Session validation:** Bearer token in `Authorization` header, or session cookie (`__Host-session` on secure requests; legacy `ticket_token` supported)
 - **Agent auth:** HTTP Basic Auth with agent UUID + password
 
 ### 8.2 Authorization
@@ -865,7 +865,7 @@ See [`openapi.yaml`](./openapi.yaml) for the full OpenAPI 3.1 specification.
 
 1. **Security headers** — `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Strict-Transport-Security` (HTTPS)
 2. **Logging** — request method, path, status, size, duration (verbose mode)
-3. **Authentication** — Bearer token, cookie (`ticket_token`), or `?token=` query param
+3. **Authentication** — Bearer token or session cookie (`__Host-session` on secure requests; legacy `ticket_token` supported)
 4. **Rate limiting** — 10 req/min per IP on auth endpoints
 
 ### 13.2 Endpoint Summary

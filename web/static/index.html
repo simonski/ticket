@@ -5496,10 +5496,7 @@
         if (socketRetry) clearTimeout(socketRetry);
         wsHealthy = false;
         const protocol = location.protocol === "https:" ? "wss" : "ws";
-        const wsToken = token || localStorage.getItem("task-token") || "";
-        const wsURL = wsToken
-          ? `${protocol}://${location.host}/api/ws?token=${encodeURIComponent(wsToken)}`
-          : `${protocol}://${location.host}/api/ws`;
+        const wsURL = `${protocol}://${location.host}/api/ws`;
         socket = new WebSocket(wsURL);
         socket.onopen = () => {
           wsHealthy = true;
@@ -5691,10 +5688,7 @@
         if (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING)) return;
         if (chatSocketRetry) clearTimeout(chatSocketRetry);
         const protocol = location.protocol === "https:" ? "wss" : "ws";
-        const wsToken = token || localStorage.getItem("task-token") || "";
-        const wsURL = wsToken
-          ? `${protocol}://${location.host}/api/chat/ws?token=${encodeURIComponent(wsToken)}`
-          : `${protocol}://${location.host}/api/chat/ws`;
+        const wsURL = `${protocol}://${location.host}/api/chat/ws`;
         chatSocket = new WebSocket(wsURL);
         chatSocket.onmessage = (evt) => {
           let msg = {};

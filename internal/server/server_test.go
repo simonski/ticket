@@ -125,11 +125,28 @@ func TestCSRFCookieSecureWithForwardedProto(t *testing.T) {
 	handler.ServeHTTP(resp, req)
 
 	setCookie := resp.Header().Get("Set-Cookie")
-	if !strings.Contains(setCookie, "_csrf=") {
+	if !strings.Contains(setCookie, "__Host-_csrf=") {
 		t.Fatalf("Set-Cookie = %q, want CSRF cookie", setCookie)
 	}
 	if !strings.Contains(setCookie, "Secure") {
 		t.Fatalf("Set-Cookie = %q, want Secure attribute", setCookie)
+	}
+}
+
+func TestSecurityHeadersAddsHSTSWhenSecure(t *testing.T) {
+	t.Parallel()
+
+	handler := securityHeadersHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if got := resp.Header().Get("Strict-Transport-Security"); got == "" {
+		t.Fatal("Strict-Transport-Security header = empty, want value for secure request")
 	}
 }
 

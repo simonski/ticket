@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -700,6 +701,9 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 		llmCmd = fmt.Sprintf("codex exec < %s", promptFile)
 		cmd = exec.Command("sh", "-c", llmCmd) //nolint:gosec // hardcoded trusted command
 	default:
+		if err := validateLLMBinary(agent); err != nil {
+			return "", err
+		}
 		llmCmd = fmt.Sprintf("%s -p < %s", agent, promptFile)
 		f, err := os.Open(promptFile)
 		if err != nil {
@@ -760,4 +764,43 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+var llmBinaryNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+func validateLLMBinary(agent string) error {
+	agent = strings.TrimSpace(agent)
+	if agent == "" {
+		return errors.New("llm binary is required")
+	}
+	if !llmBinaryNamePattern.MatchString(agent) || strings.Contains(agent, "..") || strings.Contains(agent, "/") || strings.Contains(agent, "\\") {
+		return fmt.Errorf("invalid llm binary %q: only [a-zA-Z0-9._-] names are allowed", agent)
+	}
+
+	allowed := allowedLLMBinaries()
+	if _, ok := allowed[agent]; ok {
+		return nil
+	}
+
+	known := make([]string, 0, len(allowed))
+	for name := range allowed {
+		known = append(known, name)
+	}
+	sort.Strings(known)
+	return fmt.Errorf("llm binary %q is not in the allow-list (%s)", agent, strings.Join(known, ", "))
+}
+
+func allowedLLMBinaries() map[string]struct{} {
+	allowed := map[string]struct{}{
+		"claude": {},
+		"codex":  {},
+	}
+	for _, part := range strings.Split(envValue("TICKET_AGENT_ALLOWED_LLM_BINARIES"), ",") {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		allowed[name] = struct{}{}
+	}
+	return allowed
 }

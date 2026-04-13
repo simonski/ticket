@@ -255,6 +255,9 @@ func securityHeadersHandler(next http.Handler) http.Handler {
 		nonce := cspNonce()
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
+		if requestIsSecure(r) {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		w.Header().Set("Content-Security-Policy",
 			fmt.Sprintf("default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'nonce-%s'", nonce, nonce))
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cspNonceKey{}, nonce)))
@@ -454,7 +457,6 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 // the _csrf cookie value. Requests with a Bearer token (API auth) and the
 // login/register endpoints are exempt.
 func csrfMiddleware(next http.Handler) http.Handler {
-	const cookieName = "_csrf"
 	const headerName = "X-CSRF-Token"
 
 	csrfExemptPaths := map[string]bool{
@@ -481,6 +483,7 @@ func csrfMiddleware(next http.Handler) http.Handler {
 
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			cookieName := csrfCookieName(r)
 			// Set CSRF cookie if not present.
 			if _, err := r.Cookie(cookieName); err != nil {
 				http.SetCookie(w, &http.Cookie{
@@ -514,13 +517,23 @@ func csrfMiddleware(next http.Handler) http.Handler {
 
 		// Exempt requests with no session cookie — they're API calls or
 		// unauthenticated requests, not browser form submissions.
-		if _, err := r.Cookie("session"); err != nil {
-			next.ServeHTTP(w, r)
-			return
+		if _, err := r.Cookie(hostSessionCookieName); err != nil {
+			if _, legacyErr := r.Cookie(legacySessionCookieName); legacyErr != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
 
 		// Validate double-submit: cookie must match header.
-		cookie, err := r.Cookie(cookieName)
+		cookie, err := r.Cookie(csrfCookieName(r))
+		if err != nil || cookie.Value == "" {
+			// Fallback to legacy cookie name for clients that still carry it.
+			cookie, err = r.Cookie(legacyCSRFCookieName)
+		}
+		if err != nil || cookie.Value == "" {
+			// Fallback to host-prefixed cookie when request arrived insecurely via proxy.
+			cookie, err = r.Cookie(hostCSRFCookieName)
+		}
 		if err != nil || cookie.Value == "" {
 			http.Error(w, `{"error":"missing CSRF token"}`, http.StatusForbidden)
 			return

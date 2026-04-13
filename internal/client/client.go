@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
@@ -37,8 +38,10 @@ func New(cfg config.Config) *Client {
 	return &Client{
 		baseURL: baseURL,
 		token:   cfg.Token,
-		http:    http.DefaultClient,
-		mode:    resolved.Mode,
+		http: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		mode: resolved.Mode,
 	}
 }
 

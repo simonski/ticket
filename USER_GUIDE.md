@@ -729,6 +729,10 @@ Keyboard shortcuts in the board view:
 - story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `tk login` plus `tk create` commands for epics/tasks in the selected project
 - Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
+Security notes:
+- `tk agent run -llm` uses an explicit executable allow-list (`claude`, `codex` by default). Add extra names with `TICKET_AGENT_ALLOWED_LLM_BINARIES`.
+- `TICKET_CHAT_CMD` and `TICKET_ANALYSE_CMD` run server-side subprocesses; keep these values operator-controlled and trusted.
+
 ## Command Reference
 
 ```bash

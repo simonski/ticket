@@ -22,10 +22,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		token := strings.TrimSpace(r.URL.Query().Get("token"))
-		if token == "" {
-			token = bearerToken(r)
-		}
+		token := bearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -48,10 +45,7 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		token := strings.TrimSpace(r.URL.Query().Get("token"))
-		if token == "" {
-			token = bearerToken(r)
-		}
+		token := bearerToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -141,8 +135,9 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		cookieName := sessionCookieName(r)
 		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set for TLS or trusted TLS-terminating proxies
-			Name:     "ticket_token",
+			Name:     cookieName,
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
@@ -163,15 +158,18 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set for TLS or trusted TLS-terminating proxies
-			Name:     "ticket_token",
-			Value:    "",
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   requestIsSecure(r),
-			SameSite: http.SameSiteLaxMode,
-			MaxAge:   -1,
-		})
+		secure := requestIsSecure(r)
+		for _, cookieName := range []string{hostSessionCookieName, legacySessionCookieName} {
+			http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is set for TLS or trusted TLS-terminating proxies
+				Name:     cookieName,
+				Value:    "",
+				Path:     "/",
+				HttpOnly: true,
+				Secure:   secure || cookieName == hostSessionCookieName,
+				SameSite: http.SameSiteLaxMode,
+				MaxAge:   -1,
+			})
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 	})
 

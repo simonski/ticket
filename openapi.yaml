@@ -3,8 +3,9 @@ info:
   title: Ticket API
   description: |
     RESTful API for the Ticket project and issue management system.
-    All endpoints are under `/api/`. Authentication uses Bearer tokens,
-    cookies (`ticket_token`), or query parameter (`?token=`).
+    All endpoints are under `/api/`. Authentication uses Bearer tokens
+    or session cookies (`__Host-session` on secure requests; legacy
+    `ticket_token` remains accepted).
     Agent endpoints use HTTP Basic Auth (agent UUID + password).
 .1.775
   contact:
@@ -58,7 +59,7 @@ components:
     CookieAuth:
       type: apiKey
       in: cookie
-      name: ticket_token
+      name: __Host-session
     BasicAuth:
       type: http
       scheme: basic
@@ -934,7 +935,7 @@ paths:
           description: Authenticated successfully
           headers:
             Set-Cookie:
-              description: "ticket_token session cookie (HttpOnly, SameSite=Lax, 30-day expiry)"
+              description: "__Host-session session cookie (secure requests); legacy ticket_token also accepted (HttpOnly, SameSite=Lax, 30-day expiry)"
               schema:
                 type: string
           content:
@@ -5274,7 +5275,7 @@ paths:
       operationId: liveUpdates
       description: |
         WebSocket endpoint for real-time ticket and project change events.
-        Authenticate via Bearer token, cookie, or ?token= query parameter.
+        Authenticate via Bearer token or session cookie.
       parameters:
         - name: token
           in: query
