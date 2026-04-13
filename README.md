@@ -199,6 +199,12 @@ A Claude Code skill ships in `.claude/skills/tk/`. Copy it into your project's
 `.claude/skills/` directory (or `~/.claude/skills/` for all projects) and Claude
 will query and update tickets automatically during coding sessions.
 
+You can also print the embedded skill template directly:
+
+```bash
+tk skill > SKILL.md
+```
+
 ---
 
 ## Environment variables

@@ -108,6 +108,12 @@ cp -r .claude/skills/tk .claude/skills/     # project-only
 Claude will then query and update tickets automatically during coding sessions:
 reading live ticket state, logging time, creating bugs, and recording decisions.
 
+Or print the embedded template directly:
+
+```bash
+tk skill > SKILL.md
+```
+
 ---
 
 ## Environment variables

@@ -34,6 +34,14 @@ tk onboard
 
 `tk onboard` prints the embedded onboarding template to stdout.
 
+Print the embedded tk skill template:
+
+```bash
+tk skill
+```
+
+`tk skill` prints the embedded `SKILL.md` content to stdout.
+
 Initialize a task sqlite database:
 
 ```bash
@@ -148,7 +156,7 @@ Manage autonomous agents:
 **Agent Commands:**
 ```bash
 tk agent request [flags]
-tk agent run -id <uuid> -url http://localhost:8080
+tk agent run -id <uuid>
 ```
 
 **Admin Commands:**
@@ -168,14 +176,14 @@ tk agent config-rm -id <uuid> <key>
 Run an agent worker process:
 
 ```bash
-tk agent run -id <uuid> -url http://localhost:8080
+tk agent run -id <uuid>
 ```
 
-`ticket agent run` resolves required settings from flags first, then env vars:
+`ticket agent run` resolves required settings from flags and env vars:
 
 - `AGENT_ID` (flag: `-id`)
 - `AGENT_PASSWORD` (no flag; read from env or prompted with `*` masking)
-- `TICKET_URL` (flag: `-url`)
+- `TICKET_URL` (env/config)
 - `TICKET_AGENT_LLM` (optional, default: `claude`)
 
 If any required values are missing, the command exits with an explicit missing-fields error.
@@ -781,7 +789,7 @@ tk user disable -username <name>
 tk user reset-password -username <name> [-password <password>]
 # Agent Commands
 tk agent request [flags]
-tk agent run -id <uuid> -url <server-url>  # password from AGENT_PASSWORD env or prompt
+tk agent run -id <uuid>                     # TICKET_URL from env/config; password from AGENT_PASSWORD env or prompt
 
 # Agent Admin Commands
 tk agent create [-password <password>]  # UUID auto-generated
