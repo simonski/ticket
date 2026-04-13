@@ -1276,6 +1276,60 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	}
 }
 
+func TestRunPromptBuildsPlaintextSections(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if project.SdlcID != nil {
+		stages, err := svc.ListSdlcStages(context.Background(), *project.SdlcID)
+		if err != nil {
+			t.Fatalf("ListSdlcStages() error = %v", err)
+		}
+		for _, stage := range stages {
+			if _, err := svc.UpdateSdlcStage(context.Background(), stage.ID, libticket.SdlcStageRequest{
+				StageName:          stage.StageName,
+				Description:        stage.Description,
+				AcceptanceCriteria: "Stage acceptance criteria",
+				DefinitionOfReady:  "Stage acceptance criteria",
+			}); err != nil {
+				t.Fatalf("UpdateSdlcStage() error = %v", err)
+			}
+		}
+	}
+
+	epicID := createLocalTask(t, []string{"epic", "-d", "Epic description", "Prompt Epic"})
+	taskID := createLocalTask(t, []string{"add", "-parent", epicID, "-d", "Task description", "-ac", "Task acceptance", "Prompt Task"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"prompt", taskID}); err != nil {
+			t.Fatalf("prompt command error = %v", err)
+		}
+	})
+
+	for _, want := range []string{
+		"AGENT EXECUTION PROMPT",
+		"PROJECT",
+		"EPIC",
+		"Prompt Epic",
+		"STORY",
+		"Key: N/A",
+		"TICKET",
+		"Prompt Task",
+		"Task description",
+		"ROLE",
+		"STAGE",
+		"Acceptance Criteria: Stage acceptance criteria",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("prompt output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestRunProjectInit(t *testing.T) {
 	setupLocalCLI(t)
 

@@ -84,6 +84,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Namespace for all ticket operations: list, search, board, add, get, update, state changes, ownership, hierarchy, comments, lifecycle.", "Run `tk ticket help` for the full verb list."},
 		example: "tk ticket list -type bug",
 	},
+	"prompt": {
+		usage:   "tk prompt <ticket-id>",
+		details: []string{"Builds a plaintext agent prompt for the given ticket.", "Includes sections for project, epic, story, ticket, role, and stage acceptance details when available."},
+		example: "tk prompt TK-42",
+	},
 	"req": {
 		usage:   "tk req <verb> [flags]",
 		details: []string{"Legacy alias for `tk idea`. Routes to the same handlers.", "Run `tk idea help` for the full verb list."},
