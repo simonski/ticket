@@ -125,7 +125,7 @@ func TestCSRFCookieSecureWithForwardedProto(t *testing.T) {
 	handler.ServeHTTP(resp, req)
 
 	setCookie := resp.Header().Get("Set-Cookie")
-	if !strings.Contains(setCookie, "_csrf=") {
+	if !strings.Contains(setCookie, "__Host-_csrf=") {
 		t.Fatalf("Set-Cookie = %q, want CSRF cookie", setCookie)
 	}
 	if !strings.Contains(setCookie, "Secure") {

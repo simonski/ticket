@@ -15,6 +15,13 @@ import (
 	"modernc.org/sqlite"
 )
 
+const (
+	legacySessionCookieName = "ticket_token"
+	hostSessionCookieName   = "__Host-session"
+	legacyCSRFCookieName    = "_csrf"
+	hostCSRFCookieName      = "__Host-_csrf"
+)
+
 func resolveLifecycleRequest(status, stage, state string) (string, string, error) {
 	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
 		return stage, state, nil
@@ -141,11 +148,27 @@ func bearerToken(r *http.Request) string {
 	if strings.HasPrefix(header, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
 	}
-	cookie, err := r.Cookie("ticket_token")
-	if err == nil && strings.TrimSpace(cookie.Value) != "" {
-		return strings.TrimSpace(cookie.Value)
+	for _, name := range []string{hostSessionCookieName, legacySessionCookieName} {
+		cookie, err := r.Cookie(name)
+		if err == nil && strings.TrimSpace(cookie.Value) != "" {
+			return strings.TrimSpace(cookie.Value)
+		}
 	}
 	return ""
+}
+
+func sessionCookieName(r *http.Request) string {
+	if requestIsSecure(r) {
+		return hostSessionCookieName
+	}
+	return legacySessionCookieName
+}
+
+func csrfCookieName(r *http.Request) string {
+	if requestIsSecure(r) {
+		return hostCSRFCookieName
+	}
+	return legacyCSRFCookieName
 }
 
 func intParam(r *http.Request, key string, defaultValue int) int {
