@@ -204,37 +204,57 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 
 func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, sdlcStages []store.SdlcStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string) {
 	dependsOn := formatDependsOn(dependencies)
-	fmt.Printf("Key          : %s\n", ticket.ID)
-	fmt.Printf("Type         : %s\n", ticket.Type)
-	fmt.Printf("Description  : %s\n", ticket.Description)
+
+	type ticketField struct {
+		label string
+		value string
+	}
+	fields := []ticketField{
+		{label: "Key", value: ticket.ID},
+		{label: "Type", value: ticket.Type},
+		{label: "Description", value: ticket.Description},
+	}
 	if parentKey != "" {
-		fmt.Printf("Parent       : %s\n", parentKey)
+		fields = append(fields, ticketField{label: "Parent", value: parentKey})
 	}
 	if cloneKey != "" {
-		fmt.Printf("CloneOf      : %s\n", cloneKey)
+		fields = append(fields, ticketField{label: "CloneOf", value: cloneKey})
 	}
-	fmt.Printf("Title        : %s\n", ticket.Title)
-	fmt.Printf("Author       : %s\n", ticket.Author)
-	fmt.Printf("Assignee     : %s\n", ticket.Assignee)
-	fmt.Printf("Order        : %d\n", ticket.Order)
-	fmt.Printf("EstimateEffort   : %d\n", ticket.EstimateEffort)
-	fmt.Printf("EstimateComplete : %s\n", ticket.EstimateComplete)
-	fmt.Printf("DependsOn    : %s\n", dependsOn)
-	fmt.Printf("Status       : %s\n", ticket.Status)
-	fmt.Printf("Stage        : %s\n", ticket.Stage)
-	fmt.Printf("State        : %s\n", ticket.State)
+	fields = append(fields,
+		ticketField{label: "Title", value: ticket.Title},
+		ticketField{label: "Author", value: ticket.Author},
+		ticketField{label: "Assignee", value: ticket.Assignee},
+		ticketField{label: "Order", value: fmt.Sprintf("%d", ticket.Order)},
+		ticketField{label: "EstimateEffort", value: fmt.Sprintf("%d", ticket.EstimateEffort)},
+		ticketField{label: "EstimateComplete", value: ticket.EstimateComplete},
+		ticketField{label: "DependsOn", value: dependsOn},
+		ticketField{label: "Status", value: ticket.Status},
+		ticketField{label: "Stage", value: ticket.Stage},
+		ticketField{label: "State", value: ticket.State},
+	)
 	if len(sdlcStages) > 0 {
-		fmt.Printf("Sdlc     : %s\n", renderSdlcProgress(ticket.Stage, sdlcStages))
+		fields = append(fields, ticketField{label: "Sdlc", value: renderSdlcProgress(ticket.Stage, sdlcStages)})
 	}
-	fmt.Printf("Draft        : %t\n", ticket.Draft)
-	fmt.Printf("Complete     : %s\n", ticketCompleteLabel(ticket))
-	fmt.Printf("Archived     : %t\n", ticket.Archived)
-	fmt.Printf("Priority     : %d\n", ticket.Priority)
-	fmt.Printf("Created      : %s\n", ticket.CreatedAt)
-	fmt.Printf("LastModified : %s\n", ticket.UpdatedAt)
-	fmt.Printf("Acceptance Criteria : %s\n", ticket.AcceptanceCriteria)
+	fields = append(fields,
+		ticketField{label: "Draft", value: fmt.Sprintf("%t", ticket.Draft)},
+		ticketField{label: "Complete", value: ticketCompleteLabel(ticket)},
+		ticketField{label: "Archived", value: fmt.Sprintf("%t", ticket.Archived)},
+		ticketField{label: "Priority", value: fmt.Sprintf("%d", ticket.Priority)},
+		ticketField{label: "Created", value: ticket.CreatedAt},
+		ticketField{label: "LastModified", value: ticket.UpdatedAt},
+		ticketField{label: "Acceptance Criteria", value: ticket.AcceptanceCriteria},
+	)
+	maxLabelWidth := 0
+	for _, field := range fields {
+		if len(field.label) > maxLabelWidth {
+			maxLabelWidth = len(field.label)
+		}
+	}
+	for _, field := range fields {
+		fmt.Printf("%-*s : %s\n", maxLabelWidth, field.label, field.value)
+	}
 	if len(ticket.Comments) > 0 {
-		fmt.Println("Comments     :")
+		fmt.Printf("%-*s :\n", maxLabelWidth, "Comments")
 		for _, comment := range ticket.Comments {
 			fmt.Printf("  - [%s] %s: %s\n", comment.CreatedAt, comment.Author, comment.Text)
 		}
@@ -244,19 +264,19 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		for _, l := range labels {
 			labelNames = append(labelNames, l.Name)
 		}
-		fmt.Printf("Labels       : %s\n", strings.Join(labelNames, ", "))
+		fmt.Printf("%-*s : %s\n", maxLabelWidth, "Labels", strings.Join(labelNames, ", "))
 	}
 	if totalMinutes > 0 {
 		hours := totalMinutes / 60
 		mins := totalMinutes % 60
 		if hours > 0 {
-			fmt.Printf("TimeLogged   : %dh %dm\n", hours, mins)
+			fmt.Printf("%-*s : %dh %dm\n", maxLabelWidth, "TimeLogged", hours, mins)
 		} else {
-			fmt.Printf("TimeLogged   : %dm\n", mins)
+			fmt.Printf("%-*s : %dm\n", maxLabelWidth, "TimeLogged", mins)
 		}
 	}
 	if len(history) > 0 {
-		fmt.Println("History      :")
+		fmt.Printf("%-*s :\n", maxLabelWidth, "History")
 		for _, event := range history {
 			fmt.Printf("  - [%s] %s\n", event.CreatedAt, formatHistoryEvent(event))
 		}
