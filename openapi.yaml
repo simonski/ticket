@@ -7,7 +7,7 @@ info:
     or session cookies (`__Host-session` on secure requests; legacy
     `ticket_token` remains accepted).
     Agent endpoints use HTTP Basic Auth (agent UUID + password).
-.1.775
+  version: 0.1.790
   contact:
     name: Simon Gauld
     url: https://github.com/simonski/ticket
