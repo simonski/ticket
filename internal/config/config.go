@@ -51,21 +51,32 @@ func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
+// HasLocationEnvOverride returns true when the effective location is explicitly
+// configured via TICKET_URL.
+func HasLocationEnvOverride() bool {
+	return envValue("TICKET_URL") != ""
+}
+
 // HasRemoteEnvOverride returns true when remote mode is explicitly configured
 // via environment variables only.
 func HasRemoteEnvOverride() bool {
-	return envValue("TICKET_URL") != "" &&
-		envValue("TICKET_USERNAME") != "" &&
-		envValue("TICKET_PASSWORD") != ""
+	if !HasLocationEnvOverride() ||
+		envValue("TICKET_USERNAME") == "" ||
+		envValue("TICKET_PASSWORD") == "" {
+		return false
+	}
+	resolved, err := ResolveLocation(envValue("TICKET_URL"))
+	return err == nil && resolved.Mode == ModeRemote
 }
 
 // ResolveURL determines mode and target from the Location field in config.json.
 //
+//	/abs/path/to/ticket.db     → local mode
 //	file:///path/to/ticket.db  → local mode
 //	http(s)://host             → remote mode
 //	(empty)                    → local mode, DBPath = <Home()>/ticket.db
 func ResolveURL() (Resolved, error) {
-	if HasRemoteEnvOverride() {
+	if HasLocationEnvOverride() {
 		return ResolveLocation(envValue("TICKET_URL"))
 	}
 	cfg, _ := Load()
@@ -94,7 +105,10 @@ func ResolveLocation(location string) (Resolved, error) {
 	case "http", "https":
 		return Resolved{Mode: ModeRemote, ServerURL: location}, nil
 	case "":
-		// No scheme — treat as a path relative to the .ticket/ directory.
+		if filepath.IsAbs(location) {
+			return Resolved{Mode: ModeLocal, DBPath: location}, nil
+		}
+		// No scheme — treat relative paths as living under the .ticket/ directory.
 		home, err := Home()
 		if err != nil {
 			return Resolved{}, err
@@ -189,12 +203,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if HasRemoteEnvOverride() {
+	cfg.Token = creds.Token
+	if HasLocationEnvOverride() {
 		cfg.Location = envValue("TICKET_URL")
+	}
+	if HasRemoteEnvOverride() {
 		cfg.Username = envValue("TICKET_USERNAME")
 		cfg.Token = ""
-	} else {
-		cfg.Token = creds.Token
 	}
 
 	return cfg, nil

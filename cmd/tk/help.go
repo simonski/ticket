@@ -26,7 +26,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [-f <db-path>] [-force] [-password <password>] [-populate]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path is derived from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path defaults to `.ticket/ticket.db` at the nearest Git root, or `.ticket/ticket.db` in the current directory when no Git root exists. `TICKET_URL` can override the effective location.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
 		example: "tk initdb -f /path/to/ticket.db -force -password secret -populate",
 	},
 	"export": {
@@ -41,7 +41,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"server": {
 		usage:   "tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database path from TICKET_HOME (default: .ticket/ticket.db at the nearest Git root, or .ticket/ticket.db in the current directory when no Git root exists).", "If `-f` is provided, that exact database file is used directly (no TICKET_HOME/env inference for database selection).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses `.ticket/ticket.db` at the nearest Git root, or `.ticket/ticket.db` in the current directory when no Git root exists. `TICKET_URL` can override the effective location.", "If `-f` is provided, that exact database file is used directly (no env or workspace inference for database selection).", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
 		example: "tk server -f /path/to/ticket.db -p 9999 -v",
 	},
 	"version": {
@@ -56,7 +56,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only. Logs into the server and stores the session token in $TICKET_HOME/credentials.json.", "When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those values override local config and are used directly; `tk login` is optional for regular API calls in that mode.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
+		details: []string{"Remote mode only. Logs into the server and stores the session token in the active `.ticket/credentials.json` file.", "When `TICKET_URL` points at a remote server and `TICKET_USERNAME` / `TICKET_PASSWORD` are set, those values override local config and are used directly; `tk login` is optional for regular API calls in that mode.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
 		example: "tk login -username simon -password secret -url http://localhost:8080",
 	},
 	"register": {
@@ -66,7 +66,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"logout": {
 		usage:   "tk logout [-url <server-url>]",
-		details: []string{"Remote mode only. Logs out from the configured server and removes $TICKET_HOME/credentials.json."},
+		details: []string{"Remote mode only. Logs out from the configured server and removes the active `.ticket/credentials.json` session token."},
 		example: "tk logout",
 	},
 	"status": {
@@ -115,8 +115,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk health TK-1",
 	},
 	"project": {
-		usage:   "tk project <create|list|get|use|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
-		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams."},
+		usage:   "tk project <create|list|get|use|set-draft|sdlc|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
+		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project."},
 		example: "tk project CUS update -title \"Customer Portal\"",
 	},
 	"team": {
@@ -411,7 +411,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-sdlc <name>]",
-		details: []string{"Interactive setup for local or remote mode.", "In local mode, initializes `$TICKET_HOME/ticket.db`, generates an admin password, and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
+		details: []string{"Interactive setup for local or remote mode.", "In local mode, initializes `.ticket/ticket.db`, generates an admin password, and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
 		example: "tk init",
 	},
 	"curate": {
@@ -567,7 +567,8 @@ Commands:
   use      [<id>]                     Switch active project (or show current)
   rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
   rename-prefix <new-prefix>          Rename prefix and re-key all tickets
-  sdlc <id>                       Set sdlc on current project (use 0 to clear)
+  set-draft [-project_id <id>] <true|false>  Set project default draft mode
+  sdlc     <id>                          Set sdlc on current project (use 0 to clear)
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
@@ -727,7 +728,6 @@ func renderCommandHelp(command string) string {
 
 func printTicketEnvironment() {
 	variableNames := []string{
-		"TICKET_HOME",
 		"TICKET_URL",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
@@ -740,8 +740,9 @@ func printTicketEnvironment() {
 	fmt.Println()
 	fmt.Println("ENVIRONMENT")
 	for _, name := range variableNames {
-		value := envValue(name)
-		if value == "" {
+		secret := name == "TICKET_PASSWORD" || name == "AGENT_PASSWORD"
+		value := statusEnvValue(name, secret)
+		if value == "UNSET" {
 			value = "<unset>"
 		}
 		fmt.Printf("  %s: %s\n", name, value)

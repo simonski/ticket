@@ -10,8 +10,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -455,13 +455,34 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{
 		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
-		"the server uses the database path from TICKET_HOME",
+		"the server uses `.ticket/ticket.db`",
 		"If `-f` is provided, that exact database file is used directly",
 		"tk server -f /path/to/ticket.db -p 9999 -v",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("server help missing %q:\n%s", want, help)
 		}
+	}
+}
+
+func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
+	help := renderCommandHelp("project")
+	for _, want := range []string{
+		"tk project <create|list|get|use|set-draft|sdlc|add-user|remove-user|add-team|remove-team>",
+		"`set-draft` controls whether new tickets default to draft mode for the project.",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("project help missing %q:\n%s", want, help)
+		}
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "help"}); err != nil {
+			t.Fatalf("project help error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "set-draft [-project_id <id>] <true|false>") {
+		t.Fatalf("project usage missing set-draft command:\n%s", output)
 	}
 }
 
@@ -515,9 +536,11 @@ func TestRunHelpRejectsInvalidCommand(t *testing.T) {
 
 func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
 	for _, name := range []string{
-		"TICKET_HOME",
+		"TICKET_URL",
 		"TICKET_USERNAME",
 		"TICKET_PASSWORD",
+		"AGENT_ID",
+		"AGENT_PASSWORD",
 	} {
 		t.Setenv(name, "")
 	}
@@ -530,9 +553,11 @@ func TestRunHelpPrintsEnvironmentVariables(t *testing.T) {
 
 	for _, want := range []string{
 		"ENVIRONMENT",
-		"  TICKET_HOME: <unset>",
+		"  TICKET_URL: <unset>",
 		"  TICKET_USERNAME: <unset>",
 		"  TICKET_PASSWORD: <unset>",
+		"  AGENT_ID: <unset>",
+		"  AGENT_PASSWORD: <unset>",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("help output missing %q:\n%s", want, output)
@@ -1205,16 +1230,25 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 
 func TestRunStatusRemoteSuccess(t *testing.T) {
 	t.Setenv("TICKET_HOME", t.TempDir())
+	t.Setenv("TICKET_USERNAME", "env-user")
+	t.Setenv("TICKET_PASSWORD", "env-pass")
+	t.Setenv("AGENT_ID", "agent-123")
+	t.Setenv("AGENT_PASSWORD", "agent-secret")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/status" {
+		switch r.URL.Path {
+		case "/api/login":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"token":"env-token","user":{"username":"alice","role":"user"}}`))
+		case "/api/status":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"user":{"username":"alice","role":"user"}}`))
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"user":{"username":"alice","role":"user"}}`))
 	}))
 	defer server.Close()
+	t.Setenv("TICKET_URL", server.URL)
 	setTestLocation(t, server.URL)
 
 	output := captureStdout(t, func() {
@@ -1223,6 +1257,11 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
+		"TICKET_URL       : " + server.URL,
+		"TICKET_USERNAME  : env-user",
+		"TICKET_PASSWORD  : ********",
+		"AGENT_ID         : agent-123",
+		"AGENT_PASSWORD   : ********",
 		"location         : " + server.URL,
 		"username         : alice",
 		"authenticated    : true",
@@ -1232,6 +1271,9 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
+	}
+	if strings.Contains(output, "env-pass") || strings.Contains(output, "agent-secret") {
+		t.Fatalf("runStatus(remote) should mask secret env values:\n%s", output)
 	}
 }
 

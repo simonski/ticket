@@ -24,7 +24,7 @@ work. It is delivered as a single Go binary that provides:
 
 The system operates in two modes:
 
-- **Local mode** — Direct SQLite access via the path resolved from `.ticket/config.json` (`location`) or the default `<ticket-home>/ticket.db`
+- **Local mode** — Direct SQLite access via the path resolved from `.ticket/config.json` (`location`) or the default `.ticket/ticket.db`
 - **Remote mode** — HTTP client connecting to the `http(s)://...` URL stored in `.ticket/config.json`
 
 ---
@@ -606,7 +606,7 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Config/database directory |
+| `TICKET_URL` | Effective location override: bare paths and `file:///...` are local, `http(s)://...` is remote |
 | `TICKET_USERNAME` | Default username |
 | `TICKET_PASSWORD` | Default password |
 | `TICKET_TRUSTED_PROXY_CIDRS` | Comma-separated CIDRs trusted for forwarded proxy headers |
@@ -616,21 +616,22 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 ### 11.2 Config Resolution
 
-1. Load `location` from `$TICKET_HOME/config.json`
-2. If `location` is `http://...` or `https://...` -> **remote mode**
-3. If `location` is `file://...` or a bare path -> **local mode** using that path
-4. If `location` is empty -> **local mode** at `<ticket-home>/ticket.db`
+1. Resolve the workspace directory by walking up from the current directory to the nearest `.git/`, then using `.ticket/`; if no Git root exists, use `.ticket/` in the current directory
+2. Load `location` from `.ticket/config.json`
+3. If `TICKET_URL` is set, use it instead of the stored `location`
+4. If the effective location is `http://...` or `https://...` -> **remote mode**
+5. If the effective location is `file://...` or a bare path -> **local mode** using that path
+6. If the effective location is empty -> **local mode** at `.ticket/ticket.db`
 
-`TICKET_HOME` resolution:
-1. `$TICKET_HOME` environment variable
-2. Walk up directory tree looking for `.git/`, then use `.ticket/` at that repository root
-3. Fall back to `.ticket/` in current directory
+Bare local paths are resolved like this:
+1. Absolute paths are used as-is
+2. Relative paths are resolved under the active `.ticket/` workspace directory
 
 ### 11.3 Config Files
 
-- `$TICKET_HOME/config.json` — client defaults (`location`, `username`, current project/epic, TUI state)
-- `$TICKET_HOME/credentials.json` — auth token (remote mode)
-- `$TICKET_HOME/ticket.db` — SQLite database (local mode)
+- `.ticket/config.json` — client defaults (`location`, `username`, current project/epic, TUI state)
+- `.ticket/credentials.json` — auth token (remote mode)
+- `.ticket/ticket.db` — default SQLite database (local mode)
 
 ---
 

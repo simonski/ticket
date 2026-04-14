@@ -46,7 +46,7 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 
 	if cfg.ProjectID != projectID {
 		cfg.ProjectID = projectID
-		if !config.HasRemoteEnvOverride() {
+		if !config.HasLocationEnvOverride() {
 			if saveErr := config.Save(cfg); saveErr != nil {
 				return config.Config{}, nil, store.Project{}, saveErr
 			}

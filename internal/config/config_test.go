@@ -211,6 +211,28 @@ func TestResolveURLUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
 	}
 }
 
+func TestResolveURLUsesEnvLocationOverrideForLocalPath(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	localDB := filepath.Join(tempDir, "override.db")
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+
+	t.Setenv("TICKET_URL", localDB)
+
+	resolved, err := ResolveURL()
+	if err != nil {
+		t.Fatalf("ResolveURL() error = %v", err)
+	}
+	if resolved.Mode != ModeLocal {
+		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeLocal)
+	}
+	if resolved.DBPath != localDB {
+		t.Fatalf("DBPath = %q, want %q", resolved.DBPath, localDB)
+	}
+}
+
 func TestLoadUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -237,6 +259,27 @@ func TestLoadUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
 	}
 	if cfg.Token != "" {
 		t.Fatalf("Load().Token = %q, want empty when env override is active", cfg.Token)
+	}
+}
+
+func TestLoadUsesEnvLocationOverrideWithoutRemoteCredentials(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com","username":"local-user"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+
+	t.Setenv("TICKET_URL", filepath.Join(tempDir, "override.db"))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != filepath.Join(tempDir, "override.db") {
+		t.Fatalf("Load().Location = %q, want env location override", cfg.Location)
+	}
+	if cfg.Username != "local-user" {
+		t.Fatalf("Load().Username = %q, want stored username to remain", cfg.Username)
 	}
 }
 

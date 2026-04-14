@@ -14,15 +14,15 @@ This guide describes a single Go binary that provides a server, a CLI, and an em
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
-Client-side files live under `$TICKET_HOME`.
+Client-side files live under `.ticket/` in the active workspace.
 
-If `$TICKET_HOME` is not set, `tk` walks up the directory tree from the current
-working directory looking for a `.git` directory. When it finds one, it uses
-`.ticket/` at that repository root. If no Git root is found, `.ticket/` in the
-current directory is used as the default.
+`tk` walks up the directory tree from the current working directory looking for
+a `.git` directory. When it finds one, it uses `.ticket/` at that repository
+root. If no Git root is found, `.ticket/` in the current directory is used as
+the default.
 
-- `$TICKET_HOME/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
-- `$TICKET_HOME/credentials.json` stores the current session token
+- `.ticket/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
+- `.ticket/credentials.json` stores the current session token
 
 ## Getting Started
 
@@ -48,7 +48,7 @@ Initialize a task sqlite database:
 tk init
 ```
 
-If `-f` is omitted, `tk init` creates the SQLite database at `$TICKET_HOME/ticket.db` (defaults to `.ticket/ticket.db` at the nearest Git root, or in the current directory when no Git root exists).
+If `-f` is omitted, `tk init` creates the SQLite database at `.ticket/ticket.db` (at the nearest Git root, or in the current directory when no Git root exists). `TICKET_URL` can also override the active local or remote location.
 
 `tk init` creates:
 
@@ -86,8 +86,8 @@ Start the server:
 tk server
 ```
 
-If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db` (same resolution as `tk init`).
-If `-f` is provided, `tk server` uses that exact database file and does not infer DB location from env vars or `TICKET_HOME`.
+If `-f` is omitted, `tk server` uses the database at `.ticket/ticket.db` (same resolution as `tk init`).
+If `-f` is provided, `tk server` uses that exact database file and does not infer DB location from env vars or the default `.ticket/` workspace.
 
 If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
@@ -206,14 +206,15 @@ tk login -username name -password '*******'
 
 For `tk register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `tk register` falls back to `whoami` and `password`.
 
-If `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
-values override local `.ticket/config.json` and stored credentials for remote
-commands.
+If `TICKET_URL` is set, it overrides the `location` in `.ticket/config.json`.
+Bare paths and `file:///...` stay in local mode; `http(s)://...` switches to
+remote mode. If that remote location also has `TICKET_USERNAME` and
+`TICKET_PASSWORD` set, those credentials override stored remote credentials.
 
 `tk login` resolves values in this order:
 
-1. a valid session already stored in `$TICKET_HOME/credentials.json`
-2. the `username` already stored in `$TICKET_HOME/config.json`
+1. a valid session already stored in `.ticket/credentials.json`
+2. the `username` already stored in `.ticket/config.json`
 3. `-username` and `-password`
 4. `TICKET_USERNAME` and `TICKET_PASSWORD`
 5. interactive prompts for anything still missing
@@ -226,8 +227,8 @@ When `tk login` prompts for a password in an interactive terminal, typed charact
 
 On successful login:
 
-- the session token is stored in `$TICKET_HOME/credentials.json`
-- the `username` and `location` fields in `$TICKET_HOME/config.json` are updated
+- the session token is stored in `.ticket/credentials.json`
+- the `username` and `location` fields in `.ticket/config.json` are updated
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -302,7 +303,7 @@ Log out:
 tk logout
 ```
 
-`ticket logout` removes `$TICKET_HOME/credentials.json`.
+`ticket logout` removes `.ticket/credentials.json`.
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser sdlcs.
 
@@ -377,10 +378,9 @@ tk init                     # creates ~/code/project-2/.ticket/
 tk add "A new ticket"       # uses project-2's database
 ```
 
-The lookup order is:
-1. `$TICKET_HOME` env var if set
-2. Walk up from CWD looking for a `.git` directory and use `.ticket/` at that repository root
-3. `.ticket/` in the current directory (default if no Git root is found)
+The workspace lookup order is:
+1. Walk up from CWD looking for a `.git` directory and use `.ticket/` at that repository root
+2. `.ticket/` in the current directory (default if no Git root is found)
 
 Show project usage:
 

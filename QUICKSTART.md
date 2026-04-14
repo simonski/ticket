@@ -14,7 +14,7 @@ Or download a binary for your platform from the [releases page](https://github.c
 
 ## Choose your mode
 
-`ticket` works in two modes:
+`tk` works in two modes:
 
 ### [Local mode](QUICKSTART_CLIENT.md)
 
@@ -120,8 +120,7 @@ tk skill > SKILL.md
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the config/database directory |
-| `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
+| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` is remote |
 | `TICKET_USERNAME` | Default username for login/register |
 | `TICKET_PASSWORD` | Default password for login/register |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
@@ -129,8 +128,9 @@ tk skill > SKILL.md
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |
 
-When `TICKET_URL` is set the CLI communicates with a running `tk server`
-rather than opening the local database directly.
+When `TICKET_URL` is set, it overrides the configured `location`. Bare paths
+and `file:///...` keep the CLI in local mode; `http(s)://...` switches to
+client/server mode.
 
 When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
 values take precedence over local `.ticket/config.json` and credentials.

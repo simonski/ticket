@@ -211,8 +211,7 @@ tk skill > SKILL.md
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the config/database directory. Otherwise `tk` uses `.ticket/` at the nearest Git root, or `.ticket/` in the current directory if no Git root exists |
-| `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
+| `TICKET_URL` | Override the effective location. Bare paths use local SQLite, `file:///...` also uses local SQLite, and `http(s)://...` uses a remote server |
 | `TICKET_USERNAME` | Default username for remote login |
 | `TICKET_PASSWORD` | Default password for remote login |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
@@ -226,11 +225,13 @@ tk skill > SKILL.md
 them as trusted operator-only configuration and never source their values from
 untrusted input.
 
-When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, `tk`
-uses those values for remote mode even when local `.ticket/config.json` exists.
+When `TICKET_URL` is set, it overrides the `location` in `.ticket/config.json`.
+When that location is remote and `TICKET_USERNAME` / `TICKET_PASSWORD` are also
+set, `tk` uses those credentials directly.
 
 For the server process, `tk server -f <db-file>` uses the exact file you pass
-and does not infer database location from env vars or `TICKET_HOME`.
+and does not infer database location from env vars or the default `.ticket/`
+workspace.
 
 ---
 

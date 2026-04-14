@@ -15,15 +15,25 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
-// statusEnvVars returns the relevant environment variable names and their
-// current values (empty string when unset).
-func statusEnvVars() map[string]string {
-	vars := []string{"TICKET_HOME", "TICKET_USERNAME"}
-	out := make(map[string]string, len(vars))
-	for _, k := range vars {
-		out[k] = os.Getenv(k)
+func statusEnvValue(name string, secret bool) string {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return "UNSET"
 	}
-	return out
+	if secret {
+		return "********"
+	}
+	return value
+}
+
+func statusEnvLines() []statusLine {
+	return []statusLine{
+		{key: "TICKET_URL", value: statusEnvValue("TICKET_URL", false)},
+		{key: "TICKET_USERNAME", value: statusEnvValue("TICKET_USERNAME", false)},
+		{key: "TICKET_PASSWORD", value: statusEnvValue("TICKET_PASSWORD", true)},
+		{key: "AGENT_ID", value: statusEnvValue("AGENT_ID", false)},
+		{key: "AGENT_PASSWORD", value: statusEnvValue("AGENT_PASSWORD", true)},
+	}
 }
 
 // resolveCurrentProject returns the active project key and where it came from.
@@ -58,13 +68,6 @@ type statusLine struct {
 	key   string
 	value string
 	color string // ANSI color code prefix, e.g. "\x1b[32m"; empty = default
-}
-
-func envStatusLine(name, value string) statusLine {
-	if value == "" {
-		return statusLine{key: name, value: "(not set)"}
-	}
-	return statusLine{key: name, value: value}
 }
 
 func connectionStatusLine(ok bool) statusLine {
@@ -195,19 +198,22 @@ func runRemoteStatus(cfg config.Config) error {
 		username = status.User.Username
 	}
 	cfgPath, _ := config.Path()
-	envVars := statusEnvVars()
 	project, projectSource := resolveCurrentProject(cfg)
 	project, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
 		payload := map[string]any{
-			"location":       cfg.Location,
-			"TICKET_HOME":    envVars["TICKET_HOME"],
-			"config_file":    cfgPath,
-			"project_id":     project,
-			"project_source": projectSource,
-			"username":       username,
-			"authenticated":  authenticated,
-			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
+			"location":        cfg.Location,
+			"TICKET_URL":      statusEnvValue("TICKET_URL", false),
+			"TICKET_USERNAME": statusEnvValue("TICKET_USERNAME", false),
+			"TICKET_PASSWORD": statusEnvValue("TICKET_PASSWORD", true),
+			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
+			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
+			"config_file":     cfgPath,
+			"project_id":      project,
+			"project_source":  projectSource,
+			"username":        username,
+			"authenticated":   authenticated,
+			"connection":      map[bool]string{true: "success", false: "failure"}[err == nil],
 		}
 		if sdlcName != "" {
 			payload["project_sdlc"] = sdlcName
@@ -217,10 +223,8 @@ func runRemoteStatus(cfg config.Config) error {
 		}
 		return printJSON(payload)
 	}
-	lines := []statusLine{
-		envStatusLine("TICKET_HOME", envVars["TICKET_HOME"]),
+	lines := append(statusEnvLines(), []statusLine{
 		{key: "location", value: cfg.Location},
-		envStatusLine("TICKET_USERNAME", envVars["TICKET_USERNAME"]),
 		{},
 		{key: "config_file", value: cfgPath},
 		projectStatusLine(project, projectSource),
@@ -229,7 +233,7 @@ func runRemoteStatus(cfg config.Config) error {
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
 		connectionStatusLine(err == nil),
-	}
+	}...)
 	printStatusBox(lines)
 	return err
 }
@@ -243,7 +247,6 @@ func runLocalStatus() error {
 	_, statErr := os.Stat(dbPath)
 	dbExists := statErr == nil
 	cfgPath, _ := config.Path()
-	envVars := statusEnvVars()
 	cfg, _ := config.Load()
 	svc, svcErr := resolveService(cfg)
 	if svcErr != nil {
@@ -254,8 +257,11 @@ func runLocalStatus() error {
 	if outputJSON {
 		payload := map[string]any{
 			"db_path":         dbPath,
-			"TICKET_HOME":     envVars["TICKET_HOME"],
-			"TICKET_USERNAME": envVars["TICKET_USERNAME"],
+			"TICKET_URL":      statusEnvValue("TICKET_URL", false),
+			"TICKET_USERNAME": statusEnvValue("TICKET_USERNAME", false),
+			"TICKET_PASSWORD": statusEnvValue("TICKET_PASSWORD", true),
+			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
+			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
 			"current_project": project,
 			"project_source":  projectSource,
@@ -270,10 +276,8 @@ func runLocalStatus() error {
 		}
 		return printJSON(payload)
 	}
-	lines := []statusLine{
-		envStatusLine("TICKET_HOME", envVars["TICKET_HOME"]),
+	lines := append(statusEnvLines(), []statusLine{
 		{key: "location", value: cfg.Location},
-		envStatusLine("TICKET_USERNAME", envVars["TICKET_USERNAME"]),
 		{},
 		{key: "db_path", value: dbPath},
 		{key: "config_file", value: cfgPath},
@@ -282,7 +286,7 @@ func runLocalStatus() error {
 		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
 		connectionStatusLine(connErr == nil),
-	}
+	}...)
 	printStatusBox(lines)
 	if !dbExists {
 		fmt.Println("hint: run tk init")

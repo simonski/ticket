@@ -2,29 +2,33 @@
 
 This guide shows how to run `tk` as an autonomous agent worker, plus dry-run patterns that let you simulate behavior without changing ticket state.
 
-## 1. Start server mode
+## 1. Talk to a server
 
-Agent workers require remote mode (`TICKET_URL`).
-
-```bash
-# terminal 1
-tk server -f ./team.db
-```
+As an `admin`, ensure you have access to a `tk server` instance:
 
 ```bash
 # terminal 2
-export TICKET_URL=http://localhost:8080
+export TICKET_URL=http://ticket.localhost
 export TICKET_USERNAME=admin
-export TICKET_PASSWORD=secret12
+export TICKET_PASSWORD=password
+tk status
 ```
 
 ## 2. Create agent credentials
+
+Using your `admin` user, create some agents
 
 ```bash
 tk agent create
 # prints:
 # agent_id: <uuid>
 # password: <password>
+
+tk agent create 
+# prints:
+# agent_id: <uuid>
+# password: <password>
+
 ```
 
 ```bash

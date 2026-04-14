@@ -35,8 +35,8 @@ func envValue(name string) string {
 //go:embed VERSION
 var embeddedVersion string
 
-	//go:embed TICKETS.md
-	var embeddedAgents string
+//go:embed TICKETS.md
+var embeddedAgents string
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -61,22 +61,26 @@ func run(args []string) error {
 	var guiTheme string
 	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
 	explicitServerDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "server" && dbOverride != ""
-	envRemoteOverride := config.HasRemoteEnvOverride()
+	envLocationOverride := config.HasLocationEnvOverride()
 	if explicitServerDB {
 		trimmedArgs = append([]string{"server", "-f", dbOverride}, trimmedArgs[1:]...)
 	}
-	// -f /path/to/dir (or db file) sets TICKET_HOME to the directory
+	// -f /path/to/dir (or db file) sets the active local location for this run.
 	if dbOverride != "" && !explicitServerDB {
 		absPath, pathErr := filepath.Abs(dbOverride)
 		if pathErr != nil {
 			return pathErr
 		}
-		// If user passed a .db file path, use its directory as TICKET_HOME
 		dir := absPath
+		location := "ticket.db"
 		if strings.HasSuffix(absPath, ".db") || strings.HasSuffix(absPath, ".sqlite") {
 			dir = filepath.Dir(absPath)
+			location = filepath.Base(absPath)
 		}
 		if err := os.Setenv("TICKET_HOME", dir); err != nil {
+			return err
+		}
+		if err := os.Setenv("TICKET_URL", location); err != nil {
 			return err
 		}
 	}
@@ -104,7 +108,7 @@ func run(args []string) error {
 	noInitRequired := map[string]bool{
 		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "skill": true,
 	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envRemoteOverride {
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envLocationOverride {
 		home, homeErr := config.Home()
 		if homeErr != nil || !dirExists(home) {
 			return fmt.Errorf("fatal: not a ticket folder — run `tk init` first")

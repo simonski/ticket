@@ -105,8 +105,7 @@ decisions automatically during your sessions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the config/database directory |
-| `TICKET_URL` | Connect to a remote server (`http(s)://host:port`) |
+| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` is remote |
 | `TICKET_USERNAME` | Default username for login/register |
 | `TICKET_PASSWORD` | Default password for login/register |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
@@ -116,4 +115,3 @@ decisions automatically during your sessions.
 ---
 
 Previous: [Local mode quickstart](QUICKSTART_CLIENT.md) — singleplayer, no server required.
-

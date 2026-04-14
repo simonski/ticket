@@ -20,7 +20,7 @@ The system has four interfaces:
 
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
-Client-side files are stored under `$TICKET_HOME`. If `$TICKET_HOME` is not set, `tk` walks up from the current working directory looking for a `.git` directory and then uses `.ticket/` at that repository root. If no git root is found, `.ticket/` in the current directory is used as the fallback.
+Client-side files are stored under `.ticket/`. `tk` walks up from the current working directory looking for a `.git` directory and then uses `.ticket/` at that repository root. If no git root is found, `.ticket/` in the current directory is used as the fallback. `TICKET_URL` overrides the effective location: bare paths and `file:///...` stay local, while `http(s)://...` selects remote mode.
 
 ## Product Principles
 
@@ -481,23 +481,23 @@ When `tk server` starts, it should print the same colored ASCII-art `TICKET` ban
 
 Below that banner, `tk server` must print the embedded version and the resolved task database path.
 
-The CLI stores non-sensitive client defaults in `$TICKET_HOME/config.json` and session credentials in `$TICKET_HOME/credentials.json`.
+The CLI stores non-sensitive client defaults in `.ticket/config.json` and session credentials in `.ticket/credentials.json`.
 
 `tk login` must:
 
-1. check `$TICKET_HOME/credentials.json` first and reuse that session if it is still valid
-2. check the `username` in `$TICKET_HOME/config.json`
+1. check `.ticket/credentials.json` first and reuse that session if it is still valid
+2. check the `username` in `.ticket/config.json`
 3. check `-username` and `-password`, then `TICKET_USERNAME` and `TICKET_PASSWORD`
 4. prompt for any missing values
 5. when prompting, use the discovered values as editable defaults
 6. print `invalid credentials` on an invalid-login response before prompting for a retry
 7. when prompting for a password in an interactive terminal, echo `*` characters instead of the raw password
-8. on success, write the session token to `$TICKET_HOME/credentials.json`
-9. on success, update the `username` and `location` keys in `$TICKET_HOME/config.json`
+8. on success, write the session token to `.ticket/credentials.json`
+9. on success, update the `username` and `location` keys in `.ticket/config.json`
 
 `tk register` must create the account but must not create or persist a logged-in session.
 
-`tk logout` must remove `$TICKET_HOME/credentials.json`.
+`tk logout` must remove `.ticket/credentials.json`.
 
 ### Project Management
 

@@ -1,3 +1,13 @@
+
+
+Ticket can ALSO be a client to a different backend
+
+    1. ticket
+    2. gitlab (issues, labels discriminate epic/story/task/bug)
+    3. github (issues, labels)
+    4. jira
+
+
 A project is the container of work.
 A project has a title, description.
 

@@ -96,9 +96,8 @@ tk doctor ticket    # review ticket health
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_HOME` | Override the config/database directory |
+| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` is remote |
 
 ---
 
 Next: [Server mode quickstart](QUICKSTART_SERVER.md) — multi-user, web UI, and AI agents.
-
