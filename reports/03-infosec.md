@@ -104,19 +104,16 @@ The remaining highest-risk item is the CLI `--llm` flag command injection vector
 
 The next clear gains would come from nonce-based CSP, tighter username validation, stronger encryption-key handling, trusted-proxy-aware rate limiting, and HSTS.
 
-## TK-121 implementation commits
+## Changes since last assessment
 
-| Ticket | Recommendation | Commit | Status |
-|--------|----------------|--------|--------|
-| TK-156 | Allow-list known agent binaries; reject shell metacharacters in binary name | `0c33ada` | Done |
-| TK-157 | Use HKDF to derive key; reject raw keys shorter than 32 bytes | `bf9062b` | Done |
-| TK-158 | Migrate to nonce-based CSP for scripts and styles | `f64d009` (audit confirmation) | Done |
-| TK-159 | Use cookie auth for WebSocket or document and mitigate log exposure | `ca92b5f` | Done |
-| TK-160 | Add trusted-proxy CIDR config; parse X-Forwarded-For conditionally | `1b398f4` (audit confirmation) | Done |
-| TK-161 | Document security requirements; consider allow-listing executables | `d302834` | Done |
-| TK-162 | Set explicit 30s timeout on `internal/client` HTTP client | `8778bc8` | Done |
-| TK-163 | Restrict to `^[a-zA-Z0-9._-]+$` | `25ca883` | Done |
-| TK-164 | Pin base images to `@sha256:` digests | `69d171f` (audit confirmation) | Done |
-| TK-165 | Add `no-new-privileges`, `read_only`, or use socket proxy | `4430649` | Done |
-| TK-166 | Add `Strict-Transport-Security` when serving over TLS | `ab75c48` | Done |
-| TK-167 | Use `__Host-` prefix for CSRF and session cookies when Secure | `b432ff2` | Done |
+- 2026-04-13 — Verified the CLI now enforces an LLM binary allow-list for `tk agent run -llm` and blocks path/separator patterns (`cmd/tk/cmd_agent.go:769-806`).
+- 2026-04-13 — Verified remote client requests now use bounded timeout controls (`TICKET_TIMEOUT`, clamped) rather than an unbounded default (`internal/client/client.go:73-96`).
+- 2026-04-13 — Verified docs now explicitly communicate agent command behavior and env-driven configuration, reducing operator misuse risk (`README.md:196-206`, `USER_GUIDE.md:156-188`).
+
+## Remaining recommendations
+
+| Finding | Severity | Recommendation |
+|---------|----------|----------------|
+| `TICKET_CHAT_CMD` / `TICKET_ANALYSE_CMD` execute operator-provided binaries directly | Medium | Add a server-side executable allow-list (or explicit deny-list) and reject unsafe command forms at startup in addition to documentation warnings. |
+| CSP still allows inline script/style execution | Medium | Replace `'unsafe-inline'` with nonce-based CSP and apply nonces to inline script/style blocks in the web shell. |
+| WebSocket auth token can still appear in URL-based contexts | Medium | Move chat/auth WebSocket auth to cookie-based session flow and remove token query-string usage. |

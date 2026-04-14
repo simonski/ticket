@@ -1,6 +1,6 @@
 # SDLC Assessment Summary
 
-**Date:** 2026-04-12
+**Date:** 2026-04-13
 **Project:** ticket / tk
 **Overall Score: 79/100** (was 80, -1)
 
@@ -47,7 +47,7 @@ Since the previous report set, the codebase picked up useful CLI workflow improv
 - **Tech Lead -3**: two previously flagged critical TUI state/stage mismatches remain unresolved, and new SA4010-style append bugs were identified
 - **Performance -1**: unbounded history queries and full-project scans in clone/delete paths remain unresolved
 - **SRE -1**: `docs/SLO.md` still references request counters/histograms that `/metrics` does not expose
-- **Tech Writer / Product Owner / Compliance / UX / New Starter** all slipped slightly as the updated review caught stale docs, unresolved workflow correctness bugs, verbose response logging gaps, and web UX/accessibility debt
+- **Tech Writer / Product Owner / Compliance / New Starter** had partial recovery as key user docs were brought back in line with CLI behavior (`tk skill` docs added; stale `tk agent run -url` guidance removed)
 - **Architect / Database / OpenAPI / Security / InfoSec / Idiomatic Go / Idiomatic JS / DevOps** remained broadly stable with no fresh regressions of consequence
 
 ## Key Metrics
@@ -66,8 +66,8 @@ Since the previous report set, the codebase picked up useful CLI workflow improv
 ## Top Priority Action Items
 
 ### High
-1. **Repair doc drift** — prefix length, `tk init` flags, `TICKET_HOME`, and default DB path documentation are stale across the main docs set
-2. **Run `gofmt -w ./...` and fix the remaining static-analysis issues** — repository-wide formatting drift remains
+1. **Run `gofmt -w ./...` and fix the remaining static-analysis issues** — repository-wide formatting drift remains
+2. **Improve report automation reliability** — SDLC refresh agent runs are vulnerable to transient model backend failures and need retry-safe orchestration
 
 ### Medium
 3. **Complete dark-mode and modal keyboard handling in the SPA** — hardcoded light colors and missing Escape handling remain the top UX issues
@@ -80,6 +80,7 @@ Since the previous report set, the codebase picked up useful CLI workflow improv
 - 2026-04-12 — TK-139 — commit `67b0af3` removed the stale alerting/metrics claims from `docs/SLO.md` instead of pretending nonexistent counters existed
 - 2026-04-12 — TK-142 — commit `108ee1f` verified `tk sdlc role-add/get/update/rm` are all SDLC-scoped and no longer match the stale report finding
 - 2026-04-12 — TK-144 — commit `67b0af3` capped verbose body capture and suppressed auth/agent request-response bodies in `internal/server/server.go`
+- 2026-04-13 — commit `c55e1f7` updated `README.md`, `QUICKSTART.md`, and `USER_GUIDE.md` to remove stale `tk agent run -url` guidance and document `tk skill`
 
 ## Cumulative Progress
 
