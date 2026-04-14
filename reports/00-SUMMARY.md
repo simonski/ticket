@@ -2,87 +2,63 @@
 
 **Date:** 2026-04-13
 **Project:** ticket / tk
-**Overall Score: 79/100** (was 80, -1)
+**Overall Score: 80/100** (was 79, +1)
 
 ## Score Table
 
 | # | Category | Previous | Current | Delta |
 |---|----------|----------|---------|-------|
-| 01 | OpenAPI | 78 | 78 | 0 |
+| 01 | OpenAPI | 78 | 74 | -4 |
 | 02 | Security | 82 | 82 | 0 |
-| 03 | InfoSec | 78 | 78 | 0 |
+| 03 | InfoSec | 78 | 80 | +2 |
 | 04 | Idiomatic Go | 79 | 79 | 0 |
 | 05 | Idiomatic JS | 88 | 88 | 0 |
-| 06 | DevOps | 87 | 87 | 0 |
-| 07 | QA | 79 | 75 | -4 |
-| 08 | Tech Lead | 59 | 56 | -3 |
+| 06 | DevOps | 87 | 88 | +1 |
+| 07 | QA | 75 | 77 | +2 |
+| 08 | Tech Lead | 56 | 56 | 0 |
 | 09 | Architect | 79 | 79 | 0 |
-| 10 | Performance | 76 | 75 | -1 |
+| 10 | Performance | 75 | 75 | 0 |
 | 11 | Database | 80 | 80 | 0 |
-| 12 | Tech Writer | 82 | 81 | -1 |
-| 13 | Product Owner | 84 | 82 | -2 |
-| 14 | Compliance | 80 | 79 | -1 |
-| 15 | SRE | 74 | 73 | -1 |
-| 16 | UX | 80 | 78 | -2 |
-| 17 | New Starter | 89 | 87 | -2 |
-| **Overall** |  | **80** | **79** | **-1** |
+| 12 | Tech Writer | 81 | 81 | 0 |
+| 13 | Product Owner | 82 | 85 | +3 |
+| 14 | Compliance | 79 | 79 | 0 |
+| 15 | SRE | 73 | 74 | +1 |
+| 16 | UX | 78 | 79 | +1 |
+| 17 | New Starter | 87 | 88 | +1 |
+| **Overall** |  | **79** | **80** | **+1** |
 
 ## Score Distribution
 
 | Band | Categories |
-|------|-----------|
-| 85-89 | Idiomatic JS (88), DevOps (87), New Starter (87) |
-| 80-84 | Security (82), Database (80), Tech Writer (81), Product Owner (82) |
-| 75-79 | OpenAPI (78), InfoSec (78), Idiomatic Go (79), QA (75), Architect (79), Performance (75), Compliance (79), UX (78) |
-| 70-74 | SRE (73) |
-| 55-59 | Tech Lead (56) |
+|------|------------|
+| 90+ | None |
+| 80-89 | Security (82), InfoSec (80), Idiomatic JS (88), DevOps (88), Database (80), Tech Writer (81), Product Owner (85), New Starter (88) |
+| 70-79 | OpenAPI (74), Idiomatic Go (79), QA (77), Architect (79), Performance (75), Compliance (79), SRE (74), UX (79) |
+| 60-69 | None |
+| 50-59 | Tech Lead (56) |
 
 ## What Changed Since Last Assessment
 
-Since the previous report set, the codebase picked up useful CLI workflow improvements in `cmd/tk`: `tk ls` now filters on genuinely open tickets instead of raw `complete` state, `tk get` now reports child totals/open/closed counts, and epic child rendering keeps closed children visible while visually de-emphasising them by state (`cmd/tk/cmd_ticket.go:39-55`, `cmd/tk/cmd_ticket.go:397-402`, `cmd/tk/cmd_ticket.go:644-658`, `cmd/tk/printer.go:262-307`). Those changes improved day-to-day ergonomics, but the fresh SDLC pass also uncovered real regressions and stale findings that the previous summary understated.
+Recent user-facing work materially improved the product surface: `tk draft` / `tk undraft` now support multiple IDs (`cmd/tk/cmd_ticket_lifecycle.go:262-323`), `tk get` detail columns and child counts are aligned and regression-tested (`cmd/tk/printer.go:253-290`, `cmd/tk/main_test.go:2167-2201`), `tk skill` is now a documented first-class command (`cmd/tk/cmd_setup.go:48-66`, `README.md:205`, `USER_GUIDE.md:37-43`), and ticket health expanded from 4 to 10 checks with project/SDLC/stage context (`cmd/tk/cmd_ticket_health.go:54-76`, `cmd/tk/cmd_ticket_health.go:175-245`).
 
-### Key movements
-
-- **QA -4**: the review confirmed the coverage gate is still broken and still lacks API/CLI coverage for several SDLC flows, despite the recent CLI regression tests added for `tk ls`/`tk get` (`cmd/tk/main_test.go:1441-1495`, `cmd/tk/main_test.go:1855-1880`, `cmd/tk/main_test.go:4193-4203`)
-- **Tech Lead -3**: two previously flagged critical TUI state/stage mismatches remain unresolved, and new SA4010-style append bugs were identified
-- **Performance -1**: unbounded history queries and full-project scans in clone/delete paths remain unresolved
-- **SRE -1**: `docs/SLO.md` still references request counters/histograms that `/metrics` does not expose
-- **Tech Writer / Product Owner / Compliance / New Starter** had partial recovery as key user docs were brought back in line with CLI behavior (`tk skill` docs added; stale `tk agent run -url` guidance removed)
-- **Architect / Database / OpenAPI / Security / InfoSec / Idiomatic Go / Idiomatic JS / DevOps** remained broadly stable with no fresh regressions of consequence
+The main regression uncovered in this refresh is `openapi.yaml`: the new endpoints are documented, but the top-level `info.version` entry is malformed as a bare `.1.775`, so the file is no longer valid YAML (`openapi.yaml:1-10`). Smaller doc/UI drift remains in `docs/PRIVACY.md`, `docs/ONBOARDING.md`, and the SPA health/prefix controls.
 
 ## Key Metrics
 
-| Metric | Previous | Current |
-|--------|----------|---------|
-| Go test functions | 410 | 414 |
-| Playwright specs | 11 | 11 |
-| OpenAPI operationIds | 113 | 113 |
-| Lines in cmd_ticket.go | 2,041 | 2,060 |
-| Lines in tui/model.go | 1,846 | 1,846 |
-| Lines in index.html | 6,183 | 6,183 |
-| Files failing gofmt | 34 | 32 |
-| Binary version | 0.1.769 | 0.1.774 |
+| Metric | Previous | Current | Evidence |
+|--------|----------|---------|----------|
+| Go test functions | 414 | 486 | repository-wide `*_test.go` count on 2026-04-13 |
+| Playwright specs | 11 | 11 | `tests/playwright/*.spec.*` |
+| OpenAPI operationIds | 113 | 119 | `grep -c '^\s*operationId:' openapi.yaml` |
+| OpenAPI YAML parses | yes | no | `openapi.yaml:1-10` |
+| Health check criteria | 4 | 10 | `cmd/tk/cmd_ticket_health.go:218-245` |
+| Draft/undraft target count | 1 | many | `cmd/tk/cmd_ticket_lifecycle.go:275-323` |
+| `cmd/tk/cmd_ticket.go` lines | 2,060 | 2,187 | current wc |
+| `cmd/tk/cmd_ticket_health.go` lines | 440 | 541 | current wc |
+| `web/static/index.html` lines | 6,183 | 6,287 | current wc |
+| Binary version | 0.1.774 | 0.1.790 | `cmd/tk/VERSION` |
 
-## Top Priority Action Items
-
-### High
-1. **Run `gofmt -w ./...` and fix the remaining static-analysis issues** — repository-wide formatting drift remains
-2. **Improve report automation reliability** — SDLC refresh agent runs are vulnerable to transient model backend failures and need retry-safe orchestration
-
-### Medium
-3. **Complete dark-mode and modal keyboard handling in the SPA** — hardcoded light colors and missing Escape handling remain the top UX issues
-
-## Resolved Since Publication
-
-- 2026-04-12 — TK-136 — commit `108ee1f` added regression coverage proving `tk ready` clears draft mode and `tk notready` sets it
-- 2026-04-12 — TK-137 — commit `67b0af3` aligned the TUI ticket type/state/stage pickers with the current lifecycle constants in `internal/tui/model_forms.go`
-- 2026-04-12 — TK-138 — commit `67b0af3` restored the enforced Go coverage gates by adding targeted CLI/API/store/server tests and fixing `tk project sdlc 0`
-- 2026-04-12 — TK-139 — commit `67b0af3` removed the stale alerting/metrics claims from `docs/SLO.md` instead of pretending nonexistent counters existed
-- 2026-04-12 — TK-142 — commit `108ee1f` verified `tk sdlc role-add/get/update/rm` are all SDLC-scoped and no longer match the stale report finding
-- 2026-04-12 — TK-144 — commit `67b0af3` capped verbose body capture and suppressed auth/agent request-response bodies in `internal/server/server.go`
-- 2026-04-13 — commit `c55e1f7` updated `README.md`, `QUICKSTART.md`, and `USER_GUIDE.md` to remove stale `tk agent run -url` guidance and document `tk skill`
-
-## Cumulative Progress
+## Cumulative Improvement
 
 | Assessment | Date | Score | Delta |
 |-----------|------|-------|-------|
@@ -90,10 +66,14 @@ Since the previous report set, the codebase picked up useful CLI workflow improv
 | v2 | 2026-04-09 | 71 | +1 |
 | v3 | 2026-04-10 | 71 | 0 |
 | v4 | 2026-04-12 | 80 | +9 |
-| v5 (current) | 2026-04-12 | 79 | -1 |
+| v5 | 2026-04-12 | 79 | -1 |
+| v6 (current) | 2026-04-13 | 80 | +1 |
 
-## Notes
+## Prioritized Actions
 
-- The project is still materially stronger than the v1-v3 baseline, especially in security, DevOps, OpenAPI alignment, and architectural coherence.
-- This refresh is the first report set to surface a **mixed picture**: CLI ergonomics improved, but quality gates, stale documentation, and some long-standing correctness issues are still dragging down the overall readiness score.
-- The biggest disconnect remains between documented intent and implemented behavior: `tk ready`, TUI lifecycle constants, and SLO alerting rules all advertise workflows the current code does not fully honor.
+| Priority | Action | Evidence | Why it matters |
+|----------|--------|----------|----------------|
+| 1 | Repair the malformed OpenAPI header and add a spec validation check to CI | `openapi.yaml:1-10` | The spec currently cannot be parsed by standard tooling, which undermines docs, SDK generation, and drift checking. |
+| 2 | Replace full-project child scans in CLI/store paths with targeted child queries | `cmd/tk/cmd_ticket.go:728-737`, `internal/store/ticket.go:1864-1870`, `internal/store/ticket.go:1885-1892` | The same scalability smell appears in interactive read, clone, and delete flows. |
+| 3 | Finish the remaining doc drift cleanup in privacy/onboarding materials | `docs/PRIVACY.md:4-5`, `docs/PRIVACY.md:113-114`, `docs/ONBOARDING.md:23-47` | New commands are documented in README/USER_GUIDE, but the specialist docs still lag. |
+| 4 | Align the web UI with the expanded health model and backend prefix validation | `web/static/index.html:1274-1275`, `web/static/index.html:1495-1503`, `cmd/tk/cmd_ticket_health.go:218-245`, `docs/LIFECYCLE.md:14-15` | The main UX now trails the CLI in two visible workflow areas. |

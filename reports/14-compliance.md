@@ -1,44 +1,36 @@
 # Compliance
 
-**Score: 79/100** (was 80)
+**Score: 79/100** (was 79)
 
 ## What is being assessed
-
-Privacy, retention, auditability, licensing, and evidence that the system can support ordinary operational and regulatory expectations without hidden data-handling surprises.
+Privacy, retention, erasure, auditability, and license/SBOM evidence, with attention to whether the project’s documented compliance story matches what the code can actually do.
 
 ## Methodology
-
-Reviewed audit, retention, and data-handling documentation plus the current server/store implementation and compared them with the previous compliance report baseline.
+Reviewed `docs/PRIVACY.md`, `LICENSE`, `sbom.json`, user-deletion logic, history storage, and snapshot signing to verify the current compliance posture against the previous baseline.
 
 ## Findings
 
 ### Passing checks
-- **The project still carries explicit licensing and SBOM artifacts** — `LICENSE` and `sbom.json` remain present at the repo root
-- **Audit-oriented activity history remains part of the product model** — ticket activity and event retrieval are still implemented in `internal/store/activity.go`
-- **The docs set still includes security and operational guidance** — the repository continues to maintain security- and ops-adjacent docs in `docs/`
+- **The project ships the expected legal/composition artifacts** — both `LICENSE` and `sbom.json` are present at the repository root.
+- **Retention controls are documented with concrete knobs** — the privacy policy names both session and history retention environment variables (`docs/PRIVACY.md:57-72`).
+- **User deletion still does real cleanup plus audit anonymisation** — deleting a user nulls history references and removes sessions, memberships, time entries, messages, comments, and related records (`internal/store/auth.go:310-366`).
+- **Snapshot export/import is tamper-evident when configured** — snapshots are signed and verified with HMAC before import (`internal/store/snapshot.go:113-131`, `internal/store/snapshot.go:242-276`).
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| No documented retention or deletion policy for ticket/user data | High | docs set | Add an explicit retention-and-erasure policy covering `.ticket/`, server data, backups, and logs |
-| No user-facing data export / erasure workflow | High | CLI/API surface | Add documented admin workflows for export and purge operations |
-| Audit integrity is eventful but not tamper-evident | Medium | `internal/store/activity.go` | Add signed or chained audit records if compliance-grade integrity is required |
-| Cookie/privacy guidance is incomplete for hosted deployments | Medium | docs / web deployment guidance | Document cookie usage, auth data handling, and operator responsibilities |
-| Third-party dependency review is present via SBOM but not operationalised | Low | `sbom.json` | Add a documented dependency review cadence and ownership |
+| The privacy policy metadata is stale and still uses old `ticket` CLI examples for rights workflows | Medium | `docs/PRIVACY.md:4-5`, `docs/PRIVACY.md:113-114` | Update the version/date and rewrite the rights examples to use the current `tk` command surface. |
+| Ticket/history audit records are preserved but not individually signed or chained | Medium | `internal/store/activity.go:34-42` | Add record-level signing/chaining if tamper-evident audit history is a compliance requirement beyond snapshot integrity. |
 
 ## Verdict
-
-The project remains better than average on basic artifact hygiene, but it still lacks the documented privacy and retention controls that make a compliance story credible beyond engineering intent. The score dipped because the remaining gaps are still material and mostly procedural rather than purely technical.
+The compliance posture is credible for a self-hosted project of this size because retention controls, erasure semantics, and SBOM/licensing artifacts are all concrete. The remaining weakness is specialist-document freshness and the fact that audit integrity stops at snapshot signing rather than per-record protection.
 
 ## Changes since last assessment
-- The same core compliance gaps remain open: retention, erasure, and stronger audit integrity
-- The repo still has licensing/SBOM basics, but the operational compliance story has not materially advanced
+- Reconfirmed the privacy policy now documents retention knobs and self-hosted controller responsibilities (`docs/PRIVACY.md:57-72`, `docs/PRIVACY.md:117-129`).
+- Reconfirmed user deletion still anonymises audit references while removing personal records (`internal/store/auth.go:327-366`).
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| Missing retention/erasure policy | High | Publish a concrete data retention and deletion policy |
-| Missing export/purge workflows | High | Add admin-facing export and purge commands/endpoints |
-| Audit trail not tamper-evident | Medium | Add chained or signed audit records |
-| Incomplete cookie/privacy guidance | Medium | Document operator responsibilities for hosted deployments |
-| No documented dependency review cadence | Low | Add ownership and review frequency for SBOM/vulnerability review |
+| Stale privacy metadata/examples | Medium | Refresh `docs/PRIVACY.md` so its header and command examples match the current product. |
+| Audit history integrity gap | Medium | Add record-level signing/chaining if compliance expectations require tamper-evident history, not just signed snapshots. |

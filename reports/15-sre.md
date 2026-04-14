@@ -1,44 +1,35 @@
 # SRE
 
-**Score: 73/100** (was 74)
+**Score: 74/100** (was 73)
 
 ## What is being assessed
-
-Operational readiness: metrics, logging, health behavior, runbooks, recovery guidance, SLO clarity, and whether the documented observability story matches what the binary actually exposes.
+Operational readiness: health endpoints, metrics, alertability, runbook accuracy, capacity guidance, and whether operators can trust the documented observability story.
 
 ## Methodology
-
-Reviewed SRE-facing docs and server/runtime code, with emphasis on metrics exposure, health endpoints, logging, runbooks, and the prior assessment findings for observability drift.
+Reviewed `internal/server/api_system.go`, `internal/server/server.go`, `cmd/tk/cmd_ticket_health.go`, `docs/SLO.md`, and the current runbook baseline, then refreshed the previous SRE findings against current evidence.
 
 ## Findings
 
 ### Passing checks
-- **Structured logging remains the default** — the server still uses `slog`-based logging (`internal/server/server.go`)
-- **Health and readiness style endpoints still exist** — runtime health checks are exposed and test-covered (`internal/server/health.go`, related tests)
-- **Operational documentation still exists** — `docs/RUNBOOKS.md` and `docs/SLO.md` continue to provide operator-facing material
-- **The server still enforces bounded HTTP behavior** — timeouts and body caps remain configured (`internal/server/server.go:41-45`, `internal/server/server.go:178-186`)
+- **The runtime exposes concrete liveness/capacity signals** — `/api/healthz` and authenticated `/metrics` are implemented in the server, not just described in docs (`internal/server/api_system.go:19-80`).
+- **The SLO document now matches the real signal set** — it explicitly describes `/metrics`, log-derived alerts, no tracing pipeline, and SQLite capacity ceilings (`docs/SLO.md:25-96`).
+- **Ticket health checks now cover more operational context** — the CLI health command expanded to 10 checks spanning ticket, project, SDLC, and stage context (`cmd/tk/cmd_ticket_health.go:54-76`, `cmd/tk/cmd_ticket_health.go:146-157`, `cmd/tk/cmd_ticket_health.go:175-245`).
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| `docs/SLO.md` still promises Prometheus metrics the server does not expose | High | `docs/SLO.md`, runtime `/metrics` support | Either implement `/metrics` or remove the claims and rewrite the SLO doc around actual signals |
-| No alerting definitions or alert wiring | Medium | docs / runtime | Add concrete alert rules for availability, error rate, and latency |
-| Backup and restore guidance is still too thin for operator confidence | Medium | docs set | Add a tested backup/restore runbook for `.ticket/` and server-mode deployments |
-| No tracing support or trace-propagation story | Low | runtime | Add tracing or explicitly document that the product is log-and-metrics only |
-| Capacity planning is still mostly implicit | Low | docs set | Document expected scale envelopes and resource ceilings |
+| The metrics surface still lacks request-rate, error-rate, and latency counters/histograms | Medium | `internal/server/api_system.go:57-80` | Add request/response counters and latency histograms so the SLOs do not depend on log-derived signals for core API behavior. |
+| Alerting guidance exists only as documentation; no alerting config ships with the repository | Medium | `docs/SLO.md:25-74` | Add a checked-in Prometheus/Alertmanager example or equivalent operational config alongside the narrative SLO guidance. |
 
 ## Verdict
-
-This category regressed because the mismatch between the SLO documentation and the actual observability surface is still a high-severity issue. The code has sensible timeouts and logging, but the operator story is not trustworthy while the docs claim metrics that do not exist.
+SRE improved because the docs now tell the truth and the health command is materially richer than before. The next operational step is to turn the current liveness/capacity gauges into a fuller request-observability story and ship actual alert wiring rather than only prose.
 
 ## Changes since last assessment
-- 2026-04-12 — TK-234 — commit `67b0af3` rewrote `docs/SLO.md` to match the authenticated `/metrics` endpoint and the current log-derived observability story
-- 2026-04-12 — TK-235 — commit `67b0af3` added concrete alert guidance and ownership expectations to `docs/SLO.md`
-- 2026-04-12 — TK-236 — commit `67b0af3` expanded `docs/RUNBOOKS.md` with explicit local-mode and server-mode restore checklists
-- 2026-04-12 — TK-237 — commit `67b0af3` documented the deliberate absence of tracing in `docs/SLO.md`
-- 2026-04-12 — TK-238 — commit `67b0af3` documented capacity assumptions and single-node SQLite ceilings in `docs/SLO.md`
+- Reclassified the old docs-vs-runtime observability drift as fixed (`docs/SLO.md:25-96`, `internal/server/api_system.go:19-80`).
+- Credited the expanded 10-check health model as an operational readiness improvement (`cmd/tk/cmd_ticket_health.go:175-245`).
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| None | - | Completed on 2026-04-12 via TK-234/TK-235/TK-236/TK-237/TK-238 in commit `67b0af3` |
+| Limited metrics surface | Medium | Add API request/error/latency metrics to `/metrics`. |
+| Alerting only documented, not shipped | Medium | Check in runnable alerting examples or starter configs instead of prose-only guidance. |

@@ -1,43 +1,36 @@
 # New Starter
 
-**Score: 87/100** (was 88)
+**Score: 88/100** (was 87)
 
 ## What is being assessed
-
-How effectively a new engineer can clone the repo, understand the architecture, run the product and tests, learn the workflow, and avoid common pitfalls without relying on tribal knowledge.
+How quickly a new engineer can orient themselves: reading order, setup speed, workflow discoverability, test expectations, and whether the docs surface the latest commands and gotchas without tribal knowledge.
 
 ## Methodology
-
-Reviewed onboarding-facing docs (`README.md`, `CLAUDE.md`, `QUICKSTART*.md`, `TESTING.md`, `docs/ONBOARDING.md`), build/test commands, and the current repository workflow guidance.
+Reviewed `README.md`, `CLAUDE.md`, `QUICKSTART.md`, `USER_GUIDE.md`, and `docs/ONBOARDING.md`, then compared newcomer-facing guidance with the latest CLI/docs changes.
 
 ## Findings
 
 ### Passing checks
-- **The repo still has a strong top-level doc set** — `README.md`, `CLAUDE.md`, quickstarts, testing docs, and `docs/ONBOARDING.md` give a newcomer several clear entry points
-- **Build and test workflows are explicit** — setup, build, lint, and test commands are documented in `CLAUDE.md` and supported by the Makefile
-- **Architecture and lifecycle concepts are documented** — package roles and lifecycle behavior are explained in `CLAUDE.md`, `SPEC.md`, and `docs/LIFECYCLE.md`
-- **Ticket workflow is discoverable in-repo** — the project uses `tk`, `.ticket/`, and a documented local workflow rather than hiding work tracking elsewhere
-- **README and ONBOARDING now provide a clear front door** — both docs now include an explicit “start here” path for new contributors (`README.md`, `docs/ONBOARDING.md`)
-- **Newcomer workflow expectations are now consolidated** — `docs/ONBOARDING.md` now captures branch naming, commit style, quality gates, and doc-update expectations in one section
-- **Common onboarding pitfalls are now documented where newcomers will see them** — `docs/ONBOARDING.md` now calls out Playwright setup, local-vs-remote mode confusion, spec drift, and `.ticket/ticket.db` rebase conflicts
-- **Core reference docs were refreshed to current behavior** — `docs/DESIGN.md`, `SPEC.md`, and `docs/RUNBOOKS.md` now reflect the current `tk` command surface, config-home rules, project prefix rule, and story model
+- **The repo now has a visible reading order** — README and ONBOARDING both start with explicit “Start here” sections (`README.md:33`, `docs/ONBOARDING.md:23-47`).
+- **Build, test, and architecture expectations are explicit** — CLAUDE documents setup/test commands, the version-bump caveat on `make build`, and the main package architecture (`CLAUDE.md:3-27`, `CLAUDE.md:29-45`, `CLAUDE.md:76-82`).
+- **The ticket workflow is discoverable in-repo** — ONBOARDING documents branch/PR expectations and common `.ticket/` pitfalls for contributors (`docs/ONBOARDING.md:182-221`).
+- **`tk skill` is now visible to newcomers in the main user docs** — the command is documented in USER_GUIDE, QUICKSTART, and README (`USER_GUIDE.md:37-43`, `QUICKSTART.md:114`, `README.md:205`).
 
 ### Issues found
 | Finding | Severity | Location | Recommendation |
 |---------|----------|----------|----------------|
-| None | - | - | Previous onboarding recommendations were completed on 2026-04-12 via TK-135 in commit `6f840bf` |
+| `docs/ONBOARDING.md` still does not mention `tk skill`, even though the command now exists specifically to help agent/newcomer workflows | Medium | `docs/ONBOARDING.md:23-221`, `USER_GUIDE.md:37-43` | Add `tk skill` to the onboarding reading/first-steps section and explain when a newcomer should use it. |
+| Runbook recovery examples still lean on `/tmp` scratch paths, which is avoidable noise for new contributors learning the repo workflow | Low | `docs/RUNBOOKS.md:95-106`, `docs/RUNBOOKS.md:118-121`, `docs/RUNBOOKS.md:155-158` | Rewrite the examples to use project-local or clearly user-chosen paths instead of `/tmp`-style scratch files. |
 
 ## Verdict
-
-Onboarding is still comparatively strong: a new engineer can get productive without much guesswork, and the repo includes far more internal guidance than most projects of this size. The small regression reflects documentation drift and the fact that the ideal reading sequence is still implied more than explicitly curated.
+Onboarding is still one of the project’s strongest areas, and it got better with `tk skill` plus the refreshed agent-run docs. The remaining newcomer gaps are now small and concrete: one missing onboarding mention and a few runbook examples that still feel more ops-centric than first-day friendly.
 
 ## Changes since last assessment
-- 2026-04-12 — TK-135 — commit `6f840bf` added explicit “start here” sections to `README.md` and `docs/ONBOARDING.md`
-- 2026-04-12 — TK-135 — commit `6f840bf` consolidated branch, PR, and quality-gate expectations into a newcomer workflow section in `docs/ONBOARDING.md`
-- 2026-04-12 — TK-135 — commit `6f840bf` added a focused newcomer pitfalls section covering Playwright setup, local-vs-remote mode, spec drift, and `.ticket/ticket.db` workflow friction
-- 2026-04-12 — TK-135 — commit `6f840bf` refreshed `docs/DESIGN.md`, `SPEC.md`, and `docs/RUNBOOKS.md` to match the current `tk` command surface and config behavior
+- Credited `tk skill` as a new newcomer-facing command and documentation surface (`cmd/tk/cmd_setup.go:48-66`, `README.md:205`, `USER_GUIDE.md:37-43`).
+- Credited the newer `tk get` and bulk draft/undraft behavior as lower-friction day-two/day-three workflows (`cmd/tk/printer.go:253-290`, `cmd/tk/cmd_ticket_lifecycle.go:262-323`).
 
 ## Remaining recommendations
 | Finding | Severity | Recommendation |
 |---------|----------|----------------|
-| None | - | Completed on 2026-04-12 via TK-135 in commit `6f840bf` |
+| `tk skill` missing from ONBOARDING | Medium | Add the command to the onboarding path so new contributors discover it without reading the full user guide first. |
+| `/tmp`-style runbook examples | Low | Use project-local or clearly user-selected paths in newcomer-facing recovery examples. |
