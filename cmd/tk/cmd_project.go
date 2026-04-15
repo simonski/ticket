@@ -53,6 +53,9 @@ func runProject(args []string) error {
 		wow := fs.String("wow", "", "ways of working")
 		dor := fs.String("dor", "", "definition of ready")
 		dod := fs.String("dod", "", "definition of done")
+		dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+		dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitBranch := fs.String("git-branch", "", "project git branch")
 		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
@@ -60,7 +63,7 @@ func runProject(args []string) error {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-wow text] [-dor text] [-dod text] [-description text] [-ac text] [-sdlc id]")
+			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-sdlc id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -76,15 +79,26 @@ func runProject(args []string) error {
 		if projectWoW == "" {
 			projectWoW = *description
 		}
-		projectDoR := strings.TrimSpace(*dor)
-		if projectDoR == "" {
-			projectDoR = *acceptanceCriteria
+		projectDORMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
+		if err != nil {
+			return err
+		}
+		projectDODMap, err := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args[1:], "-dod"), containsFlag(args[1:], "-dod-map"))
+		if err != nil {
+			return err
+		}
+		projectACMap, err := mergeGuidanceMap(nil, *acceptanceCriteria, *acMapRaw, containsFlag(args[1:], "-ac"), containsFlag(args[1:], "-ac-map"))
+		if err != nil {
+			return err
 		}
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Prefix:             *prefix,
 			Title:              *title,
 			Description:        projectWoW,
-			AcceptanceCriteria: projectDoR,
+			AcceptanceCriteria: strings.TrimSpace(*acceptanceCriteria),
+			DORMap:             projectDORMap,
+			DODMap:             projectDODMap,
+			ACMap:              projectACMap,
 			Notes:              strings.TrimSpace(*dod),
 			GitRepository:      strings.TrimSpace(*gitRepository),
 			GitBranch:          strings.TrimSpace(*gitBranch),
@@ -327,6 +341,10 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	description := fs.String("description", dirName, "project description (default: directory name)")
 	dor := fs.String("dor", "", "definition of ready")
 	dod := fs.String("dod", "", "definition of done")
+	ac := fs.String("ac", "", "acceptance criteria")
+	dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+	dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+	acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -340,13 +358,28 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	// Try to find existing project by prefix
 	project, err := svc.GetProject(context.Background(), *prefix)
 	if err != nil {
+		dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args, "-dor"), containsFlag(args, "-dor-map"))
+		if err != nil {
+			return err
+		}
+		dodMap, err := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args, "-dod"), containsFlag(args, "-dod-map"))
+		if err != nil {
+			return err
+		}
+		acMap, err := mergeGuidanceMap(nil, *ac, *acMapRaw, containsFlag(args, "-ac"), containsFlag(args, "-ac-map"))
+		if err != nil {
+			return err
+		}
 		// Project doesn't exist — create it
 		project, err = svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
-			Prefix:      *prefix,
-			Title:       *title,
-			Description: *description,
-			AcceptanceCriteria: strings.TrimSpace(*dor),
-			Notes:       strings.TrimSpace(*dod),
+			Prefix:             *prefix,
+			Title:              *title,
+			Description:        *description,
+			AcceptanceCriteria: strings.TrimSpace(*ac),
+			DORMap:             dorMap,
+			DODMap:             dodMap,
+			ACMap:              acMap,
+			Notes:              strings.TrimSpace(*dod),
 		})
 		if err != nil {
 			return err
@@ -531,6 +564,9 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		wow := fs.String("wow", "", "ways of working")
 		dor := fs.String("dor", "", "definition of ready")
 		dod := fs.String("dod", "", "definition of done")
+		dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+		dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
 		gitBranch := fs.String("git-branch", "", "project git branch")
@@ -558,17 +594,14 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		if fs.Lookup("description") != nil && strings.TrimSpace(*description) != "" || containsFlag(args[1:], "-description") {
 			nextDescription = *description
 		}
-		if containsFlag(args[1:], "-ac") {
-			nextAC = *acceptanceCriteria
-		}
 		if containsFlag(args[1:], "-wow") {
 			nextDescription = strings.TrimSpace(*wow)
 		}
-		if containsFlag(args[1:], "-dor") {
-			nextAC = strings.TrimSpace(*dor)
-		}
 		if containsFlag(args[1:], "-dod") {
 			nextNotes = strings.TrimSpace(*dod)
+		}
+		if containsFlag(args[1:], "-ac") {
+			nextAC = strings.TrimSpace(*acceptanceCriteria)
 		}
 		if containsFlag(args[1:], "-git-repository") || containsFlag(args[1:], "-git") {
 			nextRepo = strings.TrimSpace(*gitRepository)
@@ -592,10 +625,25 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		} else {
 			nextSdlcID = current.SdlcID
 		}
+		nextDORMap, err := mergeGuidanceMap(current.DORMap, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
+		if err != nil {
+			return err
+		}
+		nextDODMap, err := mergeGuidanceMap(current.DODMap, *dod, *dodMapRaw, containsFlag(args[1:], "-dod"), containsFlag(args[1:], "-dod-map"))
+		if err != nil {
+			return err
+		}
+		nextACMap, err := mergeGuidanceMap(current.ACMap, *acceptanceCriteria, *acMapRaw, containsFlag(args[1:], "-ac"), containsFlag(args[1:], "-ac-map"))
+		if err != nil {
+			return err
+		}
 		project, err := svc.UpdateProject(context.Background(), projectID, libticket.ProjectUpdateRequest{
 			Title:              *title,
 			Description:        nextDescription,
 			AcceptanceCriteria: nextAC,
+			DORMap:             nextDORMap,
+			DODMap:             nextDODMap,
+			ACMap:              nextACMap,
 			Notes:              nextNotes,
 			GitRepository:      nextRepo,
 			GitBranch:          nextBranch,

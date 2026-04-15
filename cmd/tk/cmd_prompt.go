@@ -64,6 +64,12 @@ func buildPromptForTicket(ctx context.Context, svc promptService, ticketRef stri
 		return "", err
 	}
 
+	projectGuidance := project.ResolveGuidance(ticket.Stage)
+	projectDOD := projectGuidance.DOD
+	if strings.TrimSpace(projectDOD) == "" {
+		projectDOD = project.Notes
+	}
+
 	epic, hasEpic := findAncestorByType(ancestors, "epic")
 	story, hasStory := findAncestorByType(ancestors, "story")
 	if strings.EqualFold(ticket.Type, "story") {
@@ -71,14 +77,17 @@ func buildPromptForTicket(ctx context.Context, svc promptService, ticketRef stri
 		hasStory = true
 	}
 
-	roleTitle, roleAC := "N/A", "N/A"
+	roleTitle, roleDOR, roleDOD, roleAC := "N/A", "N/A", "N/A", "N/A"
 	if ticket.RoleID != nil {
 		roles, roleErr := svc.ListRoles(ctx)
 		if roleErr == nil {
 			for _, role := range roles {
 				if role.ID == *ticket.RoleID {
 					roleTitle = promptValue(role.Title)
-					roleAC = promptValue(role.AcceptanceCriteria)
+					roleGuidance := role.ResolveGuidance(ticket.Stage)
+					roleDOR = promptValue(roleGuidance.DOR)
+					roleDOD = promptValue(roleGuidance.DOD)
+					roleAC = promptValue(roleGuidance.AC)
 					break
 				}
 			}
@@ -86,22 +95,24 @@ func buildPromptForTicket(ctx context.Context, svc promptService, ticketRef stri
 	}
 
 	stageName := promptValue(ticket.Stage)
-	stageAC := "N/A"
+	stageDOR, stageDOD, stageAC := "N/A", "N/A", "N/A"
 	if stage, stageErr := resolveStageForPrompt(ctx, svc, ticket, project); stageErr == nil && stage != nil {
 		stageName = promptValue(stage.StageName)
 		stageAC = promptValue(stage.AcceptanceCriteria)
-		if strings.TrimSpace(stage.DefinitionOfReady) != "" {
-			stageAC = promptValue(stage.DefinitionOfReady)
-		}
+		stageDOR = promptValue(stage.DefinitionOfReady)
+		stageDOD = promptValue(stage.DefinitionOfDone)
 	}
+	ticketGuidance := ticket.ResolveGuidance(ticket.Stage)
 
 	var b strings.Builder
 	b.WriteString("AGENT EXECUTION PROMPT\n\n")
 	b.WriteString("PROJECT\n")
 	b.WriteString("Title: " + promptValue(project.Title) + "\n")
 	b.WriteString("Description: " + promptValue(project.Description) + "\n")
-	b.WriteString("Definition of Ready: " + promptValue(project.AcceptanceCriteria) + "\n")
-	b.WriteString("Definition of Done: " + promptValue(project.Notes) + "\n\n")
+	b.WriteString("Definition of Ready: " + promptValue(projectGuidance.DOR) + "\n")
+	b.WriteString("Definition of Done: " + promptValue(projectDOD) + "\n")
+	b.WriteString("Acceptance Criteria: " + promptValue(projectGuidance.AC) + "\n")
+	b.WriteString("\n")
 
 	b.WriteString("EPIC\n")
 	if hasEpic {
@@ -128,14 +139,20 @@ func buildPromptForTicket(ctx context.Context, svc promptService, ticketRef stri
 	b.WriteString("Type: " + promptValue(ticket.Type) + "\n")
 	b.WriteString("Title: " + promptValue(ticket.Title) + "\n")
 	b.WriteString("Description: " + promptValue(ticket.Description) + "\n")
-	b.WriteString("Acceptance Criteria: " + promptValue(ticket.AcceptanceCriteria) + "\n\n")
+	b.WriteString("Definition of Ready: " + promptValue(ticketGuidance.DOR) + "\n")
+	b.WriteString("Definition of Done: " + promptValue(ticketGuidance.DOD) + "\n")
+	b.WriteString("Acceptance Criteria: " + promptValue(ticketGuidance.AC) + "\n\n")
 
 	b.WriteString("ROLE\n")
 	b.WriteString("Title: " + roleTitle + "\n")
+	b.WriteString("Definition of Ready: " + roleDOR + "\n")
+	b.WriteString("Definition of Done: " + roleDOD + "\n")
 	b.WriteString("Acceptance Criteria: " + roleAC + "\n\n")
 
 	b.WriteString("STAGE\n")
 	b.WriteString("Name: " + stageName + "\n")
+	b.WriteString("Definition of Ready: " + stageDOR + "\n")
+	b.WriteString("Definition of Done: " + stageDOD + "\n")
 	b.WriteString("Acceptance Criteria: " + stageAC + "\n")
 
 	return b.String(), nil

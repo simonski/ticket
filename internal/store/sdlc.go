@@ -388,7 +388,7 @@ func listSdlcStages(ctx context.Context, db *sql.DB, sdlcID int64) ([]SdlcStage,
 // given sdlcID in a single query and returns them grouped by stage_id.
 func listSdlcStageRolesBatch(ctx context.Context, db *sql.DB, sdlcID int64) (map[int64][]Role, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT sr.stage_id, r.role_id, r.sdlc_id, r.title, r.description, r.acceptance_criteria, r.created_at, r.updated_at
+		SELECT sr.stage_id, r.role_id, r.sdlc_id, r.title, r.description, r.acceptance_criteria, r.dor_map, r.dod_map, r.ac_map, r.created_at, r.updated_at
 		FROM sdlc_stage_roles sr
 		JOIN roles r ON r.role_id = sr.role_id
 		WHERE sr.sdlc_id = ?
@@ -401,13 +401,12 @@ func listSdlcStageRolesBatch(ctx context.Context, db *sql.DB, sdlcID int64) (map
 	result := make(map[int64][]Role)
 	for rows.Next() {
 		var stageID int64
-		var role Role
-		var sdlcNullID sql.NullInt64
-		if err := rows.Scan(&stageID, &role.ID, &sdlcNullID, &role.Title, &role.Description, &role.AcceptanceCriteria, &role.CreatedAt, &role.UpdatedAt); err != nil {
+		role, err := scanRoleValues(func(dest ...any) error {
+			withStageID := append([]any{&stageID}, dest...)
+			return rows.Scan(withStageID...)
+		})
+		if err != nil {
 			return nil, err
-		}
-		if sdlcNullID.Valid {
-			role.SdlcID = &sdlcNullID.Int64
 		}
 		result[stageID] = append(result[stageID], role)
 	}

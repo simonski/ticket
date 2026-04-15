@@ -102,10 +102,16 @@ func ticketTypeCode(ticketType string) (string, error) {
 	switch normalizeTicketType(ticketType) {
 	case "epic":
 		return "E", nil
+	case "story":
+		return "Y", nil
 	case "task":
 		return "T", nil
 	case "bug":
 		return "B", nil
+	case "feature":
+		return "F", nil
+	case "idea":
+		return "I", nil
 	case "spike":
 		return "S", nil
 	case "chore":
@@ -119,7 +125,7 @@ func ticketTypeCode(ticketType string) (string, error) {
 	case "decision":
 		return "D", nil
 	default:
-		return "", fmt.Errorf("invalid task type %q", ticketType)
+		return "", fmt.Errorf("invalid ticket type %q", ticketType)
 	}
 }
 

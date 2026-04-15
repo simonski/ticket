@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -66,9 +67,12 @@ func printProject(project store.Project) {
 		fmt.Printf("description: %s\n", project.Description)
 	}
 	if project.AcceptanceCriteria != "" {
-		fmt.Printf("dor: %s\n", project.AcceptanceCriteria)
+		fmt.Printf("ac: %s\n", project.AcceptanceCriteria)
 		fmt.Printf("acceptance_criteria: %s\n", project.AcceptanceCriteria)
 	}
+	printGuidanceMap("dor_map", project.DORMap)
+	printGuidanceMap("dod_map", project.DODMap)
+	printGuidanceMap("ac_map", project.ACMap)
 	if project.Notes != "" {
 		fmt.Printf("dod: %s\n", project.Notes)
 		fmt.Printf("notes: %s\n", project.Notes)
@@ -129,6 +133,7 @@ func printTicket(ticket store.Ticket) {
 	fmt.Printf("draft: %t\n", ticket.Draft)
 	fmt.Printf("complete: %s\n", ticketCompleteLabel(ticket))
 	fmt.Printf("archived: %t\n", ticket.Archived)
+	fmt.Printf("deleted: %t\n", ticket.Deleted)
 	if ticket.Author != "" {
 		fmt.Printf("author: %s\n", ticket.Author)
 	}
@@ -138,6 +143,9 @@ func printTicket(ticket store.Ticket) {
 	if ticket.AcceptanceCriteria != "" {
 		fmt.Printf("acceptance_criteria: %s\n", ticket.AcceptanceCriteria)
 	}
+	printGuidanceMap("dor_map", ticket.DORMap)
+	printGuidanceMap("dod_map", ticket.DODMap)
+	printGuidanceMap("ac_map", ticket.ACMap)
 	if ticket.GitRepository != "" {
 		fmt.Printf("git_repository: %s\n", ticket.GitRepository)
 	}
@@ -152,6 +160,50 @@ func printTicket(ticket store.Ticket) {
 	}
 	if ticket.EstimateComplete != "" {
 		fmt.Printf("estimate_complete: %s\n", ticket.EstimateComplete)
+	}
+}
+
+func printGuidanceMap(label string, m store.GuidanceMap) {
+	if len(m) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Printf("%s[%s]: %s\n", label, key, m[key])
+	}
+}
+
+func guidanceDetailLabels(prefix string, m store.GuidanceMap) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	labels := make([]string, 0, len(keys))
+	for _, key := range keys {
+		labels = append(labels, fmt.Sprintf("%s[%s]", prefix, key))
+	}
+	return labels
+}
+
+func printAlignedGuidanceMap(width int, prefix string, m store.GuidanceMap) {
+	if len(m) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Printf("%-*s : %s\n", width, fmt.Sprintf("%s[%s]", prefix, key), m[key])
 	}
 }
 
@@ -245,6 +297,7 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		ticketField{label: "Draft", value: fmt.Sprintf("%t", ticket.Draft)},
 		ticketField{label: "Complete", value: ticketCompleteLabel(ticket)},
 		ticketField{label: "Archived", value: fmt.Sprintf("%t", ticket.Archived)},
+		ticketField{label: "Deleted", value: fmt.Sprintf("%t", ticket.Deleted)},
 		ticketField{label: "Priority", value: fmt.Sprintf("%d", ticket.Priority)},
 		ticketField{label: "Created", value: ticket.CreatedAt},
 		ticketField{label: "LastModified", value: ticket.UpdatedAt},
@@ -256,9 +309,27 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 			maxLabelWidth = len(field.label)
 		}
 	}
+	for _, label := range guidanceDetailLabels("dor_map", ticket.DORMap) {
+		if len(label) > maxLabelWidth {
+			maxLabelWidth = len(label)
+		}
+	}
+	for _, label := range guidanceDetailLabels("dod_map", ticket.DODMap) {
+		if len(label) > maxLabelWidth {
+			maxLabelWidth = len(label)
+		}
+	}
+	for _, label := range guidanceDetailLabels("ac_map", ticket.ACMap) {
+		if len(label) > maxLabelWidth {
+			maxLabelWidth = len(label)
+		}
+	}
 	for _, field := range fields {
 		fmt.Printf("%-*s : %s\n", maxLabelWidth, field.label, field.value)
 	}
+	printAlignedGuidanceMap(maxLabelWidth, "dor_map", ticket.DORMap)
+	printAlignedGuidanceMap(maxLabelWidth, "dod_map", ticket.DODMap)
+	printAlignedGuidanceMap(maxLabelWidth, "ac_map", ticket.ACMap)
 	if len(ticket.Comments) > 0 {
 		fmt.Printf("%-*s :\n", maxLabelWidth, "Comments")
 		for _, comment := range ticket.Comments {

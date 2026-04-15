@@ -10,8 +10,11 @@ tk init
 tk server
 ```
 
-The web UI is available at `http://localhost:8080`.  
-Leave the server running and open a second terminal for the steps below.
+In the first terminal, choose **Local mode** during `tk init` so the server has
+its local SQLite database. Save the generated `admin` password.
+
+The web UI is available at `http://localhost:8080`. Leave the server running
+and open a second terminal for the steps below.
 
 ## 2. Register and log in
 
@@ -20,8 +23,8 @@ Point the CLI at the running server and create your account:
 ```bash
 export TICKET_URL=http://localhost:8080
 
-tk register -username alice -password secret
-tk login    -username alice -password secret
+tk register -username alice -password secret12
+tk login    -username alice -password secret12
 ```
 
 ## 3. Create a project
@@ -42,22 +45,19 @@ tk list
 
 ## 5. Move work through the lifecycle
 
-Tickets progress through stages: **design → develop → test → done**.
+Tickets progress through stages: **design -> develop -> test -> done**.
 
 ```bash
-tk active   -id CUS-T-1      # begin work  (sets state=active)
-tk complete -id CUS-T-1      # finish stage, auto-advance to next
-tk idle     -id CUS-T-1      # pause
-tk complete -id CUS-T-1      # mark ticket complete
+tk complete -id CUS-1
 ```
 
 ## 6. Claim and request work
 
 ```bash
-tk claim   -id CUS-T-2       # assign to yourself
-tk request                    # get the next ready ticket
+tk request
 ```
 
+Use `tk claim -id <ticket>` when you want a specific claimable ticket.
 Admins can assign to other users with `tk assign <id> <username>`.
 
 ## 7. Run an AI agent
@@ -65,22 +65,22 @@ Admins can assign to other users with `tk assign <id> <username>`.
 The agent picks up tickets marked `ready` and works on them autonomously.
 
 ```bash
-tk undraft -id CUS-T-3         # make ticket available for agents
+tk ready -id CUS-3
 
-tk agent create               # prints agent_id (UUID) and password
+tk agent create
 export AGENT_ID=<agent-uuid>
 export AGENT_PASSWORD=<generated-password>
 
-tk agent run                  # default LLM: claude (Sonnet)
-tk agent run -llm codex       # use codex
-tk agent run -v               # stream LLM I/O to terminal
+tk agent run
+tk agent run -llm codex
+tk agent run -v
 ```
 
 ## 8. Web UI
 
 Open `http://localhost:8080` in a browser:
 
-- Kanban board grouped by sdlc stage
+- Kanban board grouped by SDLC stage
 - Ticket creation and inline editing
 - Drag-and-drop stage transitions
 - Team and user management
@@ -88,12 +88,11 @@ Open `http://localhost:8080` in a browser:
 
 ## 9. Using with Claude Code
 
-Copy the bundled skill so Claude can query and update tickets during coding:
+Write the bundled skill so Claude can query and update tickets during coding:
 
 ```bash
-cp -r .claude/skills/tk ~/.claude/skills/   # global (all projects)
-# or
-cp -r .claude/skills/tk .claude/skills/     # this project only
+mkdir -p .claude/skills/tk
+tk skill > .claude/skills/tk/SKILL.md
 ```
 
 Claude will then read live ticket state, log time, create bugs, and record
@@ -105,7 +104,7 @@ decisions automatically during your sessions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` is remote |
+| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` are remote |
 | `TICKET_USERNAME` | Default username for login/register |
 | `TICKET_PASSWORD` | Default password for login/register |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
@@ -114,4 +113,4 @@ decisions automatically during your sessions.
 
 ---
 
-Previous: [Local mode quickstart](QUICKSTART_CLIENT.md) — singleplayer, no server required.
+Previous: [Local mode quickstart](QUICKSTART_CLIENT.md) — single-user, no server required.

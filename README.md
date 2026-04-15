@@ -86,8 +86,8 @@ make test
 
 ```bash
 tk init                                          # create a repo-local .ticket/ workspace
-tk project create -prefix MY -title "My Project" -wow "Team ways of working" -dor "Ready criteria" -dod "Done criteria"
-tk add "First ticket"
+tk project create -prefix MY -title "My Project" -wow "Team ways of working" -dor "Ready criteria" -dod "Done criteria" -ac "Default acceptance criteria"
+tk add -dor "Ready for design" -ac "First ticket acceptance criteria" "First ticket"
 tk list
 ```
 

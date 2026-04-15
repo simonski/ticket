@@ -19,27 +19,33 @@ type StatusResponse struct {
 type CountSummary = store.CountSummary
 
 type ProjectCreateRequest struct {
-	Prefix             string `json:"prefix"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	Notes              string `json:"notes"`
-	Visibility         string `json:"visibility"`
-	SdlcID             *int64 `json:"sdlc_id,omitempty"`
+	Prefix             string            `json:"prefix"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string            `json:"git_repository"`
+	GitBranch          string            `json:"git_branch"`
+	Notes              string            `json:"notes"`
+	Visibility         string            `json:"visibility"`
+	SdlcID             *int64            `json:"sdlc_id,omitempty"`
 }
 
 type ProjectUpdateRequest struct {
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	Notes              string `json:"notes"`
-	Status             string `json:"status"`
-	Visibility         string `json:"visibility"`
-	SdlcID             *int64 `json:"sdlc_id,omitempty"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string            `json:"git_repository"`
+	GitBranch          string            `json:"git_branch"`
+	Notes              string            `json:"notes"`
+	Status             string            `json:"status"`
+	Visibility         string            `json:"visibility"`
+	SdlcID             *int64            `json:"sdlc_id,omitempty"`
 }
 
 type ProjectMemberRequest struct {
@@ -93,42 +99,48 @@ type LabelRequest struct {
 }
 
 type TicketCreateRequest struct {
-	ProjectID          int64   `json:"project_id"`
-	ParentID           *string `json:"parent_id,omitempty"`
-	CloneOf            *string `json:"clone_of,omitempty"`
-	Type               string  `json:"type"`
-	Title              string  `json:"title"`
-	Description        string  `json:"description"`
-	AcceptanceCriteria string  `json:"acceptance_criteria"`
-	GitRepository      string  `json:"git_repository"`
-	GitBranch          string  `json:"git_branch"`
-	Priority           int     `json:"priority"`
-	EstimateEffort     int     `json:"estimate_effort"`
-	EstimateComplete   string  `json:"estimate_complete,omitempty"`
-	Assignee           string  `json:"assignee"`
-	Status             string  `json:"status,omitempty"`
-	Stage              string  `json:"stage,omitempty"`
-	State              string  `json:"state,omitempty"`
-	Message            string  `json:"message,omitempty"`
+	ProjectID          int64             `json:"project_id"`
+	ParentID           *string           `json:"parent_id,omitempty"`
+	CloneOf            *string           `json:"clone_of,omitempty"`
+	Type               string            `json:"type"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string            `json:"git_repository"`
+	GitBranch          string            `json:"git_branch"`
+	Priority           int               `json:"priority"`
+	EstimateEffort     int               `json:"estimate_effort"`
+	EstimateComplete   string            `json:"estimate_complete,omitempty"`
+	Assignee           string            `json:"assignee"`
+	Status             string            `json:"status,omitempty"`
+	Stage              string            `json:"stage,omitempty"`
+	State              string            `json:"state,omitempty"`
+	Message            string            `json:"message,omitempty"`
 }
 
 type TicketUpdateRequest struct {
-	Title              string  `json:"title"`
-	Description        string  `json:"description"`
-	AcceptanceCriteria string  `json:"acceptance_criteria"`
-	GitRepository      string  `json:"git_repository"`
-	GitBranch          string  `json:"git_branch"`
-	ParentID           *string `json:"parent_id,omitempty"`
-	Assignee           string  `json:"assignee"`
-	Status             string  `json:"status,omitempty"`
-	Stage              string  `json:"stage,omitempty"`
-	State              string  `json:"state,omitempty"`
-	Priority           int     `json:"priority"`
-	Order              int     `json:"order"`
-	EstimateEffort     int     `json:"estimate_effort"`
-	EstimateComplete   string  `json:"estimate_complete,omitempty"`
-	Message            string  `json:"message,omitempty"`
-	Type               string  `json:"type,omitempty"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string            `json:"git_repository"`
+	GitBranch          string            `json:"git_branch"`
+	ParentID           *string           `json:"parent_id,omitempty"`
+	Assignee           string            `json:"assignee"`
+	Status             string            `json:"status,omitempty"`
+	Stage              string            `json:"stage,omitempty"`
+	State              string            `json:"state,omitempty"`
+	Priority           int               `json:"priority"`
+	Order              int               `json:"order"`
+	EstimateEffort     int               `json:"estimate_effort"`
+	EstimateComplete   string            `json:"estimate_complete,omitempty"`
+	Message            string            `json:"message,omitempty"`
+	Type               string            `json:"type,omitempty"`
 }
 
 type TicketHealthRequest struct {
@@ -181,10 +193,13 @@ type AgentCreateRequest struct {
 }
 
 type RoleRequest struct {
-	SdlcID             *int64 `json:"sdlc_id,omitempty"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
+	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
 }
 
 type AgentUpdateRequest struct {

@@ -238,7 +238,66 @@ func TestSetTicketHealth(t *testing.T) {
 	}
 }
 
-func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
+func TestTicketGuidanceMapsPersistAndResolve(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID:          project.ID,
+		Type:               "task",
+		Title:              "Guidance ticket",
+		AcceptanceCriteria: "legacy ticket ac",
+		DORMap:             GuidanceMap{"default": "ticket default dor", "develop": "ticket develop dor"},
+		DODMap:             GuidanceMap{"default": "ticket default dod"},
+		ACMap:              GuidanceMap{"qa": "ticket qa ac"},
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if !reflect.DeepEqual(ticket.DORMap, GuidanceMap{"default": "ticket default dor", "develop": "ticket develop dor"}) {
+		t.Fatalf("CreateTicket().DORMap = %#v", ticket.DORMap)
+	}
+	if !reflect.DeepEqual(ticket.ACMap, GuidanceMap{"default": "legacy ticket ac", "qa": "ticket qa ac"}) {
+		t.Fatalf("CreateTicket().ACMap = %#v", ticket.ACMap)
+	}
+
+	reloaded, err := GetTicket(context.Background(), db, ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	resolved := reloaded.ResolveGuidance("develop")
+	if !resolved.HasDOR || resolved.DOR != "ticket develop dor" {
+		t.Fatalf("ResolveGuidance(develop).DOR = %#v", resolved)
+	}
+	if !resolved.HasDOD || resolved.DOD != "ticket default dod" {
+		t.Fatalf("ResolveGuidance(develop).DOD = %#v", resolved)
+	}
+	if !resolved.HasAC || resolved.AC != "legacy ticket ac" {
+		t.Fatalf("ResolveGuidance(develop).AC = %#v", resolved)
+	}
+
+	updated, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
+		Title:  ticket.Title,
+		DORMap: GuidanceMap{"qa": "updated ticket dor"},
+		DODMap: GuidanceMap{"qa": "updated ticket dod"},
+		ACMap:  GuidanceMap{"qa": "updated ticket ac"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket() error = %v", err)
+	}
+	if !reflect.DeepEqual(updated.DODMap, GuidanceMap{"qa": "updated ticket dod"}) {
+		t.Fatalf("UpdateTicket().DODMap = %#v", updated.DODMap)
+	}
+	if !reflect.DeepEqual(updated.ACMap, GuidanceMap{"default": "legacy ticket ac", "qa": "updated ticket ac"}) {
+		t.Fatalf("UpdateTicket().ACMap = %#v", updated.ACMap)
+	}
+}
+
+func TestCreateAndUpdateTicketAllowLineageIndependentOfType(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
@@ -261,8 +320,8 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 		Type:      "epic",
 		Title:     "Invalid epic",
 		CreatedBy: "",
-	}); err == nil || err.Error() != "task cannot parent epic" {
-		t.Fatalf("CreateTicket(epic with non-epic parent) error = %v, want task cannot parent epic", err)
+	}); err != nil {
+		t.Fatalf("CreateTicket(epic with task parent) error = %v, want nil", err)
 	}
 
 	epicParent, err := CreateTicket(context.Background(), db, TicketCreateParams{
@@ -286,12 +345,63 @@ func TestCreateOrUpdateTicketEnforcesEpicParentRules(t *testing.T) {
 		t.Fatalf("CreateTicket(task child) error = %v", err)
 	}
 
-	_, err = UpdateTicket(context.Background(), db, epicParent.ID, TicketUpdateParams{
-		Title:    "Valid epic",
+	standaloneFeature, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "feature",
+		Title:     "Standalone feature",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket(standalone feature) error = %v", err)
+	}
+
+	updated, err := UpdateTicket(context.Background(), db, standaloneFeature.ID, TicketUpdateParams{
+		Title:    standaloneFeature.Title,
 		ParentID: &taskChild.ID,
 	})
-	if err == nil || err.Error() != "task cannot parent epic" {
-		t.Fatalf("UpdateTicket(epic parented by task) error = %v, want task cannot parent epic", err)
+	if err != nil {
+		t.Fatalf("UpdateTicket(feature parented by task) error = %v, want nil", err)
+	}
+	if updated.ParentID == nil || *updated.ParentID != taskChild.ID {
+		t.Fatalf("UpdateTicket(feature parented by task).ParentID = %#v, want %q", updated.ParentID, taskChild.ID)
+	}
+}
+
+func TestCreateTicketAcceptsCanonicalTypes(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Customer Portal", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	types := []string{
+		"epic",
+		"story",
+		"task",
+		"bug",
+		"feature",
+		"idea",
+		"spike",
+		"chore",
+		"note",
+		"question",
+		"requirement",
+		"decision",
+	}
+	for _, ticketType := range types {
+		ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+			ProjectID: project.ID,
+			Type:      ticketType,
+			Title:     "Ticket type " + ticketType,
+			CreatedBy: "",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket(%q) error = %v", ticketType, err)
+		}
+		if ticket.Type != ticketType {
+			t.Fatalf("CreateTicket(%q).Type = %q, want %q", ticketType, ticket.Type, ticketType)
+		}
 	}
 }
 
@@ -839,35 +949,54 @@ func TestDeleteTicketDeletesTaskAndRelatedRows(t *testing.T) {
 	if _, err := GetTicket(context.Background(), db, ticket.ID); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("GetTicket(deleted) error = %v, want ErrTicketNotFound", err)
 	}
+	if _, err := GetTicketByRef(context.Background(), db, ticket.ID); !errors.Is(err, ErrTicketNotFound) {
+		t.Fatalf("GetTicketByRef(deleted) error = %v, want ErrTicketNotFound", err)
+	}
+	listed, err := ListTicketsByProject(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("ListTicketsByProject() error = %v", err)
+	}
+	for _, listedTicket := range listed {
+		if listedTicket.ID == ticket.ID {
+			t.Fatalf("deleted ticket %s should not appear in project listing", ticket.ID)
+		}
+	}
 
 	clonedTask, err := GetTicket(context.Background(), db, clone.ID)
 	if err != nil {
 		t.Fatalf("GetTicket(clone) error = %v", err)
 	}
-	if clonedTask.CloneOf != nil {
-		t.Fatalf("CloneOf = %#v, want nil after source delete", clonedTask.CloneOf)
+	if clonedTask.CloneOf == nil || *clonedTask.CloneOf != ticket.ID {
+		t.Fatalf("CloneOf = %#v, want %q preserved after soft delete", clonedTask.CloneOf, ticket.ID)
 	}
-	if comments, err := ListComments(context.Background(), db, ticket.ID); err != nil || len(comments) != 0 {
-		t.Fatalf("ListComments(deleted) = %#v, %v", comments, err)
+	var deleted int
+	if err := db.QueryRowContext(context.Background(), `SELECT deleted FROM tickets WHERE ticket_id = ?`, ticket.ID).Scan(&deleted); err != nil {
+		t.Fatalf("deleted flag query error = %v", err)
 	}
-	if history, err := ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0); err != nil || len(history) != 0 {
-		t.Fatalf("ListHistoryEvents(deleted) = %#v, %v", history, err)
+	if deleted != 1 {
+		t.Fatalf("deleted flag = %d, want 1", deleted)
 	}
-	if deps, err := ListDependencies(context.Background(), db, ticket.ID); err != nil || len(deps) != 0 {
-		t.Fatalf("ListDependencies(deleted) = %#v, %v", deps, err)
+	if comments, err := ListComments(context.Background(), db, ticket.ID); err != nil || len(comments) != 1 {
+		t.Fatalf("ListComments(soft-deleted) = %#v, %v", comments, err)
 	}
-	if labels, err := ListTicketLabels(context.Background(), db, ticket.ID); err != nil || len(labels) != 0 {
-		t.Fatalf("ListTicketLabels(deleted) = %#v, %v", labels, err)
+	if history, err := ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0); err != nil || len(history) < 2 {
+		t.Fatalf("ListHistoryEvents(soft-deleted) = %#v, %v", history, err)
 	}
-	if entries, err := ListTimeEntries(context.Background(), db, ticket.ID); err != nil || len(entries) != 0 {
-		t.Fatalf("ListTimeEntries(deleted) = %#v, %v", entries, err)
+	if deps, err := ListDependencies(context.Background(), db, ticket.ID); err != nil || len(deps) != 1 {
+		t.Fatalf("ListDependencies(soft-deleted) = %#v, %v", deps, err)
+	}
+	if labels, err := ListTicketLabels(context.Background(), db, ticket.ID); err != nil || len(labels) != 1 {
+		t.Fatalf("ListTicketLabels(soft-deleted) = %#v, %v", labels, err)
+	}
+	if entries, err := ListTimeEntries(context.Background(), db, ticket.ID); err != nil || len(entries) != 1 {
+		t.Fatalf("ListTimeEntries(soft-deleted) = %#v, %v", entries, err)
 	}
 	var storyLinks int
 	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM story_ticket_links WHERE story_id = ?`, story.ID).Scan(&storyLinks); err != nil {
 		t.Fatalf("story_ticket_links count query error = %v", err)
 	}
-	if storyLinks != 0 {
-		t.Fatalf("story_ticket_links count = %d, want 0 after ticket delete", storyLinks)
+	if storyLinks != 1 {
+		t.Fatalf("story_ticket_links count = %d, want 1 after soft delete", storyLinks)
 	}
 }
 

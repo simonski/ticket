@@ -330,7 +330,13 @@ Most teams use `ticket` in this order:
 Create a project:
 
 ```bash
-tk project create -prefix CUS -title "Customer Portal" -wow "Portal ways of working" -dor "Portal launch criteria" -dod "Launch done criteria"
+tk project create -prefix CUS -title "Customer Portal" \
+  -wow "Portal ways of working" \
+  -dor "Default ready criteria" \
+  -dod "Default done criteria" \
+  -ac "Default acceptance criteria" \
+  -dor-map "develop=Implementation ready,qa=QA ready" \
+  -ac-map "develop=Code reviewed"
 ```
 
 The project is now the default project.
@@ -402,10 +408,12 @@ Update a project:
 ```bash
 tk project CUS update -title "New project title"
 tk project CUS update -description "The new description"
-tk project CUS update -ac "The acceptance criteria"
 tk project CUS update -wow "Updated ways of working"
-tk project CUS update -dor "Updated definition of ready"
-tk project CUS update -dod "Updated definition of done"
+tk project CUS update -dor "Updated default definition of ready"
+tk project CUS update -dod "Updated default definition of done"
+tk project CUS update -ac "Updated default acceptance criteria"
+tk project CUS update -dor-map "qa=QA ready"
+tk project CUS update -ac-map "develop=Reviewed and approved"
 ```
 
 Enable or disable a project:
@@ -425,6 +433,7 @@ Add a task (type defaults to task)
 
 ```bash
 tk add "Customers can reset their password."
+tk add -dor "Ready for design" -ac "Password reset works end to end" "Customers can reset their password."
 ```
 
 These are equivalent:
@@ -578,7 +587,7 @@ tk draft CUS-42        # mark as draft (not ready)
 
 Only ready tickets are eligible for automatic assignment. You can still explicitly request a specific not-ready ticket by ID.
 
-`ticket rm` and `ticket delete` remove a ticket permanently. They fail if the ticket still has child tickets.
+`ticket rm` and `ticket delete` soft-delete a ticket. Deleted tickets are hidden from normal reads and listings, and they still fail if the ticket has child tickets.
 
 `ticket request` is the lower-level form of `ticket claim`. It accepts a ticket ID (key such as `CUS-42`). If no work can be assigned, the JSON response status is `NO-WORK`. If a specific ticket is requested and cannot be assigned, the JSON response status is `REJECTED`.
 
@@ -804,7 +813,8 @@ tk agent config-ls -id <uuid>
 tk agent config-rm -id <uuid> <key>
 
 tk project create -prefix ABC -title "..."
-tk project create -prefix ABC -title "..." -wow "Ways of working" -dor "Definition of ready" -dod "Definition of done"
+tk project create -prefix ABC -title "..." -wow "Ways of working" -dor "Default definition of ready" -dod "Default definition of done" -ac "Default acceptance criteria"
+tk project create -prefix ABC -title "..." -dor-map "develop=Implementation ready" -ac-map "qa=Sign-off complete"
 tk project init
 tk project list
 tk project ls
@@ -814,10 +824,13 @@ tk project get <prefix-or-id>
 tk project <prefix-or-id>
 tk project <prefix-or-id> update -title "..."
 tk project <prefix-or-id> update -description "..."
-tk project <prefix-or-id> update -ac "..."
 tk project <prefix-or-id> update -wow "..."
 tk project <prefix-or-id> update -dor "..."
 tk project <prefix-or-id> update -dod "..."
+tk project <prefix-or-id> update -ac "..."
+tk project <prefix-or-id> update -dor-map "stage=text"
+tk project <prefix-or-id> update -dod-map "stage=text"
+tk project <prefix-or-id> update -ac-map "stage=text"
 tk project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
 tk project <prefix-or-id> update -git-branch "main"
 tk project <prefix-or-id> enable
@@ -878,7 +891,11 @@ tk summary
 tk update -id <key-or-id> -stage develop -state idle
 tk update -id <key-or-id> -title "new title"
 tk update -id <key-or-id> -description "new description"
+tk update -id <key-or-id> -dor "new default definition of ready"
+tk update -id <key-or-id> -dod "new default definition of done"
 tk update -id <key-or-id> -ac "new acceptance criteria"
+tk update -id <key-or-id> -dor-map "develop=implementation ready"
+tk update -id <key-or-id> -ac-map "qa=QA sign-off complete"
 tk update -id <key-or-id> -git-repository "https://github.com/org/repo.git"
 tk update -id <key-or-id> -git-branch "feature/x"
 tk update -id <key-or-id> -priority 4
@@ -909,9 +926,9 @@ tk sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>
 tk sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <id,id,...>
 
 tk role list
-tk role create -title <title> [-description <desc>] [-ac <criteria>]
+tk role create -title <title> [-description <desc>] [-dor <text>] [-dod <text>] [-ac <criteria>] [-dor-map stage=text] [-dod-map stage=text] [-ac-map stage=text]
 tk role get -id <id>
-tk role update -id <id> [-title <title>] [-description <desc>] [-ac <criteria>]
+tk role update -id <id> [-title <title>] [-description <desc>] [-dor <text>] [-dod <text>] [-ac <criteria>] [-dor-map stage=text] [-dod-map stage=text] [-ac-map stage=text]
 tk role delete -id <id>
 
 tk decision add "text"

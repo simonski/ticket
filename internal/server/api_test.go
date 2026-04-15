@@ -931,6 +931,85 @@ func TestRoleAPI(t *testing.T) {
 	}
 }
 
+func TestGuidanceMapsAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "admin",
+		"password": "password",
+	}, "")
+	var auth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &auth)
+
+	createProjectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"prefix":              "MAP",
+		"title":               "Guidance Project",
+		"acceptance_criteria": "legacy project ac",
+		"dor_map":             map[string]string{"develop": "project develop dor"},
+		"dod_map":             map[string]string{"develop": "project develop dod"},
+		"ac_map":              map[string]string{"qa": "project qa ac"},
+	}, auth.Token)
+	if createProjectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, want %d body=%s", createProjectResp.Code, http.StatusCreated, createProjectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, createProjectResp, &project)
+	if got := project.DORMap["develop"]; got != "project develop dor" {
+		t.Fatalf("project.DORMap[develop] = %q", got)
+	}
+	if got := project.ACMap["default"]; got != "legacy project ac" {
+		t.Fatalf("project.ACMap[default] = %q", got)
+	}
+
+	createRoleResp := doJSONRequest(t, handler, http.MethodPost, "/api/roles", map[string]any{
+		"title":               "reviewer",
+		"description":         "reviews work",
+		"acceptance_criteria": "legacy role ac",
+		"dor_map":             map[string]string{"develop": "role develop dor"},
+		"dod_map":             map[string]string{"develop": "role develop dod"},
+		"ac_map":              map[string]string{"qa": "role qa ac"},
+	}, auth.Token)
+	if createRoleResp.Code != http.StatusCreated {
+		t.Fatalf("create role status = %d, want %d body=%s", createRoleResp.Code, http.StatusCreated, createRoleResp.Body.String())
+	}
+	var role store.Role
+	decodeResponse(t, createRoleResp, &role)
+	if got := role.DODMap["develop"]; got != "role develop dod" {
+		t.Fatalf("role.DODMap[develop] = %q", got)
+	}
+	if got := role.ACMap["default"]; got != "legacy role ac" {
+		t.Fatalf("role.ACMap[default] = %q", got)
+	}
+
+	createTicketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id":          project.ID,
+		"type":                "task",
+		"title":               "Mapped ticket",
+		"acceptance_criteria": "legacy ticket ac",
+		"dor_map":             map[string]string{"develop": "ticket develop dor"},
+		"dod_map":             map[string]string{"develop": "ticket develop dod"},
+		"ac_map":              map[string]string{"qa": "ticket qa ac"},
+	}, auth.Token)
+	if createTicketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d, want %d body=%s", createTicketResp.Code, http.StatusCreated, createTicketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createTicketResp, &ticket)
+	if got := ticket.DORMap["develop"]; got != "ticket develop dor" {
+		t.Fatalf("ticket.DORMap[develop] = %q", got)
+	}
+	if got := ticket.ACMap["default"]; got != "legacy ticket ac" {
+		t.Fatalf("ticket.ACMap[default] = %q", got)
+	}
+	if ticket.Deleted {
+		t.Fatalf("ticket.Deleted = true, want false")
+	}
+}
+
 func TestStoryAPIAndAnalyseFallback(t *testing.T) {
 	t.Setenv("TICKET_ANALYSE_CMD", "false")
 

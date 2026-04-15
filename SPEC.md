@@ -8,6 +8,10 @@ designed so that an agent or team can rebuild the codebase, documentation, and
 design from scratch using only this document and the OpenAPI specification in
 [`openapi.yaml`](./openapi.yaml).
 
+For the phase 1 entity-model pass, `docs/ENTITY_MODEL.md` is the authoritative
+definition of PROJECT, SDLC, STAGE, ROLE, and TICKET where older sections of
+this spec still differ.
+
 ---
 
 ## 1. Overview

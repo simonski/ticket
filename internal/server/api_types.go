@@ -12,22 +12,28 @@ type agentRequest struct {
 }
 
 type projectRequest struct {
-	Prefix             string `json:"prefix"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	Notes              string `json:"notes"`
-	Visibility         string `json:"visibility"`
-	SdlcID             *int64 `json:"sdlc_id,omitempty"`
+	Prefix             string            `json:"prefix"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string            `json:"git_repository"`
+	GitBranch          string            `json:"git_branch"`
+	Notes              string            `json:"notes"`
+	Visibility         string            `json:"visibility"`
+	SdlcID             *int64            `json:"sdlc_id,omitempty"`
 }
 
 type roleRequest struct {
-	SdlcID             *int64 `json:"sdlc_id,omitempty"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
+	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
 }
 
 type sdlcRequest struct {
@@ -67,23 +73,26 @@ type storyRequest struct {
 }
 
 type ticketRequest struct {
-	ProjectID          int64   `json:"project_id"`
-	ParentID           *string `json:"parent_id"`
-	Type               string  `json:"type"`
-	Title              string  `json:"title"`
-	Description        string  `json:"description"`
-	AcceptanceCriteria string  `json:"acceptance_criteria"`
-	GitRepository      string  `json:"git_repository"`
-	GitBranch          string  `json:"git_branch"`
-	Status             string  `json:"status"`
-	Stage              string  `json:"stage"`
-	State              string  `json:"state"`
-	Priority           int     `json:"priority"`
-	Order              int     `json:"order"`
-	EstimateEffort     int     `json:"estimate_effort"`
-	EstimateComplete   string  `json:"estimate_complete,omitempty"`
-	Assignee           string  `json:"assignee"`
-	Message            string  `json:"message,omitempty"`
+	ProjectID          int64             `json:"project_id"`
+	ParentID           *string           `json:"parent_id"`
+	Type               string            `json:"type"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	AcceptanceCriteria string            `json:"acceptance_criteria"`
+	DORMap             store.GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string            `json:"git_repository"`
+	GitBranch          string            `json:"git_branch"`
+	Status             string            `json:"status"`
+	Stage              string            `json:"stage"`
+	State              string            `json:"state"`
+	Priority           int               `json:"priority"`
+	Order              int               `json:"order"`
+	EstimateEffort     int               `json:"estimate_effort"`
+	EstimateComplete   string            `json:"estimate_complete,omitempty"`
+	Assignee           string            `json:"assignee"`
+	Message            string            `json:"message,omitempty"`
 }
 
 type messageRequest struct {

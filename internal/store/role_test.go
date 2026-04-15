@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -53,6 +54,61 @@ func TestRoleCRUD(t *testing.T) {
 	}
 	if _, err := GetRoleByID(context.Background(), db, created.ID); err == nil {
 		t.Fatalf("GetRoleByID(deleted) error = nil, want error")
+	}
+}
+
+func TestRoleGuidanceMapsPersistAndResolve(t *testing.T) {
+	t.Parallel()
+	db := openRoleTestDB(t)
+	defer db.Close()
+
+	role, err := CreateRoleWithParams(context.Background(), db, RoleCreateParams{
+		Title:              "QA",
+		Description:        "Own quality",
+		AcceptanceCriteria: "legacy role ac",
+		DORMap:             GuidanceMap{"default": "role default dor", "qa": "role qa dor"},
+		DODMap:             GuidanceMap{"default": "role default dod"},
+		ACMap:              GuidanceMap{"develop": "role develop ac"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRoleWithParams() error = %v", err)
+	}
+	if !reflect.DeepEqual(role.DORMap, GuidanceMap{"default": "role default dor", "qa": "role qa dor"}) {
+		t.Fatalf("CreateRoleWithParams().DORMap = %#v", role.DORMap)
+	}
+	if !reflect.DeepEqual(role.ACMap, GuidanceMap{"default": "legacy role ac", "develop": "role develop ac"}) {
+		t.Fatalf("CreateRoleWithParams().ACMap = %#v", role.ACMap)
+	}
+
+	reloaded, err := GetRoleByID(context.Background(), db, role.ID)
+	if err != nil {
+		t.Fatalf("GetRoleByID() error = %v", err)
+	}
+	resolved := reloaded.ResolveGuidance("qa")
+	if !resolved.HasDOR || resolved.DOR != "role qa dor" {
+		t.Fatalf("ResolveGuidance(qa).DOR = %#v", resolved)
+	}
+	if !resolved.HasDOD || resolved.DOD != "role default dod" {
+		t.Fatalf("ResolveGuidance(qa).DOD = %#v", resolved)
+	}
+	if !resolved.HasAC || resolved.AC != "legacy role ac" {
+		t.Fatalf("ResolveGuidance(qa).AC = %#v", resolved)
+	}
+
+	updated, err := UpdateRoleWithParams(context.Background(), db, role.ID, RoleUpdateParams{
+		Title:  "QA",
+		DORMap: GuidanceMap{"develop": "updated role dor"},
+		DODMap: GuidanceMap{"develop": "updated role dod"},
+		ACMap:  GuidanceMap{"develop": "updated role ac"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateRoleWithParams() error = %v", err)
+	}
+	if !reflect.DeepEqual(updated.DODMap, GuidanceMap{"develop": "updated role dod"}) {
+		t.Fatalf("UpdateRoleWithParams().DODMap = %#v", updated.DODMap)
+	}
+	if !reflect.DeepEqual(updated.ACMap, GuidanceMap{"default": "legacy role ac", "develop": "updated role ac"}) {
+		t.Fatalf("UpdateRoleWithParams().ACMap = %#v", updated.ACMap)
 	}
 }
 

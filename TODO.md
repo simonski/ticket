@@ -1,4 +1,134 @@
+We need a definitive specification of the entities as a design document and then we need to apply it against the codebase to ensure it is all correct.
 
+We will work in phases.  For now it is phase1.
+
+1. agree the entities and their relationships
+2. refactor/implement the datamodel and codebase
+3. refactor/implement the CLI commands
+4. refactor/implement the TUI commands
+5. refactor/implement the website
+
+-----
+
+1. agree the entities and their relationships
+
+In this phase I want a back-and-forth conversation with you having read the docs and codebase agains this new requirement.  The final output should new definition document that describes the entities below, their purpose and usage.  It should be useable for humans as well as act as a design document.  
+
+PROJECT, SDLC, STAGE, ROLE, TICKET
+
+PROJECT has a default SDLC but any epic or story (synonym for ticket) can use a different SDLC 
+
+This means a ticket of any type has an sdlc foreign key ewhich may-or-may not be populated. If it is, use that
+as teh sdlc for that story.  If it is not, check any parent ticket until you find an sdlc, otherwise use project sdlc, which is non-null.   
+
+dor: definition of ready
+dod: definition of done
+
+PROJECT has
+    title: description: free text
+    prefix: 1-3 digit prefix for ticket IDs
+    git repo: git url
+    dor: text describing definition of ready
+    dod: text describing definition of done
+    default_draft:boolean, indicates if tickets start in draft
+    default_sdlc:link to sdlc
+
+SDLC has
+    title
+    description
+    list of stanges (ordered)
+    each stage in the SDLC has a list of roles
+
+STAGE has
+    title
+    description
+    dor
+    dod
+    ac
+
+ROLE has
+    title
+    description
+    dor: map (keyed by stage)
+    dod  map (keyed by stage)
+    ac:  map (keyed by stage)
+
+    Note1: the role dod, dor, ac values are keyed by stage however if the value for the current stage is missing, then the 'default' key is used.   in this way a role can 'specialise' for a stage or be general purpose across any stage it is called on to do work.
+
+    Note2: a role can be put in any stage in any order - this is specific to the SDLC.   A Stage can be included or excluded in any SDLC also.  
+
+TICKET has
+    id (prefix+integer) "TK-123"
+    title
+    type:
+    description
+    dod
+    dor
+    ac
+    stage:
+    state:
+    deleted:
+    archived:
+    compelte:
+    draft: boolean
+    sdlc: optional
+    parent ticket id: optional
+    project
+
+A TICKET is *any* piece of actionable work.  It has a type (epic, task, bug, chore, idea, requirement, feature) however the type is more of a piece of advice to classify it.  The more important part is the LINEAGE - if it has a parent or not.  So by implication a ticket that has multiple children is "complex" - it has many parts "inside it".  You'd probably call that ticket type an epic.  
+
+==========================================================================================
+2. refactor/implement the datamodel and codebase
+
+
+
+
+
+
+it should show the sequence of stages
+    it shoudl show the sequence of roles in those stages
+        the combination of any of them should yield
+
+project + stage + role + ticket
+    P: high level prompts that apply to 100%
+    P-WOW
+    P-DOR
+    P-DOD
+    P-AC
+    +
+    S: prompts that apply to the stage: design, do not write code, write diagrams and docs
+    What is the WOW for the Stage Design
+    S-WOW
+    S-DOR
+    S-DOD
+    S-AC
+    +
+    R-WOW
+    R-DOR
+    R-DOR
+    R-AC
+    +
+    Role-Stage: WOW: What is the WOW for the Stage Design for the Role "QA".  What does a QA want to do in Design?
+    Role-Stage: DOR
+    Role-Stage: DOR
+    Role-Stage: AC
+    +
+    T-WOW
+    T-DOR
+    T-DOD
+    T-AC
+    T-TITLE
+    T-DESCRIPTION
+    
+tk sdlc ls
+tk sdlc get -id N / -name foo
+
+
+renders
+
+
+
+------
 
 Ticket can ALSO be a client to a different backend
 

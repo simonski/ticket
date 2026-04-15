@@ -17,38 +17,46 @@ var (
 )
 
 type Ticket struct {
-	ID                  string    `json:"ticket_id"`
-	ProjectID           int64     `json:"project_id"`
-	ParentID            *string   `json:"parent_id,omitempty"`
-	CloneOf             *string   `json:"clone_of,omitempty"`
-	Type                string    `json:"type"`
-	Title               string    `json:"title"`
-	Description         string    `json:"description"`
-	AcceptanceCriteria  string    `json:"acceptance_criteria"`
-	GitRepository       string    `json:"git_repository"`
-	GitBranch           string    `json:"git_branch"`
-	SdlcID              *int64    `json:"sdlc_id,omitempty"`
-	SdlcStageID         *int64    `json:"sdlc_stage_id,omitempty"`
-	RoleID              *int64    `json:"role_id,omitempty"`
-	Stage               string    `json:"stage"`
-	State               string    `json:"state"`
-	Status              string    `json:"status"`
-	Priority            int       `json:"priority"`
-	Order               int       `json:"order"`
-	EstimateEffort      int       `json:"estimate_effort"`
-	EstimateComplete    string    `json:"estimate_complete,omitempty"`
-	HealthScore         int       `json:"health_score"`
-	Assignee            string    `json:"assignee"`
-	Author              string    `json:"author"`
-	Comments            []Comment `json:"comments,omitempty"`
-	Draft               bool      `json:"draft"`
-	Complete            bool      `json:"complete"`
-	Archived            bool      `json:"archived"`
-	PreviousSdlcStageID *int64    `json:"previous_sdlc_stage_id,omitempty"`
-	PreviousRoleID      *int64    `json:"previous_role_id,omitempty"`
-	CreatedBy           string    `json:"created_by"`
-	CreatedAt           string    `json:"created_at"`
-	UpdatedAt           string    `json:"updated_at"`
+	ID                  string      `json:"ticket_id"`
+	ProjectID           int64       `json:"project_id"`
+	ParentID            *string     `json:"parent_id,omitempty"`
+	CloneOf             *string     `json:"clone_of,omitempty"`
+	Type                string      `json:"type"`
+	Title               string      `json:"title"`
+	Description         string      `json:"description"`
+	AcceptanceCriteria  string      `json:"acceptance_criteria"`
+	DORMap              GuidanceMap `json:"dor_map,omitempty"`
+	DODMap              GuidanceMap `json:"dod_map,omitempty"`
+	ACMap               GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository       string      `json:"git_repository"`
+	GitBranch           string      `json:"git_branch"`
+	SdlcID              *int64      `json:"sdlc_id,omitempty"`
+	SdlcStageID         *int64      `json:"sdlc_stage_id,omitempty"`
+	RoleID              *int64      `json:"role_id,omitempty"`
+	Stage               string      `json:"stage"`
+	State               string      `json:"state"`
+	Status              string      `json:"status"`
+	Priority            int         `json:"priority"`
+	Order               int         `json:"order"`
+	EstimateEffort      int         `json:"estimate_effort"`
+	EstimateComplete    string      `json:"estimate_complete,omitempty"`
+	HealthScore         int         `json:"health_score"`
+	Assignee            string      `json:"assignee"`
+	Author              string      `json:"author"`
+	Comments            []Comment   `json:"comments,omitempty"`
+	Draft               bool        `json:"draft"`
+	Complete            bool        `json:"complete"`
+	Archived            bool        `json:"archived"`
+	Deleted             bool        `json:"deleted"`
+	PreviousSdlcStageID *int64      `json:"previous_sdlc_stage_id,omitempty"`
+	PreviousRoleID      *int64      `json:"previous_role_id,omitempty"`
+	CreatedBy           string      `json:"created_by"`
+	CreatedAt           string      `json:"created_at"`
+	UpdatedAt           string      `json:"updated_at"`
+}
+
+func (t Ticket) ResolveGuidance(stage string) ResolvedGuidance {
+	return resolveGuidance(stage, t.DORMap, t.DODMap, t.ACMap)
 }
 
 type TicketCreateParams struct {
@@ -60,6 +68,9 @@ type TicketCreateParams struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	DORMap             GuidanceMap
+	DODMap             GuidanceMap
+	ACMap              GuidanceMap
 	GitRepository      string
 	GitBranch          string
 	Priority           int
@@ -76,6 +87,9 @@ type TicketUpdateParams struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	DORMap             GuidanceMap
+	DODMap             GuidanceMap
+	ACMap              GuidanceMap
 	GitRepository      string
 	GitBranch          string
 	ParentID           *string
@@ -151,6 +165,23 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if state == StateActive && strings.TrimSpace(params.Assignee) == "" {
 		return Ticket{}, errors.New("active ticket requires assignee")
 	}
+	dorJSON, err := guidanceMapJSON(params.DORMap)
+	if err != nil {
+		return Ticket{}, err
+	}
+	dodJSON, err := guidanceMapJSON(params.DODMap)
+	if err != nil {
+		return Ticket{}, err
+	}
+	acMap := withLegacyAcceptanceCriteria(params.AcceptanceCriteria, params.ACMap)
+	acJSON, err := guidanceMapJSON(acMap)
+	if err != nil {
+		return Ticket{}, err
+	}
+	acceptanceCriteria := strings.TrimSpace(params.AcceptanceCriteria)
+	if acceptanceCriteria == "" && acMap != nil {
+		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
+	}
 	priority := params.Priority
 	if priority == 0 {
 		priority = 1
@@ -216,9 +247,9 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		return Ticket{}, err
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketSdlcID), nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), nullableUserID(params.CreatedBy))
+		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketSdlcID), nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), nullableUserID(params.CreatedBy))
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -307,6 +338,38 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	nextGitBranch := strings.TrimSpace(params.GitBranch)
 	if nextGitBranch == "" {
 		nextGitBranch = strings.TrimSpace(current.GitBranch)
+	}
+	nextDORMap := current.DORMap
+	if params.DORMap != nil {
+		nextDORMap = normalizeGuidanceMap(params.DORMap)
+	}
+	nextDODMap := current.DODMap
+	if params.DODMap != nil {
+		nextDODMap = normalizeGuidanceMap(params.DODMap)
+	}
+	nextACMap := current.ACMap
+	if params.ACMap != nil {
+		nextACMap = params.ACMap
+	}
+	nextAcceptanceCriteria := strings.TrimSpace(params.AcceptanceCriteria)
+	if nextAcceptanceCriteria == "" {
+		nextAcceptanceCriteria = current.AcceptanceCriteria
+	}
+	if strings.TrimSpace(params.AcceptanceCriteria) != "" && params.ACMap == nil {
+		nextACMap = withLegacyAcceptanceCriteria(params.AcceptanceCriteria, current.ACMap)
+	}
+	nextACMap = withLegacyAcceptanceCriteria(nextAcceptanceCriteria, nextACMap)
+	dorJSON, err := guidanceMapJSON(nextDORMap)
+	if err != nil {
+		return Ticket{}, err
+	}
+	dodJSON, err := guidanceMapJSON(nextDODMap)
+	if err != nil {
+		return Ticket{}, err
+	}
+	acJSON, err := guidanceMapJSON(nextACMap)
+	if err != nil {
+		return Ticket{}, err
 	}
 	if err := validateTicketAssignmentChange(current.Assignee, assignee, params.ActorUsername, params.ActorRole); err != nil {
 		return Ticket{}, err
@@ -408,9 +471,9 @@ writeTicket:
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, sdlc_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, sdlc_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, title, params.Description, strings.TrimSpace(params.AcceptanceCriteria), nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, id)
+	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -857,11 +920,12 @@ func ListTickets(ctx context.Context, db *sql.DB, params TicketListParams) ([]Ti
 	}
 
 	query := `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE project_id = ?
 	`
 	args := []any{params.ProjectID}
+	query += ` AND deleted = 0`
 	if ticketType := normalizeOptional(params.Type); ticketType != "" {
 		query += ` AND type = ?`
 		args = append(args, ticketType)
@@ -942,9 +1006,9 @@ func SearchTickets(ctx context.Context, db *sql.DB, projectID int64, query strin
 
 func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id string) (Ticket, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
-		WHERE project_id = ? AND ticket_id = ?
+		WHERE project_id = ? AND ticket_id = ? AND deleted = 0
 	`, projectID, id)
 	ticket, err := scanTicket(row)
 	if err != nil {
@@ -958,9 +1022,9 @@ func GetTicketByProject(ctx context.Context, db *sql.DB, projectID int64, id str
 
 func GetTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
-		WHERE ticket_id = ?
+		WHERE ticket_id = ? AND deleted = 0
 	`, id)
 
 	ticket, err := scanTicket(row)
@@ -1059,30 +1123,30 @@ func ListTicketParents(ctx context.Context, db *sql.DB, id string) ([]Ticket, er
 	// making one GetTicket() call per ancestor level (O(depth) queries).
 	rows, err := db.QueryContext(ctx, `
 		WITH RECURSIVE ancestors(ticket_id, project_id, parent_id, clone_of, type, title,
-		  description, acceptance_criteria, git_repository, git_branch,
+		  description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch,
 		  sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order,
 		  estimate_effort, estimate_complete, health_score, assignee, author,
-		  draft, complete, archived, previous_sdlc_stage_id, previous_role_id, created_by, created_at, updated_at) AS (
+		  draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, created_by, created_at, updated_at) AS (
 			SELECT ticket_id, project_id, parent_id, clone_of, type, title,
-			  description, acceptance_criteria, git_repository, git_branch,
+			  description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch,
 			  sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order,
 			  estimate_effort, estimate_complete, health_score, assignee, COALESCE(author,''),
-			  draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by,''), created_at, updated_at
-			FROM tickets WHERE ticket_id = ?
+			  draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by,''), created_at, updated_at
+			FROM tickets WHERE ticket_id = ? AND deleted = 0
 			UNION ALL
 			SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title,
-			  t.description, t.acceptance_criteria, t.git_repository, t.git_branch,
+			  t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch,
 			  t.sdlc_id, t.sdlc_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order,
 			  t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author,''),
-			  t.draft, t.complete, t.archived, t.previous_sdlc_stage_id, t.previous_role_id, COALESCE(t.created_by,''), t.created_at, t.updated_at
+			  t.draft, t.complete, t.archived, t.deleted, t.previous_sdlc_stage_id, t.previous_role_id, COALESCE(t.created_by,''), t.created_at, t.updated_at
 			FROM tickets t
 			JOIN ancestors a ON t.ticket_id = a.parent_id
 		)
 		SELECT ticket_id, project_id, parent_id, clone_of, type, title,
-		  description, acceptance_criteria, git_repository, git_branch,
+		  description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch,
 		  sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order,
 		  estimate_effort, estimate_complete, health_score, assignee, author,
-		  draft, complete, archived, previous_sdlc_stage_id, previous_role_id, created_by, created_at, updated_at
+		  draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, created_by, created_at, updated_at
 		FROM ancestors
 		WHERE ticket_id != ?
 	`, id, id)
@@ -1130,10 +1194,14 @@ func scanTicket(s scanner) (Ticket, error) {
 	var sdlcID sql.NullInt64
 	var sdlcStageID sql.NullInt64
 	var roleID sql.NullInt64
+	var dorJSON string
+	var dodJSON string
+	var acJSON string
 	var storedStatus string
 	var draft int
 	var complete int
 	var archived int
+	var deleted int
 	var prevStageID sql.NullInt64
 	var prevRoleID sql.NullInt64
 	if err := s.Scan(
@@ -1145,6 +1213,9 @@ func scanTicket(s scanner) (Ticket, error) {
 		&ticket.Title,
 		&ticket.Description,
 		&ticket.AcceptanceCriteria,
+		&dorJSON,
+		&dodJSON,
+		&acJSON,
 		&ticket.GitRepository,
 		&ticket.GitBranch,
 		&sdlcID,
@@ -1163,6 +1234,7 @@ func scanTicket(s scanner) (Ticket, error) {
 		&draft,
 		&complete,
 		&archived,
+		&deleted,
 		&prevStageID,
 		&prevRoleID,
 		&ticket.CreatedBy,
@@ -1192,10 +1264,26 @@ func scanTicket(s scanner) (Ticket, error) {
 	if prevRoleID.Valid {
 		ticket.PreviousRoleID = &prevRoleID.Int64
 	}
+	dorMap, err := parseGuidanceMap(dorJSON)
+	if err != nil {
+		return Ticket{}, err
+	}
+	dodMap, err := parseGuidanceMap(dodJSON)
+	if err != nil {
+		return Ticket{}, err
+	}
+	acMap, err := parseGuidanceMap(acJSON)
+	if err != nil {
+		return Ticket{}, err
+	}
+	ticket.DORMap = dorMap
+	ticket.DODMap = dodMap
+	ticket.ACMap = withLegacyAcceptanceCriteria(ticket.AcceptanceCriteria, acMap)
 	ticket.Status = RenderLifecycleStatus(ticket.Stage, ticket.State)
 	ticket.Draft = draft == 1
 	ticket.Complete = complete == 1
 	ticket.Archived = archived == 1
+	ticket.Deleted = deleted == 1
 	return ticket, nil
 }
 
@@ -1288,7 +1376,7 @@ func batchFetchComments(ctx context.Context, db *sql.DB, ids []string) (map[stri
 
 func ticketHasChildren(ctx context.Context, db *sql.DB, id string) (bool, error) {
 	var childID string
-	err := db.QueryRowContext(ctx, `SELECT ticket_id FROM tickets WHERE parent_id = ? LIMIT 1`, id).Scan(&childID)
+	err := db.QueryRowContext(ctx, `SELECT ticket_id FROM tickets WHERE parent_id = ? AND deleted = 0 LIMIT 1`, id).Scan(&childID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -1416,9 +1504,9 @@ func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, acto
 
 func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([]Ticket, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
-		WHERE parent_id = ?
+		WHERE parent_id = ? AND deleted = 0
 		ORDER BY created_at, ticket_id
 	`, parentID)
 	if err != nil {
@@ -1439,7 +1527,7 @@ func listStoredChildTickets(ctx context.Context, db *sql.DB, parentID string) ([
 
 func getStoredTicket(ctx context.Context, db *sql.DB, id string) (Ticket, error) {
 	ticket, err := scanTicket(db.QueryRowContext(ctx, `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
 		WHERE ticket_id = ?
 	`, id))
@@ -1489,7 +1577,7 @@ func normalizeOptional(v string) string {
 
 func validTicketType(ticketType string) bool {
 	switch ticketType {
-	case "task", "bug", "epic", "spike", "chore", "note", "question", "requirement", "decision":
+	case "epic", "story", "task", "bug", "feature", "idea", "spike", "chore", "note", "question", "requirement", "decision":
 		return true
 	default:
 		return false
@@ -1499,18 +1587,13 @@ func validTicketType(ticketType string) bool {
 func validateTicketParenting(parentType, childType string) error {
 	parentType = normalizeTicketType(parentType)
 	childType = normalizeTicketType(childType)
-	switch parentType {
-	case "epic":
-		if validTicketType(childType) {
-			return nil
-		}
-	case "task":
-		switch childType {
-		case "task", "bug", "spike", "chore":
-			return nil
-		}
+	if !validTicketType(parentType) {
+		return fmt.Errorf("invalid ticket type %q", parentType)
 	}
-	return fmt.Errorf("%s cannot parent %s", parentType, childType)
+	if !validTicketType(childType) {
+		return fmt.Errorf("invalid ticket type %q", childType)
+	}
+	return nil
 }
 
 func nullableInt64(v *int64) any {
@@ -1682,9 +1765,9 @@ func ticketClaimable(ctx context.Context, db *sql.DB, ticket Ticket, projectID i
 
 func findAssignedTicketForUser(ctx context.Context, db *sql.DB, projectID int64, username, state string) (Ticket, bool, error) {
 	query := `
-		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
+		SELECT ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, COALESCE(author, ''), draft, complete, archived, deleted, previous_sdlc_stage_id, previous_role_id, COALESCE(created_by, ''), created_at, updated_at
 		FROM tickets
-		WHERE assignee = ? AND complete = 0 AND archived = 0 AND state = ?
+		WHERE assignee = ? AND complete = 0 AND archived = 0 AND deleted = 0 AND state = ?
 	`
 	args := []any{username, state}
 	if projectID != 0 {
@@ -1711,11 +1794,11 @@ func findClaimCandidate(ctx context.Context, db *sql.DB, projectID int64) (Ticke
 		return Ticket{}, false, errors.New("project is required")
 	}
 	ticket, err := scanTicket(db.QueryRowContext(ctx, `
-		SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.git_repository, t.git_branch, t.sdlc_id, t.sdlc_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.draft, t.complete, t.archived, t.previous_sdlc_stage_id, t.previous_role_id, COALESCE(t.created_by, ''), t.created_at, t.updated_at
+		SELECT t.ticket_id, t.project_id, t.parent_id, t.clone_of, t.type, t.title, t.description, t.acceptance_criteria, t.dor_map, t.dod_map, t.ac_map, t.git_repository, t.git_branch, t.sdlc_id, t.sdlc_stage_id, t.role_id, t.stage, t.state, t.status, t.priority, t.sort_order, t.estimate_effort, t.estimate_complete, t.health_score, t.assignee, COALESCE(t.author, ''), t.draft, t.complete, t.archived, t.deleted, t.previous_sdlc_stage_id, t.previous_role_id, COALESCE(t.created_by, ''), t.created_at, t.updated_at
 		FROM tickets t
 		JOIN projects p ON p.project_id = t.project_id
-		WHERE t.project_id = ? AND p.status = 'open' AND t.complete = 0 AND t.archived = 0 AND t.draft = 0 AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
-		  AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id)
+		WHERE t.project_id = ? AND p.status = 'open' AND t.complete = 0 AND t.archived = 0 AND t.deleted = 0 AND t.draft = 0 AND t.state = ? AND TRIM(COALESCE(t.assignee, '')) = ''
+		  AND NOT EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id AND c.deleted = 0)
 		ORDER BY t.priority DESC, t.created_at, t.ticket_id
 		LIMIT 1
 	`, projectID, StateIdle))
@@ -1735,7 +1818,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 
 	// Count total tickets in project.
 	var total int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets WHERE project_id = ?`, projectID).Scan(&total); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets WHERE project_id = ? AND deleted = 0`, projectID).Scan(&total); err != nil {
 		return nil, err
 	}
 	reasons = append(reasons, fmt.Sprintf("total tickets in project: %d", total))
@@ -1743,7 +1826,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 	// Count by state.
 	rows, err := db.QueryContext(ctx, `
 		SELECT state, COUNT(*) FROM tickets
-		WHERE project_id = ? AND complete = 0 AND archived = 0
+		WHERE project_id = ? AND complete = 0 AND archived = 0 AND deleted = 0
 		GROUP BY state
 	`, projectID)
 	if err != nil {
@@ -1766,7 +1849,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 	var idleUnassigned int
 	if err := db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM tickets
-		WHERE project_id = ? AND complete = 0 AND archived = 0 AND state = 'idle'
+		WHERE project_id = ? AND complete = 0 AND archived = 0 AND deleted = 0 AND state = 'idle'
 		AND TRIM(COALESCE(assignee, '')) = ''
 	`, projectID).Scan(&idleUnassigned); err != nil {
 		return nil, err
@@ -1777,7 +1860,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 	var notReady int
 	if err := db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM tickets
-		WHERE project_id = ? AND complete = 0 AND archived = 0 AND state = 'idle'
+		WHERE project_id = ? AND complete = 0 AND archived = 0 AND deleted = 0 AND state = 'idle'
 		AND TRIM(COALESCE(assignee, '')) = '' AND draft = 1
 	`, projectID).Scan(&notReady); err != nil {
 		return nil, err
@@ -1790,9 +1873,9 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 	var withChildren int
 	if err := db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM tickets t
-		WHERE t.project_id = ? AND t.complete = 0 AND t.archived = 0 AND t.draft = 0
+		WHERE t.project_id = ? AND t.complete = 0 AND t.archived = 0 AND t.deleted = 0 AND t.draft = 0
 		AND t.state = 'idle' AND TRIM(COALESCE(t.assignee, '')) = ''
-		AND EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id)
+		AND EXISTS (SELECT 1 FROM tickets c WHERE c.parent_id = t.ticket_id AND c.deleted = 0)
 	`, projectID).Scan(&withChildren); err != nil {
 		return nil, err
 	}
@@ -1804,7 +1887,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 	var assignedOther int
 	if err := db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM tickets
-		WHERE project_id = ? AND complete = 0 AND archived = 0 AND state = 'idle'
+		WHERE project_id = ? AND complete = 0 AND archived = 0 AND deleted = 0 AND state = 'idle'
 		AND TRIM(COALESCE(assignee, '')) != '' AND assignee != ?
 	`, projectID, username).Scan(&assignedOther); err != nil {
 		return nil, err
@@ -1815,7 +1898,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 
 	// Count closed.
 	var closed int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets WHERE project_id = ? AND complete = 1`, projectID).Scan(&closed); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets WHERE project_id = ? AND deleted = 0 AND complete = 1`, projectID).Scan(&closed); err != nil {
 		return nil, err
 	}
 	if closed > 0 {
@@ -1882,14 +1965,12 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 	}
 	parentID := ticket.ParentID
 
-	children, err := ListTickets(ctx, db, TicketListParams{ProjectID: ticket.ProjectID, IncludeArchived: true})
+	hasChildren, err := ticketHasChildren(ctx, db, ticket.ID)
 	if err != nil {
 		return err
 	}
-	for _, child := range children {
-		if child.ParentID != nil && *child.ParentID == id {
-			return ErrTicketHasChildren
-		}
+	if hasChildren {
+		return ErrTicketHasChildren
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -1898,22 +1979,13 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET clone_of = NULL WHERE clone_of = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
+		VALUES (?, ?, 'ticket_deleted', ?, ?)
+	`, ticket.ProjectID, ticket.ID, fmt.Sprintf(`{"key":%q,"title":%q,"deleted":true}`, ticket.ID, ticket.Title), nil); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM dependencies WHERE ticket_id = ? OR depends_on = ?`, id, id); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM comments WHERE item_id = ?`, id); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM history_events WHERE ticket_id = ?`, id); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ticket_history WHERE ticket_id = ?`, id); err != nil {
-		return err
-	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM tickets WHERE ticket_id = ?`, id)
+	result, err := tx.ExecContext(ctx, `UPDATE tickets SET deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? AND deleted = 0`, id)
 	if err != nil {
 		return err
 	}

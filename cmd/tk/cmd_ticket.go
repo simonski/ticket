@@ -201,7 +201,7 @@ Commands:
   notready -id <id>                          Mark not ready
   reject   -id <id>                           Send ticket back to the first workflow stage as draft
   clone    -id <id>                           Duplicate
-  delete   -id <id>                           Delete permanently
+  delete   -id <id>                           Soft-delete
 
   gen      -f <files> -o <output>             Generate tickets via agent`
 
@@ -403,7 +403,7 @@ func validateTicketStageInput(svc libticket.Service, ticket store.Ticket, stage 
 func expandListShortFlags(args []string) []string {
 	boolFlags := map[byte]bool{
 		'a': true, // include all (closed)
-		'd': true, // include archived/deleted
+		'd': true, // include archived
 	}
 	var expanded []string
 	for _, arg := range args {
@@ -444,7 +444,7 @@ func runList(args []string) error {
 	useUnicode := fs.Bool("unicode", true, "render status symbols as unicode")
 	plain := fs.Bool("plain", false, "render status as plain text")
 	includeAll := fs.Bool("a", false, "include all tickets (closed and archived)")
-	includeDeleted := fs.Bool("d", false, "include archived (deleted) tickets")
+	includeDeleted := fs.Bool("d", false, "include archived tickets")
 	labelFilter := fs.String("label", "", "filter by label name")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1062,14 +1062,22 @@ func runUnsetParent(args []string, command string) error {
 }
 
 func runUpdate(args []string) error {
-	usage := "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
+	usage := "tk update [-id <id>|<id>]\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-dor <text>] [-dod <text>] [-ac <text>]\n  [-dor-map <stage=value,...>] [-dod-map <stage=value,...>] [-ac-map <stage=value,...>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append([]string{"-id", args[0]}, args[1:]...)
+	}
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
 	title := fs.String("title", "", "ticket title")
 	description := fs.String("description", "", "ticket description")
 	desc := fs.String("desc", "", "ticket description")
+	dor := fs.String("dor", "", "ticket default definition of ready")
+	dod := fs.String("dod", "", "ticket default definition of done")
 	acceptanceCriteria := fs.String("ac", "", "ticket acceptance criteria")
+	dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+	dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+	acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 	gitRepository := fs.String("git-repository", "", "ticket git repository")
 	gitBranch := fs.String("git-branch", "", "ticket git branch")
 	priority := fs.Int("priority", 0, "ticket priority")
@@ -1095,7 +1103,12 @@ func runUpdate(args []string) error {
 	hasTitle := containsFlag(args, "-title")
 	hasDescription := containsFlag(args, "-description")
 	hasDesc := containsFlag(args, "-desc")
+	hasDOR := containsFlag(args, "-dor")
+	hasDOD := containsFlag(args, "-dod")
 	hasAC := containsFlag(args, "-ac")
+	hasDORMap := containsFlag(args, "-dor-map")
+	hasDODMap := containsFlag(args, "-dod-map")
+	hasACMap := containsFlag(args, "-ac-map")
 	hasPriority := containsFlag(args, "-priority")
 	hasGitRepository := containsFlag(args, "-git-repository")
 	hasGitBranch := containsFlag(args, "-git-branch")
@@ -1107,7 +1120,7 @@ func runUpdate(args []string) error {
 	hasState := containsFlag(args, "-state")
 	hasParentID := containsFlag(args, "-parent_id")
 	hasType := containsFlag(args, "-type") || containsFlag(args, "-t")
-	if !hasTitle && !hasDescription && !hasDesc && !hasAC && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID && !hasType {
+	if !hasTitle && !hasDescription && !hasDesc && !hasDOR && !hasDOD && !hasAC && !hasDORMap && !hasDODMap && !hasACMap && !hasGitRepository && !hasGitBranch && !hasPriority && !hasOrder && !hasEstimateEffort && !hasEstimateComplete && !hasStatus && !hasStage && !hasState && !hasParentID && !hasType {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -1126,6 +1139,9 @@ func runUpdate(args []string) error {
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
+		DORMap:             current.DORMap,
+		DODMap:             current.DODMap,
+		ACMap:              current.ACMap,
 		GitRepository:      current.GitRepository,
 		GitBranch:          current.GitBranch,
 		ParentID:           current.ParentID,
@@ -1146,6 +1162,27 @@ func runUpdate(args []string) error {
 	}
 	if hasAC {
 		next.AcceptanceCriteria = *acceptanceCriteria
+	}
+	if hasDOR || hasDORMap {
+		nextMap, err := mergeGuidanceMap(current.DORMap, *dor, *dorMapRaw, hasDOR, hasDORMap)
+		if err != nil {
+			return err
+		}
+		next.DORMap = nextMap
+	}
+	if hasDOD || hasDODMap {
+		nextMap, err := mergeGuidanceMap(current.DODMap, *dod, *dodMapRaw, hasDOD, hasDODMap)
+		if err != nil {
+			return err
+		}
+		next.DODMap = nextMap
+	}
+	if hasAC || hasACMap {
+		nextMap, err := mergeGuidanceMap(current.ACMap, *acceptanceCriteria, *acMapRaw, hasAC, hasACMap)
+		if err != nil {
+			return err
+		}
+		next.ACMap = nextMap
 	}
 	if hasGitRepository {
 		next.GitRepository = strings.TrimSpace(*gitRepository)
@@ -1949,6 +1986,9 @@ type ticketCreateOptions struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	DORMap             store.GuidanceMap
+	DODMap             store.GuidanceMap
+	ACMap              store.GuidanceMap
 	GitRepository      string
 	GitBranch          string
 	Priority           int
@@ -1977,7 +2017,12 @@ func runTicketCreate(args []string) error {
 	fs.StringVar(assignee, "a", "", "ticket assignee")
 	description := fs.String("description", "", "ticket description")
 	fs.StringVar(description, "d", "", "ticket description")
+	dor := fs.String("dor", "", "default definition of ready")
+	dod := fs.String("dod", "", "default definition of done")
 	acceptanceCriteria := fs.String("ac", "", "acceptance criteria")
+	dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+	dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+	acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 	gitRepository := fs.String("git-repository", "", "ticket git repository")
 	gitBranch := fs.String("git-branch", "", "ticket git branch")
 	estimateComplete := fs.String("estimate_complete", "", "estimated completion time (RFC3339)")
@@ -2020,6 +2065,12 @@ func runTicketCreate(args []string) error {
 		if v, ok := fileFields["project"]; ok && *project == "" {
 			*project = v
 		}
+		if v, ok := fileFields["dor"]; ok && *dor == "" {
+			*dor = v
+		}
+		if v, ok := fileFields["dod"]; ok && *dod == "" {
+			*dod = v
+		}
 		if v, ok := fileFields["ac"]; ok && *acceptanceCriteria == "" {
 			*acceptanceCriteria = v
 		}
@@ -2029,13 +2080,28 @@ func runTicketCreate(args []string) error {
 	}
 
 	if title == "" {
-		return errors.New("usage: tk add|create|new [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-ac criteria] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
+		return errors.New("usage: tk add|create|new [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
+	}
+	dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(normalizedArgs, "-dor"), containsFlag(normalizedArgs, "-dor-map"))
+	if err != nil {
+		return err
+	}
+	dodMap, err := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(normalizedArgs, "-dod"), containsFlag(normalizedArgs, "-dod-map"))
+	if err != nil {
+		return err
+	}
+	acMap, err := mergeGuidanceMap(nil, *acceptanceCriteria, *acMapRaw, containsFlag(normalizedArgs, "-ac"), containsFlag(normalizedArgs, "-ac-map"))
+	if err != nil {
+		return err
 	}
 	opts := ticketCreateOptions{
 		TicketType:         *taskType,
 		Title:              title,
 		Description:        *description,
 		AcceptanceCriteria: *acceptanceCriteria,
+		DORMap:             dorMap,
+		DODMap:             dodMap,
+		ACMap:              acMap,
 		GitRepository:      strings.TrimSpace(*gitRepository),
 		GitBranch:          strings.TrimSpace(*gitBranch),
 		Priority:           *priority,
@@ -2063,7 +2129,12 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		"-a":                 true,
 		"-description":       true,
 		"-d":                 true,
+		"-dor":               true,
+		"-dod":               true,
 		"-ac":                true,
+		"-dor-map":           true,
+		"-dod-map":           true,
+		"-ac-map":            true,
 		"-git-repository":    true,
 		"-git-branch":        true,
 		"-estimate_complete": true,
@@ -2128,6 +2199,9 @@ func createTicket(opts ticketCreateOptions) error {
 		Title:              opts.Title,
 		Description:        opts.Description,
 		AcceptanceCriteria: opts.AcceptanceCriteria,
+		DORMap:             opts.DORMap,
+		DODMap:             opts.DODMap,
+		ACMap:              opts.ACMap,
 		GitRepository:      opts.GitRepository,
 		GitBranch:          opts.GitBranch,
 		Priority:           opts.Priority,

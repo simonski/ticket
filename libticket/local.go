@@ -158,7 +158,15 @@ func (s *LocalService) CreateRole(ctx context.Context, request RoleRequest) (sto
 	if err != nil {
 		return store.Role{}, err
 	}
-	return store.CreateRole(ctx, db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
+	return store.CreateRoleWithParams(ctx, db, store.RoleCreateParams{
+		SdlcID:             request.SdlcID,
+		Title:              request.Title,
+		Description:        request.Description,
+		AcceptanceCriteria: request.AcceptanceCriteria,
+		DORMap:             request.DORMap,
+		DODMap:             request.DODMap,
+		ACMap:              request.ACMap,
+	})
 }
 
 func (s *LocalService) ListRoles(ctx context.Context) ([]store.Role, error) {
@@ -174,7 +182,14 @@ func (s *LocalService) UpdateRole(ctx context.Context, id int64, request RoleReq
 	if err != nil {
 		return store.Role{}, err
 	}
-	return store.UpdateRole(ctx, db, id, request.Title, request.Description, request.AcceptanceCriteria)
+	return store.UpdateRoleWithParams(ctx, db, id, store.RoleUpdateParams{
+		Title:              request.Title,
+		Description:        request.Description,
+		AcceptanceCriteria: request.AcceptanceCriteria,
+		DORMap:             request.DORMap,
+		DODMap:             request.DODMap,
+		ACMap:              request.ACMap,
+	})
 }
 
 func (s *LocalService) DeleteRole(ctx context.Context, id int64) error {
@@ -413,6 +428,9 @@ func (s *LocalService) CreateProject(ctx context.Context, request ProjectCreateR
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		DORMap:             request.DORMap,
+		DODMap:             request.DODMap,
+		ACMap:              request.ACMap,
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
@@ -447,6 +465,9 @@ func (s *LocalService) UpdateProject(ctx context.Context, id int64, request Proj
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		DORMap:             request.DORMap,
+		DODMap:             request.DODMap,
+		ACMap:              request.ACMap,
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		Notes:              request.Notes,
@@ -634,6 +655,9 @@ func (s *LocalService) CreateTicket(ctx context.Context, request TicketCreateReq
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		DORMap:             request.DORMap,
+		DODMap:             request.DODMap,
+		ACMap:              request.ACMap,
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		Priority:           request.Priority,
@@ -691,6 +715,9 @@ func (s *LocalService) UpdateTicket(ctx context.Context, id string, request Tick
 		Title:              request.Title,
 		Description:        request.Description,
 		AcceptanceCriteria: request.AcceptanceCriteria,
+		DORMap:             request.DORMap,
+		DODMap:             request.DODMap,
+		ACMap:              request.ACMap,
 		GitRepository:      request.GitRepository,
 		GitBranch:          request.GitBranch,
 		ParentID:           request.ParentID,

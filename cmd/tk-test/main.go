@@ -143,6 +143,11 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 		// Rewrite tk/ticket references to use our binary.
 		code = rewriteCommands(code, ticketBin)
 
+		// Replace interactive init with initdb for automated quickstart testing.
+		if containsInit(code) && !isServerStart(code) {
+			code = rewriteInitCommands(code, ticketBin+" initdb")
+		}
+
 		// Rewrite hardcoded localhost:8080 to our dynamic port.
 		if serverPort > 0 {
 			code = strings.ReplaceAll(code, "http://localhost:8080", fmt.Sprintf("http://localhost:%d", serverPort))
@@ -418,7 +423,7 @@ func containsInit(code string) bool {
 }
 
 // isServerStart detects blocks that start the ticket server.
-// Matches both original (tk server) and rewritten (/path/to/ticket server) forms.
+// Matches both original (tk server) and rewritten (/path/to/tk or /path/to/ticket) forms.
 func isServerStart(code string) bool {
 	for _, line := range strings.Split(code, "\n") {
 		line = strings.TrimSpace(line)
@@ -426,8 +431,9 @@ func isServerStart(code string) bool {
 			strings.HasPrefix(line, "tk server ") || strings.HasPrefix(line, "ticket server ") {
 			return true
 		}
-		// Match rewritten form: /path/to/ticket server
-		if strings.HasSuffix(line, "/ticket server") || strings.Contains(line, "/ticket server ") {
+		// Match rewritten form: /path/to/tk server or /path/to/ticket server.
+		if strings.HasSuffix(line, "/ticket server") || strings.Contains(line, "/ticket server ") ||
+			strings.HasSuffix(line, "/tk server") || strings.Contains(line, "/tk server ") {
 			return true
 		}
 	}
@@ -446,6 +452,26 @@ func rewriteCommands(code, ticketBin string) string {
 			line = strings.Replace(line, "ticket", ticketBin, 1)
 		}
 		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func rewriteInitCommands(code, replacement string) string {
+	var lines []string
+	for _, line := range strings.Split(code, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "tk init", trimmed == "ticket init":
+			lines = append(lines, replacement)
+		case strings.HasPrefix(trimmed, "tk init "), strings.HasPrefix(trimmed, "ticket init "):
+			lines = append(lines, replacement)
+		case strings.HasSuffix(trimmed, "/tk init"), strings.HasSuffix(trimmed, "/ticket init"):
+			lines = append(lines, replacement)
+		case strings.Contains(trimmed, "/tk init "), strings.Contains(trimmed, "/ticket init "):
+			lines = append(lines, replacement)
+		default:
+			lines = append(lines, line)
+		}
 	}
 	return strings.Join(lines, "\n")
 }

@@ -126,7 +126,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"list": {
 		usage:   "tk list|ls [-type <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-unicode] [-plain]",
-		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include closed tickets, `-d` to also include archived. Combined flags like `-ad` are supported."},
+		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include closed tickets, `-d` to also include archived tickets. Combined flags like `-ad` are supported."},
 		example: "tk list -type bug -status develop/idle -u alice -n 20",
 	},
 	"orphans": {
@@ -155,9 +155,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage: "tk update -id <id>\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
+		usage: "tk update [-id <id>|<id>]\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
 		details: []string{
-			"-id <id>: required; ticket id or key",
+			"-id <id> or positional <id>: required; ticket id or key",
 			"-title <title>: set title",
 			"-desc <description>: set description (alias: -description)",
 			"-description <description>: set description (alias: -desc)",

@@ -14,17 +14,17 @@ Or download a binary for your platform from the [releases page](https://github.c
 
 ## Choose your mode
 
-`tk` works in two modes:
+`tk` works in two modes - *local* and *remote*
 
 ### [Local mode](QUICKSTART_CLIENT.md)
 
-Everything runs on your machine using a SQLite file. No server needed.  
+Everything runs on your machine using a SQLite file. No server needed.  No env vars, almost no setup.
 Best for solo use, small projects, or getting started quickly.
 
 ```bash
+# initialise a ticket database and config file under ${CWD}/.ticket
+# choose Local mode when prompted
 tk init
-tk project create -prefix MY -title "My Project" -wow "Team working agreement" -dor "Ready to start criteria" -dod "Done criteria"
-tk project use MY
 tk add "First ticket"
 tk list
 ```
@@ -35,16 +35,29 @@ Run an HTTP server with multi-user auth, a web Kanban board, WebSocket live
 updates, and AI agent support. Best for teams, shared backlogs, and CI/CD.
 
 ```bash
-tk server                              # start on :8080 (leave this running)
-# or pick an explicit DB file:
-tk server -f ./team.db
-# in another terminal:
+# initialise a ticket database and config file under ${CWD}/.ticket
+# choose Local mode when prompted so the server has a local database
+tk init
+
+# run a server
+tk server
+```
+
+### Access the server in another terminal and register a user
+
+```bash
+export TICKET_URL=http://localhost:8080
+
+### Register a user
+tk register -username alice -password secret12
+```
+
+### Open a new terminal and interact as alice
+
+```bash
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=alice
-export TICKET_PASSWORD=secret
-tk register                            # uses env username/password
-tk login                               # uses env username/password
-tk status
+export TICKET_PASSWORD=secret12
 ```
 
 ---
@@ -54,7 +67,7 @@ tk status
 | Concept | Example |
 |---------|---------|
 | Project | `CUS` — Customer Portal |
-| Ticket key | `CUS-T-42` |
+| Ticket key | `CUS-42` |
 | Ticket types | `task`, `bug`, `epic`, `story`, `spike`, `chore`, `note`, `question`, `requirement`, `decision` |
 | Lifecycle | `stage/state` e.g. `develop/active` |
 | Stages | `design → develop → test → done` |
@@ -67,19 +80,15 @@ Setting state to `success` auto-advances to the next stage.
 ## Daily sdlc
 
 ```bash
+tk project create -prefix CUS -title "Customer Portal"
+tk project use CUS
 tk summary                            # daily overview
 tk ls                                 # list open tickets
 tk add "Fix login timeout"            # create a task
 tk bug "Token expires too early"      # create a bug
 tk epic "Authentication"              # create an epic
 
-tk active   -id CUS-T-1              # begin work
-tk complete -id CUS-T-1              # finish stage, auto-advance
-tk complete -id CUS-T-1              # mark ticket complete
-
-tk claim    -id CUS-T-1              # assign to yourself
-tk request                            # get the next available ticket
-tk prompt CUS-T-1                     # build a plaintext execution prompt
+tk complete -id CUS-1               # mark ticket complete
 ```
 
 ---
@@ -97,22 +106,15 @@ Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ## Using with Claude Code
 
-Copy the bundled skill into your project (or globally):
+Write the bundled skill into your project:
 
 ```bash
-cp -r .claude/skills/tk ~/.claude/skills/   # global
-# or
-cp -r .claude/skills/tk .claude/skills/     # project-only
+mkdir -p .claude/skills/tk
+tk skill > .claude/skills/tk/SKILL.md
 ```
 
 Claude will then query and update tickets automatically during coding sessions:
 reading live ticket state, logging time, creating bugs, and recording decisions.
-
-Or print the embedded template directly:
-
-```bash
-tk skill > SKILL.md
-```
 
 ---
 

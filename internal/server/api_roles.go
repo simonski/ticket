@@ -38,7 +38,15 @@ func (r *router) registerRoleHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			role, err := store.CreateRole(r.Context(), db, payload.SdlcID, payload.Title, payload.Description, payload.AcceptanceCriteria)
+			role, err := store.CreateRoleWithParams(r.Context(), db, store.RoleCreateParams{
+				SdlcID:             payload.SdlcID,
+				Title:              payload.Title,
+				Description:        payload.Description,
+				AcceptanceCriteria: payload.AcceptanceCriteria,
+				DORMap:             payload.DORMap,
+				DODMap:             payload.DODMap,
+				ACMap:              payload.ACMap,
+			})
 			if err != nil {
 				writeStoreError(w, err)
 				return
@@ -67,7 +75,14 @@ func (r *router) registerRoleHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			role, err := store.UpdateRole(r.Context(), db, id, payload.Title, payload.Description, payload.AcceptanceCriteria)
+			role, err := store.UpdateRoleWithParams(r.Context(), db, id, store.RoleUpdateParams{
+				Title:              payload.Title,
+				Description:        payload.Description,
+				AcceptanceCriteria: payload.AcceptanceCriteria,
+				DORMap:             payload.DORMap,
+				DODMap:             payload.DODMap,
+				ACMap:              payload.ACMap,
+			})
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "role not found")

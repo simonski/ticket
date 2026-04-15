@@ -17,21 +17,28 @@ const (
 )
 
 type Project struct {
-	ID                 int64  `json:"project_id"`
-	Prefix             string `json:"prefix"`
-	Title              string `json:"title"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	GitRepository      string `json:"git_repository"`
-	GitBranch          string `json:"git_branch"`
-	Notes              string `json:"notes"`
-	Status             string `json:"status"`
-	Visibility         string `json:"visibility"`
-	DefaultDraft       bool   `json:"default_draft"`
-	CreatedBy          string `json:"created_by"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
-	SdlcID             *int64 `json:"sdlc_id,omitempty"`
+	ID                 int64       `json:"project_id"`
+	Prefix             string      `json:"prefix"`
+	Title              string      `json:"title"`
+	Description        string      `json:"description"`
+	AcceptanceCriteria string      `json:"acceptance_criteria"`
+	DORMap             GuidanceMap `json:"dor_map,omitempty"`
+	DODMap             GuidanceMap `json:"dod_map,omitempty"`
+	ACMap              GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository      string      `json:"git_repository"`
+	GitBranch          string      `json:"git_branch"`
+	Notes              string      `json:"notes"`
+	Status             string      `json:"status"`
+	Visibility         string      `json:"visibility"`
+	DefaultDraft       bool        `json:"default_draft"`
+	CreatedBy          string      `json:"created_by"`
+	CreatedAt          string      `json:"created_at"`
+	UpdatedAt          string      `json:"updated_at"`
+	SdlcID             *int64      `json:"sdlc_id,omitempty"`
+}
+
+func (p Project) ResolveGuidance(stage string) ResolvedGuidance {
+	return resolveGuidance(stage, p.DORMap, p.DODMap, p.ACMap)
 }
 
 type ProjectCreateParams struct {
@@ -39,6 +46,9 @@ type ProjectCreateParams struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	DORMap             GuidanceMap
+	DODMap             GuidanceMap
+	ACMap              GuidanceMap
 	GitRepository      string
 	GitBranch          string
 	Notes              string
@@ -51,6 +61,9 @@ type ProjectUpdateParams struct {
 	Title              string
 	Description        string
 	AcceptanceCriteria string
+	DORMap             GuidanceMap
+	DODMap             GuidanceMap
+	ACMap              GuidanceMap
 	GitRepository      string
 	GitBranch          string
 	Notes              string
@@ -100,10 +113,27 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 			sdlcID = &wfID
 		}
 	}
+	dorJSON, err := guidanceMapJSON(params.DORMap)
+	if err != nil {
+		return Project{}, err
+	}
+	dodJSON, err := guidanceMapJSON(params.DODMap)
+	if err != nil {
+		return Project{}, err
+	}
+	acMap := withLegacyAcceptanceCriteria(params.AcceptanceCriteria, params.ACMap)
+	acJSON, err := guidanceMapJSON(acMap)
+	if err != nil {
+		return Project{}, err
+	}
+	acceptanceCriteria := strings.TrimSpace(params.AcceptanceCriteria)
+	if acceptanceCriteria == "" && acMap != nil {
+		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
+	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO projects (prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, created_by, sdlc_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), strings.TrimSpace(params.AcceptanceCriteria), strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), sdlcID)
+		INSERT INTO projects (prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, created_by, sdlc_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+	`, uniquePrefix, title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), sdlcID)
 	if err != nil {
 		return Project{}, err
 	}
@@ -119,12 +149,39 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 	return GetProjectByID(ctx, db, id)
 }
 
+func scanProject(s scanner) (Project, error) {
+	var project Project
+	var sdlcID sql.NullInt64
+	var dorJSON, dodJSON, acJSON string
+	if err := s.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &dorJSON, &dodJSON, &acJSON, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &sdlcID); err != nil {
+		return Project{}, err
+	}
+	var err error
+	project.DORMap, err = parseGuidanceMap(dorJSON)
+	if err != nil {
+		return Project{}, err
+	}
+	project.DODMap, err = parseGuidanceMap(dodJSON)
+	if err != nil {
+		return Project{}, err
+	}
+	project.ACMap, err = parseGuidanceMap(acJSON)
+	if err != nil {
+		return Project{}, err
+	}
+	project.ACMap = withLegacyAcceptanceCriteria(project.AcceptanceCriteria, project.ACMap)
+	if sdlcID.Valid {
+		project.SdlcID = &sdlcID.Int64
+	}
+	return project, nil
+}
+
 func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error) {
 	if limit <= 0 {
 		limit = 1000
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		ORDER BY created_at, project_id
 		LIMIT ?
@@ -136,8 +193,8 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 
 	projects := make([]Project, 0)
 	for rows.Next() {
-		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+		project, err := scanProject(rows)
+		if err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -160,7 +217,7 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.sdlc_id
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.sdlc_id
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -174,8 +231,8 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 	defer rows.Close()
 	projects := make([]Project, 0)
 	for rows.Next() {
-		var project Project
-		if err := rows.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+		project, err := scanProject(rows)
+		if err != nil {
 			return nil, err
 		}
 		projects = append(projects, project)
@@ -193,12 +250,12 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 		return GetProjectByID(ctx, db, id)
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
-	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+	project, err := scanProject(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -209,12 +266,12 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 
 func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		WHERE project_id = ?
 	`, id)
-	var project Project
-	if err := row.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &project.SdlcID); err != nil {
+	project, err := scanProject(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
@@ -248,6 +305,22 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	if strings.TrimSpace(nextAC) == "" {
 		nextAC = current.AcceptanceCriteria
 	}
+	nextDORMap := current.DORMap
+	if params.DORMap != nil {
+		nextDORMap = normalizeGuidanceMap(params.DORMap)
+	}
+	nextDODMap := current.DODMap
+	if params.DODMap != nil {
+		nextDODMap = normalizeGuidanceMap(params.DODMap)
+	}
+	nextACMap := current.ACMap
+	if params.ACMap != nil {
+		nextACMap = params.ACMap
+	}
+	if strings.TrimSpace(params.AcceptanceCriteria) != "" && params.ACMap == nil {
+		nextACMap = withLegacyAcceptanceCriteria(params.AcceptanceCriteria, current.ACMap)
+	}
+	nextACMap = withLegacyAcceptanceCriteria(nextAC, nextACMap)
 	nextRepo := strings.TrimSpace(params.GitRepository)
 	if nextRepo == "" {
 		nextRepo = current.GitRepository
@@ -277,11 +350,23 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	} else if *nextSdlcID == 0 {
 		nextSdlcID = nil
 	}
+	dorJSON, err := guidanceMapJSON(nextDORMap)
+	if err != nil {
+		return Project{}, err
+	}
+	dodJSON, err := guidanceMapJSON(nextDODMap)
+	if err != nil {
+		return Project{}, err
+	}
+	acJSON, err := guidanceMapJSON(nextACMap)
+	if err != nil {
+		return Project{}, err
+	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE projects
-		SET title = ?, description = ?, acceptance_criteria = ?, git_repository = ?, git_branch = ?, notes = ?, status = ?, visibility = ?, sdlc_id = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, notes = ?, status = ?, visibility = ?, sdlc_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
-	`, nextTitle, nextDescription, nextAC, nextRepo, nextBranch, nextNotes, nextStatus, nextVisibility, nextSdlcID, id)
+	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextBranch, nextNotes, nextStatus, nextVisibility, nextSdlcID, id)
 	if err != nil {
 		return Project{}, err
 	}

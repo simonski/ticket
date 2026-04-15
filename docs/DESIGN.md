@@ -1,9 +1,10 @@
 # Design
 
 The authoritative lifecycle remodel specification is
-`docs/LIFECYCLE.md`. Where this file still describes the older
-single-status model, the lifecycle spec takes precedence until the rest of this
-document is rewritten.
+`docs/LIFECYCLE.md`. The authoritative phase 1 entity definition is
+`docs/ENTITY_MODEL.md`. Where this file still describes older entity or
+single-status assumptions, those dedicated documents take precedence until the
+rest of this document is rewritten.
 
 ## Product Summary
 

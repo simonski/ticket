@@ -12,8 +12,11 @@ func TestTicketTypeCode(t *testing.T) {
 		want  string
 	}{
 		{"epic", "E"},
+		{"story", "Y"},
 		{"task", "T"},
 		{"bug", "B"},
+		{"feature", "F"},
+		{"idea", "I"},
 		{"spike", "S"},
 		{"chore", "C"},
 		{"note", "N"},

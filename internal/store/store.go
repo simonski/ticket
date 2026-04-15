@@ -214,6 +214,9 @@ CREATE TABLE IF NOT EXISTS roles (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	dor_map TEXT NOT NULL DEFAULT '{}',
+	dod_map TEXT NOT NULL DEFAULT '{}',
+	ac_map TEXT NOT NULL DEFAULT '{}',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
@@ -226,6 +229,9 @@ CREATE TABLE IF NOT EXISTS projects (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	dor_map TEXT NOT NULL DEFAULT '{}',
+	dod_map TEXT NOT NULL DEFAULT '{}',
+	ac_map TEXT NOT NULL DEFAULT '{}',
 	git_repository TEXT NOT NULL DEFAULT '',
 	git_branch TEXT NOT NULL DEFAULT '',
 	notes TEXT NOT NULL DEFAULT '',
@@ -250,6 +256,9 @@ CREATE TABLE IF NOT EXISTS tickets (
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
+	dor_map TEXT NOT NULL DEFAULT '{}',
+	dod_map TEXT NOT NULL DEFAULT '{}',
+	ac_map TEXT NOT NULL DEFAULT '{}',
 	git_repository TEXT NOT NULL DEFAULT '',
 	git_branch TEXT NOT NULL DEFAULT '',
 	sdlc_stage_id INTEGER,
@@ -266,6 +275,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	draft INTEGER NOT NULL DEFAULT 0,
 	complete INTEGER NOT NULL DEFAULT 0,
 	archived INTEGER NOT NULL DEFAULT 0,
+	deleted INTEGER NOT NULL DEFAULT 0,
 	previous_sdlc_stage_id INTEGER,
 	previous_role_id INTEGER,
 	created_by TEXT,
@@ -528,6 +538,7 @@ CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_i
 CREATE INDEX IF NOT EXISTS idx_tickets_draft ON tickets(draft);
 CREATE INDEX IF NOT EXISTS idx_tickets_complete ON tickets(complete);
 CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived);
+CREATE INDEX IF NOT EXISTS idx_tickets_deleted ON tickets(deleted);
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type);
 CREATE INDEX IF NOT EXISTS idx_tickets_role_id ON tickets(role_id);
@@ -607,6 +618,21 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(ctx, db, "projects", "dor_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "dod_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN dod_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "ac_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN ac_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
 	if !columnExists(ctx, db, "projects", "git_branch") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
@@ -677,6 +703,21 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(ctx, db, "tickets", "dor_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "tickets", "dod_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN dod_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "tickets", "ac_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN ac_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
 	if !columnExists(ctx, db, "tickets", "git_branch") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
@@ -699,6 +740,11 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(ctx, db, "tickets", "deleted") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
 	if !columnExists(ctx, db, "tickets", "stage") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN stage TEXT NOT NULL DEFAULT 'design'`); err != nil {
 			return err
@@ -716,6 +762,21 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if !columnExists(ctx, db, "tickets", "sdlc_id") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN sdlc_id INTEGER REFERENCES sdlcs(sdlc_id)`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "roles", "dor_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE roles ADD COLUMN dor_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "roles", "dod_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE roles ADD COLUMN dod_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "roles", "ac_map") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE roles ADD COLUMN ac_map TEXT NOT NULL DEFAULT '{}'`); err != nil {
 			return err
 		}
 	}
@@ -1047,6 +1108,7 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	missingIndexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open)`,
 		`CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived)`,
+		`CREATE INDEX IF NOT EXISTS idx_tickets_deleted ON tickets(deleted)`,
 		`CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id)`,
@@ -1213,6 +1275,9 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
 			acceptance_criteria TEXT NOT NULL DEFAULT '',
+			dor_map TEXT NOT NULL DEFAULT '{}',
+			dod_map TEXT NOT NULL DEFAULT '{}',
+			ac_map TEXT NOT NULL DEFAULT '{}',
 			git_repository TEXT NOT NULL DEFAULT '',
 			git_branch TEXT NOT NULL DEFAULT '',
 			sdlc_id INTEGER,
@@ -1229,6 +1294,7 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 			ready INTEGER NOT NULL DEFAULT 0,
 			open INTEGER NOT NULL DEFAULT 1,
 			archived INTEGER NOT NULL DEFAULT 0,
+			deleted INTEGER NOT NULL DEFAULT 0,
 			created_by TEXT,
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1244,10 +1310,10 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 
 	// Determine which columns exist in the old table (some may be missing in very old DBs).
 	oldCols := []string{
-		"project_id", "type", "title", "description", "acceptance_criteria",
+		"project_id", "type", "title", "description", "acceptance_criteria", "dor_map", "dod_map", "ac_map",
 		"git_repository", "git_branch", "stage", "state", "status",
 		"priority", "sort_order", "estimate_effort", "estimate_complete",
-		"health_score", "assignee", "open", "archived", "created_by",
+		"health_score", "assignee", "open", "archived", "deleted", "created_by",
 		"created_at", "updated_at",
 	}
 	optionalCols := []string{"sdlc_id", "sdlc_stage_id", "ready"}

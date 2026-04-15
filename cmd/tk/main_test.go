@@ -1460,11 +1460,11 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 
 	createOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "create", "-prefix", "PRA", "-title", "Project A", "-description", "Desc", "-ac", "AC"}); err != nil {
+		if err := run([]string{"project", "create", "-prefix", "PRA", "-title", "Project A", "-description", "Desc", "-dor", "Ready", "-dod", "Done", "-ac", "AC"}); err != nil {
 			t.Fatalf("project create error = %v", err)
 		}
 	})
-	for _, want := range []string{"project: Project A", "prefix: PRA", "status: open", "wow: Desc", "dor: AC", "acceptance_criteria: AC"} {
+	for _, want := range []string{"project: Project A", "prefix: PRA", "status: open", "wow: Desc", "ac: AC", "acceptance_criteria: AC", "dor_map[default]: Ready", "dod_map[default]: Done", "ac_map[default]: AC"} {
 		if !strings.Contains(createOutput, want) {
 			t.Fatalf("project create output missing %q:\n%s", want, createOutput)
 		}
@@ -1480,11 +1480,11 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	}
 
 	updateOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "2", "update", "-title", "Project B", "-description", "Updated", "-ac", "AC2"}); err != nil {
+		if err := run([]string{"project", "2", "update", "-title", "Project B", "-description", "Updated", "-dor-map", "develop=Build reviewed", "-ac", "AC2"}); err != nil {
 			t.Fatalf("project update error = %v", err)
 		}
 	})
-	for _, want := range []string{"project: Project B", "wow: Updated", "dor: AC2", "description: Updated", "acceptance_criteria: AC2"} {
+	for _, want := range []string{"project: Project B", "wow: Updated", "description: Updated", "ac: AC2", "acceptance_criteria: AC2", "dor_map[default]: Ready", "dor_map[develop]: Build reviewed"} {
 		if !strings.Contains(updateOutput, want) {
 			t.Fatalf("project update output missing %q:\n%s", want, updateOutput)
 		}
@@ -1510,6 +1510,112 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	})
 	if !strings.Contains(useOutput, "using project") {
 		t.Fatalf("project use output = %q", useOutput)
+	}
+}
+
+func TestRunProjectGetShowsGuidanceMaps(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:             "MAP",
+		Title:              "Guidance Project",
+		AcceptanceCriteria: "legacy project ac",
+		DORMap:             store.GuidanceMap{"default": "project default dor", "develop": "project develop dor"},
+		DODMap:             store.GuidanceMap{"default": "project default dod"},
+		ACMap:              store.GuidanceMap{"qa": "project qa ac"},
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "get", project.Prefix}); err != nil {
+			t.Fatalf("project get error = %v", err)
+		}
+	})
+
+	for _, want := range []string{
+		"dor_map[default]: project default dor",
+		"dor_map[develop]: project develop dor",
+		"dod_map[default]: project default dod",
+		"ac_map[default]: legacy project ac",
+		"ac_map[qa]: project qa ac",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("project get output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunTicketCreateAndUpdateGuidanceMaps(t *testing.T) {
+	setupLocalCLI(t)
+	attachWorkflowToDefaultProject(t, "design", "develop", "qa", "done")
+
+	createOutput := captureStdout(t, func() {
+		if err := run([]string{"add", "-title", "Guided Ticket", "-dor", "Ready to start", "-dod-map", "qa=Verified in QA", "-ac", "Base acceptance", "-ac-map", "develop=Code reviewed"}); err != nil {
+			t.Fatalf("ticket create error = %v", err)
+		}
+	})
+
+	svc := localCLIService(t)
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	tickets, err := svc.ListTickets(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if len(tickets) == 0 {
+		t.Fatal("expected created ticket")
+	}
+	ticketID := tickets[0].ID
+	if !strings.Contains(createOutput, ticketID) {
+		t.Fatalf("ticket create output = %q, want %s", createOutput, ticketID)
+	}
+
+	initialGetOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", ticketID}); err != nil {
+			t.Fatalf("ticket get after create error = %v", err)
+		}
+	})
+	for label, value := range map[string]string{
+		"dor_map[default]": "Ready to start",
+		"dod_map[qa]":      "Verified in QA",
+		"ac_map[default]":  "Base acceptance",
+		"ac_map[develop]":  "Code reviewed",
+	} {
+		if !hasDetailField(initialGetOutput, label, value) {
+			t.Fatalf("ticket get after create missing %q=%q:\n%s", label, value, initialGetOutput)
+		}
+	}
+
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"update", ticketID, "-dor-map", "develop=Implementation ready", "-dod", "Shipped"}); err != nil {
+			t.Fatalf("ticket update error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, "updated") {
+		t.Fatalf("ticket update output = %q", updateOutput)
+	}
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", ticketID}); err != nil {
+			t.Fatalf("ticket get error = %v", err)
+		}
+	})
+	for label, value := range map[string]string{
+		"dor_map[default]": "Ready to start",
+		"dor_map[develop]": "Implementation ready",
+		"dod_map[default]": "Shipped",
+		"dod_map[qa]":      "Verified in QA",
+		"ac_map[default]":  "Base acceptance",
+		"ac_map[develop]":  "Code reviewed",
+	} {
+		if !hasDetailField(getOutput, label, value) {
+			t.Fatalf("ticket get output missing %q=%q:\n%s", label, value, getOutput)
+		}
 	}
 }
 
@@ -1540,6 +1646,36 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 
 	epicID := createLocalTask(t, []string{"epic", "-d", "Epic description", "Prompt Epic"})
 	taskID := createLocalTask(t, []string{"add", "-parent", epicID, "-d", "Task description", "-ac", "Task acceptance", "Prompt Task"})
+	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{
+		Title:              project.Title,
+		Description:        project.Description,
+		AcceptanceCriteria: project.AcceptanceCriteria,
+		DORMap:             store.GuidanceMap{"default": "Project default DOR"},
+		DODMap:             store.GuidanceMap{"default": "Project default DOD"},
+		ACMap:              store.GuidanceMap{"default": "Project default AC"},
+		SdlcID:             project.SdlcID,
+	}); err != nil {
+		t.Fatalf("UpdateProject() error = %v", err)
+	}
+	task, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if _, err := svc.UpdateTicket(context.Background(), taskID, libticket.TicketUpdateRequest{
+		Title:              task.Title,
+		Description:        task.Description,
+		AcceptanceCriteria: task.AcceptanceCriteria,
+		DORMap:             store.GuidanceMap{"default": "Ticket default DOR"},
+		DODMap:             store.GuidanceMap{"default": "Ticket default DOD"},
+		ACMap:              store.GuidanceMap{"default": "Ticket default AC"},
+		ParentID:           task.ParentID,
+		Priority:           task.Priority,
+		Order:              task.Order,
+		EstimateEffort:     task.EstimateEffort,
+		EstimateComplete:   task.EstimateComplete,
+	}); err != nil {
+		t.Fatalf("UpdateTicket() error = %v", err)
+	}
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"prompt", taskID}); err != nil {
@@ -1557,8 +1693,15 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 		"TICKET",
 		"Prompt Task",
 		"Task description",
+		"Definition of Ready: Project default DOR",
+		"Definition of Done: Project default DOD",
+		"Acceptance Criteria: Project default AC",
+		"Definition of Ready: Ticket default DOR",
+		"Definition of Done: Ticket default DOD",
+		"Acceptance Criteria: Ticket default AC",
 		"ROLE",
 		"STAGE",
+		"Definition of Ready: Stage acceptance criteria",
 		"Acceptance Criteria: Stage acceptance criteria",
 	} {
 		if !strings.Contains(output, want) {
@@ -2151,16 +2294,36 @@ func TestRunUpdateSupportsDescriptionAlias(t *testing.T) {
 	}
 }
 
-func TestRunUpdateRequiresIDFlag(t *testing.T) {
+func TestRunUpdateAcceptsPositionalID(t *testing.T) {
 	setupLocalCLI(t)
 	taskID := createLocalTask(t, []string{"add", "Needs ID Update"})
 
-	if err := run([]string{"update", taskID, "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update -id") {
-		t.Fatalf("expected usage error for positional id, got %v", err)
+	if err := run([]string{"update", taskID, "-title", "No ID Flag"}); err != nil {
+		t.Fatalf("run(update positional id) error = %v", err)
 	}
 
-	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update -id") {
-		t.Fatalf("expected usage error for missing -id, got %v", err)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+	ticket, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if ticket.Title != "No ID Flag" {
+		t.Fatalf("ticket.Title = %q, want %q", ticket.Title, "No ID Flag")
+	}
+}
+
+func TestRunUpdateRequiresID(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update [-id <id>|<id>]") {
+		t.Fatalf("expected usage error for missing id, got %v", err)
 	}
 }
 
@@ -2781,14 +2944,13 @@ func TestRunOrphansExcludesEpicRoots(t *testing.T) {
 	}
 }
 
-func TestRunSetParentDisallowsEpicUnderTask(t *testing.T) {
+func TestRunSetParentAllowsLineageIndependentOfType(t *testing.T) {
 	setupLocalCLI(t)
-	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
+	childID := createLocalTask(t, []string{"epic", "Standalone Epic"})
+	clearCurrentEpicID(t)
 	taskID := createLocalTask(t, []string{"add", "Task Parent"})
 
-	if err := run([]string{"set-parent", "-id", epicID, taskID}); err == nil {
-		t.Fatalf("set-parent should reject epic parenting by task")
-	} else if !strings.Contains(err.Error(), "task cannot parent epic") {
+	if err := run([]string{"set-parent", "-id", childID, taskID}); err != nil {
 		t.Fatalf("set-parent error = %v", err)
 	}
 }
@@ -3400,7 +3562,7 @@ func TestRunRoleCRUD(t *testing.T) {
 	}
 	// Create
 	createOutput := captureStdout(t, func() {
-		if err := run([]string{"role", "create", "-title", "Security Lead", "-description", "Protect systems", "-ac", "Zero breaches"}); err != nil {
+		if err := run([]string{"role", "create", "-title", "Security Lead", "-description", "Protect systems", "-dor", "Threat model ready", "-dod", "Review signed off", "-ac", "Zero breaches"}); err != nil {
 			t.Fatalf("role create error = %v", err)
 		}
 	})
@@ -3431,12 +3593,27 @@ func TestRunRoleCRUD(t *testing.T) {
 	}
 	// Update
 	output = captureStdout(t, func() {
-		if err := run([]string{"role", "update", "-id", roleID, "-title", "Chief Security", "-description", "Lead design", "-ac", "Excellence"}); err != nil {
+		if err := run([]string{"role", "update", "-id", roleID, "-title", "Chief Security", "-description", "Lead design", "-ac-map", "qa=Security sign-off"}); err != nil {
 			t.Fatalf("role update error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "Chief Security") {
 		t.Fatalf("role update missing new title:\n%s", output)
+	}
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"role", "get", "-id", roleID}); err != nil {
+			t.Fatalf("role get error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"dor_map[default]: Threat model ready",
+		"dod_map[default]: Review signed off",
+		"ac_map[default]: Zero breaches",
+		"ac_map[qa]: Security sign-off",
+	} {
+		if !strings.Contains(getOutput, want) {
+			t.Fatalf("role get output missing %q:\n%s", want, getOutput)
+		}
 	}
 	// Delete
 	output = captureStdout(t, func() {

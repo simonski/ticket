@@ -338,6 +338,9 @@ func runRole(args []string) error {
 				fmt.Printf("Title:      %s\n", role.Title)
 				fmt.Printf("Description: %s\n", role.Description)
 				fmt.Printf("AcceptanceCriteria:      %s\n", role.AcceptanceCriteria)
+				printGuidanceMap("dor_map", role.DORMap)
+				printGuidanceMap("dod_map", role.DODMap)
+				printGuidanceMap("ac_map", role.ACMap)
 				fmt.Printf("Created:    %s\n", role.CreatedAt)
 				fmt.Printf("Updated:    %s\n", role.UpdatedAt)
 				return nil
@@ -350,16 +353,36 @@ func runRole(args []string) error {
 		title := fs.String("title", "", "role title")
 		description := fs.String("description", "", "role description")
 		ac := fs.String("ac", "", "role acceptance criteria")
+		dor := fs.String("dor", "", "role default definition of ready")
+		dod := fs.String("dod", "", "role default definition of done")
+		dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+		dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk role create -title <title> [-description <text>] [-ac <text>]")
+			return errors.New("usage: tk role create -title <title> [-description <text>] [-dor <text>] [-dod <text>] [-ac <text>] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
+		}
+		dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
+		if err != nil {
+			return err
+		}
+		dodMap, err := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args[1:], "-dod"), containsFlag(args[1:], "-dod-map"))
+		if err != nil {
+			return err
+		}
+		acMap, err := mergeGuidanceMap(nil, *ac, *acMapRaw, containsFlag(args[1:], "-ac"), containsFlag(args[1:], "-ac-map"))
+		if err != nil {
+			return err
 		}
 		role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 			Title:              strings.TrimSpace(*title),
 			Description:        strings.TrimSpace(*description),
 			AcceptanceCriteria: strings.TrimSpace(*ac),
+			DORMap:             dorMap,
+			DODMap:             dodMap,
+			ACMap:              acMap,
 		})
 		if err != nil {
 			return err
@@ -376,16 +399,62 @@ func runRole(args []string) error {
 		title := fs.String("title", "", "role title")
 		description := fs.String("description", "", "role description")
 		ac := fs.String("ac", "", "role acceptance criteria")
+		dor := fs.String("dor", "", "role default definition of ready")
+		dod := fs.String("dod", "", "role default definition of done")
+		dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
+		dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
+		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *id == 0 || strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk role update -id <id> -title <title> [-description <text>] [-ac <text>]")
+		if *id == 0 || fs.NArg() != 0 {
+			return errors.New("usage: tk role update -id <id> [-title <title>] [-description <text>] [-dor <text>] [-dod <text>] [-ac <text>] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
+		}
+		roles, err := svc.ListRoles(context.Background())
+		if err != nil {
+			return err
+		}
+		var current *store.Role
+		for i := range roles {
+			if roles[i].ID == *id {
+				current = &roles[i]
+				break
+			}
+		}
+		if current == nil {
+			return fmt.Errorf("role %d not found", *id)
+		}
+		nextTitle := current.Title
+		if containsFlag(args[1:], "-title") {
+			nextTitle = strings.TrimSpace(*title)
+		}
+		nextDescription := current.Description
+		if containsFlag(args[1:], "-description") {
+			nextDescription = strings.TrimSpace(*description)
+		}
+		nextAC := current.AcceptanceCriteria
+		if containsFlag(args[1:], "-ac") {
+			nextAC = strings.TrimSpace(*ac)
+		}
+		dorMap, err := mergeGuidanceMap(current.DORMap, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
+		if err != nil {
+			return err
+		}
+		dodMap, err := mergeGuidanceMap(current.DODMap, *dod, *dodMapRaw, containsFlag(args[1:], "-dod"), containsFlag(args[1:], "-dod-map"))
+		if err != nil {
+			return err
+		}
+		acMap, err := mergeGuidanceMap(current.ACMap, *ac, *acMapRaw, containsFlag(args[1:], "-ac"), containsFlag(args[1:], "-ac-map"))
+		if err != nil {
+			return err
 		}
 		role, err := svc.UpdateRole(context.Background(), *id, libticket.RoleRequest{
-			Title:              strings.TrimSpace(*title),
-			Description:        strings.TrimSpace(*description),
-			AcceptanceCriteria: strings.TrimSpace(*ac),
+			Title:              nextTitle,
+			Description:        nextDescription,
+			AcceptanceCriteria: nextAC,
+			DORMap:             dorMap,
+			DODMap:             dodMap,
+			ACMap:              acMap,
 		})
 		if err != nil {
 			return err

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -105,6 +106,63 @@ func TestSetProjectDefaultDraft(t *testing.T) {
 
 	if err := SetProjectDefaultDraft(context.Background(), db, 9999, true); err != ErrProjectNotFound {
 		t.Fatalf("SetProjectDefaultDraft(missing) error = %v, want %v", err, ErrProjectNotFound)
+	}
+}
+
+func TestProjectGuidanceMapsPersistAndResolve(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
+		Prefix:             "MAP",
+		Title:              "Guidance Project",
+		AcceptanceCriteria: "legacy acceptance",
+		DORMap:             GuidanceMap{"default": "project default dor", "develop": "project develop dor"},
+		DODMap:             GuidanceMap{"default": "project default dod"},
+		ACMap:              GuidanceMap{"qa": "qa acceptance"},
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+	if !reflect.DeepEqual(project.DORMap, GuidanceMap{"default": "project default dor", "develop": "project develop dor"}) {
+		t.Fatalf("CreateProjectWithParams().DORMap = %#v", project.DORMap)
+	}
+	if !reflect.DeepEqual(project.ACMap, GuidanceMap{"default": "legacy acceptance", "qa": "qa acceptance"}) {
+		t.Fatalf("CreateProjectWithParams().ACMap = %#v", project.ACMap)
+	}
+
+	reloaded, err := GetProjectByID(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByID() error = %v", err)
+	}
+	if !reflect.DeepEqual(reloaded.DODMap, GuidanceMap{"default": "project default dod"}) {
+		t.Fatalf("GetProjectByID().DODMap = %#v", reloaded.DODMap)
+	}
+	resolved := reloaded.ResolveGuidance("develop")
+	if !resolved.HasDOR || resolved.DOR != "project develop dor" {
+		t.Fatalf("ResolveGuidance(develop).DOR = %#v", resolved)
+	}
+	if !resolved.HasDOD || resolved.DOD != "project default dod" {
+		t.Fatalf("ResolveGuidance(develop).DOD = %#v", resolved)
+	}
+	if !resolved.HasAC || resolved.AC != "legacy acceptance" {
+		t.Fatalf("ResolveGuidance(develop).AC = %#v", resolved)
+	}
+
+	updated, err := UpdateProjectWithParams(context.Background(), db, project.ID, ProjectUpdateParams{
+		Title:  project.Title,
+		DORMap: GuidanceMap{"qa": "project qa dor"},
+		DODMap: GuidanceMap{"qa": "project qa dod"},
+		ACMap:  GuidanceMap{"qa": "project qa ac"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateProjectWithParams() error = %v", err)
+	}
+	if !reflect.DeepEqual(updated.DORMap, GuidanceMap{"qa": "project qa dor"}) {
+		t.Fatalf("UpdateProjectWithParams().DORMap = %#v", updated.DORMap)
+	}
+	if !reflect.DeepEqual(updated.ACMap, GuidanceMap{"default": "legacy acceptance", "qa": "project qa ac"}) {
+		t.Fatalf("UpdateProjectWithParams().ACMap = %#v", updated.ACMap)
 	}
 }
 
