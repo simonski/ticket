@@ -147,6 +147,26 @@ test("authenticated app opens the channel selector by default", async ({ page })
   expect(state.logoMaxWidth).toBe(state.selectorWidth);
 });
 
+test("project modal no longer exposes a git branch field", async ({ page }) => {
+  await page.goto("/");
+
+  const state = await page.evaluate(() => {
+    if (typeof showApp !== "function" || typeof openProjModal !== "function") return null;
+    showApp("alice", "user");
+    openProjModal();
+    return {
+      hasProjectGitBranch: Boolean(document.getElementById("proj-modal-git-branch")),
+      hasProjectGitRepository: Boolean(document.getElementById("proj-modal-git-repository")),
+      hasProjectDefaultDraft: Boolean(document.getElementById("proj-modal-default-draft")),
+    };
+  });
+
+  expect(state).not.toBeNull();
+  expect(state.hasProjectGitBranch).toBe(false);
+  expect(state.hasProjectGitRepository).toBe(true);
+  expect(state.hasProjectDefaultDraft).toBe(true);
+});
+
 test("management panels support card mode with popup editing", async ({ page }) => {
   await page.goto("/");
 
@@ -306,22 +326,113 @@ test("new ticket modal hides labels and time sections", async ({ page }) => {
     if (typeof showApp !== "function" || typeof openNew !== "function") return null;
     showApp("alice", "user");
     // Need a project selected
-    projects = [{ project_id: 1, title: "Test", prefix: "TK", status: "open" }];
-    if (typeof renderProjectDropdown === "function") renderProjectDropdown();
-    const projSelect = document.getElementById("project-select");
-    if (projSelect) projSelect.value = "1";
+    projects = [{ project_id: 1, title: "Test", prefix: "TK", status: "open", default_draft: true }];
+    window.call = async (url) => {
+      if (url === "/api/sdlcs") {
+        return [{ sdlc_id: 8, name: "Delivery Flow" }];
+      }
+      return [];
+    };
+    localStorage.setItem("task-project", "1");
     openNew();
     const labelsSection = document.getElementById("ticket-labels-section");
     const timeSection = document.getElementById("ticket-time-section");
+    const draftField = document.getElementById("ticket-draft");
+    const sdlcField = document.getElementById("ticket-sdlc");
     return {
       labelsHidden: labelsSection ? labelsSection.style.display === "none" : null,
       timeHidden: timeSection ? timeSection.style.display === "none" : null,
+      hasDraftField: Boolean(draftField),
+      draftValue: draftField ? draftField.value : null,
+      hasSdlcField: Boolean(sdlcField),
     };
   });
 
   expect(result).not.toBeNull();
   expect(result.labelsHidden).toBe(true);
   expect(result.timeHidden).toBe(true);
+  expect(result.hasDraftField).toBe(true);
+  expect(result.draftValue).toBe("true");
+  expect(result.hasSdlcField).toBe(true);
+});
+
+test("board lanes expose quick new-ticket actions", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(() => {
+    if (typeof showApp !== "function" || typeof renderBoard !== "function") return null;
+    showApp("alice", "user");
+    projects = [{ project_id: 1, title: "Test", prefix: "TK", status: "open", default_draft: false }];
+    tickets = [];
+    localStorage.setItem("task-project", "1");
+    window.call = async (url) => {
+      if (url === "/api/sdlcs") return [];
+      return [];
+    };
+    renderBoard();
+    const laneButtons = Array.from(document.querySelectorAll("[data-lane-new]"));
+    laneButtons[1]?.click();
+    const overlay = document.getElementById("modal-overlay");
+    return {
+      laneCount: laneButtons.length,
+      modalVisible: overlay ? !overlay.classList.contains("hidden") : false,
+      selectedStage: document.getElementById("ticket-stage").value,
+    };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.laneCount).toBe(4);
+  expect(result.modalVisible).toBe(true);
+  expect(result.selectedStage).toBe("develop");
+});
+
+test("sdlc editor renders draggable stage cards with inline role controls", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    if (typeof showApp !== "function" || typeof openSdlcEditor !== "function") return null;
+    showApp("admin", "admin");
+    window.call = async (url) => {
+      if (url === "/api/roles") {
+        return [{ role_id: 2, title: "Engineer" }, { role_id: 3, title: "QA" }];
+      }
+      if (url === "/api/sdlcs/9") {
+        return {
+          sdlc_id: 9,
+          name: "Delivery",
+          stages: [{
+            sdlc_stage_id: 41,
+            sdlc_id: 9,
+            stage_name: "develop",
+            description: "Build the thing",
+            definition_of_ready: "Specs ready",
+            definition_of_done: "Tests green",
+            sort_order: 1,
+            roles: [{ role_id: 2, title: "Engineer" }],
+          }],
+        };
+      }
+      return [];
+    };
+    await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
+    const card = document.querySelector(".sdlc-stage-card");
+    return {
+      hasCard: Boolean(card),
+      draggable: card ? card.draggable : false,
+      hasSaveButton: Boolean(card && card.querySelector('[data-stage-action="save"]')),
+      hasRoleChip: Boolean(card && card.querySelector(".sdlc-role-chip")),
+      hasRoleSelect: Boolean(card && card.querySelector("[data-stage-role-select]")),
+      hasDorField: Boolean(card && card.querySelector('[data-stage-field="dor"]')),
+    };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.hasCard).toBe(true);
+  expect(result.draggable).toBe(true);
+  expect(result.hasSaveButton).toBe(true);
+  expect(result.hasRoleChip).toBe(true);
+  expect(result.hasRoleSelect).toBe(true);
+  expect(result.hasDorField).toBe(true);
 });
 
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {

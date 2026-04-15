@@ -578,11 +578,13 @@ Commands:
 const roleUsage = `Usage: tk role <command> [flags]
 
 Commands:
-  ls                                             List all roles
-  get      -id <id>                              Show full role details
-  new      -title <t> [-motivation m] [-goals g] Create a role
-  update   -id <id> -title <t> [-motivation m] [-goals g] Update a role
-  rm       -id <id>                              Delete a role`
+  ls                                      List all roles
+  get -id <id>                            Show full role details
+  new -title <t> [-motivation m] [-goals g]
+                                          Create a role
+  update -id <id> -title <t> [-motivation m] [-goals g]
+                                          Update a role
+  rm -id <id>                             Delete a role`
 
 const sdlcUsage = `Usage: tk sdlc <command> [flags]
 
@@ -619,16 +621,18 @@ Commands:
 const teamUsage = `Usage: tk team <command> [flags]
 
 Commands:
-  ls                                             List all teams
-  new      -name <name>                          Create a team
-  update   -id <id> -name <name>                 Update a team
-  rm       -id <id>                              Delete a team
-  add-user     -team_id <id> -user_id <id>       Add a user
-  remove-user  -team_id <id> -user_id <id>       Remove a user
-  users        -id <id>                          List team users
-  add-agent    -team_id <id> -agent_id <id>      Add an agent
-  remove-agent -team_id <id> -agent_id <id>      Remove an agent
-  agents       -id <id>                          List team agents`
+  ls                                      List all teams
+  new -name <name>                        Create a team
+  update -id <id> -name <name>           Update a team
+  rm -id <id>                             Delete a team
+  add-user -team_id <id> -user_id <id>   Add a user
+  remove-user -team_id <id> -user_id <id>
+                                          Remove a user
+  users -id <id>                          List team users
+  add-agent -team_id <id> -agent_id <id> Add an agent
+  remove-agent -team_id <id> -agent_id <id>
+                                          Remove an agent
+  agents -id <id>                         List team agents`
 
 const configUsage = `Usage: tk config <command> [flags]
 
@@ -645,41 +649,41 @@ Keys: server, username, current_project, current_epic_id, registration_enabled`
 const agentUsage = `Usage: tk agent <command> [flags]
 
 Agent Commands:
-  request  [flags]                    Request work for an agent
-  run      [flags]                    Run an agent worker loop
+  request [flags]                         Request work for an agent
+  run [flags]                             Run an agent worker loop
 
 Admin Commands:
-  ls                                  List all agents
-  new      [-password p]              Create an agent (UUID auto-generated)
-  update   -id <id> -password <p>     Update an agent password
-  rm       -id <id>                   Delete an agent
-  enable   -id <id>                   Enable an agent
-  disable  -id <id>                   Disable an agent
-  reset-password -id <id> [-password] Reset an agent's password
-  config-set -id <id> <key> <value>  Set a config value on an agent
-  config-ls  -id <id>                List agent config values
-  config-rm  -id <id> <key>          Remove a config value from an agent
+  ls                                     List all agents
+  new [-password p]                      Create an agent (UUID auto-generated)
+  update -id <id> -password <p>         Update an agent password
+  rm -id <id>                            Delete an agent
+  enable -id <id>                        Enable an agent
+  disable -id <id>                       Disable an agent
+  reset-password -id <id> [-password]   Reset an agent's password
+  config-set -id <id> <key> <value>     Set a config value on an agent
+  config-ls -id <id>                     List agent config values
+  config-rm -id <id> <key>               Remove a config value from an agent
 
 Run flags:
-  -id <uuid>               Agent UUID (or AGENT_ID env)
-  
-  -llm <command>           LLM to use (default: claude)
-                           Values: claude (Sonnet 4.5), codex, or path to binary
-  -project-id <id>         Project ID override (default: first open project)
-  -poll-seconds <n>        Idle poll interval in seconds (default: 5)
-  -v                       Verbose: stream LLM I/O to terminal
+  -id <uuid>                             Agent UUID (or AGENT_ID env)
+  -llm <command>                         LLM to use (default: claude)
+                                         Values: claude (Sonnet 4.5), codex, or path to binary
+  -project-id <id>                       Project ID override (default: first open project)
+  -poll-seconds <n>                      Idle poll interval in seconds (default: 5)
+  -v                                     Verbose: stream LLM I/O to terminal
 
 Password: AGENT_PASSWORD env var, or interactive prompt (input masked with *)`
 
 const userUsage = `Usage: tk user <command> [flags]
 
 Commands:
-  ls                                       List all users
-  new      -username <u> -password <p>     Create a user
-  rm       -id <id>                        Delete a user
-  enable   -id <id>                        Enable a user
-  disable  -id <id>                        Disable a user
-  reset-password -username <u> [-password] Reset password and invalidate sessions`
+  ls                                      List all users
+  new -username <u> -password <p>         Create a user
+  rm -id <id>                             Delete a user
+  enable -id <id>                         Enable a user
+  disable -id <id>                        Disable a user
+  reset-password -username <u> [-password]
+                                          Reset password and invalidate sessions`
 
 const storyUsage = `Usage: tk story <command> [flags]
 

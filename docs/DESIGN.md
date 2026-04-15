@@ -122,7 +122,6 @@ Notes:
 - `description`
 - `acceptance_criteria`
 - `git_repository`
-- `git_branch`
 - `notes`
 - `visibility`
 - `default_draft`

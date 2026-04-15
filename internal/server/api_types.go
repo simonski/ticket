@@ -20,7 +20,6 @@ type projectRequest struct {
 	DODMap             store.GuidanceMap `json:"dod_map,omitempty"`
 	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
 	GitRepository      string            `json:"git_repository"`
-	GitBranch          string            `json:"git_branch"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
 	SdlcID             *int64            `json:"sdlc_id,omitempty"`

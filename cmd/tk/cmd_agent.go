@@ -528,9 +528,6 @@ func buildAgentPrompt(resp libticket.AgentWorkResponse) string {
 		b.WriteString(fmt.Sprintf("Project: %s — %s\n", resp.Project.Prefix, resp.Project.Title))
 		if resp.Project.GitRepository != "" {
 			b.WriteString(fmt.Sprintf("Repository: %s\n", resp.Project.GitRepository))
-			if resp.Project.GitBranch != "" {
-				b.WriteString(fmt.Sprintf("Branch: %s\n", resp.Project.GitBranch))
-			}
 		}
 		b.WriteString("\n")
 	}

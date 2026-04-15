@@ -512,12 +512,10 @@ func runList(args []string) error {
 		if outputJSON {
 			return printJSON(tickets)
 		}
-		if isTerminal() {
-			if err := runSummary(nil); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not render summary: %v\n", err)
-			}
-			fmt.Println()
+		if err := runStatusWithSummaryStyle(statusUnicode); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not render status header: %v\n", err)
 		}
+		fmt.Println()
 		fmt.Printf("no tickets yet — create one with: tk new \"My first ticket\"\n")
 		return nil
 	}
@@ -553,11 +551,9 @@ func runList(args []string) error {
 			agentUsernames[a.Username] = true
 		}
 	}
-	// When there are few tickets (or none) and output is a terminal, show
-	// the full summary as a header so new users get context about their setup.
-	if len(tickets) <= 10 && !outputJSON && isTerminal() {
-		if err := runSummary(nil); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not render summary: %v\n", err)
+	if !outputJSON {
+		if err := runStatusWithSummaryStyle(statusUnicode); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not render status header: %v\n", err)
 		}
 		fmt.Println()
 	}

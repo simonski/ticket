@@ -1262,7 +1262,6 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		"TICKET_PASSWORD  : ********",
 		"AGENT_ID         : agent-123",
 		"AGENT_PASSWORD   : ********",
-		"location         : " + server.URL,
 		"username         : alice",
 		"authenticated    : true",
 		"connection       : ",
@@ -1315,6 +1314,9 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
+		"project          : TK — Default Project",
+		"git repo         : (none)",
+		"current project  : Default Project (1)",
 		"db_exists        : true",
 		"connection       : success",
 	} {
@@ -1324,6 +1326,68 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 	}
 	if !strings.Contains(output, "db_path          : "+filepath.Join(tempDir, "ticket.db")) {
 		t.Fatalf("runStatus(local) output missing db_path:\n%s", output)
+	}
+}
+
+func TestRunListAndStatusShareSummaryHeaderWithGitRepo(t *testing.T) {
+	setupLocalCLI(t)
+
+	captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "SUM", "-title", "Summary Test", "-git-repository", "https://github.com/example/summary.git"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	createLocalTask(t, []string{"add", "Summary task one"})
+
+	statusOut := captureStdout(t, func() {
+		if err := run([]string{"status", "-nocolor"}); err != nil {
+			t.Fatalf("status error = %v", err)
+		}
+	})
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+
+	for _, want := range []string{
+		"project          : SUM — Summary Test",
+		"git repo         : https://github.com/example/summary.git",
+		"current project  : Summary Test (SUM)",
+		"TICKET_URL       : UNSET",
+		"TICKET_USERNAME  : UNSET",
+		"TICKET_PASSWORD  : UNSET",
+		"connection       : success",
+	} {
+		if !strings.Contains(statusOut, want) {
+			t.Fatalf("status output missing %q:\n%s", want, statusOut)
+		}
+		if !strings.Contains(listOut, want) {
+			t.Fatalf("list output missing %q:\n%s", want, listOut)
+		}
+	}
+	if idxSummary, idxTable := strings.Index(listOut, "project          : SUM — Summary Test"), strings.Index(listOut, "ID       TYPE"); idxSummary == -1 || idxTable == -1 || idxSummary > idxTable {
+		t.Fatalf("list output should show summary block before table:\n%s", listOut)
+	}
+	if idxSummary, idxStatus := strings.Index(statusOut, "project          : SUM — Summary Test"), strings.Index(statusOut, "TICKET_URL"); idxSummary == -1 || idxStatus == -1 || idxSummary > idxStatus {
+		t.Fatalf("status output should show summary block before status details:\n%s", statusOut)
+	}
+	if idxSummary, idxStatus := strings.Index(listOut, "project          : SUM — Summary Test"), strings.Index(listOut, "TICKET_URL"); idxSummary == -1 || idxStatus == -1 || idxSummary > idxStatus {
+		t.Fatalf("list output should show status header before table:\n%s", listOut)
+	}
+	for _, output := range []string{statusOut, listOut} {
+		if strings.Contains(output, "open tickets") {
+			t.Fatalf("shared header should not show open tickets row:\n%s", output)
+		}
+		if strings.Contains(output, "location         :") {
+			t.Fatalf("shared header should not show location row:\n%s", output)
+		}
+	}
+	if strings.Count(statusOut, "╭") != 1 || strings.Count(statusOut, "╰") != 1 {
+		t.Fatalf("status output should render one merged header box:\n%s", statusOut)
+	}
+	if strings.Count(listOut, "╭") != 1 || strings.Count(listOut, "╰") != 1 {
+		t.Fatalf("list output should render one merged header box:\n%s", listOut)
 	}
 }
 
@@ -1510,6 +1574,18 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	})
 	if !strings.Contains(useOutput, "using project") {
 		t.Fatalf("project use output = %q", useOutput)
+	}
+}
+
+func TestRunProjectCommandsRejectGitBranchFlag(t *testing.T) {
+	setupLocalCLI(t)
+
+	err := run([]string{"project", "create", "-prefix", "PRA", "-title", "Project A", "-git-branch", "main"})
+	if err == nil {
+		t.Fatal("project create with -git-branch error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "flag provided but not defined: -git-branch") {
+		t.Fatalf("project create with -git-branch error = %v", err)
 	}
 }
 
@@ -2816,7 +2892,6 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
-		"location         : http://127.0.0.1:1",
 		"authenticated    : false",
 		"failure",
 	} {

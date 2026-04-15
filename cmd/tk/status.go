@@ -36,8 +36,20 @@ func statusEnvLines() []statusLine {
 	}
 }
 
+func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnicode bool, details []statusLine) []statusLine {
+	summary := currentProjectSummaryCoreLines(cfg, svc, statusUnicode)
+	if len(summary) == 0 {
+		return details
+	}
+	lines := make([]statusLine, 0, len(summary)+1+len(details))
+	lines = append(lines, summary...)
+	lines = append(lines, statusLine{})
+	lines = append(lines, details...)
+	return lines
+}
+
 // resolveCurrentProject returns the active project key and where it came from.
-func resolveCurrentProject(cfg config.Config) (project, source string) {
+func resolveCurrentProject(cfg config.Config) (projectID, source string) {
 	if cfg.ProjectID != "" {
 		cfgPath, _ := config.Path()
 		return cfg.ProjectID, cfgPath
@@ -45,14 +57,14 @@ func resolveCurrentProject(cfg config.Config) (project, source string) {
 	return "", ""
 }
 
-func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (project, source, sdlcName string, defaultDraft *bool) {
-	project, source = resolveCurrentProject(cfg)
-	if project == "" || svc == nil {
-		return project, source, "", nil
+func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (projectID, projectTitle, source, sdlcName string, defaultDraft *bool) {
+	projectID, source = resolveCurrentProject(cfg)
+	if projectID == "" || svc == nil {
+		return projectID, "", source, "", nil
 	}
-	currentProject, err := svc.GetProject(context.Background(), project)
+	currentProject, err := svc.GetProject(context.Background(), projectID)
 	if err != nil {
-		return project, source, "", nil
+		return projectID, "", source, "", nil
 	}
 	if currentProject.SdlcID != nil {
 		if wf, err := svc.GetSdlc(context.Background(), *currentProject.SdlcID); err == nil {
@@ -60,7 +72,7 @@ func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (pro
 		}
 	}
 	defaultDraft = &currentProject.DefaultDraft
-	return project, source, sdlcName, defaultDraft
+	return projectID, currentProject.Title, source, sdlcName, defaultDraft
 }
 
 // statusLine is a key/value row for the status box.
@@ -77,11 +89,14 @@ func connectionStatusLine(ok bool) statusLine {
 	return statusLine{key: "connection", value: "failure", color: "\x1b[31m"}
 }
 
-func projectStatusLine(project, source string) statusLine {
-	if project == "" {
-		return statusLine{key: "current_project", value: "(none)"}
+func projectStatusLine(projectID, projectTitle string) statusLine {
+	if projectID == "" {
+		return statusLine{key: "current project", value: "(none)"}
 	}
-	return statusLine{key: "current_project", value: project + "  [" + source + "]"}
+	if strings.TrimSpace(projectTitle) == "" {
+		return statusLine{key: "current project", value: projectID}
+	}
+	return statusLine{key: "current project", value: fmt.Sprintf("%s (%s)", projectTitle, projectID)}
 }
 
 // printStatusBox renders lines inside a rounded Unicode box.
@@ -179,6 +194,10 @@ func printStatusBoxWidth(lines []statusLine, fixedWidth int) {
 }
 
 func runRemoteStatus(cfg config.Config) error {
+	return runRemoteStatusWithSummaryStyle(cfg, true)
+}
+
+func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
 		return err
@@ -198,8 +217,8 @@ func runRemoteStatus(cfg config.Config) error {
 		username = status.User.Username
 	}
 	cfgPath, _ := config.Path()
-	project, projectSource := resolveCurrentProject(cfg)
-	project, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectID, projectSource := resolveCurrentProject(cfg)
+	projectID, projectTitle, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
 		payload := map[string]any{
 			"location":        cfg.Location,
@@ -209,7 +228,7 @@ func runRemoteStatus(cfg config.Config) error {
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
-			"project_id":      project,
+			"project_id":      projectID,
 			"project_source":  projectSource,
 			"username":        username,
 			"authenticated":   authenticated,
@@ -224,21 +243,23 @@ func runRemoteStatus(cfg config.Config) error {
 		return printJSON(payload)
 	}
 	lines := append(statusEnvLines(), []statusLine{
-		{key: "location", value: cfg.Location},
-		{},
 		{key: "config_file", value: cfgPath},
-		projectStatusLine(project, projectSource),
+		projectStatusLine(projectID, projectTitle),
 		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
 		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
 		connectionStatusLine(err == nil),
 	}...)
-	printStatusBox(lines)
+	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, lines))
 	return err
 }
 
 func runLocalStatus() error {
+	return runLocalStatusWithSummaryStyle(true)
+}
+
+func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
 		return err
@@ -252,7 +273,7 @@ func runLocalStatus() error {
 	if svcErr != nil {
 		svc = nil
 	}
-	project, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectID, projectTitle, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
 		payload := map[string]any{
@@ -263,7 +284,7 @@ func runLocalStatus() error {
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
-			"current_project": project,
+			"current_project": projectID,
 			"project_source":  projectSource,
 			"db_exists":       dbExists,
 			"connection":      map[bool]string{true: "success", false: "failure"}[connErr == nil],
@@ -277,17 +298,15 @@ func runLocalStatus() error {
 		return printJSON(payload)
 	}
 	lines := append(statusEnvLines(), []statusLine{
-		{key: "location", value: cfg.Location},
-		{},
 		{key: "db_path", value: dbPath},
 		{key: "config_file", value: cfgPath},
-		projectStatusLine(project, projectSource),
+		projectStatusLine(projectID, projectTitle),
 		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
 		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
 		connectionStatusLine(connErr == nil),
 	}...)
-	printStatusBox(lines)
+	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, lines))
 	if !dbExists {
 		fmt.Println("hint: run tk init")
 	}

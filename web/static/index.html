@@ -687,6 +687,22 @@
       }
       .lane h3 { margin: 0 0 0.4rem; text-transform: capitalize; }
       .lane.drag-over { outline: 2px dashed var(--accent); }
+      .lane-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      .lane-actions { display: flex; gap: 0.35rem; align-items: center; }
+      .lane-empty {
+        margin-top: 0.65rem;
+        border: 1px dashed var(--line);
+        border-radius: 10px;
+        padding: 0.7rem;
+        color: var(--muted);
+        text-align: center;
+        cursor: pointer;
+      }
       .ticket {
         margin-top: 0.55rem;
         padding: 0.55rem;
@@ -714,8 +730,63 @@
 
       .card-labels { display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.3rem; }
       .card-label { font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 2px; background: var(--line); color: var(--muted); }
+      .ticket-badges { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.35rem; }
+      .ticket-badge {
+        font-size: 0.68rem;
+        padding: 0.1rem 0.35rem;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.06);
+        color: var(--muted);
+      }
 
       .ticket.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+      .sdlc-stage-card {
+        margin-top: 0.55rem;
+        padding: 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--ticket);
+      }
+      .sdlc-stage-card[draggable="true"] { cursor: grab; }
+      .sdlc-stage-card.drag-over { outline: 2px dashed var(--accent); }
+      .sdlc-stage-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.55rem;
+      }
+      .sdlc-stage-card-body {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.45rem;
+      }
+      .sdlc-stage-card-body textarea,
+      .sdlc-stage-card-body input { width: 100%; }
+      .sdlc-stage-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.5rem;
+      }
+      .sdlc-role-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        background: var(--line);
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .sdlc-role-chip button {
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
 
       .search-overlay {
         position: fixed;
@@ -1284,10 +1355,13 @@
             <select id="proj-modal-sdlc">
               <option value="">No SDLC (default lifecycle)</option>
             </select>
+            <label for="proj-modal-default-draft">Default Draft</label>
+            <select id="proj-modal-default-draft">
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
             <label for="proj-modal-git-repository">Git Repository</label>
             <input id="proj-modal-git-repository" placeholder="git repository (optional)" autocomplete="off" />
-            <label for="proj-modal-git-branch">Git Branch</label>
-            <input id="proj-modal-git-branch" placeholder="git branch (optional)" autocomplete="off" />
             <label for="proj-modal-description">Description</label>
             <textarea id="proj-modal-description" placeholder="description (optional)"></textarea>
             <label for="proj-modal-ac">Acceptance Criteria</label>
@@ -1475,6 +1549,23 @@
                     <option value="active">active</option>
                     <option value="success">success</option>
                     <option value="fail">fail</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td class="field-label">Draft</td>
+                <td class="field-value">
+                  <select id="ticket-draft">
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td class="field-label">SDLC Override</td>
+                <td class="field-value">
+                  <select id="ticket-sdlc">
+                    <option value="">Inherit project default</option>
                   </select>
                 </td>
               </tr>
@@ -4023,6 +4114,7 @@
       // ── SDLC Management ──
       let sdlcs = [];
       let selectedSDLCID = 0;
+      let selectedSdlcDetail = null;
       const sdlcListEl = document.getElementById("sdlc-list");
       const sdlcBrowserStatusEl = document.getElementById("sdlcs-browser-status");
       const sdlcModalOverlay = document.getElementById("sdlc-modal-overlay");
@@ -4050,6 +4142,7 @@
         if (!sdlcStageRoleSelect) return;
         const list = await call("/api/roles", { headers: headers() }).catch(() => []);
         const roleList = Array.isArray(list) ? list : [];
+        if (roleList.length) roles = roleList;
         sdlcStageRoleSelect.innerHTML = '<option value="">No role</option>';
         for (const r of roleList) {
           const opt = document.createElement("option");
@@ -4102,6 +4195,7 @@
 
       async function openSdlcEditor(wf = null) {
         selectedSDLCID = 0;
+        selectedSdlcDetail = null;
         sdlcNameInput.value = "";
         sdlcDescInput.value = "";
         setSDLCStatus("");
@@ -4116,8 +4210,8 @@
           sdlcDeleteBtn.style.display = "";
           sdlcExportBtn.style.display = "";
           sdlcStagesSection.style.display = "";
-          await loadSdlcStages(wf.sdlc_id);
           await populateStageRoleSelector();
+          await loadSdlcStages(wf.sdlc_id);
         } else {
           sdlcModalTitle.textContent = "New SDLC";
           sdlcSaveBtn.textContent = "Create";
@@ -4132,33 +4226,174 @@
       async function loadSdlcStages(wfID) {
         try {
           const detail = await call(`/api/sdlcs/${wfID}`, { headers: headers() });
-          const stages = detail.stages || [];
-          sdlcStagesList.innerHTML = "";
-          if (!stages.length) {
-            sdlcStagesList.innerHTML = '<div class="muted">No stages</div>';
-            return;
-          }
-          for (const s of stages) {
-            const row = document.createElement("div");
-            row.className = "row";
-            row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
-            const info = document.createElement("span");
-            info.innerHTML = `<strong>${escape(s.stage_name)}</strong> <span class="muted">(order: ${escape(String(s.sort_order))}${s.role_title ? ", role: " + escape(s.role_title) : ""})</span>`;
-            const rm = document.createElement("button");
-            rm.textContent = "\u00d7";
-            rm.className = "btn danger";
-            rm.style.cssText = "padding:0 0.4rem;";
-            rm.addEventListener("click", async () => {
-              await call(`/api/sdlcs/stages/${s.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
-              await loadSdlcStages(wfID);
-            });
-            row.appendChild(info);
-            row.appendChild(rm);
-            sdlcStagesList.appendChild(row);
-          }
+          selectedSdlcDetail = detail;
+          renderSdlcStages(detail);
         } catch (e) {
+          selectedSdlcDetail = null;
           sdlcStagesList.innerHTML = '<div class="muted">Failed to load stages</div>';
         }
+      }
+
+      function renderSdlcStages(detail) {
+        const stages = (detail && detail.stages) || [];
+        sdlcStagesList.innerHTML = "";
+        if (!stages.length) {
+          sdlcStagesList.innerHTML = '<div class="muted">No stages. Add one below, then drag cards to reorder.</div>';
+          return;
+        }
+        for (const stage of stages) {
+          const card = document.createElement("article");
+          card.className = "sdlc-stage-card";
+          card.draggable = true;
+          card.dataset.stageId = String(stage.sdlc_stage_id);
+          card.innerHTML = `
+            <div class="sdlc-stage-card-header">
+              <div>
+                <strong>${escape(stage.stage_name || "")}</strong>
+                <div class="muted">stage #${escape(String(stage.sdlc_stage_id))} · drag to reorder</div>
+              </div>
+              <div class="lane-actions">
+                <span class="ticket-badge">order ${escape(String(stage.sort_order ?? 0))}</span>
+                <button class="btn danger" type="button" data-stage-action="delete">Delete</button>
+              </div>
+            </div>
+            <div class="sdlc-stage-card-body">
+              <label class="stack">
+                <span class="muted">Stage name</span>
+                <input type="text" data-stage-field="name" value="${escape(stage.stage_name || "")}" />
+              </label>
+              <label class="stack">
+                <span class="muted">Ways of working</span>
+                <textarea data-stage-field="wow" rows="3">${escape(stage.description || "")}</textarea>
+              </label>
+              <label class="stack">
+                <span class="muted">Definition of ready</span>
+                <textarea data-stage-field="dor" rows="3">${escape(stage.definition_of_ready || "")}</textarea>
+              </label>
+              <label class="stack">
+                <span class="muted">Definition of done</span>
+                <textarea data-stage-field="dod" rows="3">${escape(stage.definition_of_done || "")}</textarea>
+              </label>
+            </div>
+            <div class="sdlc-stage-meta" data-stage-roles></div>
+            <div class="row" style="gap:0.35rem; margin-top:0.5rem;">
+              <select data-stage-role-select style="flex:1;"></select>
+              <button class="btn" type="button" data-stage-action="add-role">+ Role</button>
+              <button class="btn" type="button" data-stage-action="save">Save</button>
+            </div>
+          `;
+          card.addEventListener("dragstart", (event) => {
+            event.dataTransfer.setData("text/sdlc-stage-id", String(stage.sdlc_stage_id));
+          });
+          card.addEventListener("dragend", () => card.classList.remove("drag-over"));
+          card.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            card.classList.add("drag-over");
+          });
+          card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+          card.addEventListener("drop", async (event) => {
+            event.preventDefault();
+            card.classList.remove("drag-over");
+            const draggedID = Number(event.dataTransfer.getData("text/sdlc-stage-id") || 0);
+            if (!draggedID || draggedID === Number(stage.sdlc_stage_id)) return;
+            await reorderSdlcStages(draggedID, Number(stage.sdlc_stage_id));
+          });
+
+          renderStageRoleSelector(card.querySelector("[data-stage-role-select]"));
+          renderStageRoleChips(card.querySelector("[data-stage-roles]"), stage);
+
+          card.querySelector('[data-stage-action="delete"]').addEventListener("click", async () => {
+            await call(`/api/sdlcs/stages/${stage.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
+            await loadSdlcStages(selectedSDLCID);
+          });
+          card.querySelector('[data-stage-action="save"]').addEventListener("click", async () => {
+            await saveSdlcStageCard(stage, card);
+          });
+          card.querySelector('[data-stage-action="add-role"]').addEventListener("click", async () => {
+            const select = card.querySelector("[data-stage-role-select]");
+            const roleID = Number(select.value || 0);
+            if (!roleID) return;
+            await call(`/api/sdlcs/stages/roles/${selectedSDLCID}/${stage.sdlc_stage_id}`, {
+              method: "POST",
+              headers: headers(true),
+              body: JSON.stringify({ role_id: roleID }),
+            });
+            await loadSdlcStages(selectedSDLCID);
+          });
+          sdlcStagesList.appendChild(card);
+        }
+      }
+
+      function renderStageRoleSelector(select) {
+        if (!select) return;
+        select.innerHTML = '<option value="">Add role…</option>';
+        for (const role of roles) {
+          const option = document.createElement("option");
+          option.value = String(role.role_id);
+          option.textContent = role.title || `Role #${role.role_id}`;
+          select.appendChild(option);
+        }
+      }
+
+      function renderStageRoleChips(container, stage) {
+        if (!container) return;
+        const stageRoles = Array.isArray(stage.roles) ? stage.roles : [];
+        if (!stageRoles.length) {
+          container.innerHTML = '<span class="muted">No roles assigned</span>';
+          return;
+        }
+        container.innerHTML = "";
+        for (const role of stageRoles) {
+          const chip = document.createElement("span");
+          chip.className = "sdlc-role-chip";
+          chip.innerHTML = `${escape(role.title || `Role #${role.role_id}`)} <button type="button" aria-label="Remove role">&times;</button>`;
+          chip.querySelector("button").addEventListener("click", async () => {
+            await call(`/api/sdlcs/stages/roles/${selectedSDLCID}/${stage.sdlc_stage_id}/${role.role_id}`, {
+              method: "DELETE",
+              headers: headers(),
+            });
+            await loadSdlcStages(selectedSDLCID);
+          });
+          container.appendChild(chip);
+        }
+      }
+
+      async function saveSdlcStageCard(stage, card) {
+        const stageName = card.querySelector('[data-stage-field="name"]').value.trim();
+        if (!stageName) {
+          setSDLCStatus("Stage name is required.", true);
+          return;
+        }
+        const payload = {
+          stage_name: stageName,
+          wow: card.querySelector('[data-stage-field="wow"]').value.trim(),
+          dor: card.querySelector('[data-stage-field="dor"]').value.trim(),
+          dod: card.querySelector('[data-stage-field="dod"]').value.trim(),
+        };
+        await call(`/api/sdlcs/stages/${stage.sdlc_stage_id}`, {
+          method: "PUT",
+          headers: headers(true),
+          body: JSON.stringify(payload),
+        });
+        setSDLCStatus(`Saved stage ${stageName}`);
+        await loadSdlcStages(selectedSDLCID);
+      }
+
+      async function reorderSdlcStages(draggedID, targetID) {
+        if (!selectedSdlcDetail || !Array.isArray(selectedSdlcDetail.stages)) return;
+        const ordered = [...selectedSdlcDetail.stages];
+        const draggedIndex = ordered.findIndex((stage) => Number(stage.sdlc_stage_id) === Number(draggedID));
+        const targetIndex = ordered.findIndex((stage) => Number(stage.sdlc_stage_id) === Number(targetID));
+        if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
+        const [dragged] = ordered.splice(draggedIndex, 1);
+        ordered.splice(targetIndex, 0, dragged);
+        await call(`/api/sdlcs/${selectedSDLCID}/reorder`, {
+          method: "PUT",
+          headers: headers(true),
+          body: JSON.stringify({ stage_ids: ordered.map((stage) => Number(stage.sdlc_stage_id)) }),
+        });
+        setSDLCStatus("Reordered stages");
+        await loadSdlcStages(selectedSDLCID);
       }
 
       sdlcSaveBtn.addEventListener("click", async () => {
@@ -4181,6 +4416,7 @@
             sdlcExportBtn.style.display = "";
             sdlcStagesSection.style.display = "";
             await populateStageRoleSelector();
+            await loadSdlcStages(selectedSDLCID);
             setSDLCStatus(`Created sdlc #${created.sdlc_id}`);
           }
           await loadSdlcs();
@@ -4206,11 +4442,18 @@
         const sortOrder = Number(sdlcStageOrderInput.value || 0);
         const roleID = sdlcStageRoleSelect ? Number(sdlcStageRoleSelect.value || 0) : 0;
         try {
-          await call(`/api/sdlcs/${selectedSDLCID}/stages`, {
+          const createdStage = await call(`/api/sdlcs/${selectedSDLCID}/stages`, {
             method: "POST",
             headers: headers(true),
-            body: JSON.stringify({ stage_name: stageName, description: "", role_id: roleID || null, sort_order: sortOrder }),
+            body: JSON.stringify({ stage_name: stageName, description: "", sort_order: sortOrder }),
           });
+          if (roleID) {
+            await call(`/api/sdlcs/stages/roles/${selectedSDLCID}/${createdStage.sdlc_stage_id}`, {
+              method: "POST",
+              headers: headers(true),
+              body: JSON.stringify({ role_id: roleID }),
+            });
+          }
           sdlcStageNameInput.value = "";
           sdlcStageOrderInput.value = "";
           if (sdlcStageRoleSelect) sdlcStageRoleSelect.value = "";
@@ -4833,7 +5076,21 @@
           const laneTickets = tickets
             .filter((ticket) => ticket.stage === stage)
             .sort((a, b) => ticketModifiedEpoch(b) - ticketModifiedEpoch(a) || (b.ticket_id || 0) - (a.ticket_id || 0));
-          lane.innerHTML = `<h3>${stage}</h3><div class="muted">${laneTickets.length} tickets</div>`;
+          lane.innerHTML = `
+            <div class="lane-header">
+              <div>
+                <h3>${stage}</h3>
+                <div class="muted">${laneTickets.length} tickets</div>
+              </div>
+              <div class="lane-actions">
+                <button class="btn" type="button" data-lane-new>+ New</button>
+              </div>
+            </div>
+          `;
+          lane.querySelector("[data-lane-new]").addEventListener("click", (event) => {
+            event.stopPropagation();
+            openNew({ stage });
+          });
           lane.addEventListener("dragover", (event) => {
             event.preventDefault();
             lane.classList.add("drag-over");
@@ -4859,12 +5116,17 @@
               .map(l => `<span class="card-label" ${l.color ? `style="border-left:2px solid ${escape(l.color)}"` : ""}>${escape(l.name)}</span>`)
               .join("");
             const assignee = (ticket.assignee || "").trim();
+            const badges = [];
+            if (ticket.draft) badges.push('<span class="ticket-badge">draft</span>');
+            if (ticket.archived) badges.push('<span class="ticket-badge">archived</span>');
+            if (ticket.sdlc_id) badges.push(`<span class="ticket-badge">sdlc #${escape(String(ticket.sdlc_id))}</span>`);
             card.innerHTML = `
               <div class="ticket-top">
                 <strong>${escape(ticket.title)}</strong>
                 <span class="muted">${escape(ticket.key || "#" + ticket.ticket_id)}</span>
               </div>
               <div class="muted">${escape(ticket.type)} · ${escape(ticket.state)}${assignee ? ` · @${escape(assignee)}` : ""}</div>
+              ${badges.length ? `<div class="ticket-badges">${badges.join("")}</div>` : ""}
               ${cardLabels ? `<div class="card-labels">${cardLabels}</div>` : ""}
               <div class="state-line ${stateColorClass(ticket.state)}"></div>
             `;
@@ -4874,6 +5136,13 @@
             });
             card.addEventListener("click", () => { setFocusedCard(card); openEdit(ticket); });
             lane.appendChild(card);
+          }
+          if (!laneTickets.length) {
+            const empty = document.createElement("div");
+            empty.className = "lane-empty";
+            empty.textContent = `No tickets in ${stage}. Click to add one here.`;
+            empty.addEventListener("click", () => openNew({ stage }));
+            lane.appendChild(empty);
           }
           boardEl.appendChild(lane);
         }
@@ -4992,8 +5261,8 @@
       const projModalPrefix = document.getElementById("proj-modal-prefix");
       const projModalTitle = document.getElementById("proj-modal-title");
       const projModalVisibility = document.getElementById("proj-modal-visibility");
+      const projModalDefaultDraft = document.getElementById("proj-modal-default-draft");
       const projModalGitRepository = document.getElementById("proj-modal-git-repository");
-      const projModalGitBranch = document.getElementById("proj-modal-git-branch");
       const projModalDescription = document.getElementById("proj-modal-description");
       const projModalAC = document.getElementById("proj-modal-ac");
       const projModalSdlc = document.getElementById("proj-modal-sdlc");
@@ -5074,6 +5343,21 @@
         projModalSdlc.value = selectedSdlcID ? String(selectedSdlcID) : "";
       }
 
+      async function populateTicketModalSdlcSelector(selectedSdlcID = 0) {
+        const ticketSdlc = document.getElementById("ticket-sdlc");
+        if (!ticketSdlc) return;
+        const list = await call("/api/sdlcs", { headers: headers() }).catch(() => []);
+        const sdlcList = Array.isArray(list) ? list : [];
+        ticketSdlc.innerHTML = '<option value="">Inherit project default</option>';
+        for (const s of sdlcList) {
+          const opt = document.createElement("option");
+          opt.value = String(s.sdlc_id);
+          opt.textContent = s.name || `SDLC #${s.sdlc_id}`;
+          ticketSdlc.appendChild(opt);
+        }
+        ticketSdlc.value = selectedSdlcID ? String(selectedSdlcID) : "";
+      }
+
       function renderProjectModalSelector(selectedID = 0) {
         if (!projModalSelect) return;
         const previous = String(selectedID || projModalSelect.value || "");
@@ -5097,8 +5381,8 @@
         projModalPrefix.value = "";
         projModalTitle.value = "";
         projModalVisibility.value = "private";
+        projModalDefaultDraft.value = "false";
         projModalGitRepository.value = "";
-        projModalGitBranch.value = "";
         projModalDescription.value = "";
         projModalAC.value = "";
         populateProjModalSdlcSelector(0);
@@ -5118,8 +5402,8 @@
         projModalPrefix.value = String(project.prefix || "").toUpperCase();
         projModalTitle.value = project.title || "";
         projModalVisibility.value = (project.visibility || "public").toLowerCase() === "private" ? "private" : "public";
+        projModalDefaultDraft.value = project.default_draft ? "true" : "false";
         projModalGitRepository.value = project.git_repository || "";
-        projModalGitBranch.value = project.git_branch || "";
         projModalDescription.value = project.description || "";
         projModalAC.value = project.acceptance_criteria || "";
         populateProjModalSdlcSelector(project.sdlc_id || 0);
@@ -5138,8 +5422,8 @@
         const title = projModalTitle.value.trim();
         const prefix = projModalPrefix.value.trim().toUpperCase();
         const visibility = (projModalVisibility.value || "private").toLowerCase();
+        const defaultDraft = projModalDefaultDraft ? projModalDefaultDraft.value === "true" : false;
         const gitRepository = projModalGitRepository.value.trim();
-        const gitBranch = projModalGitBranch.value.trim();
         const description = projModalDescription.value.trim();
         const acceptanceCriteria = projModalAC.value.trim();
         if (projModalMode === "create" && !prefix) { projModalError.textContent = "Prefix is required."; projModalError.style.display = ""; projModalPrefix.focus(); return; }
@@ -5155,13 +5439,20 @@
           description,
           acceptance_criteria: acceptanceCriteria,
           git_repository: gitRepository,
-          git_branch: gitBranch,
           visibility,
           sdlc_id: sdlcID || null,
         };
         try {
           const res = await call(endpoint, { method, headers: headers(true), body: JSON.stringify(payload) });
           if (!res || res.error) { projModalError.textContent = (res && res.error) || "Failed to save project."; projModalError.style.display = ""; return; }
+          const savedProjectID = Number(res.project_id || projModalProjectID || 0);
+          if (savedProjectID) {
+            await call(`/api/projects/${savedProjectID}/set-draft`, {
+              method: "PUT",
+              headers: headers(true),
+              body: JSON.stringify({ draft: defaultDraft }),
+            });
+          }
           closeProjModal();
           await loadProjects();
           await loadTickets();
@@ -5198,19 +5489,23 @@
         restoreModalFocusIfNeeded();
       }
 
-      function openNew() {
+      function openNew(initial = {}) {
         if (!selectedProjectID()) return;
+        const currentProject = projects.find((project) => Number(project.project_id) === Number(selectedProjectID()));
         draft = { mode: "new", ticket: null };
         modalTitle.textContent = "New Ticket";
+        populateTicketModalSdlcSelector(0);
         setModalValues({
-          type: "task",
+          type: initial.type || "task",
           title: "",
           description: "",
           acceptance_criteria: "",
           git_repository: "",
           git_branch: "",
-          stage: "design",
-          state: "idle",
+          stage: initial.stage || "design",
+          state: initial.state || "idle",
+          draft: Boolean(currentProject && currentProject.default_draft),
+          sdlc_id: null,
           open: true,
           archived: false,
         });
@@ -5225,6 +5520,7 @@
       function openEdit(ticket) {
         draft = { mode: "edit", ticket: structuredClone(ticket) };
         modalTitle.textContent = ticket.key || `Ticket #${ticket.ticket_id}`;
+        populateTicketModalSdlcSelector(ticket.sdlc_id || 0);
         setModalValues(ticket);
         modalOverlay.classList.remove("hidden");
         document.body.classList.add("modal-open");
@@ -5247,6 +5543,8 @@
           git_branch: document.getElementById("ticket-git-branch").value,
           stage: document.getElementById("ticket-stage").value,
           state: document.getElementById("ticket-state").value,
+          draft: document.getElementById("ticket-draft").value === "true",
+          sdlc_id: document.getElementById("ticket-sdlc").value ? Number(document.getElementById("ticket-sdlc").value) : null,
           assignee: document.getElementById("ticket-assignee").value,
           parent_id: parentRaw ? Number(parentRaw) : null,
           health_score: Number(document.getElementById("ticket-health").value),
@@ -5262,6 +5560,8 @@
         document.getElementById("ticket-git-branch").value = ticket.git_branch || "";
         document.getElementById("ticket-stage").value = ticket.stage || "design";
         document.getElementById("ticket-state").value = ticket.state || "idle";
+        document.getElementById("ticket-draft").value = ticket.draft ? "true" : "false";
+        document.getElementById("ticket-sdlc").value = ticket.sdlc_id ? String(ticket.sdlc_id) : "";
         document.getElementById("ticket-assignee").value = ticket.assignee || "";
         document.getElementById("ticket-parent-id").value = ticket.parent_id || "";
         document.getElementById("ticket-health").value = String(ticket.health_score || 0);
@@ -5430,11 +5730,22 @@
               state: values.state,
             }),
           });
+          if (values.draft) {
+            await call(`/api/tickets/${created.ticket_id}/draft`, { method: "POST", headers: headers(true) });
+          }
+          if (values.sdlc_id) {
+            await call(`/api/tickets/${created.ticket_id}/sdlc`, {
+              method: "POST",
+              headers: headers(true),
+              body: JSON.stringify({ sdlc_id: values.sdlc_id }),
+            });
+          }
+          const createdRefreshed = await call(`/api/tickets/${created.ticket_id}`, { headers: headers() });
           draft.mode = "edit";
-          draft.ticket = created;
-          modalTitle.textContent = created.key || `Ticket #${created.ticket_id}`;
-          setModalValues(created);
-          upsertTicketLocal(created);
+          draft.ticket = createdRefreshed;
+          modalTitle.textContent = createdRefreshed.key || `Ticket #${createdRefreshed.ticket_id}`;
+          setModalValues(createdRefreshed);
+          upsertTicketLocal(createdRefreshed);
           refreshTicketViews();
           return;
         }
@@ -5451,6 +5762,8 @@
           || String(current.state || "idle") !== String(values.state || "idle")
           || String(current.assignee || "") !== String(values.assignee || "")
           || String(current.parent_id || "") !== String(values.parent_id || "");
+        const draftChanged = Boolean(current.draft) !== Boolean(values.draft);
+        const sdlcChanged = Number(current.sdlc_id || 0) !== Number(values.sdlc_id || 0);
         // Health uses a separate endpoint
         const healthChanged = Number(current.health_score || 0) !== Number(values.health_score || 0);
         if (healthChanged) {
@@ -5462,27 +5775,48 @@
           draft.ticket = hResult;
           upsertTicketLocal(hResult);
         }
-        if (!hasChanges) { if (healthChanged) refreshTicketViews(); return; }
-        const updated = await call(`/api/tickets/${current.ticket_id}`, {
-          method: "PUT",
-          headers: headers(true),
-          body: JSON.stringify({
-            type: values.type,
-            title: values.title,
-            description: values.description,
-            acceptance_criteria: values.acceptance_criteria,
-            git_repository: values.git_repository,
-            git_branch: values.git_branch,
-            parent_id: values.parent_id,
-            assignee: values.assignee,
-            priority: current.priority,
-            order: current.order,
-            estimate_effort: current.estimate_effort,
-            estimate_complete: current.estimate_complete,
-            stage: values.stage,
-            state: values.state,
-          }),
-        });
+        if (!hasChanges && !draftChanged && !sdlcChanged) { if (healthChanged) refreshTicketViews(); return; }
+        let updated = current;
+        if (hasChanges) {
+          updated = await call(`/api/tickets/${current.ticket_id}`, {
+            method: "PUT",
+            headers: headers(true),
+            body: JSON.stringify({
+              type: values.type,
+              title: values.title,
+              description: values.description,
+              acceptance_criteria: values.acceptance_criteria,
+              git_repository: values.git_repository,
+              git_branch: values.git_branch,
+              parent_id: values.parent_id,
+              assignee: values.assignee,
+              priority: current.priority,
+              order: current.order,
+              estimate_effort: current.estimate_effort,
+              estimate_complete: current.estimate_complete,
+              stage: values.stage,
+              state: values.state,
+            }),
+          });
+        }
+        if (draftChanged) {
+          updated = await call(`/api/tickets/${current.ticket_id}/${values.draft ? "draft" : "undraft"}`, {
+            method: "POST",
+            headers: headers(true),
+          });
+        }
+        if (sdlcChanged) {
+          updated = values.sdlc_id
+            ? await call(`/api/tickets/${current.ticket_id}/sdlc`, {
+                method: "POST",
+                headers: headers(true),
+                body: JSON.stringify({ sdlc_id: values.sdlc_id }),
+              })
+            : await call(`/api/tickets/${current.ticket_id}/sdlc`, {
+                method: "DELETE",
+                headers: headers(true),
+              });
+        }
         draft.ticket = updated;
         upsertTicketLocal(updated);
         const savedId = String(updated.ticket_id);

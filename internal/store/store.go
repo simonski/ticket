@@ -233,7 +233,6 @@ CREATE TABLE IF NOT EXISTS projects (
 	dod_map TEXT NOT NULL DEFAULT '{}',
 	ac_map TEXT NOT NULL DEFAULT '{}',
 	git_repository TEXT NOT NULL DEFAULT '',
-	git_branch TEXT NOT NULL DEFAULT '',
 	notes TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'open',
 	visibility TEXT NOT NULL DEFAULT 'public',
@@ -633,8 +632,8 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "projects", "git_branch") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN git_branch TEXT NOT NULL DEFAULT ''`); err != nil {
+	if columnExists(ctx, db, "projects", "git_branch") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects DROP COLUMN git_branch`); err != nil {
 			return err
 		}
 	}

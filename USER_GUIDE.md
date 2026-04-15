@@ -666,6 +666,15 @@ tk edit TK-42
 The editor opens the full-screen TUI pre-focused on the selected ticket,
 allowing you to update all fields inline without leaving the terminal.
 
+Recent TUI workflow improvements:
+
+- ticket detail now shows lifecycle context such as draft/archive/delete flags,
+  lineage, effective SDLC source, current role, and resolved project / role /
+  ticket guidance
+- ticket create/edit forms expose draft and SDLC controls
+- project edit exposes visibility, default draft, default SDLC, default
+  guidance, and git repository fields
+
 ### Themes
 
 The Config panel lists available themes. Arrowing up/down immediately applies
@@ -724,6 +733,8 @@ Use it for:
    - `chat`: LLM chat panel
    - `tv : ticketvision`: a left-to-right project → epics → stories graph view
 6. in `board`, cards are ordered by last modified timestamp (newest first)
+   and each lane includes a quick `+ New` action plus an empty-lane prompt for
+   creating a ticket directly into that stage
 7. opening the `sections` left panel to jump directly to:
    - `stories`
    - `board`
@@ -758,6 +769,11 @@ Keyboard shortcuts in the board view:
 - clicking an agent, role, or team item opens a popup editor for create/update work
 - agents support create/update/enable/disable/delete using the same API
 - roles support create/update/delete role personas (`title`, `description`, `acceptance_criteria`)
+- the ticket board supports drag-and-drop stage moves and shows card badges for
+  draft, archived, and ticket-level SDLC overrides
+- the SDLC editor uses draggable stage cards so admins can reorder stages,
+  edit ways-of-working / DoR / DoD inline, and add or remove stage roles from
+  the same popup
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
@@ -832,7 +848,6 @@ tk project <prefix-or-id> update -dor-map "stage=text"
 tk project <prefix-or-id> update -dod-map "stage=text"
 tk project <prefix-or-id> update -ac-map "stage=text"
 tk project <prefix-or-id> update -git-repository "https://github.com/org/repo.git"
-tk project <prefix-or-id> update -git-branch "main"
 tk project <prefix-or-id> enable
 tk project <prefix-or-id> disable
 tk project rename-prefix <new-prefix>

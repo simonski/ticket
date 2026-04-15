@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
+	"strconv"
 	"strings"
 )
 
@@ -20,8 +21,10 @@ const (
 	efAC     = 2
 	efType   = 3
 	efStatus = 4
-	efSave   = 5
-	efCount  = 6
+	efDraft  = 5
+	efSdlc   = 6
+	efSave   = 7
+	efCount  = 8
 )
 
 type editForm struct {
@@ -30,6 +33,8 @@ type editForm struct {
 	acceptCrit textarea.Model
 	ticketType string
 	status     string
+	draft      bool
+	sdlcID     *int64
 	focus      int
 	picker     *pickerPopup
 }
@@ -60,6 +65,8 @@ func newEditForm(t store.Ticket) editForm {
 		acceptCrit: ac,
 		ticketType: t.Type,
 		status:     t.Status,
+		draft:      t.Draft,
+		sdlcID:     t.SdlcID,
 		focus:      efTitle,
 	}
 }
@@ -104,21 +111,32 @@ func (f *editForm) prevField() {
 // ─── project edit form ───────────────────────────────────────────────────────
 
 const (
-	pfTitle = 0
-	pfDesc  = 1
-	pfDoR   = 2
-	pfDoD   = 3
-	pfSave  = 4
-	pfCount = 5
+	pfTitle        = 0
+	pfVisibility   = 1
+	pfDefaultDraft = 2
+	pfSdlc         = 3
+	pfRepo         = 4
+	pfDesc         = 5
+	pfDoR          = 6
+	pfDoD          = 7
+	pfAC           = 8
+	pfSave         = 9
+	pfCount        = 10
 )
 
 type projectEditForm struct {
-	project store.Project
-	title   textinput.Model
-	desc    textarea.Model
-	dor     textarea.Model // Definition of Ready (acceptance_criteria)
-	dod     textarea.Model // Definition of Done (notes)
-	focus   int
+	project      store.Project
+	title        textinput.Model
+	visibility   string
+	defaultDraft bool
+	sdlcID       *int64
+	gitRepo      textinput.Model
+	desc         textarea.Model
+	dor          textarea.Model
+	dod          textarea.Model
+	ac           textarea.Model
+	focus        int
+	picker       *pickerPopup
 }
 
 func newProjectEditForm(p store.Project) *projectEditForm {
@@ -126,6 +144,11 @@ func newProjectEditForm(p store.Project) *projectEditForm {
 	ti.SetValue(p.Title)
 	ti.CharLimit = 200
 	ti.Focus()
+
+	repo := textinput.New()
+	repo.SetValue(p.GitRepository)
+	repo.Placeholder = "git repository..."
+	repo.CharLimit = 500
 
 	desc := textarea.New()
 	desc.SetValue(p.Description)
@@ -135,26 +158,38 @@ func newProjectEditForm(p store.Project) *projectEditForm {
 	desc.CharLimit = 2000
 
 	dor := textarea.New()
-	dor.SetValue(p.AcceptanceCriteria)
+	dor.SetValue(guidanceDefaultValue(p.DORMap))
 	dor.Placeholder = "definition of ready..."
 	dor.SetHeight(3)
 	dor.ShowLineNumbers = false
 	dor.CharLimit = 2000
 
 	dod := textarea.New()
-	dod.SetValue(p.Notes)
+	dod.SetValue(guidanceDefaultValue(p.DODMap))
 	dod.Placeholder = "definition of done..."
 	dod.SetHeight(3)
 	dod.ShowLineNumbers = false
 	dod.CharLimit = 2000
 
+	ac := textarea.New()
+	ac.SetValue(guidanceDefaultValue(p.ACMap))
+	ac.Placeholder = "acceptance criteria..."
+	ac.SetHeight(3)
+	ac.ShowLineNumbers = false
+	ac.CharLimit = 2000
+
 	return &projectEditForm{
-		project: p,
-		title:   ti,
-		desc:    desc,
-		dor:     dor,
-		dod:     dod,
-		focus:   pfTitle,
+		project:      p,
+		title:        ti,
+		visibility:   p.Visibility,
+		defaultDraft: p.DefaultDraft,
+		sdlcID:       p.SdlcID,
+		gitRepo:      repo,
+		desc:         desc,
+		dor:          dor,
+		dod:          dod,
+		ac:           ac,
+		focus:        pfTitle,
 	}
 }
 
@@ -162,19 +197,26 @@ func (f *projectEditForm) applyFocus(w int) {
 	f.desc.SetWidth(w - 4)
 	f.dor.SetWidth(w - 4)
 	f.dod.SetWidth(w - 4)
+	f.ac.SetWidth(w - 4)
 	f.title.Blur()
+	f.gitRepo.Blur()
 	f.desc.Blur()
 	f.dor.Blur()
 	f.dod.Blur()
+	f.ac.Blur()
 	switch f.focus {
 	case pfTitle:
 		f.title.Focus()
+	case pfRepo:
+		f.gitRepo.Focus()
 	case pfDesc:
 		f.desc.Focus()
 	case pfDoR:
 		f.dor.Focus()
 	case pfDoD:
 		f.dod.Focus()
+	case pfAC:
+		f.ac.Focus()
 	}
 }
 
@@ -183,12 +225,16 @@ func (f *projectEditForm) update(msg tea.Msg) tea.Cmd {
 	switch f.focus {
 	case pfTitle:
 		f.title, cmd = f.title.Update(msg)
+	case pfRepo:
+		f.gitRepo, cmd = f.gitRepo.Update(msg)
 	case pfDesc:
 		f.desc, cmd = f.desc.Update(msg)
 	case pfDoR:
 		f.dor, cmd = f.dor.Update(msg)
 	case pfDoD:
 		f.dod, cmd = f.dod.Update(msg)
+	case pfAC:
+		f.ac, cmd = f.ac.Update(msg)
 	}
 	return cmd
 }
@@ -210,13 +256,17 @@ const (
 	nfAC    = 3
 	nfState = 4
 	nfStage = 5
-	nfSave  = 6
-	nfCount = 7
+	nfDraft = 6
+	nfSdlc  = 7
+	nfSave  = 8
+	nfCount = 9
 )
 
 var ticketTypes = []string{"task", "epic", "bug", "spike", "chore", "note", "question", "requirement", "decision"}
 var ticketStates = []string{store.StateIdle, store.StateActive, store.StateSuccess, store.StateFail}
 var ticketStages = []string{"", store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone}
+var projectVisibilities = []string{store.ProjectVisibilityPrivate, store.ProjectVisibilityPublic}
+var boolPickerItems = []string{"false", "true"}
 
 type pickerPopup struct {
 	items    []string
@@ -231,6 +281,8 @@ type newTicketForm struct {
 	ticketType string
 	state      string
 	stage      string
+	draft      bool
+	sdlcID     *int64
 	focus      int
 	picker     *pickerPopup
 }
@@ -260,6 +312,7 @@ func makeNewTicketForm() *newTicketForm {
 		ticketType: "task",
 		state:      store.StateIdle,
 		stage:      store.StageDesign,
+		draft:      false,
 		focus:      nfTitle,
 	}
 }
@@ -313,6 +366,10 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				f.ticketType = val
 			case "status":
 				f.status = val
+			case "draft":
+				f.draft = parseBoolPickerValue(val)
+			case "sdlc":
+				f.sdlcID = parseSdlcPickerValue(val)
 			}
 			f.picker = nil
 		}
@@ -342,6 +399,11 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case efStatus:
 			statuses := []string{"design/idle", "design/active", "develop/idle", "develop/active", "test/idle", "test/active", "done/success", "done/fail"}
 			f.picker = &pickerPopup{items: statuses, cursor: indexOf(statuses, f.status), forField: "status"}
+		case efDraft:
+			f.picker = &pickerPopup{items: boolPickerItems, cursor: boolPickerCursor(f.draft), forField: "draft"}
+		case efSdlc:
+			items := ticketSdlcPickerItems(m.sdlcs)
+			f.picker = &pickerPopup{items: items, cursor: sdlcPickerCursor(items, f.sdlcID), forField: "sdlc"}
 		case efSave:
 			return m, m.saveTicket()
 		}
@@ -384,6 +446,10 @@ func (m Model) handleKeyNew(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				f.state = val
 			case "stage":
 				f.stage = val
+			case "draft":
+				f.draft = parseBoolPickerValue(val)
+			case "sdlc":
+				f.sdlcID = parseSdlcPickerValue(val)
 			}
 			f.picker = nil
 		}
@@ -412,6 +478,11 @@ func (m Model) handleKeyNew(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			f.picker = &pickerPopup{items: ticketStates, cursor: indexOf(ticketStates, f.state), forField: "state"}
 		case nfStage:
 			f.picker = &pickerPopup{items: ticketStages, cursor: indexOf(ticketStages, f.stage), forField: "stage"}
+		case nfDraft:
+			f.picker = &pickerPopup{items: boolPickerItems, cursor: boolPickerCursor(f.draft), forField: "draft"}
+		case nfSdlc:
+			items := ticketSdlcPickerItems(m.sdlcs)
+			f.picker = &pickerPopup{items: items, cursor: sdlcPickerCursor(items, f.sdlcID), forField: "sdlc"}
 		case nfSave:
 			return m, m.createTicket()
 		default:
@@ -452,14 +523,39 @@ func (m Model) saveTicket() tea.Cmd {
 		Title:              m.form.title.Value(),
 		Description:        m.form.desc.Value(),
 		AcceptanceCriteria: m.form.acceptCrit.Value(),
+		Type:               m.form.ticketType,
 		Status:             m.form.status,
 	}
 	svc := m.svc
 	cfg := m.cfg
+	wasDraft := m.selected.Draft
+	prevSdlcID := m.selected.SdlcID
+	nextDraft := m.form.draft
+	nextSdlcID := m.form.sdlcID
 	return func() tea.Msg {
 		_, err := svc.UpdateTicket(context.Background(), id, req)
 		if err != nil {
 			return errMsg{err}
+		}
+		if nextDraft != wasDraft {
+			if nextDraft {
+				_, err = svc.DraftTicket(context.Background(), id, "")
+			} else {
+				_, err = svc.UndraftTicket(context.Background(), id, "")
+			}
+			if err != nil {
+				return errMsg{err}
+			}
+		}
+		if !equalOptionalInt64(prevSdlcID, nextSdlcID) {
+			if nextSdlcID == nil {
+				_, err = svc.UnsetTicketSdlc(context.Background(), id)
+			} else {
+				_, err = svc.SetTicketSdlc(context.Background(), id, *nextSdlcID)
+			}
+			if err != nil {
+				return errMsg{err}
+			}
 		}
 		return loadTicketsSync(svc, cfg)
 	}
@@ -486,10 +582,24 @@ func (m Model) createTicket() tea.Cmd {
 		State:              f.state,
 		Stage:              f.stage,
 	}
+	nextDraft := f.draft
+	nextSdlcID := f.sdlcID
 	return func() tea.Msg {
 		t, err := svc.CreateTicket(context.Background(), req)
 		if err != nil {
 			return errMsg{err}
+		}
+		if nextDraft {
+			t, err = svc.DraftTicket(context.Background(), t.ID, "")
+			if err != nil {
+				return errMsg{err}
+			}
+		}
+		if nextSdlcID != nil {
+			t, err = svc.SetTicketSdlc(context.Background(), t.ID, *nextSdlcID)
+			if err != nil {
+				return errMsg{err}
+			}
 		}
 		return ticketCreatedMsg(t)
 	}
@@ -594,6 +704,10 @@ func (m Model) viewNewTicket() []string {
 	lines = append(lines, field(nfState, "state", f.state))
 	lines = append(lines, "")
 	lines = append(lines, field(nfStage, "stage", f.stage))
+	lines = append(lines, "")
+	lines = append(lines, field(nfDraft, "draft", formatBoolPickerValue(f.draft)))
+	lines = append(lines, "")
+	lines = append(lines, field(nfSdlc, "sdlc", formatTicketSdlcChoice(f.sdlcID, m.sdlcs)))
 	lines = append(lines, "")
 
 	// Save button
@@ -750,6 +864,12 @@ func (m Model) viewForm(title string) []string {
 	lines = append(lines, field(efStatus, "status", f.status))
 	lines = append(lines, "")
 
+	lines = append(lines, field(efDraft, "draft", formatBoolPickerValue(f.draft)))
+	lines = append(lines, "")
+
+	lines = append(lines, field(efSdlc, "sdlc", formatTicketSdlcChoice(f.sdlcID, m.sdlcs)))
+	lines = append(lines, "")
+
 	// Save button
 	saveStr := "  [ Save ]"
 	if f.focus == efSave {
@@ -768,4 +888,122 @@ func (m Model) viewForm(title string) []string {
 	}
 	lines = append(lines, m.statusBar(inner))
 	return lines
+}
+
+func formatBoolPickerValue(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
+
+func parseBoolPickerValue(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), "true")
+}
+
+func boolPickerCursor(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func ticketSdlcPickerItems(sdlcs []store.SdlcWithStages) []string {
+	items := []string{"(inherit project default)"}
+	for _, sdlc := range sdlcs {
+		items = append(items, fmt.Sprintf("%d %s", sdlc.ID, sdlc.Name))
+	}
+	return items
+}
+
+func projectSdlcPickerItems(sdlcs []store.SdlcWithStages) []string {
+	items := []string{"(none)"}
+	for _, sdlc := range sdlcs {
+		items = append(items, fmt.Sprintf("%d %s", sdlc.ID, sdlc.Name))
+	}
+	return items
+}
+
+func sdlcPickerCursor(items []string, selected *int64) int {
+	if selected == nil {
+		return 0
+	}
+	prefix := strconv.FormatInt(*selected, 10) + " "
+	for idx, item := range items {
+		if strings.HasPrefix(item, prefix) {
+			return idx
+		}
+	}
+	return 0
+}
+
+func parseSdlcPickerValue(value string) *int64 {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || strings.HasPrefix(trimmed, "(") {
+		return nil
+	}
+	tokens := strings.Fields(trimmed)
+	if len(tokens) == 0 {
+		return nil
+	}
+	id, err := strconv.ParseInt(tokens[0], 10, 64)
+	if err != nil {
+		return nil
+	}
+	return &id
+}
+
+func formatTicketSdlcChoice(id *int64, sdlcs []store.SdlcWithStages) string {
+	if id == nil {
+		return "(inherit project default)"
+	}
+	return formatNamedSdlcChoice(*id, sdlcs)
+}
+
+func formatProjectSdlcChoice(id *int64, sdlcs []store.SdlcWithStages) string {
+	if id == nil {
+		return "(none)"
+	}
+	return formatNamedSdlcChoice(*id, sdlcs)
+}
+
+func formatNamedSdlcChoice(id int64, sdlcs []store.SdlcWithStages) string {
+	for _, sdlc := range sdlcs {
+		if sdlc.ID == id {
+			return fmt.Sprintf("%d %s", sdlc.ID, sdlc.Name)
+		}
+	}
+	return strconv.FormatInt(id, 10)
+}
+
+func guidanceDefaultValue(values store.GuidanceMap) string {
+	if values == nil {
+		return ""
+	}
+	return values[store.DefaultGuidanceStageKey]
+}
+
+func setDefaultGuidanceValue(values store.GuidanceMap, value string) store.GuidanceMap {
+	trimmed := strings.TrimSpace(value)
+	next := make(store.GuidanceMap)
+	for key, entry := range values {
+		if key == store.DefaultGuidanceStageKey {
+			continue
+		}
+		next[key] = entry
+	}
+	if trimmed != "" {
+		next[store.DefaultGuidanceStageKey] = trimmed
+	}
+	if len(next) == 0 {
+		return nil
+	}
+	return next
+}
+
+func equalOptionalInt64(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

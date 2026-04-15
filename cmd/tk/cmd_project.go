@@ -57,7 +57,6 @@ func runProject(args []string) error {
 		dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
 		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		gitRepository := fs.String("git-repository", "", "project git repository")
-		gitBranch := fs.String("git-branch", "", "project git branch")
 		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
@@ -101,7 +100,6 @@ func runProject(args []string) error {
 			ACMap:              projectACMap,
 			Notes:              strings.TrimSpace(*dod),
 			GitRepository:      strings.TrimSpace(*gitRepository),
-			GitBranch:          strings.TrimSpace(*gitBranch),
 			SdlcID:             wfID,
 		})
 		if err != nil {
@@ -184,7 +182,6 @@ func runProject(args []string) error {
 			fs.String("ac", "", "")
 			fs.String("git-repository", "", "")
 			fs.String("git", "", "")
-			fs.String("git-branch", "", "")
 			fs.String("status", "", "")
 			fs.Int64("sdlc", 0, "")
 			if err := fs.Parse(args[1:]); err != nil {
@@ -420,7 +417,6 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		GitRepository:      current.GitRepository,
-		GitBranch:          current.GitBranch,
 		Status:             current.Status,
 		SdlcID:             nextSdlcID,
 	})
@@ -569,7 +565,6 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
-		gitBranch := fs.String("git-branch", "", "project git branch")
 		status := fs.String("status", "", "project status (open|closed)")
 		sdlcID := fs.Int64("sdlc", 0, "sdlc ID to associate with project")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -589,7 +584,6 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		nextAC := current.AcceptanceCriteria
 		nextNotes := current.Notes
 		nextRepo := current.GitRepository
-		nextBranch := current.GitBranch
 		nextStatus := current.Status
 		if fs.Lookup("description") != nil && strings.TrimSpace(*description) != "" || containsFlag(args[1:], "-description") {
 			nextDescription = *description
@@ -605,9 +599,6 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		}
 		if containsFlag(args[1:], "-git-repository") || containsFlag(args[1:], "-git") {
 			nextRepo = strings.TrimSpace(*gitRepository)
-		}
-		if containsFlag(args[1:], "-git-branch") {
-			nextBranch = strings.TrimSpace(*gitBranch)
 		}
 		if containsFlag(args[1:], "-status") && strings.TrimSpace(*status) != "" {
 			nextStatus = strings.TrimSpace(*status)
@@ -646,7 +637,6 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			ACMap:              nextACMap,
 			Notes:              nextNotes,
 			GitRepository:      nextRepo,
-			GitBranch:          nextBranch,
 			Status:             nextStatus,
 			SdlcID:             nextSdlcID,
 		})

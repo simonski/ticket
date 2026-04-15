@@ -163,6 +163,10 @@ func runStatus(args []string) error {
 	if len(args) != 0 {
 		return errors.New("usage: tk status")
 	}
+	return runStatusWithSummaryStyle(true)
+}
+
+func runStatusWithSummaryStyle(statusUnicode bool) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
 		return err
@@ -173,9 +177,9 @@ func runStatus(args []string) error {
 	}
 	switch resolved.Mode {
 	case config.ModeRemote:
-		return runRemoteStatus(cfg)
+		return runRemoteStatusWithSummaryStyle(cfg, statusUnicode)
 	case config.ModeLocal:
-		return runLocalStatus()
+		return runLocalStatusWithSummaryStyle(statusUnicode)
 	default:
 		return fmt.Errorf("unsupported mode %q", resolved.Mode)
 	}

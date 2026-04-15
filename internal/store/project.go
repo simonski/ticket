@@ -26,7 +26,6 @@ type Project struct {
 	DODMap             GuidanceMap `json:"dod_map,omitempty"`
 	ACMap              GuidanceMap `json:"ac_map,omitempty"`
 	GitRepository      string      `json:"git_repository"`
-	GitBranch          string      `json:"git_branch"`
 	Notes              string      `json:"notes"`
 	Status             string      `json:"status"`
 	Visibility         string      `json:"visibility"`
@@ -50,7 +49,6 @@ type ProjectCreateParams struct {
 	DODMap             GuidanceMap
 	ACMap              GuidanceMap
 	GitRepository      string
-	GitBranch          string
 	Notes              string
 	Visibility         string
 	CreatedBy          string
@@ -65,7 +63,6 @@ type ProjectUpdateParams struct {
 	DODMap             GuidanceMap
 	ACMap              GuidanceMap
 	GitRepository      string
-	GitBranch          string
 	Notes              string
 	Status             string
 	Visibility         string
@@ -131,9 +128,9 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
 	}
 	result, err := db.ExecContext(ctx, `
-		INSERT INTO projects (prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, created_by, sdlc_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), sdlcID)
+		INSERT INTO projects (prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, sdlc_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+	`, uniquePrefix, title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), sdlcID)
 	if err != nil {
 		return Project{}, err
 	}
@@ -153,7 +150,7 @@ func scanProject(s scanner) (Project, error) {
 	var project Project
 	var sdlcID sql.NullInt64
 	var dorJSON, dodJSON, acJSON string
-	if err := s.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &dorJSON, &dodJSON, &acJSON, &project.GitRepository, &project.GitBranch, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &sdlcID); err != nil {
+	if err := s.Scan(&project.ID, &project.Prefix, &project.Title, &project.Description, &project.AcceptanceCriteria, &dorJSON, &dodJSON, &acJSON, &project.GitRepository, &project.Notes, &project.Status, &project.Visibility, &project.DefaultDraft, &project.CreatedBy, &project.CreatedAt, &project.UpdatedAt, &sdlcID); err != nil {
 		return Project{}, err
 	}
 	var err error
@@ -181,7 +178,7 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 		limit = 1000
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		ORDER BY created_at, project_id
 		LIMIT ?
@@ -217,7 +214,7 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 			FROM teams parent
 			JOIN team_scope ts ON ts.parent_team_id = parent.team_id
 		)
-		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.git_branch, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.sdlc_id
+		SELECT DISTINCT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.sdlc_id
 		FROM projects p
 		LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = ?
 		LEFT JOIN project_teams pt ON pt.project_id = p.project_id
@@ -250,7 +247,7 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 		return GetProjectByID(ctx, db, id)
 	}
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		WHERE prefix = ?
 	`, strings.ToUpper(rawID))
@@ -266,7 +263,7 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 
 func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, sdlc_id
 		FROM projects
 		WHERE project_id = ?
 	`, id)
@@ -325,10 +322,6 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	if nextRepo == "" {
 		nextRepo = current.GitRepository
 	}
-	nextBranch := strings.TrimSpace(params.GitBranch)
-	if nextBranch == "" {
-		nextBranch = current.GitBranch
-	}
 	nextNotes := strings.TrimSpace(params.Notes)
 	if nextNotes == "" {
 		nextNotes = current.Notes
@@ -364,9 +357,9 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE projects
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, notes = ?, status = ?, visibility = ?, sdlc_id = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, notes = ?, status = ?, visibility = ?, sdlc_id = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE project_id = ?
-	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextBranch, nextNotes, nextStatus, nextVisibility, nextSdlcID, id)
+	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextNotes, nextStatus, nextVisibility, nextSdlcID, id)
 	if err != nil {
 		return Project{}, err
 	}

@@ -80,9 +80,6 @@ func printProject(project store.Project) {
 	if project.GitRepository != "" {
 		fmt.Printf("git_repository: %s\n", project.GitRepository)
 	}
-	if project.GitBranch != "" {
-		fmt.Printf("git_branch: %s\n", project.GitBranch)
-	}
 	if project.SdlcID != nil {
 		fmt.Printf("sdlc_id: %d\n", *project.SdlcID)
 	}
@@ -215,11 +212,7 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 		fmt.Println()
 		fmt.Printf("project: %s — %s\n", resp.Project.Prefix, resp.Project.Title)
 		if resp.Project.GitRepository != "" {
-			fmt.Printf("  git: %s", resp.Project.GitRepository)
-			if resp.Project.GitBranch != "" {
-				fmt.Printf(" (%s)", resp.Project.GitBranch)
-			}
-			fmt.Println()
+			fmt.Printf("  git: %s\n", resp.Project.GitRepository)
 		}
 	}
 	if len(resp.Parents) > 0 {

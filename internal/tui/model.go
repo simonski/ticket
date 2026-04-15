@@ -55,6 +55,7 @@ type updateAvailableMsg string
 type errMsg struct{ err error }
 type projectsLoadedMsg []store.Project
 type sdlcLoadedMsg []store.SdlcWithStages
+type rolesLoadedMsg []store.Role
 type projectSwitchedMsg struct {
 	project store.Project
 	tickets treeLoadedMsg
@@ -120,6 +121,7 @@ type Model struct {
 
 	// sdlcs panel
 	sdlcs         []store.SdlcWithStages
+	roles         []store.Role
 	wfCursor      int
 	wfExpanded    map[int64]bool // expanded sdlc IDs
 	wfAddingStage bool
@@ -182,6 +184,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadTickets(m.svc, m.cfg),
 		loadSdlcs(m.svc),
+		loadRoles(m.svc),
 		checkUpdate(m.svc),
 		tickCmd(),
 	)
@@ -266,6 +269,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sdlcLoadedMsg:
 		m.sdlcs = []store.SdlcWithStages(msg)
 		m.buildBoardColumns()
+
+	case rolesLoadedMsg:
+		m.roles = []store.Role(msg)
 
 	case projectSavedMsg:
 		m.projectForm = nil
@@ -673,6 +679,33 @@ func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	f := m.projectForm
 	key := msg.String()
 
+	if f.picker != nil {
+		switch key {
+		case "esc":
+			f.picker = nil
+		case "up", "k":
+			if f.picker.cursor > 0 {
+				f.picker.cursor--
+			}
+		case "down", "j":
+			if f.picker.cursor < len(f.picker.items)-1 {
+				f.picker.cursor++
+			}
+		case "enter", " ":
+			val := f.picker.items[f.picker.cursor]
+			switch f.picker.forField {
+			case "visibility":
+				f.visibility = val
+			case "default_draft":
+				f.defaultDraft = parseBoolPickerValue(val)
+			case "sdlc":
+				f.sdlcID = parseSdlcPickerValue(val)
+			}
+			f.picker = nil
+		}
+		return m, nil
+	}
+
 	switch key {
 	case "esc":
 		m.mode = modeProjects
@@ -687,11 +720,19 @@ func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		f.applyFocus(m.width - 2)
 	case "enter", " ":
 		// Space must reach text input fields, not trigger save action
-		if key == " " && f.focus != pfSave {
+		if key == " " && f.focus != pfSave && f.focus != pfVisibility && f.focus != pfDefaultDraft && f.focus != pfSdlc {
 			cmd := f.update(msg)
 			return m, cmd
 		}
-		if f.focus == pfSave {
+		switch f.focus {
+		case pfVisibility:
+			f.picker = &pickerPopup{items: projectVisibilities, cursor: indexOf(projectVisibilities, f.visibility), forField: "visibility"}
+		case pfDefaultDraft:
+			f.picker = &pickerPopup{items: boolPickerItems, cursor: boolPickerCursor(f.defaultDraft), forField: "default_draft"}
+		case pfSdlc:
+			items := projectSdlcPickerItems(m.sdlcs)
+			f.picker = &pickerPopup{items: items, cursor: sdlcPickerCursor(items, f.sdlcID), forField: "sdlc"}
+		case pfSave:
 			return m, m.saveProject()
 		}
 	default:
@@ -712,14 +753,28 @@ func (m Model) saveProject() tea.Cmd {
 	req := libticket.ProjectUpdateRequest{
 		Title:              f.title.Value(),
 		Description:        f.desc.Value(),
-		AcceptanceCriteria: f.dor.Value(),
+		AcceptanceCriteria: f.ac.Value(),
+		DORMap:             setDefaultGuidanceValue(f.project.DORMap, f.dor.Value()),
+		DODMap:             setDefaultGuidanceValue(f.project.DODMap, f.dod.Value()),
+		ACMap:              setDefaultGuidanceValue(f.project.ACMap, f.ac.Value()),
+		GitRepository:      f.gitRepo.Value(),
 		Notes:              f.dod.Value(),
+		Visibility:         f.visibility,
+		SdlcID:             f.sdlcID,
 	}
 	svc := m.svc
+	defaultDraft := f.defaultDraft
+	projectID := f.project.ID
+	currentDefaultDraft := f.project.DefaultDraft
 	return func() tea.Msg {
 		_, err := svc.UpdateProject(context.Background(), id, req)
 		if err != nil {
 			return errMsg{err}
+		}
+		if defaultDraft != currentDefaultDraft {
+			if err := svc.SetProjectDefaultDraft(context.Background(), projectID, defaultDraft); err != nil {
+				return errMsg{err}
+			}
 		}
 		return projectSavedMsg{}
 	}
@@ -855,6 +910,16 @@ func loadProjects(svc libticket.Service) tea.Cmd {
 			return errMsg{err}
 		}
 		return projectsLoadedMsg(projects)
+	}
+}
+
+func loadRoles(svc libticket.Service) tea.Cmd {
+	return func() tea.Msg {
+		roles, err := svc.ListRoles(context.Background())
+		if err != nil {
+			return errMsg{err}
+		}
+		return rolesLoadedMsg(roles)
 	}
 }
 
@@ -1125,9 +1190,22 @@ func (m Model) viewDetail() []string {
 
 	var lines []string
 	add := func(label, val string) {
+		if strings.TrimSpace(val) == "" {
+			return
+		}
 		lines = append(lines,
 			labelStyle.Render(padRight(fmt.Sprintf(" %-14s", label), 16))+
 				valStyle.Render(truncate(val, inner-17)))
+	}
+	addBlock := func(label, val string) {
+		if strings.TrimSpace(val) == "" {
+			return
+		}
+		lines = append(lines, labelStyle.Render(padRight(" "+label, inner)))
+		for _, dl := range wordWrap(val, inner-2) {
+			lines = append(lines, valStyle.Render("  "+padRight(dl, inner-2)))
+		}
+		lines = append(lines, "")
 	}
 
 	title := fmt.Sprintf(" %s%s  %s", typeIcon(t.Type), stateIcon(t.State, !t.Complete), t.Title)
@@ -1138,23 +1216,49 @@ func (m Model) viewDetail() []string {
 	add("status", t.Status)
 	add("state", t.State)
 	add("stage", t.Stage)
-	if t.Assignee != "" {
-		add("assignee", t.Assignee)
+	if t.RoleID != nil {
+		add("role", m.roleName(*t.RoleID))
+	}
+	add("assignee", t.Assignee)
+	add("parent", optionalStringValue(t.ParentID))
+	add("clone of", optionalStringValue(t.CloneOf))
+	add("git repo", t.GitRepository)
+	add("git branch", t.GitBranch)
+	add("project", m.projectSummaryLabel())
+
+	flags := m.ticketFlags(*t)
+	if flags != "" {
+		add("flags", flags)
+	}
+
+	explicitSdlc := formatTicketSdlcChoice(t.SdlcID, m.sdlcs)
+	if t.SdlcID != nil {
+		add("ticket sdlc", explicitSdlc)
+	}
+	if effectiveSdlc, source := m.effectiveTicketSdlc(*t); effectiveSdlc != nil {
+		add("effective sdlc", fmt.Sprintf("%s (%s)", effectiveSdlc.Name, source))
+	}
+	if t.SdlcStageID != nil {
+		add("stage id", fmt.Sprintf("%d", *t.SdlcStageID))
 	}
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 
-	if t.Description != "" {
-		lines = append(lines, labelStyle.Render(padRight(" description", inner)))
-		for _, dl := range wordWrap(t.Description, inner-2) {
-			lines = append(lines, valStyle.Render("  "+padRight(dl, inner-2)))
-		}
-		lines = append(lines, "")
+	addBlock("description", t.Description)
+	addBlock("acceptance criteria", t.AcceptanceCriteria)
+
+	projectGuidance := m.project.ResolveGuidance(t.Stage)
+	if guidanceText := formatResolvedGuidance(projectGuidance); guidanceText != "" {
+		addBlock("project guidance", guidanceText)
 	}
-	if t.AcceptanceCriteria != "" {
-		lines = append(lines, labelStyle.Render(padRight(" acceptance criteria", inner)))
-		for _, al := range wordWrap(t.AcceptanceCriteria, inner-2) {
-			lines = append(lines, valStyle.Render("  "+padRight(al, inner-2)))
+	if t.RoleID != nil {
+		if role := m.roleByID(*t.RoleID); role != nil {
+			if guidanceText := formatResolvedGuidance(role.ResolveGuidance(t.Stage)); guidanceText != "" {
+				addBlock("role guidance", guidanceText)
+			}
 		}
+	}
+	if guidanceText := formatResolvedGuidance(t.ResolveGuidance(t.Stage)); guidanceText != "" {
+		addBlock("ticket guidance", guidanceText)
 	}
 
 	for len(lines) < m.height-3 {
@@ -1162,6 +1266,113 @@ func (m Model) viewDetail() []string {
 	}
 	lines = append(lines, m.statusBar(inner))
 	return lines
+}
+
+func (m Model) roleByID(id int64) *store.Role {
+	for idx := range m.roles {
+		if m.roles[idx].ID == id {
+			return &m.roles[idx]
+		}
+	}
+	return nil
+}
+
+func (m Model) roleName(id int64) string {
+	if role := m.roleByID(id); role != nil {
+		return role.Title
+	}
+	return fmt.Sprintf("%d", id)
+}
+
+func (m Model) projectSummaryLabel() string {
+	if m.project.ID == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s (%s)", m.project.Title, m.project.Prefix)
+}
+
+func (m Model) ticketFlags(ticket store.Ticket) string {
+	flags := make([]string, 0, 4)
+	if ticket.Draft {
+		flags = append(flags, "draft")
+	}
+	if ticket.Complete {
+		flags = append(flags, "complete")
+	}
+	if ticket.Archived {
+		flags = append(flags, "archived")
+	}
+	if ticket.Deleted {
+		flags = append(flags, "deleted")
+	}
+	return strings.Join(flags, ", ")
+}
+
+func (m Model) effectiveTicketSdlc(ticket store.Ticket) (*store.SdlcWithStages, string) {
+	if ticket.SdlcID != nil {
+		return m.findSdlc(*ticket.SdlcID), "ticket override"
+	}
+	seen := map[string]bool{ticket.ID: true}
+	parentID := ticket.ParentID
+	for parentID != nil {
+		parent := m.lookupTicket(*parentID)
+		if parent == nil || seen[parent.ID] {
+			break
+		}
+		seen[parent.ID] = true
+		if parent.SdlcID != nil {
+			return m.findSdlc(*parent.SdlcID), "inherited from " + parent.ID
+		}
+		parentID = parent.ParentID
+	}
+	if m.project.SdlcID != nil {
+		return m.findSdlc(*m.project.SdlcID), "project default"
+	}
+	return nil, ""
+}
+
+func (m Model) findSdlc(id int64) *store.SdlcWithStages {
+	for idx := range m.sdlcs {
+		if m.sdlcs[idx].ID == id {
+			return &m.sdlcs[idx]
+		}
+	}
+	return nil
+}
+
+func (m Model) lookupTicket(id string) *store.Ticket {
+	for idx := range m.items {
+		if m.items[idx].ticket.ID == id {
+			return &m.items[idx].ticket
+		}
+	}
+	for idx := range m.toplevel {
+		if m.toplevel[idx].ID == id {
+			return &m.toplevel[idx]
+		}
+	}
+	return nil
+}
+
+func optionalStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func formatResolvedGuidance(guidance store.ResolvedGuidance) string {
+	parts := make([]string, 0, 3)
+	if guidance.HasDOR {
+		parts = append(parts, "DoR: "+guidance.DOR)
+	}
+	if guidance.HasDOD {
+		parts = append(parts, "DoD: "+guidance.DOD)
+	}
+	if guidance.HasAC {
+		parts = append(parts, "AC: "+guidance.AC)
+	}
+	return strings.Join(parts, "\n")
 }
 
 // ─── tab bar ──────────────────────────────────────────────────────────────────
@@ -1442,7 +1653,16 @@ func (m Model) viewProjectEdit() []string {
 	labelStyle := lipgloss.NewStyle().Foreground(th.Muted).Background(th.Bg)
 	activeLabel := lipgloss.NewStyle().Foreground(th.Accent).Background(th.SelBg).Bold(true)
 	valStyle := lipgloss.NewStyle().Foreground(th.Fg).Background(th.Bg)
+	pickerHint := lipgloss.NewStyle().Foreground(th.Muted).Background(th.Bg)
 	sepStyle := lipgloss.NewStyle().Foreground(th.Border).Background(th.Bg)
+
+	field := func(idx int, name, val string) string {
+		lbl := fmt.Sprintf("  %-14s", name+":")
+		if idx == f.focus {
+			return activeLabel.Render(lbl) + valStyle.Render(" "+val) + pickerHint.Render(" ↵ pick")
+		}
+		return labelStyle.Render(lbl) + valStyle.Render(" "+val)
+	}
 
 	var lines []string
 	lines = append(lines, headerStyle.Render(padRight(" edit project  "+f.project.Prefix, inner)))
@@ -1455,6 +1675,25 @@ func (m Model) viewProjectEdit() []string {
 		lines = append(lines, activeLabel.Render(titleLbl)+f.title.View())
 	} else {
 		lines = append(lines, labelStyle.Render(titleLbl)+valStyle.Render(" "+f.title.Value()))
+	}
+	lines = append(lines, "")
+
+	lines = append(lines, field(pfVisibility, "visibility", f.visibility))
+	lines = append(lines, "")
+	lines = append(lines, field(pfDefaultDraft, "default draft", formatBoolPickerValue(f.defaultDraft)))
+	lines = append(lines, "")
+	lines = append(lines, field(pfSdlc, "default sdlc", formatProjectSdlcChoice(f.sdlcID, m.sdlcs)))
+	lines = append(lines, "")
+
+	repoLbl := fmt.Sprintf("  %-14s", "git repo:")
+	if f.focus == pfRepo {
+		lines = append(lines, activeLabel.Render(repoLbl)+f.gitRepo.View())
+	} else {
+		repoVal := f.gitRepo.Value()
+		if repoVal == "" {
+			repoVal = "(empty)"
+		}
+		lines = append(lines, labelStyle.Render(repoLbl)+valStyle.Render(" "+repoVal))
 	}
 	lines = append(lines, "")
 
@@ -1478,7 +1717,7 @@ func (m Model) viewProjectEdit() []string {
 	lines = append(lines, "")
 
 	// Definition of Ready
-	dorLbl := fmt.Sprintf("  %-14s", "def of ready:")
+	dorLbl := fmt.Sprintf("  %-14s", "default dor:")
 	if f.focus == pfDoR {
 		lines = append(lines, activeLabel.Render(dorLbl))
 		for _, tl := range strings.Split(f.dor.View(), "\n") {
@@ -1497,7 +1736,7 @@ func (m Model) viewProjectEdit() []string {
 	lines = append(lines, "")
 
 	// Definition of Done
-	dodLbl := fmt.Sprintf("  %-14s", "def of done:")
+	dodLbl := fmt.Sprintf("  %-14s", "default dod:")
 	if f.focus == pfDoD {
 		lines = append(lines, activeLabel.Render(dodLbl))
 		for _, tl := range strings.Split(f.dod.View(), "\n") {
@@ -1515,12 +1754,34 @@ func (m Model) viewProjectEdit() []string {
 	}
 	lines = append(lines, "")
 
+	acLbl := fmt.Sprintf("  %-14s", "default ac:")
+	if f.focus == pfAC {
+		lines = append(lines, activeLabel.Render(acLbl))
+		for _, tl := range strings.Split(f.ac.View(), "\n") {
+			lines = append(lines, "  "+tl)
+		}
+	} else {
+		lines = append(lines, labelStyle.Render(acLbl))
+		acVal := f.ac.Value()
+		if acVal == "" {
+			acVal = "(empty)"
+		}
+		for _, dl := range wordWrap(acVal, inner-4) {
+			lines = append(lines, valStyle.Render("  "+dl))
+		}
+	}
+	lines = append(lines, "")
+
 	// Save button
 	saveStr := "  [ Save ]"
 	if f.focus == pfSave {
 		lines = append(lines, lipgloss.NewStyle().Foreground(th.SelFg).Background(th.SelBg).Bold(true).Render(padRight(saveStr, inner)))
 	} else {
 		lines = append(lines, valStyle.Render(padRight(saveStr, inner)))
+	}
+
+	if f.picker != nil {
+		lines = m.overlayPickerOnLines(lines, f.picker, inner)
 	}
 
 	for len(lines) < m.height-3 {

@@ -128,7 +128,6 @@ Top-level namespace and container for tickets.
 | description | TEXT | Default empty |
 | acceptance_criteria | TEXT | Default empty |
 | git_repository | TEXT | Default empty |
-| git_branch | TEXT | Default empty |
 | notes | TEXT | Default empty |
 | status | TEXT | `open` \| `closed`, default `open` |
 | visibility | TEXT | `public` \| `private`, default `public` |

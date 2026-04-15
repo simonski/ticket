@@ -163,6 +163,68 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 	}
 }
 
+func TestOpenDropsLegacyProjectGitBranchColumn(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	rawDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = rawDB.Exec(`
+		PRAGMA foreign_keys = ON;
+		CREATE TABLE users (user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, user_type TEXT NOT NULL DEFAULT 'user', description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
+		CREATE TABLE sdlcs (sdlc_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+		CREATE TABLE projects (
+			project_id INTEGER PRIMARY KEY AUTOINCREMENT,
+			prefix TEXT NOT NULL DEFAULT 'TK',
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			acceptance_criteria TEXT NOT NULL DEFAULT '',
+			dor_map TEXT NOT NULL DEFAULT '{}',
+			dod_map TEXT NOT NULL DEFAULT '{}',
+			ac_map TEXT NOT NULL DEFAULT '{}',
+			git_repository TEXT NOT NULL DEFAULT '',
+			git_branch TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'open',
+			visibility TEXT NOT NULL DEFAULT 'public',
+			default_draft INTEGER NOT NULL DEFAULT 0,
+			created_by TEXT,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			ticket_sequence INTEGER NOT NULL DEFAULT 0,
+			sdlc_id INTEGER
+		);
+		INSERT INTO projects (prefix, title, git_repository, git_branch) VALUES ('TK', 'Legacy', 'https://example.com/repo.git', 'main');
+	`)
+	if err != nil {
+		rawDB.Close()
+		t.Fatal(err)
+	}
+	if err := rawDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	if columnExists(context.Background(), db, "projects", "git_branch") {
+		t.Fatal("projects.git_branch still exists after migration")
+	}
+
+	var repo string
+	if err := db.QueryRow(`SELECT git_repository FROM projects WHERE prefix = 'TK'`).Scan(&repo); err != nil {
+		t.Fatalf("QueryRow(git_repository) error = %v", err)
+	}
+	if repo != "https://example.com/repo.git" {
+		t.Fatalf("git_repository = %q, want preserved value", repo)
+	}
+}
+
 func TestParseTicketSequence(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
