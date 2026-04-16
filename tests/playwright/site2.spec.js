@@ -234,7 +234,7 @@ test("does not emit CSP inline-style violations after login", async ({ page }) =
   await page.locator("#login-username").fill("admin");
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("Ticket board")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
 
   const cspMessages = messages.filter((text) => text.includes("Applying inline style violates the following Content Security Policy directive"));
   expect(cspMessages).toEqual([]);
@@ -254,7 +254,7 @@ test("keeps the session and visible tickets across refresh", async ({ page }) =>
 
   await page.reload();
 
-  await expect(page.getByText("Ticket board")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
   await expect(page.locator("#ticket-board")).toContainText("Move me");
   await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
 });
@@ -265,7 +265,7 @@ test.beforeEach(async ({ page }) => {
   await page.locator("#login-username").fill("admin");
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("Ticket board")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
 });
 
 test("creates a project and persists default draft settings through the existing API", async ({ page }) => {
@@ -294,6 +294,13 @@ test("moves a ticket across the board with drag and drop", async ({ page }) => {
 
   const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/tickets/OPS-101"));
   expect(requests.some((request) => request.body.stage === "done")).toBeTruthy();
+});
+
+test("reorders board stages through the SDLC reorder endpoint", async ({ page }) => {
+  await page.dragAndDrop('[data-sdlc-stage-id="11"]', '[data-sdlc-stage-id="14"]');
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/sdlcs/1/reorder"));
+  expect(requests.length).toBeGreaterThan(0);
 });
 
 test("adds a role inside the SDLC editor using the existing stage-role API", async ({ page }) => {

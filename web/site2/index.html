@@ -197,23 +197,30 @@
             flex: 1 1 180px;
         }
 
+        .app-layout {
+            min-height: 100vh;
+            display: grid;
+            grid-template-rows: 68px minmax(0, 1fr);
+        }
+
         .shell {
             display: grid;
             grid-template-columns: 210px minmax(0, 1fr);
-            min-height: 100vh;
+            min-height: 0;
         }
 
         .sidebar {
-            padding: 18px 14px;
+            padding: 14px 10px;
             border-right: 1px solid var(--line);
             background: rgba(255, 248, 240, 0.72);
             display: grid;
             grid-template-rows: auto auto 1fr auto;
-            gap: 12px;
+            gap: 8px;
             position: sticky;
-            top: 0;
-            height: 100vh;
+            top: 68px;
+            height: calc(100vh - 68px);
             backdrop-filter: blur(12px);
+            align-self: start;
         }
 
         .brand {
@@ -230,7 +237,7 @@
 
         .nav {
             display: grid;
-            gap: 6px;
+            gap: 3px;
         }
 
         .nav button {
@@ -240,7 +247,7 @@
             text-align: left;
             justify-content: flex-start;
             border-radius: 14px;
-            padding: 8px 10px;
+            padding: 6px 8px;
             background: rgba(255, 255, 255, 0.5);
             border: 1px solid transparent;
             box-shadow: none;
@@ -254,10 +261,17 @@
             place-items: center;
             border-radius: 7px;
             background: rgba(22, 18, 15, 0.08);
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.02em;
             flex: 0 0 auto;
+        }
+
+        .nav-icon svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         .nav button.active {
@@ -270,26 +284,25 @@
             background: rgba(255, 255, 255, 0.16);
         }
 
-        .sidebar-foot {
-            display: grid;
-            gap: 10px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
         .main {
-            display: grid;
-            grid-template-rows: auto auto 1fr;
             min-width: 0;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .topbar {
-            padding: 14px 18px 6px;
+            padding: 12px 18px;
             display: flex;
             gap: 12px;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: space-between;
             flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: rgba(251, 246, 238, 0.92);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--line);
         }
 
         .topbar-controls {
@@ -297,6 +310,65 @@
             gap: 8px;
             align-items: center;
             flex-wrap: wrap;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .avatar-button {
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            display: inline-grid;
+            place-items: center;
+            border-radius: 50%;
+            background: #17120f;
+            color: #fffaf4;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+        }
+
+        .account-menu {
+            position: relative;
+        }
+
+        .account-dropdown {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            min-width: 200px;
+            padding: 8px;
+            display: none;
+            gap: 4px;
+            background: rgba(255, 250, 244, 0.98);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .account-dropdown.open {
+            display: grid;
+        }
+
+        .account-name {
+            padding: 8px 10px 10px;
+            color: var(--muted);
+            font-size: 12px;
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 4px;
+        }
+
+        .menu-item {
+            width: 100%;
+            display: flex;
+            justify-content: flex-start;
+            border-radius: 12px;
+            padding: 8px 10px;
+            background: transparent;
+            box-shadow: none;
         }
 
         .notice {
@@ -324,6 +396,8 @@
         .content {
             padding: 12px 18px 18px;
             min-width: 0;
+            height: 100%;
+            overflow: auto;
         }
 
         .view {
@@ -635,44 +709,53 @@
         </form>
     </div>
 
-    <div id="app-shell" class="shell hidden">
-        <aside class="sidebar">
-            <div class="brand">
-                <h1>site2</h1>
+    <div id="app-shell" class="app-layout hidden">
+        <header class="topbar">
+            <div class="topbar-controls">
+                <label class="chip" for="global-project-select">Board project</label>
+                <div class="select-shell">
+                    <select id="global-project-select"></select>
+                </div>
             </div>
-            <div class="chip" id="app-user-chip">Not signed in</div>
-            <nav class="nav" id="main-nav">
-                <button type="button" data-view="tickets" class="active"><span class="nav-icon">TK</span><span>Tickets</span></button>
-                <button type="button" data-view="projects"><span class="nav-icon">PR</span><span>Projects</span></button>
-                <button type="button" data-view="sdlcs"><span class="nav-icon">SD</span><span>SDLCs</span></button>
-                <button type="button" data-view="roles"><span class="nav-icon">RL</span><span>Roles</span></button>
-                <button type="button" data-view="agents"><span class="nav-icon">AG</span><span>Agents</span></button>
-                <button type="button" data-view="teams"><span class="nav-icon">TM</span><span>Teams</span></button>
-            </nav>
-            <div></div>
-            <div class="sidebar-foot">
-                <button id="logout-button" type="button" class="btn-ghost">Logout</button>
-            </div>
-        </aside>
-
-        <main class="main">
-            <header class="topbar">
-                <div class="topbar-controls">
-                    <label class="chip" for="global-project-select">Board project</label>
-                    <div class="select-shell">
-                        <select id="global-project-select"></select>
+            <div class="header-right">
+                <div class="account-menu">
+                    <button id="account-menu-button" type="button" class="avatar-button" aria-haspopup="true" aria-expanded="false">U</button>
+                    <div id="account-menu-dropdown" class="account-dropdown">
+                        <div id="account-menu-name" class="account-name"></div>
+                        <button type="button" class="menu-item" data-account-action="profile">Profile</button>
+                        <button type="button" class="menu-item" data-account-action="api-keys">API keys</button>
+                        <button type="button" class="menu-item" data-account-action="settings">Settings</button>
+                        <button id="logout-button" type="button" class="menu-item">Logout</button>
                     </div>
                 </div>
-            </header>
+            </div>
+        </header>
 
-            <div id="app-notice" class="notice"></div>
+        <div class="shell">
+            <aside class="sidebar">
+                <div class="brand">
+                    <h1>site2</h1>
+                </div>
+                <nav class="nav" id="main-nav">
+                    <button type="button" data-view="tickets" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg></span><span>Board</span></button>
+                    <button type="button" data-view="projects"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18"></path><path d="M6 7v10"></path><path d="M12 7v10"></path><path d="M18 7v10"></path><path d="M3 17h18"></path></svg></span><span>Projects</span></button>
+                    <button type="button" data-view="sdlcs"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14"></path><path d="M5 12h9"></path><path d="M5 18h14"></path><path d="M17 10l2 2-2 2"></path></svg></span><span>SDLCs</span></button>
+                    <button type="button" data-view="roles"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0.001 0"></path><path d="M17 16a3 3 0 1 0 0.001 0"></path><path d="M9.5 10.5l5 3"></path></svg></span><span>Roles</span></button>
+                    <button type="button" data-view="agents"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4"></path><path d="M8 8a4 4 0 1 1 8 0"></path><path d="M7 13h10v7H7z"></path></svg></span><span>Agents</span></button>
+                    <button type="button" data-view="teams"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11a2.5 2.5 0 1 0 0.001 0"></path><path d="M16 9a2 2 0 1 0 0.001 0"></path><path d="M4 19a4 4 0 0 1 8 0"></path><path d="M14 19a3 3 0 0 1 6 0"></path></svg></span><span>Teams</span></button>
+                </nav>
+                <div></div>
+            </aside>
 
-            <div class="content">
+            <main class="main">
+                <div id="app-notice" class="notice"></div>
+
+                <div class="content">
                 <section id="view-tickets" class="view active">
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <h2>Ticket board</h2>
+                                <h2>Board</h2>
                                 <p class="meta">Drag tickets between stages. Click a card to edit details, history, draft state, and lifecycle overrides.</p>
                             </div>
                             <div class="entity-actions">
@@ -936,8 +1019,9 @@
                         </form>
                     </div>
                 </section>
-            </div>
-        </main>
+                </div>
+            </main>
+        </div>
     </div>
 
     <div id="ticket-modal" class="modal">
@@ -1079,9 +1163,11 @@
             loginError: document.getElementById("login-error"),
             appShell: document.getElementById("app-shell"),
             appNotice: document.getElementById("app-notice"),
-            userChip: document.getElementById("app-user-chip"),
             projectSelect: document.getElementById("global-project-select"),
             mainNav: document.getElementById("main-nav"),
+            accountMenuButton: document.getElementById("account-menu-button"),
+            accountMenuDropdown: document.getElementById("account-menu-dropdown"),
+            accountMenuName: document.getElementById("account-menu-name"),
             projectList: document.getElementById("project-list"),
             sdlcList: document.getElementById("sdlc-list"),
             roleList: document.getElementById("role-list"),
@@ -1298,6 +1384,14 @@
             return state.projects.find((project) => project.id === state.selectedProjectID) || null;
         }
 
+        function getCurrentProjectWorkflow() {
+            const project = getCurrentProject();
+            if (!project || !project.sdlc_id) {
+                return null;
+            }
+            return state.sdlcs.find((item) => item.id === project.sdlc_id) || null;
+        }
+
         function getCurrentSdlc() {
             return state.sdlcs.find((item) => item.id === state.selectedSdlcID) || null;
         }
@@ -1315,9 +1409,7 @@
         }
 
         function getStageOptions() {
-            const project = getCurrentProject();
-            const sdlcID = project && project.sdlc_id ? project.sdlc_id : null;
-            const workflow = state.sdlcs.find((item) => item.id === sdlcID);
+            const workflow = getCurrentProjectWorkflow();
             const fromSdlc = workflow && Array.isArray(workflow.stages) && workflow.stages.length
                 ? workflow.stages.map((stage) => stage.name)
                 : [];
@@ -1326,6 +1418,15 @@
                 ? fromSdlc.concat(fromTickets)
                 : (fromTickets.length ? fromTickets : FALLBACK_STAGES.slice());
             return Array.from(new Set(stages.filter(Boolean)));
+        }
+
+        function getBoardLaneDescriptors() {
+            const workflow = getCurrentProjectWorkflow();
+            const stageMap = new Map((workflow && workflow.stages ? workflow.stages : []).map((stage) => [stage.name, stage.id]));
+            return getStageOptions().map((name) => ({
+                name,
+                sdlcStageID: stageMap.get(name) || null,
+            }));
         }
 
         function bindViewNavigation() {
@@ -1378,7 +1479,9 @@
 
         async function loadStatus() {
             state.status = await api("/api/status");
-            els.userChip.textContent = state.status.username || "signed in";
+            const username = state.status.username || "user";
+            els.accountMenuButton.textContent = username.charAt(0).toUpperCase();
+            els.accountMenuName.textContent = username;
         }
 
         async function loadProjects() {
@@ -1659,15 +1762,17 @@
         }
 
         function renderTicketBoard() {
-            const stages = getStageOptions();
-            els.ticketBoard.innerHTML = stages.map((stage) => {
+            const lanes = getBoardLaneDescriptors();
+            els.ticketBoard.innerHTML = lanes.map((lane) => {
                 const cards = state.tickets
-                    .filter((ticket) => (ticket.stage || stages[0]) === stage)
+                    .filter((ticket) => (ticket.stage || lanes[0].name) === lane.name)
                     .sort((a, b) => (a.order || 0) - (b.order || 0))
                     .map((ticket) => renderTicketCard(ticket))
                     .join("");
-                return "<div class=\"lane\" data-lane-stage=\"" + escapeHTML(stage) + "\">" +
-                    "<div class=\"lane-head\"><h3>" + escapeHTML(stage) + "</h3><span class=\"chip\">" + state.tickets.filter((ticket) => (ticket.stage || stages[0]) === stage).length + "</span></div>" +
+                const draggable = lane.sdlcStageID ? "true" : "false";
+                const stageAttr = lane.sdlcStageID ? " data-sdlc-stage-id=\"" + lane.sdlcStageID + "\"" : "";
+                return "<div class=\"lane\" draggable=\"" + draggable + "\" data-lane-stage=\"" + escapeHTML(lane.name) + "\"" + stageAttr + ">" +
+                    "<div class=\"lane-head\"><h3>" + escapeHTML(lane.name) + "</h3><span class=\"chip\">" + state.tickets.filter((ticket) => (ticket.stage || lanes[0].name) === lane.name).length + "</span></div>" +
                     (cards || "<div class=\"empty\">No tickets</div>") +
                     "</div>";
             }).join("");
@@ -2372,6 +2477,15 @@
             els.ticketBoard.addEventListener("dragstart", (event) => {
                 const card = event.target.closest("[data-ticket-id]");
                 if (!card) {
+                    const lane = event.target.closest("[data-sdlc-stage-id]");
+                    if (!lane) {
+                        return;
+                    }
+                    state.drag = {
+                        type: "board-stage",
+                        sdlcStageID: Number(lane.dataset.sdlcStageId),
+                    };
+                    event.dataTransfer.effectAllowed = "move";
                     return;
                 }
                 state.drag = { type: "ticket", ticketID: card.dataset.ticketId };
@@ -2380,12 +2494,20 @@
 
             els.ticketBoard.addEventListener("dragover", (event) => {
                 const lane = event.target.closest("[data-lane-stage]");
-                if (!lane || !state.drag || state.drag.type !== "ticket") {
+                if (!lane || !state.drag) {
                     return;
                 }
-                event.preventDefault();
-                document.querySelectorAll(".lane").forEach((item) => item.classList.remove("drag-target"));
-                lane.classList.add("drag-target");
+                if (state.drag.type === "ticket") {
+                    event.preventDefault();
+                    document.querySelectorAll(".lane").forEach((item) => item.classList.remove("drag-target"));
+                    lane.classList.add("drag-target");
+                    return;
+                }
+                if (state.drag.type === "board-stage" && lane.dataset.sdlcStageId) {
+                    event.preventDefault();
+                    document.querySelectorAll(".lane").forEach((item) => item.classList.remove("drag-target"));
+                    lane.classList.add("drag-target");
+                }
             });
 
             els.ticketBoard.addEventListener("dragleave", (event) => {
@@ -2397,26 +2519,55 @@
 
             els.ticketBoard.addEventListener("drop", async (event) => {
                 const lane = event.target.closest("[data-lane-stage]");
-                if (!lane || !state.drag || state.drag.type !== "ticket") {
+                if (!lane || !state.drag) {
                     return;
                 }
-                event.preventDefault();
-                lane.classList.remove("drag-target");
-                const ticket = state.tickets.find((item) => String(item.id) === state.drag.ticketID);
-                state.drag = null;
-                if (!ticket || ticket.stage === lane.dataset.laneStage) {
+                if (state.drag.type === "ticket") {
+                    event.preventDefault();
+                    lane.classList.remove("drag-target");
+                    const ticket = state.tickets.find((item) => String(item.id) === state.drag.ticketID);
+                    state.drag = null;
+                    if (!ticket || ticket.stage === lane.dataset.laneStage) {
+                        return;
+                    }
+                    try {
+                        await api("/api/tickets/" + ticket.id, {
+                            method: "PUT",
+                            body: JSON.stringify(Object.assign({}, ticket, { stage: lane.dataset.laneStage })),
+                        });
+                        await loadTickets();
+                        renderTicketBoard();
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
                     return;
                 }
-                try {
-                    await api("/api/tickets/" + ticket.id, {
-                        method: "PUT",
-                        body: JSON.stringify(Object.assign({}, ticket, { stage: lane.dataset.laneStage })),
-                    });
-                    await loadTickets();
-                    renderTicketBoard();
-                    setNotice("Ticket moved to " + lane.dataset.laneStage + ".");
-                } catch (error) {
-                    setNotice(error.message, true);
+                if (state.drag.type === "board-stage" && lane.dataset.sdlcStageId) {
+                    event.preventDefault();
+                    lane.classList.remove("drag-target");
+                    const workflow = getCurrentProjectWorkflow();
+                    const targetStageID = Number(lane.dataset.sdlcStageId);
+                    if (!workflow || !targetStageID || targetStageID === state.drag.sdlcStageID) {
+                        state.drag = null;
+                        return;
+                    }
+                    const ordered = Array.from(els.ticketBoard.querySelectorAll("[data-sdlc-stage-id]"))
+                        .map((item) => Number(item.dataset.sdlcStageId))
+                        .filter((stageID) => stageID !== state.drag.sdlcStageID);
+                    const targetIndex = ordered.indexOf(targetStageID);
+                    ordered.splice(targetIndex >= 0 ? targetIndex : ordered.length, 0, state.drag.sdlcStageID);
+                    state.drag = null;
+                    try {
+                        await api("/api/sdlcs/" + workflow.id + "/reorder", {
+                            method: "PUT",
+                            body: JSON.stringify({ stage_ids: ordered }),
+                        });
+                        await loadSdlcs();
+                        await loadTickets();
+                        renderAll();
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
                 }
             });
         }
@@ -2546,12 +2697,37 @@
         }
 
         function bindMiscHandlers() {
+            function closeAccountMenu() {
+                els.accountMenuDropdown.classList.remove("open");
+                els.accountMenuButton.setAttribute("aria-expanded", "false");
+            }
+
+            els.accountMenuButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                const isOpen = els.accountMenuDropdown.classList.toggle("open");
+                els.accountMenuButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            });
+
+            els.accountMenuDropdown.addEventListener("click", (event) => {
+                const item = event.target.closest("[data-account-action]");
+                if (item) {
+                    closeAccountMenu();
+                }
+            });
+
+            document.addEventListener("click", (event) => {
+                if (!event.target.closest(".account-menu")) {
+                    closeAccountMenu();
+                }
+            });
+
             document.getElementById("logout-button").addEventListener("click", async () => {
                 try {
                     await api("/api/logout", { method: "POST", body: JSON.stringify({}) });
                 } catch (error) {
                     // Ignore logout transport errors while still clearing local state.
                 }
+                closeAccountMenu();
                 disconnectLiveUpdates();
                 state.auth = null;
                 clearStoredAuth();
