@@ -205,6 +205,21 @@ test("focuses the username field on first load", async ({ page }) => {
   await expect(page.locator("#login-username")).toBeFocused();
 });
 
+test("does not emit CSP inline-style violations after login", async ({ page }) => {
+  const messages = [];
+  page.on("console", (message) => messages.push(message.text()));
+
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByText("Ticket board")).toBeVisible();
+
+  const cspMessages = messages.filter((text) => text.includes("Applying inline style violates the following Content Security Policy directive"));
+  expect(cspMessages).toEqual([]);
+});
+
 test.beforeEach(async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");

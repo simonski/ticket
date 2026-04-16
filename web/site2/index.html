@@ -310,8 +310,24 @@
             margin-top: 28px;
         }
 
+        .panel-head-tight {
+            margin: 0;
+        }
+
         .panel-padded {
             padding: 16px;
+        }
+
+        .tag-row-spaced {
+            margin-top: 10px;
+        }
+
+        .meta-top {
+            margin-top: 8px;
+        }
+
+        .field-align-end {
+            align-self: end;
         }
 
         .entity-list,
@@ -1301,7 +1317,7 @@
                 return "<div class=\"entity-card" + active + "\" data-project-id=\"" + project.id + "\">" +
                     "<h4>" + escapeHTML(project.title) + " <small>(" + escapeHTML(project.prefix) + ")</small></h4>" +
                     "<p>" + escapeHTML(project.description || "No description") + "</p>" +
-                    "<div class=\"tag-row\" style=\"margin-top:10px;\">" +
+                    "<div class=\"tag-row tag-row-spaced\">" +
                     "<span class=\"chip\">" + escapeHTML(project.visibility || "public") + "</span>" +
                     "<span class=\"chip\">draft " + String(Boolean(project.default_draft)) + "</span>" +
                     "</div></div>";
@@ -1319,7 +1335,7 @@
                 return "<div class=\"entity-card" + active + "\" data-sdlc-id=\"" + sdlc.id + "\">" +
                     "<h4>" + escapeHTML(sdlc.name) + "</h4>" +
                     "<p>" + escapeHTML(sdlc.description || "No description") + "</p>" +
-                    "<p class=\"meta\" style=\"margin-top:8px;\">" + (sdlc.stages ? sdlc.stages.length : 0) + " stages</p>" +
+                    "<p class=\"meta meta-top\">" + (sdlc.stages ? sdlc.stages.length : 0) + " stages</p>" +
                     "</div>";
             }).join("");
 
@@ -1354,7 +1370,7 @@
                     "<div class=\"field\"><label>Roles in stage</label><div class=\"role-chip-row\" data-stage-role-row=\"" + stage.id + "\">" + (roleNames || "<span class=\"meta\">No roles</span>") + "</div></div>" +
                     "<div class=\"row\">" +
                     "<div class=\"field\"><label>Add role</label><select data-add-role-select=\"" + stage.id + "\">" + optionHTML("", "Choose role", true) + addRoleOptions + "</select></div>" +
-                    "<div class=\"field\" style=\"align-self:end;\"><button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button></div>" +
+                    "<div class=\"field field-align-end\"><button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button></div>" +
                     "</div>" +
                     "</div>";
             }).join("");
@@ -1371,7 +1387,7 @@
                 return "<div class=\"entity-card" + active + "\" data-role-id=\"" + role.id + "\">" +
                     "<h4>" + escapeHTML(role.title) + "</h4>" +
                     "<p>" + escapeHTML(role.description || "No description") + "</p>" +
-                    "<p class=\"meta\" style=\"margin-top:8px;\">SDLC: " + escapeHTML(sdlc ? sdlc.name : "None") + "</p>" +
+                    "<p class=\"meta meta-top\">SDLC: " + escapeHTML(sdlc ? sdlc.name : "None") + "</p>" +
                     "</div>";
             }).join("");
         }
@@ -1422,7 +1438,7 @@
 
         function renderTicketCard(ticket) {
             return "<div class=\"ticket-card\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
-                "<div class=\"panel-head\" style=\"margin:0;\"><h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
+                "<div class=\"panel-head panel-head-tight\"><h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
                 "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
                 "<div class=\"tag-row\">" +
                 "<span class=\"chip\">p" + escapeHTML(ticket.priority || 0) + "</span>" +
