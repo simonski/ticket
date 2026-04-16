@@ -408,7 +408,7 @@ test("sdlc editor renders draggable stage cards with inline role controls", asyn
             definition_of_ready: "Specs ready",
             definition_of_done: "Tests green",
             sort_order: 1,
-            roles: [{ role_id: 2, title: "Engineer" }],
+            roles: [{ role_id: 2, title: "Engineer" }, { role_id: 3, title: "QA" }],
           }],
         };
       }
@@ -416,11 +416,13 @@ test("sdlc editor renders draggable stage cards with inline role controls", asyn
     };
     await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
     const card = document.querySelector(".sdlc-stage-card");
+    const roleChip = card ? card.querySelector(".sdlc-role-chip") : null;
     return {
       hasCard: Boolean(card),
       draggable: card ? card.draggable : false,
       hasSaveButton: Boolean(card && card.querySelector('[data-stage-action="save"]')),
       hasRoleChip: Boolean(card && card.querySelector(".sdlc-role-chip")),
+      roleChipDraggable: roleChip ? roleChip.draggable : false,
       hasRoleSelect: Boolean(card && card.querySelector("[data-stage-role-select]")),
       hasDorField: Boolean(card && card.querySelector('[data-stage-field="dor"]')),
     };
@@ -431,8 +433,50 @@ test("sdlc editor renders draggable stage cards with inline role controls", asyn
   expect(result.draggable).toBe(true);
   expect(result.hasSaveButton).toBe(true);
   expect(result.hasRoleChip).toBe(true);
+  expect(result.roleChipDraggable).toBe(true);
   expect(result.hasRoleSelect).toBe(true);
   expect(result.hasDorField).toBe(true);
+});
+
+test("sdlc role reordering sends the updated role order", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    if (typeof showApp !== "function" || typeof openSdlcEditor !== "function" || typeof reorderStageRoles !== "function") return null;
+    showApp("admin", "admin");
+    const requests = [];
+    const detail = {
+      sdlc_id: 9,
+      name: "Delivery",
+      stages: [{
+        sdlc_stage_id: 41,
+        sdlc_id: 9,
+        stage_name: "develop",
+        description: "Build the thing",
+        definition_of_ready: "Specs ready",
+        definition_of_done: "Tests green",
+        sort_order: 1,
+        roles: [{ role_id: 2, title: "Engineer" }, { role_id: 3, title: "QA" }],
+      }],
+    };
+    window.call = async (url, options = {}) => {
+      requests.push({ url, method: options.method || "GET", body: options.body || null });
+      if (url === "/api/roles") {
+        return [{ role_id: 2, title: "Engineer" }, { role_id: 3, title: "QA" }];
+      }
+      if (url === "/api/sdlcs/9") {
+        return detail;
+      }
+      return { status: "ok" };
+    };
+    await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
+    await reorderStageRoles(detail.stages[0], 3, 2);
+    const reorderRequest = requests.find((req) => req.url === "/api/sdlcs/stages/roles/9/41" && req.method === "PUT");
+    return reorderRequest ? JSON.parse(reorderRequest.body) : null;
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.role_ids).toEqual([3, 2]);
 });
 
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {

@@ -774,6 +774,8 @@ Keyboard shortcuts in the board view:
 - the SDLC editor uses draggable stage cards so admins can reorder stages,
   edit ways-of-working / DoR / DoD inline, and add or remove stage roles from
   the same popup
+- stage-role chips are draggable as well, so role order within a stage can be
+  adjusted visually instead of only through CLI commands
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
