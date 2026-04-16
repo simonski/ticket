@@ -214,6 +214,25 @@ effects for their own sake.
 - users can inspect event metadata and comments/actions at each step
 - the view works entirely from current APIs
 
+### Progress
+
+Implemented in the current branch:
+
+- tickets now expose a **History** action in the web ticket modal
+- the history modal renders the ticket journey as a staged track using the
+  current SDLC layout when available
+- users can step backward/forward through events or click any event marker
+- event payload details are visible inline for inspection
+- the view can switch between:
+  - ticket-only history from `/api/tickets/{id}/history`
+  - project history filtered to the current ticket from `/api/projects/{id}/history`
+
+Still open inside phase 3:
+
+- richer animation/polish for the replay path
+- denser comment/action rendering for long project streams
+- optional keyboard shortcuts for stepping through events
+
 ## Cross-cutting polish work
 
 These apply across all phases:

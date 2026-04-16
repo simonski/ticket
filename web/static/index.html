@@ -1092,6 +1092,79 @@
       .ticket-form-actions {
         margin-top: 0.65rem;
       }
+      .history-modal {
+        width: min(980px, 96vw);
+      }
+      .history-toolbar {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 0.7rem 0;
+      }
+      .history-toolbar select {
+        width: auto;
+        min-width: 170px;
+      }
+      .history-track {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin-top: 0.8rem;
+      }
+      .history-stage {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.88);
+        padding: 0.75rem;
+        display: grid;
+        gap: 0.55rem;
+        align-content: start;
+      }
+      .history-stage-title {
+        font-weight: 700;
+        text-transform: lowercase;
+      }
+      .history-role-track {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+      }
+      .history-event-markers,
+      .history-timeline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+      .history-marker {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--ink);
+        padding: 0.22rem 0.55rem;
+        font: inherit;
+        cursor: pointer;
+      }
+      .history-marker.active {
+        border-color: var(--accent);
+        background: rgba(17, 100, 102, 0.08);
+        color: var(--accent);
+      }
+      .history-detail {
+        margin-top: 0.85rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.82);
+        padding: 0.8rem;
+        display: grid;
+        gap: 0.45rem;
+      }
+      .history-payload-grid {
+        display: grid;
+        grid-template-columns: minmax(120px, 180px) 1fr;
+        gap: 0.35rem 0.6rem;
+        font-size: 0.85rem;
+      }
       .agent-list {
         margin-top: 0.7rem;
         max-height: 260px;
@@ -1825,12 +1898,33 @@
             <button id="ticket-delete" class="btn danger" type="button">Delete</button>
             <button id="ticket-close-open" class="btn" type="button">Close</button>
             <button id="ticket-archive" class="btn danger" type="button">Archive</button>
+            <button id="ticket-history" class="btn" type="button">History</button>
             <button id="ticket-analyse" class="btn" type="button">Analyse</button>
           </div>
           <div class="muted">No save button. Changes are persisted as you type.</div>
         </div>
       </div>
     </div>
+      <div id="history-modal-overlay" class="modal-overlay hidden">
+        <div id="history-modal" class="modal history-modal" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <strong id="history-modal-title">Ticket History</strong>
+            <button id="history-close" class="btn" type="button">Close</button>
+          </div>
+          <div class="history-toolbar">
+            <select id="history-source">
+              <option value="ticket">Ticket history</option>
+              <option value="project">Project stream</option>
+            </select>
+            <button id="history-prev" class="btn" type="button">Previous</button>
+            <button id="history-next" class="btn" type="button">Next</button>
+            <div id="history-status" class="muted"></div>
+          </div>
+          <div id="history-track" class="history-track"></div>
+          <div id="history-timeline" class="history-timeline" style="margin-top:0.75rem;"></div>
+          <div id="history-detail" class="history-detail"></div>
+        </div>
+      </div>
       <div id="sdlc-modal-overlay" class="modal-overlay hidden">
         <div id="sdlc-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="sdlc-modal-title">
         <div class="row" style="justify-content:space-between; align-items:center;">
@@ -1974,12 +2068,23 @@
       const settingsSaveBtn = document.getElementById("settings-save");
       const settingsStatusEl = document.getElementById("settings-status");
       const modalOverlay = document.getElementById("modal-overlay");
+      const historyModalOverlay = document.getElementById("history-modal-overlay");
+      const historyModalTitle = document.getElementById("history-modal-title");
+      const historySourceSelect = document.getElementById("history-source");
+      const historyPrevBtn = document.getElementById("history-prev");
+      const historyNextBtn = document.getElementById("history-next");
+      const historyCloseBtn = document.getElementById("history-close");
+      const historyTrackEl = document.getElementById("history-track");
+      const historyTimelineEl = document.getElementById("history-timeline");
+      const historyDetailEl = document.getElementById("history-detail");
+      const historyStatusEl = document.getElementById("history-status");
       const modalTitle = document.getElementById("modal-title");
       const versionOverlay = document.getElementById("version-overlay");
       const dialogOverlay = document.getElementById("dialog-overlay");
       const dialogMessage = document.getElementById("dialog-message");
       const dialogCancel = document.getElementById("dialog-cancel");
       const dialogOK = document.getElementById("dialog-ok");
+      const ticketHistoryBtn = document.getElementById("ticket-history");
       const adminOnlyNodes = Array.from(document.querySelectorAll(".admin-only"));
       const showRegisterBtn = document.getElementById("show-register");
       const registerForm = document.getElementById("register-form");
@@ -2127,6 +2232,7 @@
         closeProjMenu();
         closeProfileMenu();
         closeDialog(false);
+        closeHistoryModal();
         closeModal();
         closeProjModal();
         closeStoryModal();
@@ -3496,6 +3602,10 @@
       let ticketRefreshTimer = null;
       let ticketRefreshPending = false;
       let draft = null;
+      let historyTicket = null;
+      let historyTicketEvents = [];
+      let historyProjectEvents = [];
+      let historySelectedIndex = 0;
       let autosaveTimer = null;
       let recentlySavedTicketIds = new Set();
       let token = localStorage.getItem("task-token") || "";
@@ -6213,6 +6323,147 @@
         restoreModalFocusIfNeeded();
       }
 
+      function closeHistoryModal() {
+        historyModalOverlay.classList.add("hidden");
+        historyTicket = null;
+        historyTicketEvents = [];
+        historyProjectEvents = [];
+        historySelectedIndex = 0;
+        if (historyStatusEl) historyStatusEl.textContent = "";
+        restoreModalFocusIfNeeded();
+      }
+
+      function parseHistoryPayload(event) {
+        if (!event || !event.payload) return {};
+        try {
+          return JSON.parse(event.payload) || {};
+        } catch (_) {
+          return {};
+        }
+      }
+
+      function historyStageForEvent(event, fallbackStage = "") {
+        const payload = parseHistoryPayload(event);
+        return String(payload.to_stage || payload.stage || payload.new_stage || payload.from_stage || fallbackStage || "");
+      }
+
+      function historyEventLabel(event) {
+        return String(event && event.event_type ? event.event_type : "event").replaceAll("_", " ");
+      }
+
+      async function loadHistoryData(ticket) {
+        if (!ticket || !ticket.ticket_id) return;
+        const ticketID = String(ticket.ticket_id);
+        const projectID = Number(ticket.project_id || selectedProjectID() || 0);
+        const [ticketEvents, projectEvents] = await Promise.all([
+          call(`/api/tickets/${ticketID}/history?limit=200`, { headers: headers() }).catch(() => []),
+          projectID ? call(`/api/projects/${projectID}/history?limit=200`, { headers: headers() }).catch(() => []) : Promise.resolve([]),
+        ]);
+        historyTicketEvents = Array.isArray(ticketEvents) ? ticketEvents : [];
+        historyProjectEvents = (Array.isArray(projectEvents) ? projectEvents : []).filter((event) => String(event.ticket_id || "") === ticketID);
+      }
+
+      function currentHistoryEvents() {
+        return historySourceSelect && historySourceSelect.value === "project" ? historyProjectEvents : historyTicketEvents;
+      }
+
+      function renderHistoryDetail(event) {
+        if (!historyDetailEl) return;
+        if (!event) {
+          historyDetailEl.innerHTML = '<div class="muted">No history events for this ticket yet.</div>';
+          return;
+        }
+        const payload = parseHistoryPayload(event);
+        const entries = Object.entries(payload);
+        historyDetailEl.innerHTML = `
+          <div><strong>${escape(historyEventLabel(event))}</strong></div>
+          <div class="muted">${escape(event.created_at || "")}${event.created_by ? ` · ${escape(event.created_by)}` : ""}</div>
+          ${entries.length ? `<div class="history-payload-grid">${entries.map(([key, value]) => `<div class="muted">${escape(key)}</div><div>${escape(typeof value === "object" ? JSON.stringify(value) : String(value))}</div>`).join("")}</div>` : '<div class="muted">No event payload.</div>'}
+        `;
+      }
+
+      function renderHistoryModal() {
+        if (!historyTrackEl || !historyTimelineEl) return;
+        const ticket = historyTicket;
+        const events = currentHistoryEvents();
+        const project = currentProjectData();
+        const ticketMap = new Map(tickets.map((item) => [String(item.ticket_id), item]));
+        const effectiveSdlcID = effectiveSdlcIDForTicket(ticket, ticketMap, project);
+        const sdlcDetail = effectiveSdlcID ? backlogSdlcDetails.get(String(effectiveSdlcID)) || null : null;
+        const stageDefs = sortedSdlcStages(sdlcDetail, ticket ? [ticket] : []);
+        const selectedEvent = events[historySelectedIndex] || null;
+        if (historyPrevBtn) historyPrevBtn.disabled = historySelectedIndex <= 0;
+        if (historyNextBtn) historyNextBtn.disabled = historySelectedIndex >= events.length - 1 || !events.length;
+        if (historyStatusEl) {
+          historyStatusEl.textContent = events.length
+            ? `${historySelectedIndex + 1}/${events.length} events`
+            : "No events";
+        }
+        historyTrackEl.innerHTML = "";
+        for (const stage of stageDefs) {
+          const stageName = String(stage.stage_name || "design");
+          const column = document.createElement("section");
+          column.className = "history-stage";
+          column.innerHTML = `<div class="history-stage-title">${escape(stageName)}</div>`;
+          if ((stage.roles || []).length) {
+            const roleTrack = document.createElement("div");
+            roleTrack.className = "history-role-track";
+            roleTrack.innerHTML = (stage.roles || []).map((role) => `<span class="backlog-role-chip">${escape(String(role.title || role.name || `Role #${role.role_id}`))}</span>`).join("");
+            column.appendChild(roleTrack);
+          }
+          const markers = document.createElement("div");
+          markers.className = "history-event-markers";
+          events.forEach((event, index) => {
+            if (historyStageForEvent(event, ticket && ticket.stage).toLowerCase() !== stageName.toLowerCase()) return;
+            const marker = document.createElement("button");
+            marker.className = `history-marker${selectedEvent === event ? " active" : ""}`;
+            marker.type = "button";
+            marker.textContent = `${index + 1}. ${historyEventLabel(event)}`;
+            marker.addEventListener("click", () => {
+              historySelectedIndex = index;
+              renderHistoryModal();
+            });
+            markers.appendChild(marker);
+          });
+          if (!markers.childElementCount) {
+            markers.innerHTML = '<span class="muted">No events</span>';
+          }
+          column.appendChild(markers);
+          historyTrackEl.appendChild(column);
+        }
+        historyTimelineEl.innerHTML = "";
+        events.forEach((event, index) => {
+          const button = document.createElement("button");
+          button.className = `history-marker${selectedEvent === event ? " active" : ""}`;
+          button.type = "button";
+          button.textContent = `${index + 1}. ${historyEventLabel(event)}`;
+          button.addEventListener("click", () => {
+            historySelectedIndex = index;
+            renderHistoryModal();
+          });
+          historyTimelineEl.appendChild(button);
+        });
+        renderHistoryDetail(selectedEvent);
+      }
+
+      async function openTicketHistoryModal(ticket) {
+        if (!ticket || !ticket.ticket_id) return;
+        historyTicket = structuredClone(ticket);
+        historySelectedIndex = 0;
+        if (historySourceSelect) historySourceSelect.value = "ticket";
+        if (historyModalTitle) historyModalTitle.textContent = `${ticket.key || ticket.ticket_id} history`;
+        historyModalOverlay.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+        mainContent.classList.add("modal-open");
+        if (historyTrackEl) historyTrackEl.innerHTML = '<div class="loading-spinner">Loading history...</div>';
+        if (historyTimelineEl) historyTimelineEl.innerHTML = "";
+        if (historyDetailEl) historyDetailEl.innerHTML = "";
+        await loadBacklogSdlcData();
+        await loadHistoryData(ticket);
+        renderHistoryModal();
+        trapModalFocus(historyModalOverlay, historySourceSelect || historyPrevBtn || historyCloseBtn);
+      }
+
       function openNew(initial = {}) {
         if (!selectedProjectID()) return;
         const currentProject = projects.find((project) => Number(project.project_id) === Number(selectedProjectID()));
@@ -6292,6 +6543,7 @@
         document.getElementById("ticket-close-open").textContent = ticket.open === false ? "Open" : "Close";
         document.getElementById("ticket-archive").textContent = ticket.archived ? "Unarchive" : "Archive";
         document.getElementById("ticket-delete").disabled = !ticket.ticket_id;
+        if (ticketHistoryBtn) ticketHistoryBtn.disabled = !ticket.ticket_id;
         ticketAnalyseBtn.style.display = ticket.type === "epic" ? "" : "none";
         ticketAnalyseBtn.disabled = !(ticket.ticket_id && ticket.type === "epic");
         // Parent link
@@ -6937,6 +7189,38 @@
         const archived = !draft.ticket.archived;
         await setTicketArchivedByID(draft.ticket.ticket_id, archived, true);
       });
+      if (ticketHistoryBtn) {
+        ticketHistoryBtn.addEventListener("click", async () => {
+          if (!draft || !draft.ticket) return;
+          await openTicketHistoryModal(draft.ticket);
+        });
+      }
+      if (historyCloseBtn) historyCloseBtn.addEventListener("click", closeHistoryModal);
+      if (historyModalOverlay) {
+        historyModalOverlay.addEventListener("click", (event) => {
+          if (event.target === historyModalOverlay) closeHistoryModal();
+        });
+      }
+      if (historySourceSelect) {
+        historySourceSelect.addEventListener("change", () => {
+          historySelectedIndex = 0;
+          renderHistoryModal();
+        });
+      }
+      if (historyPrevBtn) {
+        historyPrevBtn.addEventListener("click", () => {
+          if (historySelectedIndex <= 0) return;
+          historySelectedIndex -= 1;
+          renderHistoryModal();
+        });
+      }
+      if (historyNextBtn) {
+        historyNextBtn.addEventListener("click", () => {
+          if (historySelectedIndex >= currentHistoryEvents().length - 1) return;
+          historySelectedIndex += 1;
+          renderHistoryModal();
+        });
+      }
       ticketAnalyseBtn.addEventListener("click", async () => {
         if (!draft || !draft.ticket || draft.ticket.type !== "epic") return;
         try {

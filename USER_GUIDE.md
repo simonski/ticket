@@ -774,6 +774,9 @@ Keyboard shortcuts in the board view:
 - the new backlog perspective groups tickets by effective SDLC, lays out the
   ordered stage lanes for each workflow, and exposes quick SDLC/stage/role/status
   filters without needing any new server endpoints
+- each ticket now has a History view that replays its journey across the SDLC as
+  a stage track, with step-through controls and a switch between ticket-only and
+  project-stream history using the existing history APIs
 - the SDLC editor uses draggable stage cards so admins can reorder stages,
   edit ways-of-working / DoR / DoD inline, and add or remove stage roles from
   the same popup

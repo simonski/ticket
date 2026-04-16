@@ -636,6 +636,108 @@ test("backlog perspective groups tickets by effective sdlc and filters by role",
   expect(result.filteredTitles).toEqual(["Build rollout"]);
 });
 
+test("ticket history modal renders a staged replay and filters project history to the ticket", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    if (typeof showApp !== "function" || typeof openTicketHistoryModal !== "function") return null;
+    showApp("admin", "admin");
+    projects = [{ project_id: 1, prefix: "OPS", title: "Ops Console", sdlc_id: 9 }];
+    setSelectedProjectID(1);
+    tickets = [{
+      ticket_id: 201,
+      project_id: 1,
+      title: "Ship release",
+      key: "OPS-201",
+      type: "task",
+      stage: "test",
+      state: "active",
+      sdlc_id: 9,
+      role_id: 4,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-03T00:00:00Z",
+    }];
+    window.call = async (url) => {
+      if (url === "/api/sdlcs") return [{ sdlc_id: 9, name: "Delivery Flow" }];
+      if (url === "/api/sdlcs/9") {
+        return {
+          sdlc_id: 9,
+          name: "Delivery Flow",
+          stages: [
+            { sdlc_stage_id: 41, stage_name: "design", sort_order: 1, roles: [{ role_id: 2, title: "Architect" }] },
+            { sdlc_stage_id: 42, stage_name: "develop", sort_order: 2, roles: [{ role_id: 3, title: "Engineer" }] },
+            { sdlc_stage_id: 43, stage_name: "test", sort_order: 3, roles: [{ role_id: 4, title: "QA" }] },
+          ],
+        };
+      }
+      if (url === "/api/tickets/201/history?limit=200") {
+        return [
+          {
+            id: 1,
+            ticket_id: "201",
+            event_type: "ticket_created",
+            payload: JSON.stringify({ stage: "design", state: "idle" }),
+            created_at: "2026-01-01T00:00:00Z",
+            created_by: "alice",
+          },
+          {
+            id: 2,
+            ticket_id: "201",
+            event_type: "ticket_lifecycle_changed",
+            payload: JSON.stringify({ from_stage: "develop", to_stage: "test", to_state: "active" }),
+            created_at: "2026-01-03T00:00:00Z",
+            created_by: "alice",
+          },
+        ];
+      }
+      if (url === "/api/projects/1/history?limit=200") {
+        return [
+          {
+            id: 10,
+            ticket_id: "201",
+            event_type: "comment_added",
+            payload: JSON.stringify({ comment_id: 77, new_stage: "test" }),
+            created_at: "2026-01-04T00:00:00Z",
+            created_by: "bob",
+          },
+          {
+            id: 11,
+            ticket_id: "999",
+            event_type: "comment_added",
+            payload: JSON.stringify({ comment_id: 88, new_stage: "done" }),
+            created_at: "2026-01-05T00:00:00Z",
+            created_by: "carol",
+          },
+        ];
+      }
+      return [];
+    };
+
+    await openTicketHistoryModal(tickets[0]);
+    document.getElementById("history-next").click();
+    const detailAfterNext = document.getElementById("history-detail")?.textContent || "";
+    const stageTitles = Array.from(document.querySelectorAll(".history-stage-title")).map((el) => el.textContent.trim());
+    const source = document.getElementById("history-source");
+    source.value = "project";
+    source.dispatchEvent(new Event("change", { bubbles: true }));
+    const projectTimeline = Array.from(document.querySelectorAll("#history-timeline .history-marker")).map((el) => el.textContent.trim());
+
+    return {
+      title: document.getElementById("history-modal-title")?.textContent?.trim() || "",
+      stageTitles,
+      detailAfterNext,
+      projectTimeline,
+    };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.title).toContain("OPS-201");
+  expect(result.stageTitles).toEqual(["design", "develop", "test"]);
+  expect(result.detailAfterNext).toContain("ticket lifecycle changed");
+  expect(result.detailAfterNext).toContain("to_stage");
+  expect(result.projectTimeline).toEqual(["1. comment added"]);
+});
+
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
   await page.goto("/");
 
