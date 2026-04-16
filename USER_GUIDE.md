@@ -776,6 +776,13 @@ Keyboard shortcuts in the board view:
   the same popup
 - stage-role chips are draggable as well, so role order within a stage can be
   adjusted visually instead of only through CLI commands
+- the SDLC editor now keeps an explicit stage/role selection and supports
+  keyboard shortcuts for common authoring flows:
+  - `N` focuses the new-stage composer
+  - `E` focuses the selected stage title field
+  - `Delete` / `Backspace` removes the selected role or stage after confirmation
+  - `Left` / `Right` moves between stages
+  - `Up` / `Down` moves between roles in the selected stage
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command

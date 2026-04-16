@@ -88,6 +88,27 @@ closer to Trello than to a form dump.
 - keyboard shortcuts exist for the highest-frequency actions
 - Playwright covers create, edit, reorder, assign, remove
 
+### Progress
+
+Implemented in the current branch:
+
+- SDLC stages now render in a more board-like workspace instead of a plain
+  vertical list
+- stage cards and role chips both support visual ordering
+- stage/role selection is explicit and visible
+- keyboard shortcuts now support:
+  - `N` focus the new-stage composer
+  - `E` focus the selected stage title field
+  - `Delete` / `Backspace` remove the selected role or stage after confirmation
+  - `←` / `→` move between stages
+  - `↑` / `↓` move through roles in the selected stage
+
+Still open inside phase 1:
+
+- broader keyboard shortcuts for save/assign flows
+- more discoverable hover/focus affordances
+- fuller Playwright coverage for destructive shortcut paths
+
 ## Phase 2 — backlog view showing ticket position in the SDLC
 
 ### Outcome

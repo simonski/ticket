@@ -740,15 +740,32 @@
       }
 
       .ticket.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+      #sdlc-stages-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 0.75rem;
+        align-items: start;
+      }
+      .sdlc-shortcuts {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0.5rem 0;
+      }
       .sdlc-stage-card {
-        margin-top: 0.55rem;
         padding: 0.75rem;
         border: 1px solid var(--line);
         border-radius: 12px;
         background: var(--ticket);
+        min-height: 100%;
       }
       .sdlc-stage-card[draggable="true"] { cursor: grab; }
       .sdlc-stage-card.drag-over { outline: 2px dashed var(--accent); }
+      .sdlc-stage-card.selected {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+      }
       .sdlc-stage-card-header {
         display: flex;
         justify-content: space-between;
@@ -781,6 +798,10 @@
       }
       .sdlc-role-chip[draggable="true"] { cursor: grab; }
       .sdlc-role-chip.drag-over { outline: 2px dashed var(--accent); }
+      .sdlc-role-chip.selected {
+        background: color-mix(in srgb, var(--accent) 18%, var(--line));
+        color: var(--fg, #111);
+      }
       .sdlc-role-chip button {
         border: none;
         background: transparent;
@@ -788,6 +809,12 @@
         cursor: pointer;
         padding: 0;
         line-height: 1;
+      }
+      .sdlc-stage-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.5rem;
       }
 
       .search-overlay {
@@ -1658,7 +1685,11 @@
           <div id="sdlc-status" class="muted"></div>
           <div id="sdlc-stages-section" style="display:none;">
             <strong>Stages</strong>
-            <div id="sdlc-stages-list" style="margin:0.4rem 0;"></div>
+            <div class="sdlc-shortcuts">
+              <div class="muted">Shortcuts: N new stage · E edit selected · Delete remove selected · ←/→ stages · ↑/↓ roles</div>
+              <button id="sdlc-stage-focus-new" class="btn" type="button">New Stage</button>
+            </div>
+            <div id="sdlc-stages-list"></div>
             <div class="row" style="gap:0.3rem;">
               <input id="sdlc-stage-name" placeholder="stage name" autocomplete="off" style="flex:1;" />
               <input id="sdlc-stage-order" type="number" placeholder="order" style="width:5rem;" />
@@ -4117,6 +4148,8 @@
       let sdlcs = [];
       let selectedSDLCID = 0;
       let selectedSdlcDetail = null;
+      let selectedSdlcStageID = 0;
+      let selectedSdlcRoleID = 0;
       const sdlcListEl = document.getElementById("sdlc-list");
       const sdlcBrowserStatusEl = document.getElementById("sdlcs-browser-status");
       const sdlcModalOverlay = document.getElementById("sdlc-modal-overlay");
@@ -4132,12 +4165,127 @@
       const sdlcStageNameInput = document.getElementById("sdlc-stage-name");
       const sdlcStageOrderInput = document.getElementById("sdlc-stage-order");
       const sdlcStageAddBtn = document.getElementById("sdlc-stage-add");
+      const sdlcStageFocusNewBtn = document.getElementById("sdlc-stage-focus-new");
       const sdlcStageRoleSelect = document.getElementById("sdlc-stage-role");
       const sdlcCreateBtn = document.getElementById("sdlcs-create");
 
       function setSDLCStatus(msg = "", isError = false) {
         sdlcStatusEl.textContent = msg;
         sdlcStatusEl.style.color = isError ? "var(--danger,#c0392b)" : "var(--muted)";
+      }
+
+      function sdlcStages() {
+        return Array.isArray(selectedSdlcDetail && selectedSdlcDetail.stages) ? selectedSdlcDetail.stages : [];
+      }
+
+      function selectedStageData() {
+        return sdlcStages().find((stage) => Number(stage.sdlc_stage_id) === Number(selectedSdlcStageID)) || null;
+      }
+
+      function ensureSdlcSelection() {
+        const stages = sdlcStages();
+        if (!stages.length) {
+          selectedSdlcStageID = 0;
+          selectedSdlcRoleID = 0;
+          return;
+        }
+        if (!stages.some((stage) => Number(stage.sdlc_stage_id) === Number(selectedSdlcStageID))) {
+          selectedSdlcStageID = Number(stages[0].sdlc_stage_id);
+          selectedSdlcRoleID = 0;
+        }
+        const stage = selectedStageData();
+        const roles = Array.isArray(stage && stage.roles) ? stage.roles : [];
+        if (selectedSdlcRoleID && !roles.some((role) => Number(role.role_id) === Number(selectedSdlcRoleID))) {
+          selectedSdlcRoleID = 0;
+        }
+      }
+
+      function syncSdlcSelectionStyles() {
+        document.querySelectorAll(".sdlc-stage-card").forEach((card) => {
+          card.classList.toggle("selected", Number(card.dataset.stageId) === Number(selectedSdlcStageID));
+        });
+        document.querySelectorAll(".sdlc-role-chip").forEach((chip) => {
+          const matchesRole = Number(chip.dataset.roleId) === Number(selectedSdlcRoleID);
+          const stageCard = chip.closest(".sdlc-stage-card");
+          const matchesStage = stageCard && Number(stageCard.dataset.stageId) === Number(selectedSdlcStageID);
+          chip.classList.toggle("selected", Boolean(matchesStage && matchesRole));
+        });
+      }
+
+      function selectSdlcStage(stageID, options = {}) {
+        selectedSdlcStageID = Number(stageID || 0);
+        if (options.clearRole !== false) selectedSdlcRoleID = 0;
+        ensureSdlcSelection();
+        syncSdlcSelectionStyles();
+      }
+
+      function selectSdlcRole(stageID, roleID) {
+        selectedSdlcStageID = Number(stageID || 0);
+        selectedSdlcRoleID = Number(roleID || 0);
+        ensureSdlcSelection();
+        syncSdlcSelectionStyles();
+      }
+
+      function focusNewStageComposer() {
+        if (!selectedSDLCID) return;
+        if (!sdlcStageOrderInput.value) {
+          sdlcStageOrderInput.value = String(sdlcStages().length);
+        }
+        sdlcStageNameInput.focus();
+        sdlcStageNameInput.select();
+      }
+
+      function focusSelectedStageEditor() {
+        const stage = selectedStageData();
+        if (!stage) return;
+        const input = sdlcStagesList.querySelector(`.sdlc-stage-card[data-stage-id="${stage.sdlc_stage_id}"] [data-stage-field="name"]`);
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }
+
+      function moveSelectedStage(delta) {
+        const stages = sdlcStages();
+        if (!stages.length) return;
+        const currentIndex = Math.max(0, stages.findIndex((stage) => Number(stage.sdlc_stage_id) === Number(selectedSdlcStageID)));
+        const nextIndex = Math.min(stages.length - 1, Math.max(0, currentIndex + delta));
+        selectSdlcStage(stages[nextIndex].sdlc_stage_id);
+      }
+
+      function moveSelectedRole(delta) {
+        const stage = selectedStageData();
+        const rolesForStage = Array.isArray(stage && stage.roles) ? stage.roles : [];
+        if (!stage || !rolesForStage.length) return;
+        if (!selectedSdlcRoleID) {
+          selectSdlcRole(stage.sdlc_stage_id, rolesForStage[0].role_id);
+          return;
+        }
+        const currentIndex = Math.max(0, rolesForStage.findIndex((role) => Number(role.role_id) === Number(selectedSdlcRoleID)));
+        const nextIndex = Math.min(rolesForStage.length - 1, Math.max(0, currentIndex + delta));
+        selectSdlcRole(stage.sdlc_stage_id, rolesForStage[nextIndex].role_id);
+      }
+
+      async function deleteSelectedSdlcItem() {
+        const stage = selectedStageData();
+        if (!stage) return;
+        if (selectedSdlcRoleID) {
+          const role = (stage.roles || []).find((entry) => Number(entry.role_id) === Number(selectedSdlcRoleID));
+          if (!role) return;
+          const ok = await uiConfirm(`Remove role ${role.title || role.role_id} from ${stage.stage_name}?`, "Remove");
+          if (!ok) return;
+          await call(`/api/sdlcs/stages/roles/${selectedSDLCID}/${stage.sdlc_stage_id}/${role.role_id}`, {
+            method: "DELETE",
+            headers: headers(),
+          });
+          selectedSdlcRoleID = 0;
+          await loadSdlcStages(selectedSDLCID);
+          return;
+        }
+        const ok = await uiConfirm(`Delete stage ${stage.stage_name}?`, "Delete");
+        if (!ok) return;
+        await call(`/api/sdlcs/stages/${stage.sdlc_stage_id}`, { method: "DELETE", headers: headers() });
+        await loadSdlcStages(selectedSDLCID);
       }
 
       async function populateStageRoleSelector() {
@@ -4198,6 +4346,8 @@
       async function openSdlcEditor(wf = null) {
         selectedSDLCID = 0;
         selectedSdlcDetail = null;
+        selectedSdlcStageID = 0;
+        selectedSdlcRoleID = 0;
         sdlcNameInput.value = "";
         sdlcDescInput.value = "";
         setSDLCStatus("");
@@ -4229,9 +4379,13 @@
         try {
           const detail = await call(`/api/sdlcs/${wfID}`, { headers: headers() });
           selectedSdlcDetail = detail;
+          ensureSdlcSelection();
           renderSdlcStages(detail);
+          syncSdlcSelectionStyles();
         } catch (e) {
           selectedSdlcDetail = null;
+          selectedSdlcStageID = 0;
+          selectedSdlcRoleID = 0;
           sdlcStagesList.innerHTML = '<div class="muted">Failed to load stages</div>';
         }
       }
@@ -4247,6 +4401,7 @@
           const card = document.createElement("article");
           card.className = "sdlc-stage-card";
           card.draggable = true;
+          card.tabIndex = 0;
           card.dataset.stageId = String(stage.sdlc_stage_id);
           card.innerHTML = `
             <div class="sdlc-stage-card-header">
@@ -4288,6 +4443,8 @@
             event.dataTransfer.setData("text/sdlc-stage-id", String(stage.sdlc_stage_id));
           });
           card.addEventListener("dragend", () => card.classList.remove("drag-over"));
+          card.addEventListener("click", () => selectSdlcStage(stage.sdlc_stage_id));
+          card.addEventListener("focus", () => selectSdlcStage(stage.sdlc_stage_id));
           card.addEventListener("dragover", (event) => {
             event.preventDefault();
             card.classList.add("drag-over");
@@ -4324,6 +4481,7 @@
           });
           sdlcStagesList.appendChild(card);
         }
+        syncSdlcSelectionStyles();
       }
 
       function renderStageRoleSelector(select) {
@@ -4349,9 +4507,15 @@
           const chip = document.createElement("span");
           chip.className = "sdlc-role-chip";
           chip.draggable = true;
+          chip.tabIndex = 0;
           chip.dataset.roleId = String(role.role_id);
           chip.title = "Drag to reorder role priority";
           chip.innerHTML = `${escape(role.title || `Role #${role.role_id}`)} <button type="button" aria-label="Remove role">&times;</button>`;
+          chip.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectSdlcRole(stage.sdlc_stage_id, role.role_id);
+          });
+          chip.addEventListener("focus", () => selectSdlcRole(stage.sdlc_stage_id, role.role_id));
           chip.addEventListener("dragstart", (event) => {
             event.dataTransfer.setData("text/sdlc-role-id", String(role.role_id));
           });
@@ -4369,6 +4533,7 @@
             await reorderStageRoles(stage, draggedRoleID, Number(role.role_id));
           });
           chip.querySelector("button").addEventListener("click", async () => {
+            selectedSdlcRoleID = Number(role.role_id);
             await call(`/api/sdlcs/stages/roles/${selectedSDLCID}/${stage.sdlc_stage_id}/${role.role_id}`, {
               method: "DELETE",
               headers: headers(),
@@ -4455,6 +4620,7 @@
             await populateStageRoleSelector();
             await loadSdlcStages(selectedSDLCID);
             setSDLCStatus(`Created sdlc #${created.sdlc_id}`);
+            focusNewStageComposer();
           }
           await loadSdlcs();
         } catch (err) { setSDLCStatus(err.message, true); }
@@ -4476,7 +4642,7 @@
         if (!selectedSDLCID) return;
         const stageName = sdlcStageNameInput.value.trim();
         if (!stageName) { setSDLCStatus("Stage name is required.", true); return; }
-        const sortOrder = Number(sdlcStageOrderInput.value || 0);
+        const sortOrder = Number(sdlcStageOrderInput.value || sdlcStages().length || 0);
         const roleID = sdlcStageRoleSelect ? Number(sdlcStageRoleSelect.value || 0) : 0;
         try {
           const createdStage = await call(`/api/sdlcs/${selectedSDLCID}/stages`, {
@@ -4492,11 +4658,22 @@
             });
           }
           sdlcStageNameInput.value = "";
-          sdlcStageOrderInput.value = "";
+          sdlcStageOrderInput.value = String(sdlcStages().length + 1);
           if (sdlcStageRoleSelect) sdlcStageRoleSelect.value = "";
           await loadSdlcStages(selectedSDLCID);
+          selectSdlcStage(createdStage.sdlc_stage_id);
           setSDLCStatus("");
         } catch (err) { setSDLCStatus(err.message, true); }
+      });
+
+      if (sdlcStageFocusNewBtn) {
+        sdlcStageFocusNewBtn.addEventListener("click", focusNewStageComposer);
+      }
+
+      sdlcStageNameInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+        event.preventDefault();
+        sdlcStageAddBtn.click();
       });
 
       sdlcModalCloseBtn.addEventListener("click", () => {
@@ -6443,6 +6620,39 @@
         }
         lastShiftTime = 0;
 
+        const activeTag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
+        const activeInSdlcModal = !!(document.activeElement && sdlcModalOverlay.contains(document.activeElement));
+        const typingInSdlcModal = activeInSdlcModal && (activeTag === "input" || activeTag === "textarea" || activeTag === "select");
+
+        if (!sdlcModalOverlay.classList.contains("hidden") && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          const key = event.key;
+          if (!typingInSdlcModal && (key === "ArrowLeft" || key === "ArrowRight")) {
+            event.preventDefault();
+            moveSelectedStage(key === "ArrowLeft" ? -1 : 1);
+            return;
+          }
+          if (!typingInSdlcModal && (key === "ArrowUp" || key === "ArrowDown")) {
+            event.preventDefault();
+            moveSelectedRole(key === "ArrowUp" ? -1 : 1);
+            return;
+          }
+          if (!typingInSdlcModal && key.toLowerCase() === "n") {
+            event.preventDefault();
+            focusNewStageComposer();
+            return;
+          }
+          if (!typingInSdlcModal && key.toLowerCase() === "e") {
+            event.preventDefault();
+            focusSelectedStageEditor();
+            return;
+          }
+          if (!typingInSdlcModal && (key === "Delete" || key === "Backspace")) {
+            event.preventDefault();
+            void deleteSelectedSdlcItem();
+            return;
+          }
+        }
+
         if (!perspectiveOverlay.classList.contains("hidden")) {
           const visible = visiblePerspectiveItems();
           if (event.key === "ArrowDown") {
@@ -6465,7 +6675,7 @@
           }
         }
 
-        const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
+        const tag = activeTag;
         const inField = tag === "input" || tag === "textarea" || tag === "select";
         const modalOpen = !modalOverlay.classList.contains("hidden");
 

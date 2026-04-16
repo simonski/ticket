@@ -479,6 +479,56 @@ test("sdlc role reordering sends the updated role order", async ({ page }) => {
   expect(result.role_ids).toEqual([3, 2]);
 });
 
+test("sdlc editor keyboard shortcuts focus the new stage input and selected stage field", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    if (typeof showApp !== "function" || typeof openSdlcEditor !== "function") return null;
+    showApp("admin", "admin");
+    window.call = async (url) => {
+      if (url === "/api/roles") {
+        return [{ role_id: 2, title: "Engineer" }];
+      }
+      if (url === "/api/sdlcs/9") {
+        return {
+          sdlc_id: 9,
+          name: "Delivery",
+          stages: [{
+            sdlc_stage_id: 41,
+            sdlc_id: 9,
+            stage_name: "develop",
+            description: "Build the thing",
+            definition_of_ready: "Specs ready",
+            definition_of_done: "Tests green",
+            sort_order: 1,
+            roles: [{ role_id: 2, title: "Engineer" }],
+          }],
+        };
+      }
+      return [];
+    };
+    await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
+    document.body.focus();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true }));
+    const newStageFocused = document.activeElement && document.activeElement.id === "sdlc-stage-name";
+    const selectedCardEl = document.querySelector(".sdlc-stage-card");
+    if (selectedCardEl) selectedCardEl.focus();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true }));
+    const selectedField = document.activeElement;
+    const selectedCard = document.querySelector(".sdlc-stage-card.selected");
+    return {
+      newStageFocused,
+      selectedFieldName: selectedField ? selectedField.getAttribute("data-stage-field") : null,
+      selectedStageId: selectedCard ? selectedCard.dataset.stageId : null,
+    };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.newStageFocused).toBe(true);
+  expect(result.selectedFieldName).toBe("name");
+  expect(result.selectedStageId).toBe("41");
+});
+
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
   await page.goto("/");
 
