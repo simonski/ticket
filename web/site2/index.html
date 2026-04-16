@@ -20,8 +20,8 @@
             --danger: #d84d34;
             --warning: #d08b1f;
             --shadow: 0 22px 48px rgba(53, 37, 24, 0.08);
-            --radius: 26px;
-            --radius-sm: 18px;
+            --radius: 12px;
+            --radius-sm: 8px;
         }
 
         * {
@@ -48,7 +48,7 @@
 
         button {
             border: 0;
-            border-radius: 999px;
+            border-radius: 12px;
             padding: 8px 14px;
             cursor: pointer;
             color: var(--text);
@@ -87,7 +87,7 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            border-radius: 999px;
+            border-radius: 10px;
             padding: 4px 8px;
             background: rgba(255, 122, 26, 0.1);
             color: #8c3d00;
@@ -116,7 +116,7 @@
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.9);
             color: var(--text);
-            border-radius: 999px;
+            border-radius: 10px;
             padding: 8px 32px 8px 12px;
             cursor: pointer;
             font-size: 13px;
@@ -138,7 +138,7 @@
             background: rgba(255, 250, 244, 0.95);
             border: 1px solid var(--line);
             box-shadow: var(--shadow);
-            border-radius: 36px;
+            border-radius: 16px;
             padding: 32px;
             backdrop-filter: blur(10px);
         }
@@ -178,7 +178,7 @@
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.92);
             color: var(--text);
-            border-radius: 14px;
+            border-radius: 8px;
             padding: 10px 12px;
         }
 
@@ -224,15 +224,15 @@
         }
 
         .brand {
-            display: grid;
-            gap: 6px;
+            display: flex;
+            align-items: center;
         }
 
-        .brand h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 800;
-            letter-spacing: -0.04em;
+        .brand-mark {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
         }
 
         .nav {
@@ -246,7 +246,7 @@
             gap: 8px;
             text-align: left;
             justify-content: flex-start;
-            border-radius: 14px;
+            border-radius: 8px;
             padding: 6px 8px;
             background: rgba(255, 255, 255, 0.5);
             border: 1px solid transparent;
@@ -312,6 +312,26 @@
             flex-wrap: wrap;
         }
 
+        .project-menu-button {
+            min-width: 220px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+        .project-menu-button::after {
+            content: "▾";
+            color: var(--muted);
+        }
+
+        .project-dropdown {
+            left: 0;
+            right: auto;
+        }
+
         .header-right {
             display: flex;
             align-items: center;
@@ -345,7 +365,7 @@
             gap: 4px;
             background: rgba(255, 250, 244, 0.98);
             border: 1px solid var(--line);
-            border-radius: 18px;
+            border-radius: 10px;
             box-shadow: var(--shadow);
         }
 
@@ -374,7 +394,7 @@
         .notice {
             margin: 0 22px;
             padding: 12px 14px;
-            border-radius: 14px;
+            border-radius: 8px;
             border: 1px solid var(--line);
             background: rgba(15, 26, 43, 0.74);
             color: var(--muted);
@@ -475,7 +495,7 @@
         .entity-card,
         .ticket-card,
         .stage-card {
-            border-radius: 22px;
+            border-radius: 10px;
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.78);
             padding: 12px;
@@ -712,9 +732,12 @@
     <div id="app-shell" class="app-layout hidden">
         <header class="topbar">
             <div class="topbar-controls">
-                <label class="chip" for="global-project-select">Board project</label>
-                <div class="select-shell">
-                    <select id="global-project-select"></select>
+                <div class="account-menu">
+                    <button id="project-menu-button" type="button" class="project-menu-button" aria-haspopup="true" aria-expanded="false">Projects</button>
+                    <div id="project-menu-dropdown" class="account-dropdown project-dropdown">
+                        <div id="project-menu-list"></div>
+                        <button id="project-create-link" type="button" class="menu-item">+ Create project</button>
+                    </div>
                 </div>
             </div>
             <div class="header-right">
@@ -734,7 +757,7 @@
         <div class="shell">
             <aside class="sidebar">
                 <div class="brand">
-                    <h1>site2</h1>
+                    <div class="brand-mark" aria-hidden="true"></div>
                 </div>
                 <nav class="nav" id="main-nav">
                     <button type="button" data-view="tickets" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg></span><span>Board</span></button>
@@ -1163,7 +1186,10 @@
             loginError: document.getElementById("login-error"),
             appShell: document.getElementById("app-shell"),
             appNotice: document.getElementById("app-notice"),
-            projectSelect: document.getElementById("global-project-select"),
+            projectMenuButton: document.getElementById("project-menu-button"),
+            projectMenuDropdown: document.getElementById("project-menu-dropdown"),
+            projectMenuList: document.getElementById("project-menu-list"),
+            projectCreateLink: document.getElementById("project-create-link"),
             mainNav: document.getElementById("main-nav"),
             accountMenuButton: document.getElementById("account-menu-button"),
             accountMenuDropdown: document.getElementById("account-menu-dropdown"),
@@ -1449,10 +1475,21 @@
             });
         }
 
-        function populateProjectSelect() {
-            els.projectSelect.innerHTML = state.projects.length
-                ? state.projects.map((project) => optionHTML(project.id, project.title + " (" + project.prefix + ")", project.id === state.selectedProjectID)).join("")
-                : "<option value=\"\">No projects</option>";
+        function renderProjectMenu() {
+            const current = getCurrentProject();
+            els.projectMenuButton.textContent = current ? (current.title + " (" + current.prefix + ")") : "Projects";
+            const otherProjects = state.projects.filter((project) => project.id !== state.selectedProjectID);
+            els.projectMenuList.innerHTML = otherProjects.length
+                ? otherProjects.map((project) => "<button type=\"button\" class=\"menu-item\" data-project-switch=\"" + project.id + "\">" + escapeHTML(project.title + " (" + project.prefix + ")") + "</button>").join("")
+                : "<div class=\"account-name\">No other projects</div>";
+        }
+
+        async function selectProject(projectID) {
+            state.selectedProjectID = Number(projectID);
+            state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
+            populateTicketTypeAndStageSelects();
+            await loadTickets();
+            renderAll();
         }
 
         function populateSdlcSelects() {
@@ -1556,7 +1593,7 @@
         async function refreshAll() {
             await loadStatus();
             await Promise.all([loadSdlcs(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
-            populateProjectSelect();
+            renderProjectMenu();
             populateSdlcSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
@@ -1630,7 +1667,7 @@
         }
 
         function renderAll() {
-            populateProjectSelect();
+            renderProjectMenu();
             populateSdlcSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
@@ -1890,7 +1927,7 @@
                 state.selectedProjectID = Number(card.dataset.projectId);
                 const project = getCurrentProject();
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
-                populateProjectSelect();
+                renderProjectMenu();
                 populateTicketTypeAndStageSelects();
                 loadTickets().then(renderAll).catch((error) => setNotice(error.message, true));
             });
@@ -2312,15 +2349,34 @@
                 }
             });
 
-            els.projectSelect.addEventListener("change", async () => {
-                state.selectedProjectID = Number(els.projectSelect.value);
-                state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
-                populateTicketTypeAndStageSelects();
-                try {
-                    await loadTickets();
+            els.projectMenuButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                els.accountMenuDropdown.classList.remove("open");
+                els.accountMenuButton.setAttribute("aria-expanded", "false");
+                const isOpen = els.projectMenuDropdown.classList.toggle("open");
+                els.projectMenuButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            });
+
+            els.projectMenuDropdown.addEventListener("click", async (event) => {
+                const projectButton = event.target.closest("[data-project-switch]");
+                if (projectButton) {
+                    try {
+                        await selectProject(projectButton.dataset.projectSwitch);
+                        els.projectMenuDropdown.classList.remove("open");
+                        els.projectMenuButton.setAttribute("aria-expanded", "false");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                    return;
+                }
+
+                if (event.target.closest("#project-create-link")) {
+                    els.projectMenuDropdown.classList.remove("open");
+                    els.projectMenuButton.setAttribute("aria-expanded", "false");
+                    state.selectedProjectID = null;
+                    state.selectedProjectDraft = emptyProject();
+                    switchView("projects");
                     renderAll();
-                } catch (error) {
-                    setNotice(error.message, true);
                 }
             });
 
@@ -2697,6 +2753,11 @@
         }
 
         function bindMiscHandlers() {
+            function closeProjectMenu() {
+                els.projectMenuDropdown.classList.remove("open");
+                els.projectMenuButton.setAttribute("aria-expanded", "false");
+            }
+
             function closeAccountMenu() {
                 els.accountMenuDropdown.classList.remove("open");
                 els.accountMenuButton.setAttribute("aria-expanded", "false");
@@ -2704,6 +2765,7 @@
 
             els.accountMenuButton.addEventListener("click", (event) => {
                 event.stopPropagation();
+                closeProjectMenu();
                 const isOpen = els.accountMenuDropdown.classList.toggle("open");
                 els.accountMenuButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
             });
@@ -2717,6 +2779,7 @@
 
             document.addEventListener("click", (event) => {
                 if (!event.target.closest(".account-menu")) {
+                    closeProjectMenu();
                     closeAccountMenu();
                 }
             });
