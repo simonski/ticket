@@ -49,7 +49,7 @@
         button {
             border: 0;
             border-radius: 999px;
-            padding: 10px 16px;
+            padding: 8px 14px;
             cursor: pointer;
             color: var(--text);
             background: rgba(255, 255, 255, 0.9);
@@ -88,7 +88,7 @@
             align-items: center;
             gap: 8px;
             border-radius: 999px;
-            padding: 6px 10px;
+            padding: 4px 8px;
             background: rgba(255, 122, 26, 0.1);
             color: #8c3d00;
             font-size: 12px;
@@ -97,7 +97,7 @@
 
         .select-shell {
             position: relative;
-            min-width: 220px;
+            min-width: 180px;
         }
 
         .select-shell::after {
@@ -117,8 +117,9 @@
             background: rgba(255, 255, 255, 0.9);
             color: var(--text);
             border-radius: 999px;
-            padding: 10px 36px 10px 14px;
+            padding: 8px 32px 8px 12px;
             cursor: pointer;
+            font-size: 13px;
         }
 
         .screen {
@@ -157,16 +158,16 @@
 
         .stack {
             display: grid;
-            gap: 16px;
+            gap: 12px;
         }
 
         .field {
             display: grid;
-            gap: 8px;
+            gap: 6px;
         }
 
         .field label {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--muted);
         }
 
@@ -177,8 +178,8 @@
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.92);
             color: var(--text);
-            border-radius: 18px;
-            padding: 12px 14px;
+            border-radius: 14px;
+            padding: 10px 12px;
         }
 
         .field textarea {
@@ -188,7 +189,7 @@
 
         .row {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
@@ -198,17 +199,17 @@
 
         .shell {
             display: grid;
-            grid-template-columns: 260px minmax(0, 1fr);
+            grid-template-columns: 210px minmax(0, 1fr);
             min-height: 100vh;
         }
 
         .sidebar {
-            padding: 24px 18px;
+            padding: 18px 14px;
             border-right: 1px solid var(--line);
             background: rgba(255, 248, 240, 0.72);
             display: grid;
             grid-template-rows: auto auto 1fr auto;
-            gap: 18px;
+            gap: 12px;
             position: sticky;
             top: 0;
             height: 100vh;
@@ -222,30 +223,51 @@
 
         .brand h1 {
             margin: 0;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: -0.04em;
         }
 
         .nav {
             display: grid;
-            gap: 8px;
+            gap: 6px;
         }
 
         .nav button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             text-align: left;
             justify-content: flex-start;
-            border-radius: 999px;
-            padding: 12px 14px;
+            border-radius: 14px;
+            padding: 8px 10px;
             background: rgba(255, 255, 255, 0.5);
             border: 1px solid transparent;
             box-shadow: none;
+            font-size: 13px;
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            display: inline-grid;
+            place-items: center;
+            border-radius: 7px;
+            background: rgba(22, 18, 15, 0.08);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            flex: 0 0 auto;
         }
 
         .nav button.active {
             background: #17120f;
             border-color: #17120f;
             color: #fffaf4;
+        }
+
+        .nav button.active .nav-icon {
+            background: rgba(255, 255, 255, 0.16);
         }
 
         .sidebar-foot {
@@ -262,7 +284,7 @@
         }
 
         .topbar {
-            padding: 18px 22px 10px;
+            padding: 14px 18px 6px;
             display: flex;
             gap: 12px;
             align-items: center;
@@ -272,7 +294,7 @@
 
         .topbar-controls {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             flex-wrap: wrap;
         }
@@ -300,7 +322,7 @@
         }
 
         .content {
-            padding: 18px 22px 24px;
+            padding: 12px 18px 18px;
             min-width: 0;
         }
 
@@ -311,7 +333,7 @@
 
         .view.active {
             display: grid;
-            gap: 18px;
+            gap: 14px;
         }
 
         .split {
@@ -324,13 +346,14 @@
             border: 1px solid var(--line);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
-            padding: 22px;
+            padding: 16px;
             min-width: 0;
         }
 
         .panel h2,
         .panel h3 {
-            margin: 0 0 12px;
+            margin: 0 0 8px;
+            line-height: 1.05;
         }
 
         .panel-head {
@@ -339,7 +362,7 @@
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
-            margin-bottom: 14px;
+            margin-bottom: 10px;
         }
 
         .panel-head-spaced {
@@ -369,7 +392,7 @@
         .entity-list,
         .mini-list {
             display: grid;
-            gap: 10px;
+            gap: 8px;
             max-height: 70vh;
             overflow: auto;
             padding-right: 4px;
@@ -381,7 +404,7 @@
             border-radius: 22px;
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.78);
-            padding: 16px;
+            padding: 12px;
         }
 
         .entity-card {
@@ -396,7 +419,7 @@
         .entity-card h4,
         .ticket-card h4,
         .stage-card h4 {
-            margin: 0 0 6px;
+            margin: 0 0 4px;
         }
 
         .entity-card p,
@@ -419,8 +442,8 @@
 
         .board {
             display: grid;
-            grid-template-columns: repeat(4, minmax(240px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(4, minmax(220px, 1fr));
+            gap: 12px;
             align-items: start;
             overflow-x: auto;
             padding-bottom: 6px;
@@ -432,7 +455,7 @@
             align-content: start;
             min-height: 300px;
             border-radius: var(--radius);
-            padding: 14px;
+            padding: 12px;
             border: 1px solid var(--line);
             background: rgba(255, 244, 233, 0.82);
         }
@@ -453,7 +476,7 @@
 
         .ticket-card {
             display: grid;
-            gap: 8px;
+            gap: 6px;
             cursor: grab;
         }
 
@@ -465,13 +488,13 @@
         .tag-row,
         .role-chip-row {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
         }
 
         .role-chip {
             border-radius: 999px;
-            padding: 8px 10px;
+            padding: 6px 8px;
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.95);
             display: inline-flex;
@@ -492,7 +515,7 @@
 
         .stage-grid {
             display: grid;
-            gap: 14px;
+            gap: 10px;
         }
 
         .stage-card {
@@ -619,12 +642,12 @@
             </div>
             <div class="chip" id="app-user-chip">Not signed in</div>
             <nav class="nav" id="main-nav">
-                <button type="button" data-view="tickets" class="active">Tickets</button>
-                <button type="button" data-view="projects">Projects</button>
-                <button type="button" data-view="sdlcs">SDLCs</button>
-                <button type="button" data-view="roles">Roles</button>
-                <button type="button" data-view="agents">Agents</button>
-                <button type="button" data-view="teams">Teams</button>
+                <button type="button" data-view="tickets" class="active"><span class="nav-icon">TK</span><span>Tickets</span></button>
+                <button type="button" data-view="projects"><span class="nav-icon">PR</span><span>Projects</span></button>
+                <button type="button" data-view="sdlcs"><span class="nav-icon">SD</span><span>SDLCs</span></button>
+                <button type="button" data-view="roles"><span class="nav-icon">RL</span><span>Roles</span></button>
+                <button type="button" data-view="agents"><span class="nav-icon">AG</span><span>Agents</span></button>
+                <button type="button" data-view="teams"><span class="nav-icon">TM</span><span>Teams</span></button>
             </nav>
             <div></div>
             <div class="sidebar-foot">
