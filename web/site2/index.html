@@ -306,6 +306,14 @@
             margin-bottom: 14px;
         }
 
+        .panel-head-spaced {
+            margin-top: 28px;
+        }
+
+        .panel-padded {
+            padding: 16px;
+        }
+
         .entity-list,
         .mini-list {
             display: grid;
@@ -692,13 +700,13 @@
                             </div>
                         </form>
 
-                        <div class="panel-head" style="margin-top: 28px;">
+                        <div class="panel-head panel-head-spaced">
                             <h3>Stages</h3>
                             <span class="meta">Drag whole cards to reorder the flow.</span>
                         </div>
                         <div id="stage-grid" class="stage-grid"></div>
 
-                        <div class="panel-head" style="margin-top: 28px;">
+                        <div class="panel-head panel-head-spaced">
                             <h3>Add stage</h3>
                         </div>
                         <form id="new-stage-form" class="stack">
@@ -930,11 +938,11 @@
                     </div>
                 </div>
                 <div class="stack">
-                    <div class="panel" style="padding: 16px;">
+                    <div class="panel panel-padded">
                         <h3>History</h3>
                         <div id="ticket-history" class="history-list"></div>
                     </div>
-                    <div class="panel" style="padding: 16px;">
+                    <div class="panel panel-padded">
                         <h3>Quick actions</h3>
                         <div class="entity-actions">
                             <button id="ticket-open-button" type="button">Open</button>
