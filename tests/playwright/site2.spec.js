@@ -89,6 +89,12 @@ function installSite2Mock(page) {
       if (path === "/api/status") {
         return json(db.status);
       }
+      if (path === "/api/login" && method === "POST") {
+        return json({ token: "test-token", user: { username: body.username || "admin" } });
+      }
+      if (path === "/api/logout" && method === "POST") {
+        return json({ status: "ok" });
+      }
       if (path === "/api/projects" && method === "GET") {
         return json(db.projects);
       }
@@ -129,7 +135,11 @@ function installSite2Mock(page) {
         return json(db.tickets.filter((ticket) => ticket.project_id === id));
       }
       if (path === "/api/sdlcs" && method === "GET") {
-        return json(db.sdlcs);
+        return json(db.sdlcs.map(({ stages, ...sdlc }) => sdlc));
+      }
+      if (path.match(/^\/api\/sdlcs\/\d+$/) && method === "GET") {
+        const id = Number(last(path.split("/")));
+        return json(db.sdlcs.find((item) => item.sdlc_id === id));
       }
       if (path === "/api/roles" && method === "GET") {
         return json(db.roles);
@@ -176,11 +186,11 @@ function installSite2Mock(page) {
         sdlc.stages = body.stage_ids.map((id) => sdlc.stages.find((stage) => stage.sdlc_stage_id === id));
         return json({ status: "reordered" });
       }
-      if (path.match(/^\/api\/sdlcs\/stages\/roles\/\d+\/\d+\/\d+$/) && method === "POST") {
+      if (path.match(/^\/api\/sdlcs\/stages\/roles\/\d+\/\d+$/) && method === "POST") {
         const parts = path.split("/");
         const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(parts[5]));
         const stage = sdlc.stages.find((item) => item.sdlc_stage_id === Number(parts[6]));
-        const role = db.roles.find((item) => item.role_id === Number(parts[7]));
+        const role = db.roles.find((item) => item.role_id === Number(body.role_id));
         stage.roles.push({ role_id: role.role_id, title: role.title });
         return json({ status: "created" }, 201);
       }
@@ -288,13 +298,15 @@ test("moves a ticket across the board with drag and drop", async ({ page }) => {
 
 test("adds a role inside the SDLC editor using the existing stage-role API", async ({ page }) => {
   await page.getByRole("button", { name: "SDLCs" }).click();
+  await expect(page.locator("#stage-grid")).toContainText("backlog");
+  await expect(page.locator("#sdlc-role-bank")).toContainText("Engineer");
   await page.locator('[data-add-role-select="12"]').selectOption("6");
   await page.locator('[data-add-role="12"]').click();
 
   const requests = await page.evaluate(() => window.__site2Requests);
   expect(requests).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ method: "POST", path: "/api/sdlcs/stages/roles/1/12/6" }),
+      expect.objectContaining({ method: "POST", path: "/api/sdlcs/stages/roles/1/12", body: { role_id: 6 } }),
     ]),
   );
 });

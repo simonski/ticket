@@ -90,6 +90,32 @@
             font-size: 12px;
         }
 
+        .select-shell {
+            position: relative;
+            min-width: 220px;
+        }
+
+        .select-shell::after {
+            content: "▾";
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            pointer-events: none;
+        }
+
+        .select-shell select {
+            appearance: none;
+            width: 100%;
+            border: 1px solid var(--line);
+            background: rgba(15, 26, 43, 0.95);
+            color: var(--text);
+            border-radius: 999px;
+            padding: 10px 36px 10px 14px;
+            cursor: pointer;
+        }
+
         .screen {
             min-height: 100vh;
         }
@@ -253,8 +279,12 @@
             background: rgba(15, 26, 43, 0.74);
             color: var(--muted);
             min-height: 48px;
-            display: flex;
+            display: none;
             align-items: center;
+        }
+
+        .notice.visible {
+            display: flex;
         }
 
         .notice.error {
@@ -444,6 +474,16 @@
             cursor: grab;
         }
 
+        .role-bank {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px dashed var(--line);
+            background: rgba(8, 16, 29, 0.6);
+        }
+
         .stage-grid {
             display: grid;
             gap: 14px;
@@ -569,7 +609,6 @@
         <aside class="sidebar">
             <div class="brand">
                 <h1>site2</h1>
-                <p>Entity CRUD and board editing on live ticket data.</p>
             </div>
             <div class="chip" id="app-user-chip">Not signed in</div>
             <nav class="nav" id="main-nav">
@@ -582,24 +621,21 @@
             </nav>
             <div></div>
             <div class="sidebar-foot">
-                <div id="app-version">version -</div>
                 <button id="logout-button" type="button" class="btn-ghost">Logout</button>
             </div>
         </aside>
 
         <main class="main">
             <header class="topbar">
-                <div>
-                    <div class="chip" id="app-status-chip">Loading...</div>
-                </div>
                 <div class="topbar-controls">
                     <label class="chip" for="global-project-select">Board project</label>
-                    <select id="global-project-select"></select>
-                    <button id="global-refresh" type="button" class="btn-ghost">Refresh</button>
+                    <div class="select-shell">
+                        <select id="global-project-select"></select>
+                    </div>
                 </div>
             </header>
 
-            <div id="app-notice" class="notice">Ready.</div>
+            <div id="app-notice" class="notice"></div>
 
             <div class="content">
                 <section id="view-tickets" class="view active">
@@ -718,6 +754,10 @@
                         <div class="panel-head panel-head-spaced">
                             <h3>Stages</h3>
                             <span class="meta">Drag whole cards to reorder the flow.</span>
+                        </div>
+                        <div class="field">
+                            <label>Roles</label>
+                            <div id="sdlc-role-bank" class="role-bank"></div>
                         </div>
                         <div id="stage-grid" class="stage-grid"></div>
 
@@ -995,6 +1035,8 @@
             activeTicket: null,
             ticketHistory: [],
             drag: null,
+            liveSocket: null,
+            liveRefreshTimer: null,
         };
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
@@ -1008,8 +1050,6 @@
             appShell: document.getElementById("app-shell"),
             appNotice: document.getElementById("app-notice"),
             userChip: document.getElementById("app-user-chip"),
-            statusChip: document.getElementById("app-status-chip"),
-            version: document.getElementById("app-version"),
             projectSelect: document.getElementById("global-project-select"),
             mainNav: document.getElementById("main-nav"),
             projectList: document.getElementById("project-list"),
@@ -1019,6 +1059,7 @@
             teamList: document.getElementById("team-list"),
             ticketBoard: document.getElementById("ticket-board"),
             stageGrid: document.getElementById("stage-grid"),
+            sdlcRoleBank: document.getElementById("sdlc-role-bank"),
             ticketModal: document.getElementById("ticket-modal"),
             ticketHistory: document.getElementById("ticket-history"),
         };
@@ -1072,8 +1113,14 @@
         }
 
         function setNotice(message, isError) {
+            if (!isError) {
+                els.appNotice.textContent = "";
+                els.appNotice.classList.remove("visible", "error");
+                return;
+            }
             els.appNotice.textContent = message;
-            els.appNotice.classList.toggle("error", Boolean(isError));
+            els.appNotice.classList.add("visible");
+            els.appNotice.classList.add("error");
         }
 
         function toNullableNumber(value) {
@@ -1152,7 +1199,7 @@
             }
             try {
                 const auth = JSON.parse(raw);
-                if (!auth || !auth.username || !auth.password) {
+                if (!auth || !auth.username || !auth.token) {
                     return null;
                 }
                 return auth;
@@ -1172,14 +1219,17 @@
 
         function authHeaders(extra) {
             const headers = Object.assign({ "Content-Type": "application/json" }, extra || {});
-            if (state.auth) {
-                headers.Authorization = "Basic " + btoa(state.auth.username + ":" + state.auth.password);
+            if (state.auth && state.auth.token) {
+                headers.Authorization = "Bearer " + state.auth.token;
             }
             return headers;
         }
 
         async function api(path, options) {
-            const response = await site2Fetch(path, Object.assign({}, options, { headers: authHeaders((options && options.headers) || undefined) }));
+            const response = await site2Fetch(path, Object.assign({}, options, {
+                credentials: "same-origin",
+                headers: authHeaders((options && options.headers) || undefined),
+            }));
             const text = await response.text();
             let body = null;
             if (text) {
@@ -1299,8 +1349,6 @@
         async function loadStatus() {
             state.status = await api("/api/status");
             els.userChip.textContent = state.status.username || "signed in";
-            els.statusChip.textContent = state.status.mode || "ready";
-            els.version.textContent = "version " + (state.status.version || "-");
         }
 
         async function loadProjects() {
@@ -1324,7 +1372,8 @@
         }
 
         async function loadSdlcs() {
-            state.sdlcs = (await api("/api/sdlcs")).map(normalizeSdlc);
+            const summaries = await api("/api/sdlcs");
+            state.sdlcs = await Promise.all(summaries.map(async (summary) => normalizeSdlc(await api("/api/sdlcs/" + (summary.sdlc_id || summary.id)))));
             if (!state.selectedSdlcID && state.sdlcs.length) {
                 state.selectedSdlcID = state.sdlcs[0].id;
             }
@@ -1394,6 +1443,59 @@
             focusLoginUsername();
         }
 
+        function disconnectLiveUpdates() {
+            if (state.liveRefreshTimer) {
+                clearTimeout(state.liveRefreshTimer);
+                state.liveRefreshTimer = null;
+            }
+            if (state.liveSocket) {
+                state.liveSocket.close();
+                state.liveSocket = null;
+            }
+        }
+
+        function scheduleLiveRefresh() {
+            if (state.liveRefreshTimer) {
+                return;
+            }
+            state.liveRefreshTimer = setTimeout(() => {
+                state.liveRefreshTimer = null;
+                refreshAll().catch((error) => setNotice(error.message, true));
+            }, 150);
+        }
+
+        function connectLiveUpdates() {
+            if (window.__site2MockFetch || state.liveSocket) {
+                return;
+            }
+            const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const socket = new WebSocket(scheme + "//" + window.location.host + "/api/ws");
+            state.liveSocket = socket;
+            socket.addEventListener("message", (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (!payload || payload.type === "connected") {
+                        return;
+                    }
+                    scheduleLiveRefresh();
+                } catch (error) {
+                    // Ignore malformed live payloads.
+                }
+            });
+            socket.addEventListener("close", () => {
+                if (state.liveSocket === socket) {
+                    state.liveSocket = null;
+                }
+                if (state.auth) {
+                    setTimeout(() => {
+                        if (state.auth) {
+                            connectLiveUpdates();
+                        }
+                    }, 1500);
+                }
+            });
+        }
+
         function renderAll() {
             populateProjectSelect();
             populateSdlcSelects();
@@ -1426,6 +1528,10 @@
         }
 
         function renderSdlcs() {
+            els.sdlcRoleBank.innerHTML = state.roles.length
+                ? state.roles.map((role) => "<span class=\"role-chip\" draggable=\"true\" data-role-bank-id=\"" + role.id + "\">" + escapeHTML(role.title) + "</span>").join("")
+                : "<span class=\"meta\">No roles yet.</span>";
+
             if (!state.sdlcs.length) {
                 els.sdlcList.innerHTML = "<div class=\"empty\">No SDLCs yet.</div>";
                 els.stageGrid.innerHTML = "";
@@ -1610,16 +1716,29 @@
         async function handleLogin(event) {
             event.preventDefault();
             const formData = new FormData(els.loginForm);
-            const auth = {
-                username: String(formData.get("username") || "").trim(),
-                password: String(formData.get("password") || ""),
-            };
-            state.auth = auth;
+            const username = String(formData.get("username") || "").trim();
+            const password = String(formData.get("password") || "");
             try {
+                const loginResponse = await site2Fetch("/api/login", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password }),
+                });
+                if (!loginResponse.ok) {
+                    const body = await loginResponse.json().catch(() => ({ error: "login failed" }));
+                    throw new Error(body.error || body.message || "login failed");
+                }
+                const authBody = await loginResponse.json();
+                const auth = {
+                    username: (authBody.user && authBody.user.username) || username,
+                    token: authBody.token,
+                };
+                state.auth = auth;
                 await refreshAll();
                 storeAuth(auth);
                 showAuthenticatedShell();
-                setNotice("Signed in. Data loaded.");
+                connectLiveUpdates();
             } catch (error) {
                 state.auth = null;
                 clearStoredAuth();
@@ -1816,10 +1935,12 @@
                         return;
                     }
                     try {
-                        await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + stageID + "/" + Number(select.value), { method: "POST" });
+                        await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + stageID, {
+                            method: "POST",
+                            body: JSON.stringify({ role_id: Number(select.value) }),
+                        });
                         await loadSdlcs();
                         renderAll();
-                        setNotice("Role added to stage.");
                     } catch (error) {
                         setNotice(error.message, true);
                     }
@@ -2271,6 +2392,19 @@
         }
 
         function bindStageDragAndDrop() {
+            els.sdlcRoleBank.addEventListener("dragstart", (event) => {
+                const role = event.target.closest("[data-role-bank-id]");
+                if (!role) {
+                    return;
+                }
+                state.drag = {
+                    type: "stage-role",
+                    stageID: null,
+                    roleID: Number(role.dataset.roleBankId),
+                };
+                event.dataTransfer.effectAllowed = "move";
+            });
+
             els.stageGrid.addEventListener("dragstart", (event) => {
                 const role = event.target.closest("[data-role-id]");
                 if (role) {
@@ -2332,16 +2466,22 @@
                         state.drag = null;
                         return;
                     }
-                    const roleIDs = (stage.roles || []).map((role) => role.id).filter((roleID) => roleID !== state.drag.roleID);
-                    roleIDs.push(state.drag.roleID);
                     try {
-                        await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, {
-                            method: "PUT",
-                            body: JSON.stringify({ role_ids: roleIDs }),
-                        });
+                        if (state.drag.stageID && state.drag.stageID !== targetStageID) {
+                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + state.drag.stageID + "/" + state.drag.roleID, { method: "DELETE" });
+                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
+                        } else if (!state.drag.stageID) {
+                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
+                        } else {
+                            const roleIDs = (stage.roles || []).map((role) => role.id).filter((roleID) => roleID !== state.drag.roleID);
+                            roleIDs.push(state.drag.roleID);
+                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, {
+                                method: "PUT",
+                                body: JSON.stringify({ role_ids: roleIDs }),
+                            });
+                        }
                         await loadSdlcs();
                         renderAll();
-                        setNotice("Stage roles reordered.");
                     } catch (error) {
                         setNotice(error.message, true);
                     }
@@ -2368,7 +2508,6 @@
                     });
                     await loadSdlcs();
                     renderAll();
-                    setNotice("Stages reordered.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }
@@ -2377,15 +2516,17 @@
         }
 
         function bindMiscHandlers() {
-            document.getElementById("logout-button").addEventListener("click", () => {
+            document.getElementById("logout-button").addEventListener("click", async () => {
+                try {
+                    await api("/api/logout", { method: "POST", body: JSON.stringify({}) });
+                } catch (error) {
+                    // Ignore logout transport errors while still clearing local state.
+                }
+                disconnectLiveUpdates();
                 state.auth = null;
                 clearStoredAuth();
                 showLoginScreen();
                 els.loginForm.reset();
-                setNotice("Signed out.");
-            });
-            document.getElementById("global-refresh").addEventListener("click", () => {
-                refreshAll().then(() => setNotice("Data refreshed.")).catch((error) => setNotice(error.message, true));
             });
         }
 
@@ -2410,8 +2551,9 @@
             try {
                 await refreshAll();
                 showAuthenticatedShell();
-                setNotice("Session restored.");
+                connectLiveUpdates();
             } catch (error) {
+                disconnectLiveUpdates();
                 state.auth = null;
                 clearStoredAuth();
                 els.loginError.textContent = error.message;
