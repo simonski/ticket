@@ -6,22 +6,22 @@
     <title>ticket site2</title>
     <style>
         :root {
-            color-scheme: dark;
-            --bg: #08101d;
-            --bg-elev: #0f1a2b;
-            --bg-soft: #152238;
-            --bg-muted: #1d2d49;
-            --line: rgba(148, 163, 184, 0.22);
-            --text: #e6edf7;
-            --muted: #93a6c4;
-            --accent: #60a5fa;
-            --accent-strong: #2563eb;
-            --success: #22c55e;
-            --danger: #f87171;
-            --warning: #fbbf24;
-            --shadow: 0 24px 48px rgba(2, 8, 23, 0.45);
-            --radius: 18px;
-            --radius-sm: 12px;
+            color-scheme: light;
+            --bg: #f5eee4;
+            --bg-elev: #fffaf4;
+            --bg-soft: #efe4d7;
+            --bg-muted: #e5d6c4;
+            --line: rgba(29, 24, 20, 0.12);
+            --text: #16120f;
+            --muted: #756a5d;
+            --accent: #ff7a1a;
+            --accent-strong: #ff5a1f;
+            --success: #0f9f6e;
+            --danger: #d84d34;
+            --warning: #d08b1f;
+            --shadow: 0 22px 48px rgba(53, 37, 24, 0.08);
+            --radius: 26px;
+            --radius-sm: 18px;
         }
 
         * {
@@ -32,8 +32,9 @@
             margin: 0;
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background:
-                radial-gradient(circle at top, rgba(96, 165, 250, 0.18), transparent 36%),
-                linear-gradient(180deg, #091220 0%, #070c15 100%);
+                radial-gradient(circle at top left, rgba(255, 122, 26, 0.18), transparent 30%),
+                radial-gradient(circle at top right, rgba(255, 194, 102, 0.16), transparent 34%),
+                linear-gradient(180deg, #fbf6ee 0%, #f2e7d8 100%);
             color: var(--text);
             min-height: 100vh;
         }
@@ -51,8 +52,9 @@
             padding: 10px 16px;
             cursor: pointer;
             color: var(--text);
-            background: var(--bg-muted);
+            background: rgba(255, 255, 255, 0.9);
             transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+            box-shadow: inset 0 0 0 1px var(--line);
         }
 
         button:hover {
@@ -67,15 +69,17 @@
 
         .btn-primary {
             background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #fffaf4;
+            box-shadow: none;
         }
 
         .btn-danger {
-            background: rgba(248, 113, 113, 0.22);
-            color: #fecaca;
+            background: rgba(216, 77, 52, 0.1);
+            color: #942b18;
         }
 
         .btn-ghost {
-            background: transparent;
+            background: rgba(255, 255, 255, 0.55);
             border: 1px solid var(--line);
         }
 
@@ -85,9 +89,10 @@
             gap: 8px;
             border-radius: 999px;
             padding: 6px 10px;
-            background: rgba(96, 165, 250, 0.12);
-            color: #bfdbfe;
+            background: rgba(255, 122, 26, 0.1);
+            color: #8c3d00;
             font-size: 12px;
+            box-shadow: inset 0 0 0 1px rgba(255, 122, 26, 0.14);
         }
 
         .select-shell {
@@ -109,7 +114,7 @@
             appearance: none;
             width: 100%;
             border: 1px solid var(--line);
-            background: rgba(15, 26, 43, 0.95);
+            background: rgba(255, 255, 255, 0.9);
             color: var(--text);
             border-radius: 999px;
             padding: 10px 36px 10px 14px;
@@ -129,18 +134,20 @@
         .login-card,
         .modal-card {
             width: min(100%, 460px);
-            background: rgba(15, 26, 43, 0.92);
+            background: rgba(255, 250, 244, 0.95);
             border: 1px solid var(--line);
             box-shadow: var(--shadow);
-            border-radius: 28px;
-            padding: 28px;
-            backdrop-filter: blur(18px);
+            border-radius: 36px;
+            padding: 32px;
+            backdrop-filter: blur(10px);
         }
 
         .login-card h1,
         .modal-card h2 {
             margin: 0 0 8px;
-            font-size: 28px;
+            font-size: 34px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
         }
 
         .subtitle {
@@ -168,9 +175,9 @@
         .field select {
             width: 100%;
             border: 1px solid var(--line);
-            background: rgba(8, 16, 29, 0.84);
+            background: rgba(255, 255, 255, 0.92);
             color: var(--text);
-            border-radius: 14px;
+            border-radius: 18px;
             padding: 12px 14px;
         }
 
@@ -198,13 +205,14 @@
         .sidebar {
             padding: 24px 18px;
             border-right: 1px solid var(--line);
-            background: rgba(9, 18, 32, 0.88);
+            background: rgba(255, 248, 240, 0.72);
             display: grid;
             grid-template-rows: auto auto 1fr auto;
             gap: 18px;
             position: sticky;
             top: 0;
             height: 100vh;
+            backdrop-filter: blur(12px);
         }
 
         .brand {
@@ -214,13 +222,9 @@
 
         .brand h1 {
             margin: 0;
-            font-size: 24px;
-        }
-
-        .brand p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 13px;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
         }
 
         .nav {
@@ -231,15 +235,17 @@
         .nav button {
             text-align: left;
             justify-content: flex-start;
-            border-radius: 14px;
+            border-radius: 999px;
             padding: 12px 14px;
-            background: transparent;
+            background: rgba(255, 255, 255, 0.5);
             border: 1px solid transparent;
+            box-shadow: none;
         }
 
         .nav button.active {
-            background: rgba(96, 165, 250, 0.16);
-            border-color: rgba(96, 165, 250, 0.34);
+            background: #17120f;
+            border-color: #17120f;
+            color: #fffaf4;
         }
 
         .sidebar-foot {
@@ -260,7 +266,7 @@
             display: flex;
             gap: 12px;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-end;
             flex-wrap: wrap;
         }
 
@@ -288,9 +294,9 @@
         }
 
         .notice.error {
-            color: #fecaca;
-            border-color: rgba(248, 113, 113, 0.3);
-            background: rgba(127, 29, 29, 0.22);
+            color: #8c2f1d;
+            border-color: rgba(216, 77, 52, 0.22);
+            background: rgba(255, 240, 236, 0.95);
         }
 
         .content {
@@ -314,11 +320,11 @@
         }
 
         .panel {
-            background: rgba(15, 26, 43, 0.84);
+            background: rgba(255, 250, 244, 0.92);
             border: 1px solid var(--line);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
-            padding: 18px;
+            padding: 22px;
             min-width: 0;
         }
 
@@ -372,10 +378,10 @@
         .entity-card,
         .ticket-card,
         .stage-card {
-            border-radius: 16px;
+            border-radius: 22px;
             border: 1px solid var(--line);
-            background: rgba(8, 16, 29, 0.82);
-            padding: 14px;
+            background: rgba(255, 255, 255, 0.78);
+            padding: 16px;
         }
 
         .entity-card {
@@ -383,8 +389,8 @@
         }
 
         .entity-card.active {
-            border-color: rgba(96, 165, 250, 0.4);
-            box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.22);
+            border-color: rgba(255, 122, 26, 0.38);
+            box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.18);
         }
 
         .entity-card h4,
@@ -428,14 +434,14 @@
             border-radius: var(--radius);
             padding: 14px;
             border: 1px solid var(--line);
-            background: rgba(15, 26, 43, 0.7);
+            background: rgba(255, 244, 233, 0.82);
         }
 
         .lane.drag-target,
         .stage-card.drag-target,
         .role-chip.drag-target {
-            border-color: rgba(96, 165, 250, 0.55);
-            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.22);
+            border-color: rgba(255, 122, 26, 0.45);
+            box-shadow: 0 0 0 2px rgba(255, 122, 26, 0.14);
         }
 
         .lane-head {
@@ -467,7 +473,7 @@
             border-radius: 999px;
             padding: 8px 10px;
             border: 1px solid var(--line);
-            background: rgba(15, 26, 43, 0.85);
+            background: rgba(255, 255, 255, 0.95);
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -505,12 +511,13 @@
             border: 1px dashed var(--line);
             color: var(--muted);
             text-align: center;
+            background: rgba(255, 255, 255, 0.45);
         }
 
         .modal {
             position: fixed;
             inset: 0;
-            background: rgba(2, 6, 23, 0.74);
+            background: rgba(73, 51, 29, 0.14);
             display: none;
             place-items: center;
             padding: 24px;
