@@ -999,6 +999,7 @@
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
         const FALLBACK_STAGES = ["backlog", "todo", "doing", "done"];
+        const AUTH_STORAGE_KEY = "site2.auth";
 
         const els = {
             loginScreen: document.getElementById("login-screen"),
@@ -1073,6 +1074,91 @@
         function setNotice(message, isError) {
             els.appNotice.textContent = message;
             els.appNotice.classList.toggle("error", Boolean(isError));
+        }
+
+        function toNullableNumber(value) {
+            return value === null || value === undefined || value === "" ? null : Number(value);
+        }
+
+        function normalizeRole(role) {
+            return Object.assign({}, role, {
+                id: role.id !== undefined ? role.id : role.role_id,
+                sdlc_id: toNullableNumber(role.sdlc_id),
+            });
+        }
+
+        function normalizeStage(stage) {
+            return Object.assign({}, stage, {
+                id: stage.id !== undefined ? stage.id : stage.sdlc_stage_id,
+                sdlc_id: Number(stage.sdlc_id),
+                name: stage.name || stage.stage_name,
+                wow: stage.wow !== undefined ? stage.wow : (stage.description || ""),
+                dor: stage.dor !== undefined ? stage.dor : (stage.definition_of_ready || ""),
+                dod: stage.dod !== undefined ? stage.dod : (stage.definition_of_done || ""),
+                roles: Array.isArray(stage.roles) ? stage.roles.map(normalizeRole) : [],
+            });
+        }
+
+        function normalizeSdlc(sdlc) {
+            return Object.assign({}, sdlc, {
+                id: sdlc.id !== undefined ? sdlc.id : sdlc.sdlc_id,
+                stages: Array.isArray(sdlc.stages) ? sdlc.stages.map(normalizeStage) : [],
+            });
+        }
+
+        function normalizeProject(project) {
+            return Object.assign({}, project, {
+                id: project.id !== undefined ? project.id : project.project_id,
+                sdlc_id: toNullableNumber(project.sdlc_id),
+            });
+        }
+
+        function normalizeTicket(ticket) {
+            return Object.assign({}, ticket, {
+                id: ticket.id !== undefined ? ticket.id : ticket.ticket_id,
+                project_id: Number(ticket.project_id),
+                sdlc_id: toNullableNumber(ticket.sdlc_id),
+                sdlc_stage_id: toNullableNumber(ticket.sdlc_stage_id),
+                role_id: toNullableNumber(ticket.role_id),
+                health: ticket.health !== undefined ? ticket.health : (ticket.health_score || 0),
+            });
+        }
+
+        function normalizeTeam(team) {
+            return Object.assign({}, team, {
+                id: team.id !== undefined ? team.id : team.team_id,
+                parent_team_id: toNullableNumber(team.parent_team_id),
+            });
+        }
+
+        function normalizeAgent(agent) {
+            return Object.assign({}, agent, {
+                id: agent.id || agent.user_id,
+            });
+        }
+
+        function storeAuth(auth) {
+            sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+        }
+
+        function clearStoredAuth() {
+            sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        }
+
+        function loadStoredAuth() {
+            const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
+            if (!raw) {
+                return null;
+            }
+            try {
+                const auth = JSON.parse(raw);
+                if (!auth || !auth.username || !auth.password) {
+                    return null;
+                }
+                return auth;
+            } catch (error) {
+                return null;
+            }
         }
 
         function focusLoginUsername() {
@@ -1155,7 +1241,10 @@
             const fromSdlc = workflow && Array.isArray(workflow.stages) && workflow.stages.length
                 ? workflow.stages.map((stage) => stage.name)
                 : [];
-            const stages = fromSdlc.length ? fromSdlc : FALLBACK_STAGES.slice();
+            const fromTickets = state.tickets.map((ticket) => ticket.stage).filter(Boolean);
+            const stages = fromSdlc.length
+                ? fromSdlc.concat(fromTickets)
+                : (fromTickets.length ? fromTickets : FALLBACK_STAGES.slice());
             return Array.from(new Set(stages.filter(Boolean)));
         }
 
@@ -1215,7 +1304,7 @@
         }
 
         async function loadProjects() {
-            state.projects = await api("/api/projects");
+            state.projects = (await api("/api/projects")).map(normalizeProject);
             if (!state.selectedProjectID && state.projects.length) {
                 state.selectedProjectID = state.projects[0].id;
             }
@@ -1231,11 +1320,11 @@
                 state.tickets = [];
                 return;
             }
-            state.tickets = await api("/api/projects/" + state.selectedProjectID + "/tickets");
+            state.tickets = (await api("/api/projects/" + state.selectedProjectID + "/tickets")).map(normalizeTicket);
         }
 
         async function loadSdlcs() {
-            state.sdlcs = await api("/api/sdlcs");
+            state.sdlcs = (await api("/api/sdlcs")).map(normalizeSdlc);
             if (!state.selectedSdlcID && state.sdlcs.length) {
                 state.selectedSdlcID = state.sdlcs[0].id;
             }
@@ -1246,7 +1335,7 @@
         }
 
         async function loadRoles() {
-            state.roles = await api("/api/roles");
+            state.roles = (await api("/api/roles")).map(normalizeRole);
             if (!state.selectedRoleID && state.roles.length) {
                 state.selectedRoleID = state.roles[0].id;
             }
@@ -1258,7 +1347,7 @@
 
         async function loadAgents() {
             try {
-                state.agents = await api("/api/agents");
+                state.agents = (await api("/api/agents")).map(normalizeAgent);
                 if (!state.selectedAgentID && state.agents.length) {
                     state.selectedAgentID = state.agents[0].id;
                 }
@@ -1269,7 +1358,7 @@
 
         async function loadTeams() {
             try {
-                state.teams = await api("/api/teams");
+                state.teams = (await api("/api/teams")).map(normalizeTeam);
                 if (!state.selectedTeamID && state.teams.length) {
                     state.selectedTeamID = state.teams[0].id;
                 }
@@ -1291,6 +1380,18 @@
             populateTeamParentSelect();
             await loadTickets();
             renderAll();
+        }
+
+        function showAuthenticatedShell() {
+            els.loginScreen.classList.add("hidden");
+            els.appShell.classList.remove("hidden");
+            els.loginError.textContent = "";
+        }
+
+        function showLoginScreen() {
+            els.appShell.classList.add("hidden");
+            els.loginScreen.classList.remove("hidden");
+            focusLoginUsername();
         }
 
         function renderAll() {
@@ -1509,17 +1610,19 @@
         async function handleLogin(event) {
             event.preventDefault();
             const formData = new FormData(els.loginForm);
-            state.auth = {
+            const auth = {
                 username: String(formData.get("username") || "").trim(),
                 password: String(formData.get("password") || ""),
             };
+            state.auth = auth;
             try {
                 await refreshAll();
-                els.loginScreen.classList.add("hidden");
-                els.appShell.classList.remove("hidden");
-                els.loginError.textContent = "";
+                storeAuth(auth);
+                showAuthenticatedShell();
                 setNotice("Signed in. Data loaded.");
             } catch (error) {
+                state.auth = null;
+                clearStoredAuth();
                 els.loginError.textContent = error.message;
             }
         }
@@ -1562,9 +1665,9 @@
                     sdlc_id: document.getElementById("project-sdlc").value ? Number(document.getElementById("project-sdlc").value) : null,
                 };
                 try {
-                    const project = draft.id
+                    const project = normalizeProject(draft.id
                         ? await api("/api/projects/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/projects", { method: "POST", body: JSON.stringify(payload) });
+                        : await api("/api/projects", { method: "POST", body: JSON.stringify(payload) }));
                     await api("/api/projects/" + project.id + "/set-draft", {
                         method: "PUT",
                         body: JSON.stringify({ draft: normalizeBool(document.getElementById("project-default-draft").value) }),
@@ -1628,9 +1731,9 @@
                     description: document.getElementById("sdlc-description").value.trim(),
                 };
                 try {
-                    const sdlc = draft.id
+                    const sdlc = normalizeSdlc(draft.id
                         ? await api("/api/sdlcs/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/sdlcs", { method: "POST", body: JSON.stringify(payload) });
+                        : await api("/api/sdlcs", { method: "POST", body: JSON.stringify(payload) }));
                     state.selectedSdlcID = sdlc.id;
                     await Promise.all([loadSdlcs(), loadProjects(), loadRoles()]);
                     renderAll();
@@ -1777,9 +1880,9 @@
                     sdlc_id: document.getElementById("role-sdlc").value ? Number(document.getElementById("role-sdlc").value) : null,
                 };
                 try {
-                    const role = draft.id
+                    const role = normalizeRole(draft.id
                         ? await api("/api/roles/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/roles", { method: "POST", body: JSON.stringify(payload) });
+                        : await api("/api/roles", { method: "POST", body: JSON.stringify(payload) }));
                     state.selectedRoleID = role.id;
                     await Promise.all([loadRoles(), loadSdlcs()]);
                     renderAll();
@@ -1823,7 +1926,7 @@
                     return;
                 }
                 try {
-                    const created = await api("/api/agents", { method: "POST", body: JSON.stringify({ password: password || "" }) });
+                    const created = normalizeAgent(await api("/api/agents", { method: "POST", body: JSON.stringify({ password: password || "" }) }));
                     await loadAgents();
                     state.selectedAgentID = created.id;
                     renderAll();
@@ -1914,9 +2017,9 @@
                     parent_team_id: document.getElementById("team-parent").value ? Number(document.getElementById("team-parent").value) : null,
                 };
                 try {
-                    const team = draft.id
+                    const team = normalizeTeam(draft.id
                         ? await api("/api/teams/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/teams", { method: "POST", body: JSON.stringify(payload) });
+                        : await api("/api/teams", { method: "POST", body: JSON.stringify(payload) }));
                     state.selectedTeamID = team.id;
                     await loadTeams();
                     renderAll();
@@ -2068,9 +2171,9 @@
                 health: Number(document.getElementById("ticket-health").value || 0),
             };
             try {
-                const ticket = state.activeTicket && state.activeTicket.id
+                const ticket = normalizeTicket(state.activeTicket && state.activeTicket.id
                     ? await api("/api/tickets/" + state.activeTicket.id, { method: "PUT", body: JSON.stringify(payload) })
-                    : await api("/api/tickets", { method: "POST", body: JSON.stringify(payload) });
+                    : await api("/api/tickets", { method: "POST", body: JSON.stringify(payload) }));
 
                 const wantsDraft = normalizeBool(document.getElementById("ticket-draft").value);
                 if (wantsDraft !== Boolean(ticket.draft)) {
@@ -2276,11 +2379,10 @@
         function bindMiscHandlers() {
             document.getElementById("logout-button").addEventListener("click", () => {
                 state.auth = null;
-                els.appShell.classList.add("hidden");
-                els.loginScreen.classList.remove("hidden");
+                clearStoredAuth();
+                showLoginScreen();
                 els.loginForm.reset();
                 setNotice("Signed out.");
-                focusLoginUsername();
             });
             document.getElementById("global-refresh").addEventListener("click", () => {
                 refreshAll().then(() => setNotice("Data refreshed.")).catch((error) => setNotice(error.message, true));
@@ -2296,7 +2398,26 @@
         bindTicketsHandlers();
         bindMiscHandlers();
         els.loginForm.addEventListener("submit", handleLogin);
-        focusLoginUsername();
+
+        (async function restoreSession() {
+            const auth = loadStoredAuth();
+            if (!auth) {
+                showLoginScreen();
+                return;
+            }
+            state.auth = auth;
+            document.getElementById("login-username").value = auth.username;
+            try {
+                await refreshAll();
+                showAuthenticatedShell();
+                setNotice("Session restored.");
+            } catch (error) {
+                state.auth = null;
+                clearStoredAuth();
+                els.loginError.textContent = error.message;
+                showLoginScreen();
+            }
+        }());
 
         window.site2 = {
             state,

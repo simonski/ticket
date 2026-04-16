@@ -7,7 +7,7 @@ function installSite2Mock(page) {
       nextProjectID: 2,
       projects: [
         {
-          id: 1,
+          project_id: 1,
           prefix: "OPS",
           title: "Operations",
           description: "Keep things running",
@@ -20,19 +20,18 @@ function installSite2Mock(page) {
       ],
       tickets: [
         {
-          id: 101,
-          key: "OPS-101",
+          ticket_id: "OPS-101",
           project_id: 1,
           type: "task",
           title: "Move me",
           description: "",
           acceptance_criteria: "",
           status: "open",
-          stage: "backlog",
+          stage: "design",
           priority: 1,
           order: 1,
           estimate_effort: 3,
-          health: 5,
+          health_score: 5,
           draft: false,
           archived: false,
           sdlc_id: null,
@@ -40,23 +39,23 @@ function installSite2Mock(page) {
       ],
       sdlcs: [
         {
-          id: 1,
+          sdlc_id: 1,
           name: "Delivery",
           description: "Default flow",
           stages: [
-            { id: 11, name: "backlog", wow: "", dor: "", dod: "", roles: [{ id: 5, title: "Engineer" }] },
-            { id: 12, name: "todo", wow: "", dor: "", dod: "", roles: [] },
-            { id: 13, name: "doing", wow: "", dor: "", dod: "", roles: [] },
-            { id: 14, name: "done", wow: "", dor: "", dod: "", roles: [] },
+            { sdlc_stage_id: 11, sdlc_id: 1, stage_name: "backlog", description: "", definition_of_ready: "", definition_of_done: "", roles: [{ role_id: 5, title: "Engineer" }] },
+            { sdlc_stage_id: 12, sdlc_id: 1, stage_name: "todo", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
+            { sdlc_stage_id: 13, sdlc_id: 1, stage_name: "doing", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
+            { sdlc_stage_id: 14, sdlc_id: 1, stage_name: "done", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
           ],
         },
       ],
       roles: [
-        { id: 5, title: "Engineer", description: "Build", acceptance_criteria: "", sdlc_id: 1 },
-        { id: 6, title: "QA", description: "Verify", acceptance_criteria: "", sdlc_id: 1 },
+        { role_id: 5, title: "Engineer", description: "Build", acceptance_criteria: "", sdlc_id: 1 },
+        { role_id: 6, title: "QA", description: "Verify", acceptance_criteria: "", sdlc_id: 1 },
       ],
-      agents: [{ id: "agent-1", enabled: true }],
-      teams: [{ id: 21, name: "Platform", parent_team_id: null }],
+      agents: [{ user_id: "agent-1", enabled: true }],
+      teams: [{ team_id: 21, name: "Platform", parent_team_id: null }],
     };
 
     window.__site2Requests = [];
@@ -95,7 +94,7 @@ function installSite2Mock(page) {
       }
       if (path === "/api/projects" && method === "POST") {
         const project = {
-          id: db.nextProjectID++,
+          project_id: db.nextProjectID++,
           prefix: body.prefix,
           title: body.title,
           description: body.description || "",
@@ -110,18 +109,18 @@ function installSite2Mock(page) {
       }
       if (path.match(/^\/api\/projects\/\d+$/) && method === "PUT") {
         const id = Number(last(path.split("/")));
-        const project = db.projects.find((item) => item.id === id);
+        const project = db.projects.find((item) => item.project_id === id);
         Object.assign(project, body);
         return json(project);
       }
       if (path.match(/^\/api\/projects\/\d+$/) && method === "DELETE") {
         const id = Number(last(path.split("/")));
-        db.projects = db.projects.filter((item) => item.id !== id);
+        db.projects = db.projects.filter((item) => item.project_id !== id);
         return json({ status: "deleted" });
       }
       if (path.match(/^\/api\/projects\/\d+\/set-draft$/) && method === "PUT") {
         const id = Number(path.split("/")[3]);
-        const project = db.projects.find((item) => item.id === id);
+        const project = db.projects.find((item) => item.project_id === id);
         project.default_draft = Boolean(body.draft);
         return json(project);
       }
@@ -141,20 +140,22 @@ function installSite2Mock(page) {
       if (path === "/api/teams" && method === "GET") {
         return json(db.teams);
       }
-      if (path.match(/^\/api\/tickets\/\d+\/history$/) && method === "GET") {
+      if (path.match(/^\/api\/tickets\/[^/]+\/history$/) && method === "GET") {
         return json([{ action: "created", created_at: "now", comment: "" }]);
       }
-      if (path.match(/^\/api\/tickets\/\d+$/) && method === "PUT") {
-        const id = Number(last(path.split("/")));
-        const ticket = db.tickets.find((item) => item.id === id);
+      if (path.match(/^\/api\/tickets\/[^/]+$/) && method === "PUT") {
+        const id = last(path.split("/"));
+        const ticket = db.tickets.find((item) => item.ticket_id === id);
+        if (!ticket) {
+          return json({ error: "not found" }, 404);
+        }
         Object.assign(ticket, body);
         return json(ticket);
       }
       if (path === "/api/tickets" && method === "POST") {
         const ticket = Object.assign(
           {
-            id: 999,
-            key: "OPS-999",
+            ticket_id: "OPS-999",
             archived: false,
             draft: false,
             sdlc_id: null,
@@ -164,32 +165,32 @@ function installSite2Mock(page) {
         db.tickets.push(ticket);
         return json(ticket, 201);
       }
-      if (path.match(/^\/api\/tickets\/\d+\/(draft|undraft|open|close|archive|unarchive)$/) && method === "POST") {
+      if (path.match(/^\/api\/tickets\/[^/]+\/(draft|undraft|open|close|archive|unarchive)$/) && method === "POST") {
         return json({ status: "ok" });
       }
-      if (path.match(/^\/api\/tickets\/\d+\/sdlc$/) && (method === "POST" || method === "DELETE")) {
+      if (path.match(/^\/api\/tickets\/[^/]+\/sdlc$/) && (method === "POST" || method === "DELETE")) {
         return json({ status: "ok" });
       }
       if (path.match(/^\/api\/sdlcs\/\d+\/reorder$/) && method === "PUT") {
-        const sdlc = db.sdlcs.find((item) => item.id === Number(path.split("/")[3]));
-        sdlc.stages = body.stage_ids.map((id) => sdlc.stages.find((stage) => stage.id === id));
+        const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(path.split("/")[3]));
+        sdlc.stages = body.stage_ids.map((id) => sdlc.stages.find((stage) => stage.sdlc_stage_id === id));
         return json({ status: "reordered" });
       }
       if (path.match(/^\/api\/sdlcs\/stages\/roles\/\d+\/\d+\/\d+$/) && method === "POST") {
         const parts = path.split("/");
-        const sdlc = db.sdlcs.find((item) => item.id === Number(parts[5]));
-        const stage = sdlc.stages.find((item) => item.id === Number(parts[6]));
-        const role = db.roles.find((item) => item.id === Number(parts[7]));
-        stage.roles.push({ id: role.id, title: role.title });
+        const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(parts[5]));
+        const stage = sdlc.stages.find((item) => item.sdlc_stage_id === Number(parts[6]));
+        const role = db.roles.find((item) => item.role_id === Number(parts[7]));
+        stage.roles.push({ role_id: role.role_id, title: role.title });
         return json({ status: "created" }, 201);
       }
       if (path.match(/^\/api\/sdlcs\/stages\/roles\/\d+\/\d+$/) && method === "PUT") {
         const parts = path.split("/");
-        const sdlc = db.sdlcs.find((item) => item.id === Number(parts[5]));
-        const stage = sdlc.stages.find((item) => item.id === Number(parts[6]));
+        const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(parts[5]));
+        const stage = sdlc.stages.find((item) => item.sdlc_stage_id === Number(parts[6]));
         stage.roles = body.role_ids.map((id) => {
-          const role = db.roles.find((item) => item.id === id);
-          return { id: role.id, title: role.title };
+          const role = db.roles.find((item) => item.role_id === id);
+          return { role_id: role.role_id, title: role.title };
         });
         return json({ status: "reordered" });
       }
@@ -202,7 +203,12 @@ function installSite2Mock(page) {
 test("focuses the username field on first load", async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");
-  await expect(page.locator("#login-username")).toBeFocused();
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    window.location.reload();
+  });
+  await expect(page.locator("#login-username")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement && document.activeElement.id)).toBe("login-username");
 });
 
 test("does not emit CSP inline-style violations after login", async ({ page }) => {
@@ -211,6 +217,10 @@ test("does not emit CSP inline-style violations after login", async ({ page }) =
 
   await installSite2Mock(page);
   await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    window.location.reload();
+  });
   await page.locator("#login-username").fill("admin");
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -218,6 +228,25 @@ test("does not emit CSP inline-style violations after login", async ({ page }) =
 
   const cspMessages = messages.filter((text) => text.includes("Applying inline style violates the following Content Security Policy directive"));
   expect(cspMessages).toEqual([]);
+});
+
+test("keeps the session and visible tickets across refresh", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    window.location.reload();
+  });
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("#ticket-board")).toContainText("Move me");
+
+  await page.reload();
+
+  await expect(page.getByText("Ticket board")).toBeVisible();
+  await expect(page.locator("#ticket-board")).toContainText("Move me");
+  await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
 });
 
 test.beforeEach(async ({ page }) => {
@@ -249,10 +278,11 @@ test("creates a project and persists default draft settings through the existing
 });
 
 test("moves a ticket across the board with drag and drop", async ({ page }) => {
-  await page.dragAndDrop('[data-ticket-id="101"]', '[data-lane-stage="done"]');
+  await expect(page.locator('[data-lane-stage="design"]')).toContainText("Move me");
+  await page.dragAndDrop('[data-ticket-id="OPS-101"]', '[data-lane-stage="done"]');
   await expect(page.locator('[data-lane-stage="done"]')).toContainText("Move me");
 
-  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/tickets/101"));
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/tickets/OPS-101"));
   expect(requests.some((request) => request.body.stage === "done")).toBeTruthy();
 });
 
