@@ -529,6 +529,113 @@ test("sdlc editor keyboard shortcuts focus the new stage input and selected stag
   expect(result.selectedStageId).toBe("41");
 });
 
+test("backlog perspective groups tickets by effective sdlc and filters by role", async ({ page }) => {
+  await page.goto("/");
+
+  const result = await page.evaluate(async () => {
+    if (typeof showApp !== "function" || typeof activatePerspective !== "function") return null;
+    showApp("admin", "admin");
+    projects = [{ project_id: 1, prefix: "OPS", title: "Ops Console", sdlc_id: 8 }];
+    setSelectedProjectID(1);
+    tickets = [
+      {
+        ticket_id: 101,
+        project_id: 1,
+        title: "Plan rollout",
+        key: "OPS-101",
+        type: "task",
+        stage: "design",
+        state: "idle",
+        role_id: 2,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        ticket_id: 102,
+        project_id: 1,
+        title: "Build rollout",
+        key: "OPS-102",
+        type: "task",
+        stage: "develop",
+        state: "active",
+        sdlc_id: 9,
+        role_id: 3,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      },
+      {
+        ticket_id: 103,
+        project_id: 1,
+        parent_id: 102,
+        title: "Verify rollout",
+        key: "OPS-103",
+        type: "task",
+        stage: "test",
+        state: "idle",
+        role_id: 4,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-03T00:00:00Z",
+      },
+    ];
+    window.call = async (url) => {
+      if (url === "/api/sdlcs") {
+        return [
+          { sdlc_id: 8, name: "Default Flow" },
+          { sdlc_id: 9, name: "Expedite" },
+        ];
+      }
+      if (url === "/api/sdlcs/8") {
+        return {
+          sdlc_id: 8,
+          name: "Default Flow",
+          stages: [
+            { sdlc_stage_id: 41, stage_name: "design", sort_order: 1, roles: [{ role_id: 2, title: "Architect" }] },
+            { sdlc_stage_id: 42, stage_name: "develop", sort_order: 2, roles: [{ role_id: 3, title: "Engineer" }] },
+          ],
+        };
+      }
+      if (url === "/api/sdlcs/9") {
+        return {
+          sdlc_id: 9,
+          name: "Expedite",
+          stages: [
+            { sdlc_stage_id: 51, stage_name: "develop", sort_order: 1, roles: [{ role_id: 3, title: "Engineer" }] },
+            { sdlc_stage_id: 52, stage_name: "test", sort_order: 2, roles: [{ role_id: 4, title: "QA" }] },
+          ],
+        };
+      }
+      return [];
+    };
+
+    await loadBacklogSdlcData();
+    activatePerspective("backlog");
+    renderBacklog();
+
+    const groups = Array.from(document.querySelectorAll(".backlog-sdlc-group")).map((group) => ({
+      sdlcId: group.dataset.sdlcId,
+      title: group.querySelector(".backlog-group-title")?.textContent?.trim() || "",
+      ticketTitles: Array.from(group.querySelectorAll(".backlog-ticket strong")).map((el) => el.textContent.trim()),
+    }));
+
+    const projectPill = document.getElementById("backlog-project-pill")?.textContent?.trim() || "";
+
+    const roleFilter = document.getElementById("backlog-role-filter");
+    roleFilter.value = "Engineer";
+    roleFilter.dispatchEvent(new Event("change", { bubbles: true }));
+    const filteredTitles = Array.from(document.querySelectorAll(".backlog-ticket strong")).map((el) => el.textContent.trim());
+
+    return { projectPill, groups, filteredTitles };
+  });
+
+  expect(result).not.toBeNull();
+  expect(result.projectPill).toContain("Ops Console");
+  expect(result.groups).toEqual([
+    { sdlcId: "8", title: "Default Flow", ticketTitles: ["Plan rollout"] },
+    { sdlcId: "9", title: "Expedite", ticketTitles: ["Build rollout", "Verify rollout"] },
+  ]);
+  expect(result.filteredTitles).toEqual(["Build rollout"]);
+});
+
 test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
   await page.goto("/");
 

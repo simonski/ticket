@@ -154,6 +154,25 @@ This phase should **not** need new endpoints.
 - filters are keyboard reachable and low-friction
 - drag/drop or shortcut movement preserves current ticket update APIs
 
+### Progress
+
+Implemented in the current branch:
+
+- added a dedicated **backlog** perspective beside the board and hierarchy views
+- grouped tickets by effective SDLC in the browser using existing data only:
+  - ticket SDLC override
+  - nearest parent ticket SDLC override
+  - project default SDLC
+- rendered ordered stage lanes per SDLC with visible role tracks
+- surfaced quick filters for SDLC, stage, role, and ticket status
+- preserved drag/drop stage movement using the existing ticket update API
+
+Still open inside phase 2:
+
+- richer inline summaries for draft/archived/completed state at the lane level
+- optional keyboard shortcuts for moving between backlog filters and lanes
+- broader backlog regression coverage around drag/drop between lanes
+
 ## Phase 3 — history / ghost view
 
 ### Outcome

@@ -771,6 +771,9 @@ Keyboard shortcuts in the board view:
 - roles support create/update/delete role personas (`title`, `description`, `acceptance_criteria`)
 - the ticket board supports drag-and-drop stage moves and shows card badges for
   draft, archived, and ticket-level SDLC overrides
+- the new backlog perspective groups tickets by effective SDLC, lays out the
+  ordered stage lanes for each workflow, and exposes quick SDLC/stage/role/status
+  filters without needing any new server endpoints
 - the SDLC editor uses draggable stage cards so admins can reorder stages,
   edit ways-of-working / DoR / DoD inline, and add or remove stage roles from
   the same popup

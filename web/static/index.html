@@ -466,6 +466,7 @@
         flex: 0 0 auto;
       }
       #view-stories,
+      #view-backlog,
       #view-hierarchy,
       #view-agents,
       #view-roles,
@@ -525,6 +526,132 @@
       }
       .hierarchy-noparent > .hierarchy-epic {
         background: #f7f3ea;
+      }
+      .backlog-toolbar {
+        display: flex;
+        gap: 0.65rem;
+        align-items: end;
+        flex-wrap: wrap;
+        margin-bottom: 0.9rem;
+      }
+      .backlog-filter {
+        display: grid;
+        gap: 0.2rem;
+        min-width: 140px;
+      }
+      .backlog-filter label {
+        font-size: 0.75rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .backlog-filter select { min-width: 140px; }
+      .backlog-project-pill {
+        margin-left: auto;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.8);
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .backlog-groups {
+        display: grid;
+        gap: 1rem;
+      }
+      .backlog-sdlc-group {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .backlog-group-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.75rem;
+      }
+      .backlog-group-title {
+        font-size: 1rem;
+        font-weight: 700;
+      }
+      .backlog-group-meta {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .backlog-lanes {
+        display: grid;
+        gap: 0.8rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .backlog-stage-lane {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 254, 249, 0.92);
+        padding: 0.75rem;
+        display: grid;
+        gap: 0.65rem;
+        align-content: start;
+        min-height: 180px;
+      }
+      .backlog-stage-lane.drag-over {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(17, 100, 102, 0.12);
+      }
+      .backlog-stage-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        align-items: baseline;
+      }
+      .backlog-stage-name {
+        font-weight: 700;
+        text-transform: lowercase;
+      }
+      .backlog-stage-count {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .backlog-role-track {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+      }
+      .backlog-role-chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.12rem 0.45rem;
+        font-size: 0.72rem;
+        color: var(--muted);
+        background: rgba(255,255,255,0.92);
+      }
+      .backlog-role-chip.active {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(17, 100, 102, 0.08);
+      }
+      .backlog-ticket {
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        border-radius: 10px;
+        background: #fff;
+        padding: 0.65rem;
+        display: grid;
+        gap: 0.35rem;
+        cursor: pointer;
+      }
+      .backlog-ticket:hover {
+        border-color: rgba(17, 100, 102, 0.3);
+        box-shadow: 0 8px 18px rgba(17, 100, 102, 0.08);
+      }
+      .backlog-ticket-meta {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .backlog-empty {
+        padding: 1.3rem 0.8rem;
+        text-align: center;
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 10px;
+        background: rgba(255,255,255,0.5);
       }
       .stories-head {
         display: flex;
@@ -1119,6 +1246,7 @@
           <nav class="left-panel-nav">
             <button type="button" class="left-panel-item" data-left-panel-action="stories">stories</button>
             <button type="button" class="left-panel-item active" data-left-panel-action="swimlanes">board</button>
+            <button type="button" class="left-panel-item" data-left-panel-action="backlog">backlog</button>
             <button type="button" class="left-panel-item" data-left-panel-action="hierarchy">hierarchy</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="agents">agents</button>
             <button type="button" class="left-panel-item admin-only hidden" data-left-panel-action="roles">roles</button>
@@ -1135,6 +1263,37 @@
           <main id="perspective-stage" class="perspective-stage">
             <section id="view-swimlanes" class="perspective-view active">
               <div id="board" class="board"></div>
+            </section>
+            <section id="view-backlog" class="perspective-view">
+              <div class="backlog-toolbar">
+                <div class="backlog-filter">
+                  <label for="backlog-sdlc-filter">SDLC</label>
+                  <select id="backlog-sdlc-filter"></select>
+                </div>
+                <div class="backlog-filter">
+                  <label for="backlog-stage-filter">Stage</label>
+                  <select id="backlog-stage-filter"></select>
+                </div>
+                <div class="backlog-filter">
+                  <label for="backlog-role-filter">Role</label>
+                  <select id="backlog-role-filter"></select>
+                </div>
+                <div class="backlog-filter">
+                  <label for="backlog-status-filter">Status</label>
+                  <select id="backlog-status-filter">
+                    <option value="">All work</option>
+                    <option value="draft">Draft</option>
+                    <option value="archived">Archived</option>
+                    <option value="completed">Completed</option>
+                    <option value="idle">Idle</option>
+                    <option value="active">Active</option>
+                    <option value="success">Success</option>
+                    <option value="fail">Fail</option>
+                  </select>
+                </div>
+                <div id="backlog-project-pill" class="backlog-project-pill">Project: none</div>
+              </div>
+              <div id="backlog-groups" class="backlog-groups"></div>
             </section>
             <section id="view-tv" class="perspective-view">
               <canvas id="tv-canvas"></canvas>
@@ -1321,6 +1480,10 @@
         <div class="perspective-item active" data-perspective="swimlanes">
           <div><strong>board</strong></div>
           <div class="perspective-kicker">Current board lanes for this project</div>
+        </div>
+        <div class="perspective-item" data-perspective="backlog">
+          <div><strong>backlog</strong></div>
+          <div class="perspective-kicker">Tickets grouped by effective SDLC and stage</div>
         </div>
         <div class="perspective-item" data-perspective="hierarchy">
           <div><strong>hierarchy</strong></div>
@@ -1762,6 +1925,7 @@
       const boardEl = document.getElementById("board");
       const tvCanvas = document.getElementById("tv-canvas");
       const viewSwimlanes = document.getElementById("view-swimlanes");
+      const viewBacklog = document.getElementById("view-backlog");
       const viewTV = document.getElementById("view-tv");
       const viewStories = document.getElementById("view-stories");
       const viewHierarchy = document.getElementById("view-hierarchy");
@@ -1774,6 +1938,12 @@
       const rolesPanelHost = document.getElementById("roles-panel-host");
       const teamsPanelHost = document.getElementById("teams-panel-host");
       const settingsPanelHost = document.getElementById("settings-panel-host");
+      const backlogGroupsEl = document.getElementById("backlog-groups");
+      const backlogProjectPillEl = document.getElementById("backlog-project-pill");
+      const backlogSdlcFilterEl = document.getElementById("backlog-sdlc-filter");
+      const backlogStageFilterEl = document.getElementById("backlog-stage-filter");
+      const backlogRoleFilterEl = document.getElementById("backlog-role-filter");
+      const backlogStatusFilterEl = document.getElementById("backlog-status-filter");
       const storiesListEl = document.getElementById("stories-list");
       const storyNewBtn = document.getElementById("story-new");
       const storyModalOverlay = document.getElementById("story-modal-overlay");
@@ -1971,6 +2141,13 @@
         if (action === "swimlanes") {
           switchPerspective("swimlanes");
           setLeftPanelActive("swimlanes");
+          return;
+        }
+        if (action === "backlog") {
+          switchPerspective("backlog");
+          setLeftPanelActive("backlog");
+          await loadBacklogSdlcData();
+          renderBacklog();
           return;
         }
         if (action === "stories") {
@@ -2757,6 +2934,7 @@
       let currentPerspective = localStorage.getItem("task-perspective") || "swimlanes";
       const perspectiveViews = {
         swimlanes: viewSwimlanes,
+        backlog: viewBacklog,
         stories: viewStories,
         hierarchy: viewHierarchy,
         agents: viewAgents,
@@ -2773,6 +2951,13 @@
       function syncPerspectiveDataLoads() {
         if (currentPerspective === "tv") renderTicketVision();
         if (currentPerspective === "chat") connectChatWS();
+        if (currentPerspective === "backlog") {
+          loadBacklogSdlcData().then(renderBacklog).catch((err) => {
+            if (backlogGroupsEl) {
+              backlogGroupsEl.innerHTML = `<div class="backlog-empty">${escape(err.message || "Unable to load backlog.")}</div>`;
+            }
+          });
+        }
         if (currentPerspective === "stories") loadStories();
         if (currentPerspective === "agents") loadAgents();
         if (currentPerspective === "hierarchy") renderHierarchy();
@@ -3096,6 +3281,9 @@
         localStorage.setItem("task-project", String(id || ""));
         if (id) touchRecent(id);
       }
+      function currentProjectData() {
+        return projects.find((p) => String(p.project_id) === selectedProjectID()) || null;
+      }
 
       const projBtn = document.getElementById("proj-btn");
       const projMenu = document.getElementById("proj-menu");
@@ -3283,6 +3471,10 @@
       let tickets = [];
       let ticketLabelsMap = {};
       let projectLabels = [];
+      let backlogSdlcCatalog = [];
+      const backlogSdlcDetails = new Map();
+      let backlogSdlcLoadPromise = null;
+      const backlogFilters = { sdlc: "", stage: "", role: "", status: "" };
       let selectedAgentID = 0;
       let selectedRoleID = 0;
       let selectedTeamID = 0;
@@ -3307,6 +3499,31 @@
       let autosaveTimer = null;
       let recentlySavedTicketIds = new Set();
       let token = localStorage.getItem("task-token") || "";
+
+      if (backlogSdlcFilterEl) {
+        backlogSdlcFilterEl.addEventListener("change", () => {
+          backlogFilters.sdlc = backlogSdlcFilterEl.value || "";
+          renderBacklog();
+        });
+      }
+      if (backlogStageFilterEl) {
+        backlogStageFilterEl.addEventListener("change", () => {
+          backlogFilters.stage = backlogStageFilterEl.value || "";
+          renderBacklog();
+        });
+      }
+      if (backlogRoleFilterEl) {
+        backlogRoleFilterEl.addEventListener("change", () => {
+          backlogFilters.role = backlogRoleFilterEl.value || "";
+          renderBacklog();
+        });
+      }
+      if (backlogStatusFilterEl) {
+        backlogStatusFilterEl.addEventListener("change", () => {
+          backlogFilters.status = backlogStatusFilterEl.value || "";
+          renderBacklog();
+        });
+      }
 
       function getCsrfToken() {
         const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/);
@@ -5192,7 +5409,300 @@
       function refreshTicketViews() {
         renderBoard();
         renderTicketVision();
+        if (currentPerspective === "backlog") renderBacklog();
         if (currentPerspective === "hierarchy") renderHierarchy();
+      }
+
+      function ticketCurrentRoleTitle(ticket, sdlcDetail = null) {
+        const wantedRoleID = Number(ticket && ticket.role_id ? ticket.role_id : 0);
+        if (!wantedRoleID || !sdlcDetail || !Array.isArray(sdlcDetail.stages)) return "";
+        for (const stage of sdlcDetail.stages) {
+          const role = (stage.roles || []).find((entry) => Number(entry.role_id) === wantedRoleID);
+          if (role) return String(role.title || role.name || `Role #${wantedRoleID}`);
+        }
+        return `Role #${wantedRoleID}`;
+      }
+
+      function sortedSdlcStages(detail, fallbackTickets = []) {
+        if (detail && Array.isArray(detail.stages) && detail.stages.length) {
+          const ordered = [...detail.stages].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+          const known = new Set(ordered.map((stage) => String(stage.stage_name || "")));
+          fallbackTickets.forEach((ticket) => {
+            const stageName = String(ticket.stage || "");
+            if (!stageName || known.has(stageName)) return;
+            known.add(stageName);
+            ordered.push({ stage_name: stageName, roles: [], sort_order: ordered.length + 1 });
+          });
+          return ordered;
+        }
+        const names = new Set(STAGES);
+        fallbackTickets.forEach((ticket) => names.add(ticket.stage || "design"));
+        return Array.from(names).map((stageName, index) => ({ stage_name: stageName, roles: [], sort_order: index + 1 }));
+      }
+
+      function effectiveSdlcIDForTicket(ticket, ticketMap, project, seen = new Set()) {
+        if (!ticket) return Number(project && project.sdlc_id ? project.sdlc_id : 0);
+        if (ticket.sdlc_id) return Number(ticket.sdlc_id);
+        const parentID = ticket.parent_id ? String(ticket.parent_id) : "";
+        if (!parentID || seen.has(parentID)) return Number(project && project.sdlc_id ? project.sdlc_id : 0);
+        seen.add(parentID);
+        return effectiveSdlcIDForTicket(ticketMap.get(parentID), ticketMap, project, seen);
+      }
+
+      function syncBacklogFilterSelect(selectEl, options, selectedValue, emptyLabel) {
+        if (!selectEl) return "";
+        const value = String(selectedValue || "");
+        selectEl.innerHTML = `<option value="">${escape(emptyLabel)}</option>`;
+        for (const option of options) {
+          const item = document.createElement("option");
+          item.value = String(option.value);
+          item.textContent = option.label;
+          selectEl.appendChild(item);
+        }
+        const valid = !value || options.some((option) => String(option.value) === value);
+        selectEl.value = valid ? value : "";
+        return selectEl.value;
+      }
+
+      async function loadBacklogSdlcData() {
+        if (backlogSdlcLoadPromise) return backlogSdlcLoadPromise;
+        backlogSdlcLoadPromise = (async () => {
+          backlogSdlcCatalog = await call("/api/sdlcs", { headers: headers() }).catch(() => []);
+          const project = currentProjectData();
+          const relevantIDs = new Set();
+          if (project && project.sdlc_id) relevantIDs.add(Number(project.sdlc_id));
+          tickets.forEach((ticket) => {
+            if (ticket && ticket.sdlc_id) relevantIDs.add(Number(ticket.sdlc_id));
+          });
+          await Promise.all(Array.from(relevantIDs).map(async (sdlcID) => {
+            if (!sdlcID || backlogSdlcDetails.has(String(sdlcID))) return;
+            const detail = await call(`/api/sdlcs/${sdlcID}`, { headers: headers() }).catch(() => null);
+            if (detail) backlogSdlcDetails.set(String(sdlcID), detail);
+          }));
+        })();
+        try {
+          await backlogSdlcLoadPromise;
+        } finally {
+          backlogSdlcLoadPromise = null;
+        }
+      }
+
+      function renderBacklog() {
+        if (!backlogGroupsEl) return;
+        const project = currentProjectData();
+        if (backlogProjectPillEl) {
+          backlogProjectPillEl.textContent = project
+            ? `Project: ${project.title} (${project.prefix})`
+            : "Project: none";
+        }
+        if (!selectedProjectID()) {
+          backlogGroupsEl.innerHTML = '<div class="backlog-empty">Select a project to view backlog flow.</div>';
+          return;
+        }
+        const ticketMap = new Map(tickets.map((ticket) => [String(ticket.ticket_id), ticket]));
+        const groups = new Map();
+        for (const ticket of tickets) {
+          const effectiveSdlcID = effectiveSdlcIDForTicket(ticket, ticketMap, project);
+          const key = effectiveSdlcID ? String(effectiveSdlcID) : "none";
+          const detail = effectiveSdlcID ? backlogSdlcDetails.get(key) || null : null;
+          if (!groups.has(key)) {
+            const summary = backlogSdlcCatalog.find((item) => Number(item.sdlc_id) === Number(effectiveSdlcID));
+            groups.set(key, {
+              sdlcID: effectiveSdlcID,
+              detail,
+              name: detail && detail.name ? detail.name : summary && summary.name ? summary.name : (effectiveSdlcID ? `SDLC #${effectiveSdlcID}` : "No SDLC"),
+              tickets: [],
+            });
+          }
+          groups.get(key).tickets.push(ticket);
+        }
+
+        const stageOptions = new Map();
+        const roleOptions = new Map();
+        for (const group of groups.values()) {
+          const stageDefs = sortedSdlcStages(group.detail, group.tickets);
+          for (const stage of stageDefs) {
+            stageOptions.set(String(stage.stage_name), { value: String(stage.stage_name), label: String(stage.stage_name) });
+            (stage.roles || []).forEach((role) => {
+              const title = String(role.title || role.name || `Role #${role.role_id}`);
+              roleOptions.set(title, { value: title, label: title });
+            });
+          }
+          group.tickets.forEach((ticket) => {
+            const roleTitle = ticketCurrentRoleTitle(ticket, group.detail);
+            if (roleTitle) roleOptions.set(roleTitle, { value: roleTitle, label: roleTitle });
+          });
+        }
+        backlogFilters.sdlc = syncBacklogFilterSelect(
+          backlogSdlcFilterEl,
+          Array.from(groups.values())
+            .filter((group) => group.sdlcID)
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+            .map((group) => ({ value: String(group.sdlcID), label: group.name })),
+          backlogFilters.sdlc,
+          "All SDLCs",
+        );
+        backlogFilters.stage = syncBacklogFilterSelect(
+          backlogStageFilterEl,
+          Array.from(stageOptions.values()).sort((a, b) => a.label.localeCompare(b.label)),
+          backlogFilters.stage,
+          "All stages",
+        );
+        backlogFilters.role = syncBacklogFilterSelect(
+          backlogRoleFilterEl,
+          Array.from(roleOptions.values()).sort((a, b) => a.label.localeCompare(b.label)),
+          backlogFilters.role,
+          "All roles",
+        );
+        if (backlogStatusFilterEl) backlogStatusFilterEl.value = backlogFilters.status || "";
+
+        const grouped = Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
+        backlogGroupsEl.innerHTML = "";
+        if (!grouped.length) {
+          backlogGroupsEl.innerHTML = '<div class="backlog-empty">No tickets in this project yet.</div>';
+          return;
+        }
+        const matchesStatus = (ticket) => {
+          switch (backlogFilters.status) {
+            case "draft": return Boolean(ticket.draft);
+            case "archived": return Boolean(ticket.archived);
+            case "completed": return Boolean(ticket.complete);
+            case "idle":
+            case "active":
+            case "success":
+            case "fail":
+              return String(ticket.state || "") === backlogFilters.status;
+            default:
+              return true;
+          }
+        };
+
+        for (const group of grouped) {
+          if (backlogFilters.sdlc && String(group.sdlcID || "") !== backlogFilters.sdlc) continue;
+          const stageDefs = sortedSdlcStages(group.detail, group.tickets);
+          const wrapper = document.createElement("section");
+          wrapper.className = "backlog-sdlc-group";
+          wrapper.dataset.sdlcId = String(group.sdlcID || "");
+          wrapper.innerHTML = `
+            <div class="backlog-group-head">
+              <div class="backlog-group-title">${escape(group.name)}</div>
+              <div class="backlog-group-meta">${escape(String(group.tickets.length))} tickets</div>
+            </div>
+          `;
+          const lanes = document.createElement("div");
+          lanes.className = "backlog-lanes";
+          let matchesGroup = 0;
+          for (const stageDef of stageDefs) {
+            const stageName = String(stageDef.stage_name || "design");
+            if (backlogFilters.stage && backlogFilters.stage !== stageName) continue;
+            const roleTitles = (stageDef.roles || []).map((role) => String(role.title || role.name || `Role #${role.role_id}`));
+            const laneTickets = group.tickets
+              .filter((ticket) => String(ticket.stage || "") === stageName)
+              .filter((ticket) => {
+                const currentRole = ticketCurrentRoleTitle(ticket, group.detail);
+                if (backlogFilters.role && backlogFilters.role !== currentRole) return false;
+                return matchesStatus(ticket);
+              })
+              .sort((a, b) => ticketModifiedEpoch(b) - ticketModifiedEpoch(a) || (b.ticket_id || 0) - (a.ticket_id || 0));
+            matchesGroup += laneTickets.length;
+            const lane = document.createElement("section");
+            lane.className = "backlog-stage-lane";
+            lane.dataset.stage = stageName;
+            lane.dataset.sdlcId = String(group.sdlcID || "");
+            lane.innerHTML = `
+              <div class="backlog-stage-head">
+                <div class="backlog-stage-name">${escape(stageName)}</div>
+                <div class="backlog-stage-count">${escape(String(laneTickets.length))}</div>
+              </div>
+            `;
+            if (roleTitles.length) {
+              const laneRoleTrack = document.createElement("div");
+              laneRoleTrack.className = "backlog-role-track";
+              laneRoleTrack.innerHTML = roleTitles.map((title) => `<span class="backlog-role-chip">${escape(title)}</span>`).join("");
+              lane.appendChild(laneRoleTrack);
+            }
+            lane.addEventListener("dragover", (event) => {
+              event.preventDefault();
+              lane.classList.add("drag-over");
+            });
+            lane.addEventListener("dragleave", () => lane.classList.remove("drag-over"));
+            lane.addEventListener("drop", async (event) => {
+              event.preventDefault();
+              lane.classList.remove("drag-over");
+              const id = event.dataTransfer.getData("text/ticket-id");
+              if (!id) return;
+              const movedTicket = tickets.find((item) => String(item.ticket_id) === String(id));
+              if (!movedTicket) return;
+              const movedSdlcID = effectiveSdlcIDForTicket(movedTicket, ticketMap, project);
+              if (String(movedSdlcID || "") !== String(group.sdlcID || "")) {
+                appStatus.textContent = "Backlog moves stay within the same SDLC.";
+                return;
+              }
+              try {
+                await moveTicketToStage(id, stageName);
+                appStatus.textContent = "";
+              } catch (err) {
+                appStatus.textContent = `Move failed: ${err.message}`;
+              }
+            });
+            if (laneTickets.length) {
+              for (const ticket of laneTickets) {
+                const card = document.createElement("article");
+                const roleTitle = ticketCurrentRoleTitle(ticket, group.detail);
+                const badges = [];
+                if (ticket.draft) badges.push('<span class="ticket-badge">draft</span>');
+                if (ticket.archived) badges.push('<span class="ticket-badge">archived</span>');
+                if (ticket.complete) badges.push('<span class="ticket-badge">complete</span>');
+                if (ticket.sdlc_id) badges.push(`<span class="ticket-badge">sdlc #${escape(String(ticket.sdlc_id))}</span>`);
+                card.className = "backlog-ticket";
+                card.draggable = true;
+                card.dataset.ticketId = String(ticket.ticket_id);
+                card.dataset.backlogStage = stageName;
+                card.dataset.backlogSdlc = String(group.sdlcID || "");
+                if (roleTitle) card.dataset.backlogRole = roleTitle;
+                card.innerHTML = `
+                  <div class="ticket-top">
+                    <strong>${escape(ticket.title || "")}</strong>
+                    <span class="muted">${escape(ticket.key || "#" + ticket.ticket_id)}</span>
+                  </div>
+                  <div class="backlog-ticket-meta">${escape(ticket.type || "task")} · ${escape(ticket.state || "idle")}${roleTitle ? ` · ${escape(roleTitle)}` : ""}</div>
+                  ${badges.length ? `<div class="ticket-badges">${badges.join("")}</div>` : ""}
+                  <div class="state-line ${stateColorClass(ticket.state)}"></div>
+                `;
+                card.addEventListener("dragstart", (event) => {
+                  event.dataTransfer.setData("text/ticket-id", String(ticket.ticket_id));
+                });
+                card.addEventListener("click", () => openEdit(ticket));
+                if (roleTitles.length) {
+                  const roleTrack = document.createElement("div");
+                  roleTrack.className = "backlog-role-track";
+                  roleTrack.innerHTML = roleTitles.map((title) => `<span class="backlog-role-chip${title === roleTitle ? " active" : ""}">${escape(title)}</span>`).join("");
+                  card.appendChild(roleTrack);
+                }
+                lane.appendChild(card);
+              }
+            } else {
+              const empty = document.createElement("div");
+              empty.className = "backlog-empty";
+              empty.textContent = `No tickets in ${stageName}.`;
+              empty.addEventListener("click", () => openNew({ stage: stageName, sdlc_id: group.sdlcID || null }));
+              lane.appendChild(empty);
+            }
+            lanes.appendChild(lane);
+          }
+          if (!lanes.childElementCount) continue;
+          if (!matchesGroup) {
+            const note = document.createElement("div");
+            note.className = "backlog-group-meta";
+            note.textContent = "No tickets match the current filters.";
+            wrapper.appendChild(note);
+          }
+          wrapper.appendChild(lanes);
+          backlogGroupsEl.appendChild(wrapper);
+        }
+        if (!backlogGroupsEl.childElementCount) {
+          backlogGroupsEl.innerHTML = '<div class="backlog-empty">No tickets match the current backlog filters.</div>';
+        }
       }
 
       function scheduleTicketReload(reason = "event", options = {}) {
@@ -5719,7 +6229,7 @@
           stage: initial.stage || "design",
           state: initial.state || "idle",
           draft: Boolean(currentProject && currentProject.default_draft),
-          sdlc_id: null,
+          sdlc_id: initial.sdlc_id || null,
           open: true,
           archived: false,
         });
