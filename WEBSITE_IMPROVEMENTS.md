@@ -271,6 +271,41 @@ These apply across all phases:
 - phase 2 and phase 3 should avoid creating parallel concepts that duplicate the
   current board and hierarchy views without adding real clarity
 
+## Site2 parity track
+
+The work has now split into two website surfaces:
+
+- `default` keeps the original embedded site
+- `site2` is the fresh replacement surface selected with `tk server -site site2`
+
+Current `site2` progress:
+
+1. a new shell exists with separate navigation for tickets, projects, SDLCs,
+   roles, agents, and teams
+2. ticket board interactions use the existing ticket APIs, including drag/drop
+   stage movement, editing, draft toggles, history, lifecycle actions, and SDLC
+   override
+3. project CRUD uses `/api/projects`, `/api/projects/{id}`, and
+   `/api/projects/{id}/set-draft`
+4. SDLC CRUD and stage CRUD use `/api/sdlcs`, `/api/sdlcs/{id}`,
+   `/api/sdlcs/{id}/stages`, and `/api/sdlcs/stages/{stageId}`
+5. stage-role assignment in `site2` uses the existing
+   `/api/sdlcs/stages/roles/...` endpoints
+6. role, agent, and team CRUD now have dedicated editors in `site2`
+
+Still open on the site2 track:
+
+- richer keyboard shortcuts across the new shell
+- stage-role drag/reorder polish beyond add/remove flows
+- deeper relationship management for project/team membership surfaces
+- broader browser coverage as more parity work lands
+
+Latest regression coverage added for `site2`:
+
+- project creation + default draft persistence
+- ticket board drag/drop stage movement
+- SDLC stage-role assignment
+
 ## Initial todos
 
 1. Phase 1: smooth SDLC/stage/role authoring workspace

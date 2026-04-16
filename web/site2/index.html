@@ -1,645 +1,2277 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ticket site2</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #0b1020;
-      --panel: #121a30;
-      --panel-2: #18233f;
-      --line: #2c3a61;
-      --text: #eef3ff;
-      --muted: #9eb0d8;
-      --accent: #67e8f9;
-      --accent-2: #8b5cf6;
-      --danger: #fb7185;
-      --ok: #4ade80;
-      --shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(103, 232, 249, 0.12), transparent 28%),
-        radial-gradient(circle at top right, rgba(139, 92, 246, 0.14), transparent 28%),
-        var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
-    button, input, select, textarea {
-      font: inherit;
-    }
-    .hidden { display: none !important; }
-    .shell {
-      min-height: 100vh;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 1rem 1.25rem;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      backdrop-filter: blur(18px);
-      background: rgba(11, 16, 32, 0.7);
-      position: sticky;
-      top: 0;
-      z-index: 5;
-    }
-    .brand {
-      display: grid;
-      gap: 0.1rem;
-    }
-    .brand h1 {
-      font-size: 1rem;
-      margin: 0;
-    }
-    .brand small {
-      color: var(--muted);
-    }
-    .statusline {
-      display: flex;
-      gap: 0.6rem;
-      align-items: center;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-    .pill {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 0.28rem 0.65rem;
-      background: rgba(255,255,255,0.03);
-    }
-    .layout {
-      display: grid;
-      grid-template-columns: 280px 1fr 360px;
-      gap: 1rem;
-      padding: 1rem;
-      min-height: 0;
-    }
-    .panel {
-      background: linear-gradient(180deg, rgba(24, 35, 63, 0.94), rgba(18, 26, 48, 0.96));
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      min-height: 0;
-      display: grid;
-      overflow: hidden;
-    }
-    .panel-head {
-      padding: 1rem 1rem 0.8rem;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      display: flex;
-      justify-content: space-between;
-      gap: 0.75rem;
-      align-items: center;
-    }
-    .panel-head h2 {
-      margin: 0;
-      font-size: 0.95rem;
-    }
-    .panel-head small {
-      display: block;
-      color: var(--muted);
-      margin-top: 0.2rem;
-    }
-    .panel-body {
-      padding: 0.9rem 1rem 1rem;
-      overflow: auto;
-      display: grid;
-      gap: 0.8rem;
-      align-content: start;
-    }
-    .project-list,
-    .ticket-list,
-    .history-list {
-      display: grid;
-      gap: 0.65rem;
-    }
-    .project-card,
-    .ticket-card,
-    .history-card {
-      border: 1px solid rgba(255,255,255,0.06);
-      background: rgba(255,255,255,0.03);
-      border-radius: 16px;
-      padding: 0.9rem;
-      cursor: pointer;
-      transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
-    }
-    .project-card:hover,
-    .ticket-card:hover,
-    .history-card:hover {
-      border-color: rgba(103, 232, 249, 0.4);
-      transform: translateY(-1px);
-      background: rgba(255,255,255,0.05);
-    }
-    .project-card.active,
-    .ticket-card.active {
-      border-color: var(--accent);
-      box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.25);
-    }
-    .muted { color: var(--muted); }
-    .ticket-card strong,
-    .project-card strong,
-    .detail-card strong {
-      display: block;
-      margin-bottom: 0.25rem;
-    }
-    .ticket-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 0.8rem;
-    }
-    .ticket-card {
-      min-height: 148px;
-    }
-    .badge-row,
-    .detail-grid {
-      display: flex;
-      gap: 0.4rem;
-      flex-wrap: wrap;
-    }
-    .badge {
-      border-radius: 999px;
-      padding: 0.14rem 0.5rem;
-      border: 1px solid var(--line);
-      font-size: 0.75rem;
-      color: var(--muted);
-      background: rgba(255,255,255,0.03);
-    }
-    .badge.ok { border-color: rgba(74, 222, 128, 0.45); color: #bbf7d0; }
-    .badge.warn { border-color: rgba(251, 191, 36, 0.45); color: #fde68a; }
-    .badge.danger { border-color: rgba(251, 113, 133, 0.45); color: #fecdd3; }
-    .detail-stack {
-      display: grid;
-      gap: 0.85rem;
-    }
-    .detail-card {
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 16px;
-      background: rgba(255,255,255,0.03);
-      padding: 0.9rem;
-    }
-    .detail-grid {
-      display: grid;
-      grid-template-columns: 110px 1fr;
-      gap: 0.45rem 0.7rem;
-      align-items: start;
-      font-size: 0.92rem;
-    }
-    .detail-grid div:nth-child(odd) {
-      color: var(--muted);
-    }
-    .login-wrap {
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 1rem;
-    }
-    .login-card {
-      width: min(420px, 100%);
-      border-radius: 24px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: linear-gradient(180deg, rgba(24, 35, 63, 0.96), rgba(18, 26, 48, 0.98));
-      box-shadow: var(--shadow);
-      padding: 1.25rem;
-      display: grid;
-      gap: 1rem;
-    }
-    .login-card h2 {
-      margin: 0;
-    }
-    .field {
-      display: grid;
-      gap: 0.35rem;
-    }
-    .field label {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-    .field input,
-    .field select {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: rgba(255,255,255,0.03);
-      color: var(--text);
-      padding: 0.8rem 0.9rem;
-      outline: none;
-    }
-    .button-row {
-      display: flex;
-      gap: 0.6rem;
-      flex-wrap: wrap;
-    }
-    .btn {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 0.72rem 0.95rem;
-      background: rgba(255,255,255,0.04);
-      color: var(--text);
-      cursor: pointer;
-    }
-    .btn.primary {
-      background: linear-gradient(135deg, rgba(103, 232, 249, 0.22), rgba(139, 92, 246, 0.24));
-      border-color: rgba(103, 232, 249, 0.35);
-    }
-    .empty {
-      border: 1px dashed rgba(255,255,255,0.12);
-      border-radius: 16px;
-      padding: 1rem;
-      color: var(--muted);
-      text-align: center;
-    }
-    .error { color: #fecdd3; }
-    @media (max-width: 1180px) {
-      .layout {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ticket site2</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #08101d;
+            --bg-elev: #0f1a2b;
+            --bg-soft: #152238;
+            --bg-muted: #1d2d49;
+            --line: rgba(148, 163, 184, 0.22);
+            --text: #e6edf7;
+            --muted: #93a6c4;
+            --accent: #60a5fa;
+            --accent-strong: #2563eb;
+            --success: #22c55e;
+            --danger: #f87171;
+            --warning: #fbbf24;
+            --shadow: 0 24px 48px rgba(2, 8, 23, 0.45);
+            --radius: 18px;
+            --radius-sm: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(96, 165, 250, 0.18), transparent 36%),
+                linear-gradient(180deg, #091220 0%, #070c15 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+            font: inherit;
+        }
+
+        button {
+            border: 0;
+            border-radius: 999px;
+            padding: 10px 16px;
+            cursor: pointer;
+            color: var(--text);
+            background: var(--bg-muted);
+            transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+        }
+
+        .btn-danger {
+            background: rgba(248, 113, 113, 0.22);
+            color: #fecaca;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--line);
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: rgba(96, 165, 250, 0.12);
+            color: #bfdbfe;
+            font-size: 12px;
+        }
+
+        .screen {
+            min-height: 100vh;
+        }
+
+        .login-screen {
+            display: grid;
+            place-items: center;
+            padding: 32px;
+        }
+
+        .login-card,
+        .modal-card {
+            width: min(100%, 460px);
+            background: rgba(15, 26, 43, 0.92);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            border-radius: 28px;
+            padding: 28px;
+            backdrop-filter: blur(18px);
+        }
+
+        .login-card h1,
+        .modal-card h2 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            margin: 0 0 24px;
+            color: var(--muted);
+        }
+
+        .stack {
+            display: grid;
+            gap: 16px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field label {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .field input,
+        .field textarea,
+        .field select {
+            width: 100%;
+            border: 1px solid var(--line);
+            background: rgba(8, 16, 29, 0.84);
+            color: var(--text);
+            border-radius: 14px;
+            padding: 12px 14px;
+        }
+
+        .field textarea {
+            min-height: 108px;
+            resize: vertical;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .row > * {
+            flex: 1 1 180px;
+        }
+
+        .shell {
+            display: grid;
+            grid-template-columns: 260px minmax(0, 1fr);
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            padding: 24px 18px;
+            border-right: 1px solid var(--line);
+            background: rgba(9, 18, 32, 0.88);
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+            gap: 18px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+        }
+
+        .brand {
+            display: grid;
+            gap: 6px;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .brand p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .nav {
+            display: grid;
+            gap: 8px;
+        }
+
+        .nav button {
+            text-align: left;
+            justify-content: flex-start;
+            border-radius: 14px;
+            padding: 12px 14px;
+            background: transparent;
+            border: 1px solid transparent;
+        }
+
+        .nav button.active {
+            background: rgba(96, 165, 250, 0.16);
+            border-color: rgba(96, 165, 250, 0.34);
+        }
+
+        .sidebar-foot {
+            display: grid;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .main {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            min-width: 0;
+        }
+
+        .topbar {
+            padding: 18px 22px 10px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .topbar-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .notice {
+            margin: 0 22px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: rgba(15, 26, 43, 0.74);
+            color: var(--muted);
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+        }
+
+        .notice.error {
+            color: #fecaca;
+            border-color: rgba(248, 113, 113, 0.3);
+            background: rgba(127, 29, 29, 0.22);
+        }
+
+        .content {
+            padding: 18px 22px 24px;
+            min-width: 0;
+        }
+
+        .view {
+            display: none;
+            min-width: 0;
+        }
+
+        .view.active {
+            display: grid;
+            gap: 18px;
+        }
+
+        .split {
+            grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+            align-items: start;
+        }
+
+        .panel {
+            background: rgba(15, 26, 43, 0.84);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 18px;
+            min-width: 0;
+        }
+
+        .panel h2,
+        .panel h3 {
+            margin: 0 0 12px;
+        }
+
+        .panel-head {
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .entity-list,
+        .mini-list {
+            display: grid;
+            gap: 10px;
+            max-height: 70vh;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .entity-card,
+        .ticket-card,
+        .stage-card {
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: rgba(8, 16, 29, 0.82);
+            padding: 14px;
+        }
+
+        .entity-card {
+            cursor: pointer;
+        }
+
+        .entity-card.active {
+            border-color: rgba(96, 165, 250, 0.4);
+            box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.22);
+        }
+
+        .entity-card h4,
+        .ticket-card h4,
+        .stage-card h4 {
+            margin: 0 0 6px;
+        }
+
+        .entity-card p,
+        .ticket-card p,
+        .stage-card p,
+        .meta {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .entity-actions,
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(240px, 1fr));
+            gap: 16px;
+            align-items: start;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
+
+        .lane {
+            display: grid;
+            gap: 10px;
+            align-content: start;
+            min-height: 300px;
+            border-radius: var(--radius);
+            padding: 14px;
+            border: 1px solid var(--line);
+            background: rgba(15, 26, 43, 0.7);
+        }
+
+        .lane.drag-target,
+        .stage-card.drag-target,
+        .role-chip.drag-target {
+            border-color: rgba(96, 165, 250, 0.55);
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.22);
+        }
+
+        .lane-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .ticket-card {
+            display: grid;
+            gap: 8px;
+            cursor: grab;
+        }
+
+        .ticket-card small,
+        .stage-card small {
+            color: var(--muted);
+        }
+
+        .tag-row,
+        .role-chip-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .role-chip {
+            border-radius: 999px;
+            padding: 8px 10px;
+            border: 1px solid var(--line);
+            background: rgba(15, 26, 43, 0.85);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: grab;
+        }
+
+        .stage-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .stage-card {
+            display: grid;
+            gap: 12px;
+            cursor: grab;
+        }
+
+        .stage-card .field textarea {
+            min-height: 84px;
+        }
+
+        .empty {
+            padding: 18px;
+            border-radius: 14px;
+            border: 1px dashed var(--line);
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.74);
+            display: none;
+            place-items: center;
+            padding: 24px;
+            z-index: 10;
+        }
+
+        .modal.open {
+            display: grid;
+        }
+
+        .modal-card {
+            width: min(100%, 960px);
+            max-height: calc(100vh - 48px);
+            overflow: auto;
+        }
+
+        .modal-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr);
+            gap: 18px;
+        }
+
+        .history-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: rgba(8, 16, 29, 0.7);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 1180px) {
+            .shell,
+            .split,
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+                height: auto;
+            }
+
+            .board {
+                grid-template-columns: repeat(2, minmax(240px, 1fr));
+            }
+        }
+
+        @media (max-width: 720px) {
+            .content,
+            .topbar {
+                padding-left: 14px;
+                padding-right: 14px;
+            }
+
+            .notice {
+                margin-left: 14px;
+                margin-right: 14px;
+            }
+
+            .board {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div id="login-wrap" class="login-wrap">
-    <form id="login-form" class="login-card">
-      <div>
-        <h2>ticket / site2</h2>
-        <div class="muted">Fresh frontend, same APIs.</div>
-      </div>
-      <div class="field">
-        <label for="login-user">Username</label>
-        <input id="login-user" name="username" autocomplete="username" required>
-      </div>
-      <div class="field">
-        <label for="login-pass">Password</label>
-        <input id="login-pass" name="password" type="password" autocomplete="current-password" required>
-      </div>
-      <div class="button-row">
-        <button class="btn primary" type="submit">Login</button>
-      </div>
-      <div id="login-status" class="muted"></div>
-    </form>
-  </div>
+    <div id="login-screen" class="screen login-screen">
+        <form id="login-form" class="login-card">
+            <h1>ticket</h1>
+            <p class="subtitle">Fast board, simple CRUD, and drag/drop over the existing API.</p>
+            <div class="stack">
+                <div class="field">
+                    <label for="login-username">Username</label>
+                    <input id="login-username" name="username" autocomplete="username" required>
+                </div>
+                <div class="field">
+                    <label for="login-password">Password</label>
+                    <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+                </div>
+                <div class="row">
+                    <button class="btn-primary" type="submit">Sign in</button>
+                </div>
+                <div id="login-error" class="meta"></div>
+            </div>
+        </form>
+    </div>
 
-  <div id="app" class="shell hidden">
-    <header class="topbar">
-      <div class="brand">
-        <h1>ticket / site2</h1>
-        <small id="server-version">server version pending</small>
-      </div>
-      <div class="statusline">
-        <span id="current-user" class="pill">user</span>
-        <span id="current-project-pill" class="pill">project</span>
-        <button id="refresh-btn" class="btn" type="button">Refresh</button>
-        <button id="logout-btn" class="btn" type="button">Logout</button>
-      </div>
-    </header>
+    <div id="app-shell" class="shell hidden">
+        <aside class="sidebar">
+            <div class="brand">
+                <h1>site2</h1>
+                <p>Entity CRUD and board editing on live ticket data.</p>
+            </div>
+            <div class="chip" id="app-user-chip">Not signed in</div>
+            <nav class="nav" id="main-nav">
+                <button type="button" data-view="tickets" class="active">Tickets</button>
+                <button type="button" data-view="projects">Projects</button>
+                <button type="button" data-view="sdlcs">SDLCs</button>
+                <button type="button" data-view="roles">Roles</button>
+                <button type="button" data-view="agents">Agents</button>
+                <button type="button" data-view="teams">Teams</button>
+            </nav>
+            <div></div>
+            <div class="sidebar-foot">
+                <div id="app-version">version -</div>
+                <button id="logout-button" type="button" class="btn-ghost">Logout</button>
+            </div>
+        </aside>
 
-    <main class="layout">
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Projects</h2>
-            <small>Choose a project to load its tickets.</small>
-          </div>
+        <main class="main">
+            <header class="topbar">
+                <div>
+                    <div class="chip" id="app-status-chip">Loading...</div>
+                </div>
+                <div class="topbar-controls">
+                    <label class="chip" for="global-project-select">Board project</label>
+                    <select id="global-project-select"></select>
+                    <button id="global-refresh" type="button" class="btn-ghost">Refresh</button>
+                </div>
+            </header>
+
+            <div id="app-notice" class="notice">Ready.</div>
+
+            <div class="content">
+                <section id="view-tickets" class="view active">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>Ticket board</h2>
+                                <p class="meta">Drag tickets between stages. Click a card to edit details, history, draft state, and lifecycle overrides.</p>
+                            </div>
+                            <div class="entity-actions">
+                                <button id="new-ticket-button" type="button" class="btn-primary">New ticket</button>
+                            </div>
+                        </div>
+                        <div id="ticket-board" class="board"></div>
+                    </div>
+                </section>
+
+                <section id="view-projects" class="view split">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>Projects</h2>
+                            <button id="new-project-button" type="button" class="btn-primary">New project</button>
+                        </div>
+                        <div id="project-list" class="entity-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2 id="project-editor-title">Project editor</h2>
+                            <span class="meta">Prefix, defaults, repo, and visibility.</span>
+                        </div>
+                        <form id="project-form" class="stack">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="project-prefix">Prefix</label>
+                                    <input id="project-prefix" maxlength="12" required>
+                                </div>
+                                <div class="field">
+                                    <label for="project-title">Title</label>
+                                    <input id="project-title" required>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="project-visibility">Visibility</label>
+                                    <select id="project-visibility">
+                                        <option value="public">public</option>
+                                        <option value="private">private</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="project-default-draft">Default draft</label>
+                                    <select id="project-default-draft">
+                                        <option value="false">false</option>
+                                        <option value="true">true</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="project-sdlc">Default SDLC</label>
+                                    <select id="project-sdlc"></select>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="project-git-repository">Git repository</label>
+                                <input id="project-git-repository" placeholder="owner/repo or URL">
+                            </div>
+                            <div class="field">
+                                <label for="project-description">Description</label>
+                                <textarea id="project-description"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="project-ac">Acceptance criteria</label>
+                                <textarea id="project-ac"></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-project-button" type="submit" class="btn-primary">Save project</button>
+                                <button id="delete-project-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-project-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="view-sdlcs" class="view split">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>SDLCs</h2>
+                            <button id="new-sdlc-button" type="button" class="btn-primary">New SDLC</button>
+                        </div>
+                        <div id="sdlc-list" class="entity-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2 id="sdlc-editor-title">SDLC editor</h2>
+                                <p class="meta">Reorder stages and roles with drag/drop. Stage updates are saved inline.</p>
+                            </div>
+                        </div>
+                        <form id="sdlc-form" class="stack">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="sdlc-name">Name</label>
+                                    <input id="sdlc-name" required>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="sdlc-description">Description</label>
+                                <textarea id="sdlc-description"></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-sdlc-button" type="submit" class="btn-primary">Save SDLC</button>
+                                <button id="delete-sdlc-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-sdlc-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+
+                        <div class="panel-head" style="margin-top: 28px;">
+                            <h3>Stages</h3>
+                            <span class="meta">Drag whole cards to reorder the flow.</span>
+                        </div>
+                        <div id="stage-grid" class="stage-grid"></div>
+
+                        <div class="panel-head" style="margin-top: 28px;">
+                            <h3>Add stage</h3>
+                        </div>
+                        <form id="new-stage-form" class="stack">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="new-stage-name">Stage name</label>
+                                    <input id="new-stage-name" required>
+                                </div>
+                                <div class="field">
+                                    <label for="new-stage-sort-order">Sort order</label>
+                                    <input id="new-stage-sort-order" type="number" value="0">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="new-stage-wow">Ways of working</label>
+                                    <textarea id="new-stage-wow"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="new-stage-dor">Definition of ready</label>
+                                    <textarea id="new-stage-dor"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="new-stage-dod">Definition of done</label>
+                                    <textarea id="new-stage-dod"></textarea>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-stage-button" type="submit" class="btn-primary">Add stage</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="view-roles" class="view split">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>Roles</h2>
+                            <button id="new-role-button" type="button" class="btn-primary">New role</button>
+                        </div>
+                        <div id="role-list" class="entity-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2 id="role-editor-title">Role editor</h2>
+                            <span class="meta">Attach roles to a default SDLC, then drag them into stages in the SDLC editor.</span>
+                        </div>
+                        <form id="role-form" class="stack">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="role-title">Title</label>
+                                    <input id="role-title" required>
+                                </div>
+                                <div class="field">
+                                    <label for="role-sdlc">Default SDLC</label>
+                                    <select id="role-sdlc"></select>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="role-description">Description</label>
+                                <textarea id="role-description"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="role-ac">Acceptance criteria</label>
+                                <textarea id="role-ac"></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-role-button" type="submit" class="btn-primary">Save role</button>
+                                <button id="delete-role-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-role-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="view-agents" class="view split">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>Agents</h2>
+                            <button id="new-agent-button" type="button" class="btn-primary">New agent</button>
+                        </div>
+                        <div id="agent-list" class="entity-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2 id="agent-editor-title">Agent editor</h2>
+                            <span class="meta">Create, rotate password, enable/disable, or delete agents.</span>
+                        </div>
+                        <form id="agent-form" class="stack">
+                            <div class="field">
+                                <label for="agent-id">Agent ID</label>
+                                <input id="agent-id" disabled>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="agent-enabled">Enabled</label>
+                                    <input id="agent-enabled" disabled>
+                                </div>
+                                <div class="field">
+                                    <label for="agent-new-password">New password</label>
+                                    <input id="agent-new-password" type="password" placeholder="leave blank to keep existing">
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-agent-button" type="submit" class="btn-primary">Rotate password</button>
+                                <button id="toggle-agent-button" type="button">Enable / disable</button>
+                                <button id="delete-agent-button" type="button" class="btn-danger">Delete</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="view-teams" class="view split">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2>Teams</h2>
+                            <button id="new-team-button" type="button" class="btn-primary">New team</button>
+                        </div>
+                        <div id="team-list" class="entity-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2 id="team-editor-title">Team editor</h2>
+                            <span class="meta">Simple team CRUD. Parent relationships stay editable here.</span>
+                        </div>
+                        <form id="team-form" class="stack">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="team-name">Name</label>
+                                    <input id="team-name" required>
+                                </div>
+                                <div class="field">
+                                    <label for="team-parent">Parent team</label>
+                                    <select id="team-parent"></select>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-team-button" type="submit" class="btn-primary">Save team</button>
+                                <button id="delete-team-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-team-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="ticket-modal" class="modal">
+        <div class="modal-card">
+            <div class="panel-head">
+                <div>
+                    <h2 id="ticket-modal-title">Ticket</h2>
+                    <p class="meta">Everything here uses the existing `/api/tickets` surface.</p>
+                </div>
+                <button id="close-ticket-modal" type="button" class="btn-ghost">Close</button>
+            </div>
+            <form id="ticket-form" class="modal-grid">
+                <div class="stack">
+                    <div class="row">
+                        <div class="field">
+                            <label for="ticket-type">Type</label>
+                            <select id="ticket-type"></select>
+                        </div>
+                        <div class="field">
+                            <label for="ticket-status">Status</label>
+                            <select id="ticket-status">
+                                <option value="open">open</option>
+                                <option value="closed">closed</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="ticket-stage">Stage</label>
+                            <select id="ticket-stage"></select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="ticket-title">Title</label>
+                            <input id="ticket-title" required>
+                        </div>
+                        <div class="field">
+                            <label for="ticket-priority">Priority</label>
+                            <input id="ticket-priority" type="number" value="0">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="ticket-description">Description</label>
+                        <textarea id="ticket-description"></textarea>
+                    </div>
+                    <div class="field">
+                        <label for="ticket-ac">Acceptance criteria</label>
+                        <textarea id="ticket-ac"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="ticket-parent">Parent ticket key</label>
+                            <input id="ticket-parent" placeholder="CUS-1">
+                        </div>
+                        <div class="field">
+                            <label for="ticket-sdlc">Override SDLC</label>
+                            <select id="ticket-sdlc"></select>
+                        </div>
+                        <div class="field">
+                            <label for="ticket-draft">Draft</label>
+                            <select id="ticket-draft">
+                                <option value="false">false</option>
+                                <option value="true">true</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="ticket-estimate-effort">Estimate effort</label>
+                            <input id="ticket-estimate-effort" type="number" value="0">
+                        </div>
+                        <div class="field">
+                            <label for="ticket-order">Order</label>
+                            <input id="ticket-order" type="number" value="0">
+                        </div>
+                        <div class="field">
+                            <label for="ticket-health">Health</label>
+                            <input id="ticket-health" type="number" value="0" min="0" max="10">
+                        </div>
+                    </div>
+                    <div class="editor-actions">
+                        <button id="save-ticket-button" type="submit" class="btn-primary">Save ticket</button>
+                        <button id="delete-ticket-button" type="button" class="btn-danger">Delete</button>
+                    </div>
+                </div>
+                <div class="stack">
+                    <div class="panel" style="padding: 16px;">
+                        <h3>History</h3>
+                        <div id="ticket-history" class="history-list"></div>
+                    </div>
+                    <div class="panel" style="padding: 16px;">
+                        <h3>Quick actions</h3>
+                        <div class="entity-actions">
+                            <button id="ticket-open-button" type="button">Open</button>
+                            <button id="ticket-close-button" type="button">Close</button>
+                            <button id="ticket-archive-button" type="button">Archive</button>
+                            <button id="ticket-unarchive-button" type="button">Unarchive</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
         </div>
-        <div id="project-list" class="panel-body project-list"></div>
-      </section>
+    </div>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Tickets</h2>
-            <small>Current project tickets from the existing API.</small>
-          </div>
-          <div class="field" style="min-width: 180px;">
-            <label for="ticket-filter">Stage filter</label>
-            <select id="ticket-filter">
-              <option value="">All stages</option>
-              <option value="design">design</option>
-              <option value="develop">develop</option>
-              <option value="test">test</option>
-              <option value="done">done</option>
-            </select>
-          </div>
-        </div>
-        <div id="ticket-list" class="panel-body ticket-grid"></div>
-      </section>
+    <script>
+        const site2Fetch = window.__site2MockFetch || window.fetch.bind(window);
+        const state = {
+            auth: null,
+            currentView: "tickets",
+            status: null,
+            projects: [],
+            tickets: [],
+            sdlcs: [],
+            roles: [],
+            agents: [],
+            teams: [],
+            selectedProjectID: null,
+            selectedProjectDraft: emptyProject(),
+            selectedSdlcID: null,
+            selectedSdlcDraft: emptySdlc(),
+            selectedRoleID: null,
+            selectedRoleDraft: emptyRole(),
+            selectedAgentID: null,
+            selectedTeamID: null,
+            selectedTeamDraft: emptyTeam(),
+            activeTicket: null,
+            ticketHistory: [],
+            drag: null,
+        };
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Details</h2>
-            <small>Ticket context and recent history.</small>
-          </div>
-        </div>
-        <div id="detail-panel" class="panel-body detail-stack">
-          <div class="empty">Select a ticket to inspect it.</div>
-        </div>
-      </section>
-    </main>
-  </div>
+        const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
+        const FALLBACK_STAGES = ["backlog", "todo", "doing", "done"];
 
-  <script>
-    const tokenKey = "task-token"
-    let token = localStorage.getItem(tokenKey) || ""
-    let currentUser = null
-    let projects = []
-    let tickets = []
-    let selectedProjectID = ""
-    let selectedTicketID = ""
+        const els = {
+            loginScreen: document.getElementById("login-screen"),
+            loginForm: document.getElementById("login-form"),
+            loginError: document.getElementById("login-error"),
+            appShell: document.getElementById("app-shell"),
+            appNotice: document.getElementById("app-notice"),
+            userChip: document.getElementById("app-user-chip"),
+            statusChip: document.getElementById("app-status-chip"),
+            version: document.getElementById("app-version"),
+            projectSelect: document.getElementById("global-project-select"),
+            mainNav: document.getElementById("main-nav"),
+            projectList: document.getElementById("project-list"),
+            sdlcList: document.getElementById("sdlc-list"),
+            roleList: document.getElementById("role-list"),
+            agentList: document.getElementById("agent-list"),
+            teamList: document.getElementById("team-list"),
+            ticketBoard: document.getElementById("ticket-board"),
+            stageGrid: document.getElementById("stage-grid"),
+            ticketModal: document.getElementById("ticket-modal"),
+            ticketHistory: document.getElementById("ticket-history"),
+        };
 
-    const loginWrap = document.getElementById("login-wrap")
-    const app = document.getElementById("app")
-    const loginForm = document.getElementById("login-form")
-    const loginUser = document.getElementById("login-user")
-    const loginPass = document.getElementById("login-pass")
-    const loginStatus = document.getElementById("login-status")
-    const projectList = document.getElementById("project-list")
-    const ticketList = document.getElementById("ticket-list")
-    const detailPanel = document.getElementById("detail-panel")
-    const currentUserEl = document.getElementById("current-user")
-    const currentProjectPill = document.getElementById("current-project-pill")
-    const serverVersionEl = document.getElementById("server-version")
-    const ticketFilter = document.getElementById("ticket-filter")
-
-    function escapeHTML(value) {
-      return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;")
-    }
-
-    function getCsrfToken() {
-      const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/)
-      return match ? decodeURIComponent(match[1]) : ""
-    }
-
-    function headers(json = false) {
-      const out = {}
-      if (token) out.Authorization = `Bearer ${token}`
-      if (json) out["Content-Type"] = "application/json"
-      const csrf = getCsrfToken()
-      if (csrf) out["X-CSRF-Token"] = csrf
-      return out
-    }
-
-    async function api(path, options = {}) {
-      const response = await fetch(path, { cache: "no-store", ...options })
-      const text = await response.text()
-      let data = {}
-      try { data = text ? JSON.parse(text) : {} } catch (_) { data = {} }
-      if (response.status === 401) {
-        token = ""
-        localStorage.removeItem(tokenKey)
-        showLogin("Session expired. Please log in again.")
-        throw new Error(data.error || "unauthorized")
-      }
-      if (!response.ok) throw new Error(data.error || `${response.status} ${response.statusText}`)
-      return data
-    }
-
-    function showLogin(message = "") {
-      loginWrap.classList.remove("hidden")
-      app.classList.add("hidden")
-      loginStatus.textContent = message
-      loginStatus.className = message ? "error" : "muted"
-      setTimeout(() => loginUser.focus(), 20)
-    }
-
-    function showApp(user, version) {
-      currentUser = user || null
-      loginWrap.classList.add("hidden")
-      app.classList.remove("hidden")
-      currentUserEl.textContent = currentUser ? `${currentUser.username} · ${currentUser.role}` : "anonymous"
-      serverVersionEl.textContent = version ? `server version ${version}` : "server version unknown"
-    }
-
-    function selectedProject() {
-      return projects.find((project) => String(project.project_id) === String(selectedProjectID)) || null
-    }
-
-    function selectedTicket() {
-      return tickets.find((ticket) => String(ticket.ticket_id) === String(selectedTicketID)) || null
-    }
-
-    function badgeClassForTicket(ticket) {
-      if (ticket.archived) return "danger"
-      if (ticket.state === "success") return "ok"
-      if (ticket.state === "fail") return "danger"
-      return ticket.draft ? "warn" : ""
-    }
-
-    function renderProjects() {
-      projectList.innerHTML = ""
-      if (!projects.length) {
-        projectList.innerHTML = '<div class="empty">No projects available.</div>'
-        currentProjectPill.textContent = "no project"
-        return
-      }
-      const current = selectedProject()
-      currentProjectPill.textContent = current ? `${current.prefix} · ${current.title}` : "no project"
-      for (const project of projects) {
-        const card = document.createElement("button")
-        card.type = "button"
-        card.className = `project-card${String(project.project_id) === String(selectedProjectID) ? " active" : ""}`
-        card.innerHTML = `
-          <strong>${escapeHTML(project.title)}</strong>
-          <div class="muted">${escapeHTML(project.prefix)} · visibility ${escapeHTML(project.visibility || "public")}</div>
-          <div class="muted">${escapeHTML(project.description || "No description")}</div>
-        `
-        card.addEventListener("click", async () => {
-          selectedProjectID = String(project.project_id)
-          selectedTicketID = ""
-          renderProjects()
-          await loadTickets()
-        })
-        projectList.appendChild(card)
-      }
-    }
-
-    function filteredTickets() {
-      const stage = ticketFilter.value || ""
-      return tickets.filter((ticket) => !stage || ticket.stage === stage)
-    }
-
-    function renderTickets() {
-      const visible = filteredTickets()
-      ticketList.innerHTML = ""
-      if (!visible.length) {
-        ticketList.innerHTML = '<div class="empty">No tickets match this project and filter.</div>'
-        renderTicketDetail()
-        return
-      }
-      for (const ticket of visible) {
-        const card = document.createElement("button")
-        card.type = "button"
-        card.className = `ticket-card${String(ticket.ticket_id) === String(selectedTicketID) ? " active" : ""}`
-        card.innerHTML = `
-          <strong>${escapeHTML(ticket.title)}</strong>
-          <div class="muted">${escapeHTML(ticket.key || `#${ticket.ticket_id}`)}</div>
-          <div class="badge-row">
-            <span class="badge ${badgeClassForTicket(ticket)}">${escapeHTML(ticket.stage || "unknown")}</span>
-            <span class="badge">${escapeHTML(ticket.state || "idle")}</span>
-            ${ticket.draft ? '<span class="badge warn">draft</span>' : ""}
-            ${ticket.archived ? '<span class="badge danger">archived</span>' : ""}
-          </div>
-          <div class="muted">${escapeHTML(ticket.description || "No description")}</div>
-        `
-        card.addEventListener("click", async () => {
-          selectedTicketID = String(ticket.ticket_id)
-          renderTickets()
-          await renderTicketDetail()
-        })
-        ticketList.appendChild(card)
-      }
-      if (!selectedTicketID && visible.length) selectedTicketID = String(visible[0].ticket_id)
-    }
-
-    async function renderTicketDetail() {
-      const ticket = selectedTicket()
-      if (!ticket) {
-        detailPanel.innerHTML = '<div class="empty">Select a ticket to inspect it.</div>'
-        return
-      }
-      let history = []
-      try {
-        history = await api(`/api/tickets/${ticket.ticket_id}/history?limit=8`, { headers: headers() })
-      } catch (error) {
-        history = []
-      }
-      detailPanel.innerHTML = `
-        <section class="detail-card">
-          <strong>${escapeHTML(ticket.title)}</strong>
-          <div class="muted">${escapeHTML(ticket.key || `#${ticket.ticket_id}`)} · ${escapeHTML(ticket.type || "task")}</div>
-          <div class="badge-row" style="margin-top:0.55rem;">
-            <span class="badge ${badgeClassForTicket(ticket)}">${escapeHTML(ticket.stage || "unknown")}</span>
-            <span class="badge">${escapeHTML(ticket.state || "idle")}</span>
-            ${ticket.assignee ? `<span class="badge">@${escapeHTML(ticket.assignee)}</span>` : ""}
-            ${ticket.sdlc_id ? `<span class="badge">sdlc ${escapeHTML(ticket.sdlc_id)}</span>` : ""}
-          </div>
-        </section>
-        <section class="detail-card">
-          <strong>Ticket snapshot</strong>
-          <div class="detail-grid">
-            <div>Description</div><div>${escapeHTML(ticket.description || "No description")}</div>
-            <div>Acceptance</div><div>${escapeHTML(ticket.acceptance_criteria || "No acceptance criteria")}</div>
-            <div>Repository</div><div>${escapeHTML(ticket.git_repository || "Not set")}</div>
-            <div>Updated</div><div>${escapeHTML(ticket.updated_at || "")}</div>
-          </div>
-        </section>
-        <section class="detail-card">
-          <strong>Recent history</strong>
-          <div class="history-list">
-            ${history.length ? history.map((event) => `
-              <article class="history-card">
-                <div><strong>${escapeHTML(String(event.event_type || "").replaceAll("_", " "))}</strong></div>
-                <div class="muted">${escapeHTML(event.created_at || "")}${event.created_by ? ` · ${escapeHTML(event.created_by)}` : ""}</div>
-              </article>
-            `).join("") : '<div class="empty">No history events yet.</div>'}
-          </div>
-        </section>
-      `
-    }
-
-    async function loadProjects() {
-      projects = await api("/api/projects", { headers: headers() })
-      if (!selectedProjectID && projects.length) selectedProjectID = String(projects[0].project_id)
-      if (selectedProjectID && !projects.some((project) => String(project.project_id) === String(selectedProjectID))) {
-        selectedProjectID = projects.length ? String(projects[0].project_id) : ""
-      }
-      renderProjects()
-    }
-
-    async function loadTickets() {
-      if (!selectedProjectID) {
-        tickets = []
-        renderTickets()
-        await renderTicketDetail()
-        return
-      }
-      tickets = await api(`/api/projects/${selectedProjectID}/tickets`, { headers: headers() })
-      const visible = filteredTickets()
-      if (!visible.some((ticket) => String(ticket.ticket_id) === String(selectedTicketID))) {
-        selectedTicketID = visible.length ? String(visible[0].ticket_id) : ""
-      }
-      renderProjects()
-      renderTickets()
-      await renderTicketDetail()
-    }
-
-    async function refreshAll() {
-      const status = await api("/api/status", { headers: headers() })
-      showApp(status.user, status.server_version)
-      await loadProjects()
-      await loadTickets()
-    }
-
-    loginForm.addEventListener("submit", async (event) => {
-      event.preventDefault()
-      loginStatus.textContent = "Logging in..."
-      loginStatus.className = "muted"
-      try {
-        const response = await api("/api/login", {
-          method: "POST",
-          headers: headers(true),
-          body: JSON.stringify({ username: loginUser.value.trim(), password: loginPass.value }),
-        })
-        token = response.token || ""
-        localStorage.setItem(tokenKey, token)
-        loginPass.value = ""
-        await refreshAll()
-      } catch (error) {
-        loginStatus.textContent = error.message
-        loginStatus.className = "error"
-      }
-    })
-
-    document.getElementById("refresh-btn").addEventListener("click", refreshAll)
-    document.getElementById("logout-btn").addEventListener("click", () => {
-      token = ""
-      localStorage.removeItem(tokenKey)
-      currentUser = null
-      projects = []
-      tickets = []
-      selectedProjectID = ""
-      selectedTicketID = ""
-      showLogin("Signed out.")
-    })
-    ticketFilter.addEventListener("change", async () => {
-      const visible = filteredTickets()
-      if (!visible.some((ticket) => String(ticket.ticket_id) === String(selectedTicketID))) {
-        selectedTicketID = visible.length ? String(visible[0].ticket_id) : ""
-      }
-      renderTickets()
-      await renderTicketDetail()
-    })
-
-    async function init() {
-      try {
-        const status = await api("/api/status", { headers: headers() })
-        if (!status.authenticated) {
-          showLogin("")
-          return
+        function emptyProject() {
+            return {
+                id: null,
+                prefix: "",
+                title: "",
+                description: "",
+                acceptance_criteria: "",
+                git_repository: "",
+                visibility: "public",
+                sdlc_id: null,
+                default_draft: false,
+            };
         }
-        showApp(status.user, status.server_version)
-        await loadProjects()
-        await loadTickets()
-      } catch (error) {
-        showLogin(`Server unavailable: ${error.message}`)
-      }
-    }
 
-    init()
-  </script>
+        function emptySdlc() {
+            return { id: null, name: "", description: "" };
+        }
+
+        function emptyRole() {
+            return { id: null, title: "", description: "", acceptance_criteria: "", sdlc_id: null };
+        }
+
+        function emptyTeam() {
+            return { id: null, name: "", parent_team_id: null };
+        }
+
+        function emptyTicket(projectID) {
+            return {
+                id: "",
+                key: "",
+                project_id: projectID || state.selectedProjectID || 0,
+                type: "task",
+                title: "",
+                description: "",
+                acceptance_criteria: "",
+                parent_id: null,
+                status: "open",
+                stage: getStageOptions()[0],
+                priority: 0,
+                order: 0,
+                estimate_effort: 0,
+                health: 0,
+                draft: false,
+                archived: false,
+                sdlc_id: null,
+            };
+        }
+
+        function setNotice(message, isError) {
+            els.appNotice.textContent = message;
+            els.appNotice.classList.toggle("error", Boolean(isError));
+        }
+
+        function authHeaders(extra) {
+            const headers = Object.assign({ "Content-Type": "application/json" }, extra || {});
+            if (state.auth) {
+                headers.Authorization = "Basic " + btoa(state.auth.username + ":" + state.auth.password);
+            }
+            return headers;
+        }
+
+        async function api(path, options) {
+            const response = await site2Fetch(path, Object.assign({}, options, { headers: authHeaders((options && options.headers) || undefined) }));
+            const text = await response.text();
+            let body = null;
+            if (text) {
+                try {
+                    body = JSON.parse(text);
+                } catch (error) {
+                    body = text;
+                }
+            }
+            if (!response.ok) {
+                const message = body && body.error ? body.error : (body && body.message ? body.message : response.status + " " + response.statusText);
+                throw new Error(message);
+            }
+            return body;
+        }
+
+        function normalizeBool(value) {
+            return value === true || value === "true";
+        }
+
+        function optionHTML(value, label, selected) {
+            const isSelected = selected ? " selected" : "";
+            return "<option value=\"" + String(value) + "\"" + isSelected + ">" + escapeHTML(label) + "</option>";
+        }
+
+        function escapeHTML(value) {
+            return String(value || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function getCurrentProject() {
+            return state.projects.find((project) => project.id === state.selectedProjectID) || null;
+        }
+
+        function getCurrentSdlc() {
+            return state.sdlcs.find((item) => item.id === state.selectedSdlcID) || null;
+        }
+
+        function getCurrentRole() {
+            return state.roles.find((item) => item.id === state.selectedRoleID) || null;
+        }
+
+        function getCurrentAgent() {
+            return state.agents.find((item) => item.id === state.selectedAgentID) || null;
+        }
+
+        function getCurrentTeam() {
+            return state.teams.find((item) => item.id === state.selectedTeamID) || null;
+        }
+
+        function getStageOptions() {
+            const project = getCurrentProject();
+            const sdlcID = project && project.sdlc_id ? project.sdlc_id : null;
+            const workflow = state.sdlcs.find((item) => item.id === sdlcID);
+            const fromSdlc = workflow && Array.isArray(workflow.stages) && workflow.stages.length
+                ? workflow.stages.map((stage) => stage.name)
+                : [];
+            const stages = fromSdlc.length ? fromSdlc : FALLBACK_STAGES.slice();
+            return Array.from(new Set(stages.filter(Boolean)));
+        }
+
+        function bindViewNavigation() {
+            els.mainNav.addEventListener("click", (event) => {
+                const button = event.target.closest("button[data-view]");
+                if (!button) {
+                    return;
+                }
+                switchView(button.dataset.view);
+            });
+        }
+
+        function switchView(viewName) {
+            state.currentView = viewName;
+            document.querySelectorAll(".nav button[data-view]").forEach((button) => {
+                button.classList.toggle("active", button.dataset.view === viewName);
+            });
+            document.querySelectorAll(".view").forEach((view) => {
+                view.classList.toggle("active", view.id === "view-" + viewName);
+            });
+        }
+
+        function populateProjectSelect() {
+            els.projectSelect.innerHTML = state.projects.length
+                ? state.projects.map((project) => optionHTML(project.id, project.title + " (" + project.prefix + ")", project.id === state.selectedProjectID)).join("")
+                : "<option value=\"\">No projects</option>";
+        }
+
+        function populateSdlcSelects() {
+            const options = [optionHTML("", "None", false)].concat(
+                state.sdlcs.map((sdlc) => optionHTML(sdlc.id, sdlc.name, false))
+            ).join("");
+            document.getElementById("project-sdlc").innerHTML = options;
+            document.getElementById("role-sdlc").innerHTML = options;
+            document.getElementById("ticket-sdlc").innerHTML = options;
+        }
+
+        function populateTeamParentSelect() {
+            const current = getCurrentTeam();
+            const options = [optionHTML("", "None", !current || !current.parent_team_id)]
+                .concat(state.teams.filter((team) => !current || team.id !== current.id).map((team) => optionHTML(team.id, team.name, current && current.parent_team_id === team.id)))
+                .join("");
+            document.getElementById("team-parent").innerHTML = options;
+        }
+
+        function populateTicketTypeAndStageSelects() {
+            document.getElementById("ticket-type").innerHTML = TICKET_TYPES.map((type) => optionHTML(type, type, false)).join("");
+            document.getElementById("ticket-stage").innerHTML = getStageOptions().map((stage) => optionHTML(stage, stage, false)).join("");
+        }
+
+        async function loadStatus() {
+            state.status = await api("/api/status");
+            els.userChip.textContent = state.status.username || "signed in";
+            els.statusChip.textContent = state.status.mode || "ready";
+            els.version.textContent = "version " + (state.status.version || "-");
+        }
+
+        async function loadProjects() {
+            state.projects = await api("/api/projects");
+            if (!state.selectedProjectID && state.projects.length) {
+                state.selectedProjectID = state.projects[0].id;
+            }
+            if (state.selectedProjectID && !state.projects.some((project) => project.id === state.selectedProjectID)) {
+                state.selectedProjectID = state.projects.length ? state.projects[0].id : null;
+            }
+            const project = getCurrentProject();
+            state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
+        }
+
+        async function loadTickets() {
+            if (!state.selectedProjectID) {
+                state.tickets = [];
+                return;
+            }
+            state.tickets = await api("/api/projects/" + state.selectedProjectID + "/tickets");
+        }
+
+        async function loadSdlcs() {
+            state.sdlcs = await api("/api/sdlcs");
+            if (!state.selectedSdlcID && state.sdlcs.length) {
+                state.selectedSdlcID = state.sdlcs[0].id;
+            }
+            if (state.selectedSdlcID && !state.sdlcs.some((item) => item.id === state.selectedSdlcID)) {
+                state.selectedSdlcID = state.sdlcs.length ? state.sdlcs[0].id : null;
+            }
+            state.selectedSdlcDraft = getCurrentSdlc() ? structuredClone(getCurrentSdlc()) : emptySdlc();
+        }
+
+        async function loadRoles() {
+            state.roles = await api("/api/roles");
+            if (!state.selectedRoleID && state.roles.length) {
+                state.selectedRoleID = state.roles[0].id;
+            }
+            if (state.selectedRoleID && !state.roles.some((item) => item.id === state.selectedRoleID)) {
+                state.selectedRoleID = state.roles.length ? state.roles[0].id : null;
+            }
+            state.selectedRoleDraft = getCurrentRole() ? structuredClone(getCurrentRole()) : emptyRole();
+        }
+
+        async function loadAgents() {
+            try {
+                state.agents = await api("/api/agents");
+                if (!state.selectedAgentID && state.agents.length) {
+                    state.selectedAgentID = state.agents[0].id;
+                }
+            } catch (error) {
+                state.agents = [];
+            }
+        }
+
+        async function loadTeams() {
+            try {
+                state.teams = await api("/api/teams");
+                if (!state.selectedTeamID && state.teams.length) {
+                    state.selectedTeamID = state.teams[0].id;
+                }
+                if (state.selectedTeamID && !state.teams.some((team) => team.id === state.selectedTeamID)) {
+                    state.selectedTeamID = state.teams.length ? state.teams[0].id : null;
+                }
+                state.selectedTeamDraft = getCurrentTeam() ? structuredClone(getCurrentTeam()) : emptyTeam();
+            } catch (error) {
+                state.teams = [];
+            }
+        }
+
+        async function refreshAll() {
+            await loadStatus();
+            await Promise.all([loadSdlcs(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
+            populateProjectSelect();
+            populateSdlcSelects();
+            populateTicketTypeAndStageSelects();
+            populateTeamParentSelect();
+            await loadTickets();
+            renderAll();
+        }
+
+        function renderAll() {
+            populateProjectSelect();
+            populateSdlcSelects();
+            populateTicketTypeAndStageSelects();
+            populateTeamParentSelect();
+            renderProjects();
+            renderSdlcs();
+            renderRoles();
+            renderAgents();
+            renderTeams();
+            renderTicketBoard();
+            renderEditors();
+        }
+
+        function renderProjects() {
+            if (!state.projects.length) {
+                els.projectList.innerHTML = "<div class=\"empty\">No projects yet.</div>";
+                return;
+            }
+            els.projectList.innerHTML = state.projects.map((project) => {
+                const active = project.id === state.selectedProjectID ? " active" : "";
+                return "<div class=\"entity-card" + active + "\" data-project-id=\"" + project.id + "\">" +
+                    "<h4>" + escapeHTML(project.title) + " <small>(" + escapeHTML(project.prefix) + ")</small></h4>" +
+                    "<p>" + escapeHTML(project.description || "No description") + "</p>" +
+                    "<div class=\"tag-row\" style=\"margin-top:10px;\">" +
+                    "<span class=\"chip\">" + escapeHTML(project.visibility || "public") + "</span>" +
+                    "<span class=\"chip\">draft " + String(Boolean(project.default_draft)) + "</span>" +
+                    "</div></div>";
+            }).join("");
+        }
+
+        function renderSdlcs() {
+            if (!state.sdlcs.length) {
+                els.sdlcList.innerHTML = "<div class=\"empty\">No SDLCs yet.</div>";
+                els.stageGrid.innerHTML = "";
+                return;
+            }
+            els.sdlcList.innerHTML = state.sdlcs.map((sdlc) => {
+                const active = sdlc.id === state.selectedSdlcID ? " active" : "";
+                return "<div class=\"entity-card" + active + "\" data-sdlc-id=\"" + sdlc.id + "\">" +
+                    "<h4>" + escapeHTML(sdlc.name) + "</h4>" +
+                    "<p>" + escapeHTML(sdlc.description || "No description") + "</p>" +
+                    "<p class=\"meta\" style=\"margin-top:8px;\">" + (sdlc.stages ? sdlc.stages.length : 0) + " stages</p>" +
+                    "</div>";
+            }).join("");
+
+            const sdlc = getCurrentSdlc();
+            if (!sdlc || !Array.isArray(sdlc.stages) || !sdlc.stages.length) {
+                els.stageGrid.innerHTML = "<div class=\"empty\">No stages yet.</div>";
+                return;
+            }
+
+            els.stageGrid.innerHTML = sdlc.stages.map((stage) => {
+                const roleNames = (stage.roles || []).map((role) => {
+                    const fullRole = state.roles.find((item) => item.id === role.id);
+                    const label = fullRole ? fullRole.title : role.title || ("role " + role.id);
+                    return "<span class=\"role-chip\" draggable=\"true\" data-stage-id=\"" + stage.id + "\" data-role-id=\"" + role.id + "\">" + escapeHTML(label) + "</span>";
+                }).join("");
+                const addRoleOptions = state.roles
+                    .filter((role) => !(stage.roles || []).some((current) => current.id === role.id))
+                    .map((role) => optionHTML(role.id, role.title, false))
+                    .join("");
+                return "<div class=\"stage-card\" draggable=\"true\" data-stage-id=\"" + stage.id + "\">" +
+                    "<div class=\"panel-head\"><div><h4>" + escapeHTML(stage.name) + "</h4><small>Drag to reorder</small></div>" +
+                    "<button type=\"button\" class=\"btn-danger\" data-delete-stage=\"" + stage.id + "\">Delete</button></div>" +
+                    "<div class=\"row\">" +
+                    "<div class=\"field\"><label>Stage name</label><input data-stage-name=\"" + stage.id + "\" value=\"" + escapeHTML(stage.name) + "\"></div>" +
+                    "<div class=\"field\"><label>Ways of working</label><textarea data-stage-wow=\"" + stage.id + "\">" + escapeHTML(stage.wow || stage.description || "") + "</textarea></div>" +
+                    "</div>" +
+                    "<div class=\"row\">" +
+                    "<div class=\"field\"><label>Definition of ready</label><textarea data-stage-dor=\"" + stage.id + "\">" + escapeHTML(stage.dor || "") + "</textarea></div>" +
+                    "<div class=\"field\"><label>Definition of done</label><textarea data-stage-dod=\"" + stage.id + "\">" + escapeHTML(stage.dod || "") + "</textarea></div>" +
+                    "</div>" +
+                    "<div class=\"entity-actions\"><button type=\"button\" class=\"btn-primary\" data-save-stage=\"" + stage.id + "\">Save stage</button></div>" +
+                    "<div class=\"field\"><label>Roles in stage</label><div class=\"role-chip-row\" data-stage-role-row=\"" + stage.id + "\">" + (roleNames || "<span class=\"meta\">No roles</span>") + "</div></div>" +
+                    "<div class=\"row\">" +
+                    "<div class=\"field\"><label>Add role</label><select data-add-role-select=\"" + stage.id + "\">" + optionHTML("", "Choose role", true) + addRoleOptions + "</select></div>" +
+                    "<div class=\"field\" style=\"align-self:end;\"><button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button></div>" +
+                    "</div>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderRoles() {
+            if (!state.roles.length) {
+                els.roleList.innerHTML = "<div class=\"empty\">No roles yet.</div>";
+                return;
+            }
+            els.roleList.innerHTML = state.roles.map((role) => {
+                const active = role.id === state.selectedRoleID ? " active" : "";
+                const sdlc = state.sdlcs.find((item) => item.id === role.sdlc_id);
+                return "<div class=\"entity-card" + active + "\" data-role-id=\"" + role.id + "\">" +
+                    "<h4>" + escapeHTML(role.title) + "</h4>" +
+                    "<p>" + escapeHTML(role.description || "No description") + "</p>" +
+                    "<p class=\"meta\" style=\"margin-top:8px;\">SDLC: " + escapeHTML(sdlc ? sdlc.name : "None") + "</p>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderAgents() {
+            if (!state.agents.length) {
+                els.agentList.innerHTML = "<div class=\"empty\">No agents available.</div>";
+                return;
+            }
+            els.agentList.innerHTML = state.agents.map((agent) => {
+                const active = agent.id === state.selectedAgentID ? " active" : "";
+                return "<div class=\"entity-card" + active + "\" data-agent-id=\"" + escapeHTML(agent.id) + "\">" +
+                    "<h4>" + escapeHTML(agent.id) + "</h4>" +
+                    "<p>" + escapeHTML(agent.enabled ? "enabled" : "disabled") + "</p>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderTeams() {
+            if (!state.teams.length) {
+                els.teamList.innerHTML = "<div class=\"empty\">No teams yet.</div>";
+                return;
+            }
+            els.teamList.innerHTML = state.teams.map((team) => {
+                const active = team.id === state.selectedTeamID ? " active" : "";
+                const parent = state.teams.find((item) => item.id === team.parent_team_id);
+                return "<div class=\"entity-card" + active + "\" data-team-id=\"" + team.id + "\">" +
+                    "<h4>" + escapeHTML(team.name) + "</h4>" +
+                    "<p>" + escapeHTML(parent ? ("Parent: " + parent.name) : "Top-level team") + "</p>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderTicketBoard() {
+            const stages = getStageOptions();
+            els.ticketBoard.innerHTML = stages.map((stage) => {
+                const cards = state.tickets
+                    .filter((ticket) => (ticket.stage || stages[0]) === stage)
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    .map((ticket) => renderTicketCard(ticket))
+                    .join("");
+                return "<div class=\"lane\" data-lane-stage=\"" + escapeHTML(stage) + "\">" +
+                    "<div class=\"lane-head\"><h3>" + escapeHTML(stage) + "</h3><span class=\"chip\">" + state.tickets.filter((ticket) => (ticket.stage || stages[0]) === stage).length + "</span></div>" +
+                    (cards || "<div class=\"empty\">No tickets</div>") +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderTicketCard(ticket) {
+            return "<div class=\"ticket-card\" draggable=\"true\" data-ticket-id=\"" + ticket.id + "\">" +
+                "<div class=\"panel-head\" style=\"margin:0;\"><h4>" + escapeHTML(ticket.key || ticket.id || "New") + "</h4><span class=\"chip\">" + escapeHTML(ticket.type || "task") + "</span></div>" +
+                "<p>" + escapeHTML(ticket.title || "(untitled)") + "</p>" +
+                "<div class=\"tag-row\">" +
+                "<span class=\"chip\">p" + escapeHTML(ticket.priority || 0) + "</span>" +
+                "<span class=\"chip\">draft " + String(Boolean(ticket.draft)) + "</span>" +
+                "</div>" +
+                "</div>";
+        }
+
+        function renderEditors() {
+            renderProjectEditor();
+            renderSdlcEditor();
+            renderRoleEditor();
+            renderAgentEditor();
+            renderTeamEditor();
+        }
+
+        function renderProjectEditor() {
+            const project = state.selectedProjectDraft || emptyProject();
+            document.getElementById("project-editor-title").textContent = project.id ? "Project: " + project.title : "Project editor";
+            document.getElementById("project-prefix").value = project.prefix || "";
+            document.getElementById("project-title").value = project.title || "";
+            document.getElementById("project-description").value = project.description || "";
+            document.getElementById("project-ac").value = project.acceptance_criteria || "";
+            document.getElementById("project-git-repository").value = project.git_repository || "";
+            document.getElementById("project-visibility").value = project.visibility || "public";
+            document.getElementById("project-default-draft").value = String(Boolean(project.default_draft));
+            document.getElementById("project-sdlc").value = project.sdlc_id || "";
+            document.getElementById("delete-project-button").disabled = !project.id;
+        }
+
+        function renderSdlcEditor() {
+            const sdlc = state.selectedSdlcDraft || emptySdlc();
+            document.getElementById("sdlc-editor-title").textContent = sdlc.id ? "SDLC: " + sdlc.name : "SDLC editor";
+            document.getElementById("sdlc-name").value = sdlc.name || "";
+            document.getElementById("sdlc-description").value = sdlc.description || "";
+            document.getElementById("delete-sdlc-button").disabled = !sdlc.id;
+        }
+
+        function renderRoleEditor() {
+            const role = state.selectedRoleDraft || emptyRole();
+            document.getElementById("role-editor-title").textContent = role.id ? "Role: " + role.title : "Role editor";
+            document.getElementById("role-title").value = role.title || "";
+            document.getElementById("role-description").value = role.description || "";
+            document.getElementById("role-ac").value = role.acceptance_criteria || "";
+            document.getElementById("role-sdlc").value = role.sdlc_id || "";
+            document.getElementById("delete-role-button").disabled = !role.id;
+        }
+
+        function renderAgentEditor() {
+            const agent = getCurrentAgent();
+            document.getElementById("agent-editor-title").textContent = agent ? "Agent: " + agent.id : "Agent editor";
+            document.getElementById("agent-id").value = agent ? agent.id : "";
+            document.getElementById("agent-enabled").value = agent ? String(Boolean(agent.enabled)) : "";
+            document.getElementById("agent-new-password").value = "";
+            document.getElementById("save-agent-button").disabled = !agent;
+            document.getElementById("toggle-agent-button").disabled = !agent;
+            document.getElementById("delete-agent-button").disabled = !agent;
+        }
+
+        function renderTeamEditor() {
+            const team = state.selectedTeamDraft || emptyTeam();
+            document.getElementById("team-editor-title").textContent = team.id ? "Team: " + team.name : "Team editor";
+            document.getElementById("team-name").value = team.name || "";
+            document.getElementById("team-parent").value = team.parent_team_id || "";
+            document.getElementById("delete-team-button").disabled = !team.id;
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const formData = new FormData(els.loginForm);
+            state.auth = {
+                username: String(formData.get("username") || "").trim(),
+                password: String(formData.get("password") || ""),
+            };
+            try {
+                await refreshAll();
+                els.loginScreen.classList.add("hidden");
+                els.appShell.classList.remove("hidden");
+                els.loginError.textContent = "";
+                setNotice("Signed in. Data loaded.");
+            } catch (error) {
+                els.loginError.textContent = error.message;
+            }
+        }
+
+        function bindProjectHandlers() {
+            els.projectList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-project-id]");
+                if (!card) {
+                    return;
+                }
+                state.selectedProjectID = Number(card.dataset.projectId);
+                const project = getCurrentProject();
+                state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
+                populateProjectSelect();
+                populateTicketTypeAndStageSelects();
+                loadTickets().then(renderAll).catch((error) => setNotice(error.message, true));
+            });
+
+            document.getElementById("new-project-button").addEventListener("click", () => {
+                state.selectedProjectID = null;
+                state.selectedProjectDraft = emptyProject();
+                renderEditors();
+            });
+
+            document.getElementById("reset-project-button").addEventListener("click", () => {
+                state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
+                renderEditors();
+            });
+
+            document.getElementById("project-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const draft = state.selectedProjectDraft;
+                const payload = {
+                    prefix: document.getElementById("project-prefix").value.trim(),
+                    title: document.getElementById("project-title").value.trim(),
+                    description: document.getElementById("project-description").value.trim(),
+                    acceptance_criteria: document.getElementById("project-ac").value.trim(),
+                    git_repository: document.getElementById("project-git-repository").value.trim(),
+                    visibility: document.getElementById("project-visibility").value,
+                    sdlc_id: document.getElementById("project-sdlc").value ? Number(document.getElementById("project-sdlc").value) : null,
+                };
+                try {
+                    const project = draft.id
+                        ? await api("/api/projects/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
+                        : await api("/api/projects", { method: "POST", body: JSON.stringify(payload) });
+                    await api("/api/projects/" + project.id + "/set-draft", {
+                        method: "PUT",
+                        body: JSON.stringify({ draft: normalizeBool(document.getElementById("project-default-draft").value) }),
+                    });
+                    state.selectedProjectID = project.id;
+                    await Promise.all([loadProjects(), loadSdlcs()]);
+                    await loadTickets();
+                    renderAll();
+                    setNotice("Project saved.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("delete-project-button").addEventListener("click", async () => {
+                const draft = state.selectedProjectDraft;
+                if (!draft.id) {
+                    return;
+                }
+                try {
+                    await api("/api/projects/" + draft.id, { method: "DELETE" });
+                    state.selectedProjectID = null;
+                    state.selectedProjectDraft = emptyProject();
+                    await loadProjects();
+                    await loadTickets();
+                    renderAll();
+                    setNotice("Project deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+        }
+
+        function bindSdlcHandlers() {
+            els.sdlcList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-sdlc-id]");
+                if (!card) {
+                    return;
+                }
+                state.selectedSdlcID = Number(card.dataset.sdlcId);
+                state.selectedSdlcDraft = getCurrentSdlc() ? structuredClone(getCurrentSdlc()) : emptySdlc();
+                renderAll();
+            });
+
+            document.getElementById("new-sdlc-button").addEventListener("click", () => {
+                state.selectedSdlcID = null;
+                state.selectedSdlcDraft = emptySdlc();
+                renderEditors();
+            });
+
+            document.getElementById("reset-sdlc-button").addEventListener("click", () => {
+                state.selectedSdlcDraft = getCurrentSdlc() ? structuredClone(getCurrentSdlc()) : emptySdlc();
+                renderEditors();
+            });
+
+            document.getElementById("sdlc-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const draft = state.selectedSdlcDraft;
+                const payload = {
+                    name: document.getElementById("sdlc-name").value.trim(),
+                    description: document.getElementById("sdlc-description").value.trim(),
+                };
+                try {
+                    const sdlc = draft.id
+                        ? await api("/api/sdlcs/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
+                        : await api("/api/sdlcs", { method: "POST", body: JSON.stringify(payload) });
+                    state.selectedSdlcID = sdlc.id;
+                    await Promise.all([loadSdlcs(), loadProjects(), loadRoles()]);
+                    renderAll();
+                    setNotice("SDLC saved.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("delete-sdlc-button").addEventListener("click", async () => {
+                const draft = state.selectedSdlcDraft;
+                if (!draft.id) {
+                    return;
+                }
+                try {
+                    await api("/api/sdlcs/" + draft.id, { method: "DELETE" });
+                    state.selectedSdlcID = null;
+                    state.selectedSdlcDraft = emptySdlc();
+                    await Promise.all([loadSdlcs(), loadProjects(), loadRoles()]);
+                    renderAll();
+                    setNotice("SDLC deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("new-stage-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const sdlc = getCurrentSdlc();
+                if (!sdlc) {
+                    setNotice("Select an SDLC first.", true);
+                    return;
+                }
+                try {
+                    await api("/api/sdlcs/" + sdlc.id + "/stages", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            stage_name: document.getElementById("new-stage-name").value.trim(),
+                            wow: document.getElementById("new-stage-wow").value.trim(),
+                            dor: document.getElementById("new-stage-dor").value.trim(),
+                            dod: document.getElementById("new-stage-dod").value.trim(),
+                            sort_order: Number(document.getElementById("new-stage-sort-order").value || 0),
+                        }),
+                    });
+                    document.getElementById("new-stage-form").reset();
+                    await loadSdlcs();
+                    renderAll();
+                    setNotice("Stage added.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            els.stageGrid.addEventListener("click", async (event) => {
+                const saveButton = event.target.closest("[data-save-stage]");
+                if (saveButton) {
+                    const stageID = Number(saveButton.dataset.saveStage);
+                    await saveStage(stageID);
+                    return;
+                }
+                const deleteButton = event.target.closest("[data-delete-stage]");
+                if (deleteButton) {
+                    const stageID = Number(deleteButton.dataset.deleteStage);
+                    try {
+                        await api("/api/sdlcs/stages/" + stageID, { method: "DELETE" });
+                        await loadSdlcs();
+                        renderAll();
+                        setNotice("Stage deleted.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                    return;
+                }
+                const addRoleButton = event.target.closest("[data-add-role]");
+                if (addRoleButton) {
+                    const stageID = Number(addRoleButton.dataset.addRole);
+                    const sdlc = getCurrentSdlc();
+                    const select = document.querySelector("[data-add-role-select=\"" + stageID + "\"]");
+                    if (!sdlc || !select || !select.value) {
+                        return;
+                    }
+                    try {
+                        await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + stageID + "/" + Number(select.value), { method: "POST" });
+                        await loadSdlcs();
+                        renderAll();
+                        setNotice("Role added to stage.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                }
+            });
+
+            bindStageDragAndDrop();
+        }
+
+        async function saveStage(stageID) {
+            try {
+                await api("/api/sdlcs/stages/" + stageID, {
+                    method: "PUT",
+                    body: JSON.stringify({
+                        stage_name: document.querySelector("[data-stage-name=\"" + stageID + "\"]").value.trim(),
+                        wow: document.querySelector("[data-stage-wow=\"" + stageID + "\"]").value.trim(),
+                        dor: document.querySelector("[data-stage-dor=\"" + stageID + "\"]").value.trim(),
+                        dod: document.querySelector("[data-stage-dod=\"" + stageID + "\"]").value.trim(),
+                    }),
+                });
+                await loadSdlcs();
+                renderAll();
+                setNotice("Stage saved.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        function bindRolesHandlers() {
+            els.roleList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-role-id]");
+                if (!card) {
+                    return;
+                }
+                state.selectedRoleID = Number(card.dataset.roleId);
+                state.selectedRoleDraft = getCurrentRole() ? structuredClone(getCurrentRole()) : emptyRole();
+                renderAll();
+            });
+
+            document.getElementById("new-role-button").addEventListener("click", () => {
+                state.selectedRoleID = null;
+                state.selectedRoleDraft = emptyRole();
+                renderEditors();
+            });
+
+            document.getElementById("reset-role-button").addEventListener("click", () => {
+                state.selectedRoleDraft = getCurrentRole() ? structuredClone(getCurrentRole()) : emptyRole();
+                renderEditors();
+            });
+
+            document.getElementById("role-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const draft = state.selectedRoleDraft;
+                const payload = {
+                    title: document.getElementById("role-title").value.trim(),
+                    description: document.getElementById("role-description").value.trim(),
+                    acceptance_criteria: document.getElementById("role-ac").value.trim(),
+                    sdlc_id: document.getElementById("role-sdlc").value ? Number(document.getElementById("role-sdlc").value) : null,
+                };
+                try {
+                    const role = draft.id
+                        ? await api("/api/roles/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
+                        : await api("/api/roles", { method: "POST", body: JSON.stringify(payload) });
+                    state.selectedRoleID = role.id;
+                    await Promise.all([loadRoles(), loadSdlcs()]);
+                    renderAll();
+                    setNotice("Role saved.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("delete-role-button").addEventListener("click", async () => {
+                const draft = state.selectedRoleDraft;
+                if (!draft.id) {
+                    return;
+                }
+                try {
+                    await api("/api/roles/" + draft.id, { method: "DELETE" });
+                    state.selectedRoleID = null;
+                    state.selectedRoleDraft = emptyRole();
+                    await Promise.all([loadRoles(), loadSdlcs()]);
+                    renderAll();
+                    setNotice("Role deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+        }
+
+        function bindAgentsHandlers() {
+            els.agentList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-agent-id]");
+                if (!card) {
+                    return;
+                }
+                state.selectedAgentID = card.dataset.agentId;
+                renderEditors();
+            });
+
+            document.getElementById("new-agent-button").addEventListener("click", async () => {
+                const password = prompt("Optional password for the new agent", "");
+                if (password === null) {
+                    return;
+                }
+                try {
+                    const created = await api("/api/agents", { method: "POST", body: JSON.stringify({ password: password || "" }) });
+                    await loadAgents();
+                    state.selectedAgentID = created.id;
+                    renderAll();
+                    setNotice("Agent created. Password: " + (created.password || "(generated server-side and not returned)"));
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("agent-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const agent = getCurrentAgent();
+                if (!agent) {
+                    return;
+                }
+                try {
+                    await api("/api/agents/" + agent.id, {
+                        method: "PUT",
+                        body: JSON.stringify({ password: document.getElementById("agent-new-password").value }),
+                    });
+                    await loadAgents();
+                    renderAll();
+                    setNotice("Agent password rotated.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("toggle-agent-button").addEventListener("click", async () => {
+                const agent = getCurrentAgent();
+                if (!agent) {
+                    return;
+                }
+                try {
+                    await api("/api/agents/" + agent.id + "/" + (agent.enabled ? "disable" : "enable"), { method: "POST" });
+                    await loadAgents();
+                    renderAll();
+                    setNotice("Agent updated.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("delete-agent-button").addEventListener("click", async () => {
+                const agent = getCurrentAgent();
+                if (!agent) {
+                    return;
+                }
+                try {
+                    await api("/api/agents/" + agent.id, { method: "DELETE" });
+                    state.selectedAgentID = null;
+                    await loadAgents();
+                    renderAll();
+                    setNotice("Agent deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+        }
+
+        function bindTeamsHandlers() {
+            els.teamList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-team-id]");
+                if (!card) {
+                    return;
+                }
+                state.selectedTeamID = Number(card.dataset.teamId);
+                state.selectedTeamDraft = getCurrentTeam() ? structuredClone(getCurrentTeam()) : emptyTeam();
+                renderAll();
+            });
+
+            document.getElementById("new-team-button").addEventListener("click", () => {
+                state.selectedTeamID = null;
+                state.selectedTeamDraft = emptyTeam();
+                renderEditors();
+            });
+
+            document.getElementById("reset-team-button").addEventListener("click", () => {
+                state.selectedTeamDraft = getCurrentTeam() ? structuredClone(getCurrentTeam()) : emptyTeam();
+                renderAll();
+            });
+
+            document.getElementById("team-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const draft = state.selectedTeamDraft;
+                const payload = {
+                    name: document.getElementById("team-name").value.trim(),
+                    parent_team_id: document.getElementById("team-parent").value ? Number(document.getElementById("team-parent").value) : null,
+                };
+                try {
+                    const team = draft.id
+                        ? await api("/api/teams/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
+                        : await api("/api/teams", { method: "POST", body: JSON.stringify(payload) });
+                    state.selectedTeamID = team.id;
+                    await loadTeams();
+                    renderAll();
+                    setNotice("Team saved.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("delete-team-button").addEventListener("click", async () => {
+                const draft = state.selectedTeamDraft;
+                if (!draft.id) {
+                    return;
+                }
+                try {
+                    await api("/api/teams/" + draft.id, { method: "DELETE" });
+                    state.selectedTeamID = null;
+                    state.selectedTeamDraft = emptyTeam();
+                    await loadTeams();
+                    renderAll();
+                    setNotice("Team deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+        }
+
+        function bindTicketsHandlers() {
+            document.getElementById("new-ticket-button").addEventListener("click", () => openTicketModal(emptyTicket()));
+            document.getElementById("close-ticket-modal").addEventListener("click", closeTicketModal);
+            els.ticketModal.addEventListener("click", (event) => {
+                if (event.target === els.ticketModal) {
+                    closeTicketModal();
+                }
+            });
+
+            els.projectSelect.addEventListener("change", async () => {
+                state.selectedProjectID = Number(els.projectSelect.value);
+                state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
+                populateTicketTypeAndStageSelects();
+                try {
+                    await loadTickets();
+                    renderAll();
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            els.ticketBoard.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-ticket-id]");
+                if (!card) {
+                    return;
+                }
+                const ticket = state.tickets.find((item) => String(item.id) === card.dataset.ticketId);
+                if (ticket) {
+                    openTicketModal(ticket);
+                }
+            });
+
+            document.getElementById("ticket-form").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                await saveActiveTicket();
+            });
+
+            document.getElementById("delete-ticket-button").addEventListener("click", async () => {
+                if (!state.activeTicket || !state.activeTicket.id) {
+                    closeTicketModal();
+                    return;
+                }
+                try {
+                    await api("/api/tickets/" + state.activeTicket.id, { method: "DELETE" });
+                    closeTicketModal();
+                    await loadTickets();
+                    renderTicketBoard();
+                    setNotice("Ticket deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("ticket-open-button").addEventListener("click", () => ticketAction("open"));
+            document.getElementById("ticket-close-button").addEventListener("click", () => ticketAction("close"));
+            document.getElementById("ticket-archive-button").addEventListener("click", () => ticketAction("archive"));
+            document.getElementById("ticket-unarchive-button").addEventListener("click", () => ticketAction("unarchive"));
+
+            bindTicketBoardDragAndDrop();
+        }
+
+        function openTicketModal(ticket) {
+            state.activeTicket = structuredClone(ticket);
+            document.getElementById("ticket-modal-title").textContent = ticket.id ? "Ticket " + (ticket.key || ticket.id) : "New ticket";
+            populateTicketTypeAndStageSelects();
+            document.getElementById("ticket-type").value = ticket.type || "task";
+            document.getElementById("ticket-status").value = ticket.status || "open";
+            document.getElementById("ticket-stage").value = ticket.stage || getStageOptions()[0];
+            document.getElementById("ticket-title").value = ticket.title || "";
+            document.getElementById("ticket-description").value = ticket.description || "";
+            document.getElementById("ticket-ac").value = ticket.acceptance_criteria || "";
+            document.getElementById("ticket-parent").value = ticket.parent_id || "";
+            document.getElementById("ticket-sdlc").value = ticket.sdlc_id || "";
+            document.getElementById("ticket-draft").value = String(Boolean(ticket.draft));
+            document.getElementById("ticket-priority").value = ticket.priority || 0;
+            document.getElementById("ticket-order").value = ticket.order || 0;
+            document.getElementById("ticket-estimate-effort").value = ticket.estimate_effort || 0;
+            document.getElementById("ticket-health").value = ticket.health || 0;
+            document.getElementById("delete-ticket-button").disabled = !ticket.id;
+            els.ticketModal.classList.add("open");
+            loadTicketHistory(ticket.id).catch((error) => {
+                els.ticketHistory.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+        }
+
+        function closeTicketModal() {
+            state.activeTicket = null;
+            state.ticketHistory = [];
+            els.ticketModal.classList.remove("open");
+        }
+
+        async function loadTicketHistory(ticketID) {
+            if (!ticketID) {
+                els.ticketHistory.innerHTML = "<div class=\"empty\">History appears after the first save.</div>";
+                return;
+            }
+            state.ticketHistory = await api("/api/tickets/" + ticketID + "/history");
+            if (!Array.isArray(state.ticketHistory) || !state.ticketHistory.length) {
+                els.ticketHistory.innerHTML = "<div class=\"empty\">No history yet.</div>";
+                return;
+            }
+            els.ticketHistory.innerHTML = state.ticketHistory.map((item) => {
+                return "<div class=\"history-item\"><strong>" + escapeHTML(item.action || item.type || "event") + "</strong><div class=\"meta\">" +
+                    escapeHTML(item.created_at || item.timestamp || "") + "</div><div class=\"meta\">" +
+                    escapeHTML(item.comment || item.message || "") + "</div></div>";
+            }).join("");
+        }
+
+        async function saveActiveTicket() {
+            const payload = {
+                project_id: state.selectedProjectID,
+                type: document.getElementById("ticket-type").value,
+                title: document.getElementById("ticket-title").value.trim(),
+                description: document.getElementById("ticket-description").value.trim(),
+                acceptance_criteria: document.getElementById("ticket-ac").value.trim(),
+                parent_id: document.getElementById("ticket-parent").value.trim() || null,
+                status: document.getElementById("ticket-status").value,
+                stage: document.getElementById("ticket-stage").value,
+                priority: Number(document.getElementById("ticket-priority").value || 0),
+                order: Number(document.getElementById("ticket-order").value || 0),
+                estimate_effort: Number(document.getElementById("ticket-estimate-effort").value || 0),
+                health: Number(document.getElementById("ticket-health").value || 0),
+            };
+            try {
+                const ticket = state.activeTicket && state.activeTicket.id
+                    ? await api("/api/tickets/" + state.activeTicket.id, { method: "PUT", body: JSON.stringify(payload) })
+                    : await api("/api/tickets", { method: "POST", body: JSON.stringify(payload) });
+
+                const wantsDraft = normalizeBool(document.getElementById("ticket-draft").value);
+                if (wantsDraft !== Boolean(ticket.draft)) {
+                    await api("/api/tickets/" + ticket.id + "/" + (wantsDraft ? "draft" : "undraft"), { method: "POST" });
+                }
+
+                const sdlcValue = document.getElementById("ticket-sdlc").value;
+                if (sdlcValue) {
+                    await api("/api/tickets/" + ticket.id + "/sdlc", {
+                        method: "POST",
+                        body: JSON.stringify({ sdlc_id: Number(sdlcValue) }),
+                    });
+                } else if (ticket.sdlc_id) {
+                    await api("/api/tickets/" + ticket.id + "/sdlc", { method: "DELETE" });
+                }
+
+                closeTicketModal();
+                await loadTickets();
+                renderTicketBoard();
+                setNotice("Ticket saved.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function ticketAction(action) {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/" + action, { method: "POST", body: JSON.stringify({}) });
+                await loadTickets();
+                const updated = state.tickets.find((ticket) => ticket.id === state.activeTicket.id);
+                renderTicketBoard();
+                if (updated) {
+                    openTicketModal(updated);
+                }
+                setNotice("Ticket updated.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        function bindTicketBoardDragAndDrop() {
+            els.ticketBoard.addEventListener("dragstart", (event) => {
+                const card = event.target.closest("[data-ticket-id]");
+                if (!card) {
+                    return;
+                }
+                state.drag = { type: "ticket", ticketID: card.dataset.ticketId };
+                event.dataTransfer.effectAllowed = "move";
+            });
+
+            els.ticketBoard.addEventListener("dragover", (event) => {
+                const lane = event.target.closest("[data-lane-stage]");
+                if (!lane || !state.drag || state.drag.type !== "ticket") {
+                    return;
+                }
+                event.preventDefault();
+                document.querySelectorAll(".lane").forEach((item) => item.classList.remove("drag-target"));
+                lane.classList.add("drag-target");
+            });
+
+            els.ticketBoard.addEventListener("dragleave", (event) => {
+                const lane = event.target.closest("[data-lane-stage]");
+                if (lane) {
+                    lane.classList.remove("drag-target");
+                }
+            });
+
+            els.ticketBoard.addEventListener("drop", async (event) => {
+                const lane = event.target.closest("[data-lane-stage]");
+                if (!lane || !state.drag || state.drag.type !== "ticket") {
+                    return;
+                }
+                event.preventDefault();
+                lane.classList.remove("drag-target");
+                const ticket = state.tickets.find((item) => String(item.id) === state.drag.ticketID);
+                state.drag = null;
+                if (!ticket || ticket.stage === lane.dataset.laneStage) {
+                    return;
+                }
+                try {
+                    await api("/api/tickets/" + ticket.id, {
+                        method: "PUT",
+                        body: JSON.stringify(Object.assign({}, ticket, { stage: lane.dataset.laneStage })),
+                    });
+                    await loadTickets();
+                    renderTicketBoard();
+                    setNotice("Ticket moved to " + lane.dataset.laneStage + ".");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+        }
+
+        function bindStageDragAndDrop() {
+            els.stageGrid.addEventListener("dragstart", (event) => {
+                const role = event.target.closest("[data-role-id]");
+                if (role) {
+                    state.drag = {
+                        type: "stage-role",
+                        stageID: Number(role.dataset.stageId),
+                        roleID: Number(role.dataset.roleId),
+                    };
+                    event.dataTransfer.effectAllowed = "move";
+                    return;
+                }
+                const stage = event.target.closest("[data-stage-id]");
+                if (!stage) {
+                    return;
+                }
+                state.drag = { type: "stage", stageID: Number(stage.dataset.stageId) };
+                event.dataTransfer.effectAllowed = "move";
+            });
+
+            els.stageGrid.addEventListener("dragover", (event) => {
+                if (!state.drag) {
+                    return;
+                }
+                const roleRow = event.target.closest("[data-stage-role-row]");
+                const stageCard = event.target.closest(".stage-card");
+                if (state.drag.type === "stage-role" && roleRow) {
+                    event.preventDefault();
+                    document.querySelectorAll("[data-stage-role-row]").forEach((row) => row.classList.remove("drag-target"));
+                    roleRow.classList.add("drag-target");
+                    return;
+                }
+                if (state.drag.type === "stage" && stageCard) {
+                    event.preventDefault();
+                    document.querySelectorAll(".stage-card").forEach((card) => card.classList.remove("drag-target"));
+                    stageCard.classList.add("drag-target");
+                }
+            });
+
+            els.stageGrid.addEventListener("drop", async (event) => {
+                if (!state.drag) {
+                    return;
+                }
+                const sdlc = getCurrentSdlc();
+                if (!sdlc) {
+                    state.drag = null;
+                    return;
+                }
+                if (state.drag.type === "stage-role") {
+                    const roleRow = event.target.closest("[data-stage-role-row]");
+                    if (!roleRow) {
+                        state.drag = null;
+                        return;
+                    }
+                    event.preventDefault();
+                    roleRow.classList.remove("drag-target");
+                    const targetStageID = Number(roleRow.dataset.stageRoleRow);
+                    const stage = sdlc.stages.find((item) => item.id === targetStageID);
+                    if (!stage) {
+                        state.drag = null;
+                        return;
+                    }
+                    const roleIDs = (stage.roles || []).map((role) => role.id).filter((roleID) => roleID !== state.drag.roleID);
+                    roleIDs.push(state.drag.roleID);
+                    try {
+                        await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, {
+                            method: "PUT",
+                            body: JSON.stringify({ role_ids: roleIDs }),
+                        });
+                        await loadSdlcs();
+                        renderAll();
+                        setNotice("Stage roles reordered.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                    state.drag = null;
+                    return;
+                }
+
+                const targetStage = event.target.closest(".stage-card");
+                if (!targetStage) {
+                    state.drag = null;
+                    return;
+                }
+                event.preventDefault();
+                targetStage.classList.remove("drag-target");
+                const ordered = Array.from(els.stageGrid.querySelectorAll(".stage-card"))
+                    .map((card) => Number(card.dataset.stageId))
+                    .filter((stageID) => stageID !== state.drag.stageID);
+                const targetIndex = ordered.indexOf(Number(targetStage.dataset.stageId));
+                ordered.splice(targetIndex >= 0 ? targetIndex : ordered.length, 0, state.drag.stageID);
+                try {
+                    await api("/api/sdlcs/" + sdlc.id + "/reorder", {
+                        method: "PUT",
+                        body: JSON.stringify({ stage_ids: ordered }),
+                    });
+                    await loadSdlcs();
+                    renderAll();
+                    setNotice("Stages reordered.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+                state.drag = null;
+            });
+        }
+
+        function bindMiscHandlers() {
+            document.getElementById("logout-button").addEventListener("click", () => {
+                state.auth = null;
+                els.appShell.classList.add("hidden");
+                els.loginScreen.classList.remove("hidden");
+                els.loginForm.reset();
+                setNotice("Signed out.");
+            });
+            document.getElementById("global-refresh").addEventListener("click", () => {
+                refreshAll().then(() => setNotice("Data refreshed.")).catch((error) => setNotice(error.message, true));
+            });
+        }
+
+        bindViewNavigation();
+        bindProjectHandlers();
+        bindSdlcHandlers();
+        bindRolesHandlers();
+        bindAgentsHandlers();
+        bindTeamsHandlers();
+        bindTicketsHandlers();
+        bindMiscHandlers();
+        els.loginForm.addEventListener("submit", handleLogin);
+
+        window.site2 = {
+            state,
+            refreshAll,
+            switchView,
+            openTicketModal,
+            closeTicketModal,
+            emptyTicket,
+        };
+    </script>
 </body>
 </html>
