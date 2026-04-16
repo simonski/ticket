@@ -199,6 +199,12 @@ function installSite2Mock(page) {
   });
 }
 
+test("focuses the username field on first load", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await expect(page.locator("#login-username")).toBeFocused();
+});
+
 test.beforeEach(async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");

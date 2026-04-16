@@ -532,11 +532,10 @@
     <div id="login-screen" class="screen login-screen">
         <form id="login-form" class="login-card">
             <h1>ticket</h1>
-            <p class="subtitle">Fast board, simple CRUD, and drag/drop over the existing API.</p>
             <div class="stack">
                 <div class="field">
                     <label for="login-username">Username</label>
-                    <input id="login-username" name="username" autocomplete="username" required>
+                    <input id="login-username" name="username" autocomplete="username" autofocus required>
                 </div>
                 <div class="field">
                     <label for="login-password">Password</label>
@@ -1058,6 +1057,15 @@
         function setNotice(message, isError) {
             els.appNotice.textContent = message;
             els.appNotice.classList.toggle("error", Boolean(isError));
+        }
+
+        function focusLoginUsername() {
+            requestAnimationFrame(() => {
+                const input = document.getElementById("login-username");
+                if (input && !els.loginScreen.classList.contains("hidden")) {
+                    input.focus();
+                }
+            });
         }
 
         function authHeaders(extra) {
@@ -2256,6 +2264,7 @@
                 els.loginScreen.classList.remove("hidden");
                 els.loginForm.reset();
                 setNotice("Signed out.");
+                focusLoginUsername();
             });
             document.getElementById("global-refresh").addEventListener("click", () => {
                 refreshAll().then(() => setNotice("Data refreshed.")).catch((error) => setNotice(error.message, true));
@@ -2271,6 +2280,7 @@
         bindTicketsHandlers();
         bindMiscHandlers();
         els.loginForm.addEventListener("submit", handleLogin);
+        focusLoginUsername();
 
         window.site2 = {
             state,
