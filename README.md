@@ -150,6 +150,7 @@ Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 ```bash
 tk server                  # start on :8080
 tk server -f ./team.db     # use this exact database file
+tk server -site site2      # serve the new site2 frontend instead of default
 ```
 
 Opens a Kanban board with live WebSocket updates at `http://localhost:8080`.

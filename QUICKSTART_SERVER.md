@@ -16,6 +16,13 @@ its local SQLite database. Save the generated `admin` password.
 The web UI is available at `http://localhost:8080`. Leave the server running
 and open a second terminal for the steps below.
 
+To try the fresh replacement frontend without removing the original one, start
+the server with:
+
+```bash
+tk server -site site2
+```
+
 ## 2. Register and log in
 
 Point the CLI at the running server and create your account:

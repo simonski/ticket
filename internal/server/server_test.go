@@ -54,7 +54,7 @@ func TestWriteThrottleMiddlewareUsesPerUserKeys(t *testing.T) {
 		t.Fatalf("CreateUser(alice) error = %v", err)
 	}
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	}
 	defer db.Close()
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -240,6 +240,60 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	}
 }
 
+func TestServerServesNamedEmbeddedSite(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "site2")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	ts := httptest.NewServer(srv.httpServer.Handler)
+	defer ts.Close()
+
+	rootResp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET / error = %v", err)
+	}
+	defer rootResp.Body.Close()
+
+	body, err := io.ReadAll(rootResp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	if !strings.Contains(string(body), "<title>ticket site2</title>") {
+		t.Fatalf("root response missing site2 frontend")
+	}
+}
+
+func TestHandlerRejectsUnknownEmbeddedSite(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	if _, err := Handler(db, "1.2.3", false, nil, "", "unknown-site"); err == nil || !strings.Contains(err.Error(), "unknown embedded site") {
+		t.Fatalf("Handler() error = %v, want unknown embedded site", err)
+	}
+}
+
 func TestServerVerboseLogging(t *testing.T) {
 	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
@@ -254,7 +308,7 @@ func TestServerVerboseLogging(t *testing.T) {
 	defer db.Close()
 
 	var logs strings.Builder
-	srv, err := New(":0", db, "1.2.3", true, &logs, "")
+	srv, err := New(":0", db, "1.2.3", true, &logs, "", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

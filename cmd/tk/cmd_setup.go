@@ -29,6 +29,7 @@ import (
 	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
+	"github.com/simonski/ticket/web"
 )
 
 func runOnboard(args []string) error {
@@ -1350,6 +1351,7 @@ func runServer(args []string) error {
 	port := fs.Int("p", 0, "HTTP listen port (shorthand for -addr :<port>)")
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
 	staticPath := fs.String("path", "", "serve static files from this filesystem path instead of embedded assets")
+	siteName := fs.String("site", web.DefaultSite, "embedded site bundle to serve (default or site2)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1390,13 +1392,19 @@ func runServer(args []string) error {
 	}
 	defer db.Close()
 
-	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath)
+	selectedSite := strings.TrimSpace(*siteName)
+	if selectedSite == "" {
+		selectedSite = web.DefaultSite
+	}
+
+	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite)
 	if err != nil {
 		return err
 	}
 
 	fmt.Print(renderBanner())
 	fmt.Printf("VERSION    %s\n", strings.TrimSpace(embeddedVersion))
+	fmt.Printf("SITE       %s\n", selectedSite)
 	fmt.Printf("TICKETDB   %s\n\n", resolvedDBPath)
 	fmt.Printf("serving tk on http://localhost%s\n", listenAddr)
 

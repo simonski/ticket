@@ -31,8 +31,8 @@ type Server struct {
 	stopReaper chan struct{}
 }
 
-func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath string) (*Server, error) {
-	handler, err := Handler(db, version, verbose, output, staticPath)
+func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath string, siteName string) (*Server, error) {
+	handler, err := Handler(db, version, verbose, output, staticPath, siteName)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +121,13 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 	}
 }
 
-func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath string) (http.Handler, error) {
+func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath string, siteName string) (http.Handler, error) {
 	var staticFS fs.FS
 	if staticPath != "" {
 		staticFS = os.DirFS(staticPath)
 	} else {
 		var err error
-		staticFS, err = fs.Sub(web.Static, "static")
+		staticFS, err = web.SiteFS(siteName)
 		if err != nil {
 			return nil, err
 		}

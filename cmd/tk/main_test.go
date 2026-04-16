@@ -454,10 +454,11 @@ func TestRunSkillDoesNotRequireTicketInit(t *testing.T) {
 func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 	help := renderCommandHelp("server")
 	for _, want := range []string{
-		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-v]",
+		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-site <name>] [-v]",
 		"the server uses `.ticket/ticket.db`",
 		"If `-f` is provided, that exact database file is used directly",
-		"tk server -f /path/to/ticket.db -p 9999 -v",
+		"`default` serves the original site and `site2` serves the new replacement frontend",
+		"tk server -f /path/to/ticket.db -p 9999 -site site2 -v",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("server help missing %q:\n%s", want, help)
@@ -759,7 +760,7 @@ func TestRunUsesRemoteEnvOverrideWithoutTicketInit(t *testing.T) {
 		t.Fatalf("store.Open() error = %v", err)
 	}
 	defer db.Close()
-	handler, err := server.Handler(db, "test", false, nil, "")
+	handler, err := server.Handler(db, "test", false, nil, "", "")
 	if err != nil {
 		t.Fatalf("server.Handler() error = %v", err)
 	}
@@ -810,7 +811,7 @@ func TestRunListWithRemoteEnvOverrideDoesNotCreateLocalConfigDirs(t *testing.T) 
 		t.Fatalf("store.Open() error = %v", err)
 	}
 	defer db.Close()
-	handler, err := server.Handler(db, "test", false, nil, "")
+	handler, err := server.Handler(db, "test", false, nil, "", "")
 	if err != nil {
 		t.Fatalf("server.Handler() error = %v", err)
 	}
@@ -6057,7 +6058,7 @@ func TestQuickstartServer(t *testing.T) {
 	}
 	defer db.Close()
 
-	handler, err := server.Handler(db, "test", false, nil, "")
+	handler, err := server.Handler(db, "test", false, nil, "", "")
 	if err != nil {
 		t.Fatalf("server.Handler() error = %v", err)
 	}

@@ -2952,7 +2952,7 @@ func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 		t.Fatalf("Open() error = %v", err)
 	}
 
-	srv, err := New(":0", db, "1.2.3", false, nil, "")
+	srv, err := New(":0", db, "1.2.3", false, nil, "", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

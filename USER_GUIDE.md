@@ -88,6 +88,7 @@ tk server
 
 If `-f` is omitted, `tk server` uses the database at `.ticket/ticket.db` (same resolution as `tk init`).
 If `-f` is provided, `tk server` uses that exact database file and does not infer DB location from env vars or the default `.ticket/` workspace.
+Use `-site default` to serve the existing embedded website, or `-site site2` to serve the fresh replacement frontend while keeping the old one available.
 
 If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.

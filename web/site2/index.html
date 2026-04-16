@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ticket site2</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --panel: #121a30;
+      --panel-2: #18233f;
+      --line: #2c3a61;
+      --text: #eef3ff;
+      --muted: #9eb0d8;
+      --accent: #67e8f9;
+      --accent-2: #8b5cf6;
+      --danger: #fb7185;
+      --ok: #4ade80;
+      --shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(103, 232, 249, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(139, 92, 246, 0.14), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    button, input, select, textarea {
+      font: inherit;
+    }
+    .hidden { display: none !important; }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(18px);
+      background: rgba(11, 16, 32, 0.7);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    .brand {
+      display: grid;
+      gap: 0.1rem;
+    }
+    .brand h1 {
+      font-size: 1rem;
+      margin: 0;
+    }
+    .brand small {
+      color: var(--muted);
+    }
+    .statusline {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.28rem 0.65rem;
+      background: rgba(255,255,255,0.03);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr 360px;
+      gap: 1rem;
+      padding: 1rem;
+      min-height: 0;
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(24, 35, 63, 0.94), rgba(18, 26, 48, 0.96));
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      min-height: 0;
+      display: grid;
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 1rem 1rem 0.8rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .panel-head h2 {
+      margin: 0;
+      font-size: 0.95rem;
+    }
+    .panel-head small {
+      display: block;
+      color: var(--muted);
+      margin-top: 0.2rem;
+    }
+    .panel-body {
+      padding: 0.9rem 1rem 1rem;
+      overflow: auto;
+      display: grid;
+      gap: 0.8rem;
+      align-content: start;
+    }
+    .project-list,
+    .ticket-list,
+    .history-list {
+      display: grid;
+      gap: 0.65rem;
+    }
+    .project-card,
+    .ticket-card,
+    .history-card {
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
+      border-radius: 16px;
+      padding: 0.9rem;
+      cursor: pointer;
+      transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+    }
+    .project-card:hover,
+    .ticket-card:hover,
+    .history-card:hover {
+      border-color: rgba(103, 232, 249, 0.4);
+      transform: translateY(-1px);
+      background: rgba(255,255,255,0.05);
+    }
+    .project-card.active,
+    .ticket-card.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.25);
+    }
+    .muted { color: var(--muted); }
+    .ticket-card strong,
+    .project-card strong,
+    .detail-card strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    .ticket-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 0.8rem;
+    }
+    .ticket-card {
+      min-height: 148px;
+    }
+    .badge-row,
+    .detail-grid {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .badge {
+      border-radius: 999px;
+      padding: 0.14rem 0.5rem;
+      border: 1px solid var(--line);
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+    .badge.ok { border-color: rgba(74, 222, 128, 0.45); color: #bbf7d0; }
+    .badge.warn { border-color: rgba(251, 191, 36, 0.45); color: #fde68a; }
+    .badge.danger { border-color: rgba(251, 113, 133, 0.45); color: #fecdd3; }
+    .detail-stack {
+      display: grid;
+      gap: 0.85rem;
+    }
+    .detail-card {
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+      padding: 0.9rem;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 0.45rem 0.7rem;
+      align-items: start;
+      font-size: 0.92rem;
+    }
+    .detail-grid div:nth-child(odd) {
+      color: var(--muted);
+    }
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+    .login-card {
+      width: min(420px, 100%);
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(24, 35, 63, 0.96), rgba(18, 26, 48, 0.98));
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+      display: grid;
+      gap: 1rem;
+    }
+    .login-card h2 {
+      margin: 0;
+    }
+    .field {
+      display: grid;
+      gap: 0.35rem;
+    }
+    .field label {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .field input,
+    .field select {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      padding: 0.8rem 0.9rem;
+      outline: none;
+    }
+    .button-row {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.72rem 0.95rem;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .btn.primary {
+      background: linear-gradient(135deg, rgba(103, 232, 249, 0.22), rgba(139, 92, 246, 0.24));
+      border-color: rgba(103, 232, 249, 0.35);
+    }
+    .empty {
+      border: 1px dashed rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 1rem;
+      color: var(--muted);
+      text-align: center;
+    }
+    .error { color: #fecdd3; }
+    @media (max-width: 1180px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="login-wrap" class="login-wrap">
+    <form id="login-form" class="login-card">
+      <div>
+        <h2>ticket / site2</h2>
+        <div class="muted">Fresh frontend, same APIs.</div>
+      </div>
+      <div class="field">
+        <label for="login-user">Username</label>
+        <input id="login-user" name="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="login-pass">Password</label>
+        <input id="login-pass" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="button-row">
+        <button class="btn primary" type="submit">Login</button>
+      </div>
+      <div id="login-status" class="muted"></div>
+    </form>
+  </div>
+
+  <div id="app" class="shell hidden">
+    <header class="topbar">
+      <div class="brand">
+        <h1>ticket / site2</h1>
+        <small id="server-version">server version pending</small>
+      </div>
+      <div class="statusline">
+        <span id="current-user" class="pill">user</span>
+        <span id="current-project-pill" class="pill">project</span>
+        <button id="refresh-btn" class="btn" type="button">Refresh</button>
+        <button id="logout-btn" class="btn" type="button">Logout</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Projects</h2>
+            <small>Choose a project to load its tickets.</small>
+          </div>
+        </div>
+        <div id="project-list" class="panel-body project-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Tickets</h2>
+            <small>Current project tickets from the existing API.</small>
+          </div>
+          <div class="field" style="min-width: 180px;">
+            <label for="ticket-filter">Stage filter</label>
+            <select id="ticket-filter">
+              <option value="">All stages</option>
+              <option value="design">design</option>
+              <option value="develop">develop</option>
+              <option value="test">test</option>
+              <option value="done">done</option>
+            </select>
+          </div>
+        </div>
+        <div id="ticket-list" class="panel-body ticket-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Details</h2>
+            <small>Ticket context and recent history.</small>
+          </div>
+        </div>
+        <div id="detail-panel" class="panel-body detail-stack">
+          <div class="empty">Select a ticket to inspect it.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const tokenKey = "task-token"
+    let token = localStorage.getItem(tokenKey) || ""
+    let currentUser = null
+    let projects = []
+    let tickets = []
+    let selectedProjectID = ""
+    let selectedTicketID = ""
+
+    const loginWrap = document.getElementById("login-wrap")
+    const app = document.getElementById("app")
+    const loginForm = document.getElementById("login-form")
+    const loginUser = document.getElementById("login-user")
+    const loginPass = document.getElementById("login-pass")
+    const loginStatus = document.getElementById("login-status")
+    const projectList = document.getElementById("project-list")
+    const ticketList = document.getElementById("ticket-list")
+    const detailPanel = document.getElementById("detail-panel")
+    const currentUserEl = document.getElementById("current-user")
+    const currentProjectPill = document.getElementById("current-project-pill")
+    const serverVersionEl = document.getElementById("server-version")
+    const ticketFilter = document.getElementById("ticket-filter")
+
+    function escapeHTML(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;")
+    }
+
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/)
+      return match ? decodeURIComponent(match[1]) : ""
+    }
+
+    function headers(json = false) {
+      const out = {}
+      if (token) out.Authorization = `Bearer ${token}`
+      if (json) out["Content-Type"] = "application/json"
+      const csrf = getCsrfToken()
+      if (csrf) out["X-CSRF-Token"] = csrf
+      return out
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, { cache: "no-store", ...options })
+      const text = await response.text()
+      let data = {}
+      try { data = text ? JSON.parse(text) : {} } catch (_) { data = {} }
+      if (response.status === 401) {
+        token = ""
+        localStorage.removeItem(tokenKey)
+        showLogin("Session expired. Please log in again.")
+        throw new Error(data.error || "unauthorized")
+      }
+      if (!response.ok) throw new Error(data.error || `${response.status} ${response.statusText}`)
+      return data
+    }
+
+    function showLogin(message = "") {
+      loginWrap.classList.remove("hidden")
+      app.classList.add("hidden")
+      loginStatus.textContent = message
+      loginStatus.className = message ? "error" : "muted"
+      setTimeout(() => loginUser.focus(), 20)
+    }
+
+    function showApp(user, version) {
+      currentUser = user || null
+      loginWrap.classList.add("hidden")
+      app.classList.remove("hidden")
+      currentUserEl.textContent = currentUser ? `${currentUser.username} · ${currentUser.role}` : "anonymous"
+      serverVersionEl.textContent = version ? `server version ${version}` : "server version unknown"
+    }
+
+    function selectedProject() {
+      return projects.find((project) => String(project.project_id) === String(selectedProjectID)) || null
+    }
+
+    function selectedTicket() {
+      return tickets.find((ticket) => String(ticket.ticket_id) === String(selectedTicketID)) || null
+    }
+
+    function badgeClassForTicket(ticket) {
+      if (ticket.archived) return "danger"
+      if (ticket.state === "success") return "ok"
+      if (ticket.state === "fail") return "danger"
+      return ticket.draft ? "warn" : ""
+    }
+
+    function renderProjects() {
+      projectList.innerHTML = ""
+      if (!projects.length) {
+        projectList.innerHTML = '<div class="empty">No projects available.</div>'
+        currentProjectPill.textContent = "no project"
+        return
+      }
+      const current = selectedProject()
+      currentProjectPill.textContent = current ? `${current.prefix} · ${current.title}` : "no project"
+      for (const project of projects) {
+        const card = document.createElement("button")
+        card.type = "button"
+        card.className = `project-card${String(project.project_id) === String(selectedProjectID) ? " active" : ""}`
+        card.innerHTML = `
+          <strong>${escapeHTML(project.title)}</strong>
+          <div class="muted">${escapeHTML(project.prefix)} · visibility ${escapeHTML(project.visibility || "public")}</div>
+          <div class="muted">${escapeHTML(project.description || "No description")}</div>
+        `
+        card.addEventListener("click", async () => {
+          selectedProjectID = String(project.project_id)
+          selectedTicketID = ""
+          renderProjects()
+          await loadTickets()
+        })
+        projectList.appendChild(card)
+      }
+    }
+
+    function filteredTickets() {
+      const stage = ticketFilter.value || ""
+      return tickets.filter((ticket) => !stage || ticket.stage === stage)
+    }
+
+    function renderTickets() {
+      const visible = filteredTickets()
+      ticketList.innerHTML = ""
+      if (!visible.length) {
+        ticketList.innerHTML = '<div class="empty">No tickets match this project and filter.</div>'
+        renderTicketDetail()
+        return
+      }
+      for (const ticket of visible) {
+        const card = document.createElement("button")
+        card.type = "button"
+        card.className = `ticket-card${String(ticket.ticket_id) === String(selectedTicketID) ? " active" : ""}`
+        card.innerHTML = `
+          <strong>${escapeHTML(ticket.title)}</strong>
+          <div class="muted">${escapeHTML(ticket.key || `#${ticket.ticket_id}`)}</div>
+          <div class="badge-row">
+            <span class="badge ${badgeClassForTicket(ticket)}">${escapeHTML(ticket.stage || "unknown")}</span>
+            <span class="badge">${escapeHTML(ticket.state || "idle")}</span>
+            ${ticket.draft ? '<span class="badge warn">draft</span>' : ""}
+            ${ticket.archived ? '<span class="badge danger">archived</span>' : ""}
+          </div>
+          <div class="muted">${escapeHTML(ticket.description || "No description")}</div>
+        `
+        card.addEventListener("click", async () => {
+          selectedTicketID = String(ticket.ticket_id)
+          renderTickets()
+          await renderTicketDetail()
+        })
+        ticketList.appendChild(card)
+      }
+      if (!selectedTicketID && visible.length) selectedTicketID = String(visible[0].ticket_id)
+    }
+
+    async function renderTicketDetail() {
+      const ticket = selectedTicket()
+      if (!ticket) {
+        detailPanel.innerHTML = '<div class="empty">Select a ticket to inspect it.</div>'
+        return
+      }
+      let history = []
+      try {
+        history = await api(`/api/tickets/${ticket.ticket_id}/history?limit=8`, { headers: headers() })
+      } catch (error) {
+        history = []
+      }
+      detailPanel.innerHTML = `
+        <section class="detail-card">
+          <strong>${escapeHTML(ticket.title)}</strong>
+          <div class="muted">${escapeHTML(ticket.key || `#${ticket.ticket_id}`)} · ${escapeHTML(ticket.type || "task")}</div>
+          <div class="badge-row" style="margin-top:0.55rem;">
+            <span class="badge ${badgeClassForTicket(ticket)}">${escapeHTML(ticket.stage || "unknown")}</span>
+            <span class="badge">${escapeHTML(ticket.state || "idle")}</span>
+            ${ticket.assignee ? `<span class="badge">@${escapeHTML(ticket.assignee)}</span>` : ""}
+            ${ticket.sdlc_id ? `<span class="badge">sdlc ${escapeHTML(ticket.sdlc_id)}</span>` : ""}
+          </div>
+        </section>
+        <section class="detail-card">
+          <strong>Ticket snapshot</strong>
+          <div class="detail-grid">
+            <div>Description</div><div>${escapeHTML(ticket.description || "No description")}</div>
+            <div>Acceptance</div><div>${escapeHTML(ticket.acceptance_criteria || "No acceptance criteria")}</div>
+            <div>Repository</div><div>${escapeHTML(ticket.git_repository || "Not set")}</div>
+            <div>Updated</div><div>${escapeHTML(ticket.updated_at || "")}</div>
+          </div>
+        </section>
+        <section class="detail-card">
+          <strong>Recent history</strong>
+          <div class="history-list">
+            ${history.length ? history.map((event) => `
+              <article class="history-card">
+                <div><strong>${escapeHTML(String(event.event_type || "").replaceAll("_", " "))}</strong></div>
+                <div class="muted">${escapeHTML(event.created_at || "")}${event.created_by ? ` · ${escapeHTML(event.created_by)}` : ""}</div>
+              </article>
+            `).join("") : '<div class="empty">No history events yet.</div>'}
+          </div>
+        </section>
+      `
+    }
+
+    async function loadProjects() {
+      projects = await api("/api/projects", { headers: headers() })
+      if (!selectedProjectID && projects.length) selectedProjectID = String(projects[0].project_id)
+      if (selectedProjectID && !projects.some((project) => String(project.project_id) === String(selectedProjectID))) {
+        selectedProjectID = projects.length ? String(projects[0].project_id) : ""
+      }
+      renderProjects()
+    }
+
+    async function loadTickets() {
+      if (!selectedProjectID) {
+        tickets = []
+        renderTickets()
+        await renderTicketDetail()
+        return
+      }
+      tickets = await api(`/api/projects/${selectedProjectID}/tickets`, { headers: headers() })
+      const visible = filteredTickets()
+      if (!visible.some((ticket) => String(ticket.ticket_id) === String(selectedTicketID))) {
+        selectedTicketID = visible.length ? String(visible[0].ticket_id) : ""
+      }
+      renderProjects()
+      renderTickets()
+      await renderTicketDetail()
+    }
+
+    async function refreshAll() {
+      const status = await api("/api/status", { headers: headers() })
+      showApp(status.user, status.server_version)
+      await loadProjects()
+      await loadTickets()
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault()
+      loginStatus.textContent = "Logging in..."
+      loginStatus.className = "muted"
+      try {
+        const response = await api("/api/login", {
+          method: "POST",
+          headers: headers(true),
+          body: JSON.stringify({ username: loginUser.value.trim(), password: loginPass.value }),
+        })
+        token = response.token || ""
+        localStorage.setItem(tokenKey, token)
+        loginPass.value = ""
+        await refreshAll()
+      } catch (error) {
+        loginStatus.textContent = error.message
+        loginStatus.className = "error"
+      }
+    })
+
+    document.getElementById("refresh-btn").addEventListener("click", refreshAll)
+    document.getElementById("logout-btn").addEventListener("click", () => {
+      token = ""
+      localStorage.removeItem(tokenKey)
+      currentUser = null
+      projects = []
+      tickets = []
+      selectedProjectID = ""
+      selectedTicketID = ""
+      showLogin("Signed out.")
+    })
+    ticketFilter.addEventListener("change", async () => {
+      const visible = filteredTickets()
+      if (!visible.some((ticket) => String(ticket.ticket_id) === String(selectedTicketID))) {
+        selectedTicketID = visible.length ? String(visible[0].ticket_id) : ""
+      }
+      renderTickets()
+      await renderTicketDetail()
+    })
+
+    async function init() {
+      try {
+        const status = await api("/api/status", { headers: headers() })
+        if (!status.authenticated) {
+          showLogin("")
+          return
+        }
+        showApp(status.user, status.server_version)
+        await loadProjects()
+        await loadTickets()
+      } catch (error) {
+        showLogin(`Server unavailable: ${error.message}`)
+      }
+    }
+
+    init()
+  </script>
+</body>
+</html>
