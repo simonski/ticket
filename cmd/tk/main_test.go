@@ -5126,6 +5126,48 @@ func TestRunCountSupportsTicketFiltersAndExpectations(t *testing.T) {
 	}
 }
 
+func TestRunListSupportsCountAndExpectations(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"bug", "Bug Alpha"}); err != nil {
+		t.Fatalf("bug create alpha error = %v", err)
+	}
+	if err := run([]string{"bug", "Bug Beta"}); err != nil {
+		t.Fatalf("bug create beta error = %v", err)
+	}
+	if err := run([]string{"add", "Task Gamma"}); err != nil {
+		t.Fatalf("task create error = %v", err)
+	}
+
+	countOut := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"ls", "-t", "bug", "-count"}); err != nil {
+			t.Fatalf("ls count error = %v", err)
+		}
+	}))
+	if countOut != "2" {
+		t.Fatalf("ls count output = %q, want %q", countOut, "2")
+	}
+
+	okOut := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"ls", "-t", "bug", "-count", "-expect_equals", "2"}); err != nil {
+			t.Fatalf("ls expect equals error = %v", err)
+		}
+	}))
+	if okOut != "2" {
+		t.Fatalf("ls expect equals output = %q, want %q", okOut, "2")
+	}
+
+	err := run([]string{"ls", "-t", "bug", "-count", "-expect_equals", "1"})
+	if err == nil || !strings.Contains(err.Error(), "expected count to equal 1, got 2") {
+		t.Fatalf("ls expect equals mismatch error = %v", err)
+	}
+
+	err = run([]string{"ls", "-t", "bug", "-count", "-expect_notequals", "2"})
+	if err == nil || !strings.Contains(err.Error(), "expected count to not equal 2, got 2") {
+		t.Fatalf("ls expect notequals mismatch error = %v", err)
+	}
+}
+
 func TestRunTeamCreateRequiresName(t *testing.T) {
 	setupLocalCLI(t)
 	err := run([]string{"team", "create"})

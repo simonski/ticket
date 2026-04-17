@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
@@ -278,18 +277,18 @@ func runCount(args []string) error {
 		}
 		count := len(tickets)
 		if hasExpectEquals {
-			expected, err := strconv.Atoi(*expectEquals)
+			expected, err := parseExpectedCount("expect_equals", *expectEquals)
 			if err != nil {
-				return fmt.Errorf("expect_equals must be numeric: %w", err)
+				return err
 			}
 			if count != expected {
 				return fmt.Errorf("expected count to equal %d, got %d", expected, count)
 			}
 		}
 		if hasExpectNotEquals {
-			expected, err := strconv.Atoi(*expectNotEquals)
+			expected, err := parseExpectedCount("expect_notequals", *expectNotEquals)
 			if err != nil {
-				return fmt.Errorf("expect_notequals must be numeric: %w", err)
+				return err
 			}
 			if count == expected {
 				return fmt.Errorf("expected count to not equal %d, got %d", expected, count)

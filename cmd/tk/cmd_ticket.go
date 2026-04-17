@@ -446,6 +446,9 @@ func runList(args []string) error {
 	includeAll := fs.Bool("a", false, "include all tickets (closed and archived)")
 	includeDeleted := fs.Bool("d", false, "include archived tickets")
 	labelFilter := fs.String("label", "", "filter by label name")
+	countOnly := fs.Bool("count", false, "print only the number of matching tickets")
+	expectEquals := fs.String("expect_equals", "", "expect the resulting count to equal this number")
+	expectNotEquals := fs.String("expect_notequals", "", "expect the resulting count to not equal this number")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -455,7 +458,12 @@ func runList(args []string) error {
 		taskType = &v
 	}
 	if *limit < 0 {
-		return errors.New("usage: tk list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-label <name>]")
+		return errors.New("usage: tk list|ls [<type>] [-type <type>] [-t <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-label <name>] [-count] [-expect_equals <n>] [-expect_notequals <n>]")
+	}
+	hasExpectEquals := strings.TrimSpace(*expectEquals) != ""
+	hasExpectNotEquals := strings.TrimSpace(*expectNotEquals) != ""
+	if hasExpectEquals && hasExpectNotEquals {
+		return errors.New("list expects only one of -expect_equals or -expect_notequals")
 	}
 	// -d implies -a (archived tickets are a superset of closed)
 	if *includeDeleted {
@@ -507,6 +515,32 @@ func runList(args []string) error {
 			}
 		}
 		tickets = filtered
+	}
+	if *countOnly || hasExpectEquals || hasExpectNotEquals {
+		count := len(tickets)
+		if hasExpectEquals {
+			expected, err := parseExpectedCount("expect_equals", *expectEquals)
+			if err != nil {
+				return err
+			}
+			if count != expected {
+				return fmt.Errorf("expected count to equal %d, got %d", expected, count)
+			}
+		}
+		if hasExpectNotEquals {
+			expected, err := parseExpectedCount("expect_notequals", *expectNotEquals)
+			if err != nil {
+				return err
+			}
+			if count == expected {
+				return fmt.Errorf("expected count to not equal %d, got %d", expected, count)
+			}
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"count": count})
+		}
+		fmt.Println(count)
+		return nil
 	}
 	if len(tickets) == 0 {
 		if outputJSON {

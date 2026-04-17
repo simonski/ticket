@@ -9,6 +9,7 @@
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds    | ~30s     |
 | `make test-playwright`| Browser tests against the web UI (11 spec files)     | ~20s     |
 | `make test-tk-test`   | Executable documentation tests (see below)           | ~15s     |
+| `make testscripts`    | Shell-based CLI harness scenarios                    | ~5s      |
 | `make test`           | Unit + integration + playwright                      | ~50s     |
 
 Run a single Go test:
@@ -74,6 +75,19 @@ The quickstart docs use `export TICKET_URL=http://localhost:8080` to switch the
 CLI to remote mode. The actual CLI reads mode from the `location` field in
 `config.json`, not from an environment variable. tk-test bridges this gap by
 updating `config.json` whenever it encounters a `TICKET_URL` export.
+
+## Script harness
+
+`scripts/testharness.sh` is a growing shell-based regression harness for direct
+CLI scripting flows. It creates an isolated temp workspace, builds against a
+fresh local SQLite database via `TICKET_URL`, and executes end-to-end scenarios
+that assert behavior with CLI exit codes and `tk ls -count` checks.
+
+Run it with:
+
+```bash
+make testscripts
+```
 
 ## Contract tests
 

@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -26,6 +26,7 @@ help:
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
 	@printf "  make test-tk-test    Run executable documentation tests.\n"
+	@printf "  make testscripts     Run the shell-based CLI harness scenarios.\n"
 	@printf "  make lint            Run golangci-lint on all packages.\n"
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
@@ -132,6 +133,11 @@ test-playwright:
 
 test-tk-test: build
 	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
+
+testscripts:
+	@mkdir -p bin
+	go build -o ./bin/tk ./cmd/tk
+	./scripts/testharness.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────
 # Produces cross-platform tarballs in ./dist, creates a GitHub release, and

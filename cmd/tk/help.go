@@ -125,9 +125,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk team create -name \"Platform\"",
 	},
 	"list": {
-		usage:   "tk list|ls [-type <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-unicode] [-plain]",
-		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include closed tickets, `-d` to also include archived tickets. Combined flags like `-ad` are supported."},
-		example: "tk list -type bug -status develop/idle -u alice -n 20",
+		usage:   "tk list|ls [-type <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-unicode] [-plain] [-count] [-expect_equals <n>] [-expect_notequals <n>]",
+		details: []string{"Lists tickets in the active project with optional type, lifecycle, assignee, and limit filters.", "`status` is a rendered composite such as `develop/active`. `-n` is applied server-side. `0` means no limit.", "By default closed and archived tickets are hidden; use `-a` to include closed tickets, `-d` to also include archived tickets. Combined flags like `-ad` are supported.", "`-count` prints only the number of matching tickets, and the expectation flags exit non-zero with the actual count when the comparison fails."},
+		example: "tk list -type bug -count -expect_equals 2",
 	},
 	"orphans": {
 		usage:   "tk orphans [-url <server-url>]",
@@ -405,9 +405,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk stage TK-42 develop",
 	},
 	"ls": {
-		usage:   "tk ls [-t <type>] [-stage <stage>] [-state <state>] [-status <status>] [-u <user>] [-n <limit>]",
-		details: []string{"Alias for `tk list`. Lists open tickets in the active project.", "Filter by type, stage, state, rendered status, or assignee."},
-		example: "tk ls -t bug -stage develop",
+		usage:   "tk ls [-t <type>] [-stage <stage>] [-state <state>] [-status <status>] [-u <user>] [-n <limit>] [-count] [-expect_equals <n>] [-expect_notequals <n>]",
+		details: []string{"Alias for `tk list`. Lists open tickets in the active project or prints just the count when `-count` or an expectation flag is used.", "Filter by type, stage, state, rendered status, or assignee."},
+		example: "tk ls -t bug -count -expect_equals 2",
 	},
 	"init": {
 		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-sdlc <name>]",

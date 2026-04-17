@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 func optionalInt64Flag(v int64) *int64 {
 	if v <= 0 {
@@ -15,4 +18,12 @@ func printCreatedID(id any, enabled bool) bool {
 	}
 	fmt.Println(id)
 	return true
+}
+
+func parseExpectedCount(flagName, raw string) (int, error) {
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be numeric: %w", flagName, err)
+	}
+	return value, nil
 }
