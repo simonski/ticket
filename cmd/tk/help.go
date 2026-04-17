@@ -80,9 +80,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk help dependency",
 	},
 	"count": {
-		usage:   "tk count [-project_id <id>] [-url <server-url>]",
-		details: []string{"Counts users and work items by type.", "With `-project_id`, counts work items within that project and omits the global project total."},
-		example: "tk count -project_id 1",
+		usage:   "tk count [-project_id <id>] [-type <type>] [-stage <stage>] [-state <state>] [-status <status>] [-user <user>] [-search <text>] [-a] [-d] [-expect_equals <n>] [-expect_notequals <n>] [-url <server-url>]",
+		details: []string{"Without ticket filters, prints the existing summary of users and work items by type.", "With ticket filters or expectation flags, prints just the matching ticket count for the current project (or `-project_id`).", "`-a` includes closed and archived tickets; `-d` includes archived tickets while keeping closed-ticket filtering aligned with list behavior.", "Expectation flags exit non-zero and report the actual count when the comparison fails."},
+		example: "tk count -type bug -expect_equals 2",
 	},
 	"ticket": {
 		usage:   "tk ticket <verb> [flags]",

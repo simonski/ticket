@@ -5066,6 +5066,66 @@ func TestRunCreateCommandsPrintOnlyID(t *testing.T) {
 	})
 }
 
+func TestRunCountSupportsTicketFiltersAndExpectations(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"bug", "Bug Alpha"}); err != nil {
+		t.Fatalf("bug create alpha error = %v", err)
+	}
+	if err := run([]string{"bug", "Bug Beta"}); err != nil {
+		t.Fatalf("bug create beta error = %v", err)
+	}
+	if err := run([]string{"add", "Task Gamma"}); err != nil {
+		t.Fatalf("task create error = %v", err)
+	}
+
+	summaryOut := captureStdout(t, func() {
+		if err := run([]string{"count"}); err != nil {
+			t.Fatalf("count summary error = %v", err)
+		}
+	})
+	if !strings.Contains(summaryOut, "bugs") {
+		t.Fatalf("count summary missing bug totals:\n%s", summaryOut)
+	}
+
+	filteredOut := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"count", "-type", "bug"}); err != nil {
+			t.Fatalf("count filtered error = %v", err)
+		}
+	}))
+	if filteredOut != "2" {
+		t.Fatalf("filtered count output = %q, want %q", filteredOut, "2")
+	}
+
+	searchOut := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"count", "-type", "bug", "-search", "Beta"}); err != nil {
+			t.Fatalf("count search error = %v", err)
+		}
+	}))
+	if searchOut != "1" {
+		t.Fatalf("search count output = %q, want %q", searchOut, "1")
+	}
+
+	okOut := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"count", "-type", "bug", "-expect_equals", "2"}); err != nil {
+			t.Fatalf("count expect equals error = %v", err)
+		}
+	}))
+	if okOut != "2" {
+		t.Fatalf("expect equals output = %q, want %q", okOut, "2")
+	}
+
+	err := run([]string{"count", "-type", "bug", "-expect_equals", "3"})
+	if err == nil || !strings.Contains(err.Error(), "expected count to equal 3, got 2") {
+		t.Fatalf("expect equals mismatch error = %v", err)
+	}
+
+	err = run([]string{"count", "-type", "bug", "-expect_notequals", "2"})
+	if err == nil || !strings.Contains(err.Error(), "expected count to not equal 2, got 2") {
+		t.Fatalf("expect notequals mismatch error = %v", err)
+	}
+}
+
 func TestRunTeamCreateRequiresName(t *testing.T) {
 	setupLocalCLI(t)
 	err := run([]string{"team", "create"})

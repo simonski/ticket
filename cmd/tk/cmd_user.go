@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
@@ -189,11 +190,22 @@ func runCount(args []string) error {
 	fs := flag.NewFlagSet("count", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	projectID := fs.Int64("project_id", 0, "limit counts to a project id")
+	taskType := fs.String("type", "", "filter ticket count by ticket type")
+	stage := fs.String("stage", "", "filter ticket count by stage")
+	state := fs.String("state", "", "filter ticket count by state")
+	status := fs.String("status", "", "filter ticket count by rendered status")
+	assignee := fs.String("user", "", "filter ticket count by assignee")
+	fs.StringVar(assignee, "u", "", "filter ticket count by assignee")
+	search := fs.String("search", "", "filter ticket count by search text")
+	includeAll := fs.Bool("a", false, "include closed and archived tickets")
+	includeDeleted := fs.Bool("d", false, "include archived tickets")
+	expectEquals := fs.String("expect_equals", "", "expect the resulting count to equal this number")
+	expectNotEquals := fs.String("expect_notequals", "", "expect the resulting count to not equal this number")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: tk count [-project_id <id>]")
+		return errors.New("usage: tk count [-project_id <id>] [-type <type>] [-stage <stage>] [-state <state>] [-status <status>] [-user <user>] [-search <text>] [-a] [-d] [-expect_equals <n>] [-expect_notequals <n>]")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -209,6 +221,85 @@ func runCount(args []string) error {
 		if _, err := svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectID)); err != nil {
 			return err
 		}
+	}
+	hasTicketFilters := strings.TrimSpace(*taskType) != "" ||
+		strings.TrimSpace(*stage) != "" ||
+		strings.TrimSpace(*state) != "" ||
+		strings.TrimSpace(*status) != "" ||
+		strings.TrimSpace(*assignee) != "" ||
+		strings.TrimSpace(*search) != ""
+	hasExpectEquals := strings.TrimSpace(*expectEquals) != ""
+	hasExpectNotEquals := strings.TrimSpace(*expectNotEquals) != ""
+	if hasExpectEquals && hasExpectNotEquals {
+		return errors.New("count expects only one of -expect_equals or -expect_notequals")
+	}
+	if *includeDeleted {
+		*includeAll = true
+	}
+	if hasTicketFilters || hasExpectEquals || hasExpectNotEquals {
+		var project store.Project
+		if projectFilter != nil {
+			project, err = svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectFilter))
+			if err != nil {
+				return err
+			}
+		} else {
+			_, resolvedSvc, currentProject, err := resolveCurrentProjectClient()
+			if err != nil {
+				return err
+			}
+			svc = resolvedSvc
+			project = currentProject
+		}
+		resolvedStage, resolvedState, err := resolveLifecycleInput(*status, *stage, *state)
+		if err != nil {
+			return err
+		}
+		tickets, err := svc.ListTicketsFiltered(context.Background(), project.ID, *taskType, resolvedStage, resolvedState, "", *search, *assignee, 0, *includeAll)
+		if err != nil {
+			return err
+		}
+		if !*includeAll {
+			open := tickets[:0]
+			for _, ticket := range tickets {
+				if ticketIsOpenForList(ticket) {
+					open = append(open, ticket)
+				}
+			}
+			tickets = open
+		} else if !*includeDeleted {
+			nonArchived := tickets[:0]
+			for _, ticket := range tickets {
+				if !ticket.Archived {
+					nonArchived = append(nonArchived, ticket)
+				}
+			}
+			tickets = nonArchived
+		}
+		count := len(tickets)
+		if hasExpectEquals {
+			expected, err := strconv.Atoi(*expectEquals)
+			if err != nil {
+				return fmt.Errorf("expect_equals must be numeric: %w", err)
+			}
+			if count != expected {
+				return fmt.Errorf("expected count to equal %d, got %d", expected, count)
+			}
+		}
+		if hasExpectNotEquals {
+			expected, err := strconv.Atoi(*expectNotEquals)
+			if err != nil {
+				return fmt.Errorf("expect_notequals must be numeric: %w", err)
+			}
+			if count == expected {
+				return fmt.Errorf("expected count to not equal %d, got %d", expected, count)
+			}
+		}
+		if outputJSON {
+			return printJSON(map[string]any{"count": count})
+		}
+		fmt.Println(count)
+		return nil
 	}
 	summary, err := svc.Count(context.Background(), projectFilter)
 	if err != nil {
