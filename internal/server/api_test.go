@@ -135,6 +135,95 @@ func TestAuthAndAdminAPI(t *testing.T) {
 	}
 }
 
+func TestCreateEndpointsSupportForcedIDs(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"id":     201,
+		"prefix": "EXP",
+		"title":  "Explicit Project",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("project create status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+	if project.ID != 201 {
+		t.Fatalf("project id = %d, want 201", project.ID)
+	}
+
+	teamResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams", map[string]any{
+		"id":   202,
+		"name": "Explicit Team",
+	}, adminToken)
+	if teamResp.Code != http.StatusCreated {
+		t.Fatalf("team create status = %d body=%s", teamResp.Code, teamResp.Body.String())
+	}
+	var team store.Team
+	decodeResponse(t, teamResp, &team)
+	if team.ID != 202 {
+		t.Fatalf("team id = %d, want 202", team.ID)
+	}
+
+	roleResp := doJSONRequest(t, handler, http.MethodPost, "/api/roles", map[string]any{
+		"id":    203,
+		"title": "Explicit Role",
+	}, adminToken)
+	if roleResp.Code != http.StatusCreated {
+		t.Fatalf("role create status = %d body=%s", roleResp.Code, roleResp.Body.String())
+	}
+	var role store.Role
+	decodeResponse(t, roleResp, &role)
+	if role.ID != 203 {
+		t.Fatalf("role id = %d, want 203", role.ID)
+	}
+
+	sdlcResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs", map[string]any{
+		"id":   204,
+		"name": "Explicit SDLC",
+	}, adminToken)
+	if sdlcResp.Code != http.StatusCreated {
+		t.Fatalf("sdlc create status = %d body=%s", sdlcResp.Code, sdlcResp.Body.String())
+	}
+	var wf store.Sdlc
+	decodeResponse(t, sdlcResp, &wf)
+	if wf.ID != 204 {
+		t.Fatalf("sdlc id = %d, want 204", wf.ID)
+	}
+
+	labelResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/labels", map[string]any{
+		"id":   205,
+		"name": "explicit-label",
+	}, adminToken)
+	if labelResp.Code != http.StatusCreated {
+		t.Fatalf("label create status = %d body=%s", labelResp.Code, labelResp.Body.String())
+	}
+	var label store.Label
+	decodeResponse(t, labelResp, &label)
+	if label.ID != 205 {
+		t.Fatalf("label id = %d, want 205", label.ID)
+	}
+
+	storyResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories", map[string]any{
+		"id":          206,
+		"project_id":  1,
+		"title":       "Explicit Story",
+		"description": "forced story id",
+	}, adminToken)
+	if storyResp.Code != http.StatusCreated {
+		t.Fatalf("story create status = %d body=%s", storyResp.Code, storyResp.Body.String())
+	}
+	var story store.Story
+	decodeResponse(t, storyResp, &story)
+	if story.ID != 206 {
+		t.Fatalf("story id = %d, want 206", story.ID)
+	}
+}
+
 func TestChatLimitsConfigAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

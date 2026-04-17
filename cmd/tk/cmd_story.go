@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/libticket"
 )
 
 func runStory(args []string) error {
@@ -31,6 +32,7 @@ func runStory(args []string) error {
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("story create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "force story id")
 		title := fs.String("title", "", "story title")
 		description := fs.String("d", "", "story description")
 		// Pull positional title before flags so flag parser sees flags only.
@@ -47,9 +49,14 @@ func runStory(args []string) error {
 			*title = strings.Join(positional, " ")
 		}
 		if strings.TrimSpace(*title) == "" {
-			return errors.New("usage: tk story create -title <title> [-d description]")
+			return errors.New("usage: tk story create -title <title> [-id <id>] [-d description]")
 		}
-		story, err := svc.CreateStory(context.Background(), project.ID, *title, *description)
+		story, err := svc.CreateStoryWithRequest(context.Background(), libticket.StoryCreateRequest{
+			ID:          optionalInt64Flag(*id),
+			ProjectID:   project.ID,
+			Title:       *title,
+			Description: *description,
+		})
 		if err != nil {
 			return err
 		}

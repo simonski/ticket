@@ -44,19 +44,21 @@ func runTeam(args []string) error {
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("team create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "force team id")
 		name := fs.String("name", "", "team name")
 		parentID := fs.Int64("parent_id", 0, "optional parent team id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if strings.TrimSpace(*name) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk team create -name <name> [-parent_id <id>]")
+			return errors.New("usage: tk team create -name <name> [-id <id>] [-parent_id <id>]")
 		}
 		var parent *int64
 		if *parentID > 0 {
 			parent = parentID
 		}
 		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{
+			ID:           optionalInt64Flag(*id),
 			Name:         strings.TrimSpace(*name),
 			ParentTeamID: parent,
 		})
@@ -350,6 +352,7 @@ func runRole(args []string) error {
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("role create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "force role id")
 		title := fs.String("title", "", "role title")
 		description := fs.String("description", "", "role description")
 		ac := fs.String("ac", "", "role acceptance criteria")
@@ -362,7 +365,7 @@ func runRole(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" || fs.NArg() != 0 {
-			return errors.New("usage: tk role create -title <title> [-description <text>] [-dor <text>] [-dod <text>] [-ac <text>] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
+			return errors.New("usage: tk role create -title <title> [-id <id>] [-description <text>] [-dor <text>] [-dod <text>] [-ac <text>] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...]")
 		}
 		dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
 		if err != nil {
@@ -377,6 +380,7 @@ func runRole(args []string) error {
 			return err
 		}
 		role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
+			ID:                 optionalInt64Flag(*id),
 			Title:              strings.TrimSpace(*title),
 			Description:        strings.TrimSpace(*description),
 			AcceptanceCriteria: strings.TrimSpace(*ac),

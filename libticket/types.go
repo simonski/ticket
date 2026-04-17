@@ -16,6 +16,7 @@ type StatusResponse struct {
 type CountSummary = store.CountSummary
 
 type ProjectCreateRequest struct {
+	ID                 *int64            `json:"id,omitempty"`
 	Prefix             string            `json:"prefix"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`
@@ -54,6 +55,7 @@ type ProjectTeamMemberRequest struct {
 }
 
 type TeamRequest struct {
+	ID           *int64 `json:"id,omitempty"`
 	Name         string `json:"name"`
 	ParentTeamID *int64 `json:"parent_team_id,omitempty"`
 }
@@ -65,6 +67,7 @@ type TeamMemberRequest struct {
 }
 
 type SdlcRequest struct {
+	ID          *int64 `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
@@ -89,8 +92,16 @@ type TimeEntryRequest struct {
 }
 
 type LabelRequest struct {
+	ID    *int64 `json:"id,omitempty"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
+}
+
+type StoryCreateRequest struct {
+	ID          *int64 `json:"id,omitempty"`
+	ProjectID   int64  `json:"project_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type TicketCreateRequest struct {
@@ -169,6 +180,7 @@ type AgentCreateRequest struct {
 }
 
 type RoleRequest struct {
+	ID                 *int64            `json:"id,omitempty"`
 	SdlcID             *int64            `json:"sdlc_id,omitempty"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`

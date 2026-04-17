@@ -215,7 +215,7 @@ func (r *router) registerSdlcHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			wf, err := store.CreateSdlc(r.Context(), db, payload.Name, payload.Description)
+			wf, err := store.CreateSdlcWithParams(r.Context(), db, payload.ID, payload.Name, payload.Description)
 			if err != nil {
 				writeStoreError(w, err)
 				return

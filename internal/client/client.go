@@ -239,7 +239,16 @@ func (c *Client) CreateRole(ctx context.Context, request RoleRequest) (store.Rol
 		if err != nil {
 			return store.Role{}, err
 		}
-		return store.CreateRole(ctx, db, request.SdlcID, request.Title, request.Description, request.AcceptanceCriteria)
+		return store.CreateRoleWithParams(ctx, db, store.RoleCreateParams{
+			ID:                 request.ID,
+			SdlcID:             request.SdlcID,
+			Title:              request.Title,
+			Description:        request.Description,
+			AcceptanceCriteria: request.AcceptanceCriteria,
+			DORMap:             request.DORMap,
+			DODMap:             request.DODMap,
+			ACMap:              request.ACMap,
+		})
 	}
 	var role store.Role
 	err := c.doJSON(ctx, http.MethodPost, "/api/roles", request, &role)
@@ -567,6 +576,7 @@ func (c *Client) CreateProject(ctx context.Context, request ProjectCreateRequest
 			return store.Project{}, err
 		}
 		return store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
+			ID:                 request.ID,
 			Prefix:             request.Prefix,
 			Title:              request.Title,
 			Description:        request.Description,
@@ -749,7 +759,11 @@ func (c *Client) CreateTeam(ctx context.Context, request TeamRequest) (store.Tea
 		if err != nil {
 			return store.Team{}, err
 		}
-		return store.CreateTeam(ctx, db, request.Name, request.ParentTeamID)
+		return store.CreateTeamWithParams(ctx, db, store.TeamCreateParams{
+			ID:           request.ID,
+			Name:         request.Name,
+			ParentTeamID: request.ParentTeamID,
+		})
 	}
 	var team store.Team
 	err := c.doJSON(ctx, http.MethodPost, "/api/teams", request, &team)
@@ -1542,7 +1556,7 @@ func (c *Client) CreateSdlc(ctx context.Context, request SdlcRequest) (store.Sdl
 		if err != nil {
 			return store.Sdlc{}, err
 		}
-		return store.CreateSdlc(ctx, db, request.Name, request.Description)
+		return store.CreateSdlcWithParams(ctx, db, request.ID, request.Name, request.Description)
 	}
 	var wf store.Sdlc
 	err := c.doJSON(ctx, http.MethodPost, "/api/sdlcs", request, &wf)
@@ -1845,7 +1859,12 @@ func (c *Client) CreateLabel(ctx context.Context, projectID int64, request Label
 		if err != nil {
 			return store.Label{}, err
 		}
-		return store.CreateLabel(ctx, db, projectID, request.Name, request.Color)
+		return store.CreateLabelWithParams(ctx, db, store.LabelCreateParams{
+			ID:        request.ID,
+			ProjectID: projectID,
+			Name:      request.Name,
+			Color:     request.Color,
+		})
 	}
 	var label store.Label
 	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/labels", projectID), request, &label)
@@ -1912,12 +1931,20 @@ func (c *Client) ListTicketLabels(ctx context.Context, ticketID string) ([]store
 }
 
 type storyRequest struct {
-	ProjectID   int64  `json:"project_id"`
+	ProjectID   int64  `json:"project_id,omitempty"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 }
 
 func (c *Client) CreateStory(ctx context.Context, projectID int64, title, description string) (store.Story, error) {
+	return c.CreateStoryWithRequest(ctx, StoryCreateRequest{
+		ProjectID:   projectID,
+		Title:       title,
+		Description: description,
+	})
+}
+
+func (c *Client) CreateStoryWithRequest(ctx context.Context, request StoryCreateRequest) (store.Story, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1927,10 +1954,16 @@ func (c *Client) CreateStory(ctx context.Context, projectID int64, title, descri
 		if err != nil {
 			return store.Story{}, err
 		}
-		return store.CreateStory(ctx, db, projectID, title, description, user.ID)
+		return store.CreateStoryWithParams(ctx, db, store.StoryCreateParams{
+			ID:          request.ID,
+			ProjectID:   request.ProjectID,
+			Title:       request.Title,
+			Description: request.Description,
+			CreatedBy:   user.ID,
+		})
 	}
 	var created store.Story
-	err := c.doJSON(ctx, http.MethodPost, "/api/stories", storyRequest{ProjectID: projectID, Title: title, Description: description}, &created)
+	err := c.doJSON(ctx, http.MethodPost, "/api/stories", request, &created)
 	return created, err
 }
 

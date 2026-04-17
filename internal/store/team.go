@@ -49,6 +49,12 @@ type ProjectTeamMember struct {
 	Role      string `json:"role"`
 }
 
+type TeamCreateParams struct {
+	ID           *int64
+	Name         string
+	ParentTeamID *int64
+}
+
 func normalizeTeamRole(role string) string {
 	return strings.TrimSpace(strings.ToLower(role))
 }
@@ -63,25 +69,45 @@ func validTeamRole(role string) bool {
 }
 
 func CreateTeam(ctx context.Context, db *sql.DB, name string, parentTeamID *int64) (Team, error) {
-	name = strings.TrimSpace(name)
+	return CreateTeamWithParams(ctx, db, TeamCreateParams{Name: name, ParentTeamID: parentTeamID})
+}
+
+func CreateTeamWithParams(ctx context.Context, db *sql.DB, params TeamCreateParams) (Team, error) {
+	name := strings.TrimSpace(params.Name)
 	if name == "" {
 		return Team{}, errors.New("team name is required")
 	}
-	if parentTeamID != nil {
-		if _, err := GetTeamByID(ctx, db, *parentTeamID); err != nil {
+	if params.ParentTeamID != nil {
+		if _, err := GetTeamByID(ctx, db, *params.ParentTeamID); err != nil {
 			return Team{}, err
 		}
 	}
-	result, err := db.ExecContext(ctx, `
-		INSERT INTO teams (name, parent_team_id, updated_at)
-		VALUES (?, ?, CURRENT_TIMESTAMP)
-	`, name, parentTeamID)
+	explicitID, hasExplicitID, err := normalizeExplicitID(params.ID)
 	if err != nil {
 		return Team{}, err
 	}
-	id, err := result.LastInsertId()
+	query := `
+		INSERT INTO teams (name, parent_team_id, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+	`
+	args := []any{name, params.ParentTeamID}
+	if hasExplicitID {
+		query = `
+			INSERT INTO teams (team_id, name, parent_team_id, updated_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		`
+		args = append([]any{explicitID}, args...)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return Team{}, err
+	}
+	id := explicitID
+	if !hasExplicitID {
+		id, err = result.LastInsertId()
+		if err != nil {
+			return Team{}, err
+		}
 	}
 	return GetTeamByID(ctx, db, id)
 }

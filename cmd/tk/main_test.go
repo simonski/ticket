@@ -4818,6 +4818,117 @@ func TestRunTeamCreateListUpdateDelete(t *testing.T) {
 	}
 }
 
+func TestRunCreateCommandsSupportForcedIDs(t *testing.T) {
+	t.Run("project", func(t *testing.T) {
+		setupLocalCLI(t)
+		if err := run([]string{"project", "create", "-id", "101", "-prefix", "EXP", "-title", "Explicit Project"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+		project, err := localCLIService(t).GetProject(context.Background(), "101")
+		if err != nil {
+			t.Fatalf("GetProject(101) error = %v", err)
+		}
+		if project.ID != 101 {
+			t.Fatalf("project id = %d, want 101", project.ID)
+		}
+	})
+
+	t.Run("team", func(t *testing.T) {
+		setupLocalCLI(t)
+		if err := run([]string{"team", "create", "-id", "102", "-name", "Explicit Team"}); err != nil {
+			t.Fatalf("team create error = %v", err)
+		}
+		teams, err := localCLIService(t).ListTeams(context.Background())
+		if err != nil {
+			t.Fatalf("ListTeams() error = %v", err)
+		}
+		found := false
+		for _, team := range teams {
+			if team.ID == 102 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("team 102 not found")
+		}
+	})
+
+	t.Run("role", func(t *testing.T) {
+		setupLocalCLI(t)
+		if err := run([]string{"role", "create", "-id", "103", "-title", "Explicit Role"}); err != nil {
+			t.Fatalf("role create error = %v", err)
+		}
+		roles, err := localCLIService(t).ListRoles(context.Background())
+		if err != nil {
+			t.Fatalf("ListRoles() error = %v", err)
+		}
+		found := false
+		for _, role := range roles {
+			if role.ID == 103 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("role 103 not found")
+		}
+	})
+
+	t.Run("sdlc", func(t *testing.T) {
+		setupLocalCLI(t)
+		if err := run([]string{"sdlc", "create", "-id", "104", "-name", "Explicit SDLC"}); err != nil {
+			t.Fatalf("sdlc create error = %v", err)
+		}
+		wf, err := localCLIService(t).GetSdlc(context.Background(), 104)
+		if err != nil {
+			t.Fatalf("GetSdlc(104) error = %v", err)
+		}
+		if wf.ID != 104 {
+			t.Fatalf("sdlc id = %d, want 104", wf.ID)
+		}
+	})
+
+	t.Run("label", func(t *testing.T) {
+		setupLocalCLI(t)
+		if err := run([]string{"label", "create", "-id", "105", "Explicit Label"}); err != nil {
+			t.Fatalf("label create error = %v", err)
+		}
+		project, err := localCLIService(t).GetProject(context.Background(), "1")
+		if err != nil {
+			t.Fatalf("GetProject(1) error = %v", err)
+		}
+		labels, err := localCLIService(t).ListLabels(context.Background(), project.ID)
+		if err != nil {
+			t.Fatalf("ListLabels() error = %v", err)
+		}
+		found := false
+		for _, label := range labels {
+			if label.ID == 105 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatal("label 105 not found")
+		}
+	})
+
+	t.Run("story", func(t *testing.T) {
+		setupLocalCLI(t)
+		if err := run([]string{"story", "create", "-id", "106", "-title", "Explicit Story"}); err != nil {
+			t.Fatalf("story create error = %v", err)
+		}
+		story, err := localCLIService(t).GetStory(context.Background(), 106)
+		if err != nil {
+			t.Fatalf("GetStory(106) error = %v", err)
+		}
+		if story.ID != 106 {
+			t.Fatalf("story id = %d, want 106", story.ID)
+		}
+	})
+}
+
 func TestRunTeamCreateRequiresName(t *testing.T) {
 	setupLocalCLI(t)
 	err := run([]string{"team", "create"})

@@ -159,6 +159,7 @@ func (s *LocalService) CreateRole(ctx context.Context, request RoleRequest) (sto
 		return store.Role{}, err
 	}
 	return store.CreateRoleWithParams(ctx, db, store.RoleCreateParams{
+		ID:                 request.ID,
 		SdlcID:             request.SdlcID,
 		Title:              request.Title,
 		Description:        request.Description,
@@ -424,6 +425,7 @@ func (s *LocalService) CreateProject(ctx context.Context, request ProjectCreateR
 		return store.Project{}, err
 	}
 	return store.CreateProjectWithParams(ctx, db, store.ProjectCreateParams{
+		ID:                 request.ID,
 		Prefix:             request.Prefix,
 		Title:              request.Title,
 		Description:        request.Description,
@@ -560,7 +562,11 @@ func (s *LocalService) CreateTeam(ctx context.Context, request TeamRequest) (sto
 	if err != nil {
 		return store.Team{}, err
 	}
-	return store.CreateTeam(ctx, db, request.Name, request.ParentTeamID)
+	return store.CreateTeamWithParams(ctx, db, store.TeamCreateParams{
+		ID:           request.ID,
+		Name:         request.Name,
+		ParentTeamID: request.ParentTeamID,
+	})
 }
 
 func (s *LocalService) ListTeams(ctx context.Context) ([]store.Team, error) {
@@ -1121,7 +1127,7 @@ func (s *LocalService) CreateSdlc(ctx context.Context, request SdlcRequest) (sto
 	if err != nil {
 		return store.Sdlc{}, err
 	}
-	return store.CreateSdlc(ctx, db, request.Name, request.Description)
+	return store.CreateSdlcWithParams(ctx, db, request.ID, request.Name, request.Description)
 }
 
 func (s *LocalService) ListSdlcs(ctx context.Context) ([]store.Sdlc, error) {
@@ -1333,7 +1339,12 @@ func (s *LocalService) CreateLabel(ctx context.Context, projectID int64, request
 	if err != nil {
 		return store.Label{}, err
 	}
-	return store.CreateLabel(ctx, db, projectID, request.Name, request.Color)
+	return store.CreateLabelWithParams(ctx, db, store.LabelCreateParams{
+		ID:        request.ID,
+		ProjectID: projectID,
+		Name:      request.Name,
+		Color:     request.Color,
+	})
 }
 
 func (s *LocalService) ListLabels(ctx context.Context, projectID int64) ([]store.Label, error) {
@@ -1377,6 +1388,14 @@ func (s *LocalService) ListTicketLabels(ctx context.Context, ticketID string) ([
 }
 
 func (s *LocalService) CreateStory(ctx context.Context, projectID int64, title, description string) (store.Story, error) {
+	return s.CreateStoryWithRequest(ctx, StoryCreateRequest{
+		ProjectID:   projectID,
+		Title:       title,
+		Description: description,
+	})
+}
+
+func (s *LocalService) CreateStoryWithRequest(ctx context.Context, request StoryCreateRequest) (store.Story, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Story{}, err
@@ -1385,7 +1404,13 @@ func (s *LocalService) CreateStory(ctx context.Context, projectID int64, title, 
 	if err != nil {
 		return store.Story{}, err
 	}
-	return store.CreateStory(ctx, db, projectID, title, description, user.ID)
+	return store.CreateStoryWithParams(ctx, db, store.StoryCreateParams{
+		ID:          request.ID,
+		ProjectID:   request.ProjectID,
+		Title:       request.Title,
+		Description: request.Description,
+		CreatedBy:   user.ID,
+	})
 }
 
 func (s *LocalService) ListStories(ctx context.Context, projectID int64) ([]store.Story, error) {

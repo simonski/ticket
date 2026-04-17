@@ -12,6 +12,7 @@ type agentRequest struct {
 }
 
 type projectRequest struct {
+	ID                 *int64            `json:"id,omitempty"`
 	Prefix             string            `json:"prefix"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`
@@ -26,6 +27,7 @@ type projectRequest struct {
 }
 
 type roleRequest struct {
+	ID                 *int64            `json:"id,omitempty"`
 	SdlcID             *int64            `json:"sdlc_id,omitempty"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`
@@ -36,6 +38,7 @@ type roleRequest struct {
 }
 
 type sdlcRequest struct {
+	ID          *int64 `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
@@ -55,6 +58,7 @@ type sdlcReorderRequest struct {
 }
 
 type teamRequest struct {
+	ID           *int64 `json:"id,omitempty"`
 	Name         string `json:"name"`
 	ParentTeamID *int64 `json:"parent_team_id"`
 }
@@ -66,6 +70,7 @@ type teamMemberRequest struct {
 }
 
 type storyRequest struct {
+	ID          *int64 `json:"id,omitempty"`
 	ProjectID   int64  `json:"project_id"`
 	Title       string `json:"title"`
 	Description string `json:"description"`

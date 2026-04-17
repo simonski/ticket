@@ -488,7 +488,15 @@ func (s *HTTPService) ListTicketLabels(ctx context.Context, ticketID string) ([]
 }
 
 func (s *HTTPService) CreateStory(ctx context.Context, projectID int64, title, description string) (store.Story, error) {
-	return s.client.CreateStory(ctx, projectID, title, description)
+	return s.CreateStoryWithRequest(ctx, StoryCreateRequest{
+		ProjectID:   projectID,
+		Title:       title,
+		Description: description,
+	})
+}
+
+func (s *HTTPService) CreateStoryWithRequest(ctx context.Context, request StoryCreateRequest) (store.Story, error) {
+	return s.client.CreateStoryWithRequest(ctx, client.StoryCreateRequest(request))
 }
 
 func (s *HTTPService) ListStories(ctx context.Context, projectID int64) ([]store.Story, error) {

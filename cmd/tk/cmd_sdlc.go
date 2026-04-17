@@ -46,15 +46,16 @@ func runSdlc(args []string) error {
 	case "create", "add", "new":
 		fs := flag.NewFlagSet("sdlc create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "force sdlc id")
 		name := fs.String("name", "", "sdlc name")
 		desc := fs.String("d", "", "sdlc description")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *name == "" {
-			return errors.New("usage: tk sdlc create -name <name> [-d <description>]")
+			return errors.New("usage: tk sdlc create -name <name> [-id <id>] [-d <description>]")
 		}
-		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: *name, Description: *desc})
+		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{ID: optionalInt64Flag(*id), Name: *name, Description: *desc})
 		if err != nil {
 			return err
 		}

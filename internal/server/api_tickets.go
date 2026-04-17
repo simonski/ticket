@@ -100,7 +100,13 @@ func (r *router) registerTicketHandlers() {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
-			story, err := store.CreateStory(r.Context(), db, payload.ProjectID, payload.Title, payload.Description, user.ID)
+			story, err := store.CreateStoryWithParams(r.Context(), db, store.StoryCreateParams{
+				ID:          payload.ID,
+				ProjectID:   payload.ProjectID,
+				Title:       payload.Title,
+				Description: payload.Description,
+				CreatedBy:   user.ID,
+			})
 			if err != nil {
 				writeStoreError(w, err)
 				return

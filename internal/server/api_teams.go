@@ -43,7 +43,11 @@ func (r *router) registerTeamHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			team, err := store.CreateTeam(r.Context(), db, payload.Name, payload.ParentTeamID)
+			team, err := store.CreateTeamWithParams(r.Context(), db, store.TeamCreateParams{
+				ID:           payload.ID,
+				Name:         payload.Name,
+				ParentTeamID: payload.ParentTeamID,
+			})
 			if err != nil {
 				writeStoreError(w, err)
 				return

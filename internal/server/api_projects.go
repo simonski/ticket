@@ -42,6 +42,7 @@ func (r *router) registerProjectHandlers() {
 				return
 			}
 			project, err := store.CreateProjectWithParams(r.Context(), db, store.ProjectCreateParams{
+				ID:                 projectPayload.ID,
 				Prefix:             projectPayload.Prefix,
 				Title:              projectPayload.Title,
 				Description:        projectPayload.Description,
@@ -437,6 +438,7 @@ func (r *router) registerProjectHandlers() {
 				writeJSON(w, http.StatusOK, labels)
 			case http.MethodPost:
 				var req struct {
+					ID    *int64 `json:"id,omitempty"`
 					Name  string `json:"name"`
 					Color string `json:"color"`
 				}
@@ -444,7 +446,12 @@ func (r *router) registerProjectHandlers() {
 					writeStoreError(w, err)
 					return
 				}
-				label, err := store.CreateLabel(r.Context(), db, projectID, req.Name, req.Color)
+				label, err := store.CreateLabelWithParams(r.Context(), db, store.LabelCreateParams{
+					ID:        req.ID,
+					ProjectID: projectID,
+					Name:      req.Name,
+					Color:     req.Color,
+				})
 				if err != nil {
 					writeStoreError(w, err)
 					return

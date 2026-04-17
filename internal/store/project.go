@@ -41,6 +41,7 @@ func (p Project) ResolveGuidance(stage string) ResolvedGuidance {
 }
 
 type ProjectCreateParams struct {
+	ID                 *int64
 	Prefix             string
 	Title              string
 	Description        string
@@ -110,6 +111,10 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 			sdlcID = &wfID
 		}
 	}
+	explicitID, hasExplicitID, err := normalizeExplicitID(params.ID)
+	if err != nil {
+		return Project{}, err
+	}
 	dorJSON, err := guidanceMapJSON(params.DORMap)
 	if err != nil {
 		return Project{}, err
@@ -127,16 +132,28 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 	if acceptanceCriteria == "" && acMap != nil {
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
 	}
-	result, err := db.ExecContext(ctx, `
+	query := `
 		INSERT INTO projects (prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, sdlc_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-	`, uniquePrefix, title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), sdlcID)
+	`
+	args := []any{uniquePrefix, title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.Notes), visibility, nullableUserID(params.CreatedBy), sdlcID}
+	if hasExplicitID {
+		query = `
+			INSERT INTO projects (project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, created_by, sdlc_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
+		`
+		args = append([]any{explicitID}, args...)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return Project{}, err
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Project{}, err
+	id := explicitID
+	if !hasExplicitID {
+		id, err = result.LastInsertId()
+		if err != nil {
+			return Project{}, err
+		}
 	}
 	if params.CreatedBy != "" {
 		if _, err := AddProjectMember(ctx, db, id, params.CreatedBy, ProjectRoleOwner); err != nil {

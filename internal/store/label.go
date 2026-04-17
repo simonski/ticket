@@ -20,22 +20,46 @@ type Label struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type LabelCreateParams struct {
+	ID        *int64
+	ProjectID int64
+	Name      string
+	Color     string
+}
+
 func CreateLabel(ctx context.Context, db *sql.DB, projectID int64, name, color string) (Label, error) {
-	name = strings.TrimSpace(name)
+	return CreateLabelWithParams(ctx, db, LabelCreateParams{ProjectID: projectID, Name: name, Color: color})
+}
+
+func CreateLabelWithParams(ctx context.Context, db *sql.DB, params LabelCreateParams) (Label, error) {
+	name := strings.TrimSpace(params.Name)
 	if name == "" {
 		return Label{}, errors.New("label name is required")
 	}
-	color = strings.TrimSpace(color)
+	color := strings.TrimSpace(params.Color)
 	if color != "" && !colorRegexp.MatchString(color) {
 		return Label{}, fmt.Errorf("invalid label color %q: must be a hex color (e.g. #fff or #a1b2c3)", color)
 	}
-	result, err := db.ExecContext(ctx, `INSERT INTO labels (project_id, name, color) VALUES (?, ?, ?)`, projectID, name, color)
+	explicitID, hasExplicitID, err := normalizeExplicitID(params.ID)
 	if err != nil {
 		return Label{}, err
 	}
-	id, err := result.LastInsertId()
+	query := `INSERT INTO labels (project_id, name, color) VALUES (?, ?, ?)`
+	args := []any{params.ProjectID, name, color}
+	if hasExplicitID {
+		query = `INSERT INTO labels (label_id, project_id, name, color) VALUES (?, ?, ?, ?)`
+		args = append([]any{explicitID}, args...)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return Label{}, err
+	}
+	id := explicitID
+	if !hasExplicitID {
+		id, err = result.LastInsertId()
+		if err != nil {
+			return Label{}, err
+		}
 	}
 	return GetLabel(ctx, db, id)
 }

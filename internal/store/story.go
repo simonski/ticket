@@ -18,6 +18,14 @@ type Story struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type StoryCreateParams struct {
+	ID          *int64
+	ProjectID   int64
+	Title       string
+	Description string
+	CreatedBy   string
+}
+
 func normalizeStoryStatus(status string) string {
 	switch strings.TrimSpace(strings.ToLower(status)) {
 	case "", "draft":
@@ -30,23 +38,48 @@ func normalizeStoryStatus(status string) string {
 }
 
 func CreateStory(ctx context.Context, db *sql.DB, projectID int64, title, description string, createdBy string) (Story, error) {
-	title = strings.TrimSpace(title)
-	if projectID == 0 {
+	return CreateStoryWithParams(ctx, db, StoryCreateParams{
+		ProjectID:   projectID,
+		Title:       title,
+		Description: description,
+		CreatedBy:   createdBy,
+	})
+}
+
+func CreateStoryWithParams(ctx context.Context, db *sql.DB, params StoryCreateParams) (Story, error) {
+	title := strings.TrimSpace(params.Title)
+	if params.ProjectID == 0 {
 		return Story{}, errors.New("project is required")
 	}
 	if title == "" {
 		return Story{}, errors.New("story title is required")
 	}
-	result, err := db.ExecContext(ctx, `
-		INSERT INTO stories (project_id, title, description, status, created_by, updated_at)
-		VALUES (?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP)
-	`, projectID, title, strings.TrimSpace(description), nullableUserID(createdBy))
+	explicitID, hasExplicitID, err := normalizeExplicitID(params.ID)
 	if err != nil {
 		return Story{}, err
 	}
-	id, err := result.LastInsertId()
+	query := `
+		INSERT INTO stories (project_id, title, description, status, created_by, updated_at)
+		VALUES (?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP)
+	`
+	args := []any{params.ProjectID, title, strings.TrimSpace(params.Description), nullableUserID(params.CreatedBy)}
+	if hasExplicitID {
+		query = `
+			INSERT INTO stories (story_id, project_id, title, description, status, created_by, updated_at)
+			VALUES (?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP)
+		`
+		args = append([]any{explicitID}, args...)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return Story{}, err
+	}
+	id := explicitID
+	if !hasExplicitID {
+		id, err = result.LastInsertId()
+		if err != nil {
+			return Story{}, err
+		}
 	}
 	return GetStory(ctx, db, id)
 }

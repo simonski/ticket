@@ -57,12 +57,13 @@ func runProject(args []string) error {
 		dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
 		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		gitRepository := fs.String("git-repository", "", "project git repository")
+		id := fs.Int64("id", 0, "force project id")
 		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-sdlc id]")
+			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-id <id>] [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-sdlc id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -91,6 +92,7 @@ func runProject(args []string) error {
 			return err
 		}
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+			ID:                 optionalInt64Flag(*id),
 			Prefix:             *prefix,
 			Title:              *title,
 			Description:        projectWoW,

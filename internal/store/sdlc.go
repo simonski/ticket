@@ -53,22 +53,42 @@ type SdlcExport struct {
 var ErrSdlcStageNotFound = errors.New("sdlc stage not found in sdlc")
 
 func CreateSdlc(ctx context.Context, db *sql.DB, name, description string) (Sdlc, error) {
+	return CreateSdlcWithParams(ctx, db, nil, name, description)
+}
+
+func CreateSdlcWithParams(ctx context.Context, db *sql.DB, id *int64, name, description string) (Sdlc, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Sdlc{}, errors.New("sdlc name is required")
 	}
-	result, err := db.ExecContext(ctx, `
+	explicitID, hasExplicitID, err := normalizeExplicitID(id)
+	if err != nil {
+		return Sdlc{}, err
+	}
+	query := `
 		INSERT INTO sdlcs (name, description, updated_at)
 		VALUES (?, ?, CURRENT_TIMESTAMP)
-	`, name, strings.TrimSpace(description))
+	`
+	args := []any{name, strings.TrimSpace(description)}
+	if hasExplicitID {
+		query = `
+			INSERT INTO sdlcs (sdlc_id, name, description, updated_at)
+			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		`
+		args = append([]any{explicitID}, args...)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return Sdlc{}, err
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Sdlc{}, err
+	createdID := explicitID
+	if !hasExplicitID {
+		createdID, err = result.LastInsertId()
+		if err != nil {
+			return Sdlc{}, err
+		}
 	}
-	return getSdlcRow(ctx, db, id)
+	return getSdlcRow(ctx, db, createdID)
 }
 
 func ListSdlcs(ctx context.Context, db *sql.DB, limit, offset int) ([]Sdlc, error) {

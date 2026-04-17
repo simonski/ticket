@@ -43,6 +43,7 @@ func runLabel(args []string) error {
 	case "create":
 		fs := flag.NewFlagSet("label create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
+		id := fs.Int64("id", 0, "force label id")
 		name := fs.String("name", "", "label name")
 		color := fs.String("color", "", "label color (e.g. #ff0000)")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -52,9 +53,9 @@ func runLabel(args []string) error {
 			*name = fs.Arg(0)
 		}
 		if *name == "" {
-			return errors.New("usage: tk label create <name> [-color <color>]")
+			return errors.New("usage: tk label create <name> [-id <id>] [-color <color>]")
 		}
-		label, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{Name: *name, Color: *color})
+		label, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{ID: optionalInt64Flag(*id), Name: *name, Color: *color})
 		if err != nil {
 			return err
 		}

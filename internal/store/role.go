@@ -22,6 +22,7 @@ type Role struct {
 }
 
 type RoleCreateParams struct {
+	ID                 *int64
 	SdlcID             *int64
 	Title              string
 	Description        string
@@ -58,6 +59,10 @@ func CreateRoleWithParams(ctx context.Context, db *sql.DB, params RoleCreatePara
 	if title == "" {
 		return Role{}, errors.New("role title is required")
 	}
+	explicitID, hasExplicitID, err := normalizeExplicitID(params.ID)
+	if err != nil {
+		return Role{}, err
+	}
 	dorJSON, err := guidanceMapJSON(params.DORMap)
 	if err != nil {
 		return Role{}, err
@@ -75,16 +80,28 @@ func CreateRoleWithParams(ctx context.Context, db *sql.DB, params RoleCreatePara
 	if acceptanceCriteria == "" && acMap != nil {
 		acceptanceCriteria = acMap[DefaultGuidanceStageKey]
 	}
-	result, err := db.ExecContext(ctx, `
+	query := `
 		INSERT INTO roles (sdlc_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, nullableInt64(params.SdlcID), title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON)
+	`
+	args := []any{nullableInt64(params.SdlcID), title, strings.TrimSpace(params.Description), acceptanceCriteria, dorJSON, dodJSON, acJSON}
+	if hasExplicitID {
+		query = `
+			INSERT INTO roles (role_id, sdlc_id, title, description, acceptance_criteria, dor_map, dod_map, ac_map, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		`
+		args = append([]any{explicitID}, args...)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return Role{}, err
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Role{}, err
+	id := explicitID
+	if !hasExplicitID {
+		id, err = result.LastInsertId()
+		if err != nil {
+			return Role{}, err
+		}
 	}
 	return GetRoleByID(ctx, db, id)
 }
