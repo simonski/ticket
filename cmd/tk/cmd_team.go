@@ -45,6 +45,7 @@ func runTeam(args []string) error {
 		fs := flag.NewFlagSet("team create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "force team id")
+		printID := fs.Bool("printid", false, "print only the created team id")
 		name := fs.String("name", "", "team name")
 		parentID := fs.Int64("parent_id", 0, "optional parent team id")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -67,6 +68,9 @@ func runTeam(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(team)
+		}
+		if printCreatedID(team.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("created team #%d %s\n", team.ID, team.Name)
 		return nil
@@ -353,6 +357,7 @@ func runRole(args []string) error {
 		fs := flag.NewFlagSet("role create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "force role id")
+		printID := fs.Bool("printid", false, "print only the created role id")
 		title := fs.String("title", "", "role title")
 		description := fs.String("description", "", "role description")
 		ac := fs.String("ac", "", "role acceptance criteria")
@@ -393,6 +398,9 @@ func runRole(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(role)
+		}
+		if printCreatedID(role.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("created role #%d %s\n", role.ID, role.Title)
 		return nil

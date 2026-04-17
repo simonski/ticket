@@ -33,6 +33,7 @@ func runStory(args []string) error {
 		fs := flag.NewFlagSet("story create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "force story id")
+		printID := fs.Bool("printid", false, "print only the created story id")
 		title := fs.String("title", "", "story title")
 		description := fs.String("d", "", "story description")
 		// Pull positional title before flags so flag parser sees flags only.
@@ -62,6 +63,9 @@ func runStory(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(story)
+		}
+		if printCreatedID(story.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("story %d: %s\n", story.ID, story.Title)
 		return nil

@@ -58,6 +58,7 @@ func runProject(args []string) error {
 		acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		id := fs.Int64("id", 0, "force project id")
+		printID := fs.Bool("printid", false, "print only the created project id")
 		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
@@ -114,6 +115,9 @@ func runProject(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(project)
+		}
+		if printCreatedID(project.ID, *printID) {
+			return nil
 		}
 		printProject(project)
 		return nil

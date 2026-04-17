@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -4925,6 +4926,142 @@ func TestRunCreateCommandsSupportForcedIDs(t *testing.T) {
 		}
 		if story.ID != 106 {
 			t.Fatalf("story id = %d, want 106", story.ID)
+		}
+	})
+}
+
+func TestRunCreateCommandsPrintOnlyID(t *testing.T) {
+	openLocalDB := func(t *testing.T) *sql.DB {
+		t.Helper()
+		resolved, err := config.ResolveURL()
+		if err != nil {
+			t.Fatalf("ResolveURL() error = %v", err)
+		}
+		db, err := store.Open(resolved.DBPath)
+		if err != nil {
+			t.Fatalf("store.Open() error = %v", err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		return db
+	}
+
+	t.Run("project", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"project", "create", "-id", "301", "-printid", "-prefix", "PID", "-title", "Print Project"}); err != nil {
+				t.Fatalf("project create error = %v", err)
+			}
+		}))
+		if out != "301" {
+			t.Fatalf("project output = %q, want %q", out, "301")
+		}
+	})
+
+	t.Run("team", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"team", "create", "-id", "302", "-printid", "-name", "Print Team"}); err != nil {
+				t.Fatalf("team create error = %v", err)
+			}
+		}))
+		if out != "302" {
+			t.Fatalf("team output = %q, want %q", out, "302")
+		}
+	})
+
+	t.Run("role", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"role", "create", "-id", "303", "-printid", "-title", "Print Role"}); err != nil {
+				t.Fatalf("role create error = %v", err)
+			}
+		}))
+		if out != "303" {
+			t.Fatalf("role output = %q, want %q", out, "303")
+		}
+	})
+
+	t.Run("sdlc", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"sdlc", "create", "-id", "304", "-printid", "-name", "Print SDLC"}); err != nil {
+				t.Fatalf("sdlc create error = %v", err)
+			}
+		}))
+		if out != "304" {
+			t.Fatalf("sdlc output = %q, want %q", out, "304")
+		}
+	})
+
+	t.Run("label", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"label", "create", "-id", "305", "-printid", "print-label"}); err != nil {
+				t.Fatalf("label create error = %v", err)
+			}
+		}))
+		if out != "305" {
+			t.Fatalf("label output = %q, want %q", out, "305")
+		}
+	})
+
+	t.Run("story", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"story", "create", "-id", "306", "-printid", "-title", "Print Story"}); err != nil {
+				t.Fatalf("story create error = %v", err)
+			}
+		}))
+		if out != "306" {
+			t.Fatalf("story output = %q, want %q", out, "306")
+		}
+	})
+
+	t.Run("user", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"user", "create", "-username", "script-user", "-password", "password123", "-printid"}); err != nil {
+				t.Fatalf("user create error = %v", err)
+			}
+		}))
+		user, err := store.GetUserByUsername(context.Background(), openLocalDB(t), "script-user")
+		if err != nil {
+			t.Fatalf("GetUserByUsername(script-user) error = %v", err)
+		}
+		if out != user.ID {
+			t.Fatalf("user output = %q, want %q", out, user.ID)
+		}
+	})
+
+	t.Run("agent", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"agent", "create", "-password", "agentpass123", "-printid"}); err != nil {
+				t.Fatalf("agent create error = %v", err)
+			}
+		}))
+		agent, err := store.GetAgentByID(context.Background(), openLocalDB(t), out)
+		if err != nil {
+			t.Fatalf("GetAgentByID(%q) error = %v", out, err)
+		}
+		if out != agent.ID {
+			t.Fatalf("agent output = %q, want %q", out, agent.ID)
+		}
+	})
+
+	t.Run("ticket", func(t *testing.T) {
+		setupLocalCLI(t)
+		out := strings.TrimSpace(captureStdout(t, func() {
+			if err := run([]string{"add", "-printid", "Print Ticket"}); err != nil {
+				t.Fatalf("ticket create error = %v", err)
+			}
+		}))
+		ticket, err := localCLIService(t).GetTicket(context.Background(), out)
+		if err != nil {
+			t.Fatalf("GetTicket(%q) error = %v", out, err)
+		}
+		if out != ticket.ID {
+			t.Fatalf("ticket output = %q, want %q", out, ticket.ID)
 		}
 	})
 }

@@ -49,6 +49,7 @@ func runAgent(args []string) error {
 		fs := flag.NewFlagSet("agent create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		password := fs.String("password", "", "agent password")
+		printID := fs.Bool("printid", false, "print only the created agent id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -60,6 +61,9 @@ func runAgent(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(map[string]any{"agent": agent, "password": generatedPassword})
+		}
+		if printCreatedID(agent.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("agent_id: %s\n", agent.ID)
 		fmt.Printf("password: %s\n", generatedPassword)

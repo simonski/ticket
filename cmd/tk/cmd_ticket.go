@@ -1994,6 +1994,7 @@ type ticketCreateOptions struct {
 	ParentID           *string
 	Project            string
 	Message            string
+	PrintID            bool
 }
 
 func runTicketCreate(args []string) error {
@@ -2025,6 +2026,7 @@ func runTicketCreate(args []string) error {
 	parent := fs.String("parent", "", "parent ticket id")
 	project := fs.String("project", "", "project id")
 	message := fs.String("m", "", "comment to attach")
+	printID := fs.Bool("printid", false, "print only the created ticket id")
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return err
 	}
@@ -2106,6 +2108,7 @@ func runTicketCreate(args []string) error {
 		Assignee:           *assignee,
 		Project:            *project,
 		Message:            strings.TrimSpace(*message),
+		PrintID:            *printID,
 	}
 	if *parent != "" {
 		opts.ParentID = parent
@@ -2138,6 +2141,9 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		"-project":           true,
 		"-m":                 true,
 	}
+	knownBoolFlags := map[string]bool{
+		"-printid": true,
+	}
 
 	var flagArgs []string
 	var positional []string
@@ -2149,6 +2155,10 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 			}
 			flagArgs = append(flagArgs, arg, args[i+1])
 			i++
+			continue
+		}
+		if knownBoolFlags[arg] {
+			flagArgs = append(flagArgs, arg)
 			continue
 		}
 		positional = append(positional, arg)
@@ -2211,6 +2221,9 @@ func createTicket(opts ticketCreateOptions) error {
 	}
 	if outputJSON {
 		return printJSON(ticket)
+	}
+	if printCreatedID(ticket.ID, opts.PrintID) {
+		return nil
 	}
 	if ticket.Type == "epic" {
 		cfg.CurrentEpicID = ticket.ID

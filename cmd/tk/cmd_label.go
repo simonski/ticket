@@ -44,6 +44,7 @@ func runLabel(args []string) error {
 		fs := flag.NewFlagSet("label create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "force label id")
+		printID := fs.Bool("printid", false, "print only the created label id")
 		name := fs.String("name", "", "label name")
 		color := fs.String("color", "", "label color (e.g. #ff0000)")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -61,6 +62,9 @@ func runLabel(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(label)
+		}
+		if printCreatedID(label.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("label created: %d %s\n", label.ID, label.Name)
 		return nil

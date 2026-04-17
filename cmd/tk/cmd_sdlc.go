@@ -47,6 +47,7 @@ func runSdlc(args []string) error {
 		fs := flag.NewFlagSet("sdlc create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "force sdlc id")
+		printID := fs.Bool("printid", false, "print only the created sdlc id")
 		name := fs.String("name", "", "sdlc name")
 		desc := fs.String("d", "", "sdlc description")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -61,6 +62,9 @@ func runSdlc(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(wf)
+		}
+		if printCreatedID(wf.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("sdlc: %s\nsdlc_id: %d\n", wf.Name, wf.ID)
 		return nil

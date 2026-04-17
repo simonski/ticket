@@ -326,6 +326,7 @@ func runUser(args []string) error {
 		fs.SetOutput(os.Stderr)
 		usernameFlag := fs.String("username", "", "username")
 		passwordFlag := fs.String("password", "", "password")
+		printID := fs.Bool("printid", false, "print only the created user id")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -339,6 +340,9 @@ func runUser(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(user)
+		}
+		if printCreatedID(user.ID, *printID) {
+			return nil
 		}
 		fmt.Printf("created user %s\n", user.Username)
 		return nil
