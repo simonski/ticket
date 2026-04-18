@@ -129,6 +129,20 @@ go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
   - `./scripts/testharness.sh`
   - `go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md`
 
+### Update 4
+
+- Expanded the remote Phase 2/3 CLI coverage beyond simple agent assignment:
+  - `tk agent config-set`, `config-ls`, and `config-rm`
+  - `tk agent reset-password`
+  - project-targeted `tk agent request -project-id ...`
+  - rejection/`NONE` behavior for the wrong project queue
+  - password-rotation behavior where the old password stops working immediately
+- Expanded `scripts/testharness.sh` to cover the same remote agent admin path so
+  the shell contract now exercises agent controls as well as agent work pickup.
+- Re-verified:
+  - `go test ./cmd/tk -run 'TestRunAgentRemoteAdminFlow|TestQuickstartServer'`
+  - `./scripts/testharness.sh`
+
 ## Concrete findings from this pass
 
 1. **The documented quickstarts are executable today.** That is a strong
@@ -144,8 +158,8 @@ go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
    - fail + `previous` regression
    - explicit `done` stage terminal flow
 4. **Broad CRUD confidence is improving but still uneven.** Core entities are in
-   good shape, and comments / ideas / decisions / agent request flows now have
-   meaningfully better CLI/harness coverage, but the lower-frequency admin
+   good shape, and comments / ideas / decisions / agent request/admin flows now
+   have meaningfully better CLI/harness coverage, but the lower-frequency admin
    surfaces still need deliberate review if they stay in the `mvp-1` promise.
 
 ## Recommendations

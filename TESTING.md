@@ -89,6 +89,7 @@ Current harness scenarios cover:
 2. SDLC progression, regression, and terminal-stage behavior
 3. comment / idea / decision CRUD-adjacent operator flows plus snapshot export/import restore
 4. remote server login, multi-project switching, and agent work request behavior
+5. agent admin controls: config round-trip, password rotation, and project-targeted queue selection
 
 Run it with:
 

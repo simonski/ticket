@@ -6655,6 +6655,157 @@ func TestQuickstartServer(t *testing.T) {
 	}
 }
 
+func TestRunAgentRemoteAdminFlow(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "adminpass"); err != nil {
+		t.Fatalf("store.Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	setTestLocation(t, ts.URL)
+
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "admin", "-password", "adminpass"}); err != nil {
+			t.Fatalf("admin login error = %v", err)
+		}
+	})
+
+	srvProjectID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "SRV", "-title", "Server Project", "-printid"}); err != nil {
+			t.Fatalf("project create SRV error = %v", err)
+		}
+	}))
+	opsProjectID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "OPS", "-title", "Ops Project", "-printid"}); err != nil {
+			t.Fatalf("project create OPS error = %v", err)
+		}
+	}))
+	captureStdout(t, func() {
+		if err := run([]string{"project", "use", srvProjectID}); err != nil {
+			t.Fatalf("project use error = %v", err)
+		}
+	})
+
+	readyTicketID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"add", "-printid", "Agent remote admin ticket"}); err != nil {
+			t.Fatalf("add ticket error = %v", err)
+		}
+	}))
+	captureStdout(t, func() {
+		if err := run([]string{"update", "-id", readyTicketID, "-status", "develop/idle"}); err != nil {
+			t.Fatalf("update ticket status error = %v", err)
+		}
+	})
+
+	agentID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"agent", "create", "-password", "oldpass123", "-printid"}); err != nil {
+			t.Fatalf("agent create error = %v", err)
+		}
+	}))
+
+	initialConfigOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "config-ls", "-id", agentID}); err != nil {
+			t.Fatalf("agent config-ls initial error = %v", err)
+		}
+	})
+	if !strings.Contains(initialConfigOut, "(no config)") {
+		t.Fatalf("agent config-ls initial output = %q, want no config", initialConfigOut)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"agent", "config-set", "-id", agentID, "llm", "codex"}); err != nil {
+			t.Fatalf("agent config-set llm error = %v", err)
+		}
+	})
+	captureStdout(t, func() {
+		if err := run([]string{"agent", "config-set", "-id", agentID, "poll_seconds", "7"}); err != nil {
+			t.Fatalf("agent config-set poll_seconds error = %v", err)
+		}
+	})
+	configOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "config-ls", "-id", agentID}); err != nil {
+			t.Fatalf("agent config-ls error = %v", err)
+		}
+	})
+	if !strings.Contains(configOut, "llm=codex") || !strings.Contains(configOut, "poll_seconds=7") {
+		t.Fatalf("agent config-ls output missing config values:\n%s", configOut)
+	}
+
+	wrongProjectOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "request", "-agent-id", agentID, "-password", "oldpass123", "-project-id", opsProjectID}); err != nil {
+			t.Fatalf("agent request wrong project error = %v", err)
+		}
+	})
+	var wrongProjectPayload map[string]any
+	if err := json.Unmarshal([]byte(wrongProjectOut), &wrongProjectPayload); err != nil {
+		t.Fatalf("json.Unmarshal(wrong project request) error = %v\noutput=%s", err, wrongProjectOut)
+	}
+	if wrongProjectPayload["status"] != "NONE" {
+		t.Fatalf("agent request wrong project status = %#v, want NONE", wrongProjectPayload["status"])
+	}
+
+	resetOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "reset-password", "-id", agentID, "-password", "newpass123"}); err != nil {
+			t.Fatalf("agent reset-password error = %v", err)
+		}
+	})
+	if !strings.Contains(resetOut, "password : newpass123") {
+		t.Fatalf("agent reset-password output missing new password:\n%s", resetOut)
+	}
+
+	if err := run([]string{"agent", "request", "-agent-id", agentID, "-password", "oldpass123", "-project-id", srvProjectID, "-id", readyTicketID}); err == nil {
+		t.Fatal("agent request with old password should fail after reset")
+	}
+
+	requestOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "request", "-agent-id", agentID, "-password", "newpass123", "-project-id", srvProjectID, "-id", readyTicketID}); err != nil {
+			t.Fatalf("agent request error = %v", err)
+		}
+	})
+	var requestPayload map[string]any
+	if err := json.Unmarshal([]byte(requestOut), &requestPayload); err != nil {
+		t.Fatalf("json.Unmarshal(agent request) error = %v\noutput=%s", err, requestOut)
+	}
+	if requestPayload["status"] != "NEW" {
+		t.Fatalf("agent request status = %#v, want NEW", requestPayload["status"])
+	}
+	configPayload, ok := requestPayload["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("agent request config payload = %#v", requestPayload["config"])
+	}
+	if configPayload["llm"] != "codex" || configPayload["poll_seconds"] != "7" {
+		t.Fatalf("agent request config payload = %#v", configPayload)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"agent", "config-rm", "-id", agentID, "llm"}); err != nil {
+			t.Fatalf("agent config-rm error = %v", err)
+		}
+	})
+	afterRemoveOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "config-ls", "-id", agentID}); err != nil {
+			t.Fatalf("agent config-ls after remove error = %v", err)
+		}
+	})
+	if strings.Contains(afterRemoveOut, "llm=codex") || !strings.Contains(afterRemoveOut, "poll_seconds=7") {
+		t.Fatalf("agent config-ls after remove output = %q", afterRemoveOut)
+	}
+}
+
 func TestRunIdeaReviseAlias(t *testing.T) {
 	setupLocalCLI(t)
 

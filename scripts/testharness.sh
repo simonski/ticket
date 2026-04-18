@@ -220,10 +220,20 @@ run "$TK_BIN" project use "$srv_project_id" >/dev/null
 remote_ticket_id="$("$TK_BIN" add "Remote agent ticket" -printid)"
 run "$TK_BIN" update -id "$remote_ticket_id" -status develop/idle >/dev/null
 agent_id="$("$TK_BIN" agent create -password agentpass123 -printid)"
-agent_request_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$srv_project_id")"
+initial_agent_config="$("$TK_BIN" agent config-ls -id "$agent_id")"
+expect_contains "$initial_agent_config" "(no config)" "initial agent config"
+run "$TK_BIN" agent config-set -id "$agent_id" llm codex >/dev/null
+run "$TK_BIN" agent config-set -id "$agent_id" poll_seconds 7 >/dev/null
+agent_wrong_project_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$ops_project_id")"
+expect_contains "$agent_wrong_project_output" "\"NONE\"" "agent wrong project request status"
+run "$TK_BIN" agent reset-password -id "$agent_id" -password newpass123 >/dev/null
+expect_fail "$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$srv_project_id"
+agent_request_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password newpass123 -project-id "$srv_project_id")"
 expect_contains "$agent_request_output" "\"status\"" "remote agent request response shape"
 expect_contains "$agent_request_output" "\"NEW\"" "remote agent request status"
 expect_contains "$agent_request_output" "Remote agent ticket" "remote agent request ticket"
+expect_contains "$agent_request_output" "\"llm\": \"codex\"" "remote agent request config propagation"
+run "$TK_BIN" agent config-rm -id "$agent_id" llm >/dev/null
 
 run "$TK_BIN" project use "$ops_project_id" >/dev/null
 run "$TK_BIN" ls -count -expect_equals 0
