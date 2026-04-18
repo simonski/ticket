@@ -1,8 +1,8 @@
 # Privacy Policy
 
 **Project:** ticket  
-**Version:** 0.1.731  
-**Last updated:** 2025-07-18
+**Version:** 0.1.823  
+**Last updated:** 2026-04-18
 
 This document describes what personal data the **ticket** application collects,
 how it is used, how long it is retained, and what rights users have over their
@@ -110,8 +110,8 @@ Under GDPR (and similar legislation), users have the following rights:
 |-------|----------------|
 | **Access** (Art. 15) | Request a copy of your data from the server administrator |
 | **Rectification** (Art. 16) | Update your profile via the web UI or CLI |
-| **Erasure** (Art. 17) | Ask the administrator to run `ticket user rm <username>` — this deletes your account, sessions, memberships, time entries, and messages, and anonymises audit trail references |
-| **Portability** (Art. 20) | The administrator can run `ticket export` to produce a JSON snapshot; request the subset relating to your account |
+| **Erasure** (Art. 17) | Ask the administrator to run `tk user rm -username <name>` — this deletes your account, sessions, memberships, time entries, and messages, and anonymises audit trail references |
+| **Portability** (Art. 20) | The administrator can run `tk export -o account-data.json` to produce a JSON snapshot; request the subset relating to your account |
 | **Restriction / Objection** (Arts. 18, 21) | Contact the server administrator |
 
 To exercise any right, contact the person or organisation who operates your

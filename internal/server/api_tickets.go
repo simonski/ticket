@@ -32,7 +32,7 @@ func (r *router) registerTicketHandlers() {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		_, state, err := resolveLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
+		state, err := resolveCreateLifecycleRequest(ticketPayload.Status, ticketPayload.Stage, ticketPayload.State)
 		if err != nil {
 			writeStoreError(w, err)
 			return

@@ -1,3 +1,85 @@
+THE GOAL IS A TICKET SYSTEM THAT
+
+IN SCOPE
+    1. uses an SDLC
+    2. uses an agent SKILL
+    3. uses a PROMPT per step
+    4. allows for a tcket to walk through the stages
+    5. keeps a chain of thought in the history
+    6. API is rock solid
+
+
+
+OUT OF SCOPE
+    WEBSITE
+
+I'd like to see a new test harness in the form of a repeatable set of scripts that invoke the CLI like
+
+ID=`tk new foo -id 1`
+tk ls -count -expect_equals 1
+tk ls -count -expect_equals 0 == FAIL
+tk new child -id 2 -parent_id $ID
+tk ls -count -expect_equals 2
+
+This woudl be testable via
+
+make testscripts
+
+which basically just runs
+
+./scripts/testharness.sh
+
+whichs a growing set of scenarios in a big single shellscript that calls `tk` and checks via a `count` call.
+
+
+Extend `tk count` function that accepts a number of search criteria options - type etc.  This woudl be used wiht optional options like -expect_equals N and an `-expect_notequals N` on the `tk count` result which would then exit 1 if thenumber was different AND explain the actual number.
+
+For any entity creation CLI call allow the optional -id N to be specified of the entity so that we can force the ID where possible.
+For any entity creation CLI call create an optional -printid option to print only the ID - allows for scripting.
+
+mistra.ai lookey likey
+    account 
+    profile
+    logout
+    register
+    org
+    team
+    panel on left
+        icon: option1
+        icon: option2
+        5qvaPCEHOXo73TgrVtrExcdR
+
+UX for site2
+look at the mistral website for the panel, header, content
+
+header panel top, fixed
+navigation panel on left, fixed
+content panel, remainder of space, has vertical scrolling where necessary
+all menus and popups are css based
+
+pull in an icon pack and use icons in the navicgation panel to the left of each panel name
+decrease the padding between each panel selector to very small
+
+
+Goal: Update website UX so it is 
+    - fast
+    - smoother
+    - simple shortcuts and drag/drop
+    - where all the changes use EXISTING NETWORK APIs
+
+phase0: make a plan to achieve below and call it WEBSITE_IMPROVEMENTS.md
+    as you iterate on the plan and progress, update that file
+
+Use cases.  
+
+"As an admin I want to author and manage SDLC, Stage, Role creation, order": 
+
+    - phase 1: a smooth method of creating from scratch an SDLC or editing an existing one (trello is an example reference)
+    - phase 2: a backlog view that shows the tickets and their place in the SDLC
+    - phase 3: a history view that shows where a given ticket has been in a mario-kart ghost style showing all the stages and roles, where the user can click or move through them and see the feedback/actions taken
+
+
+
 We need a definitive specification of the entities as a design document and then we need to apply it against the codebase to ensure it is all correct.
 
 We will work in phases.  For now it is phase1.

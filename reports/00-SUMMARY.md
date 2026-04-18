@@ -1,79 +1,111 @@
 # SDLC Assessment Summary
 
-**Date:** 2026-04-13
-**Project:** ticket / tk
-**Overall Score: 80/100** (was 79, +1)
+**Date:** 2026-04-18  
+**Project:** ticket / tk  
+**Overall Score:** 75/100 **(was 80, -5)**  
+**Assessment scope:** README, user/admin docs, Go services, SQLite store, web UI, Playwright/Go test setup, CI/CD, container/deploy config, and the prior `reports/` baseline.
 
 ## Score Table
 
-| # | Category | Previous | Current | Delta |
-|---|----------|----------|---------|-------|
-| 01 | OpenAPI | 78 | 74 | -4 |
-| 02 | Security | 82 | 82 | 0 |
-| 03 | InfoSec | 78 | 80 | +2 |
-| 04 | Idiomatic Go | 79 | 79 | 0 |
-| 05 | Idiomatic JS | 88 | 88 | 0 |
-| 06 | DevOps | 87 | 88 | +1 |
-| 07 | QA | 75 | 77 | +2 |
-| 08 | Tech Lead | 56 | 56 | 0 |
-| 09 | Architect | 79 | 79 | 0 |
-| 10 | Performance | 75 | 75 | 0 |
-| 11 | Database | 80 | 80 | 0 |
-| 12 | Tech Writer | 81 | 81 | 0 |
-| 13 | Product Owner | 82 | 85 | +3 |
-| 14 | Compliance | 79 | 79 | 0 |
-| 15 | SRE | 73 | 74 | +1 |
-| 16 | UX | 78 | 79 | +1 |
-| 17 | New Starter | 87 | 88 | +1 |
-| **Overall** |  | **79** | **80** | **+1** |
+| # | Role | Previous | Current | Delta |
+|---|------|----------|---------|-------|
+| 01 | product-manager | 85 | 83 | -2 |
+| 02 | user-researcher | 79 | 70 | -9 |
+| 03 | ux-review | 79 | 76 | -3 |
+| 04 | accessibility | 79 | 72 | -7 |
+| 05 | support-readiness | 74 | 74 | 0 |
+| 06 | systems-architect | 79 | 78 | -1 |
+| 07 | api-architect | 74 | 68 | -6 |
+| 08 | domain-designer | 79 | 75 | -4 |
+| 09 | tech-lead | 56 | 58 | +2 |
+| 10 | backend-engineer | 79 | 78 | -1 |
+| 11 | frontend-engineer | 88 | 75 | -13 |
+| 12 | code-reviewer | 77 | 74 | -3 |
+| 13 | maintainer | 56 | 64 | +8 |
+| 14 | security-engineer | 82 | 81 | -1 |
+| 15 | application-security | 80 | 80 | 0 |
+| 16 | database-engineer | 80 | 82 | +2 |
+| 17 | privacy-and-compliance | 79 | 74 | -5 |
+| 18 | supply-chain | 80 | 73 | -7 |
+| 19 | qa-architect | 77 | 78 | +1 |
+| 20 | performance-engineer | 75 | 72 | -3 |
+| 21 | resilience-engineer | 74 | 74 | 0 |
+| 22 | devops-engineer | 88 | 84 | -4 |
+| 23 | sre | 74 | 76 | +2 |
+| 24 | release-manager | 80 | 70 | -10 |
+| 25 | tech-writer | 81 | 77 | -4 |
+| 26 | new-starter | 88 | 84 | -4 |
+| **Overall** |  | **80** | **75** | **-5** |
 
 ## Score Distribution
 
-| Band | Categories |
-|------|------------|
+| Band | Roles |
+|------|-------|
 | 90+ | None |
-| 80-89 | Security (82), InfoSec (80), Idiomatic JS (88), DevOps (88), Database (80), Tech Writer (81), Product Owner (85), New Starter (88) |
-| 70-79 | OpenAPI (74), Idiomatic Go (79), QA (77), Architect (79), Performance (75), Compliance (79), SRE (74), UX (79) |
-| 60-69 | None |
-| 50-59 | Tech Lead (56) |
+| 80-89 | product-manager (83), security-engineer (81), application-security (80), database-engineer (82), devops-engineer (84), new-starter (84) |
+| 70-79 | user-researcher (70), ux-review (76), accessibility (72), support-readiness (74), systems-architect (78), domain-designer (75), backend-engineer (78), frontend-engineer (75), code-reviewer (74), privacy-and-compliance (74), supply-chain (73), qa-architect (78), performance-engineer (72), resilience-engineer (74), sre (76), tech-writer (77), release-manager (70) |
+| Below 70 | api-architect (68), tech-lead (58), maintainer (64) |
+
+## Top Systemic Risks
+
+1. **Contract drift is now material** — `openapi.yaml` is malformed at the top-level version field, which breaks standard tooling before deeper contract checks can even run (`openapi.yaml:1-10`).
+2. **The web UI still diverges from backend and docs in important workflows** — the project prefix field allows 8 characters while the documented rule is 1-5 uppercase characters, and the ticket modal still exposes a generic manual health control while the CLI uses a 10-check health model (`web/static/index.html:1610-1612`, `docs/LIFECYCLE.md:14-15`, `USER_GUIDE.md:64-67`, `web/static/index.html:1897-1905`, `cmd/tk/cmd_ticket_health.go:218-246`).
+3. **Release integrity is weaker than the runtime security posture** — CI runs linting, `gosec`, and `govulncheck`, but release artifacts and images are not signed or attested (`.github/workflows/makefile.yaml:22-38`, `.github/workflows/makefile.yaml:86-100`, `Makefile:171-215`).
+4. **Docs drift is visible to both contributors and operators** — docs still say there are 11 Playwright specs even though the repo now has 12, the privacy doc still carries an older version, and README still recommends `make build` even though onboarding warns against it for day-to-day work (`CLAUDE.md:27`, `TESTING.md:124-126`, `docs/PRIVACY.md:4-5`, `README.md:64-71`, `docs/ONBOARDING.md:111-117`).
+5. **Local/browser quality gates are brittle** — Playwright uses fixed local ports in both configs, which creates avoidable false negatives when those ports are already in use (`playwright.config.js:7-15`, `playwright.site2.config.js:7-15`).
+
+## Cross-role Contradiction Log
+
+| Contradiction | Resolution |
+|---------------|------------|
+| A QA/resilience pass claimed request correlation IDs were missing. | Rejected after direct review: `loggingHandler` generates or forwards `X-Request-ID` and logs it with method, path, status, and duration (`internal/server/server.go:402-445`). |
+| An architecture pass suggested TUI lifecycle constants were wrong. | Narrowed: lifecycle states and stages use `store` constants, but the TUI ticket type picker is incomplete and omits valid backend ticket types such as `story`, `feature`, and `idea` (`internal/tui/model_forms.go:265-268`, `internal/store/ticket.go:1620-1627`). |
+| A security/data pass suggested short encryption keys were padded. | Rejected after direct review: the encryption key helper now enforces a minimum of 32 bytes and errors otherwise (`internal/store/encrypt.go:17-31`). |
+| A QA/performance pass described ticket history reads as unbounded. | Rejected after direct review: `ListHistoryEvents` normalizes limit/offset and applies `LIMIT ? OFFSET ?` (`internal/store/activity.go:46-57`). |
 
 ## What Changed Since Last Assessment
 
-Recent user-facing work materially improved the product surface: `tk draft` / `tk undraft` now support multiple IDs (`cmd/tk/cmd_ticket_lifecycle.go:262-323`), `tk get` detail columns and child counts are aligned and regression-tested (`cmd/tk/printer.go:253-290`, `cmd/tk/main_test.go:2167-2201`), `tk skill` is now a documented first-class command (`cmd/tk/cmd_setup.go:48-66`, `README.md:205`, `USER_GUIDE.md:37-43`), and ticket health expanded from 4 to 10 checks with project/SDLC/stage context (`cmd/tk/cmd_ticket_health.go:54-76`, `cmd/tk/cmd_ticket_health.go:175-245`).
-
-The main regression uncovered in this refresh is `openapi.yaml`: the new endpoints are documented, but the top-level `info.version` entry is malformed as a bare `.1.775`, so the file is no longer valid YAML (`openapi.yaml:1-10`). Smaller doc/UI drift remains in `docs/PRIVACY.md`, `docs/ONBOARDING.md`, and the SPA health/prefix controls.
-
-## Key Metrics
-
-| Metric | Previous | Current | Evidence |
-|--------|----------|---------|----------|
-| Go test functions | 414 | 486 | repository-wide `*_test.go` count on 2026-04-13 |
-| Playwright specs | 11 | 11 | `tests/playwright/*.spec.*` |
-| OpenAPI operationIds | 113 | 119 | `grep -c '^\s*operationId:' openapi.yaml` |
-| OpenAPI YAML parses | yes | no | `openapi.yaml:1-10` |
-| Health check criteria | 4 | 10 | `cmd/tk/cmd_ticket_health.go:218-245` |
-| Draft/undraft target count | 1 | many | `cmd/tk/cmd_ticket_lifecycle.go:275-323` |
-| `cmd/tk/cmd_ticket.go` lines | 2,060 | 2,187 | current wc |
-| `cmd/tk/cmd_ticket_health.go` lines | 440 | 541 | current wc |
-| `web/static/index.html` lines | 6,183 | 6,287 | current wc |
-| Binary version | 0.1.774 | 0.1.790 | `cmd/tk/VERSION` |
+- The positive CLI changes from the prior pass remain in place: multi-ID draft/undraft support and richer ticket detail rendering are still present (`cmd/tk/cmd_ticket_lifecycle.go:262-323`, `cmd/tk/printer.go:256-290`).
+- The contract surface is still degraded by the malformed OpenAPI version header, so the most visible previous blocker remains unresolved (`openapi.yaml:1-10`).
+- The doc drift surface is now larger: specialist docs still report 11 Playwright specs while the repo contains 12, and the privacy policy still carries a stale product version (`CLAUDE.md:27`, `TESTING.md:124-126`, `docs/PRIVACY.md:4-5`).
+- Observability confidence improved because the current code clearly includes request-scoped correlation IDs and structured request logging (`internal/server/server.go:402-445`).
 
 ## Cumulative Improvement
 
 | Assessment | Date | Score | Delta |
 |-----------|------|-------|-------|
-| v1 (original) | 2026-04-09 | 70 | baseline |
+| v1 | 2026-04-09 | 70 | baseline |
 | v2 | 2026-04-09 | 71 | +1 |
 | v3 | 2026-04-10 | 71 | 0 |
 | v4 | 2026-04-12 | 80 | +9 |
 | v5 | 2026-04-12 | 79 | -1 |
-| v6 (current) | 2026-04-13 | 80 | +1 |
+| v6 | 2026-04-13 | 80 | +1 |
+| v7 | 2026-04-18 | 75 | -5 |
 
-## Prioritized Actions
+## Key Delivery Metrics
 
-| Priority | Action | Evidence | Why it matters |
-|----------|--------|----------|----------------|
-| 1 | Repair the malformed OpenAPI header and add a spec validation check to CI | `openapi.yaml:1-10` | The spec currently cannot be parsed by standard tooling, which undermines docs, SDK generation, and drift checking. |
-| 2 | Replace full-project child scans in CLI/store paths with targeted child queries | `cmd/tk/cmd_ticket.go:728-737`, `internal/store/ticket.go:1864-1870`, `internal/store/ticket.go:1885-1892` | The same scalability smell appears in interactive read, clone, and delete flows. |
-| 3 | Finish the remaining doc drift cleanup in privacy/onboarding materials | `docs/PRIVACY.md:4-5`, `docs/PRIVACY.md:113-114`, `docs/ONBOARDING.md:23-47` | New commands are documented in README/USER_GUIDE, but the specialist docs still lag. |
-| 4 | Align the web UI with the expanded health model and backend prefix validation | `web/static/index.html:1274-1275`, `web/static/index.html:1495-1503`, `cmd/tk/cmd_ticket_health.go:218-245`, `docs/LIFECYCLE.md:14-15` | The main UX now trails the CLI in two visible workflow areas. |
+| Metric | Current | Evidence |
+|--------|---------|----------|
+| Go test files | 40 | repository count during assessment |
+| Playwright spec files | 12 | `tests/playwright/*.spec.js` repository count during assessment |
+| Go coverage gate packages | 6 | `Makefile:105-127` |
+| Go coverage gates | passing | assessment run against `Makefile:105-127` |
+| OpenAPI YAML parses | no | `openapi.yaml:1-10` |
+| Request correlation IDs | present | `internal/server/server.go:402-445` |
+| Health/metrics endpoints | 2 | `internal/server/api_system.go:19-85` |
+| SHA-pinned workflow actions | present | `.github/workflows/makefile.yaml:15-17`, `.github/workflows/makefile.yaml:43`, `.github/workflows/makefile.yaml:56`, `.github/workflows/makefile.yaml:63`, `.github/workflows/makefile.yaml:87` |
+| Browser test fixed ports | 2 configs | `playwright.config.js:7-15`, `playwright.site2.config.js:7-15` |
+| Artifact/image signatures | none | `Makefile:171-215`, `.github/workflows/makefile.yaml:86-100` |
+
+## Prioritized Action Register
+
+| Priority | Finding | Owner role | Dependency notes |
+|----------|---------|------------|------------------|
+| P1 | Repair `openapi.yaml` and add spec validation to CI | api-architect | Depends on devops-engineer to add a validation step in workflow |
+| P2 | Add release artifact signing and container/image attestations | supply-chain | Depends on devops-engineer and release-manager agreeing the signing path |
+| P3 | Fix web prefix validation and align the web health control with the 10-check backend model | frontend-engineer | Depends on product-manager and tech-writer to settle expected wording |
+| P4 | Replace click-only `div` menus and non-announced status regions with accessible components | accessibility | Depends on ux-review and frontend-engineer for implementation details |
+| P5 | Remove fixed Playwright ports or randomize them in local CI-style runs | qa-architect | Depends on devops-engineer because the configs are part of the build/test surface |
+| P6 | Reduce ownership hotspots in `web/static/index.html`, `cmd/tk/main.go`, and `internal/client/client.go` | tech-lead | Depends on maintainer to sequence refactors without destabilizing behavior |
+| P7 | Publish a README-level help/troubleshooting entry point | support-readiness | Depends on tech-writer and sre |
+| P8 | Tighten trusted-proxy handling for `X-Forwarded-Proto` and secure cookie decisions | security-engineer | Depends on devops-engineer to define expected reverse proxy topology |

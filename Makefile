@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -14,6 +14,7 @@ help:
 	@printf "  make build           Build tk binary into ./bin/tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
 	@printf "  make sync-openapi-version Sync openapi.yaml version with cmd/tk/VERSION.\n"
+	@printf "  make validate-openapi Parse openapi.yaml and require core metadata.\n"
 	@printf "  make setup           Install development dependencies (Go + Node).\n"
 	@printf "  make setup-go        Download and cache Go module dependencies.\n"
 	@printf "  make setup-node      Install Node dependencies.\n"
@@ -85,6 +86,9 @@ bump-version:
 sync-openapi-version:
 	@perl -0pi -e 's/^(  version: ).*/$$1$(VERSION)/m' openapi.yaml
 
+validate-openapi:
+	@ruby -e 'require "yaml"; doc = YAML.safe_load(File.read("openapi.yaml"), permitted_classes: [], aliases: true); abort("openapi.yaml missing openapi version") unless doc.is_a?(Hash) && !doc["openapi"].to_s.empty?; info = doc["info"].is_a?(Hash) ? doc["info"] : {}; abort("openapi.yaml missing info.title") if info["title"].to_s.empty?; abort("openapi.yaml missing info.version") if info["version"].to_s.empty?'
+
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
 INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket
 
@@ -134,9 +138,7 @@ test-playwright:
 test-tk-test: build
 	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
-testscripts:
-	@mkdir -p bin
-	go build -o ./bin/tk ./cmd/tk
+testscripts: build
 	./scripts/testharness.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────
