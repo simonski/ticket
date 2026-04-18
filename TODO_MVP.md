@@ -28,6 +28,29 @@ executed without reopening the same scope questions every session.
 
 ## Release phases
 
+### Phase 0 — evaluation
+
+Establish the executable baseline and prove the plan is grounded in the current
+product rather than assumptions.
+
+Current status:
+
+- `QUICKSTART_CLIENT.md` passes through `cmd/tk-test`
+- `QUICKSTART_SERVER.md` passes through `cmd/tk-test`
+- `scripts/testharness.sh` now covers both scripting/count assertions and an
+  SDLC workflow scenario
+- focused Go regression checks pass for `./internal/store` and `./cmd/tk`
+- SDLC role-routing defects found during this pass were fixed and covered
+
+Outcome of this phase:
+
+1. The quickstarts are a credible smoke contract for local and remote use.
+2. The shell harness is now part of the repeatable CLI/workflow contract.
+3. Core CRUD confidence is good for projects, tickets, stories, labels,
+   dependencies, time entries, users, teams, roles, SDLCs, and stages.
+4. Weaker broad-scope areas still need a deliberate pass before `mvp-1`
+   sign-off: comments, ideas, decisions, and some agent/admin flows.
+
 ### Phase 1 — `mvp-1`
 
 Prove the core product is operational without depending on the website or TUI.
@@ -39,6 +62,7 @@ Exit criteria:
 - Local mode and remote client/server mode are both installable and usable.
 - Test coverage includes unit, integration, contract, and executable scripting
   harnesses/examples.
+- The Phase 0 evaluation findings are closed or explicitly deferred.
 - Backup/restore and database upgrade expectations are documented and exercised.
 - Website and TUI are allowed to lag as long as they do not block CLI/API use.
 
@@ -79,23 +103,34 @@ Exit criteria:
 3. Define and automate a backup routine for `.ticket/ticket.db` before risky
    schema or workflow changes land.
 4. Baseline the current state against Phase 1 exit criteria and open the missing
-   work as release tickets.
+   work as release tickets. **Partially complete**: the evaluation report now
+   exists in `reports/08-mvp-evaluation.md`.
 5. Treat schema upgrade safety as a standing requirement for all release work.
 
-## First assessment pass to perform next
+## Current MVP assessment
 
-1. Inventory Phase 1 entity/API/CLI coverage and mark each area as:
-   - done
-   - partial
-   - missing
-2. Inventory the test surface for Phase 1:
-   - unit
-   - integration
-   - contract
-   - scripted CLI harnesses
-   - executable documentation
-3. Inventory install/run paths:
-   - local CLI
-   - remote CLI against server
-   - server bootstrap and persistence
-4. Identify the smallest set of tickets required to reach `mvp-1`.
+1. **Executable baseline**
+   - local quickstart: verified
+   - remote client/server quickstart: verified
+   - scripted CLI harness: verified
+2. **Workflow stability**
+   - SDLC stage/role initialization and stage-change role persistence were
+     defective and are now fixed
+   - workflow progression/regression is now covered more directly
+3. **Broad CRUD confidence**
+   - strong for core entities and lifecycle-heavy flows
+   - still uneven for lower-frequency admin surfaces
+4. **Main remaining `mvp-1` risk**
+   - proving the weaker broad-scope entities are either solid enough to keep in
+     scope or intentionally deferred
+
+## Next assessment and delivery pass
+
+1. Do a targeted CRUD-depth pass on comments, ideas, decisions, and agent/admin
+   flows.
+2. Decide explicitly which of those weaker areas remain in `mvp-1` scope.
+3. Keep growing `scripts/testharness.sh` with scenario-based operator workflows.
+4. Exercise backup/restore and upgrade expectations as release gates rather than
+   documentation-only promises.
+5. Identify the smallest set of release tickets still required to reach
+   `mvp-1`.
