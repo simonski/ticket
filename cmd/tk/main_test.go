@@ -1522,6 +1522,111 @@ func TestRunStageStateCommandsUpdateLifecycle(t *testing.T) {
 	}
 }
 
+func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
+		Name:        "Lifecycle Workflow",
+		Description: "workflow for next/previous command coverage",
+	})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	designStage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		StageName:   "design",
+		Description: "design",
+		SortOrder:   0,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage(design) error = %v", err)
+	}
+	testStage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		StageName:   "test",
+		Description: "test",
+		SortOrder:   1,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage(test) error = %v", err)
+	}
+	_, err = svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		StageName:   "done",
+		Description: "done",
+		SortOrder:   2,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage(done) error = %v", err)
+	}
+	designer, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
+		SdlcID:      &wf.ID,
+		Title:       "designer",
+		Description: "designs work",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole(designer) error = %v", err)
+	}
+	tester, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
+		SdlcID:      &wf.ID,
+		Title:       "tester",
+		Description: "tests work",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole(tester) error = %v", err)
+	}
+	if err := svc.AddSdlcStageRole(context.Background(), wf.ID, designStage.ID, designer.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole(design) error = %v", err)
+	}
+	if err := svc.AddSdlcStageRole(context.Background(), wf.ID, testStage.ID, tester.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole(test) error = %v", err)
+	}
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{SdlcID: &wf.ID}); err != nil {
+		t.Fatalf("UpdateProject(sdlc) error = %v", err)
+	}
+
+	taskID := createLocalTask(t, []string{"add", "Workflow Ticket"})
+	initial, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket(initial) error = %v", err)
+	}
+	if initial.RoleID == nil || *initial.RoleID != designer.ID || initial.SdlcStageID == nil || *initial.SdlcStageID != designStage.ID {
+		t.Fatalf("initial ticket = %#v, want design stage with designer role", initial)
+	}
+
+	if err := run([]string{"update", "-id", taskID, "-status", "design/success"}); err != nil {
+		t.Fatalf("update design/success error = %v", err)
+	}
+	advanced, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket(after success) error = %v", err)
+	}
+	if advanced.Stage != "test" || advanced.State != store.StateIdle || advanced.RoleID == nil || *advanced.RoleID != tester.ID || advanced.SdlcStageID == nil || *advanced.SdlcStageID != testStage.ID {
+		t.Fatalf("advanced ticket = %#v, want test stage with tester role idle", advanced)
+	}
+
+	if err := run([]string{"update", "-id", taskID, "-status", "test/fail"}); err != nil {
+		t.Fatalf("update test/fail error = %v", err)
+	}
+	previousOutput := captureStdout(t, func() {
+		if err := run([]string{"previous", "-id", taskID}); err != nil {
+			t.Fatalf("previous error = %v", err)
+		}
+	})
+	if !strings.Contains(previousOutput, "regressed: test/fail -> design/idle") {
+		t.Fatalf("unexpected previous output:\n%s", previousOutput)
+	}
+	regressed, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket(after previous) error = %v", err)
+	}
+	if regressed.Stage != "design" || regressed.State != store.StateIdle || regressed.RoleID == nil || *regressed.RoleID != designer.ID || regressed.SdlcStageID == nil || *regressed.SdlcStageID != designStage.ID {
+		t.Fatalf("regressed ticket = %#v, want design stage with designer role idle", regressed)
+	}
+}
+
 func TestRunProjectCommandsInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 

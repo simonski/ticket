@@ -128,6 +128,28 @@ type TicketRequestParams struct {
 	DryRun    bool
 }
 
+type queryRower interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func firstStageRoleID(ctx context.Context, q queryRower, sdlcID, stageID int64) (*int64, error) {
+	var roleID int64
+	err := q.QueryRowContext(ctx, `
+		SELECT role_id
+		FROM sdlc_stage_roles
+		WHERE sdlc_id = ? AND stage_id = ?
+		ORDER BY sort_order, role_id
+		LIMIT 1
+	`, sdlcID, stageID).Scan(&roleID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &roleID, nil
+}
+
 func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (Ticket, error) {
 	params.Type = normalizeTicketType(params.Type)
 	params.Title = strings.TrimSpace(params.Title)
@@ -232,6 +254,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	}
 	// Resolve initial sdlc stage (first stage by sort_order)
 	var sdlcStageID *int64
+	var roleID *int64
 	stage := StageDesign // fallback
 	if effectiveSdlcID.Valid {
 		var wsID int64
@@ -240,6 +263,10 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		if err == nil {
 			sdlcStageID = &wsID
 			stage = stageName
+			roleID, err = firstStageRoleID(ctx, tx, effectiveSdlcID.Int64, wsID)
+			if err != nil {
+				return Ticket{}, err
+			}
 		}
 	}
 	key, err := generateTicketKey(projectPrefix, params.Type, nextSequence)
@@ -247,9 +274,9 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		return Ticket{}, err
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketSdlcID), nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), nullableUserID(params.CreatedBy))
+		INSERT INTO tickets (ticket_id, project_id, parent_id, clone_of, type, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, git_branch, sdlc_id, sdlc_stage_id, role_id, stage, state, status, priority, sort_order, estimate_effort, estimate_complete, health_score, assignee, author, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, key, params.ProjectID, nullableString(params.ParentID), nullableString(params.CloneOf), params.Type, params.Title, params.Description, acceptanceCriteria, dorJSON, dodJSON, acJSON, strings.TrimSpace(params.GitRepository), strings.TrimSpace(params.GitBranch), nullableInt64(ticketSdlcID), nullableInt64(sdlcStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), priority, order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), 0, strings.TrimSpace(params.Assignee), strings.TrimSpace(params.Author), nullableUserID(params.CreatedBy))
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -395,6 +422,7 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	state := current.State
 	stage := current.Stage
 	sdlcStageID := current.SdlcStageID
+	roleID := current.RoleID
 	// Direct stage override (e.g. drag-and-drop on the board)
 	if explicitStage {
 		nextStage, err := validateTicketStage(ctx, db, current, params.Stage)
@@ -420,8 +448,13 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 					var wsID int64
 					if err := db.QueryRowContext(ctx, `SELECT sdlc_stage_id FROM sdlc_stages WHERE sdlc_id = ? AND stage_name = ? LIMIT 1`, sdlcID, stage).Scan(&wsID); err == nil {
 						sdlcStageID = &wsID
+						roleID, err = firstStageRoleID(ctx, db, sdlcID, wsID)
+						if err != nil {
+							return Ticket{}, err
+						}
 					} else {
 						sdlcStageID = nil
+						roleID = nil
 					}
 				}
 			}
@@ -456,7 +489,16 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		if state == StateSuccess && sdlcStageID != nil {
 			nextStageID, nextStageName, err := getNextSdlcStage(ctx, db, *sdlcStageID)
 			if err == nil && nextStageID != nil {
+				var sdlcID int64
+				if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlc_stages WHERE sdlc_stage_id = ?`, *nextStageID).Scan(&sdlcID); err != nil {
+					return Ticket{}, err
+				}
+				nextRoleID, err := firstStageRoleID(ctx, db, sdlcID, *nextStageID)
+				if err != nil {
+					return Ticket{}, err
+				}
 				sdlcStageID = nextStageID
+				roleID = nextRoleID
 				stage = nextStageName
 				state = StateIdle
 			}
@@ -471,9 +513,9 @@ writeTicket:
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, sdlc_stage_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, description = ?, acceptance_criteria = ?, dor_map = ?, dod_map = ?, ac_map = ?, git_repository = ?, git_branch = ?, parent_id = ?, assignee = ?, sdlc_stage_id = ?, role_id = ?, stage = ?, state = ?, status = ?, priority = ?, sort_order = ?, estimate_effort = ?, estimate_complete = ?, complete = ?, type = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(sdlcStageID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, id)
+	`, title, params.Description, nextAcceptanceCriteria, dorJSON, dodJSON, acJSON, nextGitRepository, nextGitBranch, nullableString(params.ParentID), assignee, nullableInt64(sdlcStageID), nullableInt64(roleID), stage, state, RenderLifecycleStatus(stage, state), params.Priority, params.Order, params.EstimateEffort, strings.TrimSpace(params.EstimateComplete), completeVal, nextType, id)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -2074,16 +2116,21 @@ func SetTicketSdlc(ctx context.Context, db *sql.DB, ticketID string, sdlcID int6
 		return Ticket{}, fmt.Errorf("sdlc %d not found", sdlcID)
 	}
 	var wsID *int64
+	var roleID *int64
 	stage := StageDesign
 	if len(wf.Stages) > 0 {
 		wsID = &wf.Stages[0].ID
 		stage = wf.Stages[0].StageName
+		roleID, err = firstStageRoleID(ctx, db, sdlcID, wf.Stages[0].ID)
+		if err != nil {
+			return Ticket{}, err
+		}
 	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE tickets
-		SET sdlc_id = ?, sdlc_stage_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
+		SET sdlc_id = ?, sdlc_stage_id = ?, role_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, sdlcID, wsID, stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
+	`, sdlcID, wsID, nullableInt64(roleID), stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -2102,18 +2149,23 @@ func UnsetTicketSdlc(ctx context.Context, db *sql.DB, ticketID string) (Ticket, 
 	// Resolve inherited sdlc
 	wfID := ResolveSdlcID(ctx, db, ticket)
 	var wsID *int64
+	var roleID *int64
 	stage := StageDesign
 	if wfID != nil {
 		if wf, err := GetSdlc(ctx, db, *wfID); err == nil && len(wf.Stages) > 0 {
 			wsID = &wf.Stages[0].ID
 			stage = wf.Stages[0].StageName
+			roleID, err = firstStageRoleID(ctx, db, *wfID, wf.Stages[0].ID)
+			if err != nil {
+				return Ticket{}, err
+			}
 		}
 	}
 	_, err = db.ExecContext(ctx, `
 		UPDATE tickets
-		SET sdlc_id = NULL, sdlc_stage_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
+		SET sdlc_id = NULL, sdlc_stage_id = ?, role_id = ?, stage = ?, state = 'idle', status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE ticket_id = ?
-	`, wsID, stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
+	`, wsID, nullableInt64(roleID), stage, RenderLifecycleStatus(stage, StateIdle), ticketID)
 	if err != nil {
 		return Ticket{}, err
 	}
