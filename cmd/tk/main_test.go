@@ -4789,25 +4789,29 @@ func TestRunReviseRequirement(t *testing.T) {
 	}
 }
 
-func TestRunDecisionAddAndList(t *testing.T) {
+func TestRunDecisionNewListAndPrintID(t *testing.T) {
 	setupLocalCLI(t)
 
-	addOut := captureStdout(t, func() {
-		if err := run([]string{"decision", "add", "Use PostgreSQL for storage"}); err != nil {
-			t.Fatalf("decision add error = %v", err)
+	decisionID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"decision", "new", "-printid", "Use PostgreSQL for storage"}); err != nil {
+			t.Fatalf("decision new error = %v", err)
 		}
-	})
-	if !strings.Contains(addOut, "decision") {
-		t.Fatalf("decision add output missing type:\n%s", addOut)
+	}))
+	decision, err := localCLIService(t).GetTicket(context.Background(), decisionID)
+	if err != nil {
+		t.Fatalf("GetTicket(%q) error = %v", decisionID, err)
+	}
+	if decision.Type != "decision" {
+		t.Fatalf("decision type = %q, want decision", decision.Type)
 	}
 
 	listOut := captureStdout(t, func() {
-		if err := run([]string{"decision", "list"}); err != nil {
-			t.Fatalf("decision list error = %v", err)
+		if err := run([]string{"decision", "ls"}); err != nil {
+			t.Fatalf("decision ls error = %v", err)
 		}
 	})
 	if !strings.Contains(listOut, "Use PostgreSQL for storage") {
-		t.Fatalf("decision list missing decision text:\n%s", listOut)
+		t.Fatalf("decision ls missing decision text:\n%s", listOut)
 	}
 }
 
@@ -6564,11 +6568,11 @@ func TestQuickstartServer(t *testing.T) {
 	})
 
 	// Step 4: Create project
-	captureStdout(t, func() {
-		if err := run([]string{"project", "create", "-prefix", "SRV", "-title", "Server Project"}); err != nil {
+	srvProjectID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "SRV", "-title", "Server Project", "-printid"}); err != nil {
 			t.Fatalf("project create error = %v", err)
 		}
-	})
+	}))
 	captureStdout(t, func() {
 		if err := run([]string{"project", "use", "SRV"}); err != nil {
 			t.Fatalf("project use error = %v", err)
@@ -6612,21 +6616,62 @@ func TestQuickstartServer(t *testing.T) {
 	})
 
 	// Step 8: Agent create
-	agentOut := captureStdout(t, func() {
-		if err := run([]string{"agent", "create"}); err != nil {
+	agentID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"agent", "create", "-password", "agentpass123", "-printid"}); err != nil {
 			t.Fatalf("agent create error = %v", err)
 		}
-	})
-	if !strings.Contains(agentOut, "agent_id") || !strings.Contains(agentOut, "password") {
-		t.Fatalf("agent create output missing credentials:\n%s", agentOut)
-	}
+	}))
 
-	// Step 9: Ready a ticket
+	// Step 9: Move a dedicated unassigned ticket into a claimable workflow state
+	agentTaskKey := strings.Fields(captureStdout(t, func() {
+		if err := run([]string{"add", "Agent queue task"}); err != nil {
+			t.Fatalf("add agent task error = %v", err)
+		}
+	}))[0]
 	captureStdout(t, func() {
-		if err := run([]string{"ready", taskKey}); err != nil {
-			t.Fatalf("ready error = %v", err)
+		if err := run([]string{"update", "-id", agentTaskKey, "-status", "develop/idle"}); err != nil {
+			t.Fatalf("update agent task status error = %v", err)
 		}
 	})
+
+	agentRequestOut := captureStdout(t, func() {
+		if err := run([]string{"agent", "request", "-agent-id", agentID, "-password", "agentpass123", "-project-id", srvProjectID, "-id", agentTaskKey}); err != nil {
+			t.Fatalf("agent request error = %v", err)
+		}
+	})
+	var requestPayload map[string]any
+	if err := json.Unmarshal([]byte(agentRequestOut), &requestPayload); err != nil {
+		t.Fatalf("json.Unmarshal(agent request) error = %v\noutput=%s", err, agentRequestOut)
+	}
+	if requestPayload["status"] != "NEW" {
+		t.Fatalf("agent request status = %#v, want NEW", requestPayload["status"])
+	}
+	ticketPayload, ok := requestPayload["ticket"].(map[string]any)
+	if !ok {
+		t.Fatalf("agent request ticket payload = %#v", requestPayload["ticket"])
+	}
+	if ticketPayload["title"] != "Agent queue task" {
+		t.Fatalf("agent request ticket title = %#v, want %q", ticketPayload["title"], "Agent queue task")
+	}
+}
+
+func TestRunIdeaReviseAlias(t *testing.T) {
+	setupLocalCLI(t)
+
+	ideaID := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"idea", "new", "-printid", "Add dark mode"}); err != nil {
+			t.Fatalf("idea new error = %v", err)
+		}
+	}))
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"idea", "revise", "-id", ideaID}); err != nil {
+			t.Fatalf("idea revise error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "(revised)") {
+		t.Fatalf("idea revise output should contain (revised):\n%s", out)
+	}
 }
 
 func TestBuildTreeDisplayOrdersChildrenUnderParents(t *testing.T) {

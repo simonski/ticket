@@ -672,6 +672,15 @@ Run flags:
   -poll-seconds <n>                      Idle poll interval in seconds (default: 5)
   -v                                     Verbose: stream LLM I/O to terminal
 
+Request flags:
+  -agent-id <uuid>                       Agent UUID (or AGENT_ID env)
+  -password <password>                   Agent password (or AGENT_PASSWORD env)
+  -project-id <id>                       Restrict request to a specific project queue
+  -id <ticket-id>                        Request a specific ticket id
+  -dryrun                                Preview without claiming the ticket
+  -loop <n>                              Repeat the request n times (0 = forever)
+  -sleep <seconds>                       Delay between repeated requests
+
 Password: AGENT_PASSWORD env var, or interactive prompt (input masked with *)`
 
 const userUsage = `Usage: tk user <command> [flags]

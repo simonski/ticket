@@ -343,6 +343,7 @@ func runAgent(args []string) error {
 		fs.SetOutput(os.Stderr)
 		reqAgentID := fs.String("agent-id", "", "agent UUID")
 		password := fs.String("password", "", "agent password")
+		projectID := fs.Int64("project-id", 0, "project id override")
 		id := fs.String("id", "", "specific ticket id")
 		dryRun := fs.Bool("dryrun", false, "simulate assignment only")
 		loop := fs.Int("loop", 1, "number of request loops")
@@ -392,10 +393,11 @@ func runAgent(args []string) error {
 		}
 		for i := 0; *loop == 0 || i < *loop; i++ {
 			response, err := svc.RequestAgentWork(context.Background(), libticket.AgentRequest{
-				ID:       reqAgentIDVal,
-				Password: agentPassword,
-				TicketID: requestedID,
-				DryRun:   *dryRun,
+				ID:        reqAgentIDVal,
+				Password:  agentPassword,
+				ProjectID: *projectID,
+				TicketID:  requestedID,
+				DryRun:    *dryRun,
 			})
 			if err != nil {
 				return err

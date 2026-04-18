@@ -7,8 +7,13 @@ TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-testharness.XXXXXX")"
 TICKET_HOME_DIR="$WORK_DIR/home"
 DB_PATH="$WORK_DIR/harness.db"
+SERVER_PID=""
 
 cleanup() {
+	if [[ -n "$SERVER_PID" ]]; then
+		kill "$SERVER_PID" 2>/dev/null || true
+		wait "$SERVER_PID" 2>/dev/null || true
+	fi
 	rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -87,6 +92,20 @@ expect_contains() {
 	fi
 }
 
+wait_for_http() {
+	local url="$1"
+	local label="$2"
+	local i
+	for ((i = 0; i < 50; i++)); do
+		if curl -fsS "$url" >/dev/null 2>&1; then
+			return 0
+		fi
+		sleep 0.2
+	done
+	printf '%s: timed out waiting for %s\n' "$label" "$url" >&2
+	exit 1
+}
+
 run "$TK_BIN" initdb -f "$DB_PATH" -force -password admin >/dev/null
 run "$TK_BIN" project use 1 >/dev/null
 
@@ -151,5 +170,66 @@ expect_contains "$ticket_output" "Status              : done/success" "ticket af
 run "$TK_BIN" next -id "$ticket_id" >/dev/null
 ticket_output="$("$TK_BIN" get -id "$ticket_id")"
 expect_contains "$ticket_output" "Complete            : closed" "ticket complete flag"
+
+run "$TK_BIN" initdb -f "$DB_PATH" -force -password admin >/dev/null
+run "$TK_BIN" project use 1 >/dev/null
+
+log "scenario: broad admin lifecycle and snapshot restore"
+lifecycle_ticket_id="$("$TK_BIN" add "Lifecycle ticket" -printid)"
+run "$TK_BIN" comment add -id "$lifecycle_ticket_id" "First comment from harness" >/dev/null
+ticket_output="$("$TK_BIN" get -id "$lifecycle_ticket_id")"
+expect_contains "$ticket_output" "First comment from harness" "ticket detail includes comment"
+
+idea_id="$("$TK_BIN" idea new -printid "Add dark mode")"
+run "$TK_BIN" idea revise -id "$idea_id" >/dev/null
+idea_output="$("$TK_BIN" get -id "$idea_id")"
+expect_contains "$idea_output" "(revised)" "idea revise alias"
+
+decision_id="$("$TK_BIN" decision new -printid "Use PostgreSQL for production")"
+decision_list_output="$("$TK_BIN" decision ls)"
+expect_contains "$decision_list_output" "Use PostgreSQL for production" "decision ls alias"
+expect_ticket_suffix "$decision_id" "3" "decision ticket id"
+
+snapshot_file="$WORK_DIR/harness-snapshot.json"
+run "$TK_BIN" export -o "$snapshot_file" >/dev/null
+run "$TK_BIN" add "Temporary snapshot noise" >/dev/null
+run "$TK_BIN" ls -count -expect_equals 4
+run "$TK_BIN" import -i "$snapshot_file" >/dev/null
+run "$TK_BIN" ls -count -expect_equals 3
+
+log "scenario: remote multi-project and agent request flow"
+SERVER_DB="$WORK_DIR/server.db"
+SERVER_PORT=$((20000 + RANDOM % 20000))
+SERVER_ADDR="127.0.0.1:$SERVER_PORT"
+SERVER_URL="http://$SERVER_ADDR"
+SERVER_LOG="$WORK_DIR/server.log"
+
+run "$TK_BIN" initdb -f "$SERVER_DB" -force -password adminpass >/dev/null
+"$TK_BIN" server -f "$SERVER_DB" -addr "$SERVER_ADDR" >"$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+wait_for_http "$SERVER_URL/api/healthz" "server startup"
+
+export TICKET_URL="$SERVER_URL"
+unset TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+
+run "$TK_BIN" login -username admin -password adminpass >/dev/null
+srv_project_id="$("$TK_BIN" project create -prefix SRV -title "Server Harness" -printid)"
+ops_project_id="$("$TK_BIN" project create -prefix OPS -title "Ops Harness" -printid)"
+run "$TK_BIN" project use "$srv_project_id" >/dev/null
+
+remote_ticket_id="$("$TK_BIN" add "Remote agent ticket" -printid)"
+run "$TK_BIN" update -id "$remote_ticket_id" -status develop/idle >/dev/null
+agent_id="$("$TK_BIN" agent create -password agentpass123 -printid)"
+agent_request_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$srv_project_id")"
+expect_contains "$agent_request_output" "\"status\"" "remote agent request response shape"
+expect_contains "$agent_request_output" "\"NEW\"" "remote agent request status"
+expect_contains "$agent_request_output" "Remote agent ticket" "remote agent request ticket"
+
+run "$TK_BIN" project use "$ops_project_id" >/dev/null
+run "$TK_BIN" ls -count -expect_equals 0
+run "$TK_BIN" add "Ops project ticket" >/dev/null
+run "$TK_BIN" ls -count -expect_equals 1
+run "$TK_BIN" project use "$srv_project_id" >/dev/null
+run "$TK_BIN" ls -count -expect_equals 1
 
 log "all script harness scenarios passed"

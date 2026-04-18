@@ -83,6 +83,13 @@ CLI scripting flows. It creates an isolated temp workspace, builds against a
 fresh local SQLite database via `TICKET_URL`, and executes end-to-end scenarios
 that assert behavior with CLI exit codes and `tk ls -count` checks.
 
+Current harness scenarios cover:
+
+1. scriptable count/assertion flows
+2. SDLC progression, regression, and terminal-stage behavior
+3. comment / idea / decision CRUD-adjacent operator flows plus snapshot export/import restore
+4. remote server login, multi-project switching, and agent work request behavior
+
 Run it with:
 
 ```bash

@@ -204,6 +204,8 @@ func runIdea(args []string) error {
 		return runRequirementStatus("accepted", args[1:])
 	case "reject":
 		return runRequirementStatus("rejected", args[1:])
+	case "revise":
+		return runReqRevise(args[1:])
 	default:
 		// If the first arg doesn't look like a subcommand, treat as title for "new"
 		return runReqAdd(args)
@@ -383,41 +385,28 @@ func runDecision(args []string) error {
 		return nil
 	}
 	switch args[0] {
-	case "add":
-		if len(args) != 2 {
-			return errors.New("usage: tk decision add \"text\"")
-		}
-		_, api, project, err := resolveCurrentProjectClient()
-		if err != nil {
-			return err
-		}
-		ticket, err := api.CreateTicket(context.Background(), libticket.TicketCreateRequest{
-			ProjectID:   project.ID,
-			Type:        "decision",
-			Title:       args[1],
-			Description: args[1],
-		})
-		if err != nil {
-			return err
-		}
-		printTicket(ticket)
-		return nil
-	case "list":
-		_, api, project, err := resolveCurrentProjectClient()
-		if err != nil {
-			return err
-		}
-		tickets, err := api.ListTicketsFiltered(context.Background(), project.ID, "decision", "", "", "", "", "", 0, false)
-		if err != nil {
-			return err
-		}
-		for _, ticket := range tickets {
-			fmt.Printf("%s\t%s\t%s\n", ticketLabel(ticket), ticket.Status, ticket.Title)
-		}
-		return nil
+	case "new", "add", "create":
+		return runTicketCreate(append([]string{"-type", "decision"}, args[1:]...))
+	case "ls", "list":
+		return runDecisionList()
 	default:
 		return fmt.Errorf("unknown decision command %q; see: ticket decision help", args[0])
 	}
+}
+
+func runDecisionList() error {
+	_, api, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+	tickets, err := api.ListTicketsFiltered(context.Background(), project.ID, "decision", "", "", "", "", "", 0, false)
+	if err != nil {
+		return err
+	}
+	for _, ticket := range tickets {
+		fmt.Printf("%s\t%s\t%s\n", ticketLabel(ticket), ticket.Status, ticket.Title)
+	}
+	return nil
 }
 
 func runConversation(args []string) error {

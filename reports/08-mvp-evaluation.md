@@ -15,7 +15,8 @@ Establish an explicit evaluation phase before `mvp-1`:
 - `QUICKSTART_CLIENT.md` passes through `cmd/tk-test`
 - `QUICKSTART_SERVER.md` passes through `cmd/tk-test`
 - `scripts/testharness.sh` passes
-- focused Go checks pass for `./internal/store` and `./cmd/tk`
+- broader Go checks pass for `./cmd/tk`, `./internal/server`, `./internal/store`,
+  `./internal/client`, and `./libticket`
 
 Verification commands used:
 
@@ -50,7 +51,7 @@ go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 | Story CRUD | no | strong | good |
 | Label / dependency / time flows | yes | strong | good |
 | Team / user / role / SDLC admin flows | partial | strong | good |
-| Comments / ideas / decisions / agents | partial | mixed | needs targeted review before broad MVP sign-off |
+| Comments / ideas / decisions / agents | partial | now stronger | improved in this pass, but still worth explicit MVP scope review |
 | SDLC workflow progression / regression | partial | now strong | improved in this pass |
 
 ### Verified weak points
@@ -58,9 +59,10 @@ go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 - The quickstarts do **not** cover every admin/entity command in the broad MVP
   scope, so the evaluation has to rely on a blend of quickstart execution and
   targeted tests instead of quickstarts alone.
-- Some lower-frequency admin surfaces still look weaker than the core workflow
-  path: comments full lifecycle, idea/decision lifecycle, and some agent flows
-  still need a sharper explicit pass if they remain in `mvp-1`.
+- Some lower-frequency admin surfaces are now better covered at the CLI/harness
+  layer, but still remain thinner than core ticket/project flows if they remain
+  in `mvp-1`: comments full lifecycle, idea/decision lifecycle depth, and some
+  agent/admin flows still need deliberate scope review.
 - The explicit `done` stage contract is now tested, but it is more nuanced than
   the casual reading suggests: the verified flow is `... -> done/idle`,
   `success -> done/success`, then `next -> complete`.
@@ -108,6 +110,25 @@ go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
   - `./scripts/testharness.sh`
   - `go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md`
 
+### Update 3
+
+- Fixed two CLI/documentation mismatches in the weaker Phase 1 entity group:
+  `tk idea revise` now works, and `tk decision` now accepts the documented
+  `new` / `ls` aliases while inheriting the shared creation flags such as
+  `-printid`.
+- Expanded `scripts/testharness.sh` again so it now covers:
+  - comment + `get` visibility
+  - idea creation + revise alias
+  - decision creation + list alias
+  - snapshot export/import restore behavior
+  - remote server login, multi-project switching, and `tk agent request`
+- Expanded CLI integration coverage for the remote agent request path using a
+  real httptest server.
+- Re-verified:
+  - `go test ./cmd/tk ./internal/server ./internal/store ./internal/client ./libticket`
+  - `./scripts/testharness.sh`
+  - `go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md`
+
 ## Concrete findings from this pass
 
 1. **The documented quickstarts are executable today.** That is a strong
@@ -122,9 +143,10 @@ go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
    - success-driven stage progression
    - fail + `previous` regression
    - explicit `done` stage terminal flow
-4. **Broad CRUD confidence is uneven.** Core entities are in good shape; weaker
-   admin/lower-frequency entities still need deliberate review if they stay in
-   the `mvp-1` promise.
+4. **Broad CRUD confidence is improving but still uneven.** Core entities are in
+   good shape, and comments / ideas / decisions / agent request flows now have
+   meaningfully better CLI/harness coverage, but the lower-frequency admin
+   surfaces still need deliberate review if they stay in the `mvp-1` promise.
 
 ## Recommendations
 
