@@ -984,7 +984,7 @@ func TestRemoteClientRegistrationAndPasswordReset(t *testing.T) {
 	if err := api.SetRegistrationEnabled(context.Background(), true); err != nil {
 		t.Fatalf("SetRegistrationEnabled() error = %v", err)
 	}
-	if _, err := api.ResetUserPassword(context.Background(), "alice", "newpw"); err != nil {
+	if _, err := api.ResetUserPassword(context.Background(), "alice", "newpassword1"); err != nil {
 		t.Fatalf("ResetUserPassword() error = %v", err)
 	}
 	if _, err := api.Register(context.Background(), "alice", "secret"); err != nil {

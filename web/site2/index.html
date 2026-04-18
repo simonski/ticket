@@ -1135,6 +1135,53 @@
                         <div id="ticket-history" class="history-list"></div>
                     </div>
                     <div class="panel panel-padded">
+                        <h3>Comments</h3>
+                        <div id="ticket-comments" class="history-list"></div>
+                        <div class="stack">
+                            <div class="field">
+                                <label for="ticket-comment-input">Add comment</label>
+                                <textarea id="ticket-comment-input" placeholder="Add an update for this ticket"></textarea>
+                            </div>
+                            <button id="add-ticket-comment-button" type="button">Add comment</button>
+                        </div>
+                    </div>
+                    <div class="panel panel-padded">
+                        <h3>Labels</h3>
+                        <div id="ticket-labels" class="history-list"></div>
+                        <div class="row">
+                            <div class="field">
+                                <label for="ticket-label-select">Add label</label>
+                                <select id="ticket-label-select"></select>
+                            </div>
+                        </div>
+                        <button id="add-ticket-label-button" type="button">Add label</button>
+                    </div>
+                    <div class="panel panel-padded">
+                        <h3>Dependencies</h3>
+                        <div id="ticket-dependencies" class="history-list"></div>
+                        <div class="field">
+                            <label for="ticket-dependency-input">Depends on ticket</label>
+                            <input id="ticket-dependency-input" placeholder="OPS-100">
+                        </div>
+                        <button id="add-ticket-dependency-button" type="button">Add dependency</button>
+                    </div>
+                    <div class="panel panel-padded">
+                        <h3>Time tracking</h3>
+                        <div id="ticket-time-total" class="meta"></div>
+                        <div id="ticket-time-entries" class="history-list"></div>
+                        <div class="row">
+                            <div class="field">
+                                <label for="ticket-time-minutes">Minutes</label>
+                                <input id="ticket-time-minutes" type="number" min="1" value="30">
+                            </div>
+                            <div class="field">
+                                <label for="ticket-time-note">Note</label>
+                                <input id="ticket-time-note" placeholder="Work log note">
+                            </div>
+                        </div>
+                        <button id="add-ticket-time-button" type="button">Log time</button>
+                    </div>
+                    <div class="panel panel-padded">
                         <h3>Quick actions</h3>
                         <div class="entity-actions">
                             <button id="ticket-open-button" type="button">Open</button>
@@ -1171,6 +1218,12 @@
             selectedTeamDraft: emptyTeam(),
             activeTicket: null,
             ticketHistory: [],
+            ticketComments: [],
+            ticketLabels: [],
+            projectLabels: [],
+            ticketDependencies: [],
+            ticketTimeEntries: [],
+            ticketTimeTotal: 0,
             drag: null,
             liveSocket: null,
             liveRefreshTimer: null,
@@ -1204,6 +1257,20 @@
             sdlcRoleBank: document.getElementById("sdlc-role-bank"),
             ticketModal: document.getElementById("ticket-modal"),
             ticketHistory: document.getElementById("ticket-history"),
+            ticketComments: document.getElementById("ticket-comments"),
+            ticketCommentInput: document.getElementById("ticket-comment-input"),
+            addTicketCommentButton: document.getElementById("add-ticket-comment-button"),
+            ticketLabels: document.getElementById("ticket-labels"),
+            ticketLabelSelect: document.getElementById("ticket-label-select"),
+            addTicketLabelButton: document.getElementById("add-ticket-label-button"),
+            ticketDependencies: document.getElementById("ticket-dependencies"),
+            ticketDependencyInput: document.getElementById("ticket-dependency-input"),
+            addTicketDependencyButton: document.getElementById("add-ticket-dependency-button"),
+            ticketTimeEntries: document.getElementById("ticket-time-entries"),
+            ticketTimeTotal: document.getElementById("ticket-time-total"),
+            ticketTimeMinutes: document.getElementById("ticket-time-minutes"),
+            ticketTimeNote: document.getElementById("ticket-time-note"),
+            addTicketTimeButton: document.getElementById("add-ticket-time-button"),
         };
 
         function emptyProject() {
@@ -2416,6 +2483,32 @@
             document.getElementById("ticket-close-button").addEventListener("click", () => ticketAction("close"));
             document.getElementById("ticket-archive-button").addEventListener("click", () => ticketAction("archive"));
             document.getElementById("ticket-unarchive-button").addEventListener("click", () => ticketAction("unarchive"));
+            els.addTicketCommentButton.addEventListener("click", () => {
+                addTicketComment();
+            });
+            els.addTicketLabelButton.addEventListener("click", () => {
+                addTicketLabel();
+            });
+            els.ticketLabels.addEventListener("click", (event) => {
+                const button = event.target.closest("[data-remove-ticket-label]");
+                if (!button) {
+                    return;
+                }
+                removeTicketLabel(button.dataset.removeTicketLabel);
+            });
+            els.addTicketDependencyButton.addEventListener("click", () => {
+                addTicketDependency();
+            });
+            els.ticketDependencies.addEventListener("click", (event) => {
+                const button = event.target.closest("[data-remove-ticket-dependency]");
+                if (!button) {
+                    return;
+                }
+                removeTicketDependency(button.dataset.removeTicketDependency);
+            });
+            els.addTicketTimeButton.addEventListener("click", () => {
+                addTicketTimeEntry();
+            });
 
             bindTicketBoardDragAndDrop();
         }
@@ -2438,15 +2531,41 @@
             document.getElementById("ticket-estimate-effort").value = ticket.estimate_effort || 0;
             document.getElementById("ticket-health").value = ticket.health || 0;
             document.getElementById("delete-ticket-button").disabled = !ticket.id;
+            els.ticketCommentInput.value = "";
             els.ticketModal.classList.add("open");
             loadTicketHistory(ticket.id).catch((error) => {
                 els.ticketHistory.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+            loadTicketComments(ticket.id).catch((error) => {
+                els.ticketComments.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+            loadProjectLabels(ticket.project_id || state.selectedProjectID).catch((error) => {
+                els.ticketLabels.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+            loadTicketLabels(ticket.id).catch((error) => {
+                els.ticketLabels.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+            loadTicketDependencies(ticket.id).catch((error) => {
+                els.ticketDependencies.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
+            });
+            loadTicketTime(ticket.id).catch((error) => {
+                els.ticketTimeEntries.innerHTML = "<div class=\"empty\">" + escapeHTML(error.message) + "</div>";
             });
         }
 
         function closeTicketModal() {
             state.activeTicket = null;
             state.ticketHistory = [];
+            state.ticketComments = [];
+            state.ticketLabels = [];
+            state.projectLabels = [];
+            state.ticketDependencies = [];
+            state.ticketTimeEntries = [];
+            state.ticketTimeTotal = 0;
+            els.ticketCommentInput.value = "";
+            els.ticketDependencyInput.value = "";
+            els.ticketTimeMinutes.value = "30";
+            els.ticketTimeNote.value = "";
             els.ticketModal.classList.remove("open");
         }
 
@@ -2465,6 +2584,236 @@
                     escapeHTML(item.created_at || item.timestamp || "") + "</div><div class=\"meta\">" +
                     escapeHTML(item.comment || item.message || "") + "</div></div>";
             }).join("");
+        }
+
+        function renderTicketComments() {
+            if (!Array.isArray(state.ticketComments) || !state.ticketComments.length) {
+                els.ticketComments.innerHTML = "<div class=\"empty\">No comments yet.</div>";
+                return;
+            }
+            els.ticketComments.innerHTML = state.ticketComments.map((item) => {
+                return "<div class=\"history-item\"><strong>" + escapeHTML(item.author || "user") + "</strong><div class=\"meta\">" +
+                    escapeHTML(item.date || item.created_at || "") + "</div><div class=\"meta\">" +
+                    escapeHTML(item.text || item.comment || "") + "</div></div>";
+            }).join("");
+        }
+
+        async function loadTicketComments(ticketID) {
+            if (!ticketID) {
+                els.ticketComments.innerHTML = "<div class=\"empty\">Comments appear after the first save.</div>";
+                return;
+            }
+            state.ticketComments = await api("/api/tickets/" + ticketID + "/comments");
+            renderTicketComments();
+        }
+
+        function renderTicketLabels() {
+            if (!Array.isArray(state.ticketLabels) || !state.ticketLabels.length) {
+                els.ticketLabels.innerHTML = "<div class=\"empty\">No labels yet.</div>";
+            } else {
+                els.ticketLabels.innerHTML = state.ticketLabels.map((label) => {
+                    return "<div class=\"history-item\"><strong>" + escapeHTML(label.name || "") + "</strong><div class=\"meta\">" +
+                        escapeHTML(label.color || "") + "</div><button type=\"button\" data-remove-ticket-label=\"" + String(label.label_id || label.id) + "\">Remove</button></div>";
+                }).join("");
+            }
+            const options = (state.projectLabels || []).map((label) => {
+                const labelID = label.label_id || label.id;
+                return "<option value=\"" + String(labelID) + "\">" + escapeHTML((label.name || "") + " " + (label.color || "")) + "</option>";
+            }).join("");
+            els.ticketLabelSelect.innerHTML = "<option value=\"\">Choose label</option>" + options;
+        }
+
+        async function loadProjectLabels(projectID) {
+            if (!projectID) {
+                state.projectLabels = [];
+                renderTicketLabels();
+                return;
+            }
+            state.projectLabels = await api("/api/projects/" + projectID + "/labels");
+            renderTicketLabels();
+        }
+
+        async function loadTicketLabels(ticketID) {
+            if (!ticketID) {
+                state.ticketLabels = [];
+                renderTicketLabels();
+                return;
+            }
+            state.ticketLabels = await api("/api/tickets/" + ticketID + "/labels");
+            renderTicketLabels();
+        }
+
+        async function addTicketLabel() {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            const labelID = Number(els.ticketLabelSelect.value || 0);
+            if (!labelID) {
+                setNotice("Choose a label first.", true);
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/labels", {
+                    method: "POST",
+                    body: JSON.stringify({ label_id: labelID }),
+                });
+                await loadTicketLabels(state.activeTicket.id);
+                setNotice("Label added.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function removeTicketLabel(labelID) {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/labels/" + labelID, { method: "DELETE" });
+                await loadTicketLabels(state.activeTicket.id);
+                setNotice("Label removed.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        function renderTicketDependencies() {
+            if (!Array.isArray(state.ticketDependencies) || !state.ticketDependencies.length) {
+                els.ticketDependencies.innerHTML = "<div class=\"empty\">No dependencies yet.</div>";
+                return;
+            }
+            els.ticketDependencies.innerHTML = state.ticketDependencies.map((dep) => {
+                return "<div class=\"history-item\"><strong>" + escapeHTML(dep.depends_on || "") + "</strong><div class=\"meta\">" +
+                    escapeHTML(dep.created_at || "") + "</div><button type=\"button\" data-remove-ticket-dependency=\"" + escapeHTML(dep.depends_on || "") + "\">Remove</button></div>";
+            }).join("");
+        }
+
+        async function loadTicketDependencies(ticketID) {
+            if (!ticketID) {
+                state.ticketDependencies = [];
+                renderTicketDependencies();
+                return;
+            }
+            state.ticketDependencies = await api("/api/tickets/" + ticketID + "/dependencies");
+            renderTicketDependencies();
+        }
+
+        async function addTicketDependency() {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            const dependsOn = els.ticketDependencyInput.value.trim();
+            if (!dependsOn) {
+                setNotice("Dependency ticket is required.", true);
+                return;
+            }
+            try {
+                await api("/api/dependencies", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        project_id: state.activeTicket.project_id || state.selectedProjectID,
+                        ticket_id: state.activeTicket.id,
+                        depends_on: dependsOn,
+                    }),
+                });
+                els.ticketDependencyInput.value = "";
+                await loadTicketDependencies(state.activeTicket.id);
+                setNotice("Dependency added.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function removeTicketDependency(dependsOn) {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            try {
+                const query = new URLSearchParams({
+                    project_id: String(state.activeTicket.project_id || state.selectedProjectID),
+                    ticket_id: String(state.activeTicket.id),
+                    depends_on: String(dependsOn),
+                });
+                await api("/api/dependencies?" + query.toString(), { method: "DELETE" });
+                await loadTicketDependencies(state.activeTicket.id);
+                setNotice("Dependency removed.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        function renderTicketTimeEntries() {
+            els.ticketTimeTotal.textContent = "Total minutes: " + String(state.ticketTimeTotal || 0);
+            if (!Array.isArray(state.ticketTimeEntries) || !state.ticketTimeEntries.length) {
+                els.ticketTimeEntries.innerHTML = "<div class=\"empty\">No time entries yet.</div>";
+                return;
+            }
+            els.ticketTimeEntries.innerHTML = state.ticketTimeEntries.map((entry) => {
+                return "<div class=\"history-item\"><strong>" + escapeHTML(String(entry.minutes || 0) + "m") + "</strong><div class=\"meta\">" +
+                    escapeHTML(entry.note || "") + "</div><div class=\"meta\">" +
+                    escapeHTML(entry.created_at || "") + "</div></div>";
+            }).join("");
+        }
+
+        async function loadTicketTime(ticketID) {
+            if (!ticketID) {
+                state.ticketTimeEntries = [];
+                state.ticketTimeTotal = 0;
+                renderTicketTimeEntries();
+                return;
+            }
+            const [entries, total] = await Promise.all([
+                api("/api/tickets/" + ticketID + "/time"),
+                api("/api/tickets/" + ticketID + "/time/total"),
+            ]);
+            state.ticketTimeEntries = entries;
+            state.ticketTimeTotal = Number((total && total.total) || 0);
+            renderTicketTimeEntries();
+        }
+
+        async function addTicketTimeEntry() {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            const minutes = Number(els.ticketTimeMinutes.value || 0);
+            const note = els.ticketTimeNote.value.trim();
+            if (!minutes || minutes < 1) {
+                setNotice("Minutes must be positive.", true);
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/time", {
+                    method: "POST",
+                    body: JSON.stringify({ minutes: minutes, note: note }),
+                });
+                els.ticketTimeNote.value = "";
+                await loadTicketTime(state.activeTicket.id);
+                setNotice("Time logged.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function addTicketComment() {
+            if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            const comment = els.ticketCommentInput.value.trim();
+            if (!comment) {
+                setNotice("Comment cannot be empty.", true);
+                return;
+            }
+            try {
+                await api("/api/tickets/" + state.activeTicket.id + "/comments", {
+                    method: "POST",
+                    body: JSON.stringify({ comment: comment }),
+                });
+                els.ticketCommentInput.value = "";
+                await Promise.all([loadTicketComments(state.activeTicket.id), loadTicketHistory(state.activeTicket.id)]);
+                setNotice("Comment added.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
         }
 
         async function saveActiveTicket() {

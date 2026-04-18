@@ -35,9 +35,10 @@ The authoritative system contract is in [SPEC.md](./SPEC.md). Full user-facing d
 If you're new to the repo, read these first:
 
 1. [QUICKSTART.md](./QUICKSTART.md) - choose local or server mode
-2. [docs/ONBOARDING.md](./docs/ONBOARDING.md) - setup, reading order, and common pitfalls
-3. [CLAUDE.md](./CLAUDE.md) - build/test commands, architecture, and package map
-4. [CONTRIBUTING.md](./CONTRIBUTING.md) - branch naming, commit style, and PR expectations
+2. [QUICKSTART_TODO_EXAMPLE.md](./QUICKSTART_TODO_EXAMPLE.md) - reproducible seeded todo scenario
+3. [docs/ONBOARDING.md](./docs/ONBOARDING.md) - setup, reading order, and common pitfalls
+4. [CLAUDE.md](./CLAUDE.md) - build/test commands, architecture, and package map
+5. [CONTRIBUTING.md](./CONTRIBUTING.md) - branch naming, commit style, and PR expectations
 
 ## Installation
 

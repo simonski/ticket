@@ -95,17 +95,67 @@ Exit criteria:
 - Website and TUI cover the agreed workflows without regressing CLI/API use.
 - Parity gaps are documented and deliberately prioritized rather than accidental.
 
+Current kickoff status (2026-04-18):
+
+- Phase 1 verification: passed via executable quickstarts, script harness
+  scenarios, and integration package tests.
+- Phase 2 verification: passed via remote server multi-project and human
+  operator flows in the script harness and server/client integration tests.
+- Phase 3 verification: passed via agent authentication, work-request, and
+  admin-control scenarios in the script harness.
+- Phase 4 baseline: `internal/tui` tests pass and `tests/playwright/site2.spec.js`
+  passes (7/7), giving a stable starting point for parity work.
+
+Phase 4 progress update (2026-04-18):
+
+- Website parity improved for ticket comments: the site2 ticket modal now loads
+  and posts comments through the existing `/api/tickets/{id}/comments` endpoints.
+- Browser coverage expanded: `tests/playwright/site2.spec.js` now includes a
+  comment workflow check and passes at 8/8.
+- Website parity closed for labels, dependencies, and time tracking in the
+  ticket modal; browser coverage now passes at 9/9.
+- TUI board coverage expanded with tests for SDLC stage ordering and board
+  navigation/selection behavior.
+- Reproducible tutorial package added: `QUICKSTART_TODO_EXAMPLE.md`,
+  `scripts/populate_todo_example.sh`, and `scripts/verify_todo_example.sh`
+  (wired to `make test-todo-example`).
+
+Phase 4 parity matrix (2026-04-18):
+
+| Workflow area | CLI/API | Website (site2) | TUI | `beta-3` status |
+|---|---|---|---|---|
+| Projects | complete | complete | complete | done |
+| Ticket board + lifecycle | complete | complete (drag/drop + modal) | complete | done |
+| SDLC/stage/role management | complete | complete (editor + reorder + role attach) | complete | done |
+| Comments | complete | complete (load + add in ticket modal) | complete | done |
+| Labels | complete | complete | complete | done |
+| Dependencies | complete | complete | complete | done |
+| Time tracking | complete | complete | complete | done |
+| Agent/admin flows | complete | complete (agents view/admin controls) | complete | done |
+
+Initial Phase 4 delivery sequence:
+
+1. Document workflow parity matrix (CLI/API vs website vs TUI) for project, ticket,
+   SDLC/stage/role, comments, labels, dependencies, time, and agent flows.
+2. Open and prioritize explicit parity-gap tickets in `release` (must-have for
+   `beta-3` vs follow-up).
+3. Expand Playwright and TUI coverage for any missing must-have workflows before
+   behavior changes.
+4. Implement highest-priority parity gaps while keeping CLI/API behavior as the
+   regression baseline.
+
 ## Immediate preparation sequence
 
-1. Create a project named `release`.
-2. Record all self-improvement work there as epics, tickets, bugs, and follow-up
-   tasks.
-3. Define and automate a backup routine for `.ticket/ticket.db` before risky
-   schema or workflow changes land.
-4. Baseline the current state against Phase 1 exit criteria and open the missing
-   work as release tickets. **Partially complete**: the evaluation report now
-   exists in `reports/08-mvp-evaluation.md`.
-5. Treat schema upgrade safety as a standing requirement for all release work.
+1. **Done:** created release project `REL` and switched active release tracking
+   there.
+2. **Done:** opened release tickets `REL-1` through `REL-5` for Phase 4 parity,
+   TUI hardening, and backup automation follow-up.
+3. **Done:** automated backup routine via `scripts/backup_ticket_db.sh` and
+   `make backup-db`, with retention and documented overrides.
+4. **Done:** baselined current state against Phase 1 criteria and captured
+   verification evidence in this file.
+5. **Done (policy):** schema upgrade safety remains a standing release
+   requirement.
 
 ## Current MVP assessment
 
@@ -119,18 +169,21 @@ Exit criteria:
    - workflow progression/regression is now covered more directly
 3. **Broad CRUD confidence**
    - strong for core entities and lifecycle-heavy flows
-   - still uneven for lower-frequency admin surfaces
+   - lower-frequency admin surfaces are now covered by harness scenarios and
+     explicit release tickets where website parity remains
 4. **Main remaining `mvp-1` risk**
-   - proving the weaker broad-scope entities are either solid enough to keep in
-     scope or intentionally deferred
+   - **closed:** weaker broad-scope entities are kept in `mvp-1` scope for
+     CLI/API and explicitly deferred for website parity work in `beta-3`
 
 ## Next assessment and delivery pass
 
-1. Do a targeted CRUD-depth pass on comments, ideas, decisions, and agent/admin
-   flows.
-2. Decide explicitly which of those weaker areas remain in `mvp-1` scope.
-3. Keep growing `scripts/testharness.sh` with scenario-based operator workflows.
-4. Exercise backup/restore and upgrade expectations as release gates rather than
-   documentation-only promises.
-5. Identify the smallest set of release tickets still required to reach
-   `mvp-1`.
+1. **Done:** targeted CRUD-depth pass evidence now exists through
+   `scripts/testharness.sh` scenarios for comments, ideas, decisions, and
+   agent/admin flows.
+2. **Done:** weaker broad-scope entities remain in scope for `mvp-1`, with
+   website parity for labels/dependencies/time explicitly deferred to `beta-3`.
+3. **Done:** harness scenarios are now part of the repeated MVP gate set.
+4. **Done:** backup/restore moved to a concrete release gate with automation
+   (`make backup-db`) plus snapshot export/import tests in harness flows.
+5. **Done:** release follow-ups were executed and closed with verification
+   evidence in scripts and tests.

@@ -270,7 +270,7 @@ func TestLocalModeClientUserOps(t *testing.T) {
 	if err := api.SetUserEnabled(context.Background(), "bob", false); err != nil {
 		t.Fatalf("SetUserEnabled() error = %v", err)
 	}
-	reset, err := api.ResetUserPassword(context.Background(), "bob", "newpw")
+	reset, err := api.ResetUserPassword(context.Background(), "bob", "newpassword1")
 	if err != nil {
 		t.Fatalf("ResetUserPassword() error = %v", err)
 	}

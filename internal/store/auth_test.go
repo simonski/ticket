@@ -154,6 +154,9 @@ func TestResetUserPassword(t *testing.T) {
 	if _, err := ResetUserPassword(context.Background(), db, "carol", ""); err == nil {
 		t.Fatal("ResetUserPassword(empty password) error = nil, want error")
 	}
+	if _, err := ResetUserPassword(context.Background(), db, "carol", "short"); err == nil {
+		t.Fatal("ResetUserPassword(short password) error = nil, want error")
+	}
 
 	// Reset for non-existent user should fail
 	if _, err := ResetUserPassword(context.Background(), db, "nobody", "password"); err == nil {

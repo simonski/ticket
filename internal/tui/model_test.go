@@ -156,3 +156,76 @@ func TestProjectEditAndNewTicketViewsShowLifecycleFields(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildBoardColumnsUsesSdlcStageOrder(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.sdlcs = []store.SdlcWithStages{{
+		Sdlc: store.Sdlc{ID: 1, Name: "Flow"},
+		Stages: []store.SdlcStage{
+			{StageName: "backlog"},
+			{StageName: "doing"},
+			{StageName: "done"},
+		},
+	}}
+	m.toplevel = []store.Ticket{
+		{ID: "PRJ-1", Stage: "backlog", Status: "backlog/idle", Type: "task", Title: "Backlog item"},
+		{ID: "PRJ-2", Stage: "done", Status: "done/success", Type: "task", Title: "Done item"},
+	}
+
+	m.buildBoardColumns()
+
+	if len(m.boardCols) != 3 {
+		t.Fatalf("board column count = %d, want 3", len(m.boardCols))
+	}
+	if m.boardCols[0].stage != "backlog" || m.boardCols[1].stage != "doing" || m.boardCols[2].stage != "done" {
+		t.Fatalf("unexpected board stage order: %#v", []string{m.boardCols[0].stage, m.boardCols[1].stage, m.boardCols[2].stage})
+	}
+	if len(m.boardCols[0].tickets) != 1 || m.boardCols[0].tickets[0].ID != "PRJ-1" {
+		t.Fatalf("backlog column tickets = %#v", m.boardCols[0].tickets)
+	}
+	if len(m.boardCols[2].tickets) != 1 || m.boardCols[2].tickets[0].ID != "PRJ-2" {
+		t.Fatalf("done column tickets = %#v", m.boardCols[2].tickets)
+	}
+}
+
+func TestHandleKeyBoardTransitionsAndSelection(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.mode = modeBoard
+	m.width = 100
+	m.height = 30
+	m.boardCols = []boardColumn{
+		{stage: "design", tickets: []store.Ticket{{ID: "PRJ-1", Stage: "design", Status: "design/active", Type: "task", Title: "First"}}},
+		{stage: "develop", tickets: []store.Ticket{{ID: "PRJ-2", Stage: "develop", Status: "develop/idle", Type: "task", Title: "Second"}}},
+	}
+	m.boardInHeader = true
+
+	updatedAny, _ := m.handleKeyBoard("down")
+	updated, ok := updatedAny.(Model)
+	if !ok {
+		t.Fatalf("handleKeyBoard type = %T, want Model", updatedAny)
+	}
+	if updated.boardInHeader {
+		t.Fatal("board should move from header to body on down")
+	}
+
+	updatedAny, _ = updated.handleKeyBoard("right")
+	updated, ok = updatedAny.(Model)
+	if !ok {
+		t.Fatalf("handleKeyBoard type = %T, want Model", updatedAny)
+	}
+	if updated.boardCol != 1 {
+		t.Fatalf("boardCol = %d, want 1 after moving right", updated.boardCol)
+	}
+
+	updatedAny, _ = updated.handleKeyBoard("enter")
+	updated, ok = updatedAny.(Model)
+	if !ok {
+		t.Fatalf("handleKeyBoard type = %T, want Model", updatedAny)
+	}
+	if updated.mode != modeDetail {
+		t.Fatalf("mode = %v, want modeDetail", updated.mode)
+	}
+	if updated.selected == nil || updated.selected.ID != "PRJ-2" {
+		t.Fatalf("selected = %#v, want PRJ-2", updated.selected)
+	}
+}

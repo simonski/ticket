@@ -127,16 +127,31 @@ tk import -i /tmp/ticket-export-$(date +%Y%m%d).json
 
 ### Automated daily backup (recommended)
 
-Add this cron job on the host (or as a sidecar container):
+The repo ships an automation script:
+
+```bash
+make backup-db
+```
+
+This calls `scripts/backup_ticket_db.sh`, which:
+
+1. Exports a snapshot with `tk export -o`.
+2. Compresses it to `ticket-YYYYMMDD-HHMMSS.json.gz`.
+3. Prunes backups older than `KEEP_DAYS` (default: 30).
+
+Optional environment overrides:
+
+```bash
+BACKUP_DIR=/var/backups/ticket KEEP_DAYS=45 make backup-db
+```
+
+Cron example:
 
 ```bash
 # /etc/cron.daily/ticket-backup
 #!/bin/bash
-BACKUP_DIR=/var/backups/ticket
-mkdir -p "$BACKUP_DIR"
-docker exec ticket tk export | gzip > "$BACKUP_DIR/ticket-$(date +%Y%m%d-%H%M%S).json.gz"
-# Keep last 30 days
-find "$BACKUP_DIR" -name "*.json.gz" -mtime +30 -delete
+cd /srv/ticket
+BACKUP_DIR=/var/backups/ticket KEEP_DAYS=30 make backup-db
 ```
 
 ### Manual backup

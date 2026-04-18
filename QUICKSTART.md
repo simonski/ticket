@@ -104,6 +104,19 @@ Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ---
 
+## Reproducible example scenario (todo app planning)
+
+Use the dedicated tutorial to seed a realistic project with SDLC, epics, tasks,
+labels, dependencies, time entries, and decision/idea artifacts:
+
+```bash
+./scripts/populate_todo_example.sh
+```
+
+Full walkthrough: [QUICKSTART_TODO_EXAMPLE.md](./QUICKSTART_TODO_EXAMPLE.md).
+
+---
+
 ## Using with Claude Code
 
 Write the bundled skill into your project:

@@ -58,7 +58,7 @@ If `-f` is omitted, `tk init` creates the SQLite database at `.ticket/ticket.db`
 Bootstrap resolution works like this:
 
 - admin username: always `admin`
-- admin password: `-password` if provided, otherwise a generated random password printed to stdout
+- admin password: `-password` if provided, otherwise `password`
 - existing database file: overwritten only when `--force` is supplied
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 - non-interactive project setup: use `-prefix`, `-name`, and `-git` to rename the default project after bootstrap

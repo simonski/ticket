@@ -14,7 +14,7 @@ On first run the container initialises the database and prints the admin passwor
 ```
 No database found — initialising...
 admin user: admin
-admin password: <generated-uuid>
+admin password: password
 ```
 
 Copy the password — you need it to log in. If running detached (`-d`), retrieve it with:

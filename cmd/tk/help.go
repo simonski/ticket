@@ -26,7 +26,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [-f <db-path>] [-force] [-password <password>] [-populate]",
-		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path defaults to `.ticket/ticket.db` at the nearest Git root, or `.ticket/ticket.db` in the current directory when no Git root exists. `TICKET_URL` can override the effective location.", "If `-password` is omitted, a random admin password is generated and printed to stdout.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
+		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path defaults to `.ticket/ticket.db` at the nearest Git root, or `.ticket/ticket.db` in the current directory when no Git root exists. `TICKET_URL` can override the effective location.", "If `-password` is omitted, the admin password defaults to `password`.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
 		example: "tk initdb -f /path/to/ticket.db -force -password secret -populate",
 	},
 	"export": {
@@ -411,7 +411,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-sdlc <name>]",
-		details: []string{"Interactive setup for local or remote mode.", "In local mode, initializes `.ticket/ticket.db`, generates an admin password, and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
+		details: []string{"Interactive setup for local or remote mode.", "In local mode, initializes `.ticket/ticket.db`, sets admin password to `password` (unless overridden by other setup flows), and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
 		example: "tk init",
 	},
 	"curate": {

@@ -9,6 +9,7 @@
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds    | ~30s     |
 | `make test-playwright`| Browser tests against the web UI (12 spec files)     | ~20s     |
 | `make test-tk-test`   | Executable documentation tests (see below)           | ~15s     |
+| `make test-todo-example` | Reproducible todo tutorial seed + verification     | ~5s      |
 | `make testscripts`    | Shell-based CLI harness scenarios                    | ~5s      |
 | `make test`           | Unit + integration + playwright                      | ~50s     |
 
@@ -95,6 +96,20 @@ Run it with:
 
 ```bash
 make testscripts
+```
+
+## Todo example scenario verification
+
+`scripts/populate_todo_example.sh` seeds a reproducible todo-app planning
+workspace (project, SDLC, epic/tasks, labels, dependencies, time entries,
+story/decision/idea). `scripts/verify_todo_example.sh` runs that seed flow in
+the current active ticket database (project `DEMO`) and asserts key expected
+outputs.
+
+Run it with:
+
+```bash
+make test-todo-example
 ```
 
 ## Contract tests

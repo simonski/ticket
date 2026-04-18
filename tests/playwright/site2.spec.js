@@ -37,6 +37,19 @@ function installSite2Mock(page) {
           sdlc_id: null,
         },
       ],
+      commentsByTicket: {
+        "OPS-101": [{ author: "admin", text: "Initial note", date: "now" }],
+      },
+      labels: [{ label_id: 51, project_id: 1, name: "backend", color: "#ff6600", created_at: "now" }],
+      ticketLabelIDs: { "OPS-101": [51] },
+      dependenciesByTicket: {
+        "OPS-101": [{ id: 71, project_id: 1, ticket_id: "OPS-101", depends_on: "OPS-100", created_by: "admin", created_at: "now" }],
+      },
+      nextDependencyID: 72,
+      timeEntriesByTicket: {
+        "OPS-101": [{ time_entry_id: 81, ticket_id: "OPS-101", user_id: "admin", minutes: 30, note: "Initial effort", created_at: "now" }],
+      },
+      nextTimeEntryID: 82,
       sdlcs: [
         {
           sdlc_id: 1,
@@ -134,6 +147,10 @@ function installSite2Mock(page) {
         const id = Number(path.split("/")[3]);
         return json(db.tickets.filter((ticket) => ticket.project_id === id));
       }
+      if (path.match(/^\/api\/projects\/\d+\/labels$/) && method === "GET") {
+        const id = Number(path.split("/")[3]);
+        return json(db.labels.filter((label) => label.project_id === id));
+      }
       if (path === "/api/sdlcs" && method === "GET") {
         return json(db.sdlcs.map(({ stages, ...sdlc }) => sdlc));
       }
@@ -152,6 +169,96 @@ function installSite2Mock(page) {
       }
       if (path.match(/^\/api\/tickets\/[^/]+\/history$/) && method === "GET") {
         return json([{ action: "created", created_at: "now", comment: "" }]);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/comments$/) && method === "GET") {
+        const id = path.split("/")[3];
+        return json(db.commentsByTicket[id] || []);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/comments$/) && method === "POST") {
+        const id = path.split("/")[3];
+        if (!db.commentsByTicket[id]) {
+          db.commentsByTicket[id] = [];
+        }
+        const comment = {
+          author: db.status.username,
+          text: body.comment || "",
+          date: "now",
+        };
+        db.commentsByTicket[id].unshift(comment);
+        return json(comment, 201);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/labels$/) && method === "GET") {
+        const id = path.split("/")[3];
+        const ids = db.ticketLabelIDs[id] || [];
+        return json(ids.map((labelID) => db.labels.find((label) => label.label_id === labelID)).filter(Boolean));
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/labels$/) && method === "POST") {
+        const id = path.split("/")[3];
+        const labelID = Number(body.label_id);
+        if (!db.ticketLabelIDs[id]) {
+          db.ticketLabelIDs[id] = [];
+        }
+        if (!db.ticketLabelIDs[id].includes(labelID)) {
+          db.ticketLabelIDs[id].push(labelID);
+        }
+        return json({ status: "added" });
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/labels\/\d+$/) && method === "DELETE") {
+        const parts = path.split("/");
+        const id = parts[3];
+        const labelID = Number(parts[5]);
+        db.ticketLabelIDs[id] = (db.ticketLabelIDs[id] || []).filter((item) => item !== labelID);
+        return json({ status: "removed" });
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/dependencies$/) && method === "GET") {
+        const id = path.split("/")[3];
+        return json(db.dependenciesByTicket[id] || []);
+      }
+      if (path === "/api/dependencies" && method === "POST") {
+        if (!db.dependenciesByTicket[body.ticket_id]) {
+          db.dependenciesByTicket[body.ticket_id] = [];
+        }
+        const dependency = {
+          id: db.nextDependencyID++,
+          project_id: Number(body.project_id),
+          ticket_id: body.ticket_id,
+          depends_on: body.depends_on,
+          created_by: db.status.username,
+          created_at: "now",
+        };
+        db.dependenciesByTicket[body.ticket_id].push(dependency);
+        return json(dependency, 201);
+      }
+      if (path === "/api/dependencies" && method === "DELETE") {
+        const ticketID = url.searchParams.get("ticket_id");
+        const dependsOn = url.searchParams.get("depends_on");
+        db.dependenciesByTicket[ticketID] = (db.dependenciesByTicket[ticketID] || []).filter((item) => item.depends_on !== dependsOn);
+        return json({ status: "deleted" });
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/time$/) && method === "GET") {
+        const id = path.split("/")[3];
+        return json(db.timeEntriesByTicket[id] || []);
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/time\/total$/) && method === "GET") {
+        const id = path.split("/")[3];
+        const total = (db.timeEntriesByTicket[id] || []).reduce((sum, entry) => sum + Number(entry.minutes || 0), 0);
+        return json({ total });
+      }
+      if (path.match(/^\/api\/tickets\/[^/]+\/time$/) && method === "POST") {
+        const id = path.split("/")[3];
+        if (!db.timeEntriesByTicket[id]) {
+          db.timeEntriesByTicket[id] = [];
+        }
+        const entry = {
+          time_entry_id: db.nextTimeEntryID++,
+          ticket_id: id,
+          user_id: db.status.username,
+          minutes: Number(body.minutes || 0),
+          note: body.note || "",
+          created_at: "now",
+        };
+        db.timeEntriesByTicket[id].push(entry);
+        return json(entry, 201);
       }
       if (path.match(/^\/api\/tickets\/[^/]+$/) && method === "PUT") {
         const id = last(path.split("/"));
@@ -314,6 +421,52 @@ test("adds a role inside the SDLC editor using the existing stage-role API", asy
   expect(requests).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ method: "POST", path: "/api/sdlcs/stages/roles/1/12", body: { role_id: 6 } }),
+    ]),
+  );
+});
+
+test("adds a comment from the ticket modal using the ticket comments endpoint", async ({ page }) => {
+  await page.getByText("Move me").click();
+  await expect(page.getByRole("heading", { name: "Comments" })).toBeVisible();
+  await expect(page.locator("#ticket-comments")).toContainText("Initial note");
+  await page.locator("#ticket-comment-input").fill("Looks good to me");
+  await page.getByRole("button", { name: "Add comment" }).click();
+  await expect(page.locator("#ticket-comments")).toContainText("Looks good to me");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/comments", body: { comment: "Looks good to me" } }),
+    ]),
+  );
+});
+
+test("manages labels, dependencies, and time from the ticket modal", async ({ page }) => {
+  await page.getByText("Move me").click();
+  await expect(page.getByRole("heading", { name: "Labels" })).toBeVisible();
+  await expect(page.locator("#ticket-labels")).toContainText("backend");
+  await page.locator("#ticket-label-select").selectOption("51");
+  await page.getByRole("button", { name: "Add label" }).click();
+
+  await expect(page.getByRole("heading", { name: "Dependencies" })).toBeVisible();
+  await expect(page.locator("#ticket-dependencies")).toContainText("OPS-100");
+  await page.locator("#ticket-dependency-input").fill("OPS-102");
+  await page.getByRole("button", { name: "Add dependency" }).click();
+  await expect(page.locator("#ticket-dependencies")).toContainText("OPS-102");
+
+  await expect(page.getByRole("heading", { name: "Time tracking" })).toBeVisible();
+  await expect(page.locator("#ticket-time-total")).toContainText("30");
+  await page.locator("#ticket-time-minutes").fill("15");
+  await page.locator("#ticket-time-note").fill("Refactor");
+  await page.getByRole("button", { name: "Log time" }).click();
+  await expect(page.locator("#ticket-time-total")).toContainText("45");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/labels", body: { label_id: 51 } }),
+      expect.objectContaining({ method: "POST", path: "/api/dependencies", body: expect.objectContaining({ ticket_id: "OPS-101", depends_on: "OPS-102" }) }),
+      expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/time", body: { minutes: 15, note: "Refactor" } }),
     ]),
   );
 });

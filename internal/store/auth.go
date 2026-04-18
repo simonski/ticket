@@ -389,7 +389,10 @@ func ResetUserPassword(ctx context.Context, db *sql.DB, username, newPlainPasswo
 	if strings.TrimSpace(newPlainPassword) == "" {
 		return User{}, errors.New("password cannot be empty")
 	}
-	hash, err := password.Hash(strings.TrimSpace(newPlainPassword))
+	if len(newPlainPassword) < 8 {
+		return User{}, errors.New("password must be at least 8 characters")
+	}
+	hash, err := password.Hash(newPlainPassword)
 	if err != nil {
 		return User{}, err
 	}

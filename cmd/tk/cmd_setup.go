@@ -66,6 +66,8 @@ func runSkill(args []string) error {
 //go:embed SKILL.md
 var tkSkillContent string
 
+const defaultAdminPassword = "password"
+
 func prompt(reader *bufio.Reader, question, defaultVal string) string {
 	if defaultVal != "" {
 		fmt.Printf("%s [%s]: ", question, defaultVal)
@@ -344,10 +346,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 		}
 	}
 
-	password, err := generatePassword(24)
-	if err != nil {
-		return err
-	}
+	password := defaultAdminPassword
 	if err := store.Init(dbPath, "admin", password, static.SeedDatabase); err != nil {
 		return err
 	}
@@ -774,14 +773,8 @@ func runInitDB(args []string) error {
 	}
 
 	password := strings.TrimSpace(*passwordFlag)
-	generated := false
 	if password == "" {
-		var err error
-		password, err = generatePassword(24)
-		if err != nil {
-			return err
-		}
-		generated = true
+		password = defaultAdminPassword
 	}
 
 	if *force {
@@ -842,9 +835,6 @@ func runInitDB(args []string) error {
 		fmt.Printf("default project: 1\n")
 		if *populate {
 			fmt.Println("example data: seeded")
-		}
-		if generated {
-			fmt.Println("admin password was generated because -password was not provided")
 		}
 	}
 

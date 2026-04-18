@@ -949,7 +949,7 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-func TestRunInitDBGeneratesPasswordWhenMissing(t *testing.T) {
+func TestRunInitDBDefaultsPasswordWhenMissing(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -966,8 +966,8 @@ func TestRunInitDBGeneratesPasswordWhenMissing(t *testing.T) {
 	if !strings.Contains(output, "admin password: ") {
 		t.Fatalf("runInitDB() output missing password:\n%s", output)
 	}
-	if !strings.Contains(output, "generated because -password was not provided") {
-		t.Fatalf("runInitDB() output missing generated-password note:\n%s", output)
+	if !strings.Contains(output, "admin password: password") {
+		t.Fatalf("runInitDB() output missing default password:\n%s", output)
 	}
 }
 
@@ -5673,6 +5673,46 @@ func TestRunUserCRUD(t *testing.T) {
 	})
 	if strings.Contains(listOut2, "newuser") {
 		t.Fatalf("user list still shows deleted user:\n%s", listOut2)
+	}
+}
+
+func TestRunUserResetPassword(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"user", "create", "-username", "resetme", "-password", "oldpassword1"}); err != nil {
+		t.Fatalf("user create error = %v", err)
+	}
+
+	resetOut := captureStdout(t, func() {
+		if err := run([]string{"user", "reset-password", "-username", "resetme", "-password", "newpassword1"}); err != nil {
+			t.Fatalf("user reset-password error = %v", err)
+		}
+	})
+	if !strings.Contains(resetOut, "username : resetme") {
+		t.Fatalf("reset output missing username:\n%s", resetOut)
+	}
+	if !strings.Contains(resetOut, "password : newpassword1") {
+		t.Fatalf("reset output missing password:\n%s", resetOut)
+	}
+	if !strings.Contains(resetOut, "all sessions invalidated") {
+		t.Fatalf("reset output missing session invalidation:\n%s", resetOut)
+	}
+
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		t.Fatalf("config.ResolveURL() error = %v", err)
+	}
+	db, err := store.Open(resolved.DBPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	if _, err := store.AuthenticateUser(context.Background(), db, "resetme", "oldpassword1"); !errors.Is(err, store.ErrInvalidCredentials) {
+		t.Fatalf("AuthenticateUser(old password) error = %v, want ErrInvalidCredentials", err)
+	}
+	if _, err := store.AuthenticateUser(context.Background(), db, "resetme", "newpassword1"); err != nil {
+		t.Fatalf("AuthenticateUser(new password) error = %v", err)
 	}
 }
 
