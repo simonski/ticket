@@ -2,6 +2,6 @@
   "location": "ticket.db",
   "token": "",
   "username": "admin",
-  "project_id": "TK",
-  "current_epic_id": "TK-117"
+  "project_id": "1",
+  "current_epic_id": ""
 }

@@ -13,78 +13,6 @@ metadata:
 
 **Before starting any significant piece of work, check the active project and relevant tickets. After completing work, update ticket state.**
 
-## Required Git Workflow (with tk)
-
-When implementing ticket work, keep git and `tk` in sync:
-
-```bash
-# 1) Start from main and create a ticket branch
-git checkout main
-git pull --rebase origin main
-git checkout -b <type>/tk-<id>-<short-topic>
-
-# 2) Move ticket to active before coding
-tk show TK-<id>
-tk state -id TK-<id> active
-
-# 3) Commit with ticket ID in the message
-git add <files>
-git commit -m "TK-<id>: <change summary>"
-
-# 4) Record commit on ticket, then close successfully
-COMMIT=$(git rev-parse --short HEAD)
-tk state -id TK-<id> success
-tk comment -id TK-<id> "Completed in $COMMIT: <what changed>"
-tk close -id TK-<id>
-
-# 5) Merge and clean up
-git checkout main
-git pull --rebase origin main
-git merge --no-ff <type>/tk-<id>-<short-topic>
-git push origin main
-git branch -d <type>/tk-<id>-<short-topic>
-git push origin --delete <type>/tk-<id>-<short-topic>  # if remote branch exists
-```
-
-Rules:
-1. One ticket per branch unless explicitly asked otherwise.
-2. Only one ticket should be `develop/active` at a time.
-3. Always add a ticket comment with commit evidence before closure.
-
-## Command Usage by Scenario
-
-| Scenario | Commands |
-|---|---|
-| Orient to current project | `tk status`, `tk summary`, `tk list` |
-| Understand one ticket | `tk show TK-123`, `tk history TK-123`, `tk conversation show TK-123` |
-| Start implementation correctly | `tk show TK-123` then `tk state -id TK-123 active` |
-| Move ticket through SDLC | `tk state -id TK-123 success` (repeat per stage until done) |
-| Pause work | `tk state -id TK-123 idle` |
-| Mark failure | `tk state -id TK-123 fail` + `tk comment -id TK-123 "<reason>"` + `tk close -id TK-123` |
-| Leave progress notes | `tk comment add -id TK-123 "<what changed / blocker / next step>"` |
-| Verify event trail | `tk history TK-123` |
-| Check discussion context | `tk conversation show TK-123` |
-| Assignment workflow | `tk claim -id TK-123`, `tk unclaim TK-123`, `tk assign TK-123 alice` |
-| Dependencies | `tk dep add TK-200 TK-123`, `tk dep list TK-200` |
-
-## SDLC Usage Playbook
-
-Use this sequence for every ticket:
-
-1. **Design intake**
-   - Read ticket and context: `tk show`, `tk history`, `tk conversation show`
-   - If needed, clarify by adding a comment before coding.
-2. **Develop start**
-   - Move to active immediately before implementation: `tk state -id <id> active`
-   - Do not code while ticket remains idle.
-3. **Development tracking**
-   - Add comments for key decisions, blockers, and completion notes.
-   - Keep assignment current (`claim`, `assign`, `unassign`).
-4. **Test/verification handoff**
-   - After implementation, move state with `success` and note evidence in comments.
-5. **Done/close**
-   - Close only after final success stage and completion comment.
-
 ## Error Recovery: Missing config.json
 
 If any `tk` command fails with `no active project; use 'ticket project create' or 'ticket project use <id>' first`, this usually means `.ticket/config.json` is missing or has no `project_id` while `.ticket/ticket.db` exists. Do NOT ask the user to fix this manually. Instead, recover automatically:
@@ -492,3 +420,4 @@ design/idle  →  design/active  →  [complete]  →  develop/idle  →  develo
 - **develop**: Write the code (ticket should be develop/active and `ready=yes` while coding)
 - **test**: Verify the solution works, run tests
 - **done**: Work is fully complete
+

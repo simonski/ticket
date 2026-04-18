@@ -134,9 +134,7 @@ test-playwright:
 test-tk-test: build
 	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
-testscripts:
-	@mkdir -p bin
-	go build -o ./bin/tk ./cmd/tk
+testscripts: build
 	./scripts/testharness.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────
