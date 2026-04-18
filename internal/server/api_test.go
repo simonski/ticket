@@ -3029,6 +3029,60 @@ func TestDeleteLabelByIDAPI(t *testing.T) {
 	}
 }
 
+func TestCreateTicketRejectsNonDesignStageAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	resp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "bad lifecycle",
+		"stage":      "develop",
+		"state":      "active",
+	}, token)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("create ticket status = %d, want %d body=%s", resp.Code, http.StatusBadRequest, resp.Body.String())
+	}
+	var payload map[string]string
+	decodeResponse(t, resp, &payload)
+	if payload["error"] != "new tickets must start in design stage" {
+		t.Fatalf("create ticket error = %q", payload["error"])
+	}
+}
+
+func TestUpdateTicketRejectsInvalidLifecycleCombinationAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "lifecycle update",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d, want %d body=%s", createResp.Code, http.StatusCreated, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"stage": "done",
+		"state": "idle",
+	}, token)
+	if updateResp.Code != http.StatusBadRequest {
+		t.Fatalf("update ticket status = %d, want %d body=%s", updateResp.Code, http.StatusBadRequest, updateResp.Body.String())
+	}
+	var payload map[string]string
+	decodeResponse(t, updateResp, &payload)
+	if payload["error"] != "invalid status \"done/idle\"" {
+		t.Fatalf("update ticket error = %q", payload["error"])
+	}
+}
+
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 

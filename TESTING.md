@@ -7,7 +7,7 @@
 | `make test-unit`      | Config, password hashing, web package                | ~1s      |
 | `make test-integration` | CLI, client, server, store, libticket, libtickethttp | ~25s     |
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds    | ~30s     |
-| `make test-playwright`| Browser tests against the web UI (11 spec files)     | ~20s     |
+| `make test-playwright`| Browser tests against the web UI (12 spec files)     | ~20s     |
 | `make test-tk-test`   | Executable documentation tests (see below)           | ~15s     |
 | `make testscripts`    | Shell-based CLI harness scenarios                    | ~5s      |
 | `make test`           | Unit + integration + playwright                      | ~50s     |
@@ -121,7 +121,7 @@ Enforced via `make test-go-cover`:
 
 ## Playwright browser tests
 
-Located in `tests/playwright/` with 11 spec files covering auth, navigation,
+Located in `tests/playwright/` with 12 spec files covering auth, navigation,
 ticket management, projects, stories, sdlcs, labels, time tracking,
 dependencies, hierarchy, and chat. Run with:
 

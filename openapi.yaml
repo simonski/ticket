@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
   title: Ticket API
+  version: 0.1.823
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
     or session cookies (`__Host-session` on secure requests; legacy
     `ticket_token` remains accepted).
     Agent endpoints use HTTP Basic Auth (agent UUID + password).
-.1.792
   contact:
     name: Simon Gauld
     url: https://github.com/simonski/ticket
@@ -133,8 +133,8 @@ components:
           format: int64
         prefix:
           type: string
-          description: 3-5 uppercase ASCII letters
-          pattern: '^[A-Z]{3,5}$'
+          description: 1-5 uppercase ASCII letters
+          pattern: '^[A-Z]{1,5}$'
         title:
           type: string
         description:
@@ -183,7 +183,7 @@ components:
           nullable: true
         type:
           type: string
-          enum: [epic, task, bug, spike, chore, story, note, question, requirement, decision]
+          enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision]
         title:
           type: string
         description:
@@ -2866,7 +2866,8 @@ paths:
               properties:
                 prefix:
                   type: string
-                  description: 3-5 uppercase ASCII letters
+                  description: 1-5 uppercase ASCII letters
+                  pattern: '^[A-Z]{1,5}$'
                 title:
                   type: string
                 description:
@@ -3680,7 +3681,7 @@ paths:
                   nullable: true
                 type:
                   type: string
-                  enum: [epic, task, bug, spike, chore, story, note, question, requirement, decision]
+                  enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision]
                 title:
                   type: string
                 description:
@@ -3701,10 +3702,15 @@ paths:
                   type: string
                 status:
                   type: string
+                  description: Optional initial lifecycle status. New tickets must start in `design/*`.
                 stage:
                   type: string
+                  description: Optional explicit stage for new tickets. If provided, it must be `design`.
+                  enum: [design]
                 state:
                   type: string
+                  description: Optional initial state for a newly created design-stage ticket.
+                  enum: [idle, active, success, fail]
             examples:
               task:
                 $ref: '#/components/examples/CreateTicketRequestExample'
@@ -3848,10 +3854,15 @@ paths:
                   type: string
                 status:
                   type: string
+                  description: Optional lifecycle status in `stage/state` form.
                 stage:
                   type: string
+                  description: Optional explicit lifecycle stage.
+                  enum: [design, develop, test, done]
                 state:
                   type: string
+                  description: Optional explicit lifecycle state. `done` tickets accept only `success` or `fail`.
+                  enum: [idle, active, success, fail]
                 priority:
                   type: integer
                 order:

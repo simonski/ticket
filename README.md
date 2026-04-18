@@ -67,8 +67,10 @@ Download a tarball for your platform from the [releases page](https://github.com
 git clone https://github.com/simonski/ticket
 cd ticket
 make setup        # install Go tools, Node, Playwright
-make build
+go build -o ./bin/tk ./cmd/tk
 ```
+
+Use `make build` only for releases; it increments the patch version in `cmd/tk/VERSION`.
 
 New to the codebase? See [docs/ONBOARDING.md](docs/ONBOARDING.md) for the guided setup, reading order, workflow expectations, and newcomer gotchas.
 

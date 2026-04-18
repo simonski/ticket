@@ -24,7 +24,7 @@ Coverage thresholds enforced: cmd/tk 55%, libticket 65%, libtickethttp 75%, inte
 
 Docker: `make docker-build`, `make docker-up`, `make docker-down`.
 
-Playwright browser tests are in `tests/playwright/` (11 spec files). Run with `make test-playwright`.
+Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `make test-playwright`.
 
 ## Architecture
 

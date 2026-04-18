@@ -23,13 +23,41 @@ const (
 )
 
 func resolveLifecycleRequest(status, stage, state string) (string, string, error) {
-	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
+	stage = strings.TrimSpace(strings.ToLower(stage))
+	state = strings.TrimSpace(strings.ToLower(state))
+	if stage != "" || state != "" {
+		if stage != "" && !store.ValidStage(stage) {
+			return "", "", fmt.Errorf("invalid stage %q", stage)
+		}
+		if state != "" && !store.ValidState(state) {
+			return "", "", fmt.Errorf("invalid state %q", state)
+		}
+		if stage != "" && state != "" && !store.ValidLifecycle(stage, state) {
+			return "", "", fmt.Errorf("invalid status %q", store.RenderLifecycleStatus(stage, state))
+		}
 		return stage, state, nil
 	}
 	if strings.TrimSpace(status) == "" {
 		return stage, state, nil
 	}
 	return store.ParseLifecycleStatus(status)
+}
+
+func resolveCreateLifecycleRequest(status, stage, state string) (string, error) {
+	stage, state, err := resolveLifecycleRequest(status, stage, state)
+	if err != nil {
+		return "", err
+	}
+	if stage == "" {
+		stage = store.StageDesign
+	}
+	if stage != store.StageDesign {
+		return "", fmt.Errorf("new tickets must start in %s stage", store.StageDesign)
+	}
+	if state != "" && !store.ValidLifecycle(stage, state) {
+		return "", fmt.Errorf("invalid status %q", store.RenderLifecycleStatus(stage, state))
+	}
+	return state, nil
 }
 
 func autoProgressTicketLifecycle(payload ticketRequest, current store.Ticket, actorUsername string) ticketRequest {
