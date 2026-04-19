@@ -3,40 +3,38 @@
 class Ticket < Formula
   desc "A local-first ticket system for engineers — epics, stories, bugs, requirements, decisions"
   homepage "https://github.com/simonski/ticket"
-  version "0.1.733"
+  version "0.1.842"
   license "MIT"
 
   on_macos do
     on_arm do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.733/ticket_0.1.733_darwin_arm64.tar.gz"
-      sha256 "9bbdba497ea68c5c37ce29ab867ed5f9d235e09b649c0c898eded882e690002f"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.842/tk_0.1.842_darwin_arm64.tar.gz"
+      sha256 "beda6a1fe1202279e73a5f4dbf9ee542db954e9fdede3517b1a1790888153f4c"
     end
 
     on_intel do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.733/ticket_0.1.733_darwin_amd64.tar.gz"
-      sha256 "fa23abb0f8b5ad00dea5e06716631f83710cc371c70c33d2efe6b7819c513e59"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.842/tk_0.1.842_darwin_amd64.tar.gz"
+      sha256 "0bb445c4238703cf3b97e41a869b489246cbeed2c83ef4d233409a77e4ae71f5"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.733/ticket_0.1.733_linux_arm64.tar.gz"
-      sha256 "9d006ffc3a479ae1ec082f4433b9c43780db729f490ca74a5e50d39abe219c63"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.842/tk_0.1.842_linux_arm64.tar.gz"
+      sha256 "c3c49077d853c180eaea22eceba73d7c326ce505954d7e63503271af6bf4d7f7"
     end
 
     on_intel do
-      url "https://github.com/simonski/ticket/releases/download/v0.1.733/ticket_0.1.733_linux_amd64.tar.gz"
-      sha256 "39791e0f3914a17541a932cf300bba6e156e27b9004345b541d67671a8c0da57"
+      url "https://github.com/simonski/ticket/releases/download/v0.1.842/tk_0.1.842_linux_amd64.tar.gz"
+      sha256 "aaf2a4e20597e8df755aecf7a94cd4778c78ad696e42384d59381def5efb23ac"
     end
   end
 
   def install
-    bin.install "ticket"
-    # Also expose as `tk` for the short-form CLI
-    bin.install_symlink bin/"ticket" => "tk"
+    bin.install "tk"
   end
 
   test do
-    assert_match "0.1.733", shell_output("#{bin}/ticket version")
+    assert_match "0.1.842", shell_output("#{bin}/tk version")
   end
 end
