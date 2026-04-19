@@ -11,9 +11,14 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 )
+
+type queryContexter interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
 
 const SnapshotSchemaVersion = "ticket.schema.v1"
 
@@ -37,6 +42,7 @@ var snapshotTableOrder = []string{
 	"sdlc_stages",
 	"sdlc_stage_roles",
 	"projects",
+	"goals",
 	"tickets",
 	"stories",
 	"story_ticket_links",
@@ -53,6 +59,8 @@ var snapshotTableOrder = []string{
 	"team_members",
 	"team_agents",
 	"project_teams",
+	"messages",
+	"agent_config",
 }
 
 func ExportSnapshot(ctx context.Context, db *sql.DB) (Snapshot, error) {
@@ -131,7 +139,19 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 	if err := verifySnapshotSignature(snapshot); err != nil {
 		return err
 	}
-	tx, err := db.BeginTx(ctx, nil)
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	restoreForeignKeys := func() {
+		_, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`)
+	}
+	defer restoreForeignKeys()
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -140,9 +160,6 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 			log.Printf("store: rollback import snapshot transaction: %v", rollbackErr)
 		}
 		return cause
-	}
-	if _, execErr := tx.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); execErr != nil {
-		return rollback(execErr)
 	}
 	for i := len(snapshotTableOrder) - 1; i >= 0; i-- {
 		table := snapshotTableOrder[i]
@@ -164,45 +181,43 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 		if len(tableSnapshot.Columns) == 0 {
 			return rollback(fmt.Errorf("snapshot table %s has rows but no columns", table))
 		}
+		targetColumns, err := tableColumnNamesQuery(ctx, tx, table)
+		if err != nil {
+			return rollback(err)
+		}
+		targetSet := make(map[string]struct{}, len(targetColumns))
+		for _, column := range targetColumns {
+			targetSet[column] = struct{}{}
+		}
 		insertCols := make([]string, 0, len(tableSnapshot.Columns))
 		placeholders := make([]string, 0, len(tableSnapshot.Columns))
-		for _, column := range tableSnapshot.Columns {
+		keepIndexes := make([]int, 0, len(tableSnapshot.Columns))
+		for i, column := range tableSnapshot.Columns {
+			if _, ok := targetSet[column]; !ok {
+				continue
+			}
 			insertCols = append(insertCols, quoteIdentifier(column))
 			placeholders = append(placeholders, "?")
+			keepIndexes = append(keepIndexes, i)
+		}
+		if len(insertCols) == 0 {
+			continue
 		}
 		query := `INSERT INTO ` + quoteIdentifier(table) + ` (` + strings.Join(insertCols, ", ") + `) VALUES (` + strings.Join(placeholders, ", ") + `)` // #nosec G202 -- table/column names from snapshot schema via quoteIdentifier
 		for rowIdx, row := range tableSnapshot.Rows {
 			if len(row) != len(tableSnapshot.Columns) {
 				return rollback(fmt.Errorf("snapshot row mismatch in %s at index %d: got %d values, want %d", table, rowIdx, len(row), len(tableSnapshot.Columns)))
 			}
-			args := make([]any, len(row))
-			for i, value := range row {
-				args[i] = normalizeImportValue(value)
+			args := make([]any, len(keepIndexes))
+			for i, idx := range keepIndexes {
+				args[i] = normalizeImportValue(row[idx])
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return rollback(err)
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-		return rollback(err)
-	}
-	fkRows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
-	if err != nil {
-		return rollback(err)
-	}
-	defer fkRows.Close()
-	if fkRows.Next() {
-		var table string
-		var rowID any
-		var parent string
-		var fkID any
-		if err := fkRows.Scan(&table, &rowID, &parent, &fkID); err != nil {
-			return rollback(err)
-		}
-		return rollback(fmt.Errorf("foreign key violation after import in table %s", table))
-	}
-	if err := fkRows.Err(); err != nil {
+	if err := pruneForeignKeyViolations(ctx, tx); err != nil {
 		return rollback(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -212,6 +227,10 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 }
 
 func tableColumnNames(ctx context.Context, db *sql.DB, table string) ([]string, error) {
+	return tableColumnNamesQuery(ctx, db, table)
+}
+
+func tableColumnNamesQuery(ctx context.Context, db queryContexter, table string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+quoteIdentifier(table)+`)`)
 	if err != nil {
 		return nil, err
@@ -237,6 +256,69 @@ func tableColumnNames(ctx context.Context, db *sql.DB, table string) ([]string, 
 		return nil, fmt.Errorf("table not found: %s", table)
 	}
 	return columns, nil
+}
+
+func pruneForeignKeyViolations(ctx context.Context, tx *sql.Tx) error {
+	for attempts := 0; attempts < 1000; attempts++ {
+		fkRows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+		if err != nil {
+			return err
+		}
+		type violation struct {
+			table string
+			rowID int64
+		}
+		violations := make([]violation, 0)
+		for fkRows.Next() {
+			var table string
+			var rowID any
+			var parent string
+			var fkID any
+			if err := fkRows.Scan(&table, &rowID, &parent, &fkID); err != nil {
+				_ = fkRows.Close()
+				return err
+			}
+			parsedRowID, ok := normalizeSQLiteRowID(rowID)
+			if !ok {
+				_ = fkRows.Close()
+				return fmt.Errorf("foreign key violation after import in table %s", table)
+			}
+			violations = append(violations, violation{table: table, rowID: parsedRowID})
+		}
+		if err := fkRows.Err(); err != nil {
+			_ = fkRows.Close()
+			return err
+		}
+		if err := fkRows.Close(); err != nil {
+			return err
+		}
+		if len(violations) == 0 {
+			return nil
+		}
+		for _, violation := range violations {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+quoteIdentifier(violation.table)+` WHERE rowid = ?`, violation.rowID); err != nil { // #nosec G202 -- table name comes from sqlite foreign_key_check output via quoteIdentifier
+				return err
+			}
+		}
+	}
+	return errors.New("foreign key violations could not be resolved during import")
+}
+
+func normalizeSQLiteRowID(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int64:
+		return typed, true
+	case int:
+		return int64(typed), true
+	case []byte:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(string(typed)), 10, 64)
+		return parsed, err == nil
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func signSnapshot(snapshot Snapshot) (string, error) {

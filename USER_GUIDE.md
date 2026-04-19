@@ -80,6 +80,14 @@ tk import -i ./ticket-snapshot.json
 
 Snapshot files are JSON and include a `schema_version`; imports replace existing database contents and preserve entity ids.
 
+If the CLI reports that a local database schema is older than the binary, port it into a fresh database without modifying the source database:
+
+```bash
+tk -f old_ticket/ticket.db upgrade-database -o new_database/ticket.db
+```
+
+Older databases without explicit schema metadata are treated as legacy and must be upgraded before normal local commands will open them.
+
 Start the server:
 
 ```bash
@@ -812,6 +820,7 @@ Security notes:
 tk init
 tk export -o ./ticket-snapshot.json
 tk import -i ./ticket-snapshot.json
+tk upgrade-database -o ./new_database/ticket.db
 tk server -v
 tk version
 

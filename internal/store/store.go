@@ -20,33 +20,56 @@ const defaultProjectPrefix = "TK"
 
 func Open(path string) (*sql.DB, error) {
 	ctx := context.Background()
-	db, err := sql.Open("sqlite", path)
+	existed := path == ":memory:"
+	if !existed {
+		if _, err := os.Stat(path); err == nil {
+			existed = true
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+	db, err := openSQLite(path)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON;`); err != nil {
+
+	empty, err := databaseHasNoUserTables(ctx, db)
+	if err != nil {
 		if closeErr := db.Close(); closeErr != nil {
-			log.Printf("store: close db after foreign_keys pragma failure: %v", closeErr)
+			log.Printf("store: close db after empty-database check failure: %v", closeErr)
 		}
 		return nil, err
 	}
-	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode = WAL;`); err != nil {
+	if !existed || empty {
+		if err := createSchema(ctx, db); err != nil {
+			if closeErr := db.Close(); closeErr != nil {
+				log.Printf("store: close db after schema creation failure: %v", closeErr)
+			}
+			return nil, err
+		}
+	} else {
+		version, err := readSchemaVersion(ctx, db)
+		if err != nil {
+			if closeErr := db.Close(); closeErr != nil {
+				log.Printf("store: close db after schema version check failure: %v", closeErr)
+			}
+			return nil, err
+		}
+		if version != CurrentSchemaVersion {
+			if closeErr := db.Close(); closeErr != nil {
+				log.Printf("store: close db after schema version mismatch: %v", closeErr)
+			}
+			return nil, &SchemaVersionError{
+				Path:          path,
+				Found:         version,
+				Current:       CurrentSchemaVersion,
+				UpgradeNeeded: version < CurrentSchemaVersion,
+			}
+		}
+	}
+	if err := enableWAL(ctx, db); err != nil {
 		if closeErr := db.Close(); closeErr != nil {
 			log.Printf("store: close db after journal_mode pragma failure: %v", closeErr)
-		}
-		return nil, err
-	}
-	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout = 5000;`); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			log.Printf("store: close db after busy_timeout pragma failure: %v", closeErr)
-		}
-		return nil, err
-	}
-	if err := createSchema(ctx, db); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			log.Printf("store: close db after schema creation failure: %v", closeErr)
 		}
 		return nil, err
 	}
@@ -507,11 +530,6 @@ CREATE TABLE IF NOT EXISTS goals (
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 
-CREATE INDEX IF NOT EXISTS idx_tickets_project_id ON tickets(project_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_parent_id ON tickets(parent_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_assignee ON tickets(assignee);
-CREATE INDEX IF NOT EXISTS idx_tickets_stage ON tickets(stage);
-CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state);
 CREATE INDEX IF NOT EXISTS idx_stories_project_id ON stories(project_id);
 
 CREATE INDEX IF NOT EXISTS idx_story_ticket_links_ticket_id ON story_ticket_links(ticket_id);
@@ -534,14 +552,6 @@ CREATE INDEX IF NOT EXISTS idx_labels_project_id ON labels(project_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_labels_label_id ON ticket_labels(label_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id);
 
-CREATE INDEX IF NOT EXISTS idx_tickets_draft ON tickets(draft);
-CREATE INDEX IF NOT EXISTS idx_tickets_complete ON tickets(complete);
-CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived);
-CREATE INDEX IF NOT EXISTS idx_tickets_deleted ON tickets(deleted);
-CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
-CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type);
-CREATE INDEX IF NOT EXISTS idx_tickets_role_id ON tickets(role_id);
-
 CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id);
@@ -554,17 +564,15 @@ CREATE INDEX IF NOT EXISTS idx_goals_project_id ON goals(project_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
 
-CREATE INDEX IF NOT EXISTS idx_roles_sdlc_id ON roles(sdlc_id);
-CREATE INDEX IF NOT EXISTS idx_sdlc_stages_sdlc_id ON sdlc_stages(sdlc_id);
-CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_stage_id ON sdlc_stage_roles(stage_id);
-CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_role_id ON sdlc_stage_roles(role_id);
-
 `
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return err
 	}
-	return migrateSchema(ctx, db)
+	if err := migrateSchema(ctx, db); err != nil {
+		return err
+	}
+	return writeSchemaVersion(ctx, db, CurrentSchemaVersion)
 }
 
 func migrateSchema(ctx context.Context, db *sql.DB) error {
@@ -1104,20 +1112,40 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	// Add missing indexes for frequently-queried columns.
-	missingIndexes := []string{
-		`CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open)`,
-		`CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived)`,
-		`CREATE INDEX IF NOT EXISTS idx_tickets_deleted ON tickets(deleted)`,
-		`CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)`,
-		`CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type)`,
-		`CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
+	type conditionalIndex struct {
+		table  string
+		column string
+		stmt   string
 	}
-	for _, stmt := range missingIndexes {
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
+	missingIndexes := []conditionalIndex{
+		{table: "tickets", column: "project_id", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_project_id ON tickets(project_id)`},
+		{table: "tickets", column: "parent_id", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_parent_id ON tickets(parent_id)`},
+		{table: "tickets", column: "assignee", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_assignee ON tickets(assignee)`},
+		{table: "tickets", column: "stage", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_stage ON tickets(stage)`},
+		{table: "tickets", column: "state", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_state ON tickets(state)`},
+		{table: "tickets", column: "open", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_open ON tickets(open)`},
+		{table: "tickets", column: "draft", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_draft ON tickets(draft)`},
+		{table: "tickets", column: "complete", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_complete ON tickets(complete)`},
+		{table: "tickets", column: "archived", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_archived ON tickets(archived)`},
+		{table: "tickets", column: "deleted", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_deleted ON tickets(deleted)`},
+		{table: "tickets", column: "status", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)`},
+		{table: "tickets", column: "type", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets(type)`},
+		{table: "tickets", column: "role_id", stmt: `CREATE INDEX IF NOT EXISTS idx_tickets_role_id ON tickets(role_id)`},
+		{table: "project_members", column: "user_id", stmt: `CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id)`},
+		{table: "team_members", column: "user_id", stmt: `CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id)`},
+		{table: "team_agents", column: "user_id", stmt: `CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id)`},
+		{table: "ticket_labels", column: "ticket_id", stmt: `CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id)`},
+		{table: "users", column: "username", stmt: `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`},
+		{table: "roles", column: "sdlc_id", stmt: `CREATE INDEX IF NOT EXISTS idx_roles_sdlc_id ON roles(sdlc_id)`},
+		{table: "sdlc_stages", column: "sdlc_id", stmt: `CREATE INDEX IF NOT EXISTS idx_sdlc_stages_sdlc_id ON sdlc_stages(sdlc_id)`},
+		{table: "sdlc_stage_roles", column: "stage_id", stmt: `CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_stage_id ON sdlc_stage_roles(stage_id)`},
+		{table: "sdlc_stage_roles", column: "role_id", stmt: `CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_role_id ON sdlc_stage_roles(role_id)`},
+	}
+	for _, idx := range missingIndexes {
+		if !columnExists(ctx, db, idx.table, idx.column) {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, idx.stmt); err != nil {
 			return err
 		}
 	}

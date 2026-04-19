@@ -163,11 +163,11 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 	}
 }
 
-func TestOpenDropsLegacyProjectGitBranchColumn(t *testing.T) {
+func TestUpgradeDatabaseDropsLegacyProjectGitBranchColumn(t *testing.T) {
 	t.Parallel()
 
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	rawDB, err := sql.Open("sqlite", dbPath)
+	sourcePath := filepath.Join(t.TempDir(), "ticket.db")
+	rawDB, err := sql.Open("sqlite", sourcePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,9 +206,14 @@ func TestOpenDropsLegacyProjectGitBranchColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := Open(dbPath)
+	targetPath := filepath.Join(t.TempDir(), "upgraded", "ticket.db")
+	if err := UpgradeDatabase(context.Background(), sourcePath, targetPath); err != nil {
+		t.Fatalf("UpgradeDatabase() error = %v", err)
+	}
+
+	db, err := Open(targetPath)
 	if err != nil {
-		t.Fatalf("Open() error = %v", err)
+		t.Fatalf("Open(target) error = %v", err)
 	}
 	defer db.Close()
 

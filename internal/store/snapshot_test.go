@@ -247,3 +247,113 @@ func TestImportSnapshotRejectsTamperedSignedSnapshot(t *testing.T) {
 		t.Fatalf("ImportSnapshot(tampered) error = %v, want signature verification failure", err)
 	}
 }
+
+func TestImportSnapshotIgnoresUnknownLegacyColumns(t *testing.T) {
+	t.Parallel()
+
+	sourceDB := testDB(t)
+	role, err := CreateRole(context.Background(), sourceDB, nil, "Legacy Role", "", "")
+	if err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+
+	snapshot, err := ExportSnapshot(context.Background(), sourceDB)
+	if err != nil {
+		t.Fatalf("ExportSnapshot() error = %v", err)
+	}
+	rolesTable := snapshot.Tables["roles"]
+	rolesTable.Columns = append(rolesTable.Columns, "motivation")
+	for i := range rolesTable.Rows {
+		rolesTable.Rows[i] = append(rolesTable.Rows[i], "legacy field")
+	}
+	snapshot.Tables["roles"] = rolesTable
+
+	targetDB := testDB(t)
+	if err := ImportSnapshot(context.Background(), targetDB, snapshot); err != nil {
+		t.Fatalf("ImportSnapshot() error = %v", err)
+	}
+	imported, err := GetRoleByID(context.Background(), targetDB, role.ID)
+	if err != nil {
+		t.Fatalf("GetRoleByID() error = %v", err)
+	}
+	if imported.Title != role.Title {
+		t.Fatalf("imported.Title = %q, want %q", imported.Title, role.Title)
+	}
+}
+
+func TestImportSnapshotPreservesRoleSdlcForeignKeys(t *testing.T) {
+	t.Parallel()
+
+	sourceDB := testDB(t)
+	sdlc, err := CreateSdlc(context.Background(), sourceDB, "FK SDLC", "foreign key coverage")
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	role, err := CreateRole(context.Background(), sourceDB, &sdlc.ID, "FK Role", "", "")
+	if err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+
+	snapshot, err := ExportSnapshot(context.Background(), sourceDB)
+	if err != nil {
+		t.Fatalf("ExportSnapshot() error = %v", err)
+	}
+
+	targetDB := testDB(t)
+	if err := ImportSnapshot(context.Background(), targetDB, snapshot); err != nil {
+		t.Fatalf("ImportSnapshot() error = %v", err)
+	}
+	imported, err := GetRoleByID(context.Background(), targetDB, role.ID)
+	if err != nil {
+		t.Fatalf("GetRoleByID() error = %v", err)
+	}
+	if imported.SdlcID == nil || *imported.SdlcID != sdlc.ID {
+		t.Fatalf("imported.SdlcID = %#v, want %d", imported.SdlcID, sdlc.ID)
+	}
+}
+
+func TestImportSnapshotPrunesOrphanTicketHistoryRows(t *testing.T) {
+	t.Parallel()
+
+	sourceDB := testDB(t)
+	project, err := CreateProject(context.Background(), sourceDB, "History Project", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(context.Background(), sourceDB, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "History ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+
+	snapshot, err := ExportSnapshot(context.Background(), sourceDB)
+	if err != nil {
+		t.Fatalf("ExportSnapshot() error = %v", err)
+	}
+	historyTable := snapshot.Tables["ticket_history"]
+	historyTable.Rows = append(historyTable.Rows, []any{999999, project.ID, "MISSING-TICKET", "legacy", "{}", "", "2026-01-01T00:00:00Z"})
+	snapshot.Tables["ticket_history"] = historyTable
+
+	targetDB := testDB(t)
+	if err := ImportSnapshot(context.Background(), targetDB, snapshot); err != nil {
+		t.Fatalf("ImportSnapshot() error = %v", err)
+	}
+	imported, err := GetTicket(context.Background(), targetDB, ticket.ID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if imported.Title != ticket.Title {
+		t.Fatalf("imported.Title = %q, want %q", imported.Title, ticket.Title)
+	}
+	var count int
+	if err := targetDB.QueryRow(`SELECT COUNT(*) FROM ticket_history WHERE ticket_id = 'MISSING-TICKET'`).Scan(&count); err != nil {
+		t.Fatalf("ticket_history count query error = %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("orphan ticket_history row count = %d, want 0", count)
+	}
+}

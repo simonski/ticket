@@ -2,6 +2,8 @@
   "location": "ticket.db",
   "token": "",
   "username": "admin",
-  "project_id": "DEMO",
-  "current_epic_id": ""
+  "project_id": "1",
+  "current_epic_id": "",
+  "tui_theme": "the-grey",
+  "tui_mode": "summary"
 }

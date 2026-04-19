@@ -54,6 +54,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Checks the repository VERSION file and compares it to the embedded local version.", "The network check fails fast after 3 seconds if the repository cannot be reached."},
 		example: "tk upgrade",
 	},
+	"upgrade-database": {
+		usage:   "tk upgrade-database [-o <target-db>]",
+		details: []string{"Local mode only. Reads an older ticket database and ports its contents into a fresh database file without modifying the source database.", "By default the upgraded database is written to `new_database/ticket.db` relative to the current working directory.", "Use `-f <source-db>` to point the command at a specific legacy database file or directory."},
+		example: "tk -f old_ticket/ticket.db upgrade-database -o new_database/ticket.db",
+	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password>] [-url <server-url>]",
 		details: []string{"Remote mode only. Logs into the server and stores the session token in the active `.ticket/credentials.json` file.", "When `TICKET_URL` points at a remote server and `TICKET_USERNAME` / `TICKET_PASSWORD` are set, those values override local config and are used directly; `tk login` is optional for regular API calls in that mode.", "Login resolution order: valid credentials.json, then username in config.json, then `-username` / `-password`, then `TICKET_USERNAME` / `TICKET_PASSWORD`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
@@ -499,6 +504,7 @@ func renderRootUsage() string {
 		{"initdb", "Initialize the database"},
 		{"export", "Export entities to a JSON snapshot"},
 		{"import", "Import entities from a JSON snapshot"},
+		{"upgrade-database", "Port an older database into a new file"},
 		{"version", "Print the current version"},
 		{"upgrade", "Check for a newer version"},
 		{"skill", "Print the embedded SKILL.md template"},

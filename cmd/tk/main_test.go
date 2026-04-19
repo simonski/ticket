@@ -76,6 +76,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"server",
 		"version",
 		"upgrade",
+		"upgrade-database",
 		"login",
 		"help",
 	} {
@@ -127,7 +128,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	// Verify SYSTEM section ordering
-	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  init", "  export", "  import", "  version", "  upgrade", "  help"}
+	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  init", "  export", "  import", "  upgrade-database", "  version", "  upgrade", "  help"}
 	last = -1
 	for _, item := range systemOrder {
 		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
@@ -3822,6 +3823,45 @@ func setupLocalCLI(t *testing.T) {
 	}
 }
 
+func createLegacyDatabaseForCLI(t *testing.T) (string, string) {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "legacy.db")
+	if err := store.Init(dbPath, "admin", "password"); err != nil {
+		t.Fatalf("store.Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	ticket, err := store.CreateTicket(context.Background(), db, store.TicketCreateParams{
+		ProjectID: 1,
+		Type:      "task",
+		Title:     "Legacy CLI ticket",
+		CreatedBy: "",
+	})
+	if closeErr := db.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		t.Fatalf("store.CreateTicket() error = %v", err)
+	}
+	rawDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	if _, err := rawDB.Exec(`DROP TABLE schema_meta`); err != nil {
+		if closeErr := rawDB.Close(); closeErr != nil {
+			t.Fatalf("rawDB.Close() error after drop failure = %v", closeErr)
+		}
+		t.Fatalf("DROP TABLE schema_meta error = %v", err)
+	}
+	if err := rawDB.Close(); err != nil {
+		t.Fatalf("rawDB.Close() error = %v", err)
+	}
+	return dbPath, ticket.ID
+}
+
 // testAdminUserID returns the admin user's ID by opening the local DB and looking up the user.
 func testAdminUserID(t *testing.T) string {
 	t.Helper()
@@ -4131,6 +4171,60 @@ func TestRunVersion(t *testing.T) {
 	})
 	if strings.TrimSpace(output) == "" {
 		t.Fatal("version output empty")
+	}
+}
+
+func TestRunStatusReturnsUpgradeDatabaseHintForLegacyDatabase(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	legacyPath, _ := createLegacyDatabaseForCLI(t)
+	setTestLocation(t, legacyPath)
+
+	err := run([]string{"status"})
+	if err == nil {
+		t.Fatal("run(status) error = nil, want schema upgrade hint")
+	}
+	if !strings.Contains(err.Error(), "upgrade-database") {
+		t.Fatalf("run(status) error = %v, want upgrade-database hint", err)
+	}
+}
+
+func TestRunUpgradeDatabasePortsLegacyDatabase(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	legacyPath, ticketID := createLegacyDatabaseForCLI(t)
+	setTestLocation(t, legacyPath)
+
+	targetPath := filepath.Join(t.TempDir(), "new_database", "ticket.db")
+	output := captureStdout(t, func() {
+		if err := run([]string{"upgrade-database", "-o", targetPath}); err != nil {
+			t.Fatalf("upgrade-database error = %v", err)
+		}
+	})
+	if !strings.Contains(output, targetPath) {
+		t.Fatalf("upgrade-database output = %q, want target path", output)
+	}
+	if got, err := store.DetectSchemaVersion(legacyPath); err != nil {
+		t.Fatalf("DetectSchemaVersion(source) error = %v", err)
+	} else if got != store.LegacySchemaVersion {
+		t.Fatalf("DetectSchemaVersion(source) = %d, want %d", got, store.LegacySchemaVersion)
+	}
+	if got, err := store.DetectSchemaVersion(targetPath); err != nil {
+		t.Fatalf("DetectSchemaVersion(target) error = %v", err)
+	} else if got != store.CurrentSchemaVersion {
+		t.Fatalf("DetectSchemaVersion(target) = %d, want %d", got, store.CurrentSchemaVersion)
+	}
+	db, err := store.Open(targetPath)
+	if err != nil {
+		t.Fatalf("store.Open(target) error = %v", err)
+	}
+	defer db.Close()
+	ticket, err := store.GetTicket(context.Background(), db, ticketID)
+	if err != nil {
+		t.Fatalf("store.GetTicket() error = %v", err)
+	}
+	if ticket.Title != "Legacy CLI ticket" {
+		t.Fatalf("ticket.Title = %q, want %q", ticket.Title, "Legacy CLI ticket")
 	}
 }
 

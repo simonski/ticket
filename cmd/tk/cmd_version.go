@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
 )
 
 func runVersion(args []string) error {
@@ -41,6 +47,34 @@ func runUpgrade(args []string) error {
 	default:
 		fmt.Println("Your local copy is newer than the repo")
 	}
+	return nil
+}
+
+func runUpgradeDatabase(args []string) error {
+	fs := flag.NewFlagSet("upgrade-database", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	outputPath := fs.String("o", filepath.Join("new_database", "ticket.db"), "target database file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return errors.New("usage: tk upgrade-database [-o <target-db>]")
+	}
+	resolved, err := config.ResolveURL()
+	if err != nil {
+		return err
+	}
+	if resolved.Mode != config.ModeLocal {
+		return errors.New("ticket upgrade-database requires local mode")
+	}
+	target := strings.TrimSpace(*outputPath)
+	if target == "" {
+		return errors.New("usage: tk upgrade-database [-o <target-db>]")
+	}
+	if err := store.UpgradeDatabase(context.Background(), resolved.DBPath, target); err != nil {
+		return err
+	}
+	fmt.Printf("upgraded database from %s to %s\n", resolved.DBPath, target)
 	return nil
 }
 

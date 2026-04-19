@@ -106,7 +106,7 @@ func run(args []string) error {
 
 	// Commands that don't require an initialised .ticket folder.
 	noInitRequired := map[string]bool{
-		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "skill": true,
+		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true,
 	}
 	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envLocationOverride {
 		home, homeErr := config.Home()
@@ -144,6 +144,8 @@ func run(args []string) error {
 		return runVersion(trimmedArgs[1:])
 	case "upgrade":
 		return runUpgrade(trimmedArgs[1:])
+	case "upgrade-database":
+		return runUpgradeDatabase(trimmedArgs[1:])
 	case "register":
 		if resolved.Mode != config.ModeRemote {
 			return errors.New("ticket register requires remote mode (run tk init to configure)")
