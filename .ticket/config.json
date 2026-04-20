@@ -1,9 +1,9 @@
 {
-  "location": "ticket.db",
+  "location": "https://ticket.exe.xyz",
   "token": "",
   "username": "admin",
   "project_id": "1",
-  "current_epic_id": "",
+  "current_epic_id": "TK-7",
   "tui_theme": "the-grey",
   "tui_mode": "summary"
 }

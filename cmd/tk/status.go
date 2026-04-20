@@ -41,10 +41,10 @@ func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnic
 	if len(summary) == 0 {
 		return details
 	}
-	lines := make([]statusLine, 0, len(summary)+1+len(details))
-	lines = append(lines, summary...)
-	lines = append(lines, statusLine{})
+	lines := make([]statusLine, 0, len(details)+1+len(summary))
 	lines = append(lines, details...)
+	lines = append(lines, statusLine{})
+	lines = append(lines, summary...)
 	return lines
 }
 
@@ -211,6 +211,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		return err
 	}
 	status, err := svc.Status(context.Background())
+	clientVersion := strings.TrimSpace(embeddedVersion)
 	authenticated := err == nil && status.Authenticated
 	username := strings.TrimSpace(cfg.Username)
 	if status.User != nil {
@@ -228,11 +229,15 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
+			"client_version":  clientVersion,
 			"project_id":      projectID,
 			"project_source":  projectSource,
 			"username":        username,
 			"authenticated":   authenticated,
 			"connection":      map[bool]string{true: "success", false: "failure"}[err == nil],
+		}
+		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
+			payload["server_version"] = serverVersion
 		}
 		if sdlcName != "" {
 			payload["project_sdlc"] = sdlcName
@@ -247,6 +252,8 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		projectStatusLine(projectID, projectTitle),
 		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
 		{key: "project_default_draft", value: boolString(defaultDraft)},
+		{key: "client_version", value: clientVersion},
+		{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
 		connectionStatusLine(err == nil),
@@ -273,6 +280,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	if svcErr != nil {
 		svc = nil
 	}
+	clientVersion := strings.TrimSpace(embeddedVersion)
 	projectID, projectTitle, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
@@ -284,6 +292,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
+			"client_version":  clientVersion,
 			"current_project": projectID,
 			"project_source":  projectSource,
 			"db_exists":       dbExists,
@@ -303,6 +312,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 		projectStatusLine(projectID, projectTitle),
 		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
 		{key: "project_default_draft", value: boolString(defaultDraft)},
+		{key: "client_version", value: clientVersion},
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
 		connectionStatusLine(connErr == nil),
 	}...)

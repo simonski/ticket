@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -155,6 +156,7 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 		logger := slog.New(slog.NewTextHandler(logOutput, nil))
 		handler = loggingHandler(handler, logger)
 	}
+	handler = compressionMiddleware(handler)
 	return handler, nil
 }
 
@@ -292,6 +294,121 @@ func bodySizeLimitHandler(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func compressionMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead || !requestAcceptsGzip(r) || isUpgradeRequest(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		addVaryHeader(w.Header(), "Accept-Encoding")
+		gzw := &gzipResponseWriter{ResponseWriter: w}
+		defer gzw.Close()
+		next.ServeHTTP(gzw, r)
+	})
+}
+
+func requestAcceptsGzip(r *http.Request) bool {
+	for _, value := range r.Header.Values("Accept-Encoding") {
+		for _, encoding := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(encoding), "gzip") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isUpgradeRequest(r *http.Request) bool {
+	for _, value := range r.Header.Values("Connection") {
+		for _, token := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func addVaryHeader(header http.Header, value string) {
+	for _, existing := range header.Values("Vary") {
+		for _, part := range strings.Split(existing, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), value) {
+				return
+			}
+		}
+	}
+	header.Add("Vary", value)
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	writer     *gzip.Writer
+	statusCode int
+	decided    bool
+	compress   bool
+}
+
+func (w *gzipResponseWriter) WriteHeader(statusCode int) {
+	w.ensureWriter(statusCode)
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *gzipResponseWriter) Write(p []byte) (int, error) {
+	if !w.decided {
+		w.ensureWriter(http.StatusOK)
+		w.ResponseWriter.WriteHeader(http.StatusOK)
+	}
+	if !w.compress {
+		return w.ResponseWriter.Write(p)
+	}
+	return w.writer.Write(p)
+}
+
+func (w *gzipResponseWriter) Flush() {
+	if !w.decided {
+		w.ensureWriter(http.StatusOK)
+		w.ResponseWriter.WriteHeader(http.StatusOK)
+	}
+	if w.writer != nil {
+		_ = w.writer.Flush()
+	}
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, errors.New("response writer does not support hijacking")
+}
+
+func (w *gzipResponseWriter) Close() error {
+	if w.writer != nil {
+		return w.writer.Close()
+	}
+	return nil
+}
+
+func (w *gzipResponseWriter) ensureWriter(statusCode int) {
+	if w.decided {
+		return
+	}
+	w.decided = true
+	w.statusCode = statusCode
+	if statusCode == http.StatusNoContent || statusCode == http.StatusNotModified || statusCode == http.StatusSwitchingProtocols {
+		return
+	}
+	if w.Header().Get("Content-Encoding") != "" {
+		return
+	}
+	w.compress = true
+	w.Header().Set("Content-Encoding", "gzip")
+	w.Header().Del("Content-Length")
+	w.writer = gzip.NewWriter(w.ResponseWriter)
 }
 
 func (s *Server) ListenAndServe() error {

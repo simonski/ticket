@@ -160,6 +160,24 @@ Opens a Kanban board with live WebSocket updates at `http://localhost:8080`.
 
 See [QUICKSTART_SERVER.md](./QUICKSTART_SERVER.md) for multi-user server setup.
 
+### Docker server
+
+```bash
+./deploy/deploy.sh up
+docker compose logs --no-color ticket | grep 'ADMIN PASSWORD:'
+tk docker-compose > compose.yaml
+```
+
+The container stores SQLite under a persistent Docker volume mounted at `/data`,
+initialises the database on first start, prints the generated `admin` password to
+stdout once, and then runs `tk server -f /data/ticket.db`.
+
+Set `TICKET_ADMIN_PASSWORD` before startup if you want to supply a fixed initial
+admin password instead of generating one.
+
+If you want the deployment YAML written directly from the binary, use
+`tk docker-compose`.
+
 ### Remote client quick setup
 
 Use this when the server is already running (including from another laptop):

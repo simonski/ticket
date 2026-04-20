@@ -41,7 +41,7 @@ func TestStoryAnalyseProcessEnvDefaults(t *testing.T) {
 	t.Setenv("TICKET_PASSWORD", "")
 	env := strings.Join(storyAnalyseProcessEnv(), "\n")
 	for _, want := range []string{
-		"TICKET_URL=http://localhost:8080",
+		"TICKET_URL=https://ticket.exe.xyz",
 		"TICKET_USERNAME=admin",
 		"TICKET_PASSWORD=password",
 	} {

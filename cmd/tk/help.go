@@ -24,6 +24,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Prints the embedded tk SKILL.md template to stdout.", "Usage: tk skill > SKILL.md"},
 		example: "tk skill > SKILL.md",
 	},
+	"docker-compose": {
+		usage:   "tk docker-compose",
+		details: []string{"Prints the Docker Compose file for running Ticket as a persistent server container.", "The embedded template uses the `ghcr.io/simonski/ticket:latest` image and includes a Watchtower sidecar to auto-pull tagged updates for the Ticket container.", "Use this when you want the deployment YAML written directly from the binary instead of copying it from the repository."},
+		example: "tk docker-compose > compose.yaml",
+	},
 	"initdb": {
 		usage:   "tk initdb [-f <db-path>] [-force] [-password <password>] [-populate]",
 		details: []string{"Creates a new SQLite database, bootstraps the fixed `admin` account, and creates the default project.", "If `-f` is omitted, the database path defaults to `.ticket/ticket.db` at the nearest Git root, or `.ticket/ticket.db` in the current directory when no Git root exists. `TICKET_URL` can override the effective location.", "If `-password` is omitted, the admin password defaults to `password`.", "If `-force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive setup command for local/remote configuration."},
@@ -508,6 +513,7 @@ func renderRootUsage() string {
 		{"version", "Print the current version"},
 		{"upgrade", "Check for a newer version"},
 		{"skill", "Print the embedded SKILL.md template"},
+		{"docker-compose", "Print the Docker Compose deployment template"},
 		{"help", "Show command help"},
 	}
 	b.WriteString("\n" + h + "SYSTEM" + r + "\n")

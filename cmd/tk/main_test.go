@@ -77,6 +77,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"version",
 		"upgrade",
 		"upgrade-database",
+		"docker-compose",
 		"login",
 		"help",
 	} {
@@ -128,7 +129,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	// Verify SYSTEM section ordering
-	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  init", "  export", "  import", "  upgrade-database", "  version", "  upgrade", "  help"}
+	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  init", "  export", "  import", "  upgrade-database", "  version", "  upgrade", "  skill", "  docker-compose", "  help"}
 	last = -1
 	for _, item := range systemOrder {
 		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
@@ -450,6 +451,53 @@ func TestRunSkillDoesNotRequireTicketInit(t *testing.T) {
 	})
 	if !strings.Contains(output, "# tk Ticket Management Skill") {
 		t.Fatalf("run(skill) output missing skill content:\n%s", output)
+	}
+}
+
+func TestRunDockerComposePrintsComposeTemplateToStdout(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"docker-compose"}); err != nil {
+			t.Fatalf("run(docker-compose) error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"services:",
+		"ghcr.io/simonski/ticket:latest",
+		"com.centurylinklabs.watchtower.enable=true",
+		"TICKET_DATA_DIR: /data",
+		"- ticket-data:/data",
+		"TICKET_ADMIN_PASSWORD: change-me",
+		"watchtower:",
+		"containrrr/watchtower:latest",
+		"/var/run/docker.sock:/var/run/docker.sock",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("run(docker-compose) output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunDockerComposeDoesNotRequireTicketInit(t *testing.T) {
+	tempDir := t.TempDir()
+	previousHome := os.Getenv("TICKET_HOME")
+	if err := os.Setenv("TICKET_HOME", filepath.Join(tempDir, ".ticket")); err != nil {
+		t.Fatalf("Setenv(TICKET_HOME) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if previousHome == "" {
+			_ = os.Unsetenv("TICKET_HOME")
+			return
+		}
+		_ = os.Setenv("TICKET_HOME", previousHome)
+	})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"docker-compose"}); err != nil {
+			t.Fatalf("run(docker-compose) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "services:") {
+		t.Fatalf("run(docker-compose) output missing compose content:\n%s", output)
 	}
 }
 
@@ -1245,7 +1293,7 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 			_, _ = w.Write([]byte(`{"token":"env-token","user":{"username":"alice","role":"user"}}`))
 		case "/api/status":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"user":{"username":"alice","role":"user"}}`))
+			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"server_version":"9.8.7","user":{"username":"alice","role":"user"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -1265,6 +1313,8 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		"TICKET_PASSWORD  : ********",
 		"AGENT_ID         : agent-123",
 		"AGENT_PASSWORD   : ********",
+		"client_version   : " + strings.TrimSpace(embeddedVersion),
+		"server_version   : 9.8.7",
 		"username         : alice",
 		"authenticated    : true",
 		"connection       : ",
@@ -1291,6 +1341,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 		t.Fatalf("runStatus(local missing) error = %v, want os.ErrNotExist", runErr)
 	}
 	for _, want := range []string{
+		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"db_exists        : false",
 		"failure",
 		"hint: run tk init",
@@ -1320,6 +1371,7 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		"project          : TK — Default Project",
 		"git repo         : (none)",
 		"current project  : Default Project (1)",
+		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"db_exists        : true",
 		"connection       : success",
 	} {
@@ -1372,11 +1424,11 @@ func TestRunListAndStatusShareSummaryHeaderWithGitRepo(t *testing.T) {
 	if idxSummary, idxTable := strings.Index(listOut, "project          : SUM — Summary Test"), strings.Index(listOut, "ID       TYPE"); idxSummary == -1 || idxTable == -1 || idxSummary > idxTable {
 		t.Fatalf("list output should show summary block before table:\n%s", listOut)
 	}
-	if idxSummary, idxStatus := strings.Index(statusOut, "project          : SUM — Summary Test"), strings.Index(statusOut, "TICKET_URL"); idxSummary == -1 || idxStatus == -1 || idxSummary > idxStatus {
-		t.Fatalf("status output should show summary block before status details:\n%s", statusOut)
+	if idxStatus, idxSummary := strings.Index(statusOut, "TICKET_URL"), strings.Index(statusOut, "project          : SUM — Summary Test"); idxStatus == -1 || idxSummary == -1 || idxStatus > idxSummary {
+		t.Fatalf("status output should show env vars before summary block:\n%s", statusOut)
 	}
-	if idxSummary, idxStatus := strings.Index(listOut, "project          : SUM — Summary Test"), strings.Index(listOut, "TICKET_URL"); idxSummary == -1 || idxStatus == -1 || idxSummary > idxStatus {
-		t.Fatalf("list output should show status header before table:\n%s", listOut)
+	if idxStatus, idxSummary := strings.Index(listOut, "TICKET_URL"), strings.Index(listOut, "project          : SUM — Summary Test"); idxStatus == -1 || idxSummary == -1 || idxStatus > idxSummary {
+		t.Fatalf("list output should show env vars before summary block:\n%s", listOut)
 	}
 	for _, output := range []string{statusOut, listOut} {
 		if strings.Contains(output, "open tickets") {
@@ -3000,6 +3052,8 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
+		"client_version   : " + strings.TrimSpace(embeddedVersion),
+		"server_version   : (unknown)",
 		"authenticated    : false",
 		"failure",
 	} {

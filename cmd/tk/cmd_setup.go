@@ -394,7 +394,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 
 func runSetupRemote(reader *bufio.Reader) error {
 	// 1. Server URL
-	defaultURL := "http://localhost:8080"
+	defaultURL := "https://ticket.exe.xyz"
 	serverURL := prompt(reader, "server URL", defaultURL)
 	serverURL = strings.TrimRight(strings.TrimSpace(serverURL), "/")
 	if serverURL == "" {

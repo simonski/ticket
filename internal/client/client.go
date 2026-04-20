@@ -44,10 +44,21 @@ func New(cfg config.Config) *Client {
 		baseURL: baseURL,
 		token:   cfg.Token,
 		http: &http.Client{
-			Timeout: timeout,
+			Timeout:   timeout,
+			Transport: newHTTPTransport(),
 		},
 		mode: resolved.Mode,
 	}
+}
+
+func newHTTPTransport() *http.Transport {
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Transport{}
+	}
+	cloned := transport.Clone()
+	cloned.DisableCompression = false
+	return cloned
 }
 
 func remoteTimeoutFromEnv() time.Duration {

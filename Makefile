@@ -1,4 +1,4 @@
-.PHONY: help default build setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down
+.PHONY: help default build build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down deploy-exedev deploy-exedev-assets
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -7,12 +7,15 @@ GHCR_IMAGE    := ghcr.io/simonski/ticket
 DIST_DIR      := dist
 HOMEBREW_TAP_REPO := https://github.com/simonski/homebrew-tap.git
 
+EXE_DEV_URL ?= ticket.exe.xyz
+
 default: help
 
 help:
 	@printf "Available targets:\n\n"
 	@printf "  make build           Build tk binary into ./bin/tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
+	@printf "  make build-linux     Build a linux/amd64 tk binary into ./bin/tk-linux using BuildKit.\n"
 	@printf "  make sync-openapi-version Sync openapi.yaml version with cmd/tk/VERSION.\n"
 	@printf "  make validate-openapi Parse openapi.yaml and require core metadata.\n"
 	@printf "  make backup-db       Export and compress a local snapshot under .ticket/backups/.\n"
@@ -34,9 +37,16 @@ help:
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
 	@printf "Docker targets:\n\n"
-	@printf "  make docker-build    Build the Docker image.\n"
+	@printf "  make docker-build    Build the local Docker image only.\n"
+	@printf "  make docker-push     Build the image and push versioned + latest tags to GHCR.\n"
 	@printf "  make docker-up       Start the service via Docker Compose.\n"
 	@printf "  make docker-down     Stop the service via Docker Compose.\n"
+	@printf "\n"
+	@printf "exe.dev targets:\n\n"
+	@printf "  make deploy-exedev-assets Build ./bin/tk-linux and copy it plus deploy/README.exedev.md to the configured host.\n"
+	@printf "  make deploy-exedev   Alias for deploy-exedev-assets.\n"
+	@printf "  make deploy          Alias for deploy-exedev.\n"
+	@printf "                       Set EXE_DEV_URL=user@host to choose the remote destination.\n"
 	@printf "\n"
 	@printf "Release targets:\n\n"
 	@printf "  make release         Full release: build → checksums → SBOM → formula → GitHub release → homebrew tap.\n"
@@ -52,6 +62,12 @@ build:
 	@$(MAKE) sync-openapi-version
 	@mkdir -p bin
 	go build -o ./bin/tk ./cmd/tk
+
+build-linux:
+	@mkdir -p ./bin
+	DOCKER_BUILDKIT=1 docker buildx build --platform linux/amd64 --target artifact --output type=local,dest=./bin .
+	@chmod +x ./bin/tk-linux
+
 
 setup: setup-go setup-node setup-playwright
 
@@ -277,3 +293,29 @@ dev:
 	@echo "export TICKET_URL=file://`pwd`/ticket.db"
 	@echo "export TICKET_CONFIG_DIR=`pwd`"
 	@echo "\nAnd you are now in a position to extend ticket itself.\n"
+
+
+deploy-exedev-assets: build-linux
+	@echo "Deploying assets to exe.dev..."
+	@if [ -z "$(EXE_DEV_URL)" ]; then \
+		echo "Error: EXE_DEV_URL environment variable not set"; \
+		echo "Usage: EXE_DEV_URL=user@host make deploy-exedev-assets"; \
+		exit 1; \
+	fi
+	@echo "tk-linux (called \`tk\`) and README.md to $(EXE_DEV_URL):~/"
+	@scp ./bin/tk-linux $(EXE_DEV_URL):~/tk
+	@scp deploy/README.exedev.md $(EXE_DEV_URL):~/README.md
+	@echo ""
+	@echo "✓ Deployed to $(EXE_DEV_URL)"
+	@echo ""
+	@echo "Next steps on remote server:"
+	@echo "  ssh $(EXE_DEV_URL)"
+	@echo "  cd ~"
+	@echo "  chmod +x ./tk"
+	@echo "  ./tk server -f ./data/ticket.db -p 8000"
+	@echo ""
+	@echo "Or manually start on remote server with docker compose"
+
+deploy-exedev: deploy-exedev-assets
+
+deploy: deploy-exedev

@@ -1,3 +1,32 @@
+GOAL
+
+Perform an assessment of how far the project is from being used by itself.  Then create a plan to achieve the MVP for a phased set of beta releases.   This is a "self-improvement" piece of work that we will "race to a release".   Review this goal and give feedback until all the ambiguity is resolved.
+
+Phase1: confirm capability, baseline the features such that
+    All entity and entity management API and CLIs are agreed as "Done"
+    The website and TUI are put to one side for now.
+    The workflow of the SDLC is done.
+    A test harness exists for all - unit and integration, and examples.
+    It is installable and useable 
+        - as a server
+        - as a client CLI application
+    This would be tagged as an mvp-1 
+
+Phase2: a running server with working CRUD-management in-use by multiple projects by humans.
+
+Phase3: a running server with working CRUD-management in-use by multiple projects by humans AND agents running semi-autonomously.
+
+Phase4: re-introduce the website and TUI as capabilities.
+
+METHOD:
+    I want to ensure that we "upgrade" the .ticket/ticket.db that exists already as we go.  I will keep populating more and more tickets into the database.   
+
+Step0:
+    Create a new project called "ticket".  This is where we will put all the tickets and epics and bugs to describe the journey of self-improvement.
+
+
+
+
 THE GOAL IS A TICKET SYSTEM THAT
 
 IN SCOPE

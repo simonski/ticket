@@ -103,6 +103,18 @@ In `-v` mode, chat sessions also print prompt/output activity, heartbeat status 
 
 On startup, `tk server` also prints a colored ASCII-art `TICKET` banner before the listen message.
 
+To run the server in Docker with a persistent SQLite volume:
+
+```bash
+./deploy/deploy.sh up
+docker compose logs --no-color ticket | grep 'ADMIN PASSWORD:'
+tk docker-compose > compose.yaml
+```
+
+The container stores its database in the `ticket-data` Docker volume at `/data/ticket.db`, initialises on first boot, and prints the generated admin password to stdout once. Set `TICKET_ADMIN_PASSWORD` before startup if you want to control that initial password.
+
+If you need the compose YAML directly from the Ticket binary, use `tk docker-compose`.
+
 Immediately below the banner it prints:
 
 - the embedded version

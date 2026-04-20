@@ -16,6 +16,30 @@ its local SQLite database. Save the generated `admin` password.
 The web UI is available at `http://localhost:8080`. Leave the server running
 and open a second terminal for the steps below.
 
+### Docker deployment
+
+The repository also includes a container entrypoint and compose file that run
+Ticket as a persistent server backed by a Docker volume:
+
+```bash
+./deploy/deploy.sh up
+docker compose logs --no-color ticket | grep 'ADMIN PASSWORD:'
+tk docker-compose > compose.yaml
+```
+
+On first boot the container:
+
+1. creates `/data/ticket.db` if it does not exist
+2. generates an `admin` password unless `TICKET_ADMIN_PASSWORD` is already set
+3. prints `ADMIN PASSWORD: ...` to stdout once
+4. starts `tk server -f /data/ticket.db -addr 0.0.0.0:8080`
+
+The SQLite database lives in the `ticket-data` Docker volume, so it survives
+container restarts and image upgrades.
+
+If you want the compose YAML generated directly from the Ticket binary, run
+`tk docker-compose`.
+
 To try the fresh replacement frontend without removing the original one, start
 the server with:
 

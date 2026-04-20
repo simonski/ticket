@@ -106,7 +106,7 @@ func run(args []string) error {
 
 	// Commands that don't require an initialised .ticket folder.
 	noInitRequired := map[string]bool{
-		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true,
+		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true,
 	}
 	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envLocationOverride {
 		home, homeErr := config.Home()
@@ -124,6 +124,8 @@ func run(args []string) error {
 		return runOnboard(trimmedArgs[1:])
 	case "skill":
 		return runSkill(trimmedArgs[1:])
+	case "docker-compose":
+		return runDockerCompose(trimmedArgs[1:])
 	case "init":
 		return runSetup(trimmedArgs[1:])
 	case "initdb":

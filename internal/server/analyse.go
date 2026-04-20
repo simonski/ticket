@@ -58,7 +58,7 @@ func resolveAnalyseCommandArgs() []string {
 }
 
 func storyAnalyseProcessEnv() []string {
-	url := "http://localhost:8080"
+	url := "https://ticket.exe.xyz"
 	if r, err := config.ResolveURL(); err == nil && r.Mode == config.ModeRemote {
 		url = r.ServerURL
 	}

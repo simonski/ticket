@@ -1,5 +1,17 @@
 # MVP release plan
 
+USEFUL: being used and solving problems.
+REAL: used by > 1 person
+TOY: used by 1 person
+
+ticket: I NEED TO BE USING IT OR IT IS NOt USEFUL
+kp: I NEED TO BE USING IT OR IT IS NOt USEFUL
+pixel: I NEED TO BE USING IT OR IT IS NOT USEFUL
+
+I NEED USERS ON THESE OR IT IS NOT REAL
+
+
+
 ## Goal
 
 Assess how close `ticket` is to being used to manage its own development, then
