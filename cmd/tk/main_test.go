@@ -1317,8 +1317,6 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		"server_version   : 9.8.7",
 		"username         : alice",
 		"authenticated    : true",
-		"connection       : ",
-		"success",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
@@ -1343,7 +1341,6 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	for _, want := range []string{
 		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"db_exists        : false",
-		"failure",
 		"hint: run tk init",
 	} {
 		if !strings.Contains(output, want) {
@@ -1370,10 +1367,10 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 	for _, want := range []string{
 		"project          : TK — Default Project",
 		"git repo         : (none)",
-		"current project  : Default Project (1)",
+		"project_sdlc     : Agile",
+		"project_default_draft: false",
 		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"db_exists        : true",
-		"connection       : success",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
@@ -1408,11 +1405,11 @@ func TestRunListAndStatusShareSummaryHeaderWithGitRepo(t *testing.T) {
 	for _, want := range []string{
 		"project          : SUM — Summary Test",
 		"git repo         : https://github.com/example/summary.git",
-		"current project  : Summary Test (SUM)",
+		"project_sdlc     : Agile",
+		"project_default_draft: false",
 		"TICKET_URL       : UNSET",
 		"TICKET_USERNAME  : UNSET",
 		"TICKET_PASSWORD  : UNSET",
-		"connection       : success",
 	} {
 		if !strings.Contains(statusOut, want) {
 			t.Fatalf("status output missing %q:\n%s", want, statusOut)
@@ -3055,7 +3052,6 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"server_version   : (unknown)",
 		"authenticated    : false",
-		"failure",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote failure) missing %q:\n%s", want, output)

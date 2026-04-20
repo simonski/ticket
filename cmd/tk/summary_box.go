@@ -52,6 +52,14 @@ func buildProjectSummaryCoreLines(svc libticket.Service, project store.Project, 
 		lines = append(lines, statusLine{key: "description", value: strings.TrimSpace(project.Description)})
 	}
 	lines = append(lines, statusLine{key: "git repo", value: projectGitRepoValue(project)})
+	sdlcName := "(none)"
+	if project.SdlcID != nil {
+		if wf, err := svc.GetSdlc(context.Background(), *project.SdlcID); err == nil && strings.TrimSpace(wf.Name) != "" {
+			sdlcName = strings.TrimSpace(wf.Name)
+		}
+	}
+	lines = append(lines, statusLine{key: "project_sdlc", value: sdlcName})
+	lines = append(lines, statusLine{key: "project_default_draft", value: fmt.Sprintf("%t", project.DefaultDraft)})
 
 	if includeOpenTickets {
 		lines = append(lines, statusLine{})

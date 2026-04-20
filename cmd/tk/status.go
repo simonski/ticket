@@ -219,7 +219,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	}
 	cfgPath, _ := config.Path()
 	projectID, projectSource := resolveCurrentProject(cfg)
-	projectID, projectTitle, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectID, _, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
 		payload := map[string]any{
 			"location":        cfg.Location,
@@ -249,14 +249,10 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	}
 	lines := append(statusEnvLines(), []statusLine{
 		{key: "config_file", value: cfgPath},
-		projectStatusLine(projectID, projectTitle),
-		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
-		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "client_version", value: clientVersion},
 		{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
-		connectionStatusLine(err == nil),
 	}...)
 	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, lines))
 	return err
@@ -281,7 +277,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 		svc = nil
 	}
 	clientVersion := strings.TrimSpace(embeddedVersion)
-	projectID, projectTitle, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectID, _, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
 		payload := map[string]any{
@@ -309,12 +305,8 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	lines := append(statusEnvLines(), []statusLine{
 		{key: "db_path", value: dbPath},
 		{key: "config_file", value: cfgPath},
-		projectStatusLine(projectID, projectTitle),
-		{key: "project_sdlc", value: valueOrDefault(sdlcName, "(none)")},
-		{key: "project_default_draft", value: boolString(defaultDraft)},
 		{key: "client_version", value: clientVersion},
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
-		connectionStatusLine(connErr == nil),
 	}...)
 	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, lines))
 	if !dbExists {
