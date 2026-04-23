@@ -28,8 +28,8 @@ work. It is delivered as a single Go binary that provides:
 
 The system operates in two modes:
 
-- **Local mode** — Direct SQLite access via the path resolved from `.ticket/config.json` (`location`) or the default `.ticket/ticket.db`
-- **Remote mode** — HTTP client connecting to the `http(s)://...` URL stored in `.ticket/config.json`
+- **Local mode** — Direct SQLite access via the shared database at `$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`), with repo-local `.ticket/config.json` used for project routing
+- **Remote mode** — HTTP client connecting to the `http(s)://...` URL stored in repo-local `.ticket/config.json` or an explicit env/global override
 
 ---
 
@@ -619,22 +619,25 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 ### 11.2 Config Resolution
 
-1. Resolve the workspace directory by walking up from the current directory to the nearest `.git/`, then using `.ticket/`; if no Git root exists, use `.ticket/` in the current directory
-2. Load `location` from `.ticket/config.json`
-3. If `TICKET_URL` is set, use it instead of the stored `location`
-4. If the effective location is `http://...` or `https://...` -> **remote mode**
-5. If the effective location is `file://...` or a bare path -> **local mode** using that path
-6. If the effective location is empty -> **local mode** at `.ticket/ticket.db`
+1. Resolve `$TICKET_HOME` from the environment or default it to `~/.ticket`
+2. Walk up from the current directory looking for the nearest `.ticket/config.json`
+3. Load repo-local routing from that file when present
+4. Overlay global defaults from `$TICKET_HOME/config.json`
+5. If `TICKET_URL` is set, use it instead of the stored `location`
+6. If the effective location is `http://...` or `https://...` -> **remote mode**
+7. If the effective location is `file://...` or a bare path -> **local mode** using that path
+8. If the effective location is empty -> **local mode** at `$TICKET_HOME/ticket.db`
 
 Bare local paths are resolved like this:
 1. Absolute paths are used as-is
-2. Relative paths are resolved under the active `.ticket/` workspace directory
+2. Relative paths are resolved under `$TICKET_HOME`
 
 ### 11.3 Config Files
 
-- `.ticket/config.json` — client defaults (`location`, `username`, current project/epic, TUI state)
-- `.ticket/credentials.json` — auth token (remote mode)
-- `.ticket/ticket.db` — default SQLite database (local mode)
+- `.ticket/config.json` — repo-local routing (`location`, bound project, local project state)
+- `$TICKET_HOME/config.json` — global defaults (`username`, fallback location, current project override, TUI state)
+- `$TICKET_HOME/credentials.json` — remote auth tokens
+- `$TICKET_HOME/ticket.db` — default SQLite database (local mode)
 
 ---
 
@@ -646,7 +649,8 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk init` | Initialize local workspace or configure remote mode; supports `-prefix`, `-name`, `-git`, and `-sdlc` for non-interactive project setup |
+| `tk initdb` | Create or repair the shared local database and bootstrap the default admin/project |
+| `tk init` | Bind the current repo or directory to a local or remote project |
 | `tk server` | Start HTTP server and web UI on :8080 |
 | `tk version` | Show version |
 | `tk upgrade` | Check for newer version from GitHub |
@@ -1064,7 +1068,7 @@ Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee
 
 ### 14.5 Initialization
 
-`tk init` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), and a default project with prefix `TK`.
+`tk initdb` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), and a default project with prefix `TK`. `tk init` writes `.ticket/config.json` to bind the current repo or directory to a project.
 
 ---
 

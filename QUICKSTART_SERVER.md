@@ -22,16 +22,16 @@ The repository also includes a container entrypoint and compose file that run
 Ticket as a persistent server backed by a Docker volume:
 
 ```bash
-./deploy/deploy.sh up
-docker compose logs --no-color ticket | grep 'ADMIN PASSWORD:'
+docker compose -f deploy/compose.yaml up -d
+docker compose -f deploy/compose.yaml logs -f
 tk docker-compose > compose.yaml
 ```
 
 On first boot the container:
 
 1. creates `/data/ticket.db` if it does not exist
-2. generates an `admin` password unless `TICKET_ADMIN_PASSWORD` is already set
-3. prints `ADMIN PASSWORD: ...` to stdout once
+2. bootstraps `admin` / `password` unless `TICKET_ADMIN_PASSWORD` is already set
+3. prints `admin password: ...` to stdout once
 4. starts `tk server -f /data/ticket.db -addr 0.0.0.0:8080`
 
 The SQLite database lives in the `ticket-data` Docker volume, so it survives

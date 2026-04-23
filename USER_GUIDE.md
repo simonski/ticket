@@ -14,15 +14,12 @@ This guide describes a single Go binary that provides a server, a CLI, and an em
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
-Client-side files live under `.ticket/` in the active workspace.
+`tk` splits local state in two places:
 
-`tk` walks up the directory tree from the current working directory looking for
-a `.git` directory. When it finds one, it uses `.ticket/` at that repository
-root. If no Git root is found, `.ticket/` in the current directory is used as
-the default.
-
-- `.ticket/config.json` stores non-sensitive client defaults such as the current username, server URL, and active project
-- `.ticket/credentials.json` stores the current session token
+- `$TICKET_HOME` (default `~/.ticket`) stores the shared local database, global
+  config, and remote credentials
+- `.ticket/config.json` in the current repo or directory stores non-secret
+  routing for that location
 
 ## Getting Started
 
@@ -42,15 +39,16 @@ tk skill
 
 `tk skill` prints the embedded `SKILL.md` content to stdout.
 
-Initialize a task sqlite database:
+Create the shared local database:
 
 ```bash
-tk init
+tk initdb
 ```
 
-If `-f` is omitted, `tk init` creates the SQLite database at `.ticket/ticket.db` (at the nearest Git root, or in the current directory when no Git root exists). `TICKET_URL` can also override the active local or remote location.
+If `-f` is omitted, `tk initdb` creates the SQLite database at
+`$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`).
 
-`tk init` creates:
+`tk initdb` creates:
 
 1. an `admin` account
 2. the default project, `Default Project`, with project id `1` and prefix `TK`
@@ -62,8 +60,19 @@ Bootstrap resolution works like this:
 - existing database file: overwritten only when `--force` is supplied
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 - non-interactive project setup: use `-prefix`, `-name`, and `-git` to rename the default project after bootstrap
-- initial workflow selection: use `-sdlc <name>` to assign one of the built-in SDLCs during init
+- initial workflow selection: use `-sdlc <name>` to assign one of the built-in SDLCs during bootstrap
 - project prefixes must be 1-5 uppercase ASCII letters
+
+Bind the current repo or directory to a project:
+
+```bash
+tk init
+```
+
+`tk init` writes `.ticket/config.json` in the current managed root. In local
+mode it binds that location to a project in the shared local database. In remote
+mode it writes the remote server URL and project binding locally, while keeping
+credentials in `$TICKET_HOME/credentials.json`.
 
 For example:
 
@@ -94,7 +103,8 @@ Start the server:
 tk server
 ```
 
-If `-f` is omitted, `tk server` uses the database at `.ticket/ticket.db` (same resolution as `tk init`).
+If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db`
+(same resolution as `tk initdb`).
 If `-f` is provided, `tk server` uses that exact database file and does not infer DB location from env vars or the default `.ticket/` workspace.
 Use `-site default` to serve the existing embedded website, or `-site site2` to serve the fresh replacement frontend while keeping the old one available.
 
@@ -106,12 +116,12 @@ On startup, `tk server` also prints a colored ASCII-art `TICKET` banner before t
 To run the server in Docker with a persistent SQLite volume:
 
 ```bash
-./deploy/deploy.sh up
-docker compose logs --no-color ticket | grep 'ADMIN PASSWORD:'
+docker compose -f deploy/compose.yaml up -d
+docker compose -f deploy/compose.yaml logs -f
 tk docker-compose > compose.yaml
 ```
 
-The container stores its database in the `ticket-data` Docker volume at `/data/ticket.db`, initialises on first boot, and prints the generated admin password to stdout once. Set `TICKET_ADMIN_PASSWORD` before startup if you want to control that initial password.
+The container stores its database in the `ticket-data` Docker volume at `/data/ticket.db`, initialises on first boot, and bootstraps `admin` / `password`. Set `TICKET_ADMIN_PASSWORD` before startup if you want to override that initial password before the first boot.
 
 If you need the compose YAML directly from the Ticket binary, use `tk docker-compose`.
 
@@ -148,7 +158,7 @@ tk status
 tk whoami
 ```
 
-When all three are set, remote mode takes precedence over local `.ticket/config.json`.
+When all three are set, remote mode takes precedence over repo-local `.ticket/config.json`.
 In this mode, `tk login` is optional for normal commands because the client
 auto-authenticates when issuing remote API calls.
 You can tune remote API timeout with `TICKET_TIMEOUT` (seconds, default `5`,
@@ -227,15 +237,15 @@ tk login -username name -password '*******'
 
 For `tk register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `tk register` falls back to `whoami` and `password`.
 
-If `TICKET_URL` is set, it overrides the `location` in `.ticket/config.json`.
+If `TICKET_URL` is set, it overrides the effective configured `location`.
 Bare paths and `file:///...` stay in local mode; `http(s)://...` switches to
 remote mode. If that remote location also has `TICKET_USERNAME` and
 `TICKET_PASSWORD` set, those credentials override stored remote credentials.
 
 `tk login` resolves values in this order:
 
-1. a valid session already stored in `.ticket/credentials.json`
-2. the `username` already stored in `.ticket/config.json`
+1. a valid session already stored in `$TICKET_HOME/credentials.json`
+2. the `username` already stored in `$TICKET_HOME/config.json`
 3. `-username` and `-password`
 4. `TICKET_USERNAME` and `TICKET_PASSWORD`
 5. interactive prompts for anything still missing
@@ -248,8 +258,8 @@ When `tk login` prompts for a password in an interactive terminal, typed charact
 
 On successful login:
 
-- the session token is stored in `.ticket/credentials.json`
-- the `username` and `location` fields in `.ticket/config.json` are updated
+- the session token is stored in `$TICKET_HOME/credentials.json`
+- the `username` and global fallback `location` fields in `$TICKET_HOME/config.json` are updated
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -324,7 +334,7 @@ Log out:
 tk logout
 ```
 
-`ticket logout` removes `.ticket/credentials.json`.
+`ticket logout` removes the matching entry from `$TICKET_HOME/credentials.json`.
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser sdlcs.
 

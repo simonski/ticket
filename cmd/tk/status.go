@@ -51,6 +51,9 @@ func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnic
 // resolveCurrentProject returns the active project key and where it came from.
 func resolveCurrentProject(cfg config.Config) (projectID, source string) {
 	if cfg.ProjectID != "" {
+		if projectPath, ok, _ := config.ProjectPath(); ok {
+			return cfg.ProjectID, projectPath
+		}
 		cfgPath, _ := config.Path()
 		return cfg.ProjectID, cfgPath
 	}

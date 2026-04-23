@@ -15,8 +15,7 @@ const dockerComposeTemplate = `services:
       TICKET_DATA_DIR: /data
       TICKET_DB_PATH: /data/ticket.db
       TICKET_SERVER_ADDR: 0.0.0.0:8080
-      # Optional: set this before first start to control the initial admin password.
-      # TICKET_ADMIN_PASSWORD: change-me
+      TICKET_ADMIN_PASSWORD: password
     ports:
       - "8080:8080"
     volumes:
@@ -38,7 +37,7 @@ const dockerComposeTemplate = `services:
       - --label-enable
       - --cleanup
       - --interval
-      - "300"
+      - "30"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

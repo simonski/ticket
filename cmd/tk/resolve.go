@@ -272,9 +272,5 @@ func removeDBFiles(path string) error {
 }
 
 func defaultDatabasePath() (string, error) {
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return "", err
-	}
-	return resolved.DBPath, nil
+	return config.LocalDBPath()
 }

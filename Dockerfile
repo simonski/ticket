@@ -30,7 +30,6 @@ ENV TICKET_HOME=/data
 ENV TICKET_DATA_DIR=/data
 ENV TICKET_DB_PATH=/data/ticket.db
 ENV TICKET_SERVER_ADDR=0.0.0.0:8080
-USER ticket
 WORKDIR /home/ticket
 
 COPY --from=builder /out/tk /usr/local/bin/tk

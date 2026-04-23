@@ -117,7 +117,7 @@ func finishLogin(cfg config.Config, user store.User, token string) error {
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-	if err := config.SaveCredentials(config.Credentials{Token: token}); err != nil {
+	if err := config.SaveRemoteCredentials(cfg.Location, user.Username, token); err != nil {
 		return err
 	}
 	if outputJSON {
@@ -140,13 +140,13 @@ func runLogout(args []string) error {
 		return err
 	}
 	if err := svc.Logout(context.Background()); err != nil {
-		if clearErr := config.ClearCredentials(); clearErr != nil {
+		if clearErr := config.ClearRemoteCredentials(cfg.Location); clearErr != nil {
 			return clearErr
 		}
 		cfg.Token = ""
 		return err
 	}
-	if err := config.ClearCredentials(); err != nil {
+	if err := config.ClearRemoteCredentials(cfg.Location); err != nil {
 		return err
 	}
 	cfg.Token = ""

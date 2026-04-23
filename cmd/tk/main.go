@@ -104,14 +104,27 @@ func run(args []string) error {
 		return nil
 	}
 
-	// Commands that don't require an initialised .ticket folder.
+	// Commands that don't require an initialised project binding.
 	noInitRequired := map[string]bool{
-		"init": true, "setup": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true,
+		"init": true, "initdb": true, "setup": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true,
+		"login": true, "logout": true, "register": true, "status": true,
 	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envLocationOverride {
-		home, homeErr := config.Home()
-		if homeErr != nil || !dirExists(home) {
-			return fmt.Errorf("fatal: not a ticket folder — run `tk init` first")
+	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "init" {
+		noInitRequired["project"] = true
+	}
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envLocationOverride && resolved.Mode == config.ModeLocal {
+		if _, ok, pathErr := config.ProjectPath(); pathErr != nil {
+			return pathErr
+		} else if !ok {
+			if err := maybeBootstrapMutableCommand(trimmedArgs); err != nil {
+				return err
+			}
+			if _, ok, pathErr = config.ProjectPath(); pathErr != nil {
+				return pathErr
+			}
+			if !ok {
+				return advisoryNotManagedProject()
+			}
 		}
 	}
 

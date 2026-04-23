@@ -92,8 +92,8 @@ curl http://localhost:8080/api/healthz
 
 ```bash
 # Copy the DB out of the container
-docker cp ticket:/home/ticket/.ticket/ticket.db /tmp/ticket-recovery.db
-docker cp ticket:/home/ticket/.ticket/ticket.db-wal /tmp/ticket-recovery.db-wal 2>/dev/null || true
+docker cp ticket:/data/ticket.db /tmp/ticket-recovery.db
+docker cp ticket:/data/ticket.db-wal /tmp/ticket-recovery.db-wal 2>/dev/null || true
 
 # Run integrity check
 sqlite3 /tmp/ticket-recovery.db "PRAGMA integrity_check;"
@@ -185,8 +185,8 @@ tk project ls
 
 ### Local mode restore checklist
 
-1. Stop any running `tk server` process pointed at the same `.ticket/` directory.
-2. Confirm `TICKET_HOME` (or the repository-local `.ticket/`) matches the target workspace.
+1. Stop any running `tk server` process pointed at the same local database.
+2. Confirm `TICKET_HOME` points at the target global home and that you are in the repo or directory whose `.ticket/config.json` should route to that database.
 3. Run `tk import -i /path/to/snapshot.json`.
 4. Run `tk status` and `tk project ls` to confirm the workspace reopened cleanly.
 
@@ -347,7 +347,7 @@ find /var/backups/ticket -name "*.json.gz" -mtime +30 -delete
 docker system prune -f
 
 # If the WAL file is large, checkpoint it
-docker exec ticket sqlite3 /home/ticket/.ticket/ticket.db "PRAGMA wal_checkpoint(TRUNCATE);"
+docker exec ticket sqlite3 /data/ticket.db "PRAGMA wal_checkpoint(TRUNCATE);"
 
 # Enable history retention to prevent unbounded growth
 # Set TICKET_HISTORY_RETENTION_DAYS=180 in your compose.yaml environment

@@ -43,8 +43,15 @@ func NewLocal(cfg config.Config) *LocalService {
 	return &LocalService{cfg: cfg}
 }
 
+func (s *LocalService) resolvedLocation() (config.Resolved, error) {
+	if strings.TrimSpace(s.cfg.Location) != "" {
+		return config.ResolveLocation(s.cfg.Location)
+	}
+	return config.ResolveURL()
+}
+
 func (s *LocalService) Status(ctx context.Context) (StatusResponse, error) {
-	resolved, err := config.ResolveURL()
+	resolved, err := s.resolvedLocation()
 	if err != nil {
 		return StatusResponse{}, err
 	}
@@ -1090,7 +1097,7 @@ func (s *LocalService) openDB() (*sql.DB, error) {
 	if s.db != nil {
 		return s.db, nil
 	}
-	resolved, err := config.ResolveURL()
+	resolved, err := s.resolvedLocation()
 	if err != nil {
 		return nil, err
 	}

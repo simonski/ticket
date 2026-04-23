@@ -43,8 +43,22 @@ type Config struct {
 	DeleteConfirmTicket  string `json:"delete_confirm_ticket,omitempty"`
 }
 
+type RemoteCredentials struct {
+	Username string `json:"username,omitempty"`
+	Token    string `json:"token,omitempty"`
+}
+
 type Credentials struct {
-	Token string `json:"token"`
+	// Legacy single-token field kept for backward compatibility.
+	Token string `json:"token,omitempty"`
+
+	Remotes map[string]RemoteCredentials `json:"remotes,omitempty"`
+}
+
+type projectDiskConfig struct {
+	Version int    `json:"version,omitempty"`
+	Backend string `json:"backend,omitempty"`
+	Config
 }
 
 func envValue(name string) string {
@@ -69,31 +83,27 @@ func HasRemoteEnvOverride() bool {
 	return err == nil && resolved.Mode == ModeRemote
 }
 
-// ResolveURL determines mode and target from the Location field in config.json.
-//
-//	/abs/path/to/ticket.db     → local mode
-//	file:///path/to/ticket.db  → local mode
-//	http(s)://host             → remote mode
-//	(empty)                    → local mode, DBPath = <Home()>/ticket.db
+// ResolveURL determines mode and target from the effective config.
 func ResolveURL() (Resolved, error) {
 	if HasLocationEnvOverride() {
 		return ResolveLocation(envValue("TICKET_URL"))
 	}
-	cfg, _ := Load()
+	cfg, err := Load()
+	if err != nil {
+		return Resolved{}, err
+	}
 	return ResolveLocation(cfg.Location)
 }
 
 // ResolveLocation parses a location string into a Resolved struct.
-// This is the core logic, separated so callers with an already-loaded config
-// can avoid re-reading the file.
 func ResolveLocation(location string) (Resolved, error) {
 	location = strings.TrimSpace(location)
 	if location == "" {
-		home, err := Home()
+		dbPath, err := LocalDBPath()
 		if err != nil {
 			return Resolved{}, err
 		}
-		return Resolved{Mode: ModeLocal, DBPath: filepath.Join(home, "ticket.db")}, nil
+		return Resolved{Mode: ModeLocal, DBPath: dbPath}, nil
 	}
 	u, err := url.Parse(location)
 	if err != nil {
@@ -108,7 +118,6 @@ func ResolveLocation(location string) (Resolved, error) {
 		if filepath.IsAbs(location) {
 			return Resolved{Mode: ModeLocal, DBPath: location}, nil
 		}
-		// No scheme — treat relative paths as living under the .ticket/ directory.
 		home, err := Home()
 		if err != nil {
 			return Resolved{}, err
@@ -120,92 +129,54 @@ func ResolveLocation(location string) (Resolved, error) {
 }
 
 func Load() (Config, error) {
-	path, err := Path()
+	globalPath, err := Path()
+	if err != nil {
+		return Config{}, err
+	}
+	globalCfg, err := loadConfigFile(globalPath)
 	if err != nil {
 		return Config{}, err
 	}
 
-	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from the application config directory, not user input
-	if errors.Is(err, os.ErrNotExist) {
-		return Config{}, nil
-	}
+	cfg := globalCfg
+	projectPath, hasProject, err := ProjectPath()
 	if err != nil {
 		return Config{}, err
+	}
+	if hasProject {
+		projectCfg, err := loadConfigFile(projectPath)
+		if err != nil {
+			return Config{}, err
+		}
+		if strings.TrimSpace(projectCfg.Location) != "" {
+			cfg.Location = projectCfg.Location
+		}
+		if strings.TrimSpace(cfg.ProjectID) == "" {
+			cfg.ProjectID = projectCfg.ProjectID
+		}
+		cfg.CurrentEpicID = projectCfg.CurrentEpicID
+		cfg.DeleteConfirmToken = projectCfg.DeleteConfirmToken
+		cfg.DeleteConfirmProject = projectCfg.DeleteConfirmProject
+		cfg.DeleteConfirmTicket = projectCfg.DeleteConfirmTicket
 	}
 
-	// Use a raw map to handle type migrations (e.g. current_epic_id changed from int to string).
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: config.json is not valid JSON (%v); using defaults\n", err)
-		return Config{}, nil
-	}
-	// Fix current_epic_id: if stored as a number (legacy), convert to string.
-	if v, ok := raw["current_epic_id"]; ok {
-		s := strings.TrimSpace(string(v))
-		if s != "" && s[0] != '"' {
-			// It's a number literal (e.g. 0 or 42); wrap as string. Treat 0 as empty.
-			if s == "0" {
-				raw["current_epic_id"] = json.RawMessage(`""`)
-			} else {
-				raw["current_epic_id"] = json.RawMessage(`"` + s + `"`)
-			}
-		}
-	}
-	// Fix tui_expanded_epics: if stored as int array (legacy), convert to string array.
-	if v, ok := raw["tui_expanded_epics"]; ok {
-		s := strings.TrimSpace(string(v))
-		if len(s) > 0 && s[0] == '[' {
-			var items []json.RawMessage
-			if json.Unmarshal(v, &items) == nil {
-				converted := make([]string, 0, len(items))
-				for _, item := range items {
-					is := strings.TrimSpace(string(item))
-					if len(is) > 0 && is[0] == '"' {
-						var sv string
-						json.Unmarshal(item, &sv) // #nosec G104 -- best-effort unmarshal; invalid items are skipped
-						converted = append(converted, sv)
-					} else {
-						converted = append(converted, strings.Trim(is, " "))
-					}
-				}
-				if b, err := json.Marshal(converted); err == nil {
-					raw["tui_expanded_epics"] = json.RawMessage(b)
-				}
-			}
-		}
-	}
-	fixedData, err := json.Marshal(raw)
-	if err != nil {
-		return Config{}, err
-	}
-	var cfg Config
-	if err := json.Unmarshal(fixedData, &cfg); err != nil {
-		// Some field has an unexpected type. Strip invalid fields and warn.
-		cleaned, removed := removeInvalidFields(raw)
-		if len(removed) > 0 {
-			fmt.Fprintf(os.Stderr, "warning: config.json has invalid values for %v; resetting those fields\n", removed)
-		}
-		cleanData, merr := json.Marshal(cleaned)
-		if merr != nil {
-			return Config{}, merr
-		}
-		if merr := json.Unmarshal(cleanData, &cfg); merr != nil {
-			// Still broken — return empty config rather than failing.
-			fmt.Fprintf(os.Stderr, "warning: config.json could not be parsed (%v); using defaults\n", merr)
-			cfg = Config{}
-		}
-		// Persist the fixed config so future invocations are clean.
-		if saveErr := saveRaw(path, cleaned); saveErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not save fixed config.json: %v\n", saveErr)
-		}
-	}
 	creds, err := LoadCredentials()
 	if err != nil {
 		return Config{}, err
 	}
-	cfg.Token = creds.Token
+	if resolved, rErr := ResolveLocation(cfg.Location); rErr == nil && resolved.Mode == ModeRemote {
+		if remote, ok := creds.Remote(cfg.Location); ok {
+			if strings.TrimSpace(cfg.Username) == "" {
+				cfg.Username = remote.Username
+			}
+			cfg.Token = remote.Token
+		} else {
+			cfg.Token = creds.Token
+		}
+	}
 	if HasLocationEnvOverride() {
 		cfg.Location = envValue("TICKET_URL")
+		cfg.Token = ""
 	}
 	if HasRemoteEnvOverride() {
 		cfg.Username = envValue("TICKET_USERNAME")
@@ -216,22 +187,46 @@ func Load() (Config, error) {
 }
 
 func Save(cfg Config) error {
-	path, err := Path()
+	globalPath, err := Path()
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o750); err != nil {
 		return err
+	}
+
+	projectPath, hasProject, err := ProjectPath()
+	if err != nil {
+		return err
+	}
+	if hasProject {
+		projectCfg, err := loadConfigFile(projectPath)
+		if err != nil {
+			return err
+		}
+		projectCfg.CurrentEpicID = cfg.CurrentEpicID
+		projectCfg.DeleteConfirmToken = cfg.DeleteConfirmToken
+		projectCfg.DeleteConfirmProject = cfg.DeleteConfirmProject
+		projectCfg.DeleteConfirmTicket = cfg.DeleteConfirmTicket
+		if err := saveProjectConfig(projectPath, projectCfg); err != nil {
+			return err
+		}
 	}
 
 	saved := cfg
 	saved.Token = ""
+	if hasProject {
+		saved.CurrentEpicID = ""
+		saved.DeleteConfirmToken = ""
+		saved.DeleteConfirmProject = ""
+		saved.DeleteConfirmTicket = ""
+	}
 
 	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return os.WriteFile(globalPath, data, 0o600)
 }
 
 func LoadCredentials() (Credentials, error) {
@@ -240,7 +235,7 @@ func LoadCredentials() (Credentials, error) {
 		return Credentials{}, err
 	}
 
-	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from the application config directory, not user input
+	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from application state
 	if errors.Is(err, os.ErrNotExist) {
 		return Credentials{}, nil
 	}
@@ -252,7 +247,18 @@ func LoadCredentials() (Credentials, error) {
 	if err := json.Unmarshal(data, &creds); err != nil {
 		return Credentials{}, err
 	}
+	if creds.Remotes == nil {
+		creds.Remotes = map[string]RemoteCredentials{}
+	}
 	return creds, nil
+}
+
+func (c Credentials) Remote(location string) (RemoteCredentials, bool) {
+	if c.Remotes == nil {
+		return RemoteCredentials{}, false
+	}
+	remote, ok := c.Remotes[strings.TrimSpace(location)]
+	return remote, ok
 }
 
 func SaveCredentials(creds Credentials) error {
@@ -270,6 +276,29 @@ func SaveCredentials(creds Credentials) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
+func SaveRemoteCredentials(location, username, token string) error {
+	creds, err := LoadCredentials()
+	if err != nil {
+		return err
+	}
+	if creds.Remotes == nil {
+		creds.Remotes = map[string]RemoteCredentials{}
+	}
+	location = strings.TrimSpace(location)
+	if location == "" {
+		creds.Token = token
+		return SaveCredentials(creds)
+	}
+	creds.Remotes[location] = RemoteCredentials{
+		Username: strings.TrimSpace(username),
+		Token:    strings.TrimSpace(token),
+	}
+	if creds.Token == "" {
+		creds.Token = strings.TrimSpace(token)
+	}
+	return SaveCredentials(creds)
+}
+
 func ClearCredentials() error {
 	path, err := CredentialsPath()
 	if err != nil {
@@ -281,7 +310,26 @@ func ClearCredentials() error {
 	return nil
 }
 
-// Path returns the path to the config file ($TICKET_HOME/config.json).
+func ClearRemoteCredentials(location string) error {
+	location = strings.TrimSpace(location)
+	if location == "" {
+		return ClearCredentials()
+	}
+	creds, err := LoadCredentials()
+	if err != nil {
+		return err
+	}
+	if creds.Remotes == nil {
+		return nil
+	}
+	delete(creds.Remotes, location)
+	if len(creds.Remotes) == 0 {
+		return ClearCredentials()
+	}
+	return SaveCredentials(creds)
+}
+
+// Path returns the path to the global config file ($TICKET_HOME/config.json).
 func Path() (string, error) {
 	home, err := Home()
 	if err != nil {
@@ -298,23 +346,68 @@ func CredentialsPath() (string, error) {
 	return filepath.Join(home, "credentials.json"), nil
 }
 
-// Home returns the ticket home directory used for config and (in local mode) the database.
-// Resolution order:
-//  1. $TICKET_HOME if set
-//  2. Walk up from CWD looking for .git/, then use .ticket/ as a sibling
-//  3. ${CWD}/.ticket (default fallback, may not yet exist)
+func LocalDBPath() (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "ticket.db"), nil
+}
+
+// Home returns the global Ticket home directory used for credentials,
+// global config, and the central local database.
 func Home() (string, error) {
 	if dir := envValue("TICKET_HOME"); dir != "" {
 		return dir, nil
 	}
-	cwd, err := os.Getwd()
+	userHome, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	if gitRoot, ok := FindGitRoot(cwd); ok {
-		return filepath.Join(gitRoot, ".ticket"), nil
+	return filepath.Join(userHome, ".ticket"), nil
+}
+
+// ProjectPath returns the nearest project-local .ticket/config.json path.
+func ProjectPath() (string, bool, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false, err
 	}
-	return filepath.Join(cwd, ".ticket"), nil
+	return ProjectPathFrom(cwd)
+}
+
+func ProjectPathFrom(startDir string) (string, bool, error) {
+	root, ok := FindTicketRoot(startDir)
+	if !ok {
+		return "", false, nil
+	}
+	return ProjectPathAtRoot(root), true, nil
+}
+
+func ProjectPathAtRoot(root string) string {
+	return filepath.Join(root, ".ticket", "config.json")
+}
+
+func SaveProjectConfigAt(root string, cfg Config) error {
+	return saveProjectConfig(ProjectPathAtRoot(root), cfg)
+}
+
+// FindTicketRoot walks up the directory tree from startDir looking for a
+// .ticket directory. Returns the parent of .ticket/.
+func FindTicketRoot(startDir string) (string, bool) {
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, ".ticket")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
 }
 
 // FindGitRoot walks up the directory tree from startDir looking for a .git
@@ -336,13 +429,111 @@ func FindGitRoot(startDir string) (string, bool) {
 	return "", false
 }
 
+func loadConfigFile(path string) (Config, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is resolved from application state
+	if errors.Is(err, os.ErrNotExist) {
+		return Config{}, nil
+	}
+	if err != nil {
+		return Config{}, err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: config at %s is not valid JSON (%v); using defaults\n", path, err)
+		return Config{}, nil
+	}
+	if v, ok := raw["current_epic_id"]; ok {
+		s := strings.TrimSpace(string(v))
+		if s != "" && s[0] != '"' {
+			if s == "0" {
+				raw["current_epic_id"] = json.RawMessage(`""`)
+			} else {
+				raw["current_epic_id"] = json.RawMessage(`"` + s + `"`)
+			}
+		}
+	}
+	if v, ok := raw["tui_expanded_epics"]; ok {
+		s := strings.TrimSpace(string(v))
+		if len(s) > 0 && s[0] == '[' {
+			var items []json.RawMessage
+			if json.Unmarshal(v, &items) == nil {
+				converted := make([]string, 0, len(items))
+				for _, item := range items {
+					is := strings.TrimSpace(string(item))
+					if len(is) > 0 && is[0] == '"' {
+						var sv string
+						_ = json.Unmarshal(item, &sv)
+						converted = append(converted, sv)
+					} else {
+						converted = append(converted, strings.Trim(is, " "))
+					}
+				}
+				if b, err := json.Marshal(converted); err == nil {
+					raw["tui_expanded_epics"] = json.RawMessage(b)
+				}
+			}
+		}
+	}
+	fixedData, err := json.Marshal(raw)
+	if err != nil {
+		return Config{}, err
+	}
+	var cfg Config
+	if err := json.Unmarshal(fixedData, &cfg); err != nil {
+		cleaned, removed := removeInvalidFields(raw)
+		if len(removed) > 0 {
+			fmt.Fprintf(os.Stderr, "warning: config at %s has invalid values for %v; resetting those fields\n", path, removed)
+		}
+		cleanData, merr := json.Marshal(cleaned)
+		if merr != nil {
+			return Config{}, merr
+		}
+		if merr := json.Unmarshal(cleanData, &cfg); merr != nil {
+			fmt.Fprintf(os.Stderr, "warning: config at %s could not be parsed (%v); using defaults\n", path, merr)
+			cfg = Config{}
+		}
+		if saveErr := saveRaw(path, cleaned); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not save fixed config at %s: %v\n", path, saveErr)
+		}
+	}
+	return cfg, nil
+}
+
+func saveProjectConfig(path string, cfg Config) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	disk := projectDiskConfig{
+		Version: 1,
+		Config: Config{
+			ProjectID:            cfg.ProjectID,
+			CurrentEpicID:        cfg.CurrentEpicID,
+			DeleteConfirmToken:   cfg.DeleteConfirmToken,
+			DeleteConfirmProject: cfg.DeleteConfirmProject,
+			DeleteConfirmTicket:  cfg.DeleteConfirmTicket,
+		},
+	}
+	resolved, err := ResolveLocation(cfg.Location)
+	if err == nil {
+		disk.Backend = resolved.Mode
+		if resolved.Mode == ModeRemote {
+			disk.Location = strings.TrimSpace(cfg.Location)
+		}
+	}
+	data, err := json.MarshalIndent(disk, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
 // removeInvalidFields tries removing fields from raw one at a time until the
 // map can be unmarshalled into Config without error. Returns the cleaned map
 // and the names of fields that were removed.
 func removeInvalidFields(raw map[string]json.RawMessage) (map[string]json.RawMessage, []string) {
 	var removed []string
 	for key := range raw {
-		// Build a candidate map without this key.
 		candidate := make(map[string]json.RawMessage, len(raw))
 		for k, v := range raw {
 			if k != key {
@@ -355,7 +546,6 @@ func removeInvalidFields(raw map[string]json.RawMessage) (map[string]json.RawMes
 		}
 		var cfg Config
 		if err := json.Unmarshal(data, &cfg); err == nil {
-			// Removing this key fixed the parse — keep it removed.
 			removed = append(removed, key)
 			raw = candidate
 		}
@@ -366,7 +556,6 @@ func removeInvalidFields(raw map[string]json.RawMessage) (map[string]json.RawMes
 // saveRaw writes a raw map back to the config file as indented JSON,
 // preserving only the data that's already been validated.
 func saveRaw(path string, raw map[string]json.RawMessage) error {
-	// Strip token from persisted config.
 	cleaned := make(map[string]json.RawMessage, len(raw))
 	for k, v := range raw {
 		if k != "token" {

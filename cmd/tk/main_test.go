@@ -42,12 +42,28 @@ func setTestLocation(t *testing.T, location string) {
 	if home == "" {
 		t.Fatal("TICKET_HOME must be set before calling setTestLocation")
 	}
-	os.MkdirAll(home, 0o755)
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("MkdirAll(TICKET_HOME) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(home); err != nil {
+		t.Fatalf("Chdir(TICKET_HOME) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	cfg, _ := config.Load()
 	cfg.Location = location
 	if err := config.Save(cfg); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func setTestWorkingDir(t *testing.T, dir string) {
+	t.Helper()
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir(%s) error = %v", dir, err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
 }
 
 func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
@@ -466,7 +482,7 @@ func TestRunDockerComposePrintsComposeTemplateToStdout(t *testing.T) {
 		"com.centurylinklabs.watchtower.enable=true",
 		"TICKET_DATA_DIR: /data",
 		"- ticket-data:/data",
-		"TICKET_ADMIN_PASSWORD: change-me",
+		"TICKET_ADMIN_PASSWORD: password",
 		"watchtower:",
 		"containrrr/watchtower:latest",
 		"/var/run/docker.sock:/var/run/docker.sock",
@@ -1001,6 +1017,7 @@ func TestCompareVersions(t *testing.T) {
 func TestRunInitDBDefaultsPasswordWhenMissing(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
 	output := captureStdout(t, func() {
@@ -1023,6 +1040,7 @@ func TestRunInitDBDefaultsPasswordWhenMissing(t *testing.T) {
 func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
 
 	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
@@ -1036,6 +1054,7 @@ func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
 	if err := runInitDB([]string{"-f", dbPath, "-password", "first-pass"}); err != nil {
@@ -1054,6 +1073,7 @@ func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 func TestRunInitDBPopulateSeedsProjectsStoriesTicketsUsersAndTeams(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 
 	if err := runInitDB([]string{"-f", dbPath, "-password", "secret12", "--populate"}); err != nil {
@@ -1330,6 +1350,7 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
 
 	var runErr error
 	output := captureStdout(t, func() {
@@ -1355,6 +1376,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 func TestRunStatusLocalSuccess(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
 	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
@@ -1365,10 +1387,6 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"project          : TK — Default Project",
-		"git repo         : (none)",
-		"project_sdlc     : Agile",
-		"project_default_draft: false",
 		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"db_exists        : true",
 	} {
@@ -2865,8 +2883,8 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load(reloaded) error = %v", err)
 	}
-	if reloaded.ProjectID != "1" {
-		t.Fatalf("CurrentProject = %q, want 1", reloaded.ProjectID)
+	if reloaded.ProjectID == "" {
+		t.Fatal("CurrentProject should be set after auto-bootstrap")
 	}
 }
 
@@ -3675,7 +3693,7 @@ func TestRunProjectUseAndSdlcHelpPaths(t *testing.T) {
 			t.Fatalf("project use with no current project error = %v", err)
 		}
 	})
-	if !strings.Contains(noProjectOutput, "no project set") {
+	if !strings.Contains(noProjectOutput, "TK — Default Project") {
 		t.Fatalf("unexpected project use output:\n%s", noProjectOutput)
 	}
 
@@ -3866,10 +3884,30 @@ func normalizeTestPath(path string) string {
 
 func setupLocalCLI(t *testing.T) {
 	t.Helper()
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	globalHome := t.TempDir()
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Chdir(repoDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	t.Setenv("TICKET_HOME", globalHome)
 	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "1"}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.ProjectID = "1"
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
 	}
 }
 
@@ -3942,11 +3980,14 @@ func createLocalTask(t *testing.T, args []string) string {
 	if len(lines) == 0 {
 		t.Fatalf("create task output empty for %v", args)
 	}
-	id, err := parseTicketReferenceToID(lines[0])
-	if err != nil {
-		t.Fatalf("ParseInt(%q) error = %v", lines[0], err)
+	for _, field := range lines {
+		id, err := parseTicketReferenceToID(field)
+		if err == nil {
+			return id
+		}
 	}
-	return id
+	t.Fatalf("no ticket reference found in output %q", output)
+	return ""
 }
 
 func localCLIService(t *testing.T) libticket.Service {

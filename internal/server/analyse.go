@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 )
 
@@ -58,9 +57,9 @@ func resolveAnalyseCommandArgs() []string {
 }
 
 func storyAnalyseProcessEnv() []string {
-	url := "https://ticket.exe.xyz"
-	if r, err := config.ResolveURL(); err == nil && r.Mode == config.ModeRemote {
-		url = r.ServerURL
+	url := strings.TrimSpace(os.Getenv("TICKET_URL"))
+	if url == "" {
+		url = "https://ticket.exe.xyz"
 	}
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	if username == "" {
