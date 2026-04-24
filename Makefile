@@ -1,4 +1,4 @@
-.PHONY: help default build build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-bin build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -58,6 +58,9 @@ help:
 build: 
 	@$(MAKE) bump-version
 	@$(MAKE) sync-openapi-version
+	@$(MAKE) build-bin
+
+build-bin:
 	@mkdir -p bin
 	go build -o ./bin/tk ./cmd/tk
 
@@ -111,7 +114,7 @@ backup-db:
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
 INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket
 
-test: test-unit test-integration test-playwright
+test: test-unit test-integration test-tk-test testscripts test-todo-example test-playwright
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
@@ -154,13 +157,13 @@ test-playwright:
 	npx playwright install chromium
 	npx playwright test
 
-test-tk-test: build
+test-tk-test: build-bin
 	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
-test-todo-example: build
+test-todo-example: build-bin
 	./scripts/verify_todo_example.sh
 
-testscripts: build
+testscripts: build-bin
 	./scripts/testharness.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────

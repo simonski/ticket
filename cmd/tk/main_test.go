@@ -1051,6 +1051,28 @@ func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 	}
 }
 
+func TestRunInitDBCommandRespectsExplicitFPath(t *testing.T) {
+	tempDir := t.TempDir()
+	homeDir := filepath.Join(tempDir, "home")
+	workDir := filepath.Join(tempDir, "repo")
+	dbPath := filepath.Join(tempDir, "custom.db")
+	t.Setenv("TICKET_HOME", homeDir)
+	if err := os.MkdirAll(filepath.Join(workDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	setTestWorkingDir(t, workDir)
+
+	if err := run([]string{"initdb", "-f", dbPath, "-password", "secret12"}); err != nil {
+		t.Fatalf("run(initdb -f) error = %v", err)
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("expected explicit db at %s: %v", dbPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, "ticket.db")); !os.IsNotExist(err) {
+		t.Fatalf("default ticket.db should not be created when -f is explicit, err = %v", err)
+	}
+}
+
 func TestRunInitDBForceOverwritesExistingDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)

@@ -281,6 +281,35 @@ func TestLoadUsesEnvLocationOverrideWithoutRemoteCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadUsesStoredRemoteCredentialsWithEnvLocationOverride(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+	if err := SaveCredentials(Credentials{
+		Remotes: map[string]RemoteCredentials{
+			"https://tickets.example.com": {Username: "alice", Token: "stored-token"},
+		},
+	}); err != nil {
+		t.Fatalf("SaveCredentials() error = %v", err)
+	}
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != "https://tickets.example.com" {
+		t.Fatalf("Load().Location = %q, want env URL", cfg.Location)
+	}
+	if cfg.Username != "alice" {
+		t.Fatalf("Load().Username = %q, want alice", cfg.Username)
+	}
+	if cfg.Token != "stored-token" {
+		t.Fatalf("Load().Token = %q, want stored-token", cfg.Token)
+	}
+}
+
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
 

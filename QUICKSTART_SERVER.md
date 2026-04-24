@@ -6,12 +6,12 @@ board, WebSocket live updates, and AI agent support.
 ## 1. Initialise and start the server
 
 ```bash
-tk init
+tk initdb
 tk server
 ```
 
-In the first terminal, choose **Local mode** during `tk init` so the server has
-its local SQLite database. Save the generated `admin` password.
+In the first terminal, `tk initdb` creates the shared local database at
+`$TICKET_HOME/ticket.db` and bootstraps `admin` / `password`.
 
 The web UI is available at `http://localhost:8080`. Leave the server running
 and open a second terminal for the steps below.
@@ -19,7 +19,7 @@ and open a second terminal for the steps below.
 ### Docker deployment
 
 The repository also includes a container entrypoint and compose file that run
-Ticket as a persistent server backed by a Docker volume:
+Ticket as a persistent server backed by a bind-mounted `./data` directory:
 
 ```bash
 docker compose -f deploy/compose.yaml up -d
@@ -34,8 +34,8 @@ On first boot the container:
 3. prints `admin password: ...` to stdout once
 4. starts `tk server -f /data/ticket.db -addr 0.0.0.0:8080`
 
-The SQLite database lives in the `ticket-data` Docker volume, so it survives
-container restarts and image upgrades.
+The SQLite database lives in `./data/ticket.db`, so it survives container
+restarts and image upgrades.
 
 If you want the compose YAML generated directly from the Ticket binary, run
 `tk docker-compose`.
@@ -47,20 +47,21 @@ the server with:
 tk server -site site2
 ```
 
-## 2. Register and log in
+## 2. Configure the CLI for the running server
 
-Point the CLI at the running server and create your account:
+Point the CLI at the running server and use the bootstrap admin credentials:
 
 ```bash
 export TICKET_URL=http://localhost:8080
-
-tk register -username alice -password secret12
-tk login    -username alice -password secret12
+tk login -username admin -password password
+tk whoami
 ```
 
 ## 3. Create a project
 
 ```bash
+export TICKET_URL=http://localhost:8080
+
 tk project create -prefix CUS -title "Customer Portal"
 tk project use CUS
 ```
@@ -68,6 +69,8 @@ tk project use CUS
 ## 4. Capture and organise work
 
 ```bash
+export TICKET_URL=http://localhost:8080
+
 tk add  "Customers can reset their password"
 tk bug  "Reset token expires immediately"
 tk epic "Authentication"
@@ -79,12 +82,16 @@ tk list
 Tickets progress through stages: **design -> develop -> test -> done**.
 
 ```bash
+export TICKET_URL=http://localhost:8080
+
 tk complete -id CUS-1
 ```
 
 ## 6. Claim and request work
 
 ```bash
+export TICKET_URL=http://localhost:8080
+
 tk request
 ```
 

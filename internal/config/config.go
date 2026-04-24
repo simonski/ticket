@@ -159,6 +159,9 @@ func Load() (Config, error) {
 		cfg.DeleteConfirmProject = projectCfg.DeleteConfirmProject
 		cfg.DeleteConfirmTicket = projectCfg.DeleteConfirmTicket
 	}
+	if HasLocationEnvOverride() {
+		cfg.Location = envValue("TICKET_URL")
+	}
 
 	creds, err := LoadCredentials()
 	if err != nil {
@@ -173,10 +176,6 @@ func Load() (Config, error) {
 		} else {
 			cfg.Token = creds.Token
 		}
-	}
-	if HasLocationEnvOverride() {
-		cfg.Location = envValue("TICKET_URL")
-		cfg.Token = ""
 	}
 	if HasRemoteEnvOverride() {
 		cfg.Username = envValue("TICKET_USERNAME")

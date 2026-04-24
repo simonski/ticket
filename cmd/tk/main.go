@@ -61,12 +61,16 @@ func run(args []string) error {
 	var guiTheme string
 	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
 	explicitServerDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "server" && dbOverride != ""
+	explicitInitDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "initdb" && dbOverride != ""
 	envLocationOverride := config.HasLocationEnvOverride()
 	if explicitServerDB {
 		trimmedArgs = append([]string{"server", "-f", dbOverride}, trimmedArgs[1:]...)
 	}
+	if explicitInitDB {
+		trimmedArgs = append([]string{"initdb", "-f", dbOverride}, trimmedArgs[1:]...)
+	}
 	// -f /path/to/dir (or db file) sets the active local location for this run.
-	if dbOverride != "" && !explicitServerDB {
+	if dbOverride != "" && !explicitServerDB && !explicitInitDB {
 		absPath, pathErr := filepath.Abs(dbOverride)
 		if pathErr != nil {
 			return pathErr
@@ -106,7 +110,7 @@ func run(args []string) error {
 
 	// Commands that don't require an initialised project binding.
 	noInitRequired := map[string]bool{
-		"init": true, "initdb": true, "setup": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true,
+		"init": true, "initdb": true, "setup": true, "server": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true,
 		"login": true, "logout": true, "register": true, "status": true,
 	}
 	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "init" {
