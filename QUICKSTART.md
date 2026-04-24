@@ -6,9 +6,9 @@
 brew install simonski/tap/ticket
 ```
 
-Installs both `ticket` and the alias `tk`.
+Installs the binary as `tk`.
 
-Or download a binary for your platform from the [releases page](https://github.com/simonski/ticket/releases).
+Or, download a binary for your platform from the [releases page](https://github.com/simonski/ticket/releases).
 
 ---
 
@@ -18,12 +18,17 @@ Or download a binary for your platform from the [releases page](https://github.c
 
 ### [Local mode](QUICKSTART_CLIENT.md)
 
-Everything runs on your machine using a SQLite file. No server needed.  No env vars, almost no setup.
+In local mode, the client talks to SQLite directly. No server needed.
+`tk initdb` creates the shared local database at `$TICKET_HOME/ticket.db`
+(default `~/.ticket/ticket.db`), and `tk init` binds the current repo or
+directory by writing `.ticket/config.json`.
 Best for solo use, small projects, or getting started quickly.
 
 ```bash
-# initialise a ticket database and config file under ${CWD}/.ticket
-# choose Local mode when prompted
+# create the shared local database once
+tk initdb
+
+# bind this repo/directory to a project
 tk init
 tk add "First ticket"
 tk list
@@ -35,15 +40,14 @@ Run an HTTP server with multi-user auth, a web Kanban board, WebSocket live
 updates, and AI agent support. Best for teams, shared backlogs, and CI/CD.
 
 ```bash
-# initialise a ticket database and config file under ${CWD}/.ticket
-# choose Local mode when prompted so the server has a local database
-tk init
+# create the shared local database once
+tk initdb
 
-# run a server
+# now run the server
 tk server
 ```
 
-### Access the server in another terminal and register a user
+### Access a remote server 
 
 ```bash
 export TICKET_URL=http://localhost:8080
@@ -148,7 +152,8 @@ and `file:///...` keep the CLI in local mode; `http(s)://...` switches to
 client/server mode.
 
 When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
-values take precedence over local `.ticket/config.json` and credentials.
+values take precedence over repo-local `.ticket/config.json` and the stored
+credentials in `$TICKET_HOME/credentials.json`.
 
 In that env-trio mode, client commands do not require `tk init`.
 `tk login` is optional in that mode because remote calls auto-authenticate.

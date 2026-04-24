@@ -11,7 +11,19 @@ if [[ ! -x "$TK_BIN" ]]; then
 	exit 1
 fi
 
-unset TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+
+if [[ ! -f .ticket/config.json ]]; then
+	"$TK_BIN" initdb >/dev/null
+	"$TK_BIN" project init -prefix DEMO -title demo >/dev/null
+fi
+
+if ! "$TK_BIN" project use DEMO >/dev/null 2>&1; then
+	project_id="$("$TK_BIN" project create -prefix DEMO -title "demo" -description "Example todo application planning workspace" -git-repository https://github.com/example/todo-app -printid)"
+	"$TK_BIN" project use "$project_id" >/dev/null
+else
+	project_id="DEMO"
+fi
 
 status_json="$("$TK_BIN" -json status)"
 config_file="$(printf '%s\n' "$status_json" | sed -nE 's/.*"config_file": "([^"]+)".*/\1/p')"
@@ -22,13 +34,6 @@ if [[ -z "$config_file" ]]; then
 fi
 config_dir="$(dirname "$config_file")"
 manifest_file="$config_dir/demo-example.env"
-
-if ! "$TK_BIN" project use DEMO >/dev/null 2>&1; then
-	project_id="$("$TK_BIN" project create -prefix DEMO -title "demo" -description "Example todo application planning workspace" -git-repository https://github.com/example/todo-app -printid)"
-	"$TK_BIN" project use "$project_id" >/dev/null
-else
-	project_id="DEMO"
-fi
 
 extract_numeric_id() {
 	local text="$1"

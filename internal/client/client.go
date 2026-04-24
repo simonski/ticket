@@ -25,6 +25,7 @@ type Client struct {
 	token   string
 	http    *http.Client
 	mode    string
+	localDBPath string
 
 	localDBMu sync.Mutex
 	localDB   *sql.DB
@@ -47,7 +48,8 @@ func New(cfg config.Config) *Client {
 			Timeout:   timeout,
 			Transport: newHTTPTransport(),
 		},
-		mode: resolved.Mode,
+		mode:        resolved.Mode,
+		localDBPath: resolved.DBPath,
 	}
 }
 
@@ -111,11 +113,7 @@ func (c *Client) Logout(ctx context.Context) error {
 
 func (c *Client) Status(ctx context.Context) (StatusResponse, error) {
 	if c.mode == config.ModeLocal {
-		resolved, err := config.ResolveURL()
-		if err != nil {
-			return StatusResponse{}, err
-		}
-		if _, err := os.Stat(resolved.DBPath); err != nil {
+		if _, err := os.Stat(c.localDBPath); err != nil {
 			return StatusResponse{}, err
 		}
 		db, err := c.openLocalDB()

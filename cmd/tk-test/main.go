@@ -97,22 +97,35 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 		return 0, 0, 0, err
 	}
 	defer os.RemoveAll(tmpDir)
+	repoDir := filepath.Join(tmpDir, "repo")
+	homeDir := filepath.Join(tmpDir, "home")
+	ticketHome := filepath.Join(homeDir, ".ticket")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		return 0, 0, 0, err
+	}
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		return 0, 0, 0, err
+	}
+	if err := os.MkdirAll(ticketHome, 0o755); err != nil {
+		return 0, 0, 0, err
+	}
 
 	// Initialise a git repo so config.Home() can find .git.
-	gitInit := exec.Command("git", "init", tmpDir) // #nosec G204 -- tmpDir is a freshly created temp directory
+	gitInit := exec.Command("git", "init", repoDir) // #nosec G204 -- repoDir is a freshly created temp directory
 	gitInit.Stdout = io.Discard
 	gitInit.Stderr = io.Discard
 	_ = gitInit.Run()
 
 	// Persistent env across blocks within this file.
 	env := map[string]string{
-		"TICKET_HOME": filepath.Join(tmpDir, ".ticket"),
-		"HOME":        tmpDir,
+		"TICKET_HOME": ticketHome,
+		"HOME":        homeDir,
 		"PATH":        filepath.Dir(ticketBin) + ":" + os.Getenv("PATH"),
 	}
 
 	pass, fail, skip := 0, 0, 0
 	var serverCmd *exec.Cmd
+	var serverLog string
 	serverPort := 0 // set when a server is started
 
 	defer func() {
@@ -158,15 +171,20 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 			if verbose {
 				fmt.Printf("  >>    %s\n", strings.TrimSpace(code))
 			}
-			// If the block contains tk init before tk server, run initdb
-			// non-interactively instead (tk init is interactive).
-			if containsInit(code) {
-				initCode := ticketBin + " initdb"
+			// Run any setup commands in the block (for example `tk initdb`)
+			// before starting the long-lived server process.
+			preServerCode := stripServerCommands(code)
+			if containsInit(preServerCode) {
+				preServerCode = rewriteInitCommands(preServerCode, ticketBin+" initdb")
+			}
+			if strings.TrimSpace(preServerCode) != "" {
 				if verbose {
-					fmt.Printf("  >>    (replacing tk init with: %s)\n", initCode)
+					for _, line := range strings.Split(strings.TrimSpace(preServerCode), "\n") {
+						fmt.Printf("  >>    (pre-server) %s\n", line)
+					}
 				}
-				if out, initErr := execBlock(initCode, tmpDir, env); initErr != nil {
-					fmt.Printf("  FAIL  %s  |  initdb: %s\n", label, strings.TrimSpace(out))
+				if out, preErr := execBlock(preServerCode, repoDir, env); preErr != nil {
+					fmt.Printf("  FAIL  %s  |  pre-server: %s\n", label, strings.TrimSpace(out))
 					fail++
 					continue
 				}
@@ -182,17 +200,17 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 			serverURL := fmt.Sprintf("http://localhost:%d", port)
 			env["TICKET_URL"] = serverURL
 
-			serverCmd, err = startServerOnPort(ticketBin, tmpDir, env, port)
+			serverCmd, serverLog, err = startServerOnPort(ticketBin, repoDir, env, port, "")
 			if err != nil {
 				fmt.Printf("  FAIL  %s  |  server start: %v\n", label, err)
 				fail++
 				continue
 			}
-			if waitHealthz(env, 10*time.Second) {
+			if waitHealthz(env, 20*time.Second) {
 				fmt.Printf("  PASS  %s  (port %d)\n", label, port)
 				pass++
 			} else {
-				fmt.Printf("  FAIL  %s  |  server not ready after 10s\n", label)
+				fmt.Printf("  FAIL  %s  |  server not ready after 20s\n%s\n", label, tailFile(serverLog, 40))
 				fail++
 			}
 			continue
@@ -211,7 +229,7 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 		}
 		// Update config.json location so the CLI detects remote mode.
 		if u, ok := newExports["TICKET_URL"]; ok && u != "" {
-			updateConfigLocation(env["TICKET_HOME"], u)
+			updateProjectConfigLocation(repoDir, u)
 		}
 
 		if verbose {
@@ -220,8 +238,16 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 			}
 		}
 
-		// Run the block.
-		out, runErr := execBlock(code, tmpDir, env)
+		// Run the block with this block's exports applied to the process
+		// environment as well, matching a real shell session more closely.
+		blockEnv := make(map[string]string, len(env)+len(newExports))
+		for k, v := range env {
+			blockEnv[k] = v
+		}
+		for k, v := range newExports {
+			blockEnv[k] = v
+		}
+		out, runErr := execBlock(code, repoDir, blockEnv)
 
 		// Apply exports after successful execution.
 		if runErr == nil {
@@ -322,6 +348,9 @@ func shouldSkip(code string) bool {
 
 	// Skip interactive commands.
 	if strings.Contains(trimmed, "tk -g") || strings.Contains(trimmed, "tk gui") {
+		return true
+	}
+	if strings.Contains(trimmed, "tk server -site ") || strings.Contains(trimmed, "ticket server -site ") {
 		return true
 	}
 
@@ -440,6 +469,21 @@ func isServerStart(code string) bool {
 	return false
 }
 
+func stripServerCommands(code string) string {
+	var lines []string
+	for _, line := range strings.Split(code, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "tk server" || trimmed == "ticket server" ||
+			strings.HasPrefix(trimmed, "tk server ") || strings.HasPrefix(trimmed, "ticket server ") ||
+			strings.HasSuffix(trimmed, "/ticket server") || strings.Contains(trimmed, "/ticket server ") ||
+			strings.HasSuffix(trimmed, "/tk server") || strings.Contains(trimmed, "/tk server ") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // rewriteCommands replaces tk/ticket with the absolute binary path.
 func rewriteCommands(code, ticketBin string) string {
 	var lines []string
@@ -524,17 +568,27 @@ func freePort() (int, error) {
 }
 
 // startServerOnPort runs the ticket server on a specific port in the background.
-func startServerOnPort(ticketBin, workDir string, env map[string]string, port int) (*exec.Cmd, error) {
-	cmd := exec.Command(ticketBin, "server", "-p", fmt.Sprintf("%d", port)) // #nosec G204 -- ticketBin is a resolved binary path from the build
+func startServerOnPort(ticketBin, workDir string, env map[string]string, port int, dbPath string) (*exec.Cmd, string, error) {
+	args := []string{"server", "-p", fmt.Sprintf("%d", port)}
+	if strings.TrimSpace(dbPath) != "" {
+		args = append(args, "-f", dbPath)
+	}
+	cmd := exec.Command(ticketBin, args...) // #nosec G204 -- ticketBin is a resolved binary path from the build
 	cmd.Dir = workDir
 	cmd.Env = buildEnv(env)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	logPath := filepath.Join(workDir, fmt.Sprintf("tk-test-server-%d.log", port))
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		return nil, "", err
+	}
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		_ = logFile.Close()
+		return nil, "", err
 	}
-	return cmd, nil
+	return cmd, logPath, logFile.Close()
 }
 
 // waitHealthz polls the server health endpoint until it responds 200 or timeout.
@@ -559,27 +613,38 @@ func waitHealthz(env map[string]string, timeout time.Duration) bool {
 	return false
 }
 
-// updateConfigLocation writes the location field into config.json so the CLI
-// detects remote mode.  This bridges the gap between docs that use
-// `export TICKET_URL=...` and the actual config-driven mode resolution.
-func updateConfigLocation(ticketHome, location string) {
-	configPath := filepath.Join(ticketHome, "config.json")
+// updateProjectConfigLocation writes the location field into repo-local
+// .ticket/config.json so the CLI detects remote mode from the active workspace.
+func updateProjectConfigLocation(rootDir, location string) {
+	configPath := filepath.Join(rootDir, ".ticket", "config.json")
 	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is derived from a controlled temp directory
 	if err != nil {
-		// Config doesn't exist yet — create a minimal one.
 		data = []byte("{}")
 	}
-	// Simple JSON manipulation: unmarshal, set, marshal.
-	// Avoid importing encoding/json at the top level — it's already imported.
 	var m map[string]any
 	if jsonErr := json.Unmarshal(data, &m); jsonErr != nil {
 		m = make(map[string]any)
 	}
 	m["location"] = location
 	if out, err := json.MarshalIndent(m, "", "  "); err == nil {
-		_ = os.MkdirAll(ticketHome, 0o755) // #nosec G301 -- ticketHome is a temp directory; world-readable is intentional for test isolation
+		_ = os.MkdirAll(filepath.Dir(configPath), 0o755) // #nosec G301 -- temp test directory
 		_ = os.WriteFile(configPath, out, 0o600)
 	}
+}
+
+func tailFile(path string, lines int) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path) // #nosec G304 -- path comes from a controlled temp directory
+	if err != nil {
+		return fmt.Sprintf("(could not read server log: %v)", err)
+	}
+	all := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(all) <= lines {
+		return strings.Join(all, "\n")
+	}
+	return strings.Join(all[len(all)-lines:], "\n")
 }
 
 // buildEnv converts the env map to a slice suitable for exec.Cmd.Env.

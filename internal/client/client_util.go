@@ -33,11 +33,7 @@ func (c *Client) openLocalDB() (*sql.DB, error) {
 	if c.localDB != nil {
 		return c.localDB, nil
 	}
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return nil, err
-	}
-	db, err := store.Open(resolved.DBPath)
+	db, err := store.Open(c.localDBPath)
 	if err != nil {
 		return nil, err
 	}

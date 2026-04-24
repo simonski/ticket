@@ -7,9 +7,20 @@ import (
 	"testing"
 )
 
-func TestSaveLoadRoundTrip(t *testing.T) {
+func setupConfigTestHome(t *testing.T) string {
+	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Chdir(tempDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	return tempDir
+}
+
+func TestSaveLoadRoundTrip(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
 
 	cfg := Config{Location: "http://example.test:9000"}
 	if err := Save(cfg); err != nil {
@@ -47,8 +58,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestLoadMigratesLegacyEpicID(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	// Write config with numeric current_epic_id (legacy format)
 	configPath := filepath.Join(tempDir, "config.json")
@@ -65,8 +75,7 @@ func TestLoadMigratesLegacyEpicID(t *testing.T) {
 }
 
 func TestLoadMigratesLegacyEpicIDZero(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	configPath := filepath.Join(tempDir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{"current_epic_id": 0}`), 0o644); err != nil {
@@ -82,8 +91,7 @@ func TestLoadMigratesLegacyEpicIDZero(t *testing.T) {
 }
 
 func TestLoadMigratesLegacyExpandedEpics(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	configPath := filepath.Join(tempDir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{"tui_expanded_epics": [1, 2, 3]}`), 0o644); err != nil {
@@ -99,8 +107,7 @@ func TestLoadMigratesLegacyExpandedEpics(t *testing.T) {
 }
 
 func TestLoadMissingFile(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	setupConfigTestHome(t)
 
 	cfg, err := Load()
 	if err != nil {
@@ -112,8 +119,7 @@ func TestLoadMissingFile(t *testing.T) {
 }
 
 func TestResolveURLDefaultsToLocal(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -128,8 +134,7 @@ func TestResolveURLDefaultsToLocal(t *testing.T) {
 }
 
 func TestResolveURLHTTPScheme(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"http://localhost:8080"}`), 0o600)
 
 	resolved, err := ResolveURL()
@@ -145,8 +150,7 @@ func TestResolveURLHTTPScheme(t *testing.T) {
 }
 
 func TestResolveURLHTTPSScheme(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com"}`), 0o600)
 
 	resolved, err := ResolveURL()
@@ -162,8 +166,7 @@ func TestResolveURLHTTPSScheme(t *testing.T) {
 }
 
 func TestResolveURLFileScheme(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/test.db"}`), 0o600)
 
 	resolved, err := ResolveURL()
@@ -179,8 +182,7 @@ func TestResolveURLFileScheme(t *testing.T) {
 }
 
 func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"ftp://example.com"}`), 0o600)
 
 	if _, err := ResolveURL(); err == nil {
@@ -189,8 +191,7 @@ func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
 }
 
 func TestResolveURLUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
@@ -212,8 +213,7 @@ func TestResolveURLUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
 }
 
 func TestResolveURLUsesEnvLocationOverrideForLocalPath(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	localDB := filepath.Join(tempDir, "override.db")
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
@@ -234,8 +234,7 @@ func TestResolveURLUsesEnvLocationOverrideForLocalPath(t *testing.T) {
 }
 
 func TestLoadUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db","username":"local-user"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
@@ -263,8 +262,7 @@ func TestLoadUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
 }
 
 func TestLoadUsesEnvLocationOverrideWithoutRemoteCredentials(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com","username":"local-user"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
@@ -283,23 +281,44 @@ func TestLoadUsesEnvLocationOverrideWithoutRemoteCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadUsesStoredRemoteCredentialsWithEnvLocationOverride(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+	if err := SaveCredentials(Credentials{
+		Remotes: map[string]RemoteCredentials{
+			"https://tickets.example.com": {Username: "alice", Token: "stored-token"},
+		},
+	}); err != nil {
+		t.Fatalf("SaveCredentials() error = %v", err)
+	}
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != "https://tickets.example.com" {
+		t.Fatalf("Load().Location = %q, want env URL", cfg.Location)
+	}
+	if cfg.Username != "alice" {
+		t.Fatalf("Load().Username = %q, want alice", cfg.Username)
+	}
+	if cfg.Token != "stored-token" {
+		t.Fatalf("Load().Token = %q, want stored-token", cfg.Token)
+	}
+}
+
 func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
-
-	tempDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
 
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	// On macOS /var is a symlink to /private/var; resolve both sides for comparison.
-	resolvedTempDir, _ := filepath.EvalSymlinks(tempDir)
-	want := filepath.Join(resolvedTempDir, ".ticket")
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".ticket")
 	if got != want {
 		t.Fatalf("Home() = %q, want %q", got, want)
 	}
@@ -307,57 +326,27 @@ func TestHomeDefaultsToDotConfigTicket(t *testing.T) {
 
 func TestHomeWalksUpToFindDotTicket(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
-	root := t.TempDir()
-
-	// Create root/.git/ so Home() anchors on the project root
-	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// .ticket/ should be resolved as sibling of .git/
-	ticketHome := filepath.Join(root, ".ticket")
-	// Chdir to a deep subdirectory
-	deep := filepath.Join(root, "a", "b", "c")
-	if err := os.MkdirAll(deep, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(deep); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	// Resolve symlinks for macOS /private/var
-	resolvedTicketHome, _ := filepath.EvalSymlinks(ticketHome)
-	resolvedGot, _ := filepath.EvalSymlinks(got)
-	if resolvedGot != resolvedTicketHome {
-		t.Fatalf("Home() = %q, want %q", got, ticketHome)
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".ticket")
+	if got != want {
+		t.Fatalf("Home() = %q, want %q", got, want)
 	}
 }
 
 func TestHomeDefaultsToLocalDotTicketWhenNoneFound(t *testing.T) {
 	t.Setenv("TICKET_HOME", "")
-	tempDir := t.TempDir() // no .ticket dir here
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
 
 	got, err := Home()
 	if err != nil {
 		t.Fatalf("Home() error = %v", err)
 	}
-	// Resolve symlinks on the parent (the .ticket dir won't exist yet).
-	resolvedTempDir, _ := filepath.EvalSymlinks(tempDir)
-	want := filepath.Join(resolvedTempDir, ".ticket")
-	// Normalise got the same way.
-	resolvedParent, _ := filepath.EvalSymlinks(filepath.Dir(got))
-	resolvedGot := filepath.Join(resolvedParent, filepath.Base(got))
-	if resolvedGot != want {
+	homeDir, _ := os.UserHomeDir()
+	want := filepath.Join(homeDir, ".ticket")
+	if got != want {
 		t.Fatalf("Home() = %q, want %q", got, want)
 	}
 }
@@ -376,8 +365,7 @@ func TestHomeUsesTicketHome(t *testing.T) {
 }
 
 func TestCredentialsStoredSeparately(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	cfg := Config{Location: "http://example.test:9000", Username: "alice", Token: "sensitive"}
 	if err := Save(cfg); err != nil {
@@ -412,8 +400,7 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 }
 
 func TestLoadInvalidFieldTypeIsHealedAndSaved(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	// Write config where tui_cursor is an object instead of an int — invalid type.
 	configPath := filepath.Join(tempDir, "config.json")
@@ -444,8 +431,7 @@ func TestLoadInvalidFieldTypeIsHealedAndSaved(t *testing.T) {
 }
 
 func TestLoadInvalidJSONUsesDefaults(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
+	tempDir := setupConfigTestHome(t)
 
 	configPath := filepath.Join(tempDir, "config.json")
 	if err := os.WriteFile(configPath, []byte(`{not valid json`), 0o644); err != nil {

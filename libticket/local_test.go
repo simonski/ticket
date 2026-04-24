@@ -12,6 +12,10 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
+func localServiceConfig(dbPath string) config.Config {
+	return config.Config{Location: dbPath}
+}
+
 func TestLocalServiceContract(t *testing.T) {
 
 	RunServiceContractTests(t, func(t *testing.T) libticket.Service {
@@ -21,7 +25,7 @@ func TestLocalServiceContract(t *testing.T) {
 		if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
 			t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 		}
-		return libticket.NewLocal(config.Config{})
+		return libticket.NewLocal(localServiceConfig(dbPath))
 	}, ContractOptions{RequireStatusOwnership: false})
 }
 
@@ -34,7 +38,7 @@ func TestLocalServiceStatusDefaultsToAdmin(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(dbPath))
 	status, err := svc.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
@@ -67,7 +71,7 @@ func TestLocalServiceStatusFailsWhenDatabaseMissing(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(filepath.Join(tempDir, "ticket.db")))
 	if _, err := svc.Status(context.Background()); err == nil {
 		t.Fatal("Status() error = nil, want missing database error")
 	}
@@ -94,7 +98,7 @@ func TestLocalServiceUsesTicketHomeDatabasePath(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(dbPath))
 	projects, err := svc.ListProjects(context.Background())
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
@@ -113,7 +117,7 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(dbPath))
 	parent, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "epic", Title: "Parent"})
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
@@ -149,7 +153,7 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(dbPath))
 	parent, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "epic", Title: "Parent"})
 	if err != nil {
 		t.Fatalf("CreateTicket(parent) error = %v", err)
@@ -200,7 +204,7 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(dbPath))
 	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
@@ -242,7 +246,7 @@ func TestLocalServiceDeleteTicket(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	svc := libticket.NewLocal(config.Config{})
+	svc := libticket.NewLocal(localServiceConfig(dbPath))
 	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
@@ -267,7 +271,7 @@ func newLocalSvc(t *testing.T) libticket.Service {
 	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	return libticket.NewLocal(config.Config{})
+	return libticket.NewLocal(localServiceConfig(dbPath))
 }
 func TestLocalServiceDeleteProject(t *testing.T) {
 	svc := newLocalSvc(t)

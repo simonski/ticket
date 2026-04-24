@@ -339,7 +339,7 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 
 	fs := flag.NewFlagSet("project init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	prefix := fs.String("prefix", strings.ToUpper(dirName[:min(3, len(dirName))]), "project prefix (default: first 3 chars of dir name)")
+	prefix := fs.String("prefix", defaultProjectPrefix(cwd), "project prefix (default: derived from directory name)")
 	title := fs.String("title", dirName, "project title (default: directory name)")
 	description := fs.String("description", dirName, "project description (default: directory name)")
 	dor := fs.String("dor", "", "definition of ready")
@@ -354,7 +354,7 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 
 	// Check if a project is already initialised
 	if cfg.ProjectID != "" {
-		cfgPath, _ := config.Path()
+		cfgPath, _, _ := config.ProjectPath()
 		return fmt.Errorf("project already initialised: %s (in %s)", cfg.ProjectID, cfgPath)
 	}
 
@@ -392,9 +392,7 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
 	}
 
-	cfg.ProjectID = project.Prefix
-	cfg.CurrentEpicID = ""
-	if err := config.Save(cfg); err != nil {
+	if err := bindRootToLocalProject(cwd, project.Title, project.Prefix, project.GitRepository); err != nil {
 		return err
 	}
 	return nil

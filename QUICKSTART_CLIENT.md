@@ -2,23 +2,19 @@
 
 Local mode runs everything on your machine with a SQLite database. No server required.
 
-## 1. Initialise a workspace
+## 1. Initialise the shared local database
 
 ```bash
-tk init
+tk initdb
 ```
 
-Choose **Local mode** when prompted. If the suggested project prefix contains
-characters other than `A-Z`, enter a short uppercase prefix such as `TK`.
+This creates the shared local database at `$TICKET_HOME/ticket.db`
+(default `~/.ticket/ticket.db`) and bootstraps `admin` / `password`.
 
-This creates `.ticket/ticket.db` in the current directory (or the nearest
-`.ticket/` found by walking up the tree). Save the generated `admin` password.
-
-## 2. Create a project
+## 2. Bind this repo or directory to a project
 
 ```bash
-tk project create -prefix CUS -title "Customer Portal"
-tk project use CUS
+tk project init -prefix CUS -title "Customer Portal"
 ```
 
 ## 3. Capture work

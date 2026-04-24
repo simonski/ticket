@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-testharness.XXXXXX")"
 TICKET_HOME_DIR="$WORK_DIR/home"
-DB_PATH="$WORK_DIR/harness.db"
+REPO_DIR="$WORK_DIR/repo"
 SERVER_PID=""
 
 cleanup() {
@@ -24,8 +24,10 @@ if [[ ! -x "$TK_BIN" ]]; then
 fi
 
 export TICKET_HOME="$TICKET_HOME_DIR"
-export TICKET_URL="$DB_PATH"
 mkdir -p "$TICKET_HOME"
+mkdir -p "$REPO_DIR/.git"
+cd "$REPO_DIR"
+unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
 
 log() {
 	printf '\n==> %s\n' "$1"
@@ -106,8 +108,15 @@ wait_for_http() {
 	exit 1
 }
 
-run "$TK_BIN" initdb -f "$DB_PATH" -force -password admin >/dev/null
-run "$TK_BIN" project use 1 >/dev/null
+reset_local_repo() {
+	rm -rf "$REPO_DIR/.ticket" "$TICKET_HOME_DIR"
+	mkdir -p "$REPO_DIR/.git" "$TICKET_HOME_DIR"
+	unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+	run "$TK_BIN" initdb -password admin >/dev/null
+	run "$TK_BIN" project init -prefix HAR -title "Harness Project" >/dev/null
+}
+
+reset_local_repo
 
 log "scenario: basic count assertions"
 parent_id="$("$TK_BIN" new foo -id 1 -printid)"
@@ -121,8 +130,7 @@ expect_ticket_suffix "$child_id" "2" "child ticket id"
 
 run "$TK_BIN" ls -count -expect_equals 2
 
-run "$TK_BIN" initdb -f "$DB_PATH" -force -password admin >/dev/null
-run "$TK_BIN" project use 1 >/dev/null
+reset_local_repo
 
 log "scenario: sdlc next/previous workflow"
 sdlc_id="$("$TK_BIN" sdlc create -name "review-flow" -printid)"
@@ -171,8 +179,7 @@ run "$TK_BIN" next -id "$ticket_id" >/dev/null
 ticket_output="$("$TK_BIN" get -id "$ticket_id")"
 expect_contains "$ticket_output" "Complete            : closed" "ticket complete flag"
 
-run "$TK_BIN" initdb -f "$DB_PATH" -force -password admin >/dev/null
-run "$TK_BIN" project use 1 >/dev/null
+reset_local_repo
 
 log "scenario: broad admin lifecycle and snapshot restore"
 lifecycle_ticket_id="$("$TK_BIN" add "Lifecycle ticket" -printid)"

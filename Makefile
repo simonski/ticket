@@ -1,4 +1,4 @@
-.PHONY: help default build build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push docker-up docker-down deploy-exedev deploy-exedev-assets
+.PHONY: help default build build-bin build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -38,14 +38,12 @@ help:
 	@printf "\n"
 	@printf "Docker targets:\n\n"
 	@printf "  make docker-build    Build the local Docker image only.\n"
-	@printf "  make docker-push     Build the image and push versioned + latest tags to GHCR.\n"
+	@printf "  make publish         Build the image and push versioned + latest tags to GHCR.\n"
 	@printf "  make docker-up       Start the service via Docker Compose.\n"
 	@printf "  make docker-down     Stop the service via Docker Compose.\n"
 	@printf "\n"
 	@printf "exe.dev targets:\n\n"
-	@printf "  make deploy-exedev-assets Build ./bin/tk-linux and copy it plus deploy/README.exedev.md to the configured host.\n"
-	@printf "  make deploy-exedev   Alias for deploy-exedev-assets.\n"
-	@printf "  make deploy          Alias for deploy-exedev.\n"
+	@printf "  make deploy          Copy deploy/compose.yaml and deploy/README.md to the configured host.\n"
 	@printf "                       Set EXE_DEV_URL=user@host to choose the remote destination.\n"
 	@printf "\n"
 	@printf "Release targets:\n\n"
@@ -60,6 +58,9 @@ help:
 build: 
 	@$(MAKE) bump-version
 	@$(MAKE) sync-openapi-version
+	@$(MAKE) build-bin
+
+build-bin:
 	@mkdir -p bin
 	go build -o ./bin/tk ./cmd/tk
 
@@ -113,7 +114,7 @@ backup-db:
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
 INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket
 
-test: test-unit test-integration test-playwright
+test: test-unit test-integration test-tk-test testscripts test-todo-example test-playwright
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
@@ -156,13 +157,13 @@ test-playwright:
 	npx playwright install chromium
 	npx playwright test
 
-test-tk-test: build
+test-tk-test: build-bin
 	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
 
-test-todo-example: build
+test-todo-example: build-bin
 	./scripts/verify_todo_example.sh
 
-testscripts: build
+testscripts: build-bin
 	./scripts/testharness.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────
@@ -272,6 +273,8 @@ docker-push: docker-build
 	docker push $(GHCR_IMAGE):$(VERSION)
 	docker push $(GHCR_IMAGE):latest
 
+publish: docker-push
+
 docker-up:
 	VERSION=$(VERSION) docker compose up -d
 
@@ -295,27 +298,20 @@ dev:
 	@echo "\nAnd you are now in a position to extend ticket itself.\n"
 
 
-deploy-exedev-assets: build-linux
+deploy:
 	@echo "Deploying assets to exe.dev..."
 	@if [ -z "$(EXE_DEV_URL)" ]; then \
 		echo "Error: EXE_DEV_URL environment variable not set"; \
-		echo "Usage: EXE_DEV_URL=user@host make deploy-exedev-assets"; \
+		echo "Usage: EXE_DEV_URL=user@host make deploy"; \
 		exit 1; \
 	fi
-	@echo "tk-linux (called \`tk\`) and README.md to $(EXE_DEV_URL):~/"
-	@scp ./bin/tk-linux $(EXE_DEV_URL):~/tk
-	@scp deploy/README.exedev.md $(EXE_DEV_URL):~/README.md
+	@echo "compose.yaml and README.md to $(EXE_DEV_URL):~/"
+	@scp deploy/compose.yaml deploy/README.md $(EXE_DEV_URL):~/
 	@echo ""
-	@echo "✓ Deployed to $(EXE_DEV_URL)"
+	@echo "✓ Deployed to $(EXE_DEV_URL):~/"
 	@echo ""
 	@echo "Next steps on remote server:"
 	@echo "  ssh $(EXE_DEV_URL)"
-	@echo "  cd ~"
-	@echo "  chmod +x ./tk"
-	@echo "  ./tk server -f ./data/ticket.db -p 8000"
+	@echo "  cat ~/README.md"
 	@echo ""
-	@echo "Or manually start on remote server with docker compose"
-
-deploy-exedev: deploy-exedev-assets
-
-deploy: deploy-exedev
+	@echo "This bundle uses ghcr.io/simonski/ticket:latest and a 30-second watchtower poll."

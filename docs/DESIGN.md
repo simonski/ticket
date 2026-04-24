@@ -21,7 +21,12 @@ The system has four interfaces:
 
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
-Client-side files are stored under `.ticket/`. `tk` walks up from the current working directory looking for a `.git` directory and then uses `.ticket/` at that repository root. If no git root is found, `.ticket/` in the current directory is used as the fallback. `TICKET_URL` overrides the effective location: bare paths and `file:///...` stay local, while `http(s)://...` selects remote mode.
+`tk` now splits state between a global home and per-project routing. `$TICKET_HOME`
+(default `~/.ticket`) stores the shared local database, global config, and
+remote credentials. `tk` walks up from the current working directory looking for
+`.ticket/config.json` first, then `.git`, and uses that root for repo-local
+routing. `TICKET_URL` overrides the effective location: bare paths and
+`file:///...` stay local, while `http(s)://...` selects remote mode.
 
 ## Product Principles
 
@@ -303,9 +308,9 @@ Typical history events:
 
 The product must support local initialization of a SQLite database from the CLI.
 
-The bootstrap command is `tk init`.
+The bootstrap commands are `tk initdb` and `tk init`.
 
-`tk init` must:
+`tk initdb` must:
 
 1. create the schema in a new SQLite database
 2. create an `admin` account
@@ -315,21 +320,26 @@ The bootstrap command is `tk init`.
 Representative flow:
 
 ```bash
-tk init -f ticket.db --force -password secret --populate
+tk initdb -f ticket.db --force -password secret --populate
 ```
 
 Bootstrap defaults:
 
 - admin username is always `admin`
-- if `-f` is omitted, the SQLite database is created at the default local path (`$TICKET_HOME/ticket.db`, with `TICKET_HOME` resolved from the repo root or current working directory)
+- if `-f` is omitted, the SQLite database is created at `$TICKET_HOME/ticket.db`
 - admin password comes from `-password` when supplied
-- if `-password` is omitted, the CLI generates a random password and prints it to stdout
+- if `-password` is omitted, the default is `password`
 - if `--force` is supplied, any existing SQLite database file is overwritten
 - the default project is created automatically during initialization with prefix `TK`
 - if `--populate` is supplied, the CLI seeds:
   - 3 example projects
   - stories in each project with associated epic/task/bug/chore tickets
   - 3 example teams with sample users assigned across those teams
+
+`tk init` must bind the current repo or directory by writing `.ticket/config.json`.
+In local mode that file binds the location to a project in the shared local
+database. In remote mode it binds the location to a remote URL and project,
+while credentials remain under `$TICKET_HOME`.
 
 Snapshot portability:
 
@@ -481,23 +491,25 @@ When `tk server` starts, it should print the same colored ASCII-art `TICKET` ban
 
 Below that banner, `tk server` must print the embedded version and the resolved task database path.
 
-The CLI stores non-sensitive client defaults in `.ticket/config.json` and session credentials in `.ticket/credentials.json`.
+The CLI stores repo-local routing in `.ticket/config.json`, global defaults in
+`$TICKET_HOME/config.json`, and remote session credentials in
+`$TICKET_HOME/credentials.json`.
 
 `tk login` must:
 
-1. check `.ticket/credentials.json` first and reuse that session if it is still valid
-2. check the `username` in `.ticket/config.json`
+1. check `$TICKET_HOME/credentials.json` first and reuse that session if it is still valid
+2. check the `username` in `$TICKET_HOME/config.json`
 3. check `-username` and `-password`, then `TICKET_USERNAME` and `TICKET_PASSWORD`
 4. prompt for any missing values
 5. when prompting, use the discovered values as editable defaults
 6. print `invalid credentials` on an invalid-login response before prompting for a retry
 7. when prompting for a password in an interactive terminal, echo `*` characters instead of the raw password
-8. on success, write the session token to `.ticket/credentials.json`
-9. on success, update the `username` and `location` keys in `.ticket/config.json`
+8. on success, write the session token to `$TICKET_HOME/credentials.json`
+9. on success, update the `username` and fallback `location` keys in `$TICKET_HOME/config.json`
 
 `tk register` must create the account but must not create or persist a logged-in session.
 
-`tk logout` must remove `.ticket/credentials.json`.
+`tk logout` must remove the matching remote credential entry from `$TICKET_HOME/credentials.json`.
 
 ### Project Management
 

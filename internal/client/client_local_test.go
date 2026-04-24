@@ -13,6 +13,10 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
+func localClientConfig(dbPath string) config.Config {
+	return config.Config{Location: dbPath}
+}
+
 func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -22,7 +26,7 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 	projects, err := api.ListProjects(context.Background())
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
@@ -113,7 +117,7 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 	ticket, err := api.CreateTicket(context.Background(), TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
@@ -157,7 +161,7 @@ func TestLocalModeClientDeleteTicket(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 	ticket, err := api.CreateTicket(context.Background(), TicketCreateRequest{
 		ProjectID: 1,
 		Type:      "task",
@@ -183,7 +187,7 @@ func TestLocalModeClientStatusIsReadOnlyWithoutMatchingUser(t *testing.T) {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
 
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 	status, err := api.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
@@ -203,7 +207,7 @@ func TestLocalModeClientStatusFailsWhenDatabaseMissing(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 
-	api := New(config.Config{})
+	api := New(localClientConfig(filepath.Join(tempDir, "ticket.db")))
 	if _, err := api.Status(context.Background()); err == nil {
 		t.Fatal("Status() error = nil, want missing database error")
 	}
@@ -216,7 +220,7 @@ func TestLocalModeClientRolesCRUD(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	role, err := api.CreateRole(context.Background(), RoleRequest{Title: "dev", Description: "build", AcceptanceCriteria: "ship"})
 	if err != nil {
@@ -251,7 +255,7 @@ func TestLocalModeClientUserOps(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	user, err := api.CreateUser(context.Background(), "bob", "password1")
 	if err != nil {
@@ -289,7 +293,7 @@ func TestLocalModeClientRegistrationToggle(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	if err := api.SetRegistrationEnabled(context.Background(), false); err != nil {
 		t.Fatalf("SetRegistrationEnabled(false) error = %v", err)
@@ -306,7 +310,7 @@ func TestLocalModeClientCount(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	if _, err := api.Count(context.Background(), nil); err != nil {
 		t.Fatalf("Count(nil) error = %v", err)
@@ -324,7 +328,7 @@ func TestLocalModeClientProjectOps(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	proj, err := api.CreateProject(context.Background(), ProjectCreateRequest{Title: "P2", Prefix: "PP"})
 	if err != nil {
@@ -358,7 +362,7 @@ func TestLocalModeClientTicketLifecycle(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	ticket, err := api.CreateTicket(context.Background(), TicketCreateRequest{ProjectID: 1, Type: "task", Title: "LC"})
 	if err != nil {
@@ -413,7 +417,7 @@ func TestLocalModeClientDependencies(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	t1, err := api.CreateTicket(context.Background(), TicketCreateRequest{ProjectID: 1, Type: "task", Title: "A"})
 	if err != nil {
@@ -445,7 +449,7 @@ func TestLocalModeClientSdlcs(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	wf, err := api.CreateSdlc(context.Background(), SdlcRequest{Name: "wf1", Description: "d"})
 	if err != nil {
@@ -500,7 +504,7 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	ticket, err := api.CreateTicket(context.Background(), TicketCreateRequest{ProjectID: 1, Type: "task", Title: "time-test"})
 	if err != nil {
@@ -565,7 +569,7 @@ func TestLocalModeClientStories(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	story, err := api.CreateStory(context.Background(), 1, "S1", "desc")
 	if err != nil {
@@ -604,7 +608,7 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	team, err := api.CreateTeam(context.Background(), TeamRequest{Name: "alpha"})
 	if err != nil {
@@ -694,7 +698,7 @@ func TestLocalModeClientAgents(t *testing.T) {
 	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
 		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
 	}
-	api := New(config.Config{})
+	api := New(localClientConfig(dbPath))
 
 	agent, pw, err := api.CreateAgent(context.Background(), AgentCreateRequest{Password: "agentpw"})
 	if err != nil {

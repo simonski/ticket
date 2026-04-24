@@ -215,9 +215,9 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 | `make build` bumps the version unexpectedly | Use `go build -o ./bin/tk ./cmd/tk` for dev builds |
 | Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
 | `tk` command not found | Run `go build -o ./bin/tk ./cmd/tk` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
-| `tk` is talking to the wrong backend | Run `tk status` first. Local mode uses `.ticket/config.json` + `.ticket/ticket.db`; remote mode uses the `location` entry in `.ticket/config.json` |
+| `tk` is talking to the wrong backend | Run `tk status` first. Local mode uses `$TICKET_HOME/ticket.db` with repo-local `.ticket/config.json` for routing; remote mode uses the `location` entry in `.ticket/config.json` |
 | API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo SDLC commands, run the `spec` workflow |
-| `.ticket/ticket.db` blocks a rebase or pull | The repo tracks `.ticket/ticket.db`. If you do not need your local ticket state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
+| `.ticket/config.json` blocks a rebase or pull | If you do not need your local Ticket routing state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
 | `make test` times out | Playwright tests require a local server; the Makefile starts one automatically, but if port 8080 is already in use the tests will hang — kill any running `ticket` server first |
 | Local and remote mode behave differently | Read `tk status` before debugging. The same CLI can talk directly to SQLite or to a server depending on `.ticket/config.json` |
 | Import cycle errors | The dependency flow must be `cmd -> libticket -> internal/store`. Nothing in `internal/` may import `cmd/` |

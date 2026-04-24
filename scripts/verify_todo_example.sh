@@ -5,6 +5,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SEED_SCRIPT="$ROOT_DIR/scripts/populate_todo_example.sh"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-todo-example.XXXXXX")"
+TICKET_HOME_DIR="$WORK_DIR/home"
+REPO_DIR="$WORK_DIR/repo"
+
+cleanup() {
+	rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+mkdir -p "$REPO_DIR/.git" "$TICKET_HOME_DIR"
+cd "$REPO_DIR"
+export TICKET_HOME="$TICKET_HOME_DIR"
+unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
 
 "$SEED_SCRIPT" >/dev/null
 
@@ -37,7 +50,7 @@ assert_contains() {
 }
 
 status_output="$("$TK_BIN" status)"
-assert_contains "$status_output" "current project  : demo (DEMO)" "status project"
+assert_contains "$status_output" "project          : DEMO — demo" "status project"
 
 list_output="$("$TK_BIN" ls)"
 assert_contains "$list_output" "$EPIC_ID" "ticket list epic"

@@ -11,7 +11,7 @@
 | `make test-tk-test`   | Executable documentation tests (see below)           | ~15s     |
 | `make test-todo-example` | Reproducible todo tutorial seed + verification     | ~5s      |
 | `make testscripts`    | Shell-based CLI harness scenarios                    | ~5s      |
-| `make test`           | Unit + integration + playwright                      | ~50s     |
+| `make test`           | Unit + integration + docs + shell harnesses + playwright | ~70s |
 
 Run a single Go test:
 
@@ -29,8 +29,8 @@ verifying each block exits 0.
 
 1. Reads one or more markdown files passed as arguments
 2. Extracts every fenced `bash` code block, tracking its file and line number
-3. Creates an isolated temp directory with `TICKET_HOME`, a fresh `git init`, and
-   the built `ticket` binary on `PATH`
+3. Creates an isolated temp environment with a fresh Git repo as the working
+   directory, a separate `$TICKET_HOME`, and the built `ticket` binary on `PATH`
 4. Runs each block in order using `bash -e`, carrying environment state between
    blocks (simulating a user following a tutorial step by step)
 5. Reports pass/fail/skip per block with `file:line` references
@@ -62,27 +62,29 @@ The tool automatically skips blocks that cannot be executed in an automated test
 
 When a block contains `tk server`, tk-test:
 
-1. Runs `tk initdb` non-interactively (since `tk init` is interactive)
+1. Runs `tk initdb` when the documentation block still embeds first-run local setup
 2. Picks a random free port to avoid conflicts with running services
 3. Starts the server in the background on that port
-4. Waits for `/api/healthz` to respond (up to 10 seconds)
+4. Waits for `/api/healthz` to respond and prints captured server logs on failure
 5. Rewrites `localhost:8080` references in subsequent blocks to the dynamic port
-6. Updates `config.json` so the CLI detects remote mode
+6. Updates repo-local `.ticket/config.json` so the CLI detects remote mode
 7. Kills the server when the file finishes
 
 ### TICKET_URL bridging
 
 The quickstart docs use `export TICKET_URL=http://localhost:8080` to switch the
-CLI to remote mode. The actual CLI reads mode from the `location` field in
-`config.json`, not from an environment variable. tk-test bridges this gap by
-updating `config.json` whenever it encounters a `TICKET_URL` export.
+CLI to remote mode. The actual CLI resolves remote mode from repo-local
+`.ticket/config.json` unless env overrides are present. tk-test bridges this gap
+by updating repo-local `.ticket/config.json` whenever it encounters a
+`TICKET_URL` export.
 
 ## Script harness
 
 `scripts/testharness.sh` is a growing shell-based regression harness for direct
-CLI scripting flows. It creates an isolated temp workspace, builds against a
-fresh local SQLite database via `TICKET_URL`, and executes end-to-end scenarios
-that assert behavior with CLI exit codes and `tk ls -count` checks.
+CLI scripting flows. It creates an isolated temp repo plus `$TICKET_HOME`,
+bootstraps a fresh local database with `tk initdb`, binds the repo with
+`tk project init`, and executes end-to-end scenarios that assert behavior with
+CLI exit codes and `tk ls -count` checks.
 
 Current harness scenarios cover:
 
@@ -103,8 +105,8 @@ make testscripts
 `scripts/populate_todo_example.sh` seeds a reproducible todo-app planning
 workspace (project, SDLC, epic/tasks, labels, dependencies, time entries,
 story/decision/idea). `scripts/verify_todo_example.sh` runs that seed flow in
-the current active ticket database (project `DEMO`) and asserts key expected
-outputs.
+an isolated temp repo/home pair, then asserts key expected outputs for project
+`DEMO`.
 
 Run it with:
 
