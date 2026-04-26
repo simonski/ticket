@@ -397,7 +397,7 @@ tk project ls                      # List projects (* = current)
 tk project create -title "Name"    # Create project
 tk project use <id>                # Switch active project
 tk project get <id>                # View project detail
-tk project init                    # Write .ticket.json in current dir
+tk project init                    # Write .ticket/config.json in current dir
 ```
 
 ## SDLC Guidelines
@@ -420,4 +420,3 @@ design/idle  →  design/active  →  [complete]  →  develop/idle  →  develo
 - **develop**: Write the code (ticket should be develop/active and `ready=yes` while coding)
 - **test**: Verify the solution works, run tests
 - **done**: Work is fully complete
-

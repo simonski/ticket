@@ -74,7 +74,7 @@ All notable changes to the Ticket project are documented here.
 
 ### Changed
 - CLI usage output reorganised into admin and client command groups
-- `tk status` output simplified: removed mode line, uses TICKET_URL as key
+- `tk status` output simplified and aligned with named remote configuration
 - `tk get` shows sdlc progress for the ticket's current stage
 - Ticket list shows progress column
 

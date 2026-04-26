@@ -20,8 +20,8 @@ Or, download a binary for your platform from the [releases page](https://github.
 
 In local mode, the client talks to SQLite directly. No server needed.
 `tk initdb` creates the shared local database at `$TICKET_HOME/ticket.db`
-(default `~/.ticket/ticket.db`), and `tk init` binds the current repo or
-directory by writing `.ticket/config.json`.
+(default `~/.ticket/ticket.db`), registers the default `local` remote, and
+`tk init` binds the current repo or directory by writing `.ticket/config.json`.
 Best for solo use, small projects, or getting started quickly.
 
 ```bash
@@ -50,18 +50,10 @@ tk server
 ### Access a remote server 
 
 ```bash
-export TICKET_URL=http://localhost:8080
-
-### Register a user
+tk remote add local-server http://localhost:8080
 tk register -username alice -password secret12
-```
-
-### Open a new terminal and interact as alice
-
-```bash
-export TICKET_URL=http://localhost:8080
-export TICKET_USERNAME=alice
-export TICKET_PASSWORD=secret12
+tk login -username alice -password secret12
+tk project remote local-server
 ```
 
 ---
@@ -139,21 +131,11 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` is remote |
-| `TICKET_USERNAME` | Default username for login/register |
-| `TICKET_PASSWORD` | Default password for login/register |
+| `TICKET_HOME` | Override the global Ticket home directory (default `~/.ticket`) |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |
 
-When `TICKET_URL` is set, it overrides the configured `location`. Bare paths
-and `file:///...` keep the CLI in local mode; `http(s)://...` switches to
-client/server mode.
-
-When `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are all set, those
-values take precedence over repo-local `.ticket/config.json` and the stored
-credentials in `$TICKET_HOME/credentials.json`.
-
-In that env-trio mode, client commands do not require `tk init`.
-`tk login` is optional in that mode because remote calls auto-authenticate.
+Use `tk remote add NAME URL` plus `tk project remote NAME` to select a server.
+Remote credentials are stored per canonical URL in `$TICKET_HOME/credentials.json`.

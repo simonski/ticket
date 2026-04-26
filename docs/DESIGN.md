@@ -22,11 +22,14 @@ The system has four interfaces:
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
 `tk` now splits state between a global home and per-project routing. `$TICKET_HOME`
-(default `~/.ticket`) stores the shared local database, global config, and
-remote credentials. `tk` walks up from the current working directory looking for
-`.ticket/config.json` first, then `.git`, and uses that root for repo-local
-routing. `TICKET_URL` overrides the effective location: bare paths and
-`file:///...` stay local, while `http(s)://...` selects remote mode.
+(default `~/.ticket`) stores the shared local database, global config, the
+named remote registry, and remote credentials. `tk` walks up from the current
+working directory looking for `.ticket/config.json` first, then `.git`, and
+uses that root for repo-local routing. The steady-state model is:
+
+- global `~/.ticket/config.json` stores `default_remote` plus `remotes[]`
+- repo-local `.ticket/config.json` stores `remote` plus `project_id`
+- `~/.ticket/credentials.json` stores credentials per canonical remote URL
 
 ## Product Principles
 
@@ -320,13 +323,13 @@ The bootstrap commands are `tk initdb` and `tk init`.
 Representative flow:
 
 ```bash
-tk initdb -f ticket.db --force -password secret --populate
+tk initdb . --force -password secret --populate
 ```
 
 Bootstrap defaults:
 
 - admin username is always `admin`
-- if `-f` is omitted, the SQLite database is created at `$TICKET_HOME/ticket.db`
+- if `-f` is omitted, the SQLite database is created at `$TICKET_HOME/ticket.db` and registered as the global `local` remote
 - admin password comes from `-password` when supplied
 - if `-password` is omitted, the default is `password`
 - if `--force` is supplied, any existing SQLite database file is overwritten
@@ -337,9 +340,9 @@ Bootstrap defaults:
   - 3 example teams with sample users assigned across those teams
 
 `tk init` must bind the current repo or directory by writing `.ticket/config.json`.
-In local mode that file binds the location to a project in the shared local
-database. In remote mode it binds the location to a remote URL and project,
-while credentials remain under `$TICKET_HOME`.
+In local mode that file binds the location to a project in the selected local
+remote database. In remote mode it binds the location to a named remote and
+project, while credentials remain under `$TICKET_HOME`.
 
 Snapshot portability:
 
@@ -364,7 +367,7 @@ Responsibilities:
 
 The default local server should listen on `http://localhost:8080`.
 
-If `tk server` is run without `-f`, it must open the SQLite database at the default local path (`$TICKET_HOME/ticket.db`).
+If `tk server` is run without `-f`, it must open the SQLite database resolved by the active local configuration, defaulting to `$TICKET_HOME/ticket.db`.
 
 If `tk server` is run with `-v`, it must print verbose request and response details to stdout.
 When chat is active, `-v` must also print chat process telemetry, including:
@@ -469,9 +472,9 @@ If `-nocolor` is set, the same output must be printed without ANSI colors.
 
 `tk count` must query the server and print aggregate counts for users and work item types. Without a project filter it must also print the project count. With `-project_id <id>` it must scope work item counts to that project.
 
-The CLI must resolve credentials from `-username` and `-password` first, then `TICKET_USERNAME` and `TICKET_PASSWORD`, and finally default to OS `whoami` and `password`.
+The CLI must resolve credentials from the selected remote's stored session and username first, then `-username` and `-password`, and finally default to OS `whoami` and `password` when a command permits defaults.
 
-The CLI must resolve the server URL from `-url` first, then saved config (`location`), and otherwise require remote mode to be configured via `tk init`.
+The CLI must resolve remote server selection from the repo-local `remote` binding first, then the global `default_remote`, with legacy raw `location` values supported only for compatibility.
 
 `tk config` must support:
 
@@ -481,7 +484,7 @@ The CLI must resolve the server URL from `-url` first, then saved config (`locat
 
 The CLI must expose `tk version`, which prints the semantic version embedded into the binary at build time.
 
-`tk init` is separate from the login and registration flows: it only creates `admin`, does not consume `TICKET_USERNAME`, and does not read `TICKET_PASSWORD`.
+`tk init` is separate from the login and registration flows: it only binds the repo to a remote/project pair and must never persist secrets into repo-local config.
 
 Admin-only user-management requests must be rejected by the server when the caller is authenticated but not an admin. Those requests must return HTTP 403 with an error explaining that the user is not an admin.
 
@@ -498,14 +501,14 @@ The CLI stores repo-local routing in `.ticket/config.json`, global defaults in
 `tk login` must:
 
 1. check `$TICKET_HOME/credentials.json` first and reuse that session if it is still valid
-2. check the `username` in `$TICKET_HOME/config.json`
-3. check `-username` and `-password`, then `TICKET_USERNAME` and `TICKET_PASSWORD`
+2. check the stored username for the selected remote
+3. check `-username` and `-password`
 4. prompt for any missing values
 5. when prompting, use the discovered values as editable defaults
 6. print `invalid credentials` on an invalid-login response before prompting for a retry
 7. when prompting for a password in an interactive terminal, echo `*` characters instead of the raw password
 8. on success, write the session token to `$TICKET_HOME/credentials.json`
-9. on success, update the `username` and fallback `location` keys in `$TICKET_HOME/config.json`
+9. on success, update the selected remote credential entry with the latest username and token
 
 `tk register` must create the account but must not create or persist a logged-in session.
 
@@ -791,7 +794,7 @@ The web UI should make these activities easy:
 - `/api/status` returns `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - admins update chat limits through `POST /api/config/chat_limits`
 - stories are stored as first-class entities (`stories`) associated to one project; generated epics/tasks are linked via `story_ticket_links`
-- story analysis uses the `StoryReview` role and an external Codex process with remote-mode `tk` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) to run `tk login` + `tk create` breakdown commands for epics/tasks; story is marked `ready_for_review`
+- story analysis uses the `StoryReview` role and an external Codex process with remote Ticket context to run `tk login` + `tk create` breakdown commands for epics/tasks; story is marked `ready_for_review`
 - epic analysis uses the `EpicReview` role to generate child implementation tickets
 - API reads for board state should bypass browser cache and include websocket health/fallback sync to recover from delivery gaps
 - when no websocket activity is seen for 10 seconds, the status strip renders idle motion (waveform/sweep) until activity resumes

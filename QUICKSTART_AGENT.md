@@ -7,10 +7,9 @@ This guide shows how to run `tk` as an autonomous agent worker, plus dry-run pat
 As an `admin`, ensure you have access to a `tk server` instance:
 
 ```bash
-# terminal 2
-export TICKET_URL=http://ticket.localhost
-export TICKET_USERNAME=admin
-export TICKET_PASSWORD=password
+tk remote add local-server http://ticket.localhost
+tk login -username admin -password password
+tk project remote local-server
 tk status
 ```
 
@@ -117,6 +116,6 @@ tk agent run -llm claude -v
 
 ## 7. Common errors
 
-- `agent run requires remote mode`: set `TICKET_URL` to `http(s)://...`
+- `agent run requires remote mode`: add or select a remote with `tk remote add NAME http(s)://...` and `tk project remote NAME`
 - `missing required values`: set `AGENT_ID` and `AGENT_PASSWORD`
 - `llm binary ... is not in the allow-list`: add it to `TICKET_AGENT_ALLOWED_LLM_BINARIES`

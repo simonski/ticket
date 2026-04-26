@@ -46,7 +46,7 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 
 	if cfg.ProjectID != projectID {
 		cfg.ProjectID = projectID
-		if !config.HasLocationEnvOverride() {
+		if !config.HasLocationOverride() {
 			if saveErr := config.Save(cfg); saveErr != nil {
 				return config.Config{}, nil, store.Project{}, saveErr
 			}
@@ -61,11 +61,6 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		return nil, err
 	}
 	effectiveCfg := cfg
-	if config.HasRemoteEnvOverride() {
-		effectiveCfg.Location = resolved.ServerURL
-		effectiveCfg.Username = envValue("TICKET_USERNAME")
-		effectiveCfg.Token = ""
-	}
 	switch resolved.Mode {
 	case config.ModeLocal:
 		return libticket.NewLocal(effectiveCfg), nil
@@ -90,14 +85,7 @@ func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (string,
 		return username, password, nil
 	}
 
-	if useEnv {
-		if username == "" {
-			username = envValue("TICKET_USERNAME")
-		}
-		if password == "" {
-			password = envValue("TICKET_PASSWORD")
-		}
-	}
+	_ = useEnv
 	if username == "" {
 		username = currentOSUser()
 	}

@@ -48,32 +48,17 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 	}
 }
 
-func TestRemoteClientAutoAuthenticatesFromEnvTrio(t *testing.T) {
-	t.Setenv("TICKET_URL", "http://example.test")
-	t.Setenv("TICKET_USERNAME", "alice")
-	t.Setenv("TICKET_PASSWORD", "secret12")
-
-	loginCalls := 0
+func TestRemoteClientDoesNotAutoAuthenticateWithoutToken(t *testing.T) {
 	statusCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/api/login":
-			loginCalls++
-			var payload map[string]string
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("Decode(login) error = %v", err)
-			}
-			if payload["username"] != "alice" || payload["password"] != "secret12" {
-				t.Fatalf("login payload = %#v", payload)
-			}
-			_, _ = w.Write([]byte(`{"token":"env-token","user":{"username":"alice","role":"admin"}}`))
 		case "/api/status":
 			statusCalls++
-			if got := r.Header.Get("Authorization"); got != "Bearer env-token" {
-				t.Fatalf("Authorization = %q, want Bearer env-token", got)
+			if got := r.Header.Get("Authorization"); got != "" {
+				t.Fatalf("Authorization = %q, want empty", got)
 			}
-			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true}`))
+			_, _ = w.Write([]byte(`{"status":"ok","authenticated":false}`))
 		default:
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
@@ -87,41 +72,24 @@ func TestRemoteClientAutoAuthenticatesFromEnvTrio(t *testing.T) {
 	if _, err := api.Status(context.Background()); err != nil {
 		t.Fatalf("Status(second) error = %v", err)
 	}
-	if loginCalls != 1 {
-		t.Fatalf("login calls = %d, want 1", loginCalls)
-	}
 	if statusCalls != 2 {
 		t.Fatalf("status calls = %d, want 2", statusCalls)
 	}
 }
 
-func TestRemoteClientEnvTrioReauthenticatesAfterUnauthorized(t *testing.T) {
-	t.Setenv("TICKET_URL", "http://example.test")
-	t.Setenv("TICKET_USERNAME", "alice")
-	t.Setenv("TICKET_PASSWORD", "secret12")
-
+func TestRemoteClientReturnsUnauthorizedWithoutReauth(t *testing.T) {
 	loginCalls := 0
-	statusCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/login":
 			loginCalls++
-			_, _ = w.Write([]byte(`{"token":"fresh-token","user":{"username":"alice","role":"admin"}}`))
 		case "/api/status":
-			statusCalls++
-			if statusCalls == 1 {
-				if got := r.Header.Get("Authorization"); got != "Bearer stale-token" {
-					t.Fatalf("first Authorization = %q, want Bearer stale-token", got)
-				}
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
-				return
+			if got := r.Header.Get("Authorization"); got != "Bearer stale-token" {
+				t.Fatalf("Authorization = %q, want Bearer stale-token", got)
 			}
-			if got := r.Header.Get("Authorization"); got != "Bearer fresh-token" {
-				t.Fatalf("second Authorization = %q, want Bearer fresh-token", got)
-			}
-			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true}`))
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 		default:
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
@@ -129,14 +97,11 @@ func TestRemoteClientEnvTrioReauthenticatesAfterUnauthorized(t *testing.T) {
 	defer server.Close()
 
 	api := New(config.Config{Location: server.URL, Token: "stale-token"})
-	if _, err := api.Status(context.Background()); err != nil {
-		t.Fatalf("Status() error = %v", err)
+	if _, err := api.Status(context.Background()); err == nil {
+		t.Fatal("Status() error = nil, want unauthorized")
 	}
-	if loginCalls != 1 {
-		t.Fatalf("login calls = %d, want 1", loginCalls)
-	}
-	if statusCalls != 2 {
-		t.Fatalf("status calls = %d, want 2", statusCalls)
+	if loginCalls != 0 {
+		t.Fatalf("login calls = %d, want 0", loginCalls)
 	}
 }
 

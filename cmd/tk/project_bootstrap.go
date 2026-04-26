@@ -101,14 +101,14 @@ func ensureLocalDatabase() (config.Config, error) {
 		return config.Config{}, err
 	}
 	if _, err := os.Stat(dbPath); err == nil {
-		return config.Load()
+		return ensureDefaultLocalRemote(dbPath)
 	} else if !os.IsNotExist(err) {
 		return config.Config{}, err
 	}
 	if err := runInitDB(nil); err != nil {
 		return config.Config{}, err
 	}
-	return config.Load()
+	return ensureDefaultLocalRemote(dbPath)
 }
 
 func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverride string) error {
@@ -171,7 +171,12 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 	if err := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); err != nil {
 		return err
 	}
+	remoteName := strings.TrimSpace(cfg.Remote)
+	if remoteName == "" {
+		remoteName = strings.TrimSpace(cfg.DefaultRemote)
+	}
 	projectCfg := config.Config{
+		Remote:    remoteName,
 		ProjectID: projectID,
 	}
 	if err := config.SaveProjectConfigAt(root, projectCfg); err != nil {
@@ -181,27 +186,29 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 	return config.Save(cfg)
 }
 
-func bindRootToRemoteProject(root, serverURL, projectID string) error {
-	if strings.TrimSpace(serverURL) == "" {
-		return fmt.Errorf("remote server URL is required")
+func bindRootToRemoteProject(root, remoteName, projectID string) error {
+	if strings.TrimSpace(remoteName) == "" {
+		return fmt.Errorf("remote name is required")
 	}
 	if strings.TrimSpace(projectID) == "" {
 		return fmt.Errorf("remote project id is required")
-	}
-	if err := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); err != nil {
-		return err
-	}
-	if err := config.SaveProjectConfigAt(root, config.Config{
-		Location:  strings.TrimSpace(serverURL),
-		ProjectID: strings.TrimSpace(projectID),
-	}); err != nil {
-		return err
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	cfg.Location = strings.TrimSpace(serverURL)
+	if _, ok := cfg.RemoteByName(remoteName); !ok {
+		return fmt.Errorf("remote %q not found", remoteName)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); err != nil {
+		return err
+	}
+	if err := config.SaveProjectConfigAt(root, config.Config{
+		Remote:    strings.TrimSpace(remoteName),
+		ProjectID: strings.TrimSpace(projectID),
+	}); err != nil {
+		return err
+	}
 	cfg.ProjectID = strings.TrimSpace(projectID)
 	return config.Save(cfg)
 }

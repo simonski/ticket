@@ -49,19 +49,19 @@ tk server -site site2
 
 ## 2. Configure the CLI for the running server
 
-Point the CLI at the running server and use the bootstrap admin credentials:
+Register a named remote for the server, bind this repo to it, and use the
+bootstrap admin credentials:
 
 ```bash
-export TICKET_URL=http://localhost:8080
+tk remote add local-server http://localhost:8080
 tk login -username admin -password password
+tk project remote local-server
 tk whoami
 ```
 
 ## 3. Create a project
 
 ```bash
-export TICKET_URL=http://localhost:8080
-
 tk project create -prefix CUS -title "Customer Portal"
 tk project use CUS
 ```
@@ -69,8 +69,6 @@ tk project use CUS
 ## 4. Capture and organise work
 
 ```bash
-export TICKET_URL=http://localhost:8080
-
 tk add  "Customers can reset their password"
 tk bug  "Reset token expires immediately"
 tk epic "Authentication"
@@ -82,16 +80,12 @@ tk list
 Tickets progress through stages: **design -> develop -> test -> done**.
 
 ```bash
-export TICKET_URL=http://localhost:8080
-
 tk complete -id CUS-1
 ```
 
 ## 6. Claim and request work
 
 ```bash
-export TICKET_URL=http://localhost:8080
-
 tk request
 ```
 
@@ -142,9 +136,8 @@ decisions automatically during your sessions.
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` are remote |
-| `TICKET_USERNAME` | Default username for login/register |
-| `TICKET_PASSWORD` | Default password for login/register |
+| `TICKET_HOME` | Override the global Ticket home directory (default `~/.ticket`) |
+| `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |

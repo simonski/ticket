@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -22,10 +23,18 @@ type Resolved struct {
 	ServerURL string // populated when Mode == "remote"
 }
 
+type Remote struct {
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url,omitempty"`
+}
+
 type Config struct {
 	Location      string `json:"location"`
 	Token         string `json:"token"`
 	Username      string `json:"username"`
+	Remote        string `json:"remote,omitempty"`
+	DefaultRemote string `json:"default_remote,omitempty"`
+	Remotes       []Remote `json:"remotes,omitempty"`
 	ProjectID     string `json:"project_id"`
 	CurrentEpicID string `json:"current_epic_id"`
 
@@ -56,37 +65,38 @@ type Credentials struct {
 }
 
 type projectDiskConfig struct {
-	Version int    `json:"version,omitempty"`
-	Backend string `json:"backend,omitempty"`
-	Config
+	Version              int    `json:"version,omitempty"`
+	Remote               string `json:"remote,omitempty"`
+	Location             string `json:"location,omitempty"` // legacy fallback only
+	ProjectID            string `json:"project_id,omitempty"`
+	CurrentEpicID        string `json:"current_epic_id,omitempty"`
+	DeleteConfirmToken   string `json:"delete_confirm_token,omitempty"`
+	DeleteConfirmProject string `json:"delete_confirm_project,omitempty"`
+	DeleteConfirmTicket  string `json:"delete_confirm_ticket,omitempty"`
 }
+
+var locationOverride string
 
 func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
-// HasLocationEnvOverride returns true when the effective location is explicitly
-// configured via TICKET_URL.
-func HasLocationEnvOverride() bool {
-	return envValue("TICKET_URL") != ""
+func SetLocationOverride(location string) {
+	locationOverride = strings.TrimSpace(location)
 }
 
-// HasRemoteEnvOverride returns true when remote mode is explicitly configured
-// via environment variables only.
-func HasRemoteEnvOverride() bool {
-	if !HasLocationEnvOverride() ||
-		envValue("TICKET_USERNAME") == "" ||
-		envValue("TICKET_PASSWORD") == "" {
-		return false
-	}
-	resolved, err := ResolveLocation(envValue("TICKET_URL"))
-	return err == nil && resolved.Mode == ModeRemote
+func ClearLocationOverride() {
+	locationOverride = ""
+}
+
+func HasLocationOverride() bool {
+	return strings.TrimSpace(locationOverride) != ""
 }
 
 // ResolveURL determines mode and target from the effective config.
 func ResolveURL() (Resolved, error) {
-	if HasLocationEnvOverride() {
-		return ResolveLocation(envValue("TICKET_URL"))
+	if HasLocationOverride() {
+		return ResolveLocation(locationOverride)
 	}
 	cfg, err := Load()
 	if err != nil {
@@ -148,10 +158,20 @@ func Load() (Config, error) {
 		if err != nil {
 			return Config{}, err
 		}
+		if strings.TrimSpace(projectCfg.Username) != "" || strings.TrimSpace(projectCfg.Token) != "" {
+			projectCfg.Username = ""
+			projectCfg.Token = ""
+			if err := saveProjectConfig(projectPath, projectCfg); err != nil {
+				return Config{}, err
+			}
+		}
+		if strings.TrimSpace(projectCfg.Remote) != "" {
+			cfg.Remote = projectCfg.Remote
+		}
 		if strings.TrimSpace(projectCfg.Location) != "" {
 			cfg.Location = projectCfg.Location
 		}
-		if strings.TrimSpace(cfg.ProjectID) == "" {
+		if strings.TrimSpace(projectCfg.ProjectID) != "" {
 			cfg.ProjectID = projectCfg.ProjectID
 		}
 		cfg.CurrentEpicID = projectCfg.CurrentEpicID
@@ -159,8 +179,16 @@ func Load() (Config, error) {
 		cfg.DeleteConfirmProject = projectCfg.DeleteConfirmProject
 		cfg.DeleteConfirmTicket = projectCfg.DeleteConfirmTicket
 	}
-	if HasLocationEnvOverride() {
-		cfg.Location = envValue("TICKET_URL")
+	if strings.TrimSpace(cfg.Location) == "" && strings.TrimSpace(cfg.Remote) != "" {
+		if remote, ok := cfg.RemoteByName(cfg.Remote); ok {
+			cfg.Location = remote.URL
+		}
+	}
+	if strings.TrimSpace(cfg.Location) == "" && strings.TrimSpace(cfg.DefaultRemote) != "" {
+		if remote, ok := cfg.RemoteByName(cfg.DefaultRemote); ok {
+			cfg.Remote = remote.Name
+			cfg.Location = remote.URL
+		}
 	}
 
 	creds, err := LoadCredentials()
@@ -176,10 +204,6 @@ func Load() (Config, error) {
 		} else {
 			cfg.Token = creds.Token
 		}
-	}
-	if HasRemoteEnvOverride() {
-		cfg.Username = envValue("TICKET_USERNAME")
-		cfg.Token = ""
 	}
 
 	return cfg, nil
@@ -214,12 +238,21 @@ func Save(cfg Config) error {
 
 	saved := cfg
 	saved.Token = ""
+	saved.Username = ""
+	if len(saved.Remotes) > 0 || strings.TrimSpace(saved.DefaultRemote) != "" {
+		saved.Location = ""
+		saved.Remote = ""
+	}
 	if hasProject {
+		saved.Remote = ""
+		saved.Location = ""
 		saved.CurrentEpicID = ""
 		saved.DeleteConfirmToken = ""
 		saved.DeleteConfirmProject = ""
 		saved.DeleteConfirmTicket = ""
+		saved.ProjectID = ""
 	}
+	saved.Remotes = sortUniqueRemotes(saved.Remotes)
 
 	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
@@ -256,7 +289,11 @@ func (c Credentials) Remote(location string) (RemoteCredentials, bool) {
 	if c.Remotes == nil {
 		return RemoteCredentials{}, false
 	}
-	remote, ok := c.Remotes[strings.TrimSpace(location)]
+	location, err := CanonicalizeRemoteURL(location)
+	if err != nil {
+		return RemoteCredentials{}, false
+	}
+	remote, ok := c.Remotes[location]
 	return remote, ok
 }
 
@@ -283,7 +320,10 @@ func SaveRemoteCredentials(location, username, token string) error {
 	if creds.Remotes == nil {
 		creds.Remotes = map[string]RemoteCredentials{}
 	}
-	location = strings.TrimSpace(location)
+	location, err = CanonicalizeRemoteURL(location)
+	if err != nil {
+		return err
+	}
 	if location == "" {
 		creds.Token = token
 		return SaveCredentials(creds)
@@ -310,7 +350,11 @@ func ClearCredentials() error {
 }
 
 func ClearRemoteCredentials(location string) error {
-	location = strings.TrimSpace(location)
+	var err error
+	location, err = CanonicalizeRemoteURL(location)
+	if err != nil {
+		return err
+	}
 	if location == "" {
 		return ClearCredentials()
 	}
@@ -389,6 +433,131 @@ func ProjectPathAtRoot(root string) string {
 
 func SaveProjectConfigAt(root string, cfg Config) error {
 	return saveProjectConfig(ProjectPathAtRoot(root), cfg)
+}
+
+func (cfg Config) RemoteByName(name string) (Remote, bool) {
+	name = strings.TrimSpace(name)
+	for _, remote := range cfg.Remotes {
+		if remote.Name == name {
+			return remote, true
+		}
+	}
+	return Remote{}, false
+}
+
+func (cfg Config) RemoteByURL(rawURL string) (Remote, bool) {
+	canonical, err := CanonicalizeRemoteURL(rawURL)
+	if err != nil {
+		return Remote{}, false
+	}
+	for _, remote := range cfg.Remotes {
+		normalized, err := CanonicalizeRemoteURL(remote.URL)
+		if err == nil && normalized == canonical {
+			return remote, true
+		}
+	}
+	return Remote{}, false
+}
+
+func CanonicalizeRemoteURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	resolved, err := ResolveLocation(raw)
+	if err != nil {
+		return "", err
+	}
+	switch resolved.Mode {
+	case ModeRemote:
+		u, err := url.Parse(resolved.ServerURL)
+		if err != nil {
+			return "", err
+		}
+		u.Scheme = strings.ToLower(u.Scheme)
+		u.Host = strings.ToLower(u.Host)
+		if u.Path == "/" {
+			u.Path = ""
+		}
+		return u.String(), nil
+	case ModeLocal:
+		path := resolved.DBPath
+		if !filepath.IsAbs(path) {
+			abs, err := filepath.Abs(path)
+			if err != nil {
+				return "", err
+			}
+			path = abs
+		}
+		return "file://" + path, nil
+	default:
+		return raw, nil
+	}
+}
+
+func AddRemote(cfg Config, remote Remote) (Config, error) {
+	name := strings.TrimSpace(remote.Name)
+	if name == "" {
+		return cfg, errors.New("remote name is required")
+	}
+	urlValue, err := CanonicalizeRemoteURL(remote.URL)
+	if err != nil {
+		return cfg, err
+	}
+	if urlValue == "" {
+		return cfg, errors.New("remote url is required")
+	}
+	for _, existing := range cfg.Remotes {
+		if existing.Name == name {
+			return cfg, fmt.Errorf("remote %q already exists", name)
+		}
+		existingURL, err := CanonicalizeRemoteURL(existing.URL)
+		if err == nil && existingURL == urlValue {
+			return cfg, fmt.Errorf("remote URL %q already exists", urlValue)
+		}
+	}
+	cfg.Remotes = append(cfg.Remotes, Remote{Name: name, URL: urlValue})
+	cfg.Remotes = sortUniqueRemotes(cfg.Remotes)
+	return cfg, nil
+}
+
+func RemoveRemote(cfg Config, name string) (Config, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return cfg, false
+	}
+	filtered := make([]Remote, 0, len(cfg.Remotes))
+	removed := false
+	for _, remote := range cfg.Remotes {
+		if remote.Name == name {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, remote)
+	}
+	cfg.Remotes = filtered
+	if cfg.DefaultRemote == name {
+		cfg.DefaultRemote = ""
+	}
+	return cfg, removed
+}
+
+func sortUniqueRemotes(remotes []Remote) []Remote {
+	seenNames := map[string]bool{}
+	seenURLs := map[string]bool{}
+	filtered := make([]Remote, 0, len(remotes))
+	for _, remote := range remotes {
+		name := strings.TrimSpace(remote.Name)
+		urlValue, err := CanonicalizeRemoteURL(remote.URL)
+		if name == "" || err != nil || urlValue == "" || seenNames[name] || seenURLs[urlValue] {
+			continue
+		}
+		seenNames[name] = true
+		seenURLs[urlValue] = true
+		filtered = append(filtered, Remote{Name: name, URL: urlValue})
+	}
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].Name < filtered[j].Name })
+	return filtered
 }
 
 // FindTicketRoot walks up the directory tree from startDir looking for a
@@ -504,19 +673,17 @@ func saveProjectConfig(path string, cfg Config) error {
 		return err
 	}
 	disk := projectDiskConfig{
-		Version: 1,
-		Config: Config{
-			ProjectID:            cfg.ProjectID,
-			CurrentEpicID:        cfg.CurrentEpicID,
-			DeleteConfirmToken:   cfg.DeleteConfirmToken,
-			DeleteConfirmProject: cfg.DeleteConfirmProject,
-			DeleteConfirmTicket:  cfg.DeleteConfirmTicket,
-		},
+		Version:              1,
+		Remote:               strings.TrimSpace(cfg.Remote),
+		Location:             "",
+		ProjectID:            cfg.ProjectID,
+		CurrentEpicID:        cfg.CurrentEpicID,
+		DeleteConfirmToken:   cfg.DeleteConfirmToken,
+		DeleteConfirmProject: cfg.DeleteConfirmProject,
+		DeleteConfirmTicket:  cfg.DeleteConfirmTicket,
 	}
-	resolved, err := ResolveLocation(cfg.Location)
-	if err == nil {
-		disk.Backend = resolved.Mode
-		if resolved.Mode == ModeRemote {
+	if disk.Remote == "" {
+		if resolved, err := ResolveLocation(cfg.Location); err == nil && resolved.Mode == ModeRemote {
 			disk.Location = strings.TrimSpace(cfg.Location)
 		}
 	}
@@ -557,7 +724,7 @@ func removeInvalidFields(raw map[string]json.RawMessage) (map[string]json.RawMes
 func saveRaw(path string, raw map[string]json.RawMessage) error {
 	cleaned := make(map[string]json.RawMessage, len(raw))
 	for k, v := range raw {
-		if k != "token" {
+		if k != "token" && k != "username" {
 			cleaned[k] = v
 		}
 	}

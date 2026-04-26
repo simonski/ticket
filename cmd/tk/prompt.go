@@ -136,12 +136,12 @@ func resolveLoginUsername(configUsername, usernameFlag string) string {
 	if strings.TrimSpace(usernameFlag) != "" {
 		return strings.TrimSpace(usernameFlag)
 	}
-	return envValue("TICKET_USERNAME")
+	return ""
 }
 
 func resolveLoginPassword(passwordFlag string) string {
 	if strings.TrimSpace(passwordFlag) != "" {
 		return strings.TrimSpace(passwordFlag)
 	}
-	return envValue("TICKET_PASSWORD")
+	return ""
 }

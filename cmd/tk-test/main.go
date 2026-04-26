@@ -11,7 +11,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -198,7 +197,6 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 			}
 			serverPort = port
 			serverURL := fmt.Sprintf("http://localhost:%d", port)
-			env["TICKET_URL"] = serverURL
 
 			serverCmd, serverLog, err = startServerOnPort(ticketBin, repoDir, env, port, "")
 			if err != nil {
@@ -206,7 +204,7 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 				fail++
 				continue
 			}
-			if waitHealthz(env, 20*time.Second) {
+			if waitHealthz(serverURL, 20*time.Second) {
 				fmt.Printf("  PASS  %s  (port %d)\n", label, port)
 				pass++
 			} else {
@@ -218,19 +216,6 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 
 		// Extract export lines to persist in env for subsequent blocks.
 		code, newExports := extractExports(code, env)
-
-		// If TICKET_URL is being set, override with our dynamic server URL
-		// (the doc may hardcode localhost:8080 but we use a free port).
-		if _, ok := newExports["TICKET_URL"]; ok && serverPort > 0 {
-			serverURL := fmt.Sprintf("http://localhost:%d", serverPort)
-			newExports["TICKET_URL"] = serverURL
-			// Also rewrite the export in the code so bash sees the right URL.
-			code = strings.ReplaceAll(code, "http://localhost:8080", serverURL)
-		}
-		// Update config.json location so the CLI detects remote mode.
-		if u, ok := newExports["TICKET_URL"]; ok && u != "" {
-			updateProjectConfigLocation(repoDir, u)
-		}
 
 		if verbose {
 			for _, line := range strings.Split(strings.TrimSpace(code), "\n") {
@@ -592,13 +577,7 @@ func startServerOnPort(ticketBin, workDir string, env map[string]string, port in
 }
 
 // waitHealthz polls the server health endpoint until it responds 200 or timeout.
-func waitHealthz(env map[string]string, timeout time.Duration) bool {
-	// Determine server URL from env or default.
-	serverURL := "http://localhost:8080"
-	if u, ok := env["TICKET_URL"]; ok && u != "" {
-		serverURL = u
-	}
-
+func waitHealthz(serverURL string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(serverURL + "/api/healthz")
@@ -611,25 +590,6 @@ func waitHealthz(env map[string]string, timeout time.Duration) bool {
 		time.Sleep(200 * time.Millisecond)
 	}
 	return false
-}
-
-// updateProjectConfigLocation writes the location field into repo-local
-// .ticket/config.json so the CLI detects remote mode from the active workspace.
-func updateProjectConfigLocation(rootDir, location string) {
-	configPath := filepath.Join(rootDir, ".ticket", "config.json")
-	data, err := os.ReadFile(configPath) // #nosec G304 -- configPath is derived from a controlled temp directory
-	if err != nil {
-		data = []byte("{}")
-	}
-	var m map[string]any
-	if jsonErr := json.Unmarshal(data, &m); jsonErr != nil {
-		m = make(map[string]any)
-	}
-	m["location"] = location
-	if out, err := json.MarshalIndent(m, "", "  "); err == nil {
-		_ = os.MkdirAll(filepath.Dir(configPath), 0o755) // #nosec G301 -- temp test directory
-		_ = os.WriteFile(configPath, out, 0o600)
-	}
 }
 
 func tailFile(path string, lines int) string {

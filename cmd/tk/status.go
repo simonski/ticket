@@ -28,9 +28,7 @@ func statusEnvValue(name string, secret bool) string {
 
 func statusEnvLines() []statusLine {
 	return []statusLine{
-		{key: "TICKET_URL", value: statusEnvValue("TICKET_URL", false)},
-		{key: "TICKET_USERNAME", value: statusEnvValue("TICKET_USERNAME", false)},
-		{key: "TICKET_PASSWORD", value: statusEnvValue("TICKET_PASSWORD", true)},
+		{key: "TICKET_HOME", value: statusEnvValue("TICKET_HOME", false)},
 		{key: "AGENT_ID", value: statusEnvValue("AGENT_ID", false)},
 		{key: "AGENT_PASSWORD", value: statusEnvValue("AGENT_PASSWORD", true)},
 	}
@@ -226,9 +224,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	if outputJSON {
 		payload := map[string]any{
 			"location":        cfg.Location,
-			"TICKET_URL":      statusEnvValue("TICKET_URL", false),
-			"TICKET_USERNAME": statusEnvValue("TICKET_USERNAME", false),
-			"TICKET_PASSWORD": statusEnvValue("TICKET_PASSWORD", true),
+			"TICKET_HOME":     statusEnvValue("TICKET_HOME", false),
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
@@ -285,9 +281,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	if outputJSON {
 		payload := map[string]any{
 			"db_path":         dbPath,
-			"TICKET_URL":      statusEnvValue("TICKET_URL", false),
-			"TICKET_USERNAME": statusEnvValue("TICKET_USERNAME", false),
-			"TICKET_PASSWORD": statusEnvValue("TICKET_PASSWORD", true),
+			"TICKET_HOME":     statusEnvValue("TICKET_HOME", false),
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,

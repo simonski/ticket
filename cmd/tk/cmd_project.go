@@ -207,6 +207,8 @@ func runProject(args []string) error {
 		return runProjectByID(svc, project.ID, args)
 	case "init":
 		return runProjectInit(cfg, svc, args[1:])
+	case "remote":
+		return runProjectRemote(cfg, args[1:])
 	case "set-draft":
 		fs := flag.NewFlagSet("project set-draft", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -392,9 +394,48 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
 	}
 
-	if err := bindRootToLocalProject(cwd, project.Title, project.Prefix, project.GitRepository); err != nil {
+	resolved, err := config.ResolveURL()
+	if err != nil {
 		return err
 	}
+	if resolved.Mode == config.ModeRemote {
+		remoteName := strings.TrimSpace(cfg.Remote)
+		if remoteName == "" {
+			remoteName = strings.TrimSpace(cfg.DefaultRemote)
+		}
+		return bindRootToRemoteProject(cwd, remoteName, project.Prefix)
+	}
+	return bindRootToLocalProject(cwd, project.Title, project.Prefix, project.GitRepository)
+}
+
+func runProjectRemote(cfg config.Config, args []string) error {
+	if len(args) == 0 {
+		if strings.TrimSpace(cfg.Remote) == "" {
+			fmt.Println("(none)")
+			return nil
+		}
+		fmt.Println(cfg.Remote)
+		return nil
+	}
+	if len(args) != 1 {
+		return errors.New("usage: tk project remote <name>")
+	}
+	name := strings.TrimSpace(args[0])
+	globalCfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if _, ok := globalCfg.RemoteByName(name); !ok {
+		return fmt.Errorf("remote %q not found", name)
+	}
+	root, _, err := currentOrAncestorProjectRoot()
+	if err != nil {
+		return err
+	}
+	if err := config.SaveProjectConfigAt(root, config.Config{Remote: name}); err != nil {
+		return err
+	}
+	fmt.Printf("using remote %s for %s\n", name, root)
 	return nil
 }
 
