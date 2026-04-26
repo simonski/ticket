@@ -94,6 +94,21 @@ Rules:
 - [ ] Coverage thresholds still met
 ```
 
+### High-risk change checklist
+
+Use this for release-sensitive or high-blast-radius work such as auth/session
+changes, websocket/runtime changes, deploy/release changes, schema changes, or
+public contract updates.
+
+```
+- [ ] Added or updated focused tests for the changed risk area (not just broad regression runs)
+- [ ] Ran `make test-go-cover` after the change
+- [ ] Ran `go test ./internal/server -run <target>` or equivalent targeted package tests for server-facing changes
+- [ ] Ran `go test -race ./...` when touching concurrency, websocket, goroutines, or shared state
+- [ ] Ran `make validate-openapi` and updated `SPEC.md` / `USER_GUIDE.md` when changing public contracts
+- [ ] Updated operator docs (`docs/RUNBOOKS.md`, quickstarts, deploy docs) when deploy/runtime behavior changed
+```
+
 ---
 
 ## Testing expectations

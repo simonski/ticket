@@ -1,7 +1,7 @@
 # Ticket — System Specification
 
-**Version:** 0.1.774
-**Date:** 2026-04-12
+**Version:** 0.1.848
+**Date:** 2026-04-26
 
 This document is the authoritative specification for the `ticket` system. It is
 designed so that an agent or team can rebuild the codebase, documentation, and

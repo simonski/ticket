@@ -108,6 +108,54 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 	}
 }
 
+func TestLocalModeClientCreateAndUpdateTicketUsingStatusAndMessages(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
+	}
+
+	api := New(localClientConfig(dbPath))
+	ctx := context.Background()
+	ticket, err := api.CreateTicket(ctx, TicketCreateRequest{
+		ProjectID: 1,
+		Type:      "task",
+		Title:     "Status-based task",
+		Assignee:  "admin",
+		Status:    "design/active",
+		Message:   "created from status",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if ticket.State != "active" {
+		t.Fatalf("CreateTicket().State = %q, want active", ticket.State)
+	}
+	updated, err := api.UpdateTicket(ctx, ticket.ID, TicketUpdateRequest{
+		Title:       ticket.Title,
+		Description: ticket.Description,
+		ParentID:    ticket.ParentID,
+		Assignee:    ticket.Assignee,
+		Status:      "design/success",
+		Message:     "updated from status",
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket() error = %v", err)
+	}
+	if updated.ID != ticket.ID {
+		t.Fatalf("UpdateTicket().ID = %q, want %q", updated.ID, ticket.ID)
+	}
+	comments, err := api.ListComments(ctx, ticket.ID)
+	if err != nil {
+		t.Fatalf("ListComments() error = %v", err)
+	}
+	if len(comments) < 2 {
+		t.Fatalf("ListComments() len = %d, want at least 2", len(comments))
+	}
+}
+
 func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -497,6 +545,136 @@ func TestLocalModeClientSdlcs(t *testing.T) {
 	}
 }
 
+func TestLocalModeClientSdlcStagesProjectDraftAndTicketAliases(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
+	}
+	api := New(localClientConfig(dbPath))
+
+	ctx := context.Background()
+	wf, err := api.CreateSdlc(ctx, SdlcRequest{Name: "wf-advanced", Description: "d"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := api.AddSdlcStage(ctx, wf.ID, SdlcStageRequest{
+		StageName:          "develop",
+		Description:        "ways",
+		AcceptanceCriteria: "ready",
+		DefinitionOfDone:   "done",
+		SortOrder:          1,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+	if stage.Description != "ways" || stage.DefinitionOfReady != "ready" || stage.DefinitionOfDone != "done" {
+		t.Fatalf("AddSdlcStage() = %#v, want fallback values copied", stage)
+	}
+	stage, err = api.UpdateSdlcStage(ctx, stage.ID, SdlcStageRequest{
+		StageName:          "develop",
+		Description:        "updated ways",
+		AcceptanceCriteria: "updated ready",
+		DefinitionOfDone:   "updated done",
+	})
+	if err != nil {
+		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	}
+	if stage.Description != "updated ways" || stage.DefinitionOfReady != "updated ready" {
+		t.Fatalf("UpdateSdlcStage() = %#v, want updated fallback values", stage)
+	}
+	gotStage, err := api.GetSdlcStage(ctx, stage.ID)
+	if err != nil {
+		t.Fatalf("GetSdlcStage() error = %v", err)
+	}
+	if gotStage.ID != stage.ID {
+		t.Fatalf("GetSdlcStage().ID = %d, want %d", gotStage.ID, stage.ID)
+	}
+	stages, err := api.ListSdlcStages(ctx, wf.ID)
+	if err != nil {
+		t.Fatalf("ListSdlcStages() error = %v", err)
+	}
+	if len(stages) != 1 {
+		t.Fatalf("ListSdlcStages() len = %d, want 1", len(stages))
+	}
+
+	role, err := api.CreateRole(ctx, RoleRequest{Title: "Engineer"})
+	if err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+	if err := api.AddSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	}
+	if err := api.ReorderSdlcStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
+		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	}
+	if err := api.RemoveSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	}
+
+	projectBefore, err := api.GetProject(ctx, "1")
+	if err != nil {
+		t.Fatalf("GetProject(before) error = %v", err)
+	}
+	if err := api.SetProjectDefaultDraft(ctx, 1, !projectBefore.DefaultDraft); err != nil {
+		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
+	}
+	projectAfter, err := api.GetProject(ctx, "1")
+	if err != nil {
+		t.Fatalf("GetProject(after) error = %v", err)
+	}
+	if projectAfter.DefaultDraft == projectBefore.DefaultDraft {
+		t.Fatalf("DefaultDraft unchanged: before=%v after=%v", projectBefore.DefaultDraft, projectAfter.DefaultDraft)
+	}
+
+	ticket, err := api.CreateTicket(ctx, TicketCreateRequest{ProjectID: 1, Type: "task", Title: "alias-test"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := api.ReadyTicket(ctx, ticket.ID, "ready"); err != nil {
+		t.Fatalf("ReadyTicket() error = %v", err)
+	}
+	db, err := api.openLocalDB()
+	if err != nil {
+		t.Fatalf("openLocalDB() error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, store.StateSuccess, store.RenderLifecycleStatus(ticket.Stage, store.StateSuccess), ticket.ID); err != nil {
+		t.Fatalf("set success state error = %v", err)
+	}
+	advanced, err := api.NextTicket(ctx, ticket.ID)
+	if err != nil {
+		t.Fatalf("NextTicket() error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, store.StateFail, store.RenderLifecycleStatus(advanced.Stage, store.StateFail), ticket.ID); err != nil {
+		t.Fatalf("set fail state error = %v", err)
+	}
+	if _, err := api.PreviousTicket(ctx, ticket.ID); err != nil {
+		t.Fatalf("PreviousTicket() error = %v", err)
+	}
+	if _, err := api.ArchiveTicket(ctx, ticket.ID, "archive"); err != nil {
+		t.Fatalf("ArchiveTicket() error = %v", err)
+	}
+	if _, err := api.UnarchiveTicket(ctx, ticket.ID, "unarchive"); err != nil {
+		t.Fatalf("UnarchiveTicket() error = %v", err)
+	}
+	if _, err := api.CompleteTicket(ctx, ticket.ID, "complete"); err != nil {
+		t.Fatalf("CompleteTicket() error = %v", err)
+	}
+	if _, err := api.ReopenTicket(ctx, ticket.ID, "reopen"); err != nil {
+		t.Fatalf("ReopenTicket() error = %v", err)
+	}
+	if _, err := api.DraftTicket(ctx, ticket.ID, "draft"); err != nil {
+		t.Fatalf("DraftTicket() error = %v", err)
+	}
+	if _, err := api.UndraftTicket(ctx, ticket.ID, "undraft"); err != nil {
+		t.Fatalf("UndraftTicket() error = %v", err)
+	}
+	if _, err := api.CloneTicket(ctx, ticket.ID, "clone"); err != nil {
+		t.Fatalf("CloneTicket() error = %v", err)
+	}
+}
+
 func TestLocalModeClientTimeAndLabels(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -792,6 +970,11 @@ func TestLocalModeClientAgents(t *testing.T) {
 		t.Fatalf("RequestAgentWork() error = %v", err)
 	}
 	_ = resp
+	dryRunResp, err := api.RequestAgentWork(context.Background(), AgentRequest{ID: agent.ID, Password: newpw, TicketID: &ticket.ID, DryRun: true})
+	if err != nil {
+		t.Fatalf("RequestAgentWork(ticket dry run) error = %v", err)
+	}
+	_ = dryRunResp
 
 	// AgentUpdateTicket
 	if resp.Status == "NEW" || resp.Status == "CURRENT" {
@@ -815,6 +998,82 @@ func TestGetenvFirst(t *testing.T) {
 	result = getenvFirst("TEST_GETENV_MISSING_1", "TEST_GETENV_MISSING_2")
 	if result != "" {
 		t.Fatalf("getenvFirst() = %q, want empty", result)
+	}
+}
+
+func TestEnsureLocalUserCreatesAndReenablesUser(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	created, err := ensureLocalUser(ctx, db, "builder")
+	if err != nil {
+		t.Fatalf("ensureLocalUser(create) error = %v", err)
+	}
+	if created.Username != "builder" || !created.Enabled {
+		t.Fatalf("ensureLocalUser(create) = %#v", created)
+	}
+	if err := store.SetUserEnabled(ctx, db, "builder", false); err != nil {
+		t.Fatalf("SetUserEnabled(false) error = %v", err)
+	}
+	reenabled, err := ensureLocalUser(ctx, db, "builder")
+	if err != nil {
+		t.Fatalf("ensureLocalUser(reenable) error = %v", err)
+	}
+	if !reenabled.Enabled {
+		t.Fatalf("ensureLocalUser(reenable) = %#v, want enabled user", reenabled)
+	}
+}
+
+func TestLocalModeClientLogoutFails(t *testing.T) {
+	t.Parallel()
+
+	api := New(localClientConfig(filepath.Join(t.TempDir(), "ticket.db")))
+	if err := api.Logout(context.Background()); err == nil {
+		t.Fatal("Logout() error = nil, want local mode error")
+	}
+}
+
+func TestLocalModeClientLoginFails(t *testing.T) {
+	t.Parallel()
+
+	api := New(localClientConfig(filepath.Join(t.TempDir(), "ticket.db")))
+	if _, err := api.Login(context.Background(), "admin", "secret"); err == nil {
+		t.Fatal("Login() error = nil, want local mode error")
+	}
+}
+
+func TestLocalModeClientRequestTicketByRefDryRun(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "secret", static.SeedDatabase); err != nil {
+		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
+	}
+	api := New(localClientConfig(dbPath))
+
+	ticket, err := api.CreateTicket(context.Background(), TicketCreateRequest{ProjectID: 1, Type: "task", Title: "dry-run"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := api.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
+		t.Fatalf("ReadyTicket() error = %v", err)
+	}
+	resp, err := api.RequestTicket(context.Background(), TicketRequest{TicketRef: ticket.ID, DryRun: true})
+	if err != nil {
+		t.Fatalf("RequestTicket(dry run) error = %v", err)
+	}
+	if resp.Status == "" {
+		t.Fatalf("RequestTicket(dry run) = %#v, want non-empty status", resp)
 	}
 }
 

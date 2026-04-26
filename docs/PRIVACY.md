@@ -1,8 +1,8 @@
 # Privacy Policy
 
 **Project:** ticket  
-**Version:** 0.1.823  
-**Last updated:** 2026-04-18
+**Version:** 0.1.848  
+**Last updated:** 2026-04-26
 
 This document describes what personal data the **ticket** application collects,
 how it is used, how long it is retained, and what rights users have over their

@@ -1,12 +1,12 @@
 # ticket
 
-`ticket` is an issue tracking toolkit for agentic software engineering.  It is a batteries included go binary that provides a CLI, server, a terminal UI, a web UI, an agent SKILL and a REST API — backed by SQLite.
+`ticket` is an issue tracking toolkit for agentic software engineering.  It is "batteries included" - providing a CLI, server, terminal UI, an agent SKILL and a REST API — backed by SQLite.
 
 ---
 
 ## Introduction
 
-`ticket` tracks engineering work through a lightweight lifecycle:
+`tk` tracks engineering work through a lightweight lifecycle:
 
 | Concept | Example |
 |---------|---------|

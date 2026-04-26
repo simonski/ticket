@@ -1,16 +1,19 @@
 const { defineConfig } = require("@playwright/test");
+const { resolvePort } = require("./playwright.port");
+
+const port = resolvePort("PLAYWRIGHT_SITE2_PORT", 4174);
 
 module.exports = defineConfig({
   testDir: "./tests/playwright",
   testMatch: "site2.spec.js",
   timeout: 30000,
   use: {
-    baseURL: "http://127.0.0.1:4174",
+    baseURL: `http://127.0.0.1:${port}`,
     headless: true,
   },
   webServer: {
-    command: "python3 -m http.server 4174 -d web",
-    url: "http://127.0.0.1:4174/site2",
+    command: `python3 -m http.server ${port} -d web`,
+    url: `http://127.0.0.1:${port}/site2`,
     reuseExistingServer: true,
     timeout: 30000,
   },

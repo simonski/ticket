@@ -378,6 +378,8 @@ test.beforeEach(async ({ page }) => {
 test("creates a project and persists default draft settings through the existing API", async ({ page }) => {
   await page.getByRole("button", { name: "Projects" }).click();
   await page.getByRole("button", { name: "New project" }).click();
+  await expect(page.locator("#project-prefix")).toHaveAttribute("maxlength", "5");
+  await expect(page.locator("#project-prefix")).toHaveAttribute("pattern", "[A-Z]{1,5}");
   await page.locator("#project-prefix").fill("WEB");
   await page.locator("#project-title").fill("Website");
   await page.locator("#project-default-draft").selectOption("true");

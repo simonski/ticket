@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/simonski/ticket/internal/client"
@@ -173,6 +174,121 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	}
 	if updated.ParentID == nil || *updated.ParentID != parent.ID {
 		t.Fatalf("UpdateTicket() parent = %#v", updated)
+	}
+}
+
+func TestHTTPServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
+	_, svc := newRemoteFixture(t)
+	ctx := context.Background()
+
+	project, err := svc.CreateProject(ctx, libticket.ProjectCreateRequest{Title: "Advanced Project"})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := svc.RenameProjectPrefix(ctx, project.ID, "ADV"); err == nil {
+		t.Fatal("RenameProjectPrefix() error = nil, want remote unsupported error")
+	}
+	if err := svc.SetProjectDefaultDraft(ctx, project.ID, true); err != nil {
+		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
+	}
+	projectAfter, err := svc.GetProject(ctx, strconv.FormatInt(project.ID, 10))
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if !projectAfter.DefaultDraft {
+		t.Fatalf("GetProject().DefaultDraft = %v, want true", projectAfter.DefaultDraft)
+	}
+
+	wf, err := svc.CreateSdlc(ctx, libticket.SdlcRequest{Name: "wf-advanced", Description: "d"})
+	if err != nil {
+		t.Fatalf("CreateSdlc() error = %v", err)
+	}
+	stage, err := svc.AddSdlcStage(ctx, wf.ID, libticket.SdlcStageRequest{
+		StageName:          "develop",
+		Description:        "ways",
+		AcceptanceCriteria: "ready",
+		DefinitionOfDone:   "done",
+		SortOrder:          1,
+	})
+	if err != nil {
+		t.Fatalf("AddSdlcStage() error = %v", err)
+	}
+	stage, err = svc.UpdateSdlcStage(ctx, stage.ID, libticket.SdlcStageRequest{
+		StageName:          "develop",
+		Description:        "updated ways",
+		AcceptanceCriteria: "updated ready",
+		DefinitionOfDone:   "updated done",
+	})
+	if err != nil {
+		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	}
+	if _, err := svc.GetSdlcStage(ctx, stage.ID); err != nil {
+		t.Fatalf("GetSdlcStage() error = %v", err)
+	}
+	if stages, err := svc.ListSdlcStages(ctx, wf.ID); err != nil {
+		t.Fatalf("ListSdlcStages() error = %v", err)
+	} else if len(stages) != 1 {
+		t.Fatalf("ListSdlcStages() len = %d, want 1", len(stages))
+	}
+
+	role, err := svc.CreateRole(ctx, libticket.RoleRequest{Title: "Engineer"})
+	if err != nil {
+		t.Fatalf("CreateRole() error = %v", err)
+	}
+	if err := svc.AddSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	}
+	if err := svc.ReorderSdlcStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
+		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	}
+	if err := svc.RemoveSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	}
+
+	ticket, err := svc.CreateTicket(ctx, libticket.TicketCreateRequest{ProjectID: project.ID, Type: "task", Title: "Lifecycle task"})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := svc.DraftTicket(ctx, ticket.ID, "draft"); err != nil {
+		t.Fatalf("DraftTicket() error = %v", err)
+	}
+	if _, err := svc.UndraftTicket(ctx, ticket.ID, "ready"); err != nil {
+		t.Fatalf("UndraftTicket() error = %v", err)
+	}
+	if _, err := svc.CompleteTicket(ctx, ticket.ID, "complete"); err != nil {
+		t.Fatalf("CompleteTicket() error = %v", err)
+	}
+	if _, err := svc.ReopenTicket(ctx, ticket.ID, "reopen"); err != nil {
+		t.Fatalf("ReopenTicket() error = %v", err)
+	}
+	if _, err := svc.NextTicket(ctx, ticket.ID); err == nil {
+		t.Fatal("NextTicket() error = nil, want state precondition error")
+	}
+	if _, err := svc.PreviousTicket(ctx, ticket.ID); err == nil {
+		t.Fatal("PreviousTicket() error = nil, want state precondition error")
+	}
+	if _, err := svc.ListHistoryPaged(ctx, ticket.ID, 5, 0); err != nil {
+		t.Fatalf("ListHistoryPaged() error = %v", err)
+	}
+
+	agent, password, err := svc.CreateAgent(ctx, libticket.AgentCreateRequest{Password: "agentpw"})
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	if password == "" {
+		t.Fatal("CreateAgent() password = empty")
+	}
+	if _, err := svc.RegisterAgent(ctx, libticket.AgentRegisterRequest{ID: agent.ID, Password: password}); err != nil {
+		t.Fatalf("RegisterAgent() error = %v", err)
+	}
+	if err := svc.HeartbeatAgent(ctx, agent.ID, password, "online"); err != nil {
+		t.Fatalf("HeartbeatAgent() error = %v", err)
+	}
+	if _, err := svc.RequestAgentWork(ctx, libticket.AgentRequest{ID: agent.ID, Password: password, ProjectID: project.ID, DryRun: true}); err != nil {
+		t.Fatalf("RequestAgentWork() error = %v", err)
+	}
+	if _, err := svc.AgentUpdateTicket(ctx, ticket.ID, libticket.AgentTicketUpdateRequest{ID: agent.ID, Password: password, Result: "done"}); err != nil {
+		t.Fatalf("AgentUpdateTicket() error = %v", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -518,5 +519,339 @@ func TestLoadInvalidJSONUsesDefaults(t *testing.T) {
 	}
 	if cfg.Location != "" {
 		t.Fatalf("Load().Location = %q, want empty default", cfg.Location)
+	}
+}
+
+func TestCanonicalizeRemoteURL(t *testing.T) {
+	setupConfigTestHome(t)
+
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty", input: "", want: ""},
+		{name: "remote lowercases scheme and host", input: "HTTPS://Tickets.EXAMPLE.com/", want: "https://tickets.example.com"},
+		{name: "unsupported scheme", input: "ftp://example.com", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CanonicalizeRemoteURL(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("CanonicalizeRemoteURL() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CanonicalizeRemoteURL() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("CanonicalizeRemoteURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	got, err := CanonicalizeRemoteURL("ticket.db")
+	if err != nil {
+		t.Fatalf("CanonicalizeRemoteURL(relative path) error = %v", err)
+	}
+	if !strings.HasPrefix(got, "file://") || !strings.HasSuffix(got, "/ticket.db") {
+		t.Fatalf("CanonicalizeRemoteURL(relative path) = %q, want file://.../ticket.db", got)
+	}
+}
+
+func TestAddRemoteRejectsDuplicateNameAndURL(t *testing.T) {
+	setupConfigTestHome(t)
+
+	cfg, err := AddRemote(Config{}, Remote{Name: "prod", URL: "https://tickets.example.com"})
+	if err != nil {
+		t.Fatalf("AddRemote(first) error = %v", err)
+	}
+	if _, err := AddRemote(cfg, Remote{Name: "prod", URL: "https://other.example.com"}); err == nil {
+		t.Fatal("AddRemote(duplicate name) error = nil, want error")
+	}
+	if _, err := AddRemote(cfg, Remote{Name: "prod-2", URL: "https://tickets.example.com/"}); err == nil {
+		t.Fatal("AddRemote(duplicate URL) error = nil, want error")
+	}
+}
+
+func TestRemoveRemoteClearsDefaultRemote(t *testing.T) {
+	cfg := Config{
+		DefaultRemote: "prod",
+		Remotes: []Remote{
+			{Name: "local", URL: "file:///tmp/local.db"},
+			{Name: "prod", URL: "https://tickets.example.com"},
+		},
+	}
+
+	got, removed := RemoveRemote(cfg, "prod")
+	if !removed {
+		t.Fatal("RemoveRemote() removed = false, want true")
+	}
+	if got.DefaultRemote != "" {
+		t.Fatalf("RemoveRemote().DefaultRemote = %q, want empty", got.DefaultRemote)
+	}
+	if len(got.Remotes) != 1 || got.Remotes[0].Name != "local" {
+		t.Fatalf("RemoveRemote().Remotes = %#v, want only local", got.Remotes)
+	}
+}
+
+func TestSortUniqueRemotesNormalizesAndDeduplicates(t *testing.T) {
+	setupConfigTestHome(t)
+
+	got := sortUniqueRemotes([]Remote{
+		{Name: "prod", URL: "https://tickets.example.com/"},
+		{Name: "prod", URL: "https://tickets.example.com"},
+		{Name: "local", URL: "ticket.db"},
+		{Name: "invalid", URL: "ftp://example.com"},
+	})
+	if len(got) != 2 {
+		t.Fatalf("sortUniqueRemotes() len = %d, want 2 (%#v)", len(got), got)
+	}
+	want := []Remote{
+		{Name: "local", URL: got[0].URL},
+		{Name: "prod", URL: "https://tickets.example.com"},
+	}
+	if !strings.HasPrefix(got[0].URL, "file://") || !strings.HasSuffix(got[0].URL, "/ticket.db") {
+		t.Fatalf("sortUniqueRemotes() local URL = %q, want file://.../ticket.db", got[0].URL)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sortUniqueRemotes() = %#v, want %#v", got, want)
+	}
+}
+
+func TestSaveAndClearRemoteCredentials(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+
+	if err := SaveRemoteCredentials("https://tickets.example.com/", "alice", "secret"); err != nil {
+		t.Fatalf("SaveRemoteCredentials() error = %v", err)
+	}
+
+	creds, err := LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials() error = %v", err)
+	}
+	remote, ok := creds.Remote("https://tickets.example.com")
+	if !ok {
+		t.Fatal("Credentials.Remote() ok = false, want true")
+	}
+	if remote.Username != "alice" || remote.Token != "secret" {
+		t.Fatalf("remote creds = %#v, want alice/secret", remote)
+	}
+	if creds.Token != "secret" {
+		t.Fatalf("Credentials.Token = %q, want legacy token mirror", creds.Token)
+	}
+
+	if err := ClearRemoteCredentials("https://tickets.example.com"); err != nil {
+		t.Fatalf("ClearRemoteCredentials() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "credentials.json")); !os.IsNotExist(err) {
+		t.Fatalf("credentials.json should be removed after clearing last remote, err = %v", err)
+	}
+}
+
+func TestSaveWithProjectConfigSplitsGlobalAndProjectFields(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+	projectRoot := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(filepath.Join(projectRoot, ".ticket"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.ticket) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(projectRoot); err != nil {
+		t.Fatalf("Chdir(projectRoot) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	if err := Save(Config{
+		DefaultRemote:        "prod",
+		Remotes:              []Remote{{Name: "prod", URL: "https://tickets.example.com"}},
+		Remote:               "prod",
+		Location:             "https://tickets.example.com",
+		ProjectID:            "CUS",
+		CurrentEpicID:        "T-1",
+		DeleteConfirmToken:   "token",
+		DeleteConfirmProject: "CUS",
+		DeleteConfirmTicket:  "CUS-1",
+		Username:             "alice",
+		Token:                "secret",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	globalData, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(global config) error = %v", err)
+	}
+	if strings.Contains(string(globalData), "secret") || strings.Contains(string(globalData), `"remote": "prod"`) || strings.Contains(string(globalData), `"project_id": "CUS"`) {
+		t.Fatalf("global config leaked project/auth fields: %s", string(globalData))
+	}
+
+	projectData, err := os.ReadFile(filepath.Join(projectRoot, ".ticket", "config.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(project config) error = %v", err)
+	}
+	if !strings.Contains(string(projectData), `"current_epic_id": "T-1"`) || !strings.Contains(string(projectData), `"delete_confirm_project": "CUS"`) {
+		t.Fatalf("project config = %s, want project-only state fields", string(projectData))
+	}
+	if strings.Contains(string(projectData), "secret") {
+		t.Fatalf("project config leaked token: %s", string(projectData))
+	}
+}
+
+func TestConfigRemoteByURLMatchesCanonicalForms(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Remotes: []Remote{
+			{Name: "prod", URL: "HTTPS://Tickets.Example.com/"},
+			{Name: "local", URL: "file:///tmp/ticket.db"},
+		},
+	}
+
+	remote, ok := cfg.RemoteByURL("https://tickets.example.com")
+	if !ok || remote.Name != "prod" {
+		t.Fatalf("RemoteByURL(remote) = (%#v, %v), want prod", remote, ok)
+	}
+
+	remote, ok = cfg.RemoteByURL("https://missing.example.com")
+	if ok {
+		t.Fatalf("RemoteByURL(missing) = (%#v, %v), want not found", remote, ok)
+	}
+}
+
+func TestFindGitRootWalksUp(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "a", "b", "c")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("MkdirAll(nested) error = %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatalf("Mkdir(.git) error = %v", err)
+	}
+
+	got, ok := FindGitRoot(nested)
+	if !ok || got != root {
+		t.Fatalf("FindGitRoot() = (%q, %v), want (%q, true)", got, ok, root)
+	}
+
+	if got, ok := FindGitRoot(t.TempDir()); ok || got != "" {
+		t.Fatalf("FindGitRoot(no git) = (%q, %v), want empty false", got, ok)
+	}
+}
+
+func TestPathsResolveUnderTicketHome(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+	repoDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".ticket"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.ticket) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Chdir(repoDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	if got, err := Path(); err != nil || got != filepath.Join(tempDir, "config.json") {
+		t.Fatalf("Path() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "config.json"))
+	}
+	if got, err := CredentialsPath(); err != nil || got != filepath.Join(tempDir, "credentials.json") {
+		t.Fatalf("CredentialsPath() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "credentials.json"))
+	}
+	if got, err := LocalDBPath(); err != nil || got != filepath.Join(tempDir, "ticket.db") {
+		t.Fatalf("LocalDBPath() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "ticket.db"))
+	}
+	if got, ok, err := ProjectPath(); err != nil || !ok || !strings.HasSuffix(got, filepath.Join("repo", ".ticket", "config.json")) {
+		t.Fatalf("ProjectPath() = (%q, %v, %v), want repo-local .ticket config path", got, ok, err)
+	}
+}
+
+func TestRemoteCredentialsLegacyAndMissingCases(t *testing.T) {
+	setupConfigTestHome(t)
+
+	if err := SaveRemoteCredentials("", "alice", "legacy-token"); err != nil {
+		t.Fatalf("SaveRemoteCredentials(empty) error = %v", err)
+	}
+	creds, err := LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials() error = %v", err)
+	}
+	if creds.Token != "legacy-token" {
+		t.Fatalf("Credentials.Token = %q, want legacy-token", creds.Token)
+	}
+	if _, ok := creds.Remote("::::"); ok {
+		t.Fatal("Credentials.Remote(invalid) = true, want false")
+	}
+	if err := ClearRemoteCredentials("https://missing.example.com"); err != nil {
+		t.Fatalf("ClearRemoteCredentials(missing) error = %v", err)
+	}
+}
+
+func TestSaveCredentialsRoundTripAndClearMissingFile(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+
+	want := Credentials{
+		Token: "legacy",
+		Remotes: map[string]RemoteCredentials{
+			"https://tickets.example.com": {Username: "alice", Token: "token-1"},
+		},
+	}
+	if err := SaveCredentials(want); err != nil {
+		t.Fatalf("SaveCredentials() error = %v", err)
+	}
+	got, err := LoadCredentials()
+	if err != nil {
+		t.Fatalf("LoadCredentials() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("LoadCredentials() = %#v, want %#v", got, want)
+	}
+	if err := os.Remove(filepath.Join(tempDir, "credentials.json")); err != nil {
+		t.Fatalf("Remove(credentials.json) error = %v", err)
+	}
+	if err := ClearCredentials(); err != nil {
+		t.Fatalf("ClearCredentials(missing) error = %v", err)
+	}
+}
+
+func TestRemoteHelpersAndValidationBranches(t *testing.T) {
+	setupConfigTestHome(t)
+
+	cfg := Config{
+		Remotes: []Remote{{Name: "prod", URL: "https://tickets.example.com"}},
+	}
+	if remote, ok := cfg.RemoteByName("prod"); !ok || remote.URL != "https://tickets.example.com" {
+		t.Fatalf("RemoteByName() = (%#v, %v), want prod remote", remote, ok)
+	}
+	if _, ok := cfg.RemoteByName("missing"); ok {
+		t.Fatal("RemoteByName(missing) = true, want false")
+	}
+	if _, err := AddRemote(Config{}, Remote{Name: "", URL: "https://tickets.example.com"}); err == nil {
+		t.Fatal("AddRemote(empty name) error = nil, want error")
+	}
+	if _, err := AddRemote(Config{}, Remote{Name: "prod", URL: ""}); err == nil {
+		t.Fatal("AddRemote(empty url) error = nil, want error")
+	}
+	if _, removed := RemoveRemote(cfg, ""); removed {
+		t.Fatal("RemoveRemote(empty) removed = true, want false")
+	}
+}
+
+func TestProjectPathReturnsFalseWithoutTicketDir(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+	repoDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(repoDir) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Chdir(repoDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	if got, ok, err := ProjectPath(); err != nil || ok || got != "" {
+		t.Fatalf("ProjectPath() = (%q, %v, %v), want empty false nil", got, ok, err)
 	}
 }

@@ -806,7 +806,7 @@
                             <div class="row">
                                 <div class="field">
                                     <label for="project-prefix">Prefix</label>
-                                    <input id="project-prefix" maxlength="12" required>
+                                    <input id="project-prefix" maxlength="5" pattern="[A-Z]{1,5}" autocomplete="off" style="text-transform:uppercase;" required>
                                 </div>
                                 <div class="field">
                                     <label for="project-title">Title</label>
@@ -2013,8 +2013,15 @@
             document.getElementById("project-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
                 const draft = state.selectedProjectDraft;
+                const prefixInput = document.getElementById("project-prefix");
+                prefixInput.value = prefixInput.value.trim().toUpperCase();
+                prefixInput.setCustomValidity("");
+                if (!prefixInput.checkValidity()) {
+                    prefixInput.reportValidity();
+                    return;
+                }
                 const payload = {
-                    prefix: document.getElementById("project-prefix").value.trim(),
+                    prefix: prefixInput.value,
                     title: document.getElementById("project-title").value.trim(),
                     description: document.getElementById("project-description").value.trim(),
                     acceptance_criteria: document.getElementById("project-ac").value.trim(),

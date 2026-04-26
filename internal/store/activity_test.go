@@ -166,3 +166,92 @@ func TestListHistoryEventsPagination(t *testing.T) {
 		t.Fatal("ListHistoryEvents(negative offset) error = nil, want error")
 	}
 }
+
+func TestPurgeExpiredSessions(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	adminID := testAdminID(t, db)
+
+	expiredToken, err := CreateSession(context.Background(), db, adminID)
+	if err != nil {
+		t.Fatalf("CreateSession(expired) error = %v", err)
+	}
+	activeToken, err := CreateSession(context.Background(), db, adminID)
+	if err != nil {
+		t.Fatalf("CreateSession(active) error = %v", err)
+	}
+	if _, err := db.ExecContext(context.Background(), `UPDATE sessions SET expires_at = datetime('now', '-2 days') WHERE token = ?`, expiredToken); err != nil {
+		t.Fatalf("expire session update error = %v", err)
+	}
+	if _, err := db.ExecContext(context.Background(), `UPDATE sessions SET expires_at = datetime('now', '+2 days') WHERE token = ?`, activeToken); err != nil {
+		t.Fatalf("active session update error = %v", err)
+	}
+
+	deleted, err := PurgeExpiredSessions(context.Background(), db)
+	if err != nil {
+		t.Fatalf("PurgeExpiredSessions() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("PurgeExpiredSessions() = %d, want 1", deleted)
+	}
+
+	if _, err := GetUserByToken(context.Background(), db, expiredToken); err == nil {
+		t.Fatal("GetUserByToken(expired) error = nil, want deleted session")
+	}
+	if _, err := GetUserByToken(context.Background(), db, activeToken); err != nil {
+		t.Fatalf("GetUserByToken(active) error = %v", err)
+	}
+}
+
+func TestPurgeOldHistory(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	adminID := testAdminID(t, db)
+	project, err := CreateProject(context.Background(), db, "Retention Project", "", "", adminID)
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Retention task",
+		CreatedBy: adminID,
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if err := AddHistoryEvent(context.Background(), db, project.ID, ticket.ID, "old_event", map[string]any{"age": "old"}, adminID); err != nil {
+		t.Fatalf("AddHistoryEvent(old) error = %v", err)
+	}
+	if err := AddHistoryEvent(context.Background(), db, project.ID, ticket.ID, "new_event", map[string]any{"age": "new"}, adminID); err != nil {
+		t.Fatalf("AddHistoryEvent(new) error = %v", err)
+	}
+	if _, err := db.ExecContext(context.Background(), `UPDATE ticket_history SET created_at = datetime('now', '-10 days') WHERE event_type = 'old_event'`); err != nil {
+		t.Fatalf("age old history error = %v", err)
+	}
+
+	deleted, err := PurgeOldHistory(context.Background(), db, 5)
+	if err != nil {
+		t.Fatalf("PurgeOldHistory() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("PurgeOldHistory() = %d, want 1", deleted)
+	}
+	events, err := ListHistoryEvents(context.Background(), db, ticket.ID, 20, 0)
+	if err != nil {
+		t.Fatalf("ListHistoryEvents() error = %v", err)
+	}
+	for _, event := range events {
+		if event.EventType == "old_event" {
+			t.Fatalf("old history event still present: %#v", events)
+		}
+	}
+
+	deleted, err = PurgeOldHistory(context.Background(), db, 0)
+	if err != nil {
+		t.Fatalf("PurgeOldHistory(retention=0) error = %v", err)
+	}
+	if deleted != 0 {
+		t.Fatalf("PurgeOldHistory(retention=0) = %d, want 0", deleted)
+	}
+}

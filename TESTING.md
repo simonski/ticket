@@ -146,3 +146,8 @@ make test-playwright
 ```
 
 Requires Node and Chromium (`make setup-playwright` installs both).
+
+The Playwright configs now auto-select a free localhost port by default. If you
+need a fixed port for debugging, set `PLAYWRIGHT_PORT` or
+`PLAYWRIGHT_SITE2_PORT` before running the tests. The main suite defaults to two
+workers for stability; override that with `PLAYWRIGHT_WORKERS` if needed.

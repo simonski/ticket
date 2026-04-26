@@ -144,6 +144,23 @@ test.describe("ticket lifecycle", () => {
           return route.continue();
         },
       ],
+      [
+        "**/api/tickets/99",
+        {
+          ticket_id: 99,
+          key: "DM-99",
+          type: "task",
+          title: "Brand new ticket",
+          description: "",
+          acceptance_criteria: "",
+          stage: "design",
+          state: "idle",
+          open: true,
+          archived: false,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
       ["**/api/board/ws", (route) => route.abort()],
     ]);
 

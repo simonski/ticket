@@ -19,6 +19,75 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
+type hijackableResponseWriter struct {
+	header http.Header
+	body   bytes.Buffer
+	status int
+	conn   net.Conn
+	rw     *bufio.ReadWriter
+}
+
+func (w *hijackableResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *hijackableResponseWriter) Write(p []byte) (int, error) {
+	return w.body.Write(p)
+}
+
+func (w *hijackableResponseWriter) WriteHeader(status int) {
+	w.status = status
+}
+
+func (w *hijackableResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return w.conn, w.rw, nil
+}
+
+type flushTrackingResponseWriter struct {
+	header  http.Header
+	body    bytes.Buffer
+	status  int
+	flushed bool
+}
+
+type stubAddr string
+
+func (a stubAddr) Network() string { return "test" }
+func (a stubAddr) String() string  { return string(a) }
+
+type stubConn struct{}
+
+func (stubConn) Read(_ []byte) (int, error)         { return 0, io.EOF }
+func (stubConn) Write(p []byte) (int, error)        { return len(p), nil }
+func (stubConn) Close() error                       { return nil }
+func (stubConn) LocalAddr() net.Addr                { return stubAddr("local") }
+func (stubConn) RemoteAddr() net.Addr               { return stubAddr("remote") }
+func (stubConn) SetDeadline(_ time.Time) error      { return nil }
+func (stubConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (stubConn) SetWriteDeadline(_ time.Time) error { return nil }
+
+func (w *flushTrackingResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *flushTrackingResponseWriter) Write(p []byte) (int, error) {
+	return w.body.Write(p)
+}
+
+func (w *flushTrackingResponseWriter) WriteHeader(status int) {
+	w.status = status
+}
+
+func (w *flushTrackingResponseWriter) Flush() {
+	w.flushed = true
+}
+
 func TestRequestIsSecure(t *testing.T) {
 	t.Parallel()
 
@@ -35,6 +104,27 @@ func TestRequestIsSecure(t *testing.T) {
 	req.Header.Set("X-Forwarded-Proto", "https, http")
 	if !requestIsSecure(req) {
 		t.Fatal("requestIsSecure() = false, want true for forwarded proto list")
+	}
+}
+
+func TestRequestTimeoutFromEnv(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  time.Duration
+	}{
+		{name: "default when unset", value: "", want: 30 * time.Second},
+		{name: "default when invalid", value: "abc", want: 30 * time.Second},
+		{name: "default when non positive", value: "0", want: 30 * time.Second},
+		{name: "custom seconds", value: "12", want: 12 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TICKET_REQUEST_TIMEOUT_SECONDS", tt.value)
+			if got := requestTimeoutFromEnv(); got != tt.want {
+				t.Fatalf("requestTimeoutFromEnv() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -150,6 +240,38 @@ func TestSecurityHeadersAddsHSTSWhenSecure(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersInjectsNonceIntoContext(t *testing.T) {
+	t.Parallel()
+
+	var nonceFromHandler string
+	handler := securityHeadersHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nonceFromHandler = cspNonceFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if nonceFromHandler == "" {
+		t.Fatal("cspNonceFromContext() = empty, want nonce from security headers middleware")
+	}
+	if !strings.Contains(resp.Header().Get("Content-Security-Policy"), nonceFromHandler) {
+		t.Fatalf("Content-Security-Policy = %q, want nonce %q", resp.Header().Get("Content-Security-Policy"), nonceFromHandler)
+	}
+}
+
+func TestCSPNonceFromContextNilAndMissing(t *testing.T) {
+	t.Parallel()
+
+	if got := cspNonceFromContext(nil); got != "" {
+		t.Fatalf("cspNonceFromContext(nil) = %q, want empty", got)
+	}
+	if got := cspNonceFromContext(context.Background()); got != "" {
+		t.Fatalf("cspNonceFromContext(background) = %q, want empty", got)
+	}
+}
+
 func TestRequestTimeoutMiddlewareTimesOutNonWebSocket(t *testing.T) {
 	t.Parallel()
 	handler := requestTimeoutMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +299,25 @@ func TestRequestTimeoutMiddlewareBypassesWebSocketPaths(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestRecoverMiddlewareReturnsInternalServerError(t *testing.T) {
+	t.Parallel()
+
+	handler := recoverMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("boom")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if !strings.Contains(rec.Body.String(), "internal server error") {
+		t.Fatalf("body = %q, want internal server error", rec.Body.String())
 	}
 }
 
@@ -420,6 +561,189 @@ func TestRealtimeHelpersAndHubLifecycle(t *testing.T) {
 	case <-client.done:
 	default:
 		t.Fatal("client.done should be closed after remove")
+	}
+}
+
+func TestIsUpgradeRequest(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/ws", nil)
+	req.Header.Add("Connection", "keep-alive, Upgrade")
+	if !isUpgradeRequest(req) {
+		t.Fatal("isUpgradeRequest() = false, want true for upgrade token in connection header")
+	}
+
+	req.Header.Set("Connection", "keep-alive")
+	if isUpgradeRequest(req) {
+		t.Fatal("isUpgradeRequest() = true, want false when no upgrade token present")
+	}
+}
+
+func TestAddVaryHeaderDeduplicates(t *testing.T) {
+	t.Parallel()
+
+	header := http.Header{}
+	addVaryHeader(header, "Accept-Encoding")
+	addVaryHeader(header, "accept-encoding")
+	addVaryHeader(header, "Origin")
+
+	got := strings.Join(header.Values("Vary"), ",")
+	if strings.Count(strings.ToLower(got), "accept-encoding") != 1 {
+		t.Fatalf("Vary header = %q, want Accept-Encoding only once", got)
+	}
+	if !strings.Contains(strings.ToLower(got), "origin") {
+		t.Fatalf("Vary header = %q, want Origin token", got)
+	}
+}
+
+func TestGzipResponseWriterFlushInitializesWriter(t *testing.T) {
+	t.Parallel()
+
+	rec := &flushTrackingResponseWriter{}
+	writer := &gzipResponseWriter{ResponseWriter: rec}
+	t.Cleanup(func() {
+		if err := writer.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	})
+
+	writer.Flush()
+
+	if rec.status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.status, http.StatusOK)
+	}
+	if !rec.flushed {
+		t.Fatal("Flush() should forward to underlying flusher")
+	}
+	if got := rec.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", got)
+	}
+}
+
+func TestGzipResponseWriterHijack(t *testing.T) {
+	t.Parallel()
+
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	base := &hijackableResponseWriter{
+		conn: serverConn,
+		rw:   bufio.NewReadWriter(bufio.NewReader(serverConn), bufio.NewWriter(serverConn)),
+	}
+	writer := &gzipResponseWriter{ResponseWriter: base}
+
+	gotConn, gotRW, err := writer.Hijack()
+	if err != nil {
+		t.Fatalf("Hijack() error = %v", err)
+	}
+	if gotConn != serverConn {
+		t.Fatal("Hijack() returned unexpected conn")
+	}
+	if gotRW == nil {
+		t.Fatal("Hijack() returned nil read writer")
+	}
+}
+
+func TestGzipResponseWriterHijackUnsupported(t *testing.T) {
+	t.Parallel()
+
+	writer := &gzipResponseWriter{ResponseWriter: httptest.NewRecorder()}
+	conn, rw, err := writer.Hijack()
+	if err == nil {
+		t.Fatal("Hijack() error = nil, want unsupported error")
+	}
+	if conn != nil || rw != nil {
+		t.Fatalf("Hijack() = (%v, %v, %v), want nils and error", conn, rw, err)
+	}
+}
+
+func TestUpgradeWebSocketRejectsCrossOrigin(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "http://ticket.test/api/ws", nil)
+	req.Host = "ticket.test"
+	req.Header.Set("Origin", "https://evil.test")
+	rec := httptest.NewRecorder()
+
+	conn, err := upgradeWebSocket(rec, req)
+	if err == nil {
+		t.Fatal("upgradeWebSocket() error = nil, want cross-origin rejection")
+	}
+	if conn != nil {
+		t.Fatalf("upgradeWebSocket() conn = %#v, want nil on cross-origin rejection", conn)
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestUpgradeWebSocketSucceeds(t *testing.T) {
+	t.Parallel()
+
+	var written bytes.Buffer
+
+	rec := &hijackableResponseWriter{
+		conn: stubConn{},
+		rw:   bufio.NewReadWriter(bufio.NewReader(strings.NewReader("")), bufio.NewWriter(&written)),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://ticket.test/api/ws", nil)
+	req.Host = "ticket.test"
+	req.Header.Set("Origin", "http://ticket.test")
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+
+	conn, err := upgradeWebSocket(rec, req)
+	if err != nil {
+		t.Fatalf("upgradeWebSocket() error = %v", err)
+	}
+	if conn == nil {
+		t.Fatal("upgradeWebSocket() conn = nil, want hijacked conn")
+	}
+
+	joined := written.String()
+	if !strings.Contains(joined, "101 Switching Protocols") {
+		t.Fatalf("handshake = %q, want websocket status line", joined)
+	}
+	if !strings.Contains(joined, "Upgrade: websocket") {
+		t.Fatalf("handshake headers = %q, want upgrade header", joined)
+	}
+	if !strings.Contains(joined, "Sec-WebSocket-Accept:") {
+		t.Fatalf("handshake headers = %q, want accept header", joined)
+	}
+}
+
+func TestReadWebSocketFrameDecodesMaskedExtendedPayload(t *testing.T) {
+	t.Parallel()
+
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	payload := bytes.Repeat([]byte("a"), 130)
+	maskKey := [4]byte{1, 2, 3, 4}
+	masked := make([]byte, len(payload))
+	for i := range payload {
+		masked[i] = payload[i] ^ maskKey[i%4]
+	}
+
+	go func() {
+		frame := []byte{0x81, 0x80 | 126, 0x00, 0x82, maskKey[0], maskKey[1], maskKey[2], maskKey[3]}
+		frame = append(frame, masked...)
+		_, _ = serverConn.Write(frame)
+	}()
+
+	opcode, gotPayload, err := readWebSocketFrame(clientConn)
+	if err != nil {
+		t.Fatalf("readWebSocketFrame() error = %v", err)
+	}
+	if opcode != 0x1 {
+		t.Fatalf("opcode = %d, want %d", opcode, 0x1)
+	}
+	if !bytes.Equal(gotPayload, payload) {
+		t.Fatalf("payload mismatch: got %d bytes want %d bytes", len(gotPayload), len(payload))
 	}
 }
 

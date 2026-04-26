@@ -2581,6 +2581,90 @@ func TestRegistrationConfigAPI(t *testing.T) {
 	}
 }
 
+func TestRegistrationConfigAPIRejectsUnauthorizedForbiddenAndInvalidJSON(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", registerResp.Code, http.StatusCreated)
+	}
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("alice login status = %d, want %d", loginResp.Code, http.StatusOK)
+	}
+	var userAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &userAuth)
+	adminToken := loginAdmin(t, handler)
+
+	unauthorized := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]bool{
+		"enabled": false,
+	}, "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status = %d, want %d", unauthorized.Code, http.StatusUnauthorized)
+	}
+
+	forbidden := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]bool{
+		"enabled": false,
+	}, userAuth.Token)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("forbidden status = %d, want %d body=%s", forbidden.Code, http.StatusForbidden, forbidden.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/config/registration", bytes.NewBufferString("{"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid json status = %d, want %d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestChatLimitsConfigAPIDefaultsNonPositiveValues(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	resp := doJSONRequest(t, handler, http.MethodPost, "/api/config/chat_limits", map[string]int{
+		"max_connections":      0,
+		"max_duration_minutes": -5,
+	}, adminToken)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("chat limits defaulting status = %d, want %d body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	var payload map[string]any
+	decodeResponse(t, resp, &payload)
+	if got := int(payload["chat_max_connections"].(float64)); got != store.DefaultChatMaxConnections {
+		t.Fatalf("chat_max_connections = %d, want %d", got, store.DefaultChatMaxConnections)
+	}
+	if got := int(payload["chat_max_duration_minutes"].(float64)); got != store.DefaultChatMaxDurationMinutes {
+		t.Fatalf("chat_max_duration_minutes = %d, want %d", got, store.DefaultChatMaxDurationMinutes)
+	}
+}
+
+func TestSystemMetricsRejectsWrongMethod(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	resp := doJSONRequest(t, handler, http.MethodPost, "/metrics", map[string]string{"noop": "x"}, adminToken)
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("metrics POST status = %d, want %d body=%s", resp.Code, http.StatusMethodNotAllowed, resp.Body.String())
+	}
+}
+
 func TestAgentSdlcAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

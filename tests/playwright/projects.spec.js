@@ -127,7 +127,7 @@ test.describe("project management", () => {
         { user_id: 2, username: "bob", role: "editor" },
       ]],
       ["**/api/projects/1/teams", [
-        { team_id: 1, name: "Platform", role: "editor" },
+        { team_id: 1, team_name: "Platform", role: "editor" },
       ]],
       ["**/api/board/ws", (route) => route.abort()],
     ]);
@@ -155,9 +155,9 @@ test.describe("project management", () => {
       };
     });
 
-    expect(result.membersContent).toContain("User #1");
-    expect(result.membersContent).toContain("User #2");
-    expect(result.teamsContent).toContain("Team #1");
+    expect(result.membersContent).toContain("alice");
+    expect(result.membersContent).toContain("bob");
+    expect(result.teamsContent).toContain("Platform");
   });
 
   test("add project member posts to API", async ({ page }) => {

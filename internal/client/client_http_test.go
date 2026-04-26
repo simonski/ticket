@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -224,6 +225,34 @@ func TestRemoteClientListHistoryPagedBuildsQuery(t *testing.T) {
 	api := New(config.Config{Location: server.URL})
 	if _, err := api.ListHistoryPaged(context.Background(), "11", 7, 3); err != nil {
 		t.Fatalf("ListHistoryPaged() error = %v", err)
+	}
+}
+
+func TestRemoteClientListProjectHistoryFilteredBuildsQuery(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/projects/7/history" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		values, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			t.Fatalf("ParseQuery() error = %v", err)
+		}
+		if values.Get("limit") != "10" || values.Get("user_id") != "u1" || values.Get("agent_id") != "a1" || values.Get("team_id") != "9" {
+			t.Fatalf("query = %#v", values)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	api := New(config.Config{Location: server.URL})
+	if _, err := api.ListProjectHistoryFiltered(context.Background(), 7, 0, store.HistoryFilter{
+		UserID:  "u1",
+		AgentID: "a1",
+		TeamID:  9,
+	}); err != nil {
+		t.Fatalf("ListProjectHistoryFiltered() error = %v", err)
 	}
 }
 
@@ -815,6 +844,156 @@ func TestRemoteClientSdlcsCRUD(t *testing.T) {
 	}
 	if _, err := api.ImportSdlc(context.Background(), store.SdlcExport{Name: "wf1", Description: "d"}); err != nil {
 		t.Fatalf("ImportSdlc() error = %v", err)
+	}
+}
+
+func TestRemoteClientSdlcStageRolesAndTicketAliases(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		ticketJSON := `{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"develop","state":"active","status":"develop/active"}`
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/projects/7/set-draft":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/sdlcs/stages/1":
+			_, _ = w.Write([]byte(`{"id":1,"sdlc_id":9,"stage_name":"develop","ways_of_working":"wow","definition_of_ready":"dor","definition_of_done":"dod","sort_order":1}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/stages/1":
+			_, _ = w.Write([]byte(`{"id":1,"sdlc_id":9,"stage_name":"develop","sort_order":1}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/9":
+			_, _ = w.Write([]byte(`{"sdlc":{"id":9,"name":"wf"},"stages":[{"id":1,"sdlc_id":9,"stage_name":"develop","sort_order":1}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs/stages/roles/9/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/sdlcs/stages/roles/9/1/5":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/sdlcs/stages/roles/9/1":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/ready":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/close":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/open":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/notready":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/next":
+			_, _ = w.Write([]byte(ticketJSON))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/previous":
+			_, _ = w.Write([]byte(ticketJSON))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	api := New(config.Config{Location: server.URL})
+	if err := api.SetProjectDefaultDraft(context.Background(), 7, true); err != nil {
+		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
+	}
+	if _, err := api.UpdateSdlcStage(context.Background(), 1, SdlcStageRequest{StageName: "develop", WaysOfWorking: "wow", DefinitionOfReady: "dor", DefinitionOfDone: "dod"}); err != nil {
+		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	}
+	if _, err := api.GetSdlcStage(context.Background(), 1); err != nil {
+		t.Fatalf("GetSdlcStage() error = %v", err)
+	}
+	if _, err := api.ListSdlcStages(context.Background(), 9); err != nil {
+		t.Fatalf("ListSdlcStages() error = %v", err)
+	}
+	if err := api.AddSdlcStageRole(context.Background(), 9, 1, 5); err != nil {
+		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	}
+	if err := api.RemoveSdlcStageRole(context.Background(), 9, 1, 5); err != nil {
+		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	}
+	if err := api.ReorderSdlcStageRoles(context.Background(), 9, 1, []int64{5, 6}); err != nil {
+		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	}
+	if _, err := api.CompleteTicket(context.Background(), "11", "done"); err != nil {
+		t.Fatalf("CompleteTicket() error = %v", err)
+	}
+	if _, err := api.ReopenTicket(context.Background(), "11", "reopen"); err != nil {
+		t.Fatalf("ReopenTicket() error = %v", err)
+	}
+	if _, err := api.DraftTicket(context.Background(), "11", "draft"); err != nil {
+		t.Fatalf("DraftTicket() error = %v", err)
+	}
+	if _, err := api.UndraftTicket(context.Background(), "11", "ready"); err != nil {
+		t.Fatalf("UndraftTicket() error = %v", err)
+	}
+	if _, err := api.NextTicket(context.Background(), "11"); err != nil {
+		t.Fatalf("NextTicket() error = %v", err)
+	}
+	if _, err := api.PreviousTicket(context.Background(), "11"); err != nil {
+		t.Fatalf("PreviousTicket() error = %v", err)
+	}
+}
+
+func TestRemoteClientLogoutHeartbeatCloneAndAgentRequest(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/logout":
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/heartbeat":
+			username, password, ok := r.BasicAuth()
+			if !ok || username != "agent-1" || password != "pw" {
+				t.Fatalf("BasicAuth = (%q, %q, %v), want agent-1/pw/true", username, password, ok)
+			}
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agents/request":
+			username, password, ok := r.BasicAuth()
+			if !ok || username != "agent-1" || password != "pw" {
+				t.Fatalf("BasicAuth = (%q, %q, %v), want agent-1/pw/true", username, password, ok)
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("ReadAll() error = %v", err)
+			}
+			if !strings.Contains(string(body), `"project_id":7`) && !strings.Contains(string(body), `"ticket_id":"11"`) {
+				t.Fatalf("request body = %s, want project_id or ticket_id", string(body))
+			}
+			_, _ = w.Write([]byte(`{"status":"NEW","ticket":{"ticket_id":"11","project_id":7,"title":"T","type":"task","stage":"develop","state":"active","status":"develop/active"},"parents":[]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/clone":
+			_, _ = w.Write([]byte(`{"ticket_id":"12","project_id":7,"title":"clone","type":"task","stage":"design","state":"idle","status":"design/idle"}`))
+		default:
+			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	api := New(config.Config{Location: server.URL, Token: "token-123"})
+	if err := api.Logout(context.Background()); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if err := api.HeartbeatAgent(context.Background(), "agent-1", "pw", "IDLE"); err != nil {
+		t.Fatalf("HeartbeatAgent() error = %v", err)
+	}
+	if _, err := api.RequestAgentWork(context.Background(), AgentRequest{ID: "agent-1", Password: "pw", ProjectID: 7, DryRun: true}); err != nil {
+		t.Fatalf("RequestAgentWork() error = %v", err)
+	}
+	ticketID := "11"
+	if _, err := api.RequestAgentWork(context.Background(), AgentRequest{ID: "agent-1", Password: "pw", TicketID: &ticketID}); err != nil {
+		t.Fatalf("RequestAgentWork(ticket) error = %v", err)
+	}
+	if _, err := api.CloneTicket(context.Background(), "11", "clone it"); err != nil {
+		t.Fatalf("CloneTicket() error = %v", err)
+	}
+}
+
+func TestRemoteClientBasicAuthErrors(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("bad gateway"))
+	}))
+	defer server.Close()
+
+	api := New(config.Config{Location: server.URL})
+	if err := api.HeartbeatAgent(context.Background(), "agent-1", "pw", "IDLE"); err == nil || !strings.Contains(err.Error(), "502 Bad Gateway") {
+		t.Fatalf("HeartbeatAgent() error = %v, want status error", err)
 	}
 }
 

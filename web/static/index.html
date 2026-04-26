@@ -222,6 +222,11 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        font: inherit;
       }
       .proj-menu-item:hover { background: #f0ede6; }
       .proj-menu-item.current { font-weight: bold; color: var(--accent); }
@@ -260,6 +265,11 @@
         padding: 0.55rem 0.9rem;
         cursor: pointer;
         white-space: nowrap;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        font: inherit;
       }
       .profile-menu-item:hover { background: #f0ede6; }
       .profile-menu-item.danger { color: #c62828; }
@@ -1266,21 +1276,21 @@
       <div class="app-head-banner">
         <canvas id="pixel-logo" width="640" height="48" title="ticket"></canvas>
       </div>
-      <div id="app-status" style="position:fixed;bottom:0;left:0;right:0;padding:4px 12px;font-size:12px;color:#555;background:#f0f0f0;border-top:1px solid #ddd;z-index:999;min-height:0;"></div>
+      <div id="app-status" role="status" aria-live="polite" style="position:fixed;bottom:0;left:0;right:0;padding:4px 12px;font-size:12px;color:#555;background:#f0f0f0;border-top:1px solid #ddd;z-index:999;min-height:0;"></div>
       <div class="app-head-right">
         <div class="proj-dropdown" id="proj-dropdown">
-          <button class="proj-btn" id="proj-btn" type="button">Project</button>
-          <div class="proj-menu hidden" id="proj-menu"></div>
+          <button class="proj-btn" id="proj-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="proj-menu">Project</button>
+          <div class="proj-menu hidden" id="proj-menu" role="menu"></div>
         </div>
         <div class="profile-wrap" id="profile-wrap">
-          <div class="avatar" id="profile-avatar" title="Profile">?</div>
-          <div class="profile-menu hidden" id="profile-menu">
-            <div class="profile-menu-item admin-only hidden" id="menu-settings">Settings</div>
-            <div class="profile-menu-item" id="menu-profile">Profile</div>
-            <div class="profile-menu-item admin-only hidden" id="menu-agents">Agents</div>
-            <div class="profile-menu-item admin-only hidden" id="menu-roles">Roles</div>
-            <div class="profile-menu-item admin-only hidden" id="menu-teams">Teams</div>
-            <div class="profile-menu-item danger" id="menu-logout">Logout</div>
+          <button class="avatar" id="profile-avatar" type="button" title="Profile" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">?</button>
+          <div class="profile-menu hidden" id="profile-menu" role="menu">
+            <button class="profile-menu-item admin-only hidden" id="menu-settings" type="button" role="menuitem">Settings</button>
+            <button class="profile-menu-item" id="menu-profile" type="button" role="menuitem">Profile</button>
+            <button class="profile-menu-item admin-only hidden" id="menu-agents" type="button" role="menuitem">Agents</button>
+            <button class="profile-menu-item admin-only hidden" id="menu-roles" type="button" role="menuitem">Roles</button>
+            <button class="profile-menu-item admin-only hidden" id="menu-teams" type="button" role="menuitem">Teams</button>
+            <button class="profile-menu-item danger" id="menu-logout" type="button" role="menuitem">Logout</button>
           </div>
         </div>
       </div>
@@ -1490,7 +1500,8 @@
                       <strong style="font-size:0.9rem;">Users</strong>
                       <div id="project-members-list" class="agent-list" style="margin:0.4rem 0;"></div>
                       <div class="row" style="gap:0.3rem;">
-                        <input id="project-member-user-id" type="number" placeholder="user id" style="width:6rem;" />
+                        <input id="project-member-user-id" type="text" list="project-member-user-options" placeholder="user id or username" style="width:12rem;" autocomplete="off" />
+                        <datalist id="project-member-user-options"></datalist>
                         <select id="project-member-role">
                           <option value="viewer">viewer</option>
                           <option value="editor">editor</option>
@@ -1503,7 +1514,8 @@
                       <strong style="font-size:0.9rem;">Teams</strong>
                       <div id="project-teams-list" class="agent-list" style="margin:0.4rem 0;"></div>
                       <div class="row" style="gap:0.3rem;">
-                        <input id="project-team-id" type="number" placeholder="team id" style="width:6rem;" />
+                        <input id="project-team-id" type="text" list="project-team-options" placeholder="team id or team name" style="width:12rem;" autocomplete="off" />
+                        <datalist id="project-team-options"></datalist>
                         <select id="project-team-role">
                           <option value="viewer">viewer</option>
                           <option value="editor">editor</option>
@@ -1513,7 +1525,7 @@
                       </div>
                     </div>
                   </div>
-                  <div id="project-members-status" class="muted" style="margin-top:0.4rem;"></div>
+                  <div id="project-members-status" class="muted" role="status" aria-live="polite" style="margin-top:0.4rem;"></div>
                 </section>
               </div>
             </section>
@@ -1608,7 +1620,7 @@
               <option value="">Create new project...</option>
             </select>
             <label for="proj-modal-prefix">Prefix</label>
-            <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="8" autocomplete="off" style="text-transform:uppercase;" />
+            <input id="proj-modal-prefix" placeholder="prefix (e.g. APP)" maxlength="5" pattern="[A-Z]{1,5}" autocomplete="off" style="text-transform:uppercase;" />
             <label for="proj-modal-title">Title</label>
             <input id="proj-modal-title" placeholder="title" autocomplete="off" />
             <label for="proj-modal-visibility">Visibility</label>
@@ -3403,13 +3415,16 @@
         if (current) {
           const el = document.createElement("div");
           el.className = "proj-menu-item current";
+          el.setAttribute("role", "presentation");
           el.textContent = `${current.prefix} · ${current.title}`;
           projMenu.appendChild(el);
         }
 
         // New project
-        const newEl = document.createElement("div");
+        const newEl = document.createElement("button");
+        newEl.type = "button";
         newEl.className = "proj-menu-item new-proj";
+        newEl.setAttribute("role", "menuitem");
         newEl.textContent = "+ New Project";
         newEl.addEventListener("click", () => {
           closeProjMenu();
@@ -3434,13 +3449,16 @@
         if (sorted.length === 0) {
           const empty = document.createElement("div");
           empty.className = "proj-menu-item";
+          empty.setAttribute("role", "presentation");
           empty.style.color = "var(--muted)";
           empty.textContent = "No other projects";
           projMenu.appendChild(empty);
         }
         for (const p of sorted) {
-          const el = document.createElement("div");
+          const el = document.createElement("button");
+          el.type = "button";
           el.className = "proj-menu-item";
+          el.setAttribute("role", "menuitem");
           el.textContent = `${p.prefix} · ${p.title}`;
           el.addEventListener("click", async () => {
             setSelectedProjectID(p.project_id);
@@ -3453,8 +3471,15 @@
         }
       }
 
-      function openProjMenu() { renderProjMenu(); projMenu.classList.remove("hidden"); }
-      function closeProjMenu() { projMenu.classList.add("hidden"); }
+      function openProjMenu() {
+        renderProjMenu();
+        projMenu.classList.remove("hidden");
+        projBtn.setAttribute("aria-expanded", "true");
+      }
+      function closeProjMenu() {
+        projMenu.classList.add("hidden");
+        projBtn.setAttribute("aria-expanded", "false");
+      }
 
       projBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -3465,8 +3490,14 @@
       const profileAvatar = document.getElementById("profile-avatar");
       const profileMenu = document.getElementById("profile-menu");
 
-      function openProfileMenu() { profileMenu.classList.remove("hidden"); }
-      function closeProfileMenu() { profileMenu.classList.add("hidden"); }
+      function openProfileMenu() {
+        profileMenu.classList.remove("hidden");
+        profileAvatar.setAttribute("aria-expanded", "true");
+      }
+      function closeProfileMenu() {
+        profileMenu.classList.add("hidden");
+        profileAvatar.setAttribute("aria-expanded", "false");
+      }
 
       profileAvatar.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -5084,11 +5115,70 @@
       const projectMembersListEl = document.getElementById("project-members-list");
       const projectTeamsListEl = document.getElementById("project-teams-list");
       const projectMembersStatusEl = document.getElementById("project-members-status");
+      const projectMemberUserInput = document.getElementById("project-member-user-id");
+      const projectMemberUserOptions = document.getElementById("project-member-user-options");
+      const projectTeamInput = document.getElementById("project-team-id");
+      const projectTeamOptions = document.getElementById("project-team-options");
+
+      async function loadUserOptions() {
+        if (!isAdminUser()) return [];
+        try {
+          return await call("/api/users", { headers: headers() });
+        } catch {
+          return [];
+        }
+      }
+
+      function populateProjectMemberUserOptions(users) {
+        if (!projectMemberUserOptions) return;
+        projectMemberUserOptions.innerHTML = "";
+        for (const user of users || []) {
+          const byID = document.createElement("option");
+          byID.value = String(user.user_id);
+          byID.label = user.username ? `${user.username} (#${user.user_id})` : `User #${user.user_id}`;
+          projectMemberUserOptions.appendChild(byID);
+          if (user.username) {
+            const byName = document.createElement("option");
+            byName.value = user.username;
+            byName.label = `#${user.user_id}`;
+            projectMemberUserOptions.appendChild(byName);
+          }
+        }
+      }
+
+      function populateProjectTeamOptions(items) {
+        if (!projectTeamOptions) return;
+        projectTeamOptions.innerHTML = "";
+        for (const item of items || []) {
+          const byID = document.createElement("option");
+          byID.value = String(item.team_id);
+          byID.label = item.team_name ? `${item.team_name} (#${item.team_id})` : `Team #${item.team_id}`;
+          projectTeamOptions.appendChild(byID);
+          if (item.team_name) {
+            const byName = document.createElement("option");
+            byName.value = item.team_name;
+            byName.label = `#${item.team_id}`;
+            projectTeamOptions.appendChild(byName);
+          }
+        }
+      }
+
+      function resolveMemberIDFromInput(items, rawValue, idKey, nameKey) {
+        const value = String(rawValue || "").trim();
+        if (!value) return "";
+        const byID = items.find((item) => String(item[idKey]) === value);
+        if (byID) return String(byID[idKey]);
+        const lowered = value.toLowerCase();
+        const byName = items.find((item) => String(item[nameKey] || "").toLowerCase() === lowered);
+        if (byName) return String(byName[idKey]);
+        return value;
+      }
 
       async function loadProjectMembers() {
         const projectID = selectedProjectID();
         if (!projectID) return;
         try {
+          populateProjectMemberUserOptions(await loadUserOptions());
           const members = await call(`/api/projects/${projectID}/users`, { headers: headers() });
           projectMembersListEl.innerHTML = "";
           if (!members || members.length === 0) {
@@ -5098,7 +5188,7 @@
               const row = document.createElement("div");
               row.className = "row";
               row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
-              row.innerHTML = `<span>User #${escape(m.user_id)} <span class="muted">(${escape(m.role)})</span></span>`;
+              row.innerHTML = `<span>${escape(m.username || `User #${m.user_id}`)} <span class="muted">(#${escape(m.user_id)} · ${escape(m.role)})</span></span>`;
               const rm = document.createElement("button");
               rm.textContent = "\u00d7";
               rm.className = "btn";
@@ -5112,6 +5202,15 @@
             }
           }
         } catch (e) { projectMembersListEl.innerHTML = '<div class="muted">Failed to load</div>'; }
+        if (isAdminUser()) {
+          try {
+            const teamList = await call("/api/teams", { headers: headers() });
+            teams = Array.isArray(teamList) ? teamList : [];
+            populateProjectTeamOptions(teams);
+          } catch {
+            populateProjectTeamOptions([]);
+          }
+        }
         try {
           const teams = await call(`/api/projects/${projectID}/teams`, { headers: headers() });
           projectTeamsListEl.innerHTML = "";
@@ -5122,7 +5221,7 @@
               const row = document.createElement("div");
               row.className = "row";
               row.style.cssText = "justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid var(--line);";
-              row.innerHTML = `<span>Team #${escape(t.team_id)} <span class="muted">(${escape(t.role)})</span></span>`;
+              row.innerHTML = `<span>${escape(t.team_name || `Team #${t.team_id}`)} <span class="muted">(#${escape(t.team_id)} · ${escape(t.role)})</span></span>`;
               const rm = document.createElement("button");
               rm.textContent = "\u00d7";
               rm.className = "btn";
@@ -5142,16 +5241,17 @@
       document.getElementById("project-member-add").addEventListener("click", async () => {
         const projectID = selectedProjectID();
         if (!projectID) return;
-        const userID = Number(document.getElementById("project-member-user-id").value);
+        const users = await loadUserOptions();
+        const userID = resolveMemberIDFromInput(users, projectMemberUserInput ? projectMemberUserInput.value : "", "user_id", "username");
         const role = document.getElementById("project-member-role").value;
-        if (!userID) { projectMembersStatusEl.textContent = "User ID required"; return; }
+        if (!String(userID).trim()) { projectMembersStatusEl.textContent = "User ID or username required"; return; }
         try {
           await call(`/api/projects/${projectID}/users`, {
             method: "POST",
             headers: headers(true),
-            body: JSON.stringify({ user_id: userID, role }),
+            body: JSON.stringify({ user_id: String(userID).trim(), role }),
           });
-          document.getElementById("project-member-user-id").value = "";
+          if (projectMemberUserInput) projectMemberUserInput.value = "";
           await loadProjectMembers();
         } catch (err) { projectMembersStatusEl.textContent = err.message; }
       });
@@ -5159,16 +5259,17 @@
       document.getElementById("project-team-add").addEventListener("click", async () => {
         const projectID = selectedProjectID();
         if (!projectID) return;
-        const teamID = Number(document.getElementById("project-team-id").value);
+        const teamID = resolveMemberIDFromInput(teams, projectTeamInput ? projectTeamInput.value : "", "team_id", "team_name");
         const role = document.getElementById("project-team-role").value;
-        if (!teamID) { projectMembersStatusEl.textContent = "Team ID required"; return; }
+        if (!String(teamID).trim()) { projectMembersStatusEl.textContent = "Team ID or team name required"; return; }
+        if (!/^\d+$/.test(String(teamID))) { projectMembersStatusEl.textContent = "Select a known team ID or team name"; return; }
         try {
           await call(`/api/projects/${projectID}/teams`, {
             method: "POST",
             headers: headers(true),
-            body: JSON.stringify({ team_id: teamID, role }),
+            body: JSON.stringify({ team_id: Number(teamID), role }),
           });
-          document.getElementById("project-team-id").value = "";
+          if (projectTeamInput) projectTeamInput.value = "";
           await loadProjectMembers();
         } catch (err) { projectMembersStatusEl.textContent = err.message; }
       });
@@ -6261,6 +6362,7 @@
         const description = projModalDescription.value.trim();
         const acceptanceCriteria = projModalAC.value.trim();
         if (projModalMode === "create" && !prefix) { projModalError.textContent = "Prefix is required."; projModalError.style.display = ""; projModalPrefix.focus(); return; }
+        if (projModalMode === "create" && !/^[A-Z]{1,5}$/.test(prefix)) { projModalError.textContent = "Prefix must be 1-5 uppercase ASCII letters."; projModalError.style.display = ""; projModalPrefix.focus(); return; }
         if (!title) { projModalError.textContent = "Title is required."; projModalError.style.display = ""; projModalTitle.focus(); return; }
         const endpoint = projModalMode === "edit" && projModalProjectID
           ? `/api/projects/${projModalProjectID}`

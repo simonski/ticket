@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "date": "2026-04-26",
+      "overall_score": 72,
+      "areas": {
+        "standards": 75,
+        "testing": 74,
+        "cyber": 73,
+        "readability": 72,
+        "devops": 70,
+        "qa": 72,
+        "infosec": 69,
+        "architecture": 74,
+        "technical-writing": 70
+      },
+      "recommendation_counts": {
+        "critical": 0,
+        "high": 4,
+        "medium": 8,
+        "low": 2
+      },
+      "summary": "Baseline SDLC assessment under reports/sdlc."
+    },
+    {
+      "date": "2026-04-26",
+      "overall_score": 74,
+      "areas": {
+        "standards": 77,
+        "testing": 76,
+        "cyber": 73,
+        "readability": 74,
+        "devops": 72,
+        "qa": 73,
+        "infosec": 71,
+        "architecture": 74,
+        "technical-writing": 73
+      },
+      "recommendation_counts": {
+        "critical": 0,
+        "high": 2,
+        "medium": 6,
+        "low": 2
+      },
+      "summary": "Second SDLC run after OpenAPI, coverage, Playwright, and documentation fixes; remaining risks center on deploy defaults, provenance, trust boundaries, and residual contract drift."
+    }
+  ]
+}
