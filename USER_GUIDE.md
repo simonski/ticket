@@ -1078,8 +1078,8 @@ You can now run as the user
 
 ```bash
 tk remote add demo http://localhost:8080
-tk login -username user-username -password user-password
 tk project remote demo
+tk login -username user-username -password user-password
 tk ls
 ```
 

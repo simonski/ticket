@@ -27,7 +27,7 @@ export TICKET_HOME="$TICKET_HOME_DIR"
 mkdir -p "$TICKET_HOME"
 mkdir -p "$REPO_DIR/.git"
 cd "$REPO_DIR"
-unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+unset AGENT_ID AGENT_PASSWORD
 
 log() {
 	printf '\n==> %s\n' "$1"
@@ -111,7 +111,7 @@ wait_for_http() {
 reset_local_repo() {
 	rm -rf "$REPO_DIR/.ticket" "$TICKET_HOME_DIR"
 	mkdir -p "$REPO_DIR/.git" "$TICKET_HOME_DIR"
-	unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+	unset AGENT_ID AGENT_PASSWORD
 	run "$TK_BIN" initdb -password admin >/dev/null
 	run "$TK_BIN" project init -prefix HAR -title "Harness Project" >/dev/null
 }
@@ -206,25 +206,34 @@ run "$TK_BIN" ls -count -expect_equals 3
 
 log "scenario: remote multi-project and agent request flow"
 SERVER_DB="$WORK_DIR/server.db"
+SERVER_HOME="$WORK_DIR/server-home"
 SERVER_PORT=$((20000 + RANDOM % 20000))
 SERVER_ADDR="127.0.0.1:$SERVER_PORT"
 SERVER_URL="http://$SERVER_ADDR"
 SERVER_LOG="$WORK_DIR/server.log"
 
-run "$TK_BIN" initdb -f "$SERVER_DB" -force -password adminpass >/dev/null
-"$TK_BIN" server -f "$SERVER_DB" -addr "$SERVER_ADDR" >"$SERVER_LOG" 2>&1 &
+mkdir -p "$SERVER_HOME"
+run env TICKET_HOME="$SERVER_HOME" "$TK_BIN" initdb -password adminpass >/dev/null
+SERVER_DB="$SERVER_HOME/ticket.db"
+env TICKET_HOME="$SERVER_HOME" "$TK_BIN" server -f "$SERVER_DB" -addr "$SERVER_ADDR" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 wait_for_http "$SERVER_URL/api/healthz" "server startup"
 
-export TICKET_URL="$SERVER_URL"
-unset TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+export TICKET_HOME="$WORK_DIR/remote-client-home"
+mkdir -p "$TICKET_HOME"
+rm -rf "$REPO_DIR/.ticket"
+mkdir -p "$REPO_DIR/.git"
 
+unset AGENT_ID AGENT_PASSWORD
+
+run "$TK_BIN" remote add harness "$SERVER_URL" >/dev/null
+run "$TK_BIN" project remote harness >/dev/null
 run "$TK_BIN" login -username admin -password adminpass >/dev/null
 srv_project_id="$("$TK_BIN" project create -prefix SRV -title "Server Harness" -printid)"
 ops_project_id="$("$TK_BIN" project create -prefix OPS -title "Ops Harness" -printid)"
-run "$TK_BIN" project use "$srv_project_id" >/dev/null
+run "$TK_BIN" project use SRV >/dev/null
 
-remote_ticket_id="$("$TK_BIN" add "Remote agent ticket" -printid)"
+remote_ticket_id="$("$TK_BIN" add -project "$srv_project_id" "Remote agent ticket" -printid)"
 run "$TK_BIN" update -id "$remote_ticket_id" -status develop/idle >/dev/null
 agent_id="$("$TK_BIN" agent create -password agentpass123 -printid)"
 initial_agent_config="$("$TK_BIN" agent config-ls -id "$agent_id")"
@@ -234,19 +243,19 @@ run "$TK_BIN" agent config-set -id "$agent_id" poll_seconds 7 >/dev/null
 agent_wrong_project_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$ops_project_id")"
 expect_contains "$agent_wrong_project_output" "\"NONE\"" "agent wrong project request status"
 run "$TK_BIN" agent reset-password -id "$agent_id" -password newpass123 >/dev/null
-expect_fail "$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$srv_project_id"
-agent_request_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password newpass123 -project-id "$srv_project_id")"
+expect_fail "$TK_BIN" agent request -agent-id "$agent_id" -password agentpass123 -project-id "$srv_project_id" -id "$remote_ticket_id"
+agent_request_output="$("$TK_BIN" agent request -agent-id "$agent_id" -password newpass123 -project-id "$srv_project_id" -id "$remote_ticket_id")"
 expect_contains "$agent_request_output" "\"status\"" "remote agent request response shape"
 expect_contains "$agent_request_output" "\"NEW\"" "remote agent request status"
 expect_contains "$agent_request_output" "Remote agent ticket" "remote agent request ticket"
 expect_contains "$agent_request_output" "\"llm\": \"codex\"" "remote agent request config propagation"
 run "$TK_BIN" agent config-rm -id "$agent_id" llm >/dev/null
 
-run "$TK_BIN" project use "$ops_project_id" >/dev/null
+run "$TK_BIN" project use OPS >/dev/null
 run "$TK_BIN" ls -count -expect_equals 0
 run "$TK_BIN" add "Ops project ticket" >/dev/null
 run "$TK_BIN" ls -count -expect_equals 1
-run "$TK_BIN" project use "$srv_project_id" >/dev/null
+run "$TK_BIN" project use SRV >/dev/null
 run "$TK_BIN" ls -count -expect_equals 1
 
 log "all script harness scenarios passed"

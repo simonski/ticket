@@ -2109,6 +2109,42 @@ func TestRunProjectInit(t *testing.T) {
 	}
 }
 
+func TestRunProjectRemoteBeforeInit(t *testing.T) {
+	homeDir := t.TempDir()
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+	t.Setenv("TICKET_HOME", homeDir)
+	if err := config.Save(config.Config{
+		DefaultRemote: "local",
+		Remotes: []config.Remote{
+			{Name: "local", URL: "file:///tmp/local.db"},
+			{Name: "prod", URL: "https://ticket.example.com"},
+		},
+	}); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "remote", "prod"}); err != nil {
+			t.Fatalf("project remote error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "using remote prod") {
+		t.Fatalf("project remote output = %q", output)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	if cfg.Remote != "prod" {
+		t.Fatalf("config.Load().Remote = %q, want prod", cfg.Remote)
+	}
+}
+
 func TestRunListStatusRenderingSupportsUnicodeAndPlainModes(t *testing.T) {
 	setupLocalCLI(t)
 

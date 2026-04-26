@@ -290,11 +290,11 @@ install: build
 	cp ./bin/tk $$(go env GOPATH)/bin/tk
 
 dev:
-    # prints out the env vars I need to set to go into a ticket dev mode
+	# prints out the commands needed to put this repo into local ticket dev mode
 	@echo ""
 	@echo "Run the following:\n"
-	@echo "export TICKET_URL=file://`pwd`/ticket.db"
-	@echo "export TICKET_CONFIG_DIR=`pwd`"
+	@echo "tk initdb ."
+	@echo "tk project init -prefix TKT -title ticket"
 	@echo "\nAnd you are now in a position to extend ticket itself.\n"
 
 

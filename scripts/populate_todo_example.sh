@@ -11,7 +11,7 @@ if [[ ! -x "$TK_BIN" ]]; then
 	exit 1
 fi
 
-unset TICKET_URL TICKET_USERNAME TICKET_PASSWORD AGENT_ID AGENT_PASSWORD
+unset AGENT_ID AGENT_PASSWORD
 
 if [[ ! -f .ticket/config.json ]]; then
 	"$TK_BIN" initdb >/dev/null

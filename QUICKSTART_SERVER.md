@@ -54,8 +54,8 @@ bootstrap admin credentials:
 
 ```bash
 tk remote add local-server http://localhost:8080
-tk login -username admin -password password
 tk project remote local-server
+tk login -username admin -password password
 tk whoami
 ```
 
@@ -80,7 +80,7 @@ tk list
 Tickets progress through stages: **design -> develop -> test -> done**.
 
 ```bash
-tk complete -id CUS-1
+tk complete -id <ticket-id>
 ```
 
 ## 6. Claim and request work

@@ -52,8 +52,8 @@ tk server
 ```bash
 tk remote add local-server http://localhost:8080
 tk register -username alice -password secret12
-tk login -username alice -password secret12
 tk project remote local-server
+tk login -username alice -password secret12
 ```
 
 ---

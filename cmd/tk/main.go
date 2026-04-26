@@ -116,6 +116,12 @@ func run(args []string) error {
 	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "init" {
 		noInitRequired["project"] = true
 	}
+	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "remote" {
+		noInitRequired["project"] = true
+	}
+	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "remote" {
+		noInitRequired["project"] = true
+	}
 	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() && resolved.Mode == config.ModeLocal {
 		if _, ok, pathErr := config.ProjectPath(); pathErr != nil {
 			return pathErr
