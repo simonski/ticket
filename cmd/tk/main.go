@@ -40,6 +40,7 @@ var embeddedAgents string
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		err = formatRuntimeError(err)
 		if strings.HasPrefix(err.Error(), "no such command") {
 			fmt.Fprintln(os.Stderr, err.Error())
 		} else {
@@ -50,6 +51,7 @@ func main() {
 }
 
 func run(args []string) error {
+	config.ClearLocationOverride()
 	trimmedArgs, dbOverride, err := extractDBOverride(args)
 	if err != nil {
 		return err
@@ -62,7 +64,6 @@ func run(args []string) error {
 	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
 	explicitServerDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "server" && dbOverride != ""
 	explicitInitDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "initdb" && dbOverride != ""
-	envLocationOverride := config.HasLocationEnvOverride()
 	if explicitServerDB {
 		trimmedArgs = append([]string{"server", "-f", dbOverride}, trimmedArgs[1:]...)
 	}
@@ -75,18 +76,11 @@ func run(args []string) error {
 		if pathErr != nil {
 			return pathErr
 		}
-		dir := absPath
-		location := "ticket.db"
-		if strings.HasSuffix(absPath, ".db") || strings.HasSuffix(absPath, ".sqlite") {
-			dir = filepath.Dir(absPath)
-			location = filepath.Base(absPath)
+		location := absPath
+		if !strings.HasSuffix(absPath, ".db") && !strings.HasSuffix(absPath, ".sqlite") {
+			location = filepath.Join(absPath, "ticket.db")
 		}
-		if err := os.Setenv("TICKET_HOME", dir); err != nil {
-			return err
-		}
-		if err := os.Setenv("TICKET_URL", location); err != nil {
-			return err
-		}
+		config.SetLocationOverride(location)
 	}
 	var resolved config.Resolved
 	if !explicitServerDB {
@@ -110,13 +104,19 @@ func run(args []string) error {
 
 	// Commands that don't require an initialised project binding.
 	noInitRequired := map[string]bool{
-		"init": true, "initdb": true, "setup": true, "server": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true,
+		"init": true, "initdb": true, "setup": true, "server": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true, "remote": true,
 		"login": true, "logout": true, "register": true, "status": true,
+	}
+	if len(trimmedArgs) == 1 {
+		switch trimmedArgs[0] {
+		case "project", "sdlc", "team", "story", "user", "label", "dep", "decision", "agent", "role", "idea":
+			noInitRequired[trimmedArgs[0]] = true
+		}
 	}
 	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "init" {
 		noInitRequired["project"] = true
 	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !envLocationOverride && resolved.Mode == config.ModeLocal {
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() && resolved.Mode == config.ModeLocal {
 		if _, ok, pathErr := config.ProjectPath(); pathErr != nil {
 			return pathErr
 		} else if !ok {
@@ -196,6 +196,8 @@ func run(args []string) error {
 		return runUser(trimmedArgs[1:])
 	case "project":
 		return runProject(trimmedArgs[1:])
+	case "remote":
+		return runRemote(trimmedArgs[1:])
 	case "team":
 		return runTeam(trimmedArgs[1:])
 	case "role":

@@ -51,6 +51,7 @@ func runConfig(args []string) error {
 		switch args[1] {
 		case "location":
 			cfg.Location = args[2]
+			cfg.Remote = ""
 		default:
 			return fmt.Errorf("unknown config key %q", args[1])
 		}
@@ -103,6 +104,7 @@ func runConfig(args []string) error {
 		switch args[1] {
 		case "location":
 			cfg.Location = ""
+			cfg.Remote = ""
 		case "username":
 			cfg.Username = ""
 		case "project_id":

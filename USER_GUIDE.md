@@ -17,9 +17,31 @@ All project data follows the server data model and API semantics, whether you ar
 `tk` splits local state in two places:
 
 - `$TICKET_HOME` (default `~/.ticket`) stores the shared local database, global
-  config, and remote credentials
+  config, named remotes, and remote credentials
 - `.ticket/config.json` in the current repo or directory stores non-secret
   routing for that location
+
+Global config keeps the remote registry and default local backend, for example:
+
+```json
+{
+  "default_remote": "local",
+  "remotes": [
+    { "name": "local", "url": "file:///Users/alice/.ticket/ticket.db" },
+    { "name": "prod", "url": "https://ticket.example.com" }
+  ]
+}
+```
+
+Repo-local `.ticket/config.json` binds the current repo to exactly one remote
+plus its active project:
+
+```json
+{
+  "remote": "prod",
+  "project_id": "CUS"
+}
+```
 
 ## Getting Started
 
@@ -45,8 +67,13 @@ Create the shared local database:
 tk initdb
 ```
 
-If `-f` is omitted, `tk initdb` creates the SQLite database at
-`$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`).
+If `-f` is omitted, `tk initdb` creates or ensures the SQLite database at
+`$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`) and registers that
+path as the global `local` remote.
+
+If you run `tk initdb .`, Ticket creates `./.ticket/ticket.db`, registers a
+named local remote for that path, and writes repo-local `.ticket/config.json`
+so the current repo uses that database from then on.
 
 `tk initdb` creates:
 
@@ -70,9 +97,17 @@ tk init
 ```
 
 `tk init` writes `.ticket/config.json` in the current managed root. In local
-mode it binds that location to a project in the shared local database. In remote
-mode it writes the remote server URL and project binding locally, while keeping
-credentials in `$TICKET_HOME/credentials.json`.
+mode it binds that location to a project in the selected local remote database.
+In remote mode it writes the selected remote name and project binding locally,
+while keeping credentials in `$TICKET_HOME/credentials.json`.
+
+Manage named remotes explicitly:
+
+```bash
+tk remote add prod https://ticket.example.com
+tk remote ls
+tk project remote prod
+```
 
 For example:
 
@@ -103,9 +138,9 @@ Start the server:
 tk server
 ```
 
-If `-f` is omitted, `tk server` uses the database at `$TICKET_HOME/ticket.db`
-(same resolution as `tk initdb`).
-If `-f` is provided, `tk server` uses that exact database file and does not infer DB location from env vars or the default `.ticket/` workspace.
+If `-f` is omitted, `tk server` uses the local database resolved from the
+current configuration, which defaults to `$TICKET_HOME/ticket.db`.
+If `-f` is provided, `tk server` uses that exact database file for that run.
 Use `-site default` to serve the existing embedded website, or `-site site2` to serve the fresh replacement frontend while keeping the old one available.
 
 If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
@@ -121,7 +156,10 @@ docker compose -f deploy/compose.yaml logs -f
 tk docker-compose > compose.yaml
 ```
 
-The container stores its database in the `ticket-data` Docker volume at `/data/ticket.db`, initialises on first boot, and bootstraps `admin` / `password`. Set `TICKET_ADMIN_PASSWORD` before startup if you want to override that initial password before the first boot.
+The container stores its database in the bind-mounted `./data` directory at
+`/data/ticket.db`, initialises on first boot, and bootstraps `admin` /
+`password`. Set `TICKET_ADMIN_PASSWORD` before startup if you want to override
+that initial password before the first boot.
 
 If you need the compose YAML directly from the Ticket binary, use `tk docker-compose`.
 
@@ -142,25 +180,19 @@ tk version
 
 Running `ticket` with no arguments prints a colored ASCII-art `TICKET` banner above the main usage output.
 
-If you are using the CLI against a running server on another host, configure TICKET_URL first:
+If you are using the CLI against a running server on another host, add a named
+remote first:
 
 ```bash
-export TICKET_URL=http://your-server:8080
-```
-
-For env-first remote mode (no local init/config required), set all three:
-
-```bash
-export TICKET_URL=http://your-server:8080
-export TICKET_USERNAME=alice
-export TICKET_PASSWORD=secret12
+tk remote add prod http://your-server:8080
+tk project remote prod
+tk login -username alice -password secret12
 tk status
 tk whoami
 ```
 
-When all three are set, remote mode takes precedence over repo-local `.ticket/config.json`.
-In this mode, `tk login` is optional for normal commands because the client
-auto-authenticates when issuing remote API calls.
+Use `tk project remote <name>` to bind the current repo to a remote before
+running normal project-scoped commands like `tk ls`, `tk add`, or `tk summary`.
 You can tune remote API timeout with `TICKET_TIMEOUT` (seconds, default `5`,
 minimum `1`, maximum `30`).
 
@@ -214,7 +246,7 @@ tk agent run -id <uuid>
 
 - `AGENT_ID` (flag: `-id`)
 - `AGENT_PASSWORD` (no flag; read from env or prompted with `*` masking)
-- `TICKET_URL` (env/config)
+- selected remote from repo/global config
 - `TICKET_AGENT_LLM` (optional, default: `claude`)
 
 If any required values are missing, the command exits with an explicit missing-fields error.
@@ -235,20 +267,12 @@ Log in:
 tk login -username name -password '*******'
 ```
 
-For `tk register`, you can omit the flags and let the CLI resolve them from `TICKET_USERNAME` and `TICKET_PASSWORD`. If those are not set, `tk register` falls back to `whoami` and `password`.
-
-If `TICKET_URL` is set, it overrides the effective configured `location`.
-Bare paths and `file:///...` stay in local mode; `http(s)://...` switches to
-remote mode. If that remote location also has `TICKET_USERNAME` and
-`TICKET_PASSWORD` set, those credentials override stored remote credentials.
-
 `tk login` resolves values in this order:
 
 1. a valid session already stored in `$TICKET_HOME/credentials.json`
-2. the `username` already stored in `$TICKET_HOME/config.json`
+2. the stored username for the selected remote
 3. `-username` and `-password`
-4. `TICKET_USERNAME` and `TICKET_PASSWORD`
-5. interactive prompts for anything still missing
+4. interactive prompts for anything still missing
 
 If login fails with `invalid credentials`, the CLI prints that message, prompts for username and password, and retries once.
 
@@ -259,7 +283,7 @@ When `tk login` prompts for a password in an interactive terminal, typed charact
 On successful login:
 
 - the session token is stored in `$TICKET_HOME/credentials.json`
-- the `username` and global fallback `location` fields in `$TICKET_HOME/config.json` are updated
+- the selected remote entry in `$TICKET_HOME/credentials.json` is updated with the latest username and token
 
 Registering a user does not log that user in or create local session credentials.
 
@@ -285,6 +309,10 @@ Supported local keys are:
 - `username`
 - `project_id`
 - `current_epic_id`
+
+`location` is now mainly a compatibility and explicit-local override key. The
+steady-state routing model is named remotes in `$TICKET_HOME/config.json` plus a
+repo-local `remote` binding in `.ticket/config.json`.
 
 In REMOTE mode it prints:
 
@@ -829,7 +857,7 @@ Keyboard shortcuts in the board view:
 - when chat capacity is full, new chat input is disabled until the server reports a free slot
 - `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
-- story analyse spawns an external Codex process with remote `ticket` environment (`TICKET_URL`, `TICKET_USERNAME`, `TICKET_PASSWORD`) and instructs Codex to run `tk login` plus `tk create` commands for epics/tasks in the selected project
+- story analyse spawns an external Codex process with remote Ticket context for the selected server and instructs Codex to run `tk login` plus `tk create` commands for epics/tasks in the selected project
 - Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
 Security notes:
@@ -861,7 +889,7 @@ tk user disable -username <name>
 tk user reset-password -username <name> [-password <password>]
 # Agent Commands
 tk agent request [flags]
-tk agent run -id <uuid>                     # TICKET_URL from env/config; password from AGENT_PASSWORD env or prompt
+tk agent run -id <uuid>                     # remote from repo/global config; password from AGENT_PASSWORD env or prompt
 
 # Agent Admin Commands
 tk agent create [-password <password>]  # UUID auto-generated
@@ -1049,16 +1077,16 @@ tk server
 You can now run as the user
 
 ```bash
-export TICKET_URL=http://localhost:8080
-export TICKET_USERNAME=user-username
-export TICKET_PASSWORD=user-password
+tk remote add demo http://localhost:8080
+tk login -username user-username -password user-password
+tk project remote demo
 tk ls
 ```
 
 You could run as an agent to do work automatically
 
 ```bash
-export TICKET_URL=http://localhost:8080
+tk project remote demo
 export AGENT_ID=<agent-uuid>
 export AGENT_PASSWORD=agent-password
 tk agent run                  # default LLM: claude (Sonnet 4.5)

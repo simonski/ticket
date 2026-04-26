@@ -56,28 +56,6 @@ func resolveAnalyseCommandArgs() []string {
 	return parts
 }
 
-func storyAnalyseProcessEnv() []string {
-	url := strings.TrimSpace(os.Getenv("TICKET_URL"))
-	if url == "" {
-		url = "https://ticket.exe.xyz"
-	}
-	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
-	if username == "" {
-		username = "admin"
-	}
-	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
-	if password == "" {
-		password = "password"
-	}
-	env := append([]string{}, os.Environ()...)
-	env = append(env,
-		"TICKET_URL="+url,
-		"TICKET_USERNAME="+username,
-		"TICKET_PASSWORD="+password,
-	)
-	return env
-}
-
 func buildStoryAnalyseCLIInstructions(story store.Story, project store.Project, role store.Role) string {
 	projectRef := fmt.Sprintf("%d", project.ID)
 	return fmt.Sprintf(
@@ -102,12 +80,8 @@ Project:
 
 Requirements:
 1) Run non-interactively.
-2) Use environment variables already provided:
-   TICKET_URL
-   TICKET_USERNAME
-   TICKET_PASSWORD
-3) Login first:
-   ticket login -url "$TICKET_URL" -username "$TICKET_USERNAME" -password "$TICKET_PASSWORD"
+2) Do not rely on TICKET_URL, TICKET_USERNAME, or TICKET_PASSWORD.
+3) Assume this environment is already configured for the correct backend.
 4) Create 1-4 epics in this project using:
    ticket create -project %s -t epic -title "<epic title>" -d "<epic description>"
 5) For each epic, create 2-5 tasks in this project associated to that epic using:

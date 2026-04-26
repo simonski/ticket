@@ -609,9 +609,8 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_URL` | Effective location override: bare paths and `file:///...` are local, `http(s)://...` is remote |
-| `TICKET_USERNAME` | Default username |
-| `TICKET_PASSWORD` | Default password |
+| `TICKET_HOME` | Global Ticket home directory (default `~/.ticket`) |
+| `TICKET_TIMEOUT` | Remote HTTP timeout in seconds |
 | `TICKET_TRUSTED_PROXY_CIDRS` | Comma-separated CIDRs trusted for forwarded proxy headers |
 | `AGENT_ID` | Agent UUID for worker mode |
 | `AGENT_PASSWORD` | Agent password |
@@ -620,23 +619,21 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 ### 11.2 Config Resolution
 
 1. Resolve `$TICKET_HOME` from the environment or default it to `~/.ticket`
-2. Walk up from the current directory looking for the nearest `.ticket/config.json`
-3. Load repo-local routing from that file when present
-4. Overlay global defaults from `$TICKET_HOME/config.json`
-5. If `TICKET_URL` is set, use it instead of the stored `location`
-6. If the effective location is `http://...` or `https://...` -> **remote mode**
-7. If the effective location is `file://...` or a bare path -> **local mode** using that path
-8. If the effective location is empty -> **local mode** at `$TICKET_HOME/ticket.db`
-
-Bare local paths are resolved like this:
-1. Absolute paths are used as-is
-2. Relative paths are resolved under `$TICKET_HOME`
+2. Load global config from `$TICKET_HOME/config.json`
+3. Walk up from the current directory looking for the nearest `.ticket/config.json`
+4. Overlay repo-local routing from that file when present
+5. If a repo-local `remote` is set, resolve it from the global `remotes[]` registry
+6. Otherwise, if a global `default_remote` is set, resolve that
+7. Legacy raw `location` values are accepted only as a compatibility fallback
+8. If the effective location is `http://...` or `https://...` -> **remote mode**
+9. If the effective location is `file://...` or a bare path -> **local mode** using that path
+10. If the effective location is empty -> **local mode** at `$TICKET_HOME/ticket.db`
 
 ### 11.3 Config Files
 
-- `.ticket/config.json` — repo-local routing (`location`, bound project, local project state)
-- `$TICKET_HOME/config.json` — global defaults (`username`, fallback location, current project override, TUI state)
-- `$TICKET_HOME/credentials.json` — remote auth tokens
+- `.ticket/config.json` — repo-local routing (`remote`, `project_id`, local project state)
+- `$TICKET_HOME/config.json` — global defaults (`default_remote`, `remotes[]`, TUI state)
+- `$TICKET_HOME/credentials.json` — remote auth tokens keyed by canonical remote URL
 - `$TICKET_HOME/ticket.db` — default SQLite database (local mode)
 
 ---
@@ -651,6 +648,9 @@ The binary is named `ticket` with the alias `tk`.
 |---------|-------------|
 | `tk initdb` | Create or repair the shared local database and bootstrap the default admin/project |
 | `tk init` | Bind the current repo or directory to a local or remote project |
+| `tk remote add NAME URL` | Register a named remote |
+| `tk remote ls` | List configured remotes |
+| `tk remote remove NAME` | Remove a named remote |
 | `tk server` | Start HTTP server and web UI on :8080 |
 | `tk version` | Show version |
 | `tk upgrade` | Check for newer version from GitHub |
@@ -678,11 +678,12 @@ The binary is named `ticket` with the alias `tk`.
 |---------|-------------|
 | `tk project list` | List projects |
 | `tk project create -prefix CUS -title "..."` | Create project |
-| `tk project use <id>` | Set active project |
+| `tk project use <id\|prefix>` | Set active project |
+| `tk project remote <name>` | Bind the current repo to a named remote |
 | `tk project get <id>` | View project details |
 | `tk project update <id> -title "..."` | Update project |
 | `tk project delete <id>` | Delete project |
-| `tk project init` | Write `.ticket.json` in current directory |
+| `tk project init` | Write `.ticket/config.json` in current directory |
 | `tk project sdlc <sdlc-id>` | Assign an SDLC to the active project |
 | `tk project set-draft <true\|false>` | Toggle draft mode on the active project |
 
@@ -1068,7 +1069,7 @@ Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee
 
 ### 14.5 Initialization
 
-`tk initdb` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), and a default project with prefix `TK`. `tk init` writes `.ticket/config.json` to bind the current repo or directory to a project.
+`tk initdb` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). `tk init` writes `.ticket/config.json` to bind the current repo or directory to a remote plus project.
 
 ---
 

@@ -70,13 +70,12 @@ When a block contains `tk server`, tk-test:
 6. Updates repo-local `.ticket/config.json` so the CLI detects remote mode
 7. Kills the server when the file finishes
 
-### TICKET_URL bridging
+### Remote binding in docs
 
-The quickstart docs use `export TICKET_URL=http://localhost:8080` to switch the
-CLI to remote mode. The actual CLI resolves remote mode from repo-local
-`.ticket/config.json` unless env overrides are present. tk-test bridges this gap
-by updating repo-local `.ticket/config.json` whenever it encounters a
-`TICKET_URL` export.
+The quickstart docs now use `tk remote add NAME http://localhost:8080` plus
+`tk project remote NAME` to switch the CLI to remote mode. `cmd/tk-test`
+rewrites `localhost:8080` references to the dynamic test server port so those
+blocks stay executable.
 
 ## Script harness
 

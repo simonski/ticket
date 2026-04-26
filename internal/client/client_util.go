@@ -13,7 +13,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 )
 
@@ -143,12 +142,6 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 		payload = encoded
 	}
 
-	if c.shouldAutoAuthenticate(path) && c.token == "" {
-		if err := c.authenticateFromEnvironment(ctx); err != nil {
-			return err
-		}
-	}
-
 	send := func(token string) (*http.Response, error) {
 		httpRequest, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(payload))
 		if err != nil {
@@ -173,20 +166,6 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	}
 	defer resp.Body.Close()
 
-	// Env-based remote auth behaves like a stateless client: if token expired,
-	// refresh it and retry once.
-	if resp.StatusCode == http.StatusUnauthorized && c.shouldAutoAuthenticate(path) {
-		c.token = ""
-		if err := c.authenticateFromEnvironment(ctx); err == nil && c.token != "" {
-			resp.Body.Close()
-			resp, err = send(c.token)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-		}
-	}
-
 	if resp.StatusCode >= 400 {
 		var apiErr struct {
 			Error string `json:"error"`
@@ -201,30 +180,4 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
-}
-
-func (c *Client) shouldAutoAuthenticate(path string) bool {
-	if c.mode != config.ModeRemote || !config.HasRemoteEnvOverride() {
-		return false
-	}
-	switch path {
-	case "/api/login", "/api/register":
-		return false
-	default:
-		return true
-	}
-}
-
-func (c *Client) authenticateFromEnvironment(ctx context.Context) error {
-	username := getenvFirst("TICKET_USERNAME")
-	password := getenvFirst("TICKET_PASSWORD")
-	if username == "" || password == "" {
-		return errors.New("TICKET_USERNAME and TICKET_PASSWORD are required when TICKET_URL is set")
-	}
-	response, err := c.Login(ctx, username, password)
-	if err != nil {
-		return err
-	}
-	c.token = response.Token
-	return nil
 }

@@ -35,22 +35,6 @@ func TestResolveAnalyseCommandArgsInjectsExecForCodexFlags(t *testing.T) {
 	}
 }
 
-func TestStoryAnalyseProcessEnvDefaults(t *testing.T) {
-	t.Setenv("TICKET_URL", "")
-	t.Setenv("TICKET_USERNAME", "")
-	t.Setenv("TICKET_PASSWORD", "")
-	env := strings.Join(storyAnalyseProcessEnv(), "\n")
-	for _, want := range []string{
-		"TICKET_URL=https://ticket.exe.xyz",
-		"TICKET_USERNAME=admin",
-		"TICKET_PASSWORD=password",
-	} {
-		if !strings.Contains(env, want) {
-			t.Fatalf("storyAnalyseProcessEnv() missing %q in %q", want, env)
-		}
-	}
-}
-
 func TestBuildStoryAnalyseCLIInstructionsContainsTicketCommands(t *testing.T) {
 	t.Parallel()
 	story := store.Story{
@@ -72,7 +56,8 @@ func TestBuildStoryAnalyseCLIInstructionsContainsTicketCommands(t *testing.T) {
 	prompt := buildStoryAnalyseCLIInstructions(story, project, role)
 	for _, want := range []string{
 		"You are role StoryReview",
-		"ticket login -url \"$TICKET_URL\" -username \"$TICKET_USERNAME\" -password \"$TICKET_PASSWORD\"",
+		"Do not rely on TICKET_URL, TICKET_USERNAME, or TICKET_PASSWORD.",
+		"Assume this environment is already configured for the correct backend.",
 		"ticket create -project 3 -t epic",
 		"ticket create -project 3 -t task -parent <epic-ref>",
 		"Story:",

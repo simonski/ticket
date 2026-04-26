@@ -40,9 +40,9 @@ Single Go binary (`cmd/tk/main.go`) providing four interfaces to the same data:
 - **Local mode** (default) — Direct SQLite via `internal/store`. No server needed.
 - **Remote mode** — HTTP client via `internal/client` to a running server.
 
-Mode is determined by the `location` field in `.ticket/config.json`: a path or `file://` URI means local; an `http(s)://` URL means remote. Resolved by `internal/config.ResolveLocation()`. The CLI, `libticket.LocalService`, and `libtickethttp.Service` all implement the same `libticket.Service` interface.
+Mode is determined from the selected remote binding: repo-local `.ticket/config.json` stores the active `remote` name and `project_id`, global `~/.ticket/config.json` stores `default_remote` plus the `remotes[]` registry, and legacy raw `location` values are only a compatibility fallback. The CLI, `libticket.LocalService`, and `libtickethttp.Service` all implement the same `libticket.Service` interface.
 
-`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. The `-f /path` flag overrides `TICKET_HOME`. Environment variables `TICKET_USERNAME` and `TICKET_PASSWORD` supply credentials for remote mode.
+`$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. `~/.ticket/config.json` stores named remotes, `~/.ticket/credentials.json` stores per-remote credentials keyed by canonical URL, and `-f /path` is a per-command local database override.
 
 ### Key Packages
 

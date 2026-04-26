@@ -210,12 +210,6 @@ func runSetupExisting(reader *bufio.Reader) error {
 	fmt.Printf("  location : %s\n", cfg.Location)
 	if resolved.Mode == config.ModeRemote {
 		fmt.Printf("  mode     : remote (%s)\n", resolved.ServerURL)
-		if u := envValue("TICKET_USERNAME"); u != "" {
-			fmt.Printf("  TICKET_USERNAME : %s\n", u)
-		}
-		if envValue("TICKET_PASSWORD") != "" {
-			fmt.Printf("  TICKET_PASSWORD : ***\n")
-		}
 	} else {
 		fmt.Printf("  mode     : local\n")
 		fmt.Printf("  database : %s\n", resolved.DBPath)
@@ -394,32 +388,20 @@ func runSetupRemote(reader *bufio.Reader) error {
 	}
 	fmt.Println("OK")
 
-	// 3. Save server URL globally so resolveService can connect during setup
-	cfg, err := config.Load()
+	// 3. Ensure the remote exists globally so resolveService can connect during setup.
+	remoteNameDefault := defaultRemoteNameForURL(serverURL)
+	remoteName := prompt(reader, "remote name", remoteNameDefault)
+	cfg, remoteName, err := ensureNamedRemote(remoteName, serverURL)
 	if err != nil {
 		return err
 	}
+	cfg.Remote = remoteName
 	cfg.Location = serverURL
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
 
 	// 4. Authentication
 	fmt.Println()
-
-	// Pick up defaults from env vars
 	defaultUsername := cfg.Username
-	if defaultUsername == "" {
-		defaultUsername = envValue("TICKET_USERNAME")
-	}
-	defaultPassword := envValue("TICKET_PASSWORD")
-
-	if defaultUsername != "" {
-		fmt.Printf("  TICKET_USERNAME : %s\n", defaultUsername)
-	}
-	if defaultPassword != "" {
-		fmt.Printf("  TICKET_PASSWORD : ***\n")
-	}
+	defaultPassword := ""
 
 	hasAccount := promptYN(reader, "do you have an account on this server?", true)
 
@@ -432,6 +414,8 @@ func runSetupRemote(reader *bufio.Reader) error {
 	if err != nil {
 		return err
 	}
+	cfg.Remote = remoteName
+	cfg.Location = serverURL
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
@@ -459,7 +443,6 @@ func runSetupRemote(reader *bufio.Reader) error {
 
 	// 5. Project selection
 	// Reload service with token
-	cfg.Location = serverURL
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
@@ -490,7 +473,7 @@ func runSetupRemote(reader *bufio.Reader) error {
 			if rootErr != nil {
 				return rootErr
 			}
-			if err := bindRootToRemoteProject(root, serverURL, fmt.Sprintf("%d", match.ID)); err != nil {
+			if err := bindRootToRemoteProject(root, remoteName, fmt.Sprintf("%d", match.ID)); err != nil {
 				return err
 			}
 			fmt.Printf("  project  : %s (%s)\n", match.Prefix, match.Title)
@@ -533,7 +516,7 @@ func runSetupRemote(reader *bufio.Reader) error {
 	if rootErr != nil {
 		return rootErr
 	}
-	if err := bindRootToRemoteProject(root, serverURL, fmt.Sprintf("%d", selected.ID)); err != nil {
+	if err := bindRootToRemoteProject(root, remoteName, fmt.Sprintf("%d", selected.ID)); err != nil {
 		return err
 	}
 	fmt.Printf("  project  : %s (%s)\n", selected.Prefix, selected.Title)
@@ -567,7 +550,7 @@ func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg c
 	if err != nil {
 		return err
 	}
-	if err := bindRootToRemoteProject(root, cfg.Location, fmt.Sprintf("%d", project.ID)); err != nil {
+	if err := bindRootToRemoteProject(root, cfg.Remote, fmt.Sprintf("%d", project.ID)); err != nil {
 		return err
 	}
 	fmt.Printf("  project  : %s (%s)\n", project.Prefix, project.Title)
@@ -729,11 +712,7 @@ func runInitDB(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	defaultDBPath, err := defaultDatabasePath()
-	if err != nil {
-		return err
-	}
-	dbPath := fs.String("f", defaultDBPath, "SQLite database file")
+	dbPathFlag := fs.String("f", "", "SQLite database file")
 	passwordFlag := fs.String("password", "", "bootstrap password")
 	force := fs.Bool("force", false, "overwrite the database file if it exists")
 	populate := fs.Bool("populate", false, "seed example projects, stories, tickets, users, and teams")
@@ -745,6 +724,33 @@ func runInitDB(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() > 1 {
+		return errors.New("usage: tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]")
+	}
+	if fs.NArg() == 1 && strings.TrimSpace(*dbPathFlag) != "" {
+		return errors.New("use either a positional path or -f, not both")
+	}
+
+	var (
+		dbPath      string
+		projectRoot string
+		err         error
+	)
+	switch {
+	case strings.TrimSpace(*dbPathFlag) != "":
+		dbPath = strings.TrimSpace(*dbPathFlag)
+	case fs.NArg() == 1:
+		projectRoot, err = filepath.Abs(strings.TrimSpace(fs.Arg(0)))
+		if err != nil {
+			return err
+		}
+		dbPath = filepath.Join(projectRoot, ".ticket", "ticket.db")
+	default:
+		dbPath, err = config.LocalDBPath()
+		if err != nil {
+			return err
+		}
+	}
 
 	password := strings.TrimSpace(*passwordFlag)
 	if password == "" {
@@ -752,25 +758,24 @@ func runInitDB(args []string) error {
 	}
 
 	if *force {
-		if err := removeDBFiles(*dbPath); err != nil {
+		if err := removeDBFiles(dbPath); err != nil {
 			return err
 		}
 	}
 
 	dbExists := false
-	if _, statErr := os.Stat(*dbPath); statErr == nil {
+	if _, statErr := os.Stat(dbPath); statErr == nil {
 		dbExists = true
 	}
 
 	if dbExists && !*force {
-		// DB already exists — skip creation, just update the config to point at it.
-		fmt.Printf("database already exists at %s (use -force to overwrite)\n", *dbPath)
+		fmt.Printf("database already exists at %s (use --force to overwrite)\n", dbPath)
 	} else {
-		if err := store.Init(*dbPath, "admin", password, static.SeedDatabase); err != nil {
+		if err := store.Init(dbPath, "admin", password, static.SeedDatabase); err != nil {
 			return err
 		}
 		if *populate {
-			db, err := store.Open(*dbPath)
+			db, err := store.Open(dbPath)
 			if err != nil {
 				return err
 			}
@@ -787,16 +792,14 @@ func runInitDB(args []string) error {
 	}
 
 	cfg := config.Config{
-		Location:  "file://" + *dbPath,
+		Location:  "file://" + dbPath,
 		ProjectID: "TK",
-		Username:  "admin",
 	}
 
-	fmt.Printf("initialized database at %s\n", *dbPath)
+	fmt.Printf("initialized database at %s\n", dbPath)
 	if !dbExists || *force {
 		fmt.Printf("admin user: admin\n")
 		fmt.Printf("admin password: %s\n", password)
-		fmt.Printf("default project: 1\n")
 		if *populate {
 			fmt.Println("example data: seeded")
 		}
@@ -807,6 +810,22 @@ func runInitDB(args []string) error {
 		reader := bufio.NewReader(os.Stdin)
 		if err := runInitCheckDefaults(reader, cfg, *sdlcFlag); err != nil {
 			fmt.Printf("warning: could not check defaults: %v\n", err)
+		}
+	}
+
+	if projectRoot != "" {
+		_, remoteName, err := ensureNamedLocalRemote(projectRoot, dbPath)
+		if err != nil {
+			return err
+		}
+		if err := config.SaveProjectConfigAt(projectRoot, config.Config{Remote: remoteName}); err != nil {
+			return err
+		}
+		fmt.Printf("remote    : %s\n", remoteName)
+		fmt.Printf("repo      : %s\n", projectRoot)
+	} else {
+		if _, err := ensureDefaultLocalRemote(dbPath); err != nil {
+			return err
 		}
 	}
 

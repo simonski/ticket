@@ -190,15 +190,14 @@ func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
 	}
 }
 
-func TestResolveURLUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
+func TestResolveURLUsesProcessLocationOverrideForRemote(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
 
-	t.Setenv("TICKET_URL", "https://tickets.example.com")
-	t.Setenv("TICKET_USERNAME", "alice")
-	t.Setenv("TICKET_PASSWORD", "secret12")
+	SetLocationOverride("https://tickets.example.com")
+	t.Cleanup(ClearLocationOverride)
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -208,18 +207,19 @@ func TestResolveURLUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
 		t.Fatalf("Mode = %q, want %q", resolved.Mode, ModeRemote)
 	}
 	if resolved.ServerURL != "https://tickets.example.com" {
-		t.Fatalf("ServerURL = %q, want env URL", resolved.ServerURL)
+		t.Fatalf("ServerURL = %q, want override URL", resolved.ServerURL)
 	}
 }
 
-func TestResolveURLUsesEnvLocationOverrideForLocalPath(t *testing.T) {
+func TestResolveURLUsesProcessLocationOverrideForLocalPath(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
 	localDB := filepath.Join(tempDir, "override.db")
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
 
-	t.Setenv("TICKET_URL", localDB)
+	SetLocationOverride(localDB)
+	t.Cleanup(ClearLocationOverride)
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -233,57 +233,12 @@ func TestResolveURLUsesEnvLocationOverrideForLocalPath(t *testing.T) {
 	}
 }
 
-func TestLoadUsesEnvOverrideWhenRemoteTrioSet(t *testing.T) {
+func TestLoadUsesDefaultRemoteAndStoredCredentials(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
-	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db","username":"local-user"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config.json) error = %v", err)
-	}
-	if err := SaveCredentials(Credentials{Token: "persisted-token"}); err != nil {
-		t.Fatalf("SaveCredentials() error = %v", err)
-	}
-
-	t.Setenv("TICKET_URL", "https://tickets.example.com")
-	t.Setenv("TICKET_USERNAME", "alice")
-	t.Setenv("TICKET_PASSWORD", "secret12")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Location != "https://tickets.example.com" {
-		t.Fatalf("Load().Location = %q, want env URL", cfg.Location)
-	}
-	if cfg.Username != "alice" {
-		t.Fatalf("Load().Username = %q, want env username", cfg.Username)
-	}
-	if cfg.Token != "" {
-		t.Fatalf("Load().Token = %q, want empty when env override is active", cfg.Token)
-	}
-}
-
-func TestLoadUsesEnvLocationOverrideWithoutRemoteCredentials(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com","username":"local-user"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config.json) error = %v", err)
-	}
-
-	t.Setenv("TICKET_URL", filepath.Join(tempDir, "override.db"))
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Location != filepath.Join(tempDir, "override.db") {
-		t.Fatalf("Load().Location = %q, want env location override", cfg.Location)
-	}
-	if cfg.Username != "local-user" {
-		t.Fatalf("Load().Username = %q, want stored username to remain", cfg.Username)
-	}
-}
-
-func TestLoadUsesStoredRemoteCredentialsWithEnvLocationOverride(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/local.db"}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{
+		"default_remote":"prod",
+		"remotes":[{"name":"prod","url":"https://tickets.example.com"}]
+	}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
 	if err := SaveCredentials(Credentials{
@@ -293,20 +248,58 @@ func TestLoadUsesStoredRemoteCredentialsWithEnvLocationOverride(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveCredentials() error = %v", err)
 	}
-	t.Setenv("TICKET_URL", "https://tickets.example.com")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if cfg.Location != "https://tickets.example.com" {
-		t.Fatalf("Load().Location = %q, want env URL", cfg.Location)
+		t.Fatalf("Load().Location = %q, want default remote URL", cfg.Location)
 	}
 	if cfg.Username != "alice" {
-		t.Fatalf("Load().Username = %q, want alice", cfg.Username)
+		t.Fatalf("Load().Username = %q, want stored username", cfg.Username)
 	}
 	if cfg.Token != "stored-token" {
 		t.Fatalf("Load().Token = %q, want stored-token", cfg.Token)
+	}
+}
+
+func TestLoadUsesProjectRemoteBinding(t *testing.T) {
+	tempDir := setupConfigTestHome(t)
+	repoDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Chdir(repoDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{
+		"default_remote":"local",
+		"remotes":[
+			{"name":"local","url":"file:///tmp/local.db"},
+			{"name":"prod","url":"https://tickets.example.com"}
+		]
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
+	}
+	if err := SaveProjectConfigAt(repoDir, Config{Remote: "prod", ProjectID: "CUS"}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != "https://tickets.example.com" {
+		t.Fatalf("Load().Location = %q, want project remote URL", cfg.Location)
+	}
+	if cfg.Remote != "prod" {
+		t.Fatalf("Load().Remote = %q, want prod", cfg.Remote)
+	}
+	if cfg.ProjectID != "CUS" {
+		t.Fatalf("Load().ProjectID = %q, want CUS", cfg.ProjectID)
 	}
 }
 
@@ -396,6 +389,87 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "credentials.json")); !os.IsNotExist(err) {
 		t.Fatalf("credentials.json should be removed, err = %v", err)
+	}
+}
+
+func TestSaveProjectConfigAtStripsAuthFields(t *testing.T) {
+	setupConfigTestHome(t)
+
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(repoDir) error = %v", err)
+	}
+	if err := SaveProjectConfigAt(repoDir, Config{
+		Location:  "https://tickets.example.com",
+		Username:  "alice",
+		Token:     "secret-token",
+		ProjectID: "1",
+	}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	data, err := os.ReadFile(ProjectPathAtRoot(repoDir))
+	if err != nil {
+		t.Fatalf("ReadFile(project config) error = %v", err)
+	}
+	got := string(data)
+	for _, unwanted := range []string{"username", "alice", "token", "secret-token"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("project config should not contain %q:\n%s", unwanted, got)
+		}
+	}
+	for _, want := range []string{"https://tickets.example.com", "\"project_id\": \"1\""} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("project config missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestLoadStripsLegacyProjectAuthFields(t *testing.T) {
+	setupConfigTestHome(t)
+
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Chdir(repoDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	projectPath := ProjectPathAtRoot(repoDir)
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(project config dir) error = %v", err)
+	}
+	raw := `{"version":1,"backend":"remote","location":"https://tickets.example.com","username":"alice","token":"secret-token","project_id":"1"}`
+	if err := os.WriteFile(projectPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("WriteFile(project config) error = %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Location != "https://tickets.example.com" {
+		t.Fatalf("Load().Location = %q, want remote location", cfg.Location)
+	}
+	if cfg.Username != "" {
+		t.Fatalf("Load().Username = %q, want empty because project config auth should be ignored", cfg.Username)
+	}
+	if cfg.Token != "" {
+		t.Fatalf("Load().Token = %q, want empty because project config auth should be ignored", cfg.Token)
+	}
+
+	data, err := os.ReadFile(projectPath)
+	if err != nil {
+		t.Fatalf("ReadFile(project config) error = %v", err)
+	}
+	got := string(data)
+	for _, unwanted := range []string{"username", "alice", "token", "secret-token"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("healed project config should not contain %q:\n%s", unwanted, got)
+		}
 	}
 }
 

@@ -11,6 +11,10 @@ tk initdb
 This creates the shared local database at `$TICKET_HOME/ticket.db`
 (default `~/.ticket/ticket.db`) and bootstraps `admin` / `password`.
 
+If you want this repo to use its own local database instead of the shared one,
+run `tk initdb .` to create `./.ticket/ticket.db`, register a named local
+remote for that path, and bind this repo to it.
+
 ## 2. Bind this repo or directory to a project
 
 ```bash
@@ -92,7 +96,7 @@ tk doctor ticket -id CUS-1
 
 | Variable | Purpose |
 |----------|---------|
-| `TICKET_URL` | Override the effective location: bare paths and `file:///...` are local, `http(s)://...` are remote |
+| `TICKET_HOME` | Override the global Ticket home directory (default `~/.ticket`) |
 
 ---
 

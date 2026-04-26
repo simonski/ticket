@@ -27,8 +27,8 @@ describes symptoms, diagnosis steps, and resolution.
 # 1. Pull the image (or build from source)
 docker pull ghcr.io/simonski/ticket:latest
 
-# 2. Create a data volume
-docker volume create ticket-data
+# 2. Create the persistent data directory
+mkdir -p ./data
 
 # 3. Start the server
 docker compose up -d
@@ -338,7 +338,7 @@ correct `Host` header.
 ```bash
 # Check disk usage
 df -h
-du -sh /var/lib/docker/volumes/ticket-data/_data/
+du -sh ./data
 
 # Prune old backups
 find /var/backups/ticket -name "*.json.gz" -mtime +30 -delete
