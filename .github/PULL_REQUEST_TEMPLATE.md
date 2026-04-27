@@ -3,6 +3,37 @@
 Closes TK-XXX
 
 <!-- What does this PR do? One paragraph is fine. -->
+<!-- Example: "Tighten tk init so it requires a git repository, update quickstarts, and add CLI coverage for the new failure path." -->
+
+## What changed
+
+- 
+- 
+
+## Testing
+
+- [ ] `make test-go-cover`
+- [ ] `make lint`
+- [ ] targeted package tests:
+
+```text
+paste commands here
+```
+
+## Docs / specs
+
+- [ ] No user-facing docs changed
+- [ ] Updated docs (`README.md`, `QUICKSTART*.md`, `USER_GUIDE.md`, `docs/DESIGN.md`) as needed
+- [ ] Updated public contract docs (`SPEC.md`, `openapi.yaml`) as needed
+
+## Risk
+
+- [ ] Low-risk change
+- [ ] High-risk change (auth/session, websocket/runtime, deploy/release, schema, or public contract)
+
+## Notes for reviewers
+
+<!-- Anything non-obvious, trade-offs, follow-up items, or rollout notes. -->
 
 ## Checklist
 
