@@ -49,8 +49,16 @@ tk server -site site2
 
 ## 2. Configure the CLI for the running server
 
-Register a named remote for the server, bind this repo to it, and use the
-bootstrap admin credentials:
+From inside a git repo, `tk init` is the guided way to connect to the server:
+
+```bash
+tk init
+```
+
+Choose **Remote server** when prompted, then enter `http://localhost:8080`,
+log in as `admin` / `password`, and select or create a project.
+
+The equivalent explicit commands are:
 
 ```bash
 tk remote add local-server http://localhost:8080
@@ -69,10 +77,10 @@ tk project use CUS
 ## 4. Capture and organise work
 
 ```bash
-tk add  "Customers can reset their password"
+tk new  "Customers can reset their password"
 tk bug  "Reset token expires immediately"
 tk epic "Authentication"
-tk list
+tk ls
 ```
 
 ## 5. Move work through the lifecycle

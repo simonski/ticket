@@ -11,7 +11,7 @@
 | Concept | Example |
 |---------|---------|
 | Project | `CUS` — Customer Portal |
-| Ticket key | `CUS-T-42` |
+| Ticket key | `CUS-42` |
 | Ticket types | `epic`, `task`, `bug`, `story`, `spike`, `chore`, `note`, `question`, `requirement`, `decision` |
 | Lifecycle | `stage/state` — e.g. `develop/active` |
 | Stages | `design → develop → test → done` |
@@ -34,3 +34,9 @@ If you're new to the repo, read these first:
 4. [CLAUDE.md](./CLAUDE.md) - build/test commands, architecture, and package map
 5. [CONTRIBUTING.md](./CONTRIBUTING.md) - branch naming, commit style, and PR expectations
 
+## Community
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- [SECURITY.md](./SECURITY.md)
+- [SUPPORT.md](./SUPPORT.md)

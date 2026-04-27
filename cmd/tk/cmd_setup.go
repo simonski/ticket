@@ -148,20 +148,21 @@ func runSetup(args []string) error {
 		}
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Println("tk init")
-	fmt.Println()
-
 	root, hasProject, err := currentOrAncestorProjectRoot()
 	if err != nil {
 		return err
 	}
-	if gitRoot, ok := config.FindGitRoot(root); ok {
-		fmt.Printf("git root   : %s\n", gitRoot)
-	} else {
-		fmt.Println("git root   : (none — using current directory)")
+	gitRoot, ok := config.FindGitRoot(root)
+	if !ok {
+		return errors.New("tk init requires a git repository; run git init or clone a repo first")
 	}
+	root = gitRoot
+
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Println("tk init")
+	fmt.Println()
+	fmt.Printf("git root   : %s\n", root)
 	fmt.Printf("config dir : %s\n", filepath.Join(root, ".ticket"))
 	fmt.Println()
 

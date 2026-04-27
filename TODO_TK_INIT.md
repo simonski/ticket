@@ -1,5 +1,34 @@
 TK_INIT
 
+tk initdb
+  initialise a database file in ~/.ticket/ticket.db
+  or initialise a database file the locaiton at -f (tk initdb -f filename.db)
+
+tk server
+  run the server using the db at ~/.ticket/ticket.db
+
+tk server -f filename.db
+  run the server using the db at filename.db
+
+tk init
+  intent is to make this location map to a project
+  using ${CWD} create a new project  (or explain it is already setup)
+  use the local .git as the git location
+  use the local dirname as the project name
+  use the prefix as the first 3 letter of the project name
+  create the project
+  update the ${CWD}/.ticket/config.json to contain the project id
+  prompt the user for all the above
+
+tk init -url http://ticket.exe.xyz
+  the intent is to make this a project (or be part of the project) at the endpoint
+  the endpoint is just the server, now we figure out the project id
+  if it is a git repo, then the origin must be the id
+  if it is not, then what to do? go into a nice tui mode to look at the various and do that
+  including what... login via the tui and hold credentials in the ~/.ticket/credentials?
+
+
+
 GOAL
 
 Reimagine the design and implementation of:

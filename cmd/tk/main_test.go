@@ -498,6 +498,14 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 	}
 }
 
+func TestRenderCommandHelpInitMentionsGitRepositoryRequirement(t *testing.T) {
+	help := renderCommandHelp("init")
+
+	if !strings.Contains(help, "requires the current working directory to be inside a git repository") {
+		t.Fatalf("init help should mention git repository requirement:\n%s", help)
+	}
+}
+
 func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 	tempDir := t.TempDir()
 	originalWD, err := os.Getwd()
@@ -1468,6 +1476,20 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	}
 	if !strings.Contains(output, "db_path          : "+filepath.Join(tempDir, "ticket.db")) {
 		t.Fatalf("runStatus(local missing) output missing db_path:\n%s", output)
+	}
+}
+
+func TestRunInitRequiresGitRepository(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", t.TempDir())
+	setTestWorkingDir(t, tempDir)
+
+	err := run([]string{"init"})
+	if err == nil {
+		t.Fatal("run(init) error = nil, want git repository requirement")
+	}
+	if !strings.Contains(err.Error(), "tk init requires a git repository") {
+		t.Fatalf("run(init) error = %v, want git repository requirement", err)
 	}
 }
 

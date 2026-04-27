@@ -20,7 +20,8 @@ fresh clone to a merged pull request.
 
 ## Code of Conduct
 
-Be kind, be constructive, assume good faith.
+Be kind, be constructive, assume good faith. See
+[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for the full policy.
 
 ---
 

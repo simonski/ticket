@@ -15,16 +15,21 @@ If you want this repo to use its own local database instead of the shared one,
 run `tk initdb .` to create `./.ticket/ticket.db`, register a named local
 remote for that path, and bind this repo to it.
 
-## 2. Bind this repo or directory to a project
+## 2. Bind this git repo to a project
 
 ```bash
-tk project init -prefix CUS -title "Customer Portal"
+# inside an existing repo (or after `git init`)
+tk init
 ```
+
+Choose **Local mode** when prompted. Ticket will use the repo name, git origin,
+and derived prefix as defaults, and then write `.ticket/config.json` at the git
+repo root.
 
 ## 3. Capture work
 
 ```bash
-tk add  "Customers can reset their password"
+tk new  "Customers can reset their password"
 tk bug  "Reset token expires immediately"
 tk epic "Authentication"
 ```
@@ -41,7 +46,7 @@ tk idea accept requirement CUS-4
 ## 4. Inspect and organise
 
 ```bash
-tk list
+tk ls
 tk get   -id CUS-1
 tk summary
 tk attach -id CUS-1 CUS-3

@@ -21,17 +21,18 @@ Or, download a binary for your platform from the [releases page](https://github.
 In local mode, the client talks to SQLite directly. No server needed.
 `tk initdb` creates the shared local database at `$TICKET_HOME/ticket.db`
 (default `~/.ticket/ticket.db`), registers the default `local` remote, and
-`tk init` binds the current repo or directory by writing `.ticket/config.json`.
+`tk init` requires a git repo and binds the current repo by writing
+`.ticket/config.json`.
 Best for solo use, small projects, or getting started quickly.
 
 ```bash
-# create the shared local database once
+# inside an existing repo (or after `git init`)
 tk initdb
 
-# bind this repo/directory to a project
+# bind this repo to a project and choose Local mode when prompted
 tk init
-tk add "First ticket"
-tk list
+tk new "First ticket"
+tk ls
 ```
 
 ### [Server mode](QUICKSTART_SERVER.md)
@@ -51,8 +52,8 @@ tk server
 
 ```bash
 tk remote add local-server http://localhost:8080
-tk register -username alice -password secret12
 tk project remote local-server
+tk register -username alice -password secret12
 tk login -username alice -password secret12
 ```
 

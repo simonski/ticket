@@ -1069,7 +1069,7 @@ Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee
 
 ### 14.5 Initialization
 
-`tk initdb` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). `tk init` writes `.ticket/config.json` to bind the current repo or directory to a remote plus project.
+`tk initdb` creates the database, schema, admin user, default sdlc (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). `tk init` requires a git repository and writes `.ticket/config.json` at the repo root to bind that repo to a remote plus project.
 
 ---
 

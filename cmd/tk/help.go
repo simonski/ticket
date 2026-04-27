@@ -426,7 +426,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-sdlc <name>]",
-		details: []string{"Interactive setup for local or remote mode.", "In local mode, initializes `.ticket/ticket.db`, sets admin password to `password` (unless overridden by other setup flows), and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
+		details: []string{"Interactive setup for local or remote mode.", "`tk init` requires the current working directory to be inside a git repository.", "In local mode, initializes `.ticket/ticket.db`, sets admin password to `password` (unless overridden by other setup flows), and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
 		example: "tk init",
 	},
 	"curate": {

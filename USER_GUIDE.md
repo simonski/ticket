@@ -90,16 +90,17 @@ Bootstrap resolution works like this:
 - initial workflow selection: use `-sdlc <name>` to assign one of the built-in SDLCs during bootstrap
 - project prefixes must be 1-5 uppercase ASCII letters
 
-Bind the current repo or directory to a project:
+Bind the current git repo to a project:
 
 ```bash
 tk init
 ```
 
-`tk init` writes `.ticket/config.json` in the current managed root. In local
-mode it binds that location to a project in the selected local remote database.
-In remote mode it writes the selected remote name and project binding locally,
-while keeping credentials in `$TICKET_HOME/credentials.json`.
+`tk init` requires the current working directory to be inside a git repository.
+It writes `.ticket/config.json` in that repo root. In local mode it binds that
+repo to a project in the selected local remote database. In remote mode it
+writes the selected remote name and project binding locally, while keeping
+credentials in `$TICKET_HOME/credentials.json`.
 
 Manage named remotes explicitly:
 
