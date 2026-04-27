@@ -53,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 	if _, err := os.Stat(bin); err != nil {
-		fmt.Fprintf(os.Stderr, "error: ticket binary not found at %s (run 'make build' first)\n", bin)
+		fmt.Fprintf(os.Stderr, "error: ticket binary not found at %s (run 'make build-dev' first)\n", bin)
 		os.Exit(1)
 	}
 

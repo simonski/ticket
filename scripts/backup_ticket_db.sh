@@ -10,7 +10,7 @@ KEEP_DAYS="${KEEP_DAYS:-30}"
 
 if [[ ! -x "$TK_BIN" ]]; then
 	echo "tk binary not found at $TK_BIN" >&2
-	echo "Build it first: go build -o ./bin/tk ./cmd/tk" >&2
+	echo "Build it first: make build-dev" >&2
 	exit 1
 fi
 

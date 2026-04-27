@@ -7,7 +7,7 @@ seeds project data only.
 ## 1. Build `tk`
 
 ```bash
-go build -o ./bin/tk ./cmd/tk
+make build-dev
 ```
 
 ## 2. Seed the example project

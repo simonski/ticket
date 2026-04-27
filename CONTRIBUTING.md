@@ -34,10 +34,9 @@ make setup       # Go modules + Node + Playwright + dev tools
 make test        # All tests must pass before you start
 ```
 
-> **⚠️ Do NOT use `make build` for day-to-day development.**
 > `make build` auto-increments the patch version in `cmd/tk/VERSION` on
-> every invocation. Use `go build -o ./bin/tk ./cmd/tk` instead.
-> Reserve `make build` for cutting releases.
+> every invocation. Use `make build-dev` when you want a development build
+> without changing the version.
 
 See [docs/ONBOARDING.md](docs/ONBOARDING.md) for a full onboarding walkthrough.
 
@@ -65,7 +64,7 @@ Format: `TK-XXX: imperative verb + brief description`
 ```
 TK-190: enforce session expires_at in GetUserByToken
 TK-193: add 9 missing database indexes for ticket list queries
-docs: update ONBOARDING.md with make build warning
+docs: update ONBOARDING.md build guidance
 ```
 
 Rules:

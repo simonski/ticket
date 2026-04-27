@@ -6,7 +6,7 @@
 # always stay aligned with the published docs.
 #
 # Usage:
-#   go build -o ./bin/tk ./cmd/tk && ./tests/quickstart_test.sh
+#   make build-dev && ./tests/quickstart_test.sh
 #
 set -euo pipefail
 
@@ -14,7 +14,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TICKET_BIN="$ROOT_DIR/bin/tk"
 
 if [[ ! -x "$TICKET_BIN" ]]; then
-  echo "FAIL: tk binary not found at $TICKET_BIN (run 'go build -o ./bin/tk ./cmd/tk' first)" >&2
+  echo "FAIL: tk binary not found at $TICKET_BIN (run 'make build-dev' first)" >&2
   exit 1
 fi
 

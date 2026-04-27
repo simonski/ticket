@@ -89,8 +89,8 @@ The `make setup` command installs:
 ## Daily development loop
 
 ```bash
-# Build for local use (does NOT bump version)
-go build -o ./bin/tk ./cmd/tk
+# Build for local use without changing the version
+make build-dev
 
 # Run unit + integration tests
 make test-go
@@ -108,13 +108,9 @@ make lint
 make test
 ```
 
-> **⚠️ Critical pitfall: `make build` increments the version**
->
 > `make build` auto-increments the patch version in `cmd/tk/VERSION` on
-> every run. This creates an unwanted commit and pollutes git history.
->
-> **Always use `go build -o ./bin/tk ./cmd/tk` for development.**
-> Only use `make build` when cutting a release.
+> every run. Use `make build-dev` when you want a local rebuild without
+> changing the version.
 
 ---
 
@@ -212,9 +208,9 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 
 | Pitfall | Fix |
 |---------|-----|
-| `make build` bumps the version unexpectedly | Use `go build -o ./bin/tk ./cmd/tk` for dev builds |
+| `make build` bumped the version and you wanted a stable dev binary | Use `make build-dev` for development builds |
 | Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
-| `tk` command not found | Run `go build -o ./bin/tk ./cmd/tk` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
+| `tk` command not found | Run `make build-dev` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
 | `tk` is talking to the wrong backend | Run `tk status` first. Local mode uses `$TICKET_HOME/ticket.db` with repo-local `.ticket/config.json` for routing; remote mode uses the `location` entry in `.ticket/config.json` |
 | API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo SDLC commands, run the `spec` workflow |
 | `.ticket/config.json` blocks a rebase or pull | If you do not need your local Ticket routing state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |

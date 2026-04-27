@@ -1,4 +1,4 @@
-.PHONY: help default build build-bin build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -15,6 +15,7 @@ help:
 	@printf "Available targets:\n\n"
 	@printf "  make build           Build tk binary into ./bin/tk.\n"
 	@printf "                       Also increments the patch version in ./VERSION.\n"
+	@printf "  make build-dev       Build tk binary into ./bin/tk without changing the version.\n"
 	@printf "  make build-linux     Build a linux/amd64 tk binary into ./bin/tk-linux using BuildKit.\n"
 	@printf "  make sync-openapi-version Sync openapi.yaml version with cmd/tk/VERSION.\n"
 	@printf "  make validate-openapi Parse openapi.yaml and require core metadata.\n"
@@ -58,6 +59,9 @@ help:
 build: 
 	@$(MAKE) bump-version
 	@$(MAKE) sync-openapi-version
+	@$(MAKE) build-bin
+
+build-dev:
 	@$(MAKE) build-bin
 
 build-bin:

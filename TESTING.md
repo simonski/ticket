@@ -38,7 +38,7 @@ verifying each block exits 0.
 ### Usage
 
 ```bash
-# Run against the quickstart guides (requires make build first)
+# Run against the quickstart guides (requires make build-dev first)
 make test-tk-test
 
 # Run directly with verbose output

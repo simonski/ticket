@@ -4,7 +4,8 @@
 
 ```bash
 make setup                # Install all dev dependencies (Go modules + Node + Playwright)
-make build                # Build binary to ./bin/tk, increments patch version
+make build                # Build binary to ./bin/tk and increment the patch version
+make build-dev            # Build binary to ./bin/tk without changing the version
 make test                 # Run all tests (unit + integration + playwright)
 make test-go              # Run all Go tests (unit + integration)
 make test-unit            # Unit tests only (config, password, web)
@@ -14,9 +15,9 @@ make lint                 # Run golangci-lint on all packages
 make dev                  # Print env vars for local development mode
 ```
 
-> **⚠️ `make build` increments the patch version** in `cmd/tk/VERSION` on
-> every invocation. Use `go build -o ./bin/tk ./cmd/tk` for day-to-day
-> development. Reserve `make build` for cutting releases.
+> `make build` increments the patch version in `cmd/tk/VERSION` on every
+> invocation. Use `make build-dev` when you want a development build without
+> changing the version.
 
 Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 
