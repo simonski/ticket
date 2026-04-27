@@ -5,7 +5,7 @@
 | Target                | What it covers                                      | Duration |
 |-----------------------|-----------------------------------------------------|----------|
 | `make test-unit`      | Config, password hashing, web package                | ~1s      |
-| `make test-integration` | CLI, client, server, store, libticket, libtickethttp | ~25s     |
+| `make test-integration` | CLI, internal/client, server, store, libticket | ~25s     |
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds    | ~30s     |
 | `make test-playwright`| Browser tests against the web UI (12 spec files)     | ~20s     |
 | `make test-tk-test`   | Executable documentation tests (see below)           | ~15s     |
@@ -115,12 +115,12 @@ make test-todo-example
 
 ## Contract tests
 
-`libtickettest/contract.go` defines a `Factory` pattern and a `RunServiceContractTests`
+`libticket/contract_test.go` defines a `Factory` pattern and a `RunServiceContractTests`
 function that exercises the full `libticket.Service` interface. Both implementations
 run the same suite:
 
 - `libticket/local_test.go` — tests `LocalService` (direct SQLite)
-- `libtickethttp/http_test.go` — tests `libtickethttp.Service` (HTTP client against a test server)
+- `libticket/http_test.go` — tests the remote `libticket.Service` implementation against a test server
 
 ## Coverage thresholds
 
@@ -130,7 +130,6 @@ Enforced via `make test-go-cover`:
 |----------------------|---------|
 | `cmd/tk`         | 55%     |
 | `libticket`          | 65%     |
-| `libtickethttp`      | 75%     |
 | `internal/client`    | 55%     |
 | `internal/store`     | 70%     |
 | `internal/config`    | 70%     |

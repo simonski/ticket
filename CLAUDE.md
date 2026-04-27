@@ -9,7 +9,7 @@ make build-dev            # Build binary to ./bin/tk without changing the versio
 make test                 # Run all tests (unit + integration + playwright)
 make test-go              # Run all Go tests (unit + integration)
 make test-unit            # Unit tests only (config, password, web)
-make test-integration     # Integration tests (cmd, client, server, store, libticket, libtickethttp)
+make test-integration     # Integration tests (cmd, internal/client, server, store, libticket)
 make test-go-cover        # Tests with per-package coverage thresholds
 make lint                 # Run golangci-lint on all packages
 make dev                  # Print env vars for local development mode
@@ -21,7 +21,7 @@ make dev                  # Print env vars for local development mode
 
 Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 
-Coverage thresholds enforced: cmd/tk 55%, libticket 65%, libtickethttp 75%, internal/client 55%, internal/store 70%, internal/config 70%.
+Coverage thresholds enforced: cmd/tk 55%, libticket 65%, internal/client 55%, internal/store 70%, internal/config 70%.
 
 Docker: `make docker-build`, `make docker-up`, `make docker-down`.
 
@@ -41,7 +41,7 @@ Single Go binary (`cmd/tk/main.go`) providing four interfaces to the same data:
 - **Local mode** (default) — Direct SQLite via `internal/store`. No server needed.
 - **Remote mode** — HTTP client via `internal/client` to a running server.
 
-Mode is determined from the selected remote binding: repo-local `.ticket/config.json` stores the active `remote` name and `project_id`, global `~/.ticket/config.json` stores `default_remote` plus the `remotes[]` registry, and legacy raw `location` values are only a compatibility fallback. The CLI, `libticket.LocalService`, and `libtickethttp.Service` all implement the same `libticket.Service` interface.
+Mode is determined from the selected remote binding: repo-local `.ticket/config.json` stores the active `remote` name and `project_id`, global `~/.ticket/config.json` stores `default_remote` plus the `remotes[]` registry, and legacy raw `location` values are only a compatibility fallback. The CLI, `libticket.LocalService`, and the remote service path backed by `internal/client` all implement the same `libticket.Service` interface.
 
 `$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. `~/.ticket/config.json` stores named remotes, `~/.ticket/credentials.json` stores per-remote credentials keyed by canonical URL, and `-f /path` is a per-command local database override.
 
@@ -56,9 +56,8 @@ Mode is determined from the selected remote binding: repo-local `.ticket/config.
 | `internal/config` | Config resolution (`$TICKET_HOME`, mode detection) |
 | `internal/password` | Argon2id hashing |
 | `internal/tui` | BubbleTea terminal UI |
-| `libticket` | `Service` interface + `LocalService` implementation |
-| `libtickethttp` | `Service` implementation wrapping HTTP client |
-| `libtickettest` | Shared contract tests run against both implementations |
+| `libticket` | `Service` interface, local/remote implementations, and shared contract tests |
+| `internal/client` | HTTP client used by the remote-mode service implementation |
 
 ### Data Model
 
@@ -72,7 +71,7 @@ Mode is determined from the selected remote binding: repo-local `.ticket/config.
 
 ### Test Strategy
 
-Contract tests in `libtickettest/contract.go` define a `Factory` pattern and verify the `Service` interface. Both `libticket/local_test.go` and `libtickethttp/http_test.go` run the same contract suite. API endpoint tests are in `internal/server/api_test.go` using `testHandler()` + `doJSONRequest()` helpers.
+Contract tests in `libticket/contract_test.go` define a `Factory` pattern and verify the `Service` interface. Both `libticket/local_test.go` and `libticket/http_test.go` run the same contract suite. API endpoint tests are in `internal/server/api_test.go` using `testHandler()` + `doJSONRequest()` helpers.
 
 ## Development Rules
 

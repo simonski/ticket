@@ -1159,9 +1159,7 @@ ticket/
 │   ├── server/              # HTTP server, API handlers, WebSocket
 │   ├── store/               # SQLite database layer
 │   └── tui/                 # Terminal UI (BubbleTea)
-├── libticket/               # Public service interface and types
-├── libtickethttp/           # HTTP adapter for libticket
-├── libtickettest/           # Test helpers
+├── libticket/               # Public service interface, implementations, and contract tests
 ├── web/                     # Embedded web UI static assets
 ├── tools/                   # Utility scripts
 ├── tests/                   # Playwright E2E tests

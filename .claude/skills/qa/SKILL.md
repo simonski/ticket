@@ -27,7 +27,7 @@ go test ./... -v 2>&1 | grep -E 'FAIL|no test files'
 go test ./... -coverprofile=cover.out && go tool cover -func=cover.out | tail -20
 ```
 
-Read `libtickettest/contract.go` — it is the canonical contract test suite. New `Service` methods **must** be tested there, not just in local_test.go.
+Read `libticket/contract_test.go` — it is the canonical contract test suite. New `Service` methods **must** be tested there, not just in local_test.go.
 
 Read the QA report at `reports/07-qa.md` to see known gaps before writing redundant tests.
 
@@ -39,7 +39,6 @@ Thresholds are enforced by `make test-go-cover`:
 |---------|---------|
 | `cmd/tk` | 55% |
 | `libticket` | 65% |
-| `libtickethttp` | 75% |
 | `internal/client` | 55% |
 | `internal/store` | 70% |
 | `internal/config` | 70% |
@@ -147,9 +146,9 @@ Every new API endpoint needs:
 4. Not-found test (unknown ID → 404)
 5. Permission test (wrong role/project → 403)
 
-### Contract tests (`libtickettest/contract.go`)
+### Contract tests (`libticket/contract_test.go`)
 
-Every new method on `libticket.Service` **must** be added to `contract.go`. Both the `LocalService` (local_test.go) and `libtickethttp.Service` (http_test.go) run the same suite.
+Every new method on `libticket.Service` **must** be added to `contract.go`. Both the `LocalService` (`local_test.go`) and the remote service implementation (`http_test.go`) run the same suite.
 
 Structure for a new contract section:
 

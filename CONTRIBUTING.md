@@ -119,11 +119,11 @@ strategy. Short version:
 | Type | Location | Run with |
 |------|----------|----------|
 | Unit (Go) | `*_test.go` alongside source | `make test-unit` |
-| Integration (Go) | `libticket/`, `libtickethttp/`, `internal/server/` | `make test-integration` |
-| Contract | `libtickettest/contract.go` | included in integration |
+| Integration (Go) | `libticket/`, `internal/client/`, `internal/server/` | `make test-integration` |
+| Contract | `libticket/contract_test.go` | included in integration |
 | E2E (Playwright) | `tests/playwright/` | `make test-playwright` |
 
-**Golden rule**: the contract tests in `libtickettest/contract.go` run the same
+**Golden rule**: the contract tests in `libticket/contract_test.go` run the same
 suite against both `LocalService` and `HTTPService`. If you add a `Service`
 method, add a contract test for it.
 
@@ -133,7 +133,6 @@ Coverage thresholds (enforced in CI):
 |---------|-----------|
 | `cmd/tk` | 55% |
 | `libticket` | 65% |
-| `libtickethttp` | 75% |
 | `internal/client` | 55% |
 | `internal/store` | 70% |
 | `internal/config` | 70% |

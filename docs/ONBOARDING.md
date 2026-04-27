@@ -195,7 +195,7 @@ make test-playwright    # End-to-end browser tests (requires Chromium)
 make test               # All of the above
 ```
 
-The contract test suite (`libtickettest/contract.go`) runs the same 28
+The contract test suite (`libticket/contract_test.go`) runs the same 28
 operations against both `LocalService` (SQLite) and `HTTPService` (HTTP
 client). If you add a `Service` method, add a contract test.
 
