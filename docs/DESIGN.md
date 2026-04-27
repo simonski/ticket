@@ -527,7 +527,8 @@ Representative commands:
 
 ```bash
 tk project new -prefix CUS -title "Customer Portal"
-tk project init
+tk init
+tk project init        # lower-level non-interactive helper
 tk project ls
 tk project use CUS
 tk project get CUS

@@ -135,6 +135,7 @@ Coverage thresholds (enforced in CI):
 | `libticket` | 65% |
 | `internal/client` | 55% |
 | `internal/store` | 70% |
+| `internal/server` | 55% |
 | `internal/config` | 70% |
 
 ---

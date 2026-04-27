@@ -23,7 +23,7 @@ If any `tk` command fails with `no active project; use 'ticket project create' o
 4. Verify the fix worked by re-running the original command.
 5. Tell the user what you did: which project you activated and that config.json was repaired.
 
-If `tk project list` returns no projects at all, then run `tk project init` to create one from the current directory name, then retry.
+If `tk project list` returns no projects at all, ask the user to run `tk init` for the guided setup flow. Use `tk project init` only when you explicitly need the lower-level non-interactive helper.
 
 ## Project Context
 ```bash
@@ -397,7 +397,8 @@ tk project ls                      # List projects (* = current)
 tk project create -title "Name"    # Create project
 tk project use <id>                # Switch active project
 tk project get <id>                # View project detail
-tk project init                    # Write .ticket/config.json in current dir
+tk init                            # Guided repo setup flow
+tk project init                    # Non-interactive project bind/create helper
 ```
 
 ## SDLC Guidelines

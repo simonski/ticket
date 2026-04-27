@@ -683,7 +683,7 @@ The binary is named `ticket` with the alias `tk`.
 | `tk project get <id>` | View project details |
 | `tk project update <id> -title "..."` | Update project |
 | `tk project delete <id>` | Delete project |
-| `tk project init` | Write `.ticket/config.json` in current directory |
+| `tk project init` | Non-interactively create/bind a project and write `.ticket/config.json` in the current directory |
 | `tk project sdlc <sdlc-id>` | Assign an SDLC to the active project |
 | `tk project set-draft <true\|false>` | Toggle draft mode on the active project |
 

@@ -29,9 +29,10 @@ this repository.
 
 ## Reporting
 
-If you experience or witness unacceptable behavior, open a private security
-advisory or contact the maintainer through GitHub so the report can be handled
-discreetly.
+If you experience or witness unacceptable behavior, contact the maintainer
+through GitHub so the report can be handled discreetly. Do not use the security
+advisory channel for Code of Conduct reports unless the incident is also a
+security issue.
 
 ## Enforcement
 

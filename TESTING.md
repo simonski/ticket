@@ -81,9 +81,9 @@ blocks stay executable.
 
 `scripts/testharness.sh` is a growing shell-based regression harness for direct
 CLI scripting flows. It creates an isolated temp repo plus `$TICKET_HOME`,
-bootstraps a fresh local database with `tk initdb`, binds the repo with
-`tk project init`, and executes end-to-end scenarios that assert behavior with
-CLI exit codes and `tk ls -count` checks.
+bootstraps a fresh local database with `tk initdb`, binds the repo
+non-interactively with `tk project init`, and executes end-to-end scenarios
+that assert behavior with CLI exit codes and `tk ls -count` checks.
 
 Current harness scenarios cover:
 
@@ -132,6 +132,7 @@ Enforced via `make test-go-cover`:
 | `libticket`          | 65%     |
 | `internal/client`    | 55%     |
 | `internal/store`     | 70%     |
+| `internal/server`    | 55%     |
 | `internal/config`    | 70%     |
 
 ## Playwright browser tests

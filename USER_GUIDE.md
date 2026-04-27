@@ -907,7 +907,8 @@ tk agent config-rm -id <uuid> <key>
 tk project create -prefix ABC -title "..."
 tk project create -prefix ABC -title "..." -wow "Ways of working" -dor "Default definition of ready" -dod "Default definition of done" -ac "Default acceptance criteria"
 tk project create -prefix ABC -title "..." -dor-map "develop=Implementation ready" -ac-map "qa=Sign-off complete"
-tk project init
+tk init
+tk project init -prefix ABC -title "..."    # non-interactive project bind/create helper
 tk project list
 tk project ls
 tk project use <prefix-or-id>

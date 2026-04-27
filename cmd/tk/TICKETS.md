@@ -230,7 +230,8 @@ tk project ls                      # List projects (* = current)
 tk project create -title "Name"    # Create project
 tk project use <id>                # Switch active project
 tk project get <id>                # View project detail
-tk project init                    # Write .ticket/config.json in current dir
+tk init                            # Guided repo setup flow
+tk project init                    # Non-interactive project bind/create helper
 ```
 
 ## SDLC Guidelines

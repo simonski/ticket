@@ -13,7 +13,7 @@ assignees: ""
 ## Environment
 
 - OS:
-- Install method: <!-- brew / release binary / go build / docker -->
+- Install method: <!-- brew / release binary / make build-dev / docker -->
 - Mode: <!-- local / server -->
 - Ticket version: <!-- output of `tk version` if available -->
 

@@ -41,6 +41,7 @@ Thresholds are enforced by `make test-go-cover`:
 | `libticket` | 65% |
 | `internal/client` | 55% |
 | `internal/store` | 70% |
+| `internal/server` | 55% |
 | `internal/config` | 70% |
 
 Work on packages below threshold first. Run `make test-go-cover` after adding tests to verify.
