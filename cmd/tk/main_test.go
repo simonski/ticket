@@ -1540,6 +1540,35 @@ func TestRunInitRequiresGitRepository(t *testing.T) {
 	}
 }
 
+func TestRunInitDoesNotTreatAncestorTicketHomeAsProjectRoot(t *testing.T) {
+	baseDir := t.TempDir()
+	homeDir := filepath.Join(baseDir, "home")
+	repoDir := filepath.Join(homeDir, "code", "repo")
+	t.Setenv("TICKET_HOME", filepath.Join(homeDir, ".ticket"))
+	if err := os.MkdirAll(filepath.Join(homeDir, ".ticket"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(home .ticket) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(repo .git) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoDir, ".ticket"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(repo .ticket) error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "CUS"}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"init"}); err != nil {
+			t.Fatalf("run(init) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "project is already initialised") {
+		t.Fatalf("run(init) output = %q, want already initialised message", output)
+	}
+}
+
 func TestRunStatusLocalSuccess(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)

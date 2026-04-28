@@ -659,6 +659,9 @@ func TestSaveWithProjectConfigSplitsGlobalAndProjectFields(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(projectRoot, ".ticket"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.ticket) error = %v", err)
 	}
+	if err := SaveProjectConfigAt(projectRoot, Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(projectRoot); err != nil {
 		t.Fatalf("Chdir(projectRoot) error = %v", err)
@@ -747,6 +750,9 @@ func TestPathsResolveUnderTicketHome(t *testing.T) {
 	repoDir := filepath.Join(tempDir, "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".ticket"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.ticket) error = %v", err)
+	}
+	if err := SaveProjectConfigAt(repoDir, Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(repoDir); err != nil {
@@ -853,5 +859,30 @@ func TestProjectPathReturnsFalseWithoutTicketDir(t *testing.T) {
 
 	if got, ok, err := ProjectPath(); err != nil || ok || got != "" {
 		t.Fatalf("ProjectPath() = (%q, %v, %v), want empty false nil", got, ok, err)
+	}
+}
+
+func TestProjectPathIgnoresAncestorTicketHomeWithoutProjectConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	homeDir := filepath.Join(tempDir, "home")
+	repoDir := filepath.Join(homeDir, "code", "repo")
+	if err := os.MkdirAll(filepath.Join(homeDir, ".ticket"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(home .ticket) error = %v", err)
+	}
+	t.Setenv("TICKET_HOME", filepath.Join(homeDir, ".ticket"))
+	if err := os.WriteFile(filepath.Join(homeDir, ".ticket", "config.json"), []byte(`{"default_remote":"local"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(global config) error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(repo .git) error = %v", err)
+	}
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Chdir(repoDir) error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	if got, ok, err := ProjectPath(); err != nil || ok || got != "" {
+		t.Fatalf("ProjectPath() with ancestor home .ticket = (%q, %v, %v), want empty false nil", got, ok, err)
 	}
 }

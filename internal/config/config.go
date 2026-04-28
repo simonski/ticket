@@ -29,14 +29,14 @@ type Remote struct {
 }
 
 type Config struct {
-	Location      string `json:"location"`
-	Token         string `json:"token"`
-	Username      string `json:"username"`
-	Remote        string `json:"remote,omitempty"`
-	DefaultRemote string `json:"default_remote,omitempty"`
+	Location      string   `json:"location"`
+	Token         string   `json:"token"`
+	Username      string   `json:"username"`
+	Remote        string   `json:"remote,omitempty"`
+	DefaultRemote string   `json:"default_remote,omitempty"`
 	Remotes       []Remote `json:"remotes,omitempty"`
-	ProjectID     string `json:"project_id"`
-	CurrentEpicID string `json:"current_epic_id"`
+	ProjectID     string   `json:"project_id"`
+	CurrentEpicID string   `json:"current_epic_id"`
 
 	// TUI state — persisted between sessions by default.
 	// Set TUIDisablePersist=true to skip save/restore.
@@ -561,12 +561,17 @@ func sortUniqueRemotes(remotes []Remote) []Remote {
 }
 
 // FindTicketRoot walks up the directory tree from startDir looking for a
-// .ticket directory. Returns the parent of .ticket/.
+// project-local .ticket/config.json. Returns the parent of .ticket/.
 func FindTicketRoot(startDir string) (string, bool) {
+	globalHome, err := Home()
+	if err != nil {
+		globalHome = ""
+	}
 	dir := startDir
 	for {
-		candidate := filepath.Join(dir, ".ticket")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+		ticketDir := filepath.Join(dir, ".ticket")
+		candidate := filepath.Join(ticketDir, "config.json")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && !samePath(ticketDir, globalHome) {
 			return dir, true
 		}
 		parent := filepath.Dir(dir)
@@ -576,6 +581,24 @@ func FindTicketRoot(startDir string) (string, bool) {
 		dir = parent
 	}
 	return "", false
+}
+
+func samePath(a, b string) bool {
+	a = filepath.Clean(strings.TrimSpace(a))
+	b = filepath.Clean(strings.TrimSpace(b))
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	if resolvedA, err := filepath.EvalSymlinks(a); err == nil {
+		a = filepath.Clean(resolvedA)
+	}
+	if resolvedB, err := filepath.EvalSymlinks(b); err == nil {
+		b = filepath.Clean(resolvedB)
+	}
+	return a == b
 }
 
 // FindGitRoot walks up the directory tree from startDir looking for a .git
