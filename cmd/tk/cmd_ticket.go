@@ -546,10 +546,6 @@ func runList(args []string) error {
 		if outputJSON {
 			return printJSON(tickets)
 		}
-		if err := runStatusWithSummaryStyle(statusUnicode); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not render status header: %v\n", err)
-		}
-		fmt.Println()
 		fmt.Printf("no tickets yet — create one with: tk new \"My first ticket\"\n")
 		return nil
 	}
@@ -584,12 +580,6 @@ func runList(args []string) error {
 		for _, a := range agents {
 			agentUsernames[a.Username] = true
 		}
-	}
-	if !outputJSON {
-		if err := runStatusWithSummaryStyle(statusUnicode); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not render status header: %v\n", err)
-		}
-		fmt.Println()
 	}
 	printTicketTable(tickets, parentKeys, agentUsernames, statusUnicode, *includeAll)
 	return nil

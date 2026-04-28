@@ -1483,10 +1483,7 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 	})
 	for _, want := range []string{
 		"TICKET_HOME      : " + os.Getenv("TICKET_HOME"),
-		"AGENT_ID         : agent-123",
-		"AGENT_PASSWORD   : ********",
 		"config_file      : " + filepath.Join(os.Getenv("TICKET_HOME"), "config.json"),
-		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"server_version   : 9.8.7",
 		"username         : alice",
 		"authenticated    : true",
@@ -1497,6 +1494,11 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 	}
 	if strings.Contains(output, "env-pass") || strings.Contains(output, "agent-secret") {
 		t.Fatalf("runStatus(remote) should mask secret env values:\n%s", output)
+	}
+	for _, unwanted := range []string{"AGENT_ID", "AGENT_PASSWORD"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("runStatus(remote) should not show %q:\n%s", unwanted, output)
+		}
 	}
 }
 
@@ -1513,7 +1515,7 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 		t.Fatalf("runStatus(local missing) error = %v, want os.ErrNotExist", runErr)
 	}
 	for _, want := range []string{
-		"client_version   : " + strings.TrimSpace(embeddedVersion),
+		"TICKET_HOME      : " + tempDir,
 		"db_exists        : false",
 		"hint: run tk init",
 	} {
@@ -1521,8 +1523,10 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(output, "db_path          : "+filepath.Join(tempDir, "ticket.db")) {
-		t.Fatalf("runStatus(local missing) output missing db_path:\n%s", output)
+	for _, unwanted := range []string{"db_path", "AGENT_ID", "AGENT_PASSWORD"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("runStatus(local missing) should not show %q:\n%s", unwanted, output)
+		}
 	}
 }
 
@@ -1583,19 +1587,21 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"client_version   : " + strings.TrimSpace(embeddedVersion),
+		"TICKET_HOME      : " + tempDir,
 		"db_exists        : true",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
 		}
 	}
-	if !strings.Contains(output, "db_path          : "+filepath.Join(tempDir, "ticket.db")) {
-		t.Fatalf("runStatus(local) output missing db_path:\n%s", output)
+	for _, unwanted := range []string{"db_path", "AGENT_ID", "AGENT_PASSWORD"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("runStatus(local) should not show %q:\n%s", unwanted, output)
+		}
 	}
 }
 
-func TestRunListAndStatusShareSummaryHeaderWithGitRepo(t *testing.T) {
+func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	setupLocalCLI(t)
 
 	captureStdout(t, func() {
@@ -1625,26 +1631,51 @@ func TestRunListAndStatusShareSummaryHeaderWithGitRepo(t *testing.T) {
 
 	for _, want := range []string{
 		"project          : SUM — Summary Test",
-		"git repo         : https://github.com/example/summary.git",
-		"project_sdlc     : Agile",
-		"project_default_draft: false",
-		"TICKET_HOME      : " + os.Getenv("TICKET_HOME"),
+		"git              : https://github.com/example/summary.git",
+		"sdlc             : Agile",
+		"draft            : false",
 	} {
 		if !strings.Contains(statusOut, want) {
 			t.Fatalf("status output missing %q:\n%s", want, statusOut)
 		}
-		if !strings.Contains(listOut, want) {
-			t.Fatalf("list output missing %q:\n%s", want, listOut)
+	}
+	if !strings.Contains(statusOut, "TICKET_HOME      : "+os.Getenv("TICKET_HOME")) {
+		t.Fatalf("status output missing TICKET_HOME:\n%s", statusOut)
+	}
+	if !strings.Contains(statusOut, "config_file      : "+filepath.Join(repoDir, ".ticket", "config.json")) {
+		t.Fatalf("status output missing repo-local config path:\n%s", statusOut)
+	}
+	if idxProject, idxConfig := strings.Index(statusOut, "project          : SUM — Summary Test"), strings.Index(statusOut, "config_file      : "+filepath.Join(repoDir, ".ticket", "config.json")); idxProject == -1 || idxConfig == -1 || idxConfig < idxProject {
+		t.Fatalf("status output should show config file after project row:\n%s", statusOut)
+	}
+	if idxConfig, idxGit := strings.Index(statusOut, "config_file      : "+filepath.Join(repoDir, ".ticket", "config.json")), strings.Index(statusOut, "git              : https://github.com/example/summary.git"); idxConfig == -1 || idxGit == -1 || idxConfig > idxGit {
+		t.Fatalf("status output should show config file before git row:\n%s", statusOut)
+	}
+	for _, unwanted := range []string{
+		"project          :",
+		"git              :",
+		"sdlc             :",
+		"draft            :",
+		"TICKET_HOME",
+		"AGENT_ID",
+		"AGENT_PASSWORD",
+		"config_file",
+		"db_path",
+		"db_exists",
+		"╭",
+		"╰",
+	} {
+		if strings.Contains(listOut, unwanted) {
+			t.Fatalf("list output should not include %q:\n%s", unwanted, listOut)
 		}
 	}
-	if idxSummary, idxTable := strings.Index(listOut, "project          : SUM — Summary Test"), strings.Index(listOut, "ID       TYPE"); idxSummary == -1 || idxTable == -1 || idxSummary > idxTable {
-		t.Fatalf("list output should show summary block before table:\n%s", listOut)
+	for _, unwanted := range []string{"git repo", "project_sdlc", "project_default_draft"} {
+		if strings.Contains(listOut, unwanted) || strings.Contains(statusOut, unwanted) {
+			t.Fatalf("output should not include legacy key %q:\nstatus:\n%s\nlist:\n%s", unwanted, statusOut, listOut)
+		}
 	}
 	if idxStatus, idxSummary := strings.Index(statusOut, "TICKET_HOME"), strings.Index(statusOut, "project          : SUM — Summary Test"); idxStatus == -1 || idxSummary == -1 || idxStatus > idxSummary {
 		t.Fatalf("status output should show setup block before summary block:\n%s", statusOut)
-	}
-	if idxStatus, idxSummary := strings.Index(listOut, "TICKET_HOME"), strings.Index(listOut, "project          : SUM — Summary Test"); idxStatus == -1 || idxSummary == -1 || idxStatus > idxSummary {
-		t.Fatalf("list output should show setup block before summary block:\n%s", listOut)
 	}
 	for _, output := range []string{statusOut, listOut} {
 		if strings.Contains(output, "open tickets") {
@@ -1657,8 +1688,11 @@ func TestRunListAndStatusShareSummaryHeaderWithGitRepo(t *testing.T) {
 	if strings.Count(statusOut, "╭") != 1 || strings.Count(statusOut, "╰") != 1 {
 		t.Fatalf("status output should render one merged header box:\n%s", statusOut)
 	}
-	if strings.Count(listOut, "╭") != 1 || strings.Count(listOut, "╰") != 1 {
-		t.Fatalf("list output should render one merged header box:\n%s", listOut)
+	if !strings.Contains(listOut, "Summary task one") {
+		t.Fatalf("list output missing ticket row:\n%s", listOut)
+	}
+	if !strings.HasPrefix(listOut, "ID") {
+		t.Fatalf("list output should start with the ticket table:\n%s", listOut)
 	}
 }
 
@@ -2000,6 +2034,53 @@ func TestRunProjectGetShowsGuidanceMaps(t *testing.T) {
 	}
 }
 
+func TestRunProjectGetUsesCurrentProjectWhenIDOmitted(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "CUR",
+		Title:  "Current Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: project.Prefix}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "get"}); err != nil {
+			t.Fatalf("project get error = %v", err)
+		}
+	})
+	for _, want := range []string{"project: Current Project", "prefix: CUR"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("project get output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunProjectGetWithoutIDRequiresCurrentProject(t *testing.T) {
+	setupLocalCLI(t)
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	err = run([]string{"project", "get"})
+	if err == nil || !strings.Contains(err.Error(), "no current project set; use: tk project use <id>") {
+		t.Fatalf("run(project get) error = %v, want missing current project message", err)
+	}
+}
+
 func TestRunTicketCreateAndUpdateGuidanceMaps(t *testing.T) {
 	setupLocalCLI(t)
 	attachWorkflowToDefaultProject(t, "design", "develop", "qa", "done")
@@ -2204,6 +2285,42 @@ func TestRunProjectInit(t *testing.T) {
 	// Running init again should fail (already initialised)
 	if err := run([]string{"project", "init", "-prefix", "INI"}); err == nil {
 		t.Fatal("expected error on second init, got nil")
+	}
+}
+
+func TestBindRootToLocalProjectBackfillsGitRepositoryOnExistingProject(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "INI",
+		Title:  "Init Test",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	root := t.TempDir()
+	gitRepo := "https://github.com/example/repo.git"
+	if err := bindRootToLocalProject(root, "Init Test", "INI", gitRepo); err != nil {
+		t.Fatalf("bindRootToLocalProject() error = %v", err)
+	}
+
+	updated, err := svc.GetProject(context.Background(), project.Prefix)
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if updated.GitRepository != gitRepo {
+		t.Fatalf("updated.GitRepository = %q, want %q", updated.GitRepository, gitRepo)
+	}
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "list"}); err != nil {
+			t.Fatalf("project list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, gitRepo) {
+		t.Fatalf("project list output missing git repository %q:\n%s", gitRepo, listOutput)
 	}
 }
 
@@ -3309,7 +3426,6 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
-		"client_version   : " + strings.TrimSpace(embeddedVersion),
 		"server_version   : (unknown)",
 		"authenticated    : false",
 	} {
@@ -3457,7 +3573,6 @@ func TestRunNegativeCommandCasesInLocalMode(t *testing.T) {
 		{[]string{"get", "-id", "abc"}, "ticket not found"},
 		{[]string{"dependency", "add", "-id", "1", "abc"}, "ticket not found"},
 		{[]string{"request", "abc"}, "ticket not found"},
-		{[]string{"project", "get"}, "usage: tk project get <id>"},
 		{[]string{"list", "-n", "-1"}, "usage: tk list|ls"},
 		{[]string{"comment", "add", "1"}, "usage: tk comment <id>"},
 		{[]string{"set-parent", "-id", "1", "abc"}, "ticket not found"},
@@ -3829,7 +3944,7 @@ func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
 			t.Fatalf("status error = %v", err)
 		}
 	})
-	for _, want := range []string{"project_sdlc", "Custom Workflow", "project_default_draft", "true"} {
+	for _, want := range []string{"sdlc", "Custom Workflow", "draft", "true"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
 		}

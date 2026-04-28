@@ -138,10 +138,17 @@ func runProject(args []string) error {
 		printProjectTable(projects, cfg.ProjectID, sdlcNames)
 		return nil
 	case "get":
-		if len(args) != 2 {
+		if len(args) > 2 {
 			return errors.New("usage: tk project get <id>")
 		}
-		project, err := svc.GetProject(context.Background(), args[1])
+		projectRef := strings.TrimSpace(cfg.ProjectID)
+		if len(args) == 2 {
+			projectRef = strings.TrimSpace(args[1])
+		}
+		if projectRef == "" {
+			return errors.New("no current project set; use: tk project use <id>")
+		}
+		project, err := svc.GetProject(context.Background(), projectRef)
 		if err != nil {
 			return err
 		}

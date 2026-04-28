@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -130,9 +131,11 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 		return err
 	}
 	var projectID string
+	var matchedProject *store.Project
 	if gitRepo != "" {
 		if match := matchProjectByGitOrigin(projects, gitRepo); match != nil {
 			projectID = match.Prefix
+			matchedProject = match
 		}
 	}
 	if projectID == "" {
@@ -141,6 +144,8 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 			for _, project := range projects {
 				if strings.EqualFold(project.Prefix, prefix) {
 					projectID = project.Prefix
+					projectCopy := project
+					matchedProject = &projectCopy
 					break
 				}
 			}
@@ -167,6 +172,25 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 			return err
 		}
 		projectID = project.Prefix
+	}
+	if matchedProject != nil && gitRepo != "" && strings.TrimSpace(matchedProject.GitRepository) == "" {
+		updated, err := svc.UpdateProject(context.Background(), matchedProject.ID, libticket.ProjectUpdateRequest{
+			Title:              matchedProject.Title,
+			Description:        matchedProject.Description,
+			AcceptanceCriteria: matchedProject.AcceptanceCriteria,
+			DORMap:             matchedProject.DORMap,
+			DODMap:             matchedProject.DODMap,
+			ACMap:              matchedProject.ACMap,
+			GitRepository:      gitRepo,
+			Notes:              matchedProject.Notes,
+			Status:             matchedProject.Status,
+			Visibility:         matchedProject.Visibility,
+			SdlcID:             matchedProject.SdlcID,
+		})
+		if err != nil {
+			return err
+		}
+		projectID = updated.Prefix
 	}
 	if err := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); err != nil {
 		return err

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -26,18 +27,24 @@ func statusEnvValue(name string, secret bool) string {
 	return value
 }
 
-func statusEnvLines() []statusLine {
-	return []statusLine{
-		{key: "TICKET_HOME", value: statusEnvValue("TICKET_HOME", false)},
-		{key: "AGENT_ID", value: statusEnvValue("AGENT_ID", false)},
-		{key: "AGENT_PASSWORD", value: statusEnvValue("AGENT_PASSWORD", true)},
+func statusHomeLines(home string) []statusLine {
+	home = strings.TrimSpace(home)
+	if home == "" {
+		home = "UNSET"
 	}
+	return []statusLine{{key: "TICKET_HOME", value: home}}
 }
 
-func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnicode bool, details []statusLine) []statusLine {
+func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnicode bool, configFile string, details []statusLine) []statusLine {
 	summary := currentProjectSummaryCoreLines(cfg, svc, statusUnicode)
 	if len(summary) == 0 {
+		if strings.TrimSpace(configFile) != "" {
+			details = append(details, statusLine{key: "config_file", value: configFile})
+		}
 		return details
+	}
+	if strings.TrimSpace(configFile) != "" {
+		summary = injectConfigFileIntoSummary(summary, configFile)
 	}
 	lines := make([]statusLine, 0, len(details)+1+len(summary))
 	lines = append(lines, details...)
@@ -46,16 +53,36 @@ func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnic
 	return lines
 }
 
+func injectConfigFileIntoSummary(summary []statusLine, configFile string) []statusLine {
+	lines := make([]statusLine, 0, len(summary)+1)
+	inserted := false
+	for _, line := range summary {
+		lines = append(lines, line)
+		if !inserted && line.key == "project" {
+			lines = append(lines, statusLine{key: "config_file", value: configFile})
+			inserted = true
+		}
+	}
+	if !inserted {
+		lines = append([]statusLine{{key: "config_file", value: configFile}}, lines...)
+	}
+	return lines
+}
+
 // resolveCurrentProject returns the active project key and where it came from.
 func resolveCurrentProject(cfg config.Config) (projectID, source string) {
 	if cfg.ProjectID != "" {
-		if projectPath, ok, _ := config.ProjectPath(); ok {
-			return cfg.ProjectID, projectPath
-		}
-		cfgPath, _ := config.Path()
-		return cfg.ProjectID, cfgPath
+		return cfg.ProjectID, effectiveConfigPath()
 	}
 	return "", ""
+}
+
+func effectiveConfigPath() string {
+	if projectPath, ok, _ := config.ProjectPath(); ok {
+		return projectPath
+	}
+	cfgPath, _ := config.Path()
+	return cfgPath
 }
 
 func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (projectID, projectTitle, source, sdlcName string, defaultDraft *bool) {
@@ -212,28 +239,27 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		return err
 	}
 	status, err := svc.Status(context.Background())
-	clientVersion := strings.TrimSpace(embeddedVersion)
 	authenticated := err == nil && status.Authenticated
 	username := strings.TrimSpace(cfg.Username)
 	if status.User != nil {
 		username = status.User.Username
 	}
-	cfgPath, _ := config.Path()
+	cfgPath := effectiveConfigPath()
+	ticketHome, _ := config.Home()
 	projectID, projectSource := resolveCurrentProject(cfg)
 	projectID, _, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
 		payload := map[string]any{
-			"location":        cfg.Location,
-			"TICKET_HOME":     statusEnvValue("TICKET_HOME", false),
-			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
-			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
-			"config_file":     cfgPath,
-			"client_version":  clientVersion,
-			"project_id":      projectID,
-			"project_source":  projectSource,
-			"username":        username,
-			"authenticated":   authenticated,
-			"connection":      map[bool]string{true: "success", false: "failure"}[err == nil],
+			"location":       cfg.Location,
+			"TICKET_HOME":    statusEnvValue("TICKET_HOME", false),
+			"AGENT_ID":       statusEnvValue("AGENT_ID", false),
+			"AGENT_PASSWORD": statusEnvValue("AGENT_PASSWORD", true),
+			"config_file":    cfgPath,
+			"project_id":     projectID,
+			"project_source": projectSource,
+			"username":       username,
+			"authenticated":  authenticated,
+			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
 		}
 		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
 			payload["server_version"] = serverVersion
@@ -246,14 +272,12 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		}
 		return printJSON(payload)
 	}
-	lines := append(statusEnvLines(), []statusLine{
-		{key: "config_file", value: cfgPath},
-		{key: "client_version", value: clientVersion},
+	lines := append(statusHomeLines(ticketHome), []statusLine{
 		{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
 	}...)
-	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, lines))
+	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, cfgPath, lines))
 	return err
 }
 
@@ -269,13 +293,12 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	dbPath := resolved.DBPath
 	_, statErr := os.Stat(dbPath)
 	dbExists := statErr == nil
-	cfgPath, _ := config.Path()
+	cfgPath := effectiveConfigPath()
 	cfg, _ := config.Load()
 	svc, svcErr := resolveService(cfg)
 	if svcErr != nil {
 		svc = nil
 	}
-	clientVersion := strings.TrimSpace(embeddedVersion)
 	projectID, _, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
@@ -285,7 +308,6 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
-			"client_version":  clientVersion,
 			"current_project": projectID,
 			"project_source":  projectSource,
 			"db_exists":       dbExists,
@@ -299,13 +321,10 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 		}
 		return printJSON(payload)
 	}
-	lines := append(statusEnvLines(), []statusLine{
-		{key: "db_path", value: dbPath},
-		{key: "config_file", value: cfgPath},
-		{key: "client_version", value: clientVersion},
+	lines := append(statusHomeLines(filepath.Dir(dbPath)), []statusLine{
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
 	}...)
-	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, lines))
+	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, cfgPath, lines))
 	if !dbExists {
 		fmt.Println("hint: run tk init")
 	}
