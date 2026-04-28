@@ -77,19 +77,27 @@ func runStory(args []string) error {
 		if outputJSON {
 			return printJSON(stories)
 		}
+		if len(stories) == 0 {
+			printNoEntitiesAvailable("stories")
+			return nil
+		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tSTATUS\tTITLE")
 		for _, s := range stories {
 			fmt.Fprintf(w, "%d\t%s\t%s\n", s.ID, s.Status, s.Title)
 		}
 		return w.Flush()
-	case "get":
-		if len(args) != 2 {
+	case "get", "show":
+		if len(args) > 2 {
 			return errors.New("usage: tk story get <id>")
 		}
-		var id int64
-		if _, err := fmt.Sscan(args[1], &id); err != nil {
-			return fmt.Errorf("invalid story id %q", args[1])
+		var rawID string
+		if len(args) == 2 {
+			rawID = args[1]
+		}
+		id, err := resolveStoryID(svc, project.ID, rawID)
+		if err != nil {
+			return err
 		}
 		story, err := svc.GetStory(context.Background(), id)
 		if err != nil {
@@ -155,7 +163,7 @@ func runStory(args []string) error {
 		fmt.Printf("deleted story %d\n", id)
 		return nil
 	default:
-		return fmt.Errorf("unknown story command %q", args[0])
+		return runStory(append([]string{"create"}, args...))
 	}
 }
 
@@ -164,10 +172,20 @@ func runEpic(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "get":
-			if len(args) != 2 {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if len(args) > 2 {
 				return errors.New("usage: tk epic get <id>")
 			}
-			return runTypedTicketGet("epic", args[1])
+			id := ""
+			if len(args) == 2 {
+				id = args[1]
+			} else if strings.TrimSpace(cfg.CurrentEpicID) != "" {
+				id = cfg.CurrentEpicID
+			}
+			return runTypedTicketGet("epic", id)
 		case "use":
 			if len(args) != 2 {
 				return errors.New("usage: tk epic use <id>")
@@ -176,7 +194,8 @@ func runEpic(args []string) error {
 			if err != nil {
 				return err
 			}
-			ticket, err := svc.GetTicket(context.Background(), args[1])
+			ticketRef := normalizeBareTicketRef(cfg, svc, args[1])
+			ticket, err := svc.GetTicket(context.Background(), ticketRef)
 			if err != nil {
 				return err
 			}
@@ -215,6 +234,10 @@ func runEpic(args []string) error {
 			}
 			if outputJSON {
 				return printJSON(epics)
+			}
+			if len(epics) == 0 {
+				printNoEntitiesAvailable("epics")
+				return nil
 			}
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "KEY\tSTATUS\tTITLE")

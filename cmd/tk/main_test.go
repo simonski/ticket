@@ -2065,8 +2065,24 @@ func TestRunProjectGetUsesCurrentProjectWhenIDOmitted(t *testing.T) {
 	}
 }
 
-func TestRunProjectGetWithoutIDRequiresCurrentProject(t *testing.T) {
+func TestRunProjectGetFallsBackToMostRecentProjectWhenCurrentUnset(t *testing.T) {
 	setupLocalCLI(t)
+	svc := localCLIService(t)
+
+	if _, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "OLD",
+		Title:  "Older Project",
+	}); err != nil {
+		t.Fatalf("CreateProject(older) error = %v", err)
+	}
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix: "NEW",
+		Title:  "Newest Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject(newest) error = %v", err)
+	}
+
 	repoDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
@@ -2075,9 +2091,28 @@ func TestRunProjectGetWithoutIDRequiresCurrentProject(t *testing.T) {
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
 
-	err = run([]string{"project", "get"})
-	if err == nil || !strings.Contains(err.Error(), "no current project set; use: tk project use <id>") {
-		t.Fatalf("run(project get) error = %v, want missing current project message", err)
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "get"}); err != nil {
+			t.Fatalf("project get error = %v", err)
+		}
+	})
+	for _, want := range []string{"project: Newest Project", fmt.Sprintf("project_id: %d", project.ID), "prefix: NEW"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("project get output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunProjectCreateUsesPositionalTitle(t *testing.T) {
+	setupLocalCLI(t)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "POS", "Positional Project"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "project: Positional Project") {
+		t.Fatalf("project create output missing positional title:\n%s", output)
 	}
 }
 
@@ -2884,6 +2919,32 @@ func TestRunUpdateSupportsCombinedFields(t *testing.T) {
 	}
 }
 
+func TestRunUpdateNormalizesBareNumericTicketRefs(t *testing.T) {
+	setupLocalCLI(t)
+
+	parentID := createLocalTask(t, []string{"add", "-type", "epic", "Parent Epic"})
+	taskID := createLocalTask(t, []string{"add", "Child Task"})
+	parentSeq := strings.TrimPrefix(parentID, "TK-")
+	taskSeq := strings.TrimPrefix(taskID, "TK-")
+
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"update", "-id", taskSeq, "-parent_id", parentSeq, "-title", "Child Task Updated"}); err != nil {
+			t.Fatalf("update error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, taskID+" updated (") {
+		t.Fatalf("update output missing normalized ticket id:\n%s", updateOutput)
+	}
+
+	ticket, err := localCLIService(t).GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if ticket.ParentID == nil || *ticket.ParentID != parentID {
+		t.Fatalf("ticket.ParentID = %#v, want %q", ticket.ParentID, parentID)
+	}
+}
+
 func TestRunUpdateSupportsDescriptionAlias(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -2945,9 +3006,14 @@ func TestRunGetAcceptsPositionalID(t *testing.T) {
 		t.Fatalf("expected positional id to work, got %v", err)
 	}
 
-	// no id at all should still fail
-	if err := run([]string{"get"}); err == nil || !strings.Contains(err.Error(), "usage:") {
-		t.Fatalf("expected usage error for missing id, got %v", err)
+	// no id now falls back to the most recent ticket in the current project
+	output := captureStdout(t, func() {
+		if err := run([]string{"get"}); err != nil {
+			t.Fatalf("expected empty get to resolve most recent ticket, got %v", err)
+		}
+	})
+	if !hasDetailField(output, "Key", taskID) || !hasDetailField(output, "Title", "Positional ID Get") {
+		t.Fatalf("get output missing most recent ticket:\n%s", output)
 	}
 }
 
@@ -4966,6 +5032,52 @@ func TestRunEpicListShowsActiveMarker(t *testing.T) {
 	}
 }
 
+func TestRunEpicGetUsesCurrentEpicWhenIDOmitted(t *testing.T) {
+	setupLocalCLI(t)
+
+	epicID := createLocalTask(t, []string{"epic", "Current Epic"})
+	if err := run([]string{"epic", "use", epicID}); err != nil {
+		t.Fatalf("epic use error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"epic", "get"}); err != nil {
+			t.Fatalf("epic get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Title", "Current Epic") {
+		t.Fatalf("epic get output missing current epic details:\n%s", output)
+	}
+}
+
+func TestRunTypedNamespaceListEmptyMessages(t *testing.T) {
+	setupLocalCLI(t)
+
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"ls"}, want: "No tickets available."},
+		{args: []string{"story", "ls"}, want: "No stories available."},
+		{args: []string{"idea", "ls"}, want: "No ideas available."},
+		{args: []string{"decision", "ls"}, want: "No decisions available."},
+		{args: []string{"epic", "ls"}, want: "No epics available."},
+		{args: []string{"bug", "ls"}, want: "No bugs available."},
+		{args: []string{"label", "ls"}, want: "No labels available."},
+	}
+
+	for _, tc := range tests {
+		output := captureStdout(t, func() {
+			if err := run(tc.args); err != nil {
+				t.Fatalf("run(%v) error = %v", tc.args, err)
+			}
+		})
+		if strings.TrimSpace(output) != tc.want {
+			t.Fatalf("run(%v) output = %q, want %q", tc.args, strings.TrimSpace(output), tc.want)
+		}
+	}
+}
+
 func TestRunUnclaimRejectsNonOwner(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -5109,8 +5221,8 @@ func TestRunStoryCreateListGetUpdateDelete(t *testing.T) {
 			t.Fatalf("story ls error after delete = %v", err)
 		}
 	})
-	if strings.Contains(emptyOutput, "Updated Story") {
-		t.Fatalf("story ls should be empty after delete: %s", emptyOutput)
+	if strings.TrimSpace(emptyOutput) != "No stories available." {
+		t.Fatalf("story ls after delete = %q, want %q", strings.TrimSpace(emptyOutput), "No stories available.")
 	}
 }
 
@@ -5127,6 +5239,28 @@ func TestRunStoryCreatePositionalTitle(t *testing.T) {
 	}
 }
 
+func TestRunStoryBarePositionalTitleCreatesStory(t *testing.T) {
+	setupLocalCLI(t)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"story", "Bar Story"}); err != nil {
+			t.Fatalf("story shortcut error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Bar Story") {
+		t.Fatalf("story shortcut output missing title: %s", output)
+	}
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"story", "ls"}); err != nil {
+			t.Fatalf("story ls error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, "Bar Story") {
+		t.Fatalf("story ls missing shortcut-created story: %s", listOutput)
+	}
+}
+
 func TestRunStoryCreateRequiresTitle(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -5140,6 +5274,26 @@ func TestRunStoryGetInvalidID(t *testing.T) {
 
 	if err := run([]string{"story", "get", "999"}); err == nil {
 		t.Fatal("expected error for non-existent story id")
+	}
+}
+
+func TestRunStoryGetUsesMostRecentWhenIDOmitted(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"story", "create", "Older Story"}); err != nil {
+		t.Fatalf("story create older error = %v", err)
+	}
+	if err := run([]string{"story", "create", "Newest Story"}); err != nil {
+		t.Fatalf("story create newest error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"story", "get"}); err != nil {
+			t.Fatalf("story get error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Newest Story") {
+		t.Fatalf("story get output missing latest story:\n%s", output)
 	}
 }
 
@@ -5353,6 +5507,26 @@ func TestRunDecisionNewListAndPrintID(t *testing.T) {
 	})
 	if !strings.Contains(listOut, "Use PostgreSQL for storage") {
 		t.Fatalf("decision ls missing decision text:\n%s", listOut)
+	}
+}
+
+func TestRunDecisionGetUsesMostRecentWhenIDOmitted(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"decision", "new", "Older decision"}); err != nil {
+		t.Fatalf("decision new older error = %v", err)
+	}
+	if err := run([]string{"decision", "new", "Newest decision"}); err != nil {
+		t.Fatalf("decision new newest error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"decision", "get"}); err != nil {
+			t.Fatalf("decision get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Title", "Newest decision") {
+		t.Fatalf("decision get output missing latest decision:\n%s", output)
 	}
 }
 
@@ -7405,6 +7579,114 @@ func TestRunIdeaReviseAlias(t *testing.T) {
 	})
 	if !strings.Contains(out, "(revised)") {
 		t.Fatalf("idea revise output should contain (revised):\n%s", out)
+	}
+}
+
+func TestRunIdeaCreatesIdeaTicketType(t *testing.T) {
+	setupLocalCLI(t)
+
+	ideaID := createLocalTask(t, []string{"idea", "Add dark mode"})
+	ticket, err := localCLIService(t).GetTicket(context.Background(), ideaID)
+	if err != nil {
+		t.Fatalf("GetTicket() error = %v", err)
+	}
+	if ticket.Type != "idea" {
+		t.Fatalf("ticket.Type = %q, want %q", ticket.Type, "idea")
+	}
+
+	ideaOut := captureStdout(t, func() {
+		if err := run([]string{"idea", "ls"}); err != nil {
+			t.Fatalf("idea ls error = %v", err)
+		}
+	})
+	if !strings.Contains(ideaOut, "Add dark mode") {
+		t.Fatalf("idea ls output missing created idea:\n%s", ideaOut)
+	}
+}
+
+func TestRunIdeaGetUsesMostRecentWhenIDOmitted(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"idea", "new", "Older idea"}); err != nil {
+		t.Fatalf("idea new older error = %v", err)
+	}
+	if err := run([]string{"idea", "new", "Newest idea"}); err != nil {
+		t.Fatalf("idea new newest error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"idea", "get"}); err != nil {
+			t.Fatalf("idea get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Title", "Newest idea") {
+		t.Fatalf("idea get output missing latest idea:\n%s", output)
+	}
+}
+
+func TestRunTicketGetUsesMostRecentWhenIDOmitted(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"add", "Older task"}); err != nil {
+		t.Fatalf("ticket create older error = %v", err)
+	}
+	latestID := createLocalTask(t, []string{"add", "Newest task"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"get"}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Key", latestID) || !hasDetailField(output, "Title", "Newest task") {
+		t.Fatalf("get output missing latest ticket:\n%s", output)
+	}
+}
+
+func TestRunTypedGetNormalizesBareNumericTicketRefs(t *testing.T) {
+	setupLocalCLI(t)
+
+	bugID := createLocalTask(t, []string{"bug", "Numeric Bug"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"bug", "get", "1"}); err != nil {
+			t.Fatalf("bug get error = %v", err)
+		}
+	})
+	if !hasDetailField(output, "Key", bugID) || !hasDetailField(output, "Title", "Numeric Bug") {
+		t.Fatalf("bug get output missing normalized bug:\n%s", output)
+	}
+}
+
+func TestRunLabelNewGetLatestAndShowNormalizesBareTicketRef(t *testing.T) {
+	setupLocalCLI(t)
+
+	if err := run([]string{"label", "new", "-title", "Needs triage"}); err != nil {
+		t.Fatalf("label new error = %v", err)
+	}
+	if err := run([]string{"label", "new", "Newest Label"}); err != nil {
+		t.Fatalf("label new positional error = %v", err)
+	}
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"label", "get"}); err != nil {
+			t.Fatalf("label get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOutput, "Name      : Newest Label") {
+		t.Fatalf("label get output missing latest label:\n%s", getOutput)
+	}
+
+	createLocalTask(t, []string{"add", "Labeled task"})
+	if err := run([]string{"label", "add", "-id", "1", "2"}); err != nil {
+		t.Fatalf("label add error = %v", err)
+	}
+	showOutput := captureStdout(t, func() {
+		if err := run([]string{"label", "show", "1"}); err != nil {
+			t.Fatalf("label show error = %v", err)
+		}
+	})
+	if !strings.Contains(showOutput, "Newest Label") {
+		t.Fatalf("label show output missing ticket labels:\n%s", showOutput)
 	}
 }
 

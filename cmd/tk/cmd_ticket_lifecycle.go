@@ -68,7 +68,8 @@ func updateTicketStage(idArg, stage string, message ...string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(context.Background(), idArg)
+	ticketRef := normalizeBareTicketRef(cfg, svc, idArg)
+	current, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}
@@ -108,7 +109,8 @@ func updateTicketState(idArg, state string, message ...string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(context.Background(), idArg)
+	ticketRef := normalizeBareTicketRef(cfg, svc, idArg)
+	current, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -63,7 +64,9 @@ func runProject(args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if fs.NArg() != 0 {
+		if strings.TrimSpace(*title) == "" && fs.NArg() > 0 {
+			*title = strings.Join(fs.Args(), " ")
+		} else if fs.NArg() != 0 {
 			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-id <id>] [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-sdlc id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
@@ -145,12 +148,17 @@ func runProject(args []string) error {
 		if len(args) == 2 {
 			projectRef = strings.TrimSpace(args[1])
 		}
+		var project store.Project
 		if projectRef == "" {
-			return errors.New("no current project set; use: tk project use <id>")
-		}
-		project, err := svc.GetProject(context.Background(), projectRef)
-		if err != nil {
-			return err
+			project, err = mostRecentProject(svc)
+			if err != nil {
+				return err
+			}
+		} else {
+			project, err = svc.GetProject(context.Background(), projectRef)
+			if err != nil {
+				return err
+			}
 		}
 		if outputJSON {
 			return printJSON(project)

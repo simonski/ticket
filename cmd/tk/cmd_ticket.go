@@ -310,6 +310,36 @@ func resolveIDFlag(flagVal string, positional []string) (string, []string, error
 	return "", nil, errors.New("missing ticket id")
 }
 
+func normalizeBareTicketRef(cfg config.Config, svc libticket.Service, ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || strings.Contains(ref, "-") || !isBareTicketSequence(ref) {
+		return ref
+	}
+	prefix := strings.TrimSpace(cfg.ProjectID)
+	if prefix == "" {
+		return ref
+	}
+	if project, err := svc.GetProject(context.Background(), prefix); err == nil && strings.TrimSpace(project.Prefix) != "" {
+		prefix = strings.TrimSpace(project.Prefix)
+	}
+	if prefix == "" {
+		return ref
+	}
+	return prefix + "-" + ref
+}
+
+func isBareTicketSequence(ref string) bool {
+	if strings.TrimSpace(ref) == "" {
+		return false
+	}
+	for _, r := range ref {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func resolveLifecycleInput(status, stage, state string) (string, string, error) {
 	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
 		return stage, state, nil
@@ -546,7 +576,11 @@ func runList(args []string) error {
 		if outputJSON {
 			return printJSON(tickets)
 		}
-		fmt.Printf("no tickets yet — create one with: tk new \"My first ticket\"\n")
+		name := "tickets"
+		if strings.TrimSpace(*taskType) != "" {
+			name = entityPlural(*taskType)
+		}
+		printNoEntitiesAvailable(name)
 		return nil
 	}
 	// Build parent key map: ticket ID → parent's key string.
@@ -703,9 +737,6 @@ func runGet(args []string) error {
 	} else if fs.NArg() != 0 {
 		return errors.New("usage: " + usage)
 	}
-	if strings.TrimSpace(*id) == "" {
-		return errors.New("usage: " + usage)
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -714,7 +745,21 @@ func runGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(context.Background(), strings.TrimSpace(*id))
+	ticketRef := strings.TrimSpace(*id)
+	if ticketRef == "" {
+		project, err := requireCurrentProject(cfg, svc)
+		if err != nil {
+			return err
+		}
+		latest, err := mostRecentTicket(svc, project.ID, "")
+		if err != nil {
+			return err
+		}
+		ticketRef = latest.ID
+	} else {
+		ticketRef = normalizeBareTicketRef(cfg, svc, ticketRef)
+	}
+	ticket, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}
@@ -1026,11 +1071,13 @@ func runSetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
+	idVal = normalizeBareTicketRef(cfg, svc, idVal)
+	parentRef := normalizeBareTicketRef(cfg, svc, rest[0])
 	child, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
 	}
-	parent, err := svc.GetTicket(context.Background(), rest[0])
+	parent, err := svc.GetTicket(context.Background(), parentRef)
 	if err != nil {
 		return err
 	}
@@ -1066,6 +1113,7 @@ func runUnsetParent(args []string, command string) error {
 	if err != nil {
 		return err
 	}
+	idVal = normalizeBareTicketRef(cfg, svc, idVal)
 	ticket, err := svc.GetTicket(context.Background(), idVal)
 	if err != nil {
 		return err
@@ -1151,7 +1199,8 @@ func runUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(context.Background(), strings.TrimSpace(*id))
+	ticketRef := normalizeBareTicketRef(cfg, svc, strings.TrimSpace(*id))
+	current, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}
@@ -1249,7 +1298,8 @@ func runUpdate(args []string) error {
 		}
 	}
 	if hasParentID {
-		parent, err := svc.GetTicket(context.Background(), strings.TrimSpace(*parentIDRaw))
+		parentRef := normalizeBareTicketRef(cfg, svc, strings.TrimSpace(*parentIDRaw))
+		parent, err := svc.GetTicket(context.Background(), parentRef)
 		if err != nil {
 			return err
 		}
@@ -1968,14 +2018,44 @@ func runDeleteTicket(args []string) error {
 func runTypedTicketCreate(ticketType string, args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "list", "ls":
+			return runTypedTicketList(ticketType)
 		case "get", "show":
-			if len(args) != 2 {
+			if len(args) > 2 {
 				return fmt.Errorf("usage: tk %s get <id>", ticketType)
 			}
-			return runTypedTicketGet(ticketType, args[1])
+			id := ""
+			if len(args) == 2 {
+				id = args[1]
+			}
+			return runTypedTicketGet(ticketType, id)
+		case "new", "add", "create":
+			return runTicketCreate(append([]string{"-type", ticketType}, args[1:]...))
 		}
 	}
 	return runTicketCreate(append([]string{"-type", ticketType}, args...))
+}
+
+func runTypedTicketList(ticketType string) error {
+	_, svc, project, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+	tickets, err := svc.ListTicketsFiltered(context.Background(), project.ID, ticketType, "", "", "", "", "", 0, false)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(tickets)
+	}
+	if len(tickets) == 0 {
+		printNoEntitiesAvailable(entityPlural(ticketType))
+		return nil
+	}
+	for _, ticket := range tickets {
+		fmt.Printf("%s\t%s\t%s\n", ticketLabel(ticket), ticket.Status, ticket.Title)
+	}
+	return nil
 }
 
 func runTypedTicketGet(ticketType, id string) error {
@@ -1987,7 +2067,11 @@ func runTypedTicketGet(ticketType, id string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(context.Background(), id)
+	resolvedID, err := resolveTypedTicketRef(cfg, svc, ticketType, id)
+	if err != nil {
+		return err
+	}
+	ticket, err := svc.GetTicket(context.Background(), resolvedID)
 	if err != nil {
 		return err
 	}
@@ -1996,9 +2080,9 @@ func runTypedTicketGet(ticketType, id string) error {
 		if strings.HasPrefix(ticketType, "a") || strings.HasPrefix(ticketType, "e") || strings.HasPrefix(ticketType, "i") || strings.HasPrefix(ticketType, "o") || strings.HasPrefix(ticketType, "u") {
 			article = "an"
 		}
-		return fmt.Errorf("ticket %s is not %s %s", id, article, ticketType)
+		return fmt.Errorf("ticket %s is not %s %s", resolvedID, article, ticketType)
 	}
-	return runGet([]string{"-id", id})
+	return runGet([]string{"-id", ticket.ID})
 }
 
 type ticketCreateOptions struct {

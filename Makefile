@@ -139,7 +139,7 @@ test-go-cover:
 		"./libticket 65" \
 		"./internal/client 55" \
 		"./internal/store 70" \
-		"./internal/server 55" \
+		"./internal/server 70" \
 		"./internal/config 70"; do \
 		pkg=$${entry% *}; \
 		min=$${entry#* }; \

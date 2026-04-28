@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -745,6 +747,378 @@ func TestReadWebSocketFrameDecodesMaskedExtendedPayload(t *testing.T) {
 	if !bytes.Equal(gotPayload, payload) {
 		t.Fatalf("payload mismatch: got %d bytes want %d bytes", len(gotPayload), len(payload))
 	}
+}
+
+func TestWebSocketServeConnectsSubscribesPingsAndCloses(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	rec := &hijackableResponseWriter{
+		conn: serverConn,
+		rw:   bufio.NewReadWriter(bufio.NewReader(serverConn), bufio.NewWriter(serverConn)),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://ticket.test/api/ws", nil)
+	req.Host = "ticket.test"
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+
+	errc := make(chan error, 1)
+	hub := newLiveHub()
+	go func() {
+		errc <- websocketServe(hub, rec, req)
+	}()
+
+	reader := bufio.NewReader(clientConn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read websocket status error = %v", err)
+	}
+	if !strings.Contains(status, "101 Switching Protocols") {
+		t.Fatalf("websocket status = %q", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read websocket header error = %v", err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+	opcode, payload, err := readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn})
+	if err != nil {
+		t.Fatalf("read connected frame error = %v", err)
+	}
+	if opcode != 0x1 || string(payload) != `{"type":"connected"}` {
+		t.Fatalf("connected frame = (%d, %q)", opcode, string(payload))
+	}
+
+	if err := writeMaskedClientFrame(clientConn, 0x1, []byte(`{"type":"subscribe","project_id":42}`)); err != nil {
+		t.Fatalf("write subscribe frame error = %v", err)
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x9, []byte("ping")); err != nil {
+		t.Fatalf("write ping frame error = %v", err)
+	}
+	opcode, payload, err = readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn})
+	if err != nil {
+		t.Fatalf("read pong frame error = %v", err)
+	}
+	if opcode != 0xA || string(payload) != "ping" {
+		t.Fatalf("pong frame = (%d, %q), want pong ping", opcode, string(payload))
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x8, nil); err != nil {
+		t.Fatalf("write close frame error = %v", err)
+	}
+	opcode, _, err = readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn})
+	if err != nil {
+		t.Fatalf("read close frame error = %v", err)
+	}
+	if opcode != 0x8 {
+		t.Fatalf("close opcode = %d, want 8", opcode)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("websocketServe() error = %v", err)
+	}
+}
+
+func TestWebSocketServeChatProcessesInputAndCloses(t *testing.T) {
+	t.Setenv("TICKET_CHAT_CMD", "cat")
+
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	rec := &hijackableResponseWriter{
+		conn: serverConn,
+		rw:   bufio.NewReadWriter(bufio.NewReader(serverConn), bufio.NewWriter(serverConn)),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://ticket.test/api/chat/ws", nil)
+	req.Host = "ticket.test"
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+
+	var logs strings.Builder
+	errc := make(chan error, 1)
+	go func() {
+		errc <- websocketServeChat(rec, req, db, func(line string) {
+			logs.WriteString(line)
+			logs.WriteByte('\n')
+		})
+	}()
+
+	reader := bufio.NewReader(clientConn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read websocket status error = %v", err)
+	}
+	if !strings.Contains(status, "101 Switching Protocols") {
+		t.Fatalf("websocket status = %q", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read websocket header error = %v", err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+
+	readChatMessage := func() chatOutboundMessage {
+		t.Helper()
+		if err := clientConn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+			t.Fatalf("SetReadDeadline() error = %v", err)
+		}
+		_, payload, err := readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn})
+		if err != nil {
+			t.Fatalf("read chat websocket frame error = %v", err)
+		}
+		var msg chatOutboundMessage
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			t.Fatalf("json.Unmarshal(chat frame) error = %v payload=%s", err, string(payload))
+		}
+		return msg
+	}
+
+	if msg := readChatMessage(); msg.Type != "chat_connected" {
+		t.Fatalf("first chat message = %#v, want chat_connected", msg)
+	}
+	if msg := readChatMessage(); msg.Type != "chat_ready" {
+		t.Fatalf("second chat message = %#v, want chat_ready", msg)
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x1, []byte("{bad")); err != nil {
+		t.Fatalf("write invalid chat payload error = %v", err)
+	}
+	if msg := readChatMessage(); msg.Type != "chat_error" || msg.Error != "invalid chat payload" {
+		t.Fatalf("invalid payload response = %#v", msg)
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x1, []byte(`{"type":"ignored","text":"hello"}`)); err != nil {
+		t.Fatalf("write ignored chat payload error = %v", err)
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x1, []byte(`{"type":"chat_input","text":"hello chat"}`)); err != nil {
+		t.Fatalf("write chat input error = %v", err)
+	}
+
+	seenProcessing := false
+	seenOutput := false
+	seenExit := false
+	for !(seenProcessing && seenOutput && seenExit) {
+		msg := readChatMessage()
+		switch msg.Type {
+		case "chat_processing":
+			seenProcessing = true
+		case "chat_output":
+			if strings.Contains(msg.Text, "hello chat") {
+				seenOutput = true
+			}
+		case "chat_exit":
+			seenExit = true
+		}
+	}
+	if !strings.Contains(logs.String(), "prompt: hello chat") {
+		t.Fatalf("chat logs missing prompt:\n%s", logs.String())
+	}
+
+	if err := writeMaskedClientFrame(clientConn, 0x9, []byte("ping")); err != nil {
+		t.Fatalf("write ping frame error = %v", err)
+	}
+	opcode, payload, err := readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn})
+	if err != nil {
+		t.Fatalf("read chat pong frame error = %v", err)
+	}
+	if opcode != 0xA || string(payload) != "ping" {
+		t.Fatalf("chat pong frame = (%d, %q), want pong ping", opcode, string(payload))
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x8, nil); err != nil {
+		t.Fatalf("write chat close frame error = %v", err)
+	}
+	opcode, _, err = readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn})
+	if err != nil {
+		t.Fatalf("read chat close frame error = %v", err)
+	}
+	if opcode != 0x8 {
+		t.Fatalf("chat close opcode = %d, want 8", opcode)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("websocketServeChat() error = %v", err)
+	}
+}
+
+func TestWebSocketServeChatRejectsInputWhenDisabled(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	if err := store.SetChatEnabled(context.Background(), db, false); err != nil {
+		t.Fatalf("SetChatEnabled(false) error = %v", err)
+	}
+
+	clientConn, reader, errc := startChatWebSocketForTest(t, db)
+	defer clientConn.Close()
+	readChatFrameForTest(t, clientConn, reader) // chat_connected
+	readChatFrameForTest(t, clientConn, reader) // chat_ready
+	if err := writeMaskedClientFrame(clientConn, 0x1, []byte(`{"type":"chat_input","text":"hello"}`)); err != nil {
+		t.Fatalf("write chat input error = %v", err)
+	}
+	msg := readChatFrameForTest(t, clientConn, reader)
+	if msg.Type != "chat_error" || msg.Error != "chat is disabled" {
+		t.Fatalf("disabled chat response = %#v", msg)
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x8, nil); err != nil {
+		t.Fatalf("write close frame error = %v", err)
+	}
+	if _, _, err := readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn}); err != nil {
+		t.Fatalf("read close frame error = %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("websocketServeChat() error = %v", err)
+	}
+}
+
+func TestWebSocketServeChatReportsCapacityReached(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	if err := store.SetChatLimitsConfig(context.Background(), db, 1, store.DefaultChatMaxDurationMinutes); err != nil {
+		t.Fatalf("SetChatLimitsConfig() error = %v", err)
+	}
+
+	sharedChatRuntime.mu.Lock()
+	sharedChatRuntime.processes[987654321] = &chatProcessBridge{}
+	sharedChatRuntime.mu.Unlock()
+	t.Cleanup(func() {
+		sharedChatRuntime.mu.Lock()
+		delete(sharedChatRuntime.processes, 987654321)
+		sharedChatRuntime.mu.Unlock()
+	})
+
+	clientConn, reader, errc := startChatWebSocketForTest(t, db)
+	defer clientConn.Close()
+	readChatFrameForTest(t, clientConn, reader) // chat_connected
+	readChatFrameForTest(t, clientConn, reader) // chat_ready
+	if err := writeMaskedClientFrame(clientConn, 0x1, []byte(`{"type":"chat_input","text":"hello"}`)); err != nil {
+		t.Fatalf("write chat input error = %v", err)
+	}
+	msg := readChatFrameForTest(t, clientConn, reader)
+	if msg.Type != "chat_error" || !strings.Contains(msg.Error, "chat capacity reached") {
+		t.Fatalf("capacity response = %#v", msg)
+	}
+	if err := writeMaskedClientFrame(clientConn, 0x8, nil); err != nil {
+		t.Fatalf("write close frame error = %v", err)
+	}
+	if _, _, err := readWebSocketFrame(readerBackedConn{Reader: reader, Conn: clientConn}); err != nil {
+		t.Fatalf("read close frame error = %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("websocketServeChat() error = %v", err)
+	}
+}
+
+func startChatWebSocketForTest(t *testing.T, db *sql.DB) (net.Conn, *bufio.Reader, <-chan error) {
+	t.Helper()
+	serverConn, clientConn := net.Pipe()
+	rec := &hijackableResponseWriter{
+		conn: serverConn,
+		rw:   bufio.NewReadWriter(bufio.NewReader(serverConn), bufio.NewWriter(serverConn)),
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://ticket.test/api/chat/ws", nil)
+	req.Host = "ticket.test"
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+	errc := make(chan error, 1)
+	go func() {
+		errc <- websocketServeChat(rec, req, db, nil)
+	}()
+
+	reader := bufio.NewReader(clientConn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read websocket status error = %v", err)
+	}
+	if !strings.Contains(status, "101 Switching Protocols") {
+		t.Fatalf("websocket status = %q", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read websocket header error = %v", err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+	return clientConn, reader, errc
+}
+
+func readChatFrameForTest(t *testing.T, conn net.Conn, reader *bufio.Reader) chatOutboundMessage {
+	t.Helper()
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error = %v", err)
+	}
+	_, payload, err := readWebSocketFrame(readerBackedConn{Reader: reader, Conn: conn})
+	if err != nil {
+		t.Fatalf("read chat websocket frame error = %v", err)
+	}
+	var msg chatOutboundMessage
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		t.Fatalf("json.Unmarshal(chat frame) error = %v payload=%s", err, string(payload))
+	}
+	return msg
+}
+
+type readerBackedConn struct {
+	*bufio.Reader
+	net.Conn
+}
+
+func (c readerBackedConn) Read(p []byte) (int, error) {
+	return c.Reader.Read(p)
+}
+
+func writeMaskedClientFrame(conn net.Conn, opcode byte, payload []byte) error {
+	var frame bytes.Buffer
+	frame.WriteByte(0x80 | opcode)
+	length := len(payload)
+	switch {
+	case length < 126:
+		frame.WriteByte(0x80 | byte(length))
+	case length <= 0xFFFF:
+		frame.WriteByte(0x80 | 126)
+		frame.WriteByte(byte(length >> 8))
+		frame.WriteByte(byte(length))
+	default:
+		return errors.New("test websocket payload too large")
+	}
+	mask := [4]byte{1, 2, 3, 4}
+	frame.Write(mask[:])
+	for i, b := range payload {
+		frame.WriteByte(b ^ mask[i%4])
+	}
+	_, err := conn.Write(frame.Bytes())
+	return err
 }
 
 func TestChatRuntimeAndBridgeStateHelpers(t *testing.T) {

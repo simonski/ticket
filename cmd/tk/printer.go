@@ -87,7 +87,7 @@ func printProject(project store.Project) {
 
 func printProjectTable(projects []store.Project, currentProjectID string, sdlcNames map[int64]string) {
 	if len(projects) == 0 {
-		fmt.Println("no projects")
+		printNoEntitiesAvailable("projects")
 		return
 	}
 	currentID := strings.TrimSpace(currentProjectID)

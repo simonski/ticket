@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/simonski/ticket/internal/static"
@@ -132,6 +134,204 @@ func TestAuthAndAdminAPI(t *testing.T) {
 	logoutResp := doJSONRequest(t, handler, http.MethodPost, "/api/logout", nil, carolLoginPayload.Token)
 	if logoutResp.Code != http.StatusOK {
 		t.Fatalf("logout status = %d, want %d", logoutResp.Code, http.StatusOK)
+	}
+}
+
+func TestOpenAPIVersionMatchesBinaryVersion(t *testing.T) {
+	t.Parallel()
+
+	versionBytes, err := os.ReadFile(filepath.Join("..", "..", "cmd", "tk", "VERSION"))
+	if err != nil {
+		t.Fatalf("ReadFile(VERSION) error = %v", err)
+	}
+	want := strings.TrimSpace(string(versionBytes))
+
+	specBytes, err := os.ReadFile(filepath.Join("..", "..", "openapi.yaml"))
+	if err != nil {
+		t.Fatalf("ReadFile(openapi.yaml) error = %v", err)
+	}
+	lines := strings.Split(string(specBytes), "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "  version: ") {
+			got := strings.TrimSpace(strings.TrimPrefix(line, "  version: "))
+			if got != want {
+				t.Fatalf("openapi.yaml info.version = %q, want VERSION %q", got, want)
+			}
+			return
+		}
+		if i > 20 {
+			break
+		}
+	}
+	t.Fatal("openapi.yaml missing info.version")
+}
+
+func TestPublicAPIContractValidationAndAuthPaths(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	userResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, adminToken)
+	if userResp.Code != http.StatusCreated {
+		t.Fatalf("create alice status = %d body=%s", userResp.Code, userResp.Body.String())
+	}
+	aliceLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, aliceLogin, &aliceAuth)
+
+	teamResp := doJSONRequest(t, handler, http.MethodPost, "/api/teams", map[string]string{"name": "Contract Team"}, adminToken)
+	if teamResp.Code != http.StatusCreated {
+		t.Fatalf("create team status = %d body=%s", teamResp.Code, teamResp.Body.String())
+	}
+	var team store.Team
+	decodeResponse(t, teamResp, &team)
+
+	agentResp := doJSONRequest(t, handler, http.MethodPost, "/api/agents", map[string]string{"password": "agent-secret"}, adminToken)
+	if agentResp.Code != http.StatusCreated {
+		t.Fatalf("create agent status = %d body=%s", agentResp.Code, agentResp.Body.String())
+	}
+	var agentPayload struct {
+		Agent    store.Agent `json:"agent"`
+		Password string      `json:"password"`
+	}
+	decodeResponse(t, agentResp, &agentPayload)
+
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "Contract validation ticket",
+	}, adminToken)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	cases := []struct {
+		name    string
+		method  string
+		path    string
+		payload any
+		token   string
+		want    int
+	}{
+		{"ws post rejects method", http.MethodPost, "/api/ws", nil, adminToken, http.StatusMethodNotAllowed},
+		{"ws get requires auth", http.MethodGet, "/api/ws", nil, "", http.StatusUnauthorized},
+		{"chat ws post rejects method", http.MethodPost, "/api/chat/ws", nil, adminToken, http.StatusMethodNotAllowed},
+		{"chat ws get requires auth", http.MethodGet, "/api/chat/ws", nil, "", http.StatusUnauthorized},
+		{"users put rejects method", http.MethodPut, "/api/users", nil, adminToken, http.StatusMethodNotAllowed},
+		{"users path get rejects method", http.MethodGet, "/api/users/alice", nil, adminToken, http.StatusMethodNotAllowed},
+		{"users unknown action not found", http.MethodPost, "/api/users/alice/promote", nil, adminToken, http.StatusNotFound},
+		{"missing user delete not found", http.MethodDelete, "/api/users/missing", nil, adminToken, http.StatusNotFound},
+		{"agents list requires admin", http.MethodGet, "/api/agents", nil, aliceAuth.Token, http.StatusForbidden},
+		{"agents bad limit", http.MethodGet, "/api/agents?limit=0", nil, adminToken, http.StatusBadRequest},
+		{"agents bad offset", http.MethodGet, "/api/agents?offset=-1", nil, adminToken, http.StatusBadRequest},
+		{"agents statuses reject method", http.MethodPost, "/api/agents/statuses", nil, adminToken, http.StatusMethodNotAllowed},
+		{"agents register requires basic auth", http.MethodPost, "/api/agents/register", nil, "", http.StatusUnauthorized},
+		{"agents heartbeat requires basic auth", http.MethodPost, "/api/agents/heartbeat", nil, "", http.StatusUnauthorized},
+		{"agents request requires basic auth", http.MethodPost, "/api/agents/request", nil, "", http.StatusUnauthorized},
+		{"agent update missing id", http.MethodPut, "/api/agents/missing", map[string]string{"password": "x"}, adminToken, http.StatusNotFound},
+		{"agent unknown action not found", http.MethodPost, "/api/agents/" + agentPayload.Agent.ID + "/unknown", nil, adminToken, http.StatusNotFound},
+		{"agent config put rejects method", http.MethodPut, "/api/agents/" + agentPayload.Agent.ID + "/config", nil, adminToken, http.StatusMethodNotAllowed},
+		{"teams list requires auth", http.MethodGet, "/api/teams", nil, "", http.StatusUnauthorized},
+		{"teams create requires admin", http.MethodPost, "/api/teams", map[string]string{"name": "User Team"}, aliceAuth.Token, http.StatusForbidden},
+		{"teams bad id", http.MethodGet, "/api/teams/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"teams missing id", http.MethodGet, "/api/teams/", nil, adminToken, http.StatusNotFound},
+		{"team users post forbidden to memberless user", http.MethodPost, "/api/teams/" + strconv.FormatInt(team.ID, 10) + "/users", map[string]string{"user_id": "x"}, aliceAuth.Token, http.StatusForbidden},
+		{"team agents post forbidden to memberless user", http.MethodPost, "/api/teams/" + strconv.FormatInt(team.ID, 10) + "/agents", map[string]string{"agent_id": agentPayload.Agent.ID}, aliceAuth.Token, http.StatusForbidden},
+		{"team unknown route not found", http.MethodGet, "/api/teams/" + strconv.FormatInt(team.ID, 10) + "/unknown", nil, adminToken, http.StatusNotFound},
+		{"projects list requires auth", http.MethodGet, "/api/projects", nil, "", http.StatusUnauthorized},
+		{"projects post requires auth", http.MethodPost, "/api/projects", map[string]string{"title": "No Auth"}, "", http.StatusUnauthorized},
+		{"project tickets missing project", http.MethodGet, "/api/projects/999999/tickets", nil, adminToken, http.StatusNotFound},
+		{"project tickets bad limit", http.MethodGet, "/api/projects/1/tickets?limit=abc", nil, adminToken, http.StatusBadRequest},
+		{"project tickets bad offset", http.MethodGet, "/api/projects/1/tickets?offset=abc", nil, adminToken, http.StatusBadRequest},
+		{"project history bad limit", http.MethodGet, "/api/projects/1/history?limit=abc", nil, adminToken, http.StatusBadRequest},
+		{"project history bad team", http.MethodGet, "/api/projects/1/history?team_id=abc", nil, adminToken, http.StatusBadRequest},
+		{"project stories missing project", http.MethodGet, "/api/projects/999999/stories", nil, adminToken, http.StatusNotFound},
+		{"project users delete missing user id", http.MethodDelete, "/api/projects/1/users", nil, adminToken, http.StatusBadRequest},
+		{"project teams delete bad team id", http.MethodDelete, "/api/projects/1/teams/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"project labels bad project id", http.MethodGet, "/api/projects/not-a-number/labels", nil, adminToken, http.StatusBadRequest},
+		{"project label bad label id", http.MethodDelete, "/api/projects/1/labels/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"project label put rejects method", http.MethodPut, "/api/projects/1/labels", nil, adminToken, http.StatusMethodNotAllowed},
+		{"project set draft requires put route", http.MethodPost, "/api/projects/1/set-draft", map[string]bool{"draft": true}, adminToken, http.StatusNotFound},
+		{"project unknown post action not found", http.MethodPost, "/api/projects/1/unknown", nil, adminToken, http.StatusNotFound},
+		{"project nested unknown method not allowed", http.MethodGet, "/api/projects/1/unknown/path", nil, adminToken, http.StatusMethodNotAllowed},
+		{"missing project get not found", http.MethodGet, "/api/projects/999999", nil, adminToken, http.StatusNotFound},
+		{"project delete requires admin", http.MethodDelete, "/api/projects/1", nil, aliceAuth.Token, http.StatusForbidden},
+		{"sdlcs import requires admin", http.MethodPost, "/api/sdlcs/import", map[string]string{"name": "x"}, aliceAuth.Token, http.StatusForbidden},
+		{"sdlcs import rejects method", http.MethodGet, "/api/sdlcs/import", nil, adminToken, http.StatusMethodNotAllowed},
+		{"sdlc stage bad id", http.MethodGet, "/api/sdlcs/stages/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"sdlc stage missing", http.MethodGet, "/api/sdlcs/stages/999999", nil, adminToken, http.StatusNotFound},
+		{"sdlc stage role bad path", http.MethodPost, "/api/sdlcs/stages/roles/1", nil, adminToken, http.StatusBadRequest},
+		{"sdlc stage role bad sdlc id", http.MethodPost, "/api/sdlcs/stages/roles/x/1", nil, adminToken, http.StatusBadRequest},
+		{"sdlc stage role bad stage id", http.MethodPost, "/api/sdlcs/stages/roles/1/x", nil, adminToken, http.StatusBadRequest},
+		{"sdlc stage role delete requires role", http.MethodDelete, "/api/sdlcs/stages/roles/1/1", nil, adminToken, http.StatusBadRequest},
+		{"sdlc bad id", http.MethodGet, "/api/sdlcs/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"sdlc missing", http.MethodGet, "/api/sdlcs/999999", nil, adminToken, http.StatusNotFound},
+		{"sdlc direct rejects patch", http.MethodPatch, "/api/sdlcs/1", nil, adminToken, http.StatusMethodNotAllowed},
+		{"story post rejects method", http.MethodGet, "/api/stories", nil, adminToken, http.StatusMethodNotAllowed},
+		{"story bad id", http.MethodGet, "/api/stories/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"story missing", http.MethodGet, "/api/stories/999999", nil, adminToken, http.StatusNotFound},
+		{"tickets create rejects method", http.MethodGet, "/api/tickets", nil, adminToken, http.StatusMethodNotAllowed},
+		{"tickets claim missing ticket", http.MethodPost, "/api/tickets/claim", map[string]any{"ticket_id": "TST-999999"}, adminToken, http.StatusNotFound},
+		{"ticket labels bad label id", http.MethodDelete, "/api/tickets/" + ticket.ID + "/labels/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"ticket labels put rejects method", http.MethodPut, "/api/tickets/" + ticket.ID + "/labels", nil, adminToken, http.StatusMethodNotAllowed},
+		{"ticket time total accepts any method as read", http.MethodPost, "/api/tickets/" + ticket.ID + "/time/total", nil, adminToken, http.StatusOK},
+		{"ticket unknown method not allowed", http.MethodPatch, "/api/tickets/" + ticket.ID, nil, adminToken, http.StatusMethodNotAllowed},
+		{"labels delete bad id", http.MethodDelete, "/api/labels/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"time delete bad id", http.MethodDelete, "/api/time/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"dependencies bad delete project id", http.MethodDelete, "/api/dependencies?project_id=abc", nil, adminToken, http.StatusBadRequest},
+		{"dependencies missing ticket id", http.MethodDelete, "/api/dependencies?project_id=1", nil, adminToken, http.StatusBadRequest},
+		{"dependencies missing depends on", http.MethodDelete, "/api/dependencies?project_id=1&ticket_id=" + ticket.ID, nil, adminToken, http.StatusBadRequest},
+		{"dependencies rejects put", http.MethodPut, "/api/dependencies", nil, adminToken, http.StatusMethodNotAllowed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := doJSONRequest(t, handler, tc.method, tc.path, tc.payload, tc.token)
+			if resp.Code != tc.want {
+				t.Fatalf("%s %s status = %d, want %d body=%s", tc.method, tc.path, resp.Code, tc.want, resp.Body.String())
+			}
+		})
+	}
+
+	rawCases := []struct {
+		name   string
+		method string
+		path   string
+		token  string
+		want   int
+	}{
+		{"register invalid json", http.MethodPost, "/api/register", "", http.StatusBadRequest},
+		{"login invalid json", http.MethodPost, "/api/login", "", http.StatusBadRequest},
+		{"user create invalid json", http.MethodPost, "/api/users", adminToken, http.StatusBadRequest},
+		{"agent create invalid json", http.MethodPost, "/api/agents", adminToken, http.StatusBadRequest},
+		{"team create invalid json", http.MethodPost, "/api/teams", adminToken, http.StatusBadRequest},
+		{"project create invalid json", http.MethodPost, "/api/projects", adminToken, http.StatusBadRequest},
+		{"project update invalid json", http.MethodPut, "/api/projects/1", adminToken, http.StatusBadRequest},
+		{"project set draft invalid json", http.MethodPut, "/api/projects/1/set-draft", adminToken, http.StatusBadRequest},
+		{"sdlc create invalid json", http.MethodPost, "/api/sdlcs", adminToken, http.StatusBadRequest},
+		{"sdlc stage create invalid json", http.MethodPost, "/api/sdlcs/1/stages", adminToken, http.StatusBadRequest},
+		{"ticket create invalid json", http.MethodPost, "/api/tickets", adminToken, http.StatusBadRequest},
+		{"ticket update invalid json", http.MethodPut, "/api/tickets/" + ticket.ID, adminToken, http.StatusBadRequest},
+		{"story create invalid json", http.MethodPost, "/api/stories", adminToken, http.StatusBadRequest},
+		{"ticket comment invalid json", http.MethodPost, "/api/tickets/" + ticket.ID + "/comments", adminToken, http.StatusBadRequest},
+	}
+	for _, tc := range rawCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := doRawRequest(t, handler, tc.method, tc.path, []byte("{bad"), tc.token)
+			if resp.Code != tc.want {
+				t.Fatalf("%s %s status = %d, want %d body=%s", tc.method, tc.path, resp.Code, tc.want, resp.Body.String())
+			}
+		})
 	}
 }
 
@@ -962,6 +1162,16 @@ func TestProjectAPI(t *testing.T) {
 	if disableResp.Code != http.StatusOK {
 		t.Fatalf("disable project status = %d, want %d body=%s", disableResp.Code, http.StatusOK, disableResp.Body.String())
 	}
+
+	enableResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(projects[1].ID, 10)+"/enable", nil, auth.Token)
+	if enableResp.Code != http.StatusOK {
+		t.Fatalf("enable project status = %d, want %d body=%s", enableResp.Code, http.StatusOK, enableResp.Body.String())
+	}
+
+	deleteProjectResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/"+strconv.FormatInt(projects[1].ID, 10), nil, auth.Token)
+	if deleteProjectResp.Code != http.StatusOK {
+		t.Fatalf("delete project status = %d, want %d body=%s", deleteProjectResp.Code, http.StatusOK, deleteProjectResp.Body.String())
+	}
 }
 
 func TestRoleAPI(t *testing.T) {
@@ -1017,6 +1227,59 @@ func TestRoleAPI(t *testing.T) {
 	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/roles/"+strconv.FormatInt(created.ID, 10), nil, auth.Token)
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("delete role status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+}
+
+func TestRoleAPIValidationAndAuthPaths(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	if _, err := store.CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	aliceLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, aliceLogin, &aliceAuth)
+
+	cases := []struct {
+		name    string
+		method  string
+		path    string
+		payload any
+		token   string
+		want    int
+	}{
+		{"list requires admin", http.MethodGet, "/api/roles", nil, aliceAuth.Token, http.StatusForbidden},
+		{"create requires admin", http.MethodPost, "/api/roles", map[string]string{"title": "x"}, aliceAuth.Token, http.StatusForbidden},
+		{"collection rejects patch", http.MethodPatch, "/api/roles", nil, adminToken, http.StatusMethodNotAllowed},
+		{"bad id", http.MethodPut, "/api/roles/not-a-number", map[string]string{"title": "x"}, adminToken, http.StatusBadRequest},
+		{"missing update", http.MethodPut, "/api/roles/999999", map[string]string{"title": "x"}, adminToken, http.StatusNotFound},
+		{"missing delete", http.MethodDelete, "/api/roles/999999", nil, adminToken, http.StatusNotFound},
+		{"item rejects get", http.MethodGet, "/api/roles/1", nil, adminToken, http.StatusMethodNotAllowed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := doJSONRequest(t, handler, tc.method, tc.path, tc.payload, tc.token)
+			if resp.Code != tc.want {
+				t.Fatalf("%s %s status = %d, want %d body=%s", tc.method, tc.path, resp.Code, tc.want, resp.Body.String())
+			}
+		})
+	}
+
+	rawCreate := doRawRequest(t, handler, http.MethodPost, "/api/roles", []byte("{bad"), adminToken)
+	if rawCreate.Code != http.StatusBadRequest {
+		t.Fatalf("raw role create status = %d, want %d body=%s", rawCreate.Code, http.StatusBadRequest, rawCreate.Body.String())
+	}
+	rawUpdate := doRawRequest(t, handler, http.MethodPut, "/api/roles/1", []byte("{bad"), adminToken)
+	if rawUpdate.Code != http.StatusBadRequest {
+		t.Fatalf("raw role update status = %d, want %d body=%s", rawUpdate.Code, http.StatusBadRequest, rawUpdate.Body.String())
 	}
 }
 
@@ -2546,6 +2809,23 @@ func TestTicketStateOpsAPI(t *testing.T) {
 	if unsetWfResp.Code != http.StatusOK {
 		t.Fatalf("unset ticket sdlc status = %d body=%s", unsetWfResp.Code, unsetWfResp.Body.String())
 	}
+
+	for _, op := range []string{"complete", "reopen", "draft", "undraft"} {
+		resp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/"+op, map[string]string{
+			"message": op + " through public API",
+		}, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s ticket status = %d body=%s", op, resp.Code, resp.Body.String())
+		}
+	}
+	nextResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/next", nil, token)
+	if nextResp.Code != http.StatusBadRequest {
+		t.Fatalf("next ticket status = %d, want %d body=%s", nextResp.Code, http.StatusBadRequest, nextResp.Body.String())
+	}
+	previousResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/previous", nil, token)
+	if previousResp.Code != http.StatusBadRequest {
+		t.Fatalf("previous ticket status = %d, want %d body=%s", previousResp.Code, http.StatusBadRequest, previousResp.Body.String())
+	}
 }
 
 func TestRegistrationConfigAPI(t *testing.T) {
@@ -3343,6 +3623,20 @@ func TestSdlcAPI(t *testing.T) {
 	}
 
 	// Delete stage
+	getStageResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
+	if getStageResp.Code != http.StatusOK {
+		t.Fatalf("get stage status = %d body=%s", getStageResp.Code, getStageResp.Body.String())
+	}
+
+	updateStageResp := doJSONRequest(t, handler, http.MethodPut, "/api/sdlcs/stages/"+strconv.FormatInt(stage.ID, 10), map[string]any{
+		"stage_name":         "package",
+		"ways_of_working":    "package artifacts",
+		"definition_of_done": "artifact published",
+	}, token)
+	if updateStageResp.Code != http.StatusOK {
+		t.Fatalf("update stage status = %d body=%s", updateStageResp.Code, updateStageResp.Body.String())
+	}
+
 	delStageResp := doJSONRequest(t, handler, http.MethodDelete, "/api/sdlcs/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
 	if delStageResp.Code != http.StatusOK {
 		t.Fatalf("delete stage status = %d", delStageResp.Code)
@@ -3430,7 +3724,26 @@ func TestLabelAPI(t *testing.T) {
 		t.Fatalf("remove ticket label status = %d", removeLabelResp.Code)
 	}
 
-	// Delete label
+	projectDeleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/1/labels/"+strconv.FormatInt(label.ID, 10), nil, token)
+	if projectDeleteResp.Code != http.StatusOK {
+		t.Fatalf("project label delete status = %d body=%s", projectDeleteResp.Code, projectDeleteResp.Body.String())
+	}
+
+	missingProjectDeleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/1/labels/"+strconv.FormatInt(label.ID, 10), nil, token)
+	if missingProjectDeleteResp.Code != http.StatusNotFound {
+		t.Fatalf("missing project label delete status = %d body=%s", missingProjectDeleteResp.Code, missingProjectDeleteResp.Body.String())
+	}
+
+	recreateResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/labels", map[string]string{
+		"name":  "urgent-again",
+		"color": "red",
+	}, token)
+	if recreateResp.Code != http.StatusCreated {
+		t.Fatalf("recreate label status = %d body=%s", recreateResp.Code, recreateResp.Body.String())
+	}
+	decodeResponse(t, recreateResp, &label)
+
+	// Delete label through the global label route.
 	delResp := doJSONRequest(t, handler, http.MethodDelete, "/api/labels/"+strconv.FormatInt(label.ID, 10), nil, token)
 	if delResp.Code != http.StatusOK {
 		t.Fatalf("delete label status = %d", delResp.Code)

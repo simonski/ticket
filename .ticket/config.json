@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "location": "https://ticket.exe.xyz",
-  "project_id": "1",
-  "current_epic_id": "TK-7"
+  "remote": "local",
+  "project_id": "TI",
+  "current_epic_id": "TI-7"
 }

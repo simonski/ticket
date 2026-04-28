@@ -19,13 +19,14 @@ func runCurate(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: tk curate <id> [id...]")
 	}
-	_, api, project, err := resolveCurrentProjectClient()
+	cfg, api, project, err := resolveCurrentProjectClient()
 	if err != nil {
 		return err
 	}
 	var titles []string
 	for _, arg := range args {
-		ticket, err := api.GetTicket(context.Background(), arg)
+		ticketRef := normalizeBareTicketRef(cfg, api, arg)
+		ticket, err := api.GetTicket(context.Background(), ticketRef)
 		if err != nil {
 			return err
 		}
@@ -109,7 +110,8 @@ func runRevise(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(context.Background(), args[1])
+	ticketRef := normalizeBareTicketRef(cfg, svc, args[1])
+	current, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}
@@ -193,11 +195,18 @@ func runIdea(args []string) error {
 		fmt.Println(ideaUsage)
 		return nil
 	case "ls", "list":
-		return runReqList(args[1:])
+		return runIdeaList(args[1:])
 	case "new", "add", "create":
-		return runReqAdd(args[1:])
+		return runTypedTicketCreate("idea", args[1:])
 	case "get", "show":
-		return runReqGet(args[1:])
+		if len(args) > 2 {
+			return errors.New("usage: tk idea get <id>")
+		}
+		id := ""
+		if len(args) == 2 {
+			id = args[1]
+		}
+		return runTypedTicketGet("idea", id)
 	case "shape":
 		return runReqShape(args[1:])
 	case "accept":
@@ -208,7 +217,7 @@ func runIdea(args []string) error {
 		return runReqRevise(args[1:])
 	default:
 		// If the first arg doesn't look like a subcommand, treat as title for "new"
-		return runReqAdd(args)
+		return runTypedTicketCreate("idea", args)
 	}
 }
 
@@ -218,6 +227,10 @@ func runReqAdd(args []string) error {
 
 func runReqList(args []string) error {
 	return runReview(args)
+}
+
+func runIdeaList(args []string) error {
+	return runTypedTicketList("idea")
 }
 
 func runReqGet(args []string) error {
@@ -244,12 +257,13 @@ func runReqShape(args []string) error {
 	if err != nil {
 		return err
 	}
-	current, err := svc.GetTicket(context.Background(), *id)
+	ticketRef := normalizeBareTicketRef(cfg, svc, *id)
+	current, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}
-	if current.Type != "requirement" {
-		return fmt.Errorf("%s is a %s, not a requirement", current.ID, current.Type)
+	if current.Type != "requirement" && current.Type != "idea" {
+		return fmt.Errorf("%s is a %s, not an idea or requirement", current.ID, current.Type)
 	}
 	update := libticket.TicketUpdateRequest{
 		Title:              current.Title,
@@ -324,7 +338,8 @@ func runReqBreak(args []string) error {
 	if err != nil {
 		return err
 	}
-	req, err := svc.GetTicket(context.Background(), *id)
+	ticketRef := normalizeBareTicketRef(cfg, svc, *id)
+	req, err := svc.GetTicket(context.Background(), ticketRef)
 	if err != nil {
 		return err
 	}
@@ -389,24 +404,22 @@ func runDecision(args []string) error {
 		return runTicketCreate(append([]string{"-type", "decision"}, args[1:]...))
 	case "ls", "list":
 		return runDecisionList()
+	case "get", "show":
+		if len(args) > 2 {
+			return errors.New("usage: tk decision get <id>")
+		}
+		id := ""
+		if len(args) == 2 {
+			id = args[1]
+		}
+		return runTypedTicketGet("decision", id)
 	default:
-		return fmt.Errorf("unknown decision command %q; see: ticket decision help", args[0])
+		return runTicketCreate(append([]string{"-type", "decision"}, args...))
 	}
 }
 
 func runDecisionList() error {
-	_, api, project, err := resolveCurrentProjectClient()
-	if err != nil {
-		return err
-	}
-	tickets, err := api.ListTicketsFiltered(context.Background(), project.ID, "decision", "", "", "", "", "", 0, false)
-	if err != nil {
-		return err
-	}
-	for _, ticket := range tickets {
-		fmt.Printf("%s\t%s\t%s\n", ticketLabel(ticket), ticket.Status, ticket.Title)
-	}
-	return nil
+	return runTypedTicketList("decision")
 }
 
 func runConversation(args []string) error {

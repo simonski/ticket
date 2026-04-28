@@ -6,9 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -17,7 +19,7 @@ func runLabel(args []string) error {
 		fmt.Println(labelUsage)
 		return nil
 	}
-	_, svc, project, err := resolveCurrentProjectClient()
+	cfg, svc, project, err := resolveCurrentProjectClient()
 	if err != nil {
 		return err
 	}
@@ -31,7 +33,7 @@ func runLabel(args []string) error {
 			return printJSON(labels)
 		}
 		if len(labels) == 0 {
-			fmt.Println("no labels")
+			printNoEntitiesAvailable("labels")
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -40,21 +42,25 @@ func runLabel(args []string) error {
 			fmt.Fprintf(w, "%d\t%s\t%s\n", l.ID, l.Name, l.Color)
 		}
 		return w.Flush()
-	case "create":
+	case "create", "new":
 		fs := flag.NewFlagSet("label create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "force label id")
 		printID := fs.Bool("printid", false, "print only the created label id")
 		name := fs.String("name", "", "label name")
+		title := fs.String("title", "", "label name")
 		color := fs.String("color", "", "label color (e.g. #ff0000)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
+		if *name == "" {
+			*name = strings.TrimSpace(*title)
+		}
 		if *name == "" && fs.NArg() > 0 {
-			*name = fs.Arg(0)
+			*name = strings.Join(fs.Args(), " ")
 		}
 		if *name == "" {
-			return errors.New("usage: tk label create <name> [-id <id>] [-color <color>]")
+			return errors.New("usage: tk label create <name> [-title <title>] [-id <id>] [-color <color>]")
 		}
 		label, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{ID: optionalInt64Flag(*id), Name: *name, Color: *color})
 		if err != nil {
@@ -67,6 +73,40 @@ func runLabel(args []string) error {
 			return nil
 		}
 		fmt.Printf("label created: %d %s\n", label.ID, label.Name)
+		return nil
+	case "get":
+		if len(args) > 2 {
+			return errors.New("usage: tk label get <id>")
+		}
+		labels, err := svc.ListLabels(context.Background(), project.ID)
+		if err != nil {
+			return err
+		}
+		var label store.Label
+		if len(args) == 2 {
+			var id int64
+			if _, err := fmt.Sscan(strings.TrimSpace(args[1]), &id); err != nil {
+				return errors.New("label id must be numeric")
+			}
+			found, ok := findLabelByID(labels, id)
+			if !ok {
+				return errors.New("label not found")
+			}
+			label = found
+		} else {
+			label, err = mostRecentLabel(labels)
+			if err != nil {
+				return err
+			}
+		}
+		if outputJSON {
+			return printJSON(label)
+		}
+		fmt.Printf("ID        : %d\n", label.ID)
+		fmt.Printf("ProjectID : %d\n", label.ProjectID)
+		fmt.Printf("Name      : %s\n", label.Name)
+		fmt.Printf("Color     : %s\n", label.Color)
+		fmt.Printf("Created   : %s\n", label.CreatedAt)
 		return nil
 	case "delete":
 		fs := flag.NewFlagSet("label delete", flag.ContinueOnError)
@@ -97,13 +137,13 @@ func runLabel(args []string) error {
 		var ticketID string
 		var labelID int64
 		if *idFlag != "" && fs.NArg() > 0 {
-			ticketID = *idFlag
+			ticketID = normalizeBareTicketRef(cfg, svc, *idFlag)
 			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
 		} else if fs.NArg() >= 2 {
 			// positional fallback
-			ticketID = fs.Arg(0)
+			ticketID = normalizeBareTicketRef(cfg, svc, fs.Arg(0))
 			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
@@ -121,12 +161,12 @@ func runLabel(args []string) error {
 		var ticketID string
 		var labelID int64
 		if *idFlag != "" && fs.NArg() > 0 {
-			ticketID = *idFlag
+			ticketID = normalizeBareTicketRef(cfg, svc, *idFlag)
 			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
 		} else if fs.NArg() >= 2 {
-			ticketID = fs.Arg(0)
+			ticketID = normalizeBareTicketRef(cfg, svc, fs.Arg(0))
 			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
@@ -148,7 +188,7 @@ func runLabel(args []string) error {
 		if idStr == "" {
 			return errors.New("usage: tk label show -id <ticket-id>")
 		}
-		ticketID := idStr
+		ticketID := normalizeBareTicketRef(cfg, svc, idStr)
 		labels, err := svc.ListTicketLabels(context.Background(), ticketID)
 		if err != nil {
 			return err
@@ -157,7 +197,7 @@ func runLabel(args []string) error {
 			return printJSON(labels)
 		}
 		if len(labels) == 0 {
-			fmt.Println("no labels")
+			printNoEntitiesAvailable("labels")
 			return nil
 		}
 		for _, l := range labels {

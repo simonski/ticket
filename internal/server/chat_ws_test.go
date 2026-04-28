@@ -142,6 +142,61 @@ func TestChatRuntimeHasCapacity(t *testing.T) {
 	}
 }
 
+func TestChatRuntimeNilAndBridgeEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	var runtime *chatRuntime
+	runtime.setLogger(func(string) {})
+	runtime.stopHeartbeat()
+	runtime.connectionOpened()
+	runtime.connectionClosed()
+	if id := runtime.registerProcess(&chatProcessBridge{}); id != 0 {
+		t.Fatalf("nil runtime registerProcess() = %d, want 0", id)
+	}
+	runtime.unregisterProcess(1)
+	if got := runtime.heartbeatLine(); got != "heartbeat connections=0 processes_running=0 processes_total=0" {
+		t.Fatalf("nil runtime heartbeatLine() = %q", got)
+	}
+	if got := runtime.runningProcessCount(); got != 0 {
+		t.Fatalf("nil runtime runningProcessCount() = %d, want 0", got)
+	}
+
+	live := newChatRuntime()
+	if id := live.registerProcess(nil); id != 0 {
+		t.Fatalf("registerProcess(nil) = %d, want 0", id)
+	}
+	live.unregisterProcess(0)
+	live.processes[1] = nil
+	if got := live.runningProcessCount(); got != 0 {
+		t.Fatalf("runningProcessCount() with nil bridge = %d, want 0", got)
+	}
+	if lines := live.processStatusLines(); len(lines) != 0 {
+		t.Fatalf("processStatusLines() with nil bridge = %#v, want empty", lines)
+	}
+	if !live.hasCapacity(0) {
+		t.Fatal("hasCapacity(0) = false, want unlimited capacity")
+	}
+
+	var bridge *chatProcessBridge
+	if err := bridge.Send("hello"); err == nil {
+		t.Fatal("nil bridge Send() error = nil, want error")
+	}
+	if err := bridge.CloseInput(); err != nil {
+		t.Fatalf("nil bridge CloseInput() error = %v, want nil", err)
+	}
+	emptyBridge := &chatProcessBridge{}
+	if err := emptyBridge.Send("   "); err != nil {
+		t.Fatalf("empty input Send() error = %v, want nil", err)
+	}
+	if err := emptyBridge.Send("hello"); err == nil {
+		t.Fatal("bridge without stdin Send() error = nil, want error")
+	}
+	if err := emptyBridge.CloseInput(); err != nil {
+		t.Fatalf("bridge without stdin CloseInput() error = %v, want nil", err)
+	}
+	emptyBridge.Close()
+}
+
 func TestStartChatBridgeWithDurationEnforcesTimeout(t *testing.T) {
 	t.Setenv("TICKET_CHAT_CMD", "sleep 5")
 	messages := make(chan chatOutboundMessage, 32)
