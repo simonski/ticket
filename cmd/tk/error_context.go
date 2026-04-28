@@ -7,11 +7,18 @@ import (
 	"os"
 	"strings"
 
+	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
 )
 
 func formatRuntimeError(err error) error {
-	if err == nil || outputJSON || !shouldExplainSetup(err) {
+	if err == nil || outputJSON {
+		return err
+	}
+	if concise := conciseRuntimeError(err); concise != nil {
+		return concise
+	}
+	if !shouldExplainSetup(err) {
 		return err
 	}
 	details, detailsErr := currentSetupDetails(err)
@@ -19,6 +26,29 @@ func formatRuntimeError(err error) error {
 		return err
 	}
 	return errors.New(err.Error() + "\n\n" + details)
+}
+
+func conciseRuntimeError(err error) error {
+	resolved, resolveErr := config.ResolveURL()
+	if resolveErr != nil {
+		return nil
+	}
+	if resolved.Mode != config.ModeRemote {
+		return nil
+	}
+	subject := remoteConfigSubject()
+	var statusErr *client.HTTPStatusError
+	if errors.As(err, &statusErr) {
+		if msg, ok := remoteHTTPStatusMessage(subject, resolved.ServerURL, statusErr); ok {
+			return errors.New(msg)
+		}
+		return nil
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if strings.Contains(msg, "cannot connect to ") {
+		return errors.New(fmt.Sprintf("%s is configured for %s, but that server could not be reached.\nCheck that the server, port, and any proxy or tunnel are running.", subject, resolved.ServerURL))
+	}
+	return nil
 }
 
 func shouldExplainSetup(err error) bool {
@@ -166,4 +196,49 @@ func remoteIssueExplanation(err error) string {
 
 func localIssueExplanation() string {
 	return "local mode is active; the CLI is trying to use the SQLite database shown above, so this looks like a local database path, file access, or initialisation problem"
+}
+
+func remoteConfigSubject() string {
+	if config.HasLocationOverride() {
+		return "this command"
+	}
+	if projectPath, ok, _ := config.ProjectPath(); ok && strings.TrimSpace(projectPath) != "" {
+		return "this repository"
+	}
+	return "your ticket CLI"
+}
+
+func remoteHTTPStatusMessage(subject, serverURL string, err *client.HTTPStatusError) (string, bool) {
+	if err == nil {
+		return "", false
+	}
+	switch err.StatusCode {
+	case 401:
+		return fmt.Sprintf("%s is configured for %s, but the server rejected the saved credentials (%s).\nRun `tk login` for that server, or check whether this remote is the right one.", subject, serverURL, err.Status), true
+	case 403:
+		return fmt.Sprintf("%s is configured for %s, but that server refused this request (%s).\nYour account is authenticated but does not have permission for this operation.", subject, serverURL, err.Status), true
+	case 404:
+		if strings.TrimSpace(err.APIError) != "" {
+			return "", false
+		}
+		return fmt.Sprintf("%s is configured for %s, but that server does not expose the expected Ticket API (%s).\nCheck that the remote URL points to the Ticket server, not a different site or path.", subject, serverURL, err.Status), true
+	case 429:
+		return fmt.Sprintf("%s is configured for %s, but that server is rate limiting requests (%s).\nWait a moment and try again, or check whether another process is hammering the API.", subject, serverURL, err.Status), true
+	case 500:
+		return fmt.Sprintf("%s is configured for %s, but that server hit an internal error (%s).\nCheck the server logs, or try again once the server-side fault is fixed.", subject, serverURL, err.Status), true
+	case 502:
+		return fmt.Sprintf("%s is configured for %s, but that server is unavailable behind a proxy or gateway (%s).\nCheck the upstream Ticket service and any reverse proxy in front of it.", subject, serverURL, err.Status), true
+	case 503:
+		return fmt.Sprintf("%s is configured for %s, but that server is currently unavailable (%s).\nCheck whether the server, proxy, or tunnel is up.", subject, serverURL, err.Status), true
+	case 504:
+		return fmt.Sprintf("%s is configured for %s, but that server timed out behind a proxy or gateway (%s).\nCheck the upstream Ticket service and any reverse proxy in front of it.", subject, serverURL, err.Status), true
+	default:
+		if err.StatusCode >= 500 {
+			return fmt.Sprintf("%s is configured for %s, but that server returned %s.\nCheck the server logs or try again once the remote fault is fixed.", subject, serverURL, err.Status), true
+		}
+		if err.StatusCode >= 400 && strings.TrimSpace(err.APIError) == "" {
+			return fmt.Sprintf("%s is configured for %s, but that server rejected the request (%s).\nCheck that the remote URL and server are the ones you expect.", subject, serverURL, err.Status), true
+		}
+		return "", false
+	}
 }

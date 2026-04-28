@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
@@ -176,15 +177,12 @@ func TestFormatRuntimeErrorRemote503IncludesSetup(t *testing.T) {
 	config.SetLocationOverride("https://ticket.example")
 	t.Cleanup(config.ClearLocationOverride)
 
-	err := formatRuntimeError(errors.New("request failed with status 503 Service Unavailable"))
+	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusServiceUnavailable, Status: "503 Service Unavailable"})
 	got := err.Error()
 
 	for _, want := range []string{
-		"request failed with status 503 Service Unavailable",
-		"setup:",
-		"mode             : remote",
-		"configured via   : https://ticket.example",
-		"remote mode is active because this command is using an explicit override; a 503 means that remote server",
+		"this command is configured for https://ticket.example, but that server is currently unavailable (503 Service Unavailable).",
+		"Check whether the server, proxy, or tunnel is up.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("remote runtime error missing %q:\n%s", want, got)
@@ -204,27 +202,76 @@ func TestFormatRuntimeErrorRemote503FromProjectConfigOmitsServerURL(t *testing.T
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
 
-	err := formatRuntimeError(errors.New("request failed with status 503 Service Unavailable"))
+	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusServiceUnavailable, Status: "503 Service Unavailable"})
 	got := err.Error()
 
 	for _, want := range []string{
-		"mode             : remote",
-		"this directory is configured for a remote server; a 503 means that remote server, or something in front of it, is currently unavailable",
+		"this repository is configured for https://ticket.example, but that server is currently unavailable (503 Service Unavailable).",
+		"Check whether the server, proxy, or tunnel is up.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("project-config remote runtime error missing %q:\n%s", want, got)
 		}
 	}
-	if !strings.Contains(got, ".ticket/config.json") {
-		t.Fatalf("project-config remote runtime error should include the project config path:\n%s", got)
-	}
-	for _, unwanted := range []string{
-		"https://ticket.example",
-		"auth override",
-	} {
+	for _, unwanted := range []string{"setup:", ".ticket/config.json", "auth override"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("project-config remote runtime error should omit %q:\n%s", unwanted, got)
 		}
+	}
+}
+
+func TestFormatRuntimeErrorRemote401ExplainsCredentials(t *testing.T) {
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+	t.Setenv("TICKET_HOME", t.TempDir())
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized", APIError: "unauthorized"})
+	got := err.Error()
+
+	for _, want := range []string{
+		"this repository is configured for https://ticket.example, but the server rejected the saved credentials (401 Unauthorized).",
+		"Run `tk login` for that server",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("remote 401 runtime error missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestFormatRuntimeErrorRemote404GenericExplainsWrongServer(t *testing.T) {
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+	t.Setenv("TICKET_HOME", t.TempDir())
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	err := formatRuntimeError(&client.HTTPStatusError{StatusCode: http.StatusNotFound, Status: "404 Not Found"})
+	got := err.Error()
+
+	for _, want := range []string{
+		"this repository is configured for https://ticket.example, but that server does not expose the expected Ticket API (404 Not Found).",
+		"Check that the remote URL points to the Ticket server",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("remote 404 runtime error missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestFormatRuntimeErrorLeavesDomain404Unchanged(t *testing.T) {
+	err := &client.HTTPStatusError{StatusCode: http.StatusNotFound, Status: "404 Not Found", APIError: "ticket not found"}
+	if got := formatRuntimeError(err); got != err {
+		t.Fatalf("formatRuntimeError() should leave domain 404 errors unchanged, got %v", got)
 	}
 }
 

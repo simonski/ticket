@@ -21,10 +21,10 @@ import (
 )
 
 type Client struct {
-	baseURL string
-	token   string
-	http    *http.Client
-	mode    string
+	baseURL     string
+	token       string
+	http        *http.Client
+	mode        string
 	localDBPath string
 
 	localDBMu sync.Mutex
@@ -1539,13 +1539,7 @@ func (c *Client) RequestTicket(ctx context.Context, request TicketRequest) (Tick
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		var apiErr struct {
-			Error string `json:"error"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Error != "" {
-			return TicketRequestResponse{}, errors.New(apiErr.Error)
-		}
-		return TicketRequestResponse{}, fmt.Errorf("request failed with status %s", resp.Status)
+		return TicketRequestResponse{}, statusErrorFromResponse(resp)
 	}
 
 	body, err := io.ReadAll(resp.Body)

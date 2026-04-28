@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -88,6 +89,43 @@ func friendlyConnectionError(err error, baseURL string) error {
 	return fmt.Errorf("cannot connect to %s", baseURL)
 }
 
+type HTTPStatusError struct {
+	StatusCode int
+	Status     string
+	APIError   string
+}
+
+func (e *HTTPStatusError) Error() string {
+	if strings.TrimSpace(e.APIError) != "" {
+		return e.APIError
+	}
+	return fmt.Sprintf("request failed with status %s", e.Status)
+}
+
+func statusErrorFromResponse(resp *http.Response) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return &HTTPStatusError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+		}
+	}
+	var apiErr struct {
+		Error string `json:"error"`
+	}
+	if len(body) > 0 && json.Unmarshal(body, &apiErr) == nil && strings.TrimSpace(apiErr.Error) != "" {
+		return &HTTPStatusError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			APIError:   strings.TrimSpace(apiErr.Error),
+		}
+	}
+	return &HTTPStatusError{
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
+	}
+}
+
 // doJSONBasicAuth is like doJSON but uses HTTP Basic Auth instead of Bearer token.
 func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, password string, body any, out any) error {
 	var reader *bytes.Reader
@@ -117,13 +155,7 @@ func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, pa
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		var apiErr struct {
-			Error string `json:"error"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Error != "" {
-			return errors.New(apiErr.Error)
-		}
-		return fmt.Errorf("request failed with status %s", resp.Status)
+		return statusErrorFromResponse(resp)
 	}
 
 	if out == nil {
@@ -167,13 +199,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, out 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		var apiErr struct {
-			Error string `json:"error"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && apiErr.Error != "" {
-			return errors.New(apiErr.Error)
-		}
-		return fmt.Errorf("request failed with status %s", resp.Status)
+		return statusErrorFromResponse(resp)
 	}
 
 	if out == nil {
