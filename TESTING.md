@@ -42,10 +42,10 @@ verifying each block exits 0.
 make test-tk-test
 
 # Run directly with verbose output
-go run ./cmd/tk-test -v QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
+go run ./cmd/tk-test -v docs/quickstarts/client.md docs/quickstarts/server.md
 
 # Point at a different binary
-go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART_CLIENT.md
+go run ./cmd/tk-test -ticket ./bin/tk docs/quickstarts/client.md
 ```
 
 ### What gets skipped

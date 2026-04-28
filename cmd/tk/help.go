@@ -197,7 +197,7 @@ var helpIndex = map[string]commandHelp{
 	"attach": {
 		usage:   "tk attach [-id] <id> <parent-id>",
 		details: []string{"Alias for `tk set-parent`."},
-		example: "tk attach CUS-T-12 CUS-E-3",
+		example: "tk attach CUS-12 CUS-3",
 	},
 	"unset-parent": {
 		usage:   "tk unset-parent [-id] <id>",
@@ -207,7 +207,7 @@ var helpIndex = map[string]commandHelp{
 	"detach": {
 		usage:   "tk detach [-id] <id>",
 		details: []string{"Alias for `tk unset-parent`."},
-		example: "tk detach CUS-T-12",
+		example: "tk detach CUS-12",
 	},
 	"idle": {
 		usage:   "tk idle [-id] <id>",

@@ -43,7 +43,7 @@ Go coverage gates, Playwright execution, executable docs, and CI test wiring.
 
 | Finding | Severity | Consequence | Evidence | Recommendation |
 |---------|----------|-------------|----------|----------------|
-| `internal/server` proof is still thin relative to the API surface | medium | Auth, websocket, and agent paths still have less proof than the service surface deserves | assessment run `TICKET_FAST_HASH=1 make test-go-cover` on 2026-04-26 (`internal/server` 57.0%) | Add targeted proof around the riskiest server paths. |
+| `internal/server` proof should continue deepening beyond the gate | medium | Auth, websocket, and agent paths deserve ongoing targeted proof even though the gate now passes at 70% | assessment run `TICKET_FAST_HASH=1 make test-go-cover` (`internal/server` 70.0%) | Keep adding targeted proof around the riskiest server paths. |
 | Race testing exists but is not part of CI | medium | Concurrency issues can still hide behind green default gates | `Makefile:122-123`; `.github/workflows/makefile.yaml:25-48` | Decide whether `go test -race ./...` or a narrower race job belongs in CI. |
 
 ## Required handoffs

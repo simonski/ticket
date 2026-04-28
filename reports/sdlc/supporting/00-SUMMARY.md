@@ -48,7 +48,7 @@
 
 ## Top systemic risks
 
-1. **The deployment bundle is still insecure by default.** The compose file pins mutable `latest` images and hard-codes `TICKET_ADMIN_PASSWORD: password`; the entrypoint also falls back to `password` when the variable is absent (`deploy/compose.yaml:3-10`, `deploy/compose.yaml:27-33`, `deploy/entrypoint.sh:12-16`).
+1. **The deployment bundle still needs release hardening.** The known default admin password finding is closed, but the compose file still pins mutable `latest` images (`deploy/compose.yaml:3-10`, `deploy/compose.yaml:27-33`).
 2. **Release provenance is incomplete.** CI builds and publishes images/releases, but the release path has no signing or attestation step (`.github/workflows/makefile.yaml:79-103`, `Makefile:173-180`).
 3. **Trust-boundary hardening remains incomplete.** Request security decisions still honor `X-Forwarded-Proto` without tying it to trusted proxy CIDRs, and chat child processes inherit the full server environment (`internal/server/server.go:668-681`, `internal/server/chat_ws.go:232-237`).
 4. **Operational telemetry is useful but shallow.** `/metrics` exposes liveness/count/memory gauges, while SLO docs explicitly defer request latency and 5xx alerting to logs until counters/histograms are added (`internal/server/api_system.go:33-85`, `docs/SLO.md:72-74`).
@@ -100,7 +100,7 @@
 
 | Priority | Finding | Owner role | Dependency notes |
 |----------|---------|------------|------------------|
-| P0 | Remove committed/fallback `admin/password` deploy defaults | security-engineer | Blocks production deployment |
+| P0 | Pin/sign deploy artifacts and avoid mutable production refs | release-manager | Blocks production-grade release provenance |
 | P1 | Pin deploy image tags or document explicit production pinning; add signing/attestation | supply-chain | Depends on release workflow changes |
 | P1 | Gate `X-Forwarded-Proto` trust on configured proxy CIDRs and filter chat child-process env | application-security | Depends on deployment topology choices |
 | P1 | Finish version metadata sync beyond the OpenAPI contract | api-architect | Depends on docs/spec refresh |

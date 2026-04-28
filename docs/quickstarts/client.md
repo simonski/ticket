@@ -9,7 +9,7 @@ tk initdb
 ```
 
 This creates the shared local database at `$TICKET_HOME/ticket.db`
-(default `~/.ticket/ticket.db`) and bootstraps `admin` / `password`.
+(default `~/.ticket/ticket.db`) and bootstraps the local admin account.
 
 If you want this repo to use its own local database instead of the shared one,
 run `tk initdb .` to create `./.ticket/ticket.db`, register a named local
@@ -39,18 +39,18 @@ Capture lightweight ideas before turning them into tickets:
 ```bash
 tk idea new "Add dark mode"
 tk idea ls              # list all ideas
-tk idea shape -id CUS-4 # refine the new requirement
-tk idea accept requirement CUS-4
+tk idea get RE-4        # inspect the idea; replace RE with your project prefix
+tk idea update -id RE-4 -title "Add dark mode support"
 ```
 
 ## 4. Inspect and organise
 
 ```bash
 tk ls
-tk get   -id CUS-1
+tk get   -id RE-1
 tk summary
-tk attach -id CUS-1 CUS-3
-tk dep add -id CUS-2 CUS-1
+tk attach -id RE-1 RE-3
+tk dep add -id RE-2 RE-1
 ```
 
 ## 5. Move work through the lifecycle
@@ -58,22 +58,22 @@ tk dep add -id CUS-2 CUS-1
 Tickets progress through stages: **design -> develop -> test -> done**.
 
 ```bash
-tk active   -id CUS-1
-tk success  -id CUS-1
+tk active   -id RE-1
+tk success  -id RE-1
 ```
 
 ## 6. Log time and add comments
 
 ```bash
-tk time log -id CUS-1 -m 90 -note "Initial implementation"
-tk time ls  -id CUS-1
+tk time log -id RE-1 -m 90 -note "Initial implementation"
+tk time ls  -id RE-1
 ```
 
 ## 7. Labels and decisions
 
 ```bash
 tk label create backend
-tk label add -id CUS-1 1
+tk label add -id RE-1 1
 
 tk decision add "Use JWT for auth"
 tk decision list
@@ -92,7 +92,7 @@ Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
 
 ```bash
 tk doctor project
-tk doctor ticket -id CUS-1
+tk doctor ticket -id RE-1
 ```
 
 ---
@@ -105,4 +105,4 @@ tk doctor ticket -id CUS-1
 
 ---
 
-Next: [Server mode quickstart](QUICKSTART_SERVER.md) — multi-user, web UI, and AI agents.
+Next: [Server mode quickstart](server.md) — multi-user, web UI, and AI agents.

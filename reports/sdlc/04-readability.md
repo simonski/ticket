@@ -29,7 +29,7 @@ Primary docs, main web UI affordances, secondary web drift, hotspot files, and u
 | Comments explain why | SHOULD | partial | `internal/server/server.go:668-681` | Some risky logic is documented, but not uniformly. |
 | Large files split when structure unclear | SHOULD | fail | assessment run `wc -l` on 2026-04-26 | Large ownership centers remain. |
 | User-visible wording consistent across surfaces | SHOULD | partial | `web/static/index.html:1622-1623`; `web/site2/index.html:808-809`; `docs/LIFECYCLE.md:14-15` | The main UI is aligned, but `site2` still drifts. |
-| Examples realistic/current | SHOULD | pass | `README.md:27-35`; `QUICKSTART_SERVER.md:13-35` | Examples are generally realistic, even if some bootstrap wording still needs hardening. |
+| Examples realistic/current | SHOULD | pass | `README.md:27-42`; `docs/quickstarts/server.md:13-45` | Examples are realistic and use safer bootstrap wording. |
 
 ## Findings
 

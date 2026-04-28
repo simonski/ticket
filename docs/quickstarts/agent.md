@@ -7,8 +7,8 @@ This guide shows how to run `tk` as an autonomous agent worker, plus dry-run pat
 As an `admin`, ensure you have access to a `tk server` instance:
 
 ```bash
-tk remote add local-server http://ticket.localhost
-tk login -username admin -password password
+tk remote add local-server http://localhost:8080
+tk login -username admin -password <admin-password>
 tk project remote local-server
 tk status
 ```
@@ -47,7 +47,7 @@ tk agent request -dryrun
 tk agent request -dryrun -loop 10 -sleep 2
 
 # target one specific ticket, still no mutation
-tk agent request -dryrun -id TK-123
+tk agent request -dryrun -id CUS-123
 ```
 
 `-dryrun` is the safest way to test routing/eligibility without the agent claiming or updating tickets.

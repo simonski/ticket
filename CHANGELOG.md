@@ -2,6 +2,18 @@
 
 All notable changes to the Ticket project are documented here.
 
+## [0.1.861] - 2026-04-28
+
+### Changed
+- **Documentation structure** — moved detailed quickstarts into `docs/quickstarts/`, the server tutorial into `docs/tutorials/`, SDLC assessment methodology into `docs/process/`, and historical planning notes into `docs/archive/`.
+- **Public contract docs** — aligned `SPEC.md`, `openapi.yaml`, and `cmd/tk/VERSION` on version `0.1.861`.
+- **Server coverage gate** — raised the enforced `internal/server` package coverage threshold to 70%.
+- **Named remote docs** — refreshed user and developer docs around `$TICKET_HOME`, named remotes, repo-local `remote`/`project_id`, and compatibility-only `location` values.
+
+### Fixed
+- **Bootstrap guidance** — changed deploy/server docs to require explicit admin credentials for shared deployments instead of normalizing development fallback credentials.
+- **Root documentation clutter** — archived stale TODO/planning files so the repository root presents only active product, contributor, testing, security, and contract docs.
+
 ## [0.1.697] - 2026-03-28
 
 ### Added

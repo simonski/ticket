@@ -13,7 +13,7 @@ check whether the **entire codebase** complies with the standards explained in
 the documentation. The goal is not legal theater or generic policy prose. The
 goal is to determine whether the codebase, tests, CI, docs, templates,
 artifacts, and workflows actually comply with the expectations set by
-`SDLC.md`, `CONTRIBUTING.md`, and the repository-facing support documents.
+`docs/process/SDLC.md`, `CONTRIBUTING.md`, and the repository-facing support documents.
 
 ## Core Principle
 
@@ -28,7 +28,7 @@ artifacts, and workflows actually comply with the expectations set by
 
 Read these first:
 
-1. `SDLC.md`
+1. `docs/process/SDLC.md`
 2. `CONTRIBUTING.md`
 3. `SECURITY.md`
 4. `CODE_OF_CONDUCT.md`
@@ -56,7 +56,7 @@ expectations across five areas:
 2. **Security process** — private vulnerability reporting, safe defaults, security documentation
 3. **Engineering controls** — testing, linting, coverage, build/release guidance
 4. **Documentation integrity** — README/quickstarts/guides/specs agree with implementation
-5. **SDLC evidence** — the repo can support the kind of evidence-backed assessment required by `SDLC.md`
+5. **SDLC evidence** — the repo can support the kind of evidence-backed assessment required by `docs/process/SDLC.md`
 
 Do not treat this as a docs-only review. Inspect the whole repository.
 
@@ -114,7 +114,7 @@ Check whether `SECURITY.md` matches repository reality:
 
 ### 4. SDLC methodology compliance
 
-Use `SDLC.md` as the governing standard for evidence and reporting discipline.
+Use `docs/process/SDLC.md` as the governing standard for evidence and reporting discipline.
 Assess whether the repo supports that methodology by checking:
 
 - required reports and report locations exist where expected

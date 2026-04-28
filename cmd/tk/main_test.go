@@ -641,7 +641,7 @@ func TestRunDockerComposePrintsComposeTemplateToStdout(t *testing.T) {
 		"com.centurylinklabs.watchtower.enable=true",
 		"TICKET_DATA_DIR: /data",
 		"- ticket-data:/data",
-		"TICKET_ADMIN_PASSWORD: password",
+		"TICKET_ADMIN_PASSWORD: ${TICKET_ADMIN_PASSWORD:?Set TICKET_ADMIN_PASSWORD before first boot}",
 		"watchtower:",
 		"containrrr/watchtower:latest",
 		"/var/run/docker.sock:/var/run/docker.sock",
@@ -7138,7 +7138,7 @@ func TestRunProjectRemoveTeamRequiresArgs(t *testing.T) {
 // Quickstart verification tests
 // ---------------------------------------------------------------------------
 
-// TestQuickstartClient exercises every command documented in QUICKSTART_CLIENT.md
+// TestQuickstartClient exercises every command documented in docs/quickstarts/client.md
 // using local mode (no server).
 func TestQuickstartClient(t *testing.T) {
 	setupLocalCLI(t)
@@ -7257,7 +7257,7 @@ func TestQuickstartClient(t *testing.T) {
 	}
 }
 
-// TestQuickstartServer exercises key commands from QUICKSTART_SERVER.md
+// TestQuickstartServer exercises key commands from docs/quickstarts/server.md
 // using a real httptest server with full API.
 func TestQuickstartServer(t *testing.T) {
 	tempDir := t.TempDir()

@@ -5,8 +5,8 @@
 //
 // Usage:
 //
-//	go run ./cmd/tk-test QUICKSTART_CLIENT.md [QUICKSTART_SERVER.md ...]
-//	go run ./cmd/tk-test -ticket ./bin/ticket QUICKSTART_CLIENT.md
+//	go run ./cmd/tk-test docs/quickstarts/client.md [docs/quickstarts/server.md ...]
+//	go run ./cmd/tk-test -ticket ./bin/ticket docs/quickstarts/client.md
 package main
 
 import (

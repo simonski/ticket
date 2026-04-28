@@ -16,7 +16,7 @@ Or, download a binary for your platform from the [releases page](https://github.
 
 `tk` works in two modes - *local* and *remote*
 
-### [Local mode](QUICKSTART_CLIENT.md)
+### [Local mode](docs/quickstarts/client.md)
 
 In local mode, the client talks to SQLite directly. No server needed.
 `tk initdb` creates the shared local database at `$TICKET_HOME/ticket.db`
@@ -35,7 +35,7 @@ tk new "First ticket"
 tk ls
 ```
 
-### [Server mode](QUICKSTART_SERVER.md)
+### [Server mode](docs/quickstarts/server.md)
 
 Run an HTTP server with multi-user auth, a web Kanban board, WebSocket live
 updates, and AI agent support. Best for teams, shared backlogs, and CI/CD.
@@ -74,7 +74,7 @@ Setting state to `success` auto-advances to the next stage.
 
 ---
 
-## Daily sdlc
+## Daily workflow
 
 ```bash
 tk project create -prefix CUS -title "Customer Portal"
@@ -110,7 +110,7 @@ labels, dependencies, time entries, and decision/idea artifacts:
 ./scripts/populate_todo_example.sh
 ```
 
-Full walkthrough: [QUICKSTART_TODO_EXAMPLE.md](./QUICKSTART_TODO_EXAMPLE.md).
+Full walkthrough: [docs/quickstarts/todo-example.md](./docs/quickstarts/todo-example.md).
 
 ---
 

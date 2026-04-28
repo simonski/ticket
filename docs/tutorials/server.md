@@ -21,7 +21,7 @@ tk server
 ```
 
 That creates `$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`), bootstraps
-the default `admin` / `password` account, and starts the web/API server on
+the initial admin account, and starts the web/API server on
 `http://localhost:8080`.
 
 Leave this terminal running.
@@ -55,9 +55,7 @@ When prompted:
 1. choose **Remote server**
 2. enter `http://localhost:8080`
 3. say you already have an account
-4. log in as:
-   - username: `admin`
-   - password: `password`
+4. log in with your admin credentials
 5. create a new project when asked
 
 Use values like:

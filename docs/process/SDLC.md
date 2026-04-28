@@ -11,7 +11,7 @@ This methodology defines the **stable reporting contract** for future SDLC runs.
 - The existing SDLC skill may assess the repository through many specialist lenses.
 - Those specialist findings MUST be consolidated into the nine domains in this document.
 - If a future SDLC run uses more granular role reports, those role reports are supporting evidence, not a replacement for the domain reports required here.
-- `SDLC.md` is the governing methodology; the skill implementation must conform to it.
+- `docs/process/SDLC.md` is the governing methodology; the skill implementation must conform to it.
 
 ## 1. Objectives
 
@@ -64,7 +64,7 @@ reports/sdlc/
 
 `reports/sdlc/00-SUMMARY.md` MUST include:
 
-- methodology version or reference to `SDLC.md`
+- methodology version or reference to `docs/process/SDLC.md`
 - assessment date
 - project name
 - scope reviewed

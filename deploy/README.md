@@ -8,6 +8,8 @@ echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u simonski --password-stdin
 
 This compose file stores the database in `./data` on the host.
 
+Before the first start, set `TICKET_ADMIN_PASSWORD` in your shell or `.env` file.
+
 Start:
 
 ```bash

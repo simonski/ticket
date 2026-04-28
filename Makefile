@@ -162,7 +162,7 @@ test-playwright:
 	npx playwright test
 
 test-tk-test: build-bin
-	go run ./cmd/tk-test QUICKSTART_CLIENT.md QUICKSTART_SERVER.md
+	go run ./cmd/tk-test docs/quickstarts/client.md docs/quickstarts/server.md
 
 test-todo-example: build-bin
 	./scripts/verify_todo_example.sh

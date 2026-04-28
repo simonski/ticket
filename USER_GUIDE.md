@@ -2,15 +2,17 @@
 
 `tk` is a ticket management tool.
 
-This guide describes a single Go binary that provides a server, a CLI, and an embedded web application backed by SQLite.
+This guide describes a single Go binary that provides a CLI, HTTP API/server,
+embedded web application, and terminal UI backed by SQLite.
 
 ## How `ticket` Works
 
-`tk` has three interfaces:
+`tk` has four interfaces:
 
-1. The server, which owns persistence, authentication, and collaboration.
-2. The CLI, which provides fast and explicit terminal sdlcs.
+1. The CLI, which provides fast and explicit terminal workflows.
+2. The HTTP API/server, which owns persistence, authentication, and collaboration.
 3. The web app, which is embedded in the same binary and uses the same API.
+4. The TUI, which provides full-screen terminal navigation and editing.
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
@@ -19,7 +21,7 @@ All project data follows the server data model and API semantics, whether you ar
 - `$TICKET_HOME` (default `~/.ticket`) stores the shared local database, global
   config, named remotes, and remote credentials
 - `.ticket/config.json` in the current repo or directory stores non-secret
-  routing for that location
+  routing for that repo
 
 Global config keeps the remote registry and default local backend, for example:
 
@@ -83,7 +85,7 @@ so the current repo uses that database from then on.
 Bootstrap resolution works like this:
 
 - admin username: always `admin`
-- admin password: `-password` if provided, otherwise `password`
+- admin password: `-password` if provided; use an explicit password for any shared or persistent server
 - existing database file: overwritten only when `--force` is supplied
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 - non-interactive project setup: use `-prefix`, `-name`, and `-git` to rename the default project after bootstrap
@@ -149,20 +151,23 @@ In `-v` mode, chat sessions also print prompt/output activity, heartbeat status 
 
 On startup, `tk server` also prints a colored ASCII-art `TICKET` banner before the listen message.
 
-To run the server in Docker with a persistent SQLite volume:
+To run the server in Docker with a persistent SQLite volume from a repository
+checkout:
 
 ```bash
 docker compose -f deploy/compose.yaml up -d
 docker compose -f deploy/compose.yaml logs -f
-tk docker-compose > compose.yaml
 ```
 
 The container stores its database in the bind-mounted `./data` directory at
-`/data/ticket.db`, initialises on first boot, and bootstraps `admin` /
-`password`. Set `TICKET_ADMIN_PASSWORD` before startup if you want to override
-that initial password before the first boot.
+`/data/ticket.db` and initialises on first boot. Set `TICKET_ADMIN_PASSWORD`
+before the first boot; the container refuses to initialise a new database
+without it.
 
-If you need the compose YAML directly from the Ticket binary, use `tk docker-compose`.
+On a deployed host, copy `deploy/README.md` and `deploy/compose.yaml` to the
+deployment directory as `README.md` and `compose.yaml`, then follow the minimal
+commands in that README. If you need the compose YAML directly from the Ticket
+binary, use `tk docker-compose > compose.yaml` and review it before deploying.
 
 Immediately below the banner it prints:
 
@@ -307,7 +312,6 @@ tk config delete project_id
 Supported local keys are:
 
 - `location`
-- `username`
 - `project_id`
 - `current_epic_id`
 
@@ -315,9 +319,10 @@ Supported local keys are:
 steady-state routing model is named remotes in `$TICKET_HOME/config.json` plus a
 repo-local `remote` binding in `.ticket/config.json`.
 
-In REMOTE mode it prints:
+In REMOTE mode it prints at least:
 
 - `mode: remote`
+- `remote: <name>`
 - `location: <http(s)://server>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
@@ -327,11 +332,12 @@ Then it calls the remote status endpoint and prints:
 - `connection: success` in green if the server responds successfully
 - `connection: failure` in red if the server cannot be contacted or returns an error
 
-In LOCAL mode it prints:
+In LOCAL mode it prints at least:
 
 - `mode: local`
-- `db_path: <resolved database path>`
-- `db_exists: true|false`
+- `TICKET_HOME: <resolved ticket home path>`
+- `project: <current project>`
+- `config_file: <repo-local config path when present>`
 
 In LOCAL mode, commands act as the bootstrap `admin` user by default. No login or password prompt is required.
 

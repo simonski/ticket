@@ -30,29 +30,34 @@ docker pull ghcr.io/simonski/ticket:latest
 # 2. Create the persistent data directory
 mkdir -p ./data
 
-# 3. Start the server
+# 3. Set the first admin password outside source control
+export TICKET_ADMIN_PASSWORD="<secret>"
+
+# 4. Start the server
 docker compose up -d
 
-# 4. Verify health
+# 5. Verify health
 curl http://localhost:8080/api/healthz
 # Expected: {"status":"ok","version":"0.1.x"}
 
-# 5. Configure the CLI for the running server
+# 6. Configure the CLI for the running server
 tk init
 # Choose "Remote server" and enter http://localhost:8080 when prompted.
 
-# 6. Create the first admin user, then log in
-tk register -username admin -password <secret>
+# 7. Log in with the bootstrapped admin account
 tk login -username admin -password <secret>
 
-# 7. Create the first project
+# 8. Create the first project
 tk project new -title "My Project" -prefix MP
 ```
 
+On first boot the container creates `/data/ticket.db` and bootstraps the
+`admin` account. Set `TICKET_ADMIN_PASSWORD` before the first boot and store it
+outside source control.
+
 **Checklist before going live:**
-- [ ] `TICKET_ENCRYPTION_KEY` is set (required for email encryption at rest)
+- [ ] `TICKET_ADMIN_PASSWORD` was set before the first boot and recorded in your secret store
 - [ ] TLS termination is configured at the reverse proxy
-- [ ] `TICKET_SESSION_EXPIRY_DAYS` is set to an appropriate value (default: 30)
 - [ ] Daily backup cron is scheduled (see [Backup and restore](#backup-and-restore))
 - [ ] Docker resource limits are set in `compose.yaml`
 

@@ -1,10 +1,8 @@
 # Design
 
-The authoritative lifecycle remodel specification is
-`docs/LIFECYCLE.md`. The authoritative phase 1 entity definition is
-`docs/ENTITY_MODEL.md`. Where this file still describes older entity or
-single-status assumptions, those dedicated documents take precedence until the
-rest of this document is rewritten.
+This document describes the current high-level architecture. The detailed
+lifecycle model is specified in `docs/LIFECYCLE.md`, and the detailed entity
+model is specified in `docs/ENTITY_MODEL.md`.
 
 ## Product Summary
 
@@ -144,7 +142,7 @@ Projects are the top-level container for work items.
 
 `Ticket` is the main work artifact. All item types share one core model.
 
-- `ticket_id` (TEXT PRIMARY KEY — the human-readable key, e.g. `TK-1`, `CUS-T-42`)
+- `ticket_id` (TEXT PRIMARY KEY — the human-readable key, e.g. `TK-1`, `CUS-42`)
 - `project_id`
 - `parent_id`
 - `clone_of`
@@ -340,8 +338,8 @@ Bootstrap defaults:
   - 3 example teams with sample users assigned across those teams
 
 `tk init` must bind the current repo or directory by writing `.ticket/config.json`.
-In local mode that file binds the location to a project in the selected local
-remote database. In remote mode it binds the location to a named remote and
+In local mode that file binds the repo to a project in the selected local
+remote database. In remote mode it binds the repo to a named remote and
 project, while credentials remain under `$TICKET_HOME`.
 
 Snapshot portability:
@@ -430,7 +428,7 @@ tk logout
 In REMOTE mode it must print at least:
 
 - `mode: remote`
-- `server: <configured http(s) location>`
+- `server: <configured http(s) remote URL>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
@@ -587,7 +585,7 @@ tk list -type bug
 tk list -status develop/idle
 tk search "password reset"
 tk search "password reset" -allprojects
-tk get CUS-T-42
+tk get CUS-42
 tk orphans
 ```
 
@@ -686,8 +684,8 @@ The first release must include:
 Representative commands:
 
 ```bash
-ticket history CUS-T-42
-ticket comment add CUS-T-42 "Waiting on API changes."
+ticket history CUS-42
+ticket comment add CUS-42 "Waiting on API changes."
 ```
 
 ## CLI Design
@@ -711,9 +709,9 @@ tk epic "Authentication"
 tk add "Customers can reset their password."
 tk bug "Reset token expires immediately."
 tk ls
-tk get CUS-T-42
+tk get CUS-42
 tk search "password reset"
-tk history CUS-T-42
+tk history CUS-42
 ```
 
 The CLI should support only the aliases that are part of the documented command surface.

@@ -28,11 +28,17 @@ The authoritative system contract is in [SPEC.md](./SPEC.md). Full user-facing d
 
 If you're new to the repo, read these first:
 
-1. [QUICKSTART.md](./QUICKSTART.md) - choose local or server mode
-2. [QUICKSTART_TODO_EXAMPLE.md](./QUICKSTART_TODO_EXAMPLE.md) - reproducible seeded todo scenario
-3. [docs/ONBOARDING.md](./docs/ONBOARDING.md) - setup, reading order, and common pitfalls
-4. [CLAUDE.md](./CLAUDE.md) - build/test commands, architecture, and package map
-5. [CONTRIBUTING.md](./CONTRIBUTING.md) - branch naming, commit style, and PR expectations
+1. [QUICKSTART.md](./QUICKSTART.md) - choose local, server, or deployed mode
+2. [docs/quickstarts/todo-example.md](./docs/quickstarts/todo-example.md) - reproducible seeded todo scenario
+3. [USER_GUIDE.md](./USER_GUIDE.md) - practical CLI, server, web, and TUI reference
+4. [SPEC.md](./SPEC.md) and [openapi.yaml](./openapi.yaml) - public contract
+5. [docs/ONBOARDING.md](./docs/ONBOARDING.md) - contributor setup, reading order, and common pitfalls
+6. [CLAUDE.md](./CLAUDE.md) - build/test commands, architecture, and package map
+7. [CONTRIBUTING.md](./CONTRIBUTING.md) - branch naming, commit style, and PR expectations
+
+Longer mode-specific guides live under [docs/quickstarts/](./docs/quickstarts/).
+Operational runbooks live in [docs/RUNBOOKS.md](./docs/RUNBOOKS.md), and
+historical planning notes are archived under [docs/archive/](./docs/archive/).
 
 ## Community
 

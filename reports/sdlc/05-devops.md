@@ -59,12 +59,11 @@ GitHub Actions, release Makefile targets, deploy compose, health/metrics, and ba
 | ID | Priority | Recommendation | Owner area | Dependency | Evidence of completion |
 |----|----------|----------------|------------|------------|------------------------|
 | R3 | high | Add release signing/attestation and stop publishing mutable deployment references | devops | CI/release changes | Signed artifacts/images and immutable deploy refs |
-| R4 | high | Remove the committed deploy default password and require an explicit bootstrap secret path | cyber | deploy UX | No committed default password |
 | R11 | medium | Add request-level counters/histograms to `/metrics` | devops | observability design | `/metrics` includes request-level telemetry |
 
 ## Changes since last run
 - The pipeline is objectively healthier than the baseline because the OpenAPI gate, coverage gate, and Playwright runner are all green in the current tree (`.github/workflows/makefile.yaml:25-48`).
-- The release/deploy hardening findings themselves did not move: signing, mutable refs, and bootstrap secrets remain open.
+- The known-default bootstrap secret finding is closed; signing and mutable refs remain open.
 
 ## Open questions
 - Should the repo keep a demo-optimized compose bundle and add a second production profile, or harden the single shipped deploy path?

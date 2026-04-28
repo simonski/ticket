@@ -42,7 +42,6 @@ Request security, session/cookie behavior, deploy defaults, proxy trust, and sub
 
 | Finding | Severity | Consequence | Evidence | Recommendation |
 |---------|----------|-------------|----------|----------------|
-| Deploy bundle still ships a known default admin password | high | First-boot deployments can be exposed with predictable credentials | `deploy/compose.yaml:6-10`; `deploy/entrypoint.sh:12-16` | Remove the committed default and require an explicit bootstrap secret path. |
 | `X-Forwarded-Proto` is trusted without trusted-proxy validation | medium | Misconfigured or untrusted proxy chains can influence secure-cookie and HSTS behavior | `internal/server/server.go:668-681` | Validate trusted proxies before honoring forwarded headers. |
 | Chat subprocess inherits the full server environment | medium | Sensitive env values can leak into child processes configured for chat backends | `internal/server/chat_ws.go:232-237` | Whitelist child-process env instead of appending full `os.Environ()`. |
 
@@ -50,23 +49,22 @@ Request security, session/cookie behavior, deploy defaults, proxy trust, and sub
 
 | Consumer | Reason | Artifact or question |
 |----------|--------|----------------------|
-| infosec | Deploy defaults, env inheritance, and proxy trust affect information-security posture | Carry forward known-default-password and env-leak concerns |
-| devops | Proxy and bootstrap-secret fixes require deployment/release changes | Decide secret injection/bootstrap UX |
+| infosec | Env inheritance and proxy trust affect information-security posture | Carry forward env-leak concerns |
+| devops | Proxy and release hardening require deployment/release changes | Decide trusted-proxy and immutable-image UX |
 
 ## Recommendations
 
 | ID | Priority | Recommendation | Owner area | Dependency | Evidence of completion |
 |----|----------|----------------|------------|------------|------------------------|
-| R4 | high | Remove the committed deploy default password and require a first-boot override/secret path | cyber | deploy UX | No committed default secret in deploy bundle or bootstrap docs |
 | R5 | medium | Validate trusted proxies before honoring `X-Forwarded-Proto` | cyber | proxy config shape | Secure-cookie/HSTS decisions ignore untrusted forwarded headers |
 | R6 | medium | Whitelist child-process env for chat/analyse subprocesses | infosec | subprocess config | Child processes receive only required env vars |
 
 ## Changes since last run
 - The surrounding platform is healthier because OpenAPI validation, coverage gates, and browser runner stability improved elsewhere in the stack.
-- The actual cyber blockers did not materially change: deploy defaults, proxy trust, and child-process env breadth are still the highest-leverage issues.
+- The known-default deploy password blocker is closed; proxy trust and child-process env breadth are still the highest-leverage cyber issues.
 
 ## Open questions
-- Should bootstrap favor a generated one-time admin secret, an explicit required env var, or a separate demo profile?
+- Should deploy docs move from mutable `latest` images to pinned production image references?
 
 ## Verdict
 This repo still has real cyber posture - headers, cookies, and CI security scanning are not aspirational. The score stays flat because the default deploy path is still insecure, forwarded-proto trust is too implicit, and child-process env handling remains broader than it should be.

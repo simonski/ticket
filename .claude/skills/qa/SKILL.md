@@ -197,11 +197,11 @@ Add fuzz tests for any function that:
 ```go
 func FuzzParseTicketKey(f *testing.F) {
     // seed corpus — known valid and boundary cases
-    f.Add("CUS-T-1")
-    f.Add("CUS-T-0")
+    f.Add("CUS-1")
+    f.Add("CUS-0")
     f.Add("")
     f.Add("a")
-    f.Add("CUS-T-99999999")
+    f.Add("CUS-99999999")
     f.Add("'; DROP TABLE tickets; --")
     f.Add("<script>alert(1)</script>")
     f.Add(strings.Repeat("A", 1000))

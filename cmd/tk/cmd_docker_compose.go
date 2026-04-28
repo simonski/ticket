@@ -15,7 +15,7 @@ const dockerComposeTemplate = `services:
       TICKET_DATA_DIR: /data
       TICKET_DB_PATH: /data/ticket.db
       TICKET_SERVER_ADDR: 0.0.0.0:8080
-      TICKET_ADMIN_PASSWORD: password
+      TICKET_ADMIN_PASSWORD: ${TICKET_ADMIN_PASSWORD:?Set TICKET_ADMIN_PASSWORD before first boot}
     ports:
       - "8080:8080"
     volumes:

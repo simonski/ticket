@@ -171,7 +171,7 @@ components:
       properties:
         ticket_id:
           type: string
-          description: "Human key, e.g. CUS-T-42"
+          description: "Human key, e.g. CUS-42"
         project_id:
           type: integer
           format: int64
@@ -670,7 +670,7 @@ components:
     TicketExample:
       summary: A typical task ticket
       value:
-        ticket_id: "CUS-T-42"
+        ticket_id: "CUS-42"
         project_id: 1
         type: "task"
         title: "Implement login page"
@@ -747,7 +747,7 @@ components:
           stage: "develop"
           state: "active"
           status: "develop/active"
-        - ticket_id: "CUS-T-42"
+        - ticket_id: "CUS-42"
           project_id: 1
           type: "task"
           title: "Implement login page"
@@ -769,14 +769,14 @@ components:
       value:
         - id: 101
           project_id: 1
-          ticket_id: "CUS-T-42"
+          ticket_id: "CUS-42"
           event_type: "ticket.created"
           payload: "{\"title\":\"Implement login page\"}"
           created_by: "admin"
           created_at: "2025-02-01T09:00:00Z"
         - id: 102
           project_id: 1
-          ticket_id: "CUS-T-42"
+          ticket_id: "CUS-42"
           event_type: "ticket.updated"
           payload: "{\"stage\":\"test\",\"state\":\"idle\"}"
           created_by: "alice"
@@ -787,7 +787,7 @@ components:
       value:
         status: "ASSIGNED"
         ticket:
-          ticket_id: "CUS-T-42"
+          ticket_id: "CUS-42"
           project_id: 1
           type: "task"
           title: "Implement login page"
@@ -3793,7 +3793,7 @@ paths:
           required: true
           schema:
             type: string
-          description: "Ticket human key (e.g. CUS-T-42) or internal ID"
+          description: "Ticket human key (e.g. CUS-42) or internal ID"
       responses:
         '200':
           description: Ticket details
