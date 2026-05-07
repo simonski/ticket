@@ -147,6 +147,7 @@ type TicketService interface {
 	RemoveDependency(ctx context.Context, request DependencyRequest) error
 	ListDependencies(ctx context.Context, id string) ([]store.Dependency, error)
 	RequestTicket(ctx context.Context, request TicketRequest) (TicketRequestResponse, error)
+	InterveneTicket(ctx context.Context, id string, request InterventionRequest) (InterventionResponse, error)
 	CreateStoryWithRequest(ctx context.Context, request StoryCreateRequest) (store.Story, error)
 	CreateStory(ctx context.Context, projectID int64, title, description string) (store.Story, error)
 	ListStories(ctx context.Context, projectID int64) ([]store.Story, error)

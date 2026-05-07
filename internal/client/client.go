@@ -1558,6 +1558,134 @@ func (c *Client) RequestTicket(ctx context.Context, request TicketRequest) (Tick
 	return response, nil
 }
 
+func (c *Client) InterveneTicket(ctx context.Context, id string, request InterventionRequest) (InterventionResponse, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return InterventionResponse{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return InterventionResponse{}, err
+		}
+		current, err := store.GetTicket(ctx, db, id)
+		if err != nil {
+			return InterventionResponse{}, err
+		}
+		if strings.TrimSpace(strings.ToLower(current.State)) != store.StateFail {
+			return InterventionResponse{}, errors.New("ticket must be in fail state to intervene")
+		}
+		outcome := strings.TrimSpace(strings.ToLower(request.Outcome))
+		if outcome == "" {
+			return InterventionResponse{}, errors.New("outcome is required")
+		}
+		var ticket store.Ticket
+		var followUp *store.Ticket
+		switch outcome {
+		case "retry-role":
+			ticket, err = store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
+				Title:              current.Title,
+				Description:        current.Description,
+				AcceptanceCriteria: current.AcceptanceCriteria,
+				DORMap:             current.DORMap,
+				DODMap:             current.DODMap,
+				ACMap:              current.ACMap,
+				GitRepository:      current.GitRepository,
+				GitBranch:          current.GitBranch,
+				ParentID:           current.ParentID,
+				Assignee:           current.Assignee,
+				Stage:              current.Stage,
+				State:              store.StateIdle,
+				Priority:           current.Priority,
+				Order:              current.Order,
+				EstimateEffort:     current.EstimateEffort,
+				EstimateComplete:   current.EstimateComplete,
+				Type:               current.Type,
+				UpdatedBy:          user.ID,
+				ActorUsername:      user.Username,
+				ActorRole:          user.Role,
+			})
+		case "retry-stage":
+			ticket, err = store.PreviousTicket(ctx, db, id, user.Username, user.ID)
+		case "split-work":
+			followUpTicket, createErr := store.CreateTicket(ctx, db, store.TicketCreateParams{
+				ProjectID:          current.ProjectID,
+				Type:               "task",
+				Title:              "Follow-up: " + strings.TrimSpace(current.Title),
+				Description:        strings.TrimSpace("Created from intervention on " + current.ID + ".\n\n" + request.Message),
+				AcceptanceCriteria: current.AcceptanceCriteria,
+				DORMap:             current.DORMap,
+				DODMap:             current.DODMap,
+				ACMap:              current.ACMap,
+				GitRepository:      current.GitRepository,
+				GitBranch:          current.GitBranch,
+				Priority:           current.Priority,
+				EstimateEffort:     current.EstimateEffort,
+				EstimateComplete:   "",
+				Author:             user.Username,
+				CreatedBy:          user.ID,
+			})
+			if createErr != nil {
+				return InterventionResponse{}, createErr
+			}
+			followUp = &followUpTicket
+			ticket, err = store.UpdateTicket(ctx, db, id, store.TicketUpdateParams{
+				Title:              current.Title,
+				Description:        current.Description,
+				AcceptanceCriteria: current.AcceptanceCriteria,
+				DORMap:             current.DORMap,
+				DODMap:             current.DODMap,
+				ACMap:              current.ACMap,
+				GitRepository:      current.GitRepository,
+				GitBranch:          current.GitBranch,
+				ParentID:           current.ParentID,
+				Assignee:           current.Assignee,
+				Stage:              current.Stage,
+				State:              store.StateIdle,
+				Priority:           current.Priority,
+				Order:              current.Order,
+				EstimateEffort:     current.EstimateEffort,
+				EstimateComplete:   current.EstimateComplete,
+				Type:               current.Type,
+				UpdatedBy:          user.ID,
+				ActorUsername:      user.Username,
+				ActorRole:          user.Role,
+			})
+		case "cancel":
+			ticket, err = store.SetTicketArchived(ctx, db, id, true, user.Username, user.ID)
+		default:
+			return InterventionResponse{}, errors.New("invalid outcome")
+		}
+		if err != nil {
+			return InterventionResponse{}, err
+		}
+		if strings.TrimSpace(request.Message) != "" {
+			_, _ = store.AddComment(ctx, db, ticket.ID, user.ID, request.Message)
+		}
+		historyPayload := map[string]any{
+			"outcome": outcome,
+			"who":     user.Username,
+			"message": request.Message,
+		}
+		if followUp != nil {
+			historyPayload["follow_up_ticket_id"] = followUp.ID
+			historyPayload["follow_up_ticket_key"] = followUp.ID
+		}
+		if err := store.AddHistoryEvent(ctx, db, ticket.ProjectID, ticket.ID, "ticket_intervention_decided", historyPayload, user.ID); err != nil {
+			return InterventionResponse{}, err
+		}
+		return InterventionResponse{
+			Ticket:       ticket,
+			FollowUp:     followUp,
+			Decision:     outcome,
+			Intervention: true,
+		}, nil
+	}
+	var response InterventionResponse
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/intervene", id), request, &response)
+	return response, err
+}
+
 func (c *Client) CreateWorkflow(ctx context.Context, request WorkflowRequest) (store.Workflow, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

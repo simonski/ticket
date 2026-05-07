@@ -117,6 +117,8 @@ func runTicketNS(args []string) error {
 		return runUnassign(args[1:])
 	case "request":
 		return runRequest(args[1:])
+	case "intervene":
+		return runIntervene(args[1:])
 
 	// Hierarchy
 	case "attach":
@@ -185,6 +187,7 @@ Commands:
   assign   -id <id> <user>                    Assign to someone
   unassign -id <id> <user>                    Unassign someone
   request                                     Next available ticket
+  intervene -id <id> -outcome <decision>      Apply intervention decision
 
   attach   -id <id> <parent-id>               Set parent
   detach   -id <id>                           Remove parent
@@ -1814,6 +1817,44 @@ func runRequest(args []string) error {
 	fmt.Println(response.Status)
 	if explain {
 		fmt.Println(requestStatusExplanation(response.Status, requestedRef))
+	}
+	return nil
+}
+
+func runIntervene(args []string) error {
+	fs := flag.NewFlagSet("intervene", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	outcome := fs.String("outcome", "", "decision outcome: retry-role|retry-stage|split-work|cancel")
+	message := fs.String("m", "", "decision message/comment")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	ticketID, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: tk intervene [-id] <id> -outcome <retry-role|retry-stage|split-work|cancel> [-m comment]")
+	}
+	if strings.TrimSpace(*outcome) == "" {
+		return errors.New("usage: tk intervene [-id] <id> -outcome <retry-role|retry-stage|split-work|cancel> [-m comment]")
+	}
+
+	_, svc, _, err := resolveCurrentProjectClient()
+	if err != nil {
+		return err
+	}
+	response, err := svc.InterveneTicket(context.Background(), ticketID, libticket.InterventionRequest{
+		Outcome: *outcome,
+		Message: *message,
+	})
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(response)
+	}
+	fmt.Printf("intervention applied: %s on %s\n", response.Decision, response.Ticket.ID)
+	if response.FollowUp != nil {
+		fmt.Printf("follow-up created: %s\n", response.FollowUp.ID)
 	}
 	return nil
 }

@@ -324,6 +324,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Simulates a request assignment without mutating state and shows what ticket would be assigned."},
 		example: "tk request-dryrun 42",
 	},
+	"intervene": {
+		usage:   "tk intervene [-id] <id> -outcome <retry-role|retry-stage|split-work|cancel> [-m comment]",
+		details: []string{"Apply a human intervention decision to a failed ticket.", "Records a `ticket_intervention_decided` history event and may create a follow-up ticket for `split-work`."},
+		example: "tk intervene TK-42 -outcome retry-stage -m \"send back for redesign\"",
+	},
 	"user": {
 		usage:   "tk user <create|new|ls|list|rm|delete|enable|disable>",
 		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`."},

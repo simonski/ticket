@@ -363,6 +363,14 @@ func (s *HTTPService) RequestTicket(ctx context.Context, request TicketRequest) 
 	return TicketRequestResponse(response), nil
 }
 
+func (s *HTTPService) InterveneTicket(ctx context.Context, id string, request InterventionRequest) (InterventionResponse, error) {
+	response, err := s.client.InterveneTicket(ctx, id, client.InterventionRequest(request))
+	if err != nil {
+		return InterventionResponse{}, err
+	}
+	return InterventionResponse(response), nil
+}
+
 func (s *HTTPService) CreateWorkflow(ctx context.Context, request WorkflowRequest) (store.Workflow, error) {
 	return s.client.CreateWorkflow(ctx, client.WorkflowRequest(request))
 }

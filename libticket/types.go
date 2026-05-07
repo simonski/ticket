@@ -177,6 +177,18 @@ type TicketRequestResponse struct {
 	Role     *store.Role               `json:"role,omitempty"`
 }
 
+type InterventionRequest struct {
+	Outcome string `json:"outcome"`
+	Message string `json:"message,omitempty"`
+}
+
+type InterventionResponse struct {
+	Ticket       store.Ticket  `json:"ticket"`
+	FollowUp     *store.Ticket `json:"follow_up,omitempty"`
+	Decision     string        `json:"decision"`
+	Intervention bool          `json:"intervention"`
+}
+
 type AgentCreateRequest struct {
 	Password string `json:"password,omitempty"`
 }

@@ -284,6 +284,8 @@ func run(args []string) error {
 		return runDependency(trimmedArgs[1:])
 	case "request":
 		return runRequest(trimmedArgs[1:])
+	case "intervene":
+		return runIntervene(trimmedArgs[1:])
 	case "request-dryrun":
 		return runRequestDryRun(trimmedArgs[1:])
 	case "history":
