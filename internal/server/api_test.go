@@ -254,6 +254,9 @@ func TestPublicAPIContractValidationAndAuthPaths(t *testing.T) {
 		{"project tickets missing project", http.MethodGet, "/api/projects/999999/tickets", nil, adminToken, http.StatusNotFound},
 		{"project tickets bad limit", http.MethodGet, "/api/projects/1/tickets?limit=abc", nil, adminToken, http.StatusBadRequest},
 		{"project tickets bad offset", http.MethodGet, "/api/projects/1/tickets?offset=abc", nil, adminToken, http.StatusBadRequest},
+		{"project interventions missing project", http.MethodGet, "/api/projects/999999/interventions", nil, adminToken, http.StatusNotFound},
+		{"project interventions bad limit", http.MethodGet, "/api/projects/1/interventions?limit=abc", nil, adminToken, http.StatusBadRequest},
+		{"project interventions bad offset", http.MethodGet, "/api/projects/1/interventions?offset=abc", nil, adminToken, http.StatusBadRequest},
 		{"project history bad limit", http.MethodGet, "/api/projects/1/history?limit=abc", nil, adminToken, http.StatusBadRequest},
 		{"project history bad team", http.MethodGet, "/api/projects/1/history?team_id=abc", nil, adminToken, http.StatusBadRequest},
 		{"project stories missing project", http.MethodGet, "/api/projects/999999/stories", nil, adminToken, http.StatusNotFound},
@@ -1848,6 +1851,90 @@ func TestTicketRouteAliasesAPI(t *testing.T) {
 	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID, nil, adminAuth.Token)
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("get ticket status = %d body=%s", getResp.Code, getResp.Body.String())
+	}
+}
+
+func TestProjectInterventionsAPIListsFailedTickets(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Intervention Project",
+		"visibility": "private",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	okResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Healthy ticket",
+	}, adminToken)
+	if okResp.Code != http.StatusCreated {
+		t.Fatalf("create healthy ticket status = %d body=%s", okResp.Code, okResp.Body.String())
+	}
+
+	failedResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Needs intervention",
+	}, adminToken)
+	if failedResp.Code != http.StatusCreated {
+		t.Fatalf("create failed ticket status = %d body=%s", failedResp.Code, failedResp.Body.String())
+	}
+	var failedTicket store.Ticket
+	decodeResponse(t, failedResp, &failedTicket)
+
+	setFailResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+failedTicket.ID, map[string]any{
+		"title":       failedTicket.Title,
+		"description": failedTicket.Description,
+		"assignee":    failedTicket.Assignee,
+		"priority":    failedTicket.Priority,
+		"order":       failedTicket.Order,
+		"state":       "fail",
+	}, adminToken)
+	if setFailResp.Code != http.StatusOK {
+		t.Fatalf("set fail status = %d body=%s", setFailResp.Code, setFailResp.Body.String())
+	}
+
+	interventionsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions", nil, adminToken)
+	if interventionsResp.Code != http.StatusOK {
+		t.Fatalf("list interventions status = %d body=%s", interventionsResp.Code, interventionsResp.Body.String())
+	}
+	var interventions []store.Ticket
+	decodeResponse(t, interventionsResp, &interventions)
+	if len(interventions) != 1 {
+		t.Fatalf("expected 1 intervention ticket, got %d: %#v", len(interventions), interventions)
+	}
+	if interventions[0].ID != failedTicket.ID || interventions[0].State != "fail" {
+		t.Fatalf("unexpected intervention ticket = %#v", interventions[0])
+	}
+
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "outsider",
+		"password": "password123",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create outsider status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	outsiderLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "outsider",
+		"password": "password123",
+	}, "")
+	var outsiderAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, outsiderLoginResp, &outsiderAuth)
+
+	outsiderResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions", nil, outsiderAuth.Token)
+	if outsiderResp.Code != http.StatusForbidden {
+		t.Fatalf("outsider interventions status = %d body=%s", outsiderResp.Code, outsiderResp.Body.String())
 	}
 }
 

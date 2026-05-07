@@ -54,7 +54,7 @@ func (r *router) registerProjectHandlers() {
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
-				WorkflowID:             projectPayload.WorkflowID,
+				WorkflowID:         projectPayload.WorkflowID,
 			})
 			if err != nil {
 				writeStoreError(w, err)
@@ -134,6 +134,62 @@ func (r *router) registerProjectHandlers() {
 				return
 			}
 			writeJSON(w, http.StatusOK, tasks)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "interventions" && r.Method == http.MethodGet {
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			limit := 0
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if _, err := fmt.Sscan(raw, &limit); err != nil {
+					writeError(w, http.StatusBadRequest, "limit must be numeric")
+					return
+				}
+			}
+			offset := 0
+			if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+				if _, err := fmt.Sscan(raw, &offset); err != nil {
+					writeError(w, http.StatusBadRequest, "offset must be numeric")
+					return
+				}
+			}
+			includeArchived := false
+			if raw := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("include_archived"))); raw == "1" || raw == "true" || raw == "yes" {
+				includeArchived = true
+			}
+			interventions, err := store.ListTickets(r.Context(), db, store.TicketListParams{
+				ProjectID:       project.ID,
+				State:           "fail",
+				Limit:           limit,
+				Offset:          offset,
+				IncludeArchived: includeArchived,
+			})
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, interventions)
 			return
 		}
 		if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
@@ -608,7 +664,7 @@ func (r *router) registerProjectHandlers() {
 				GitRepository:      projectPayload.GitRepository,
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
-				WorkflowID:             projectPayload.WorkflowID,
+				WorkflowID:         projectPayload.WorkflowID,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {

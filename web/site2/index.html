@@ -1216,6 +1216,7 @@
             status: null,
             projects: [],
             tickets: [],
+            interventions: [],
             workflows: [],
             roles: [],
             agents: [],
@@ -1617,9 +1618,15 @@
         async function loadTickets() {
             if (!state.selectedProjectID) {
                 state.tickets = [];
+                state.interventions = [];
                 return;
             }
-            state.tickets = (await api("/api/projects/" + state.selectedProjectID + "/tickets")).map(normalizeTicket);
+            const [tickets, interventions] = await Promise.all([
+                api("/api/projects/" + state.selectedProjectID + "/tickets"),
+                api("/api/projects/" + state.selectedProjectID + "/interventions"),
+            ]);
+            state.tickets = tickets.map(normalizeTicket);
+            state.interventions = interventions.map(normalizeTicket);
         }
 
         async function loadWorkflows() {
@@ -1898,8 +1905,7 @@
         }
 
         function renderInterventions() {
-            const failed = state.tickets
-                .filter((ticket) => (ticket.state || "").toLowerCase() === "fail")
+            const failed = state.interventions
                 .sort((a, b) => (a.order || 0) - (b.order || 0));
             if (!failed.length) {
                 els.interventionList.innerHTML = "<div class=\"empty\">No intervention items.</div>";
@@ -2503,7 +2509,8 @@
                 if (!button) {
                     return;
                 }
-                const ticket = state.tickets.find((item) => String(item.id) === button.dataset.openInterventionTicket);
+                const ticket = state.interventions.find((item) => String(item.id) === button.dataset.openInterventionTicket) ||
+                    state.tickets.find((item) => String(item.id) === button.dataset.openInterventionTicket);
                 if (ticket) {
                     openTicketModal(ticket);
                 }

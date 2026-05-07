@@ -147,6 +147,10 @@ function installSite2Mock(page) {
         const id = Number(path.split("/")[3]);
         return json(db.tickets.filter((ticket) => ticket.project_id === id));
       }
+      if (path.match(/^\/api\/projects\/\d+\/interventions$/) && method === "GET") {
+        const id = Number(path.split("/")[3]);
+        return json(db.tickets.filter((ticket) => ticket.project_id === id && String(ticket.state || "").toLowerCase() === "fail"));
+      }
       if (path.match(/^\/api\/projects\/\d+\/labels$/) && method === "GET") {
         const id = Number(path.split("/")[3]);
         return json(db.labels.filter((label) => label.project_id === id));
