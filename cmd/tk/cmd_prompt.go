@@ -22,7 +22,8 @@ func runPrompt(args []string) error {
 	fs := flag.NewFlagSet("prompt", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
-	if err := fs.Parse(args); err != nil {
+	err = fs.Parse(args)
+	if err != nil {
 		return err
 	}
 

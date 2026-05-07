@@ -22,7 +22,8 @@ func ensureDefaultLocalRemote(dbPath string) (config.Config, error) {
 		if cfg.DefaultRemote == "" {
 			cfg.DefaultRemote = remote.Name
 		}
-		if err := config.Save(cfg); err != nil {
+		err = config.Save(cfg)
+		if err != nil {
 			return config.Config{}, err
 		}
 		return cfg, nil
@@ -48,7 +49,8 @@ func ensureNamedLocalRemote(root, dbPath string) (config.Config, string, error) 
 		return config.Config{}, "", err
 	}
 	if remote, ok := cfg.RemoteByURL(localURL); ok {
-		if err := config.Save(cfg); err != nil {
+		err = config.Save(cfg)
+		if err != nil {
 			return config.Config{}, "", err
 		}
 		return cfg, remote.Name, nil

@@ -85,7 +85,7 @@ func runLabel(args []string) error {
 		var label store.Label
 		if len(args) == 2 {
 			var id int64
-			if _, err := fmt.Sscan(strings.TrimSpace(args[1]), &id); err != nil {
+			if _, scanErr := fmt.Sscan(strings.TrimSpace(args[1]), &id); scanErr != nil {
 				return errors.New("label id must be numeric")
 			}
 			found, ok := findLabelByID(labels, id)

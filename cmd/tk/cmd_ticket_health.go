@@ -36,9 +36,9 @@ func runHealth(args []string) error {
 		return err
 	}
 	if strings.EqualFold(idVal, "execute") {
-		_, api, project, err := resolveCurrentProjectClient()
-		if err != nil {
-			return err
+		_, api, project, resolveErr := resolveCurrentProjectClient()
+		if resolveErr != nil {
+			return resolveErr
 		}
 		projectTickets, err := api.ListTickets(context.Background(), project.ID)
 		if err != nil {
@@ -60,20 +60,20 @@ func runHealth(args []string) error {
 				return err
 			}
 			result := map[string]any{
-				"ticket_id":                  ticket.ID,
-				"ticket_key":                 ticket.ID,
-				"score":                      checks.score,
-				"not_an_orphan":              checks.notOrphan,
-				"has_acceptance_criteria":    checks.hasAC,
-				"reviewed_by_reviewer_agent": checks.reviewedByReviewer,
-				"definition_of_ready":        checks.ready,
-				"project_acceptance_criteria": checks.projectAC,
-				"project_definition_of_ready": checks.projectDoR,
-				"project_definition_of_done":  checks.projectDoD,
-				"workflow_acceptance_criteria":    checks.workflowAC,
-				"stage_acceptance_criteria":   checks.stageAC,
-				"ticket_acceptance_criteria":  checks.ticketAC,
-				"persisted_score":            updated.HealthScore,
+				"ticket_id":                    ticket.ID,
+				"ticket_key":                   ticket.ID,
+				"score":                        checks.score,
+				"not_an_orphan":                checks.notOrphan,
+				"has_acceptance_criteria":      checks.hasAC,
+				"reviewed_by_reviewer_agent":   checks.reviewedByReviewer,
+				"definition_of_ready":          checks.ready,
+				"project_acceptance_criteria":  checks.projectAC,
+				"project_definition_of_ready":  checks.projectDoR,
+				"project_definition_of_done":   checks.projectDoD,
+				"workflow_acceptance_criteria": checks.workflowAC,
+				"stage_acceptance_criteria":    checks.stageAC,
+				"ticket_acceptance_criteria":   checks.ticketAC,
+				"persisted_score":              updated.HealthScore,
 			}
 			results = append(results, result)
 		}
@@ -121,17 +121,17 @@ func runHealth(args []string) error {
 		return err
 	}
 	section := map[string]any{
-		"score":                      checks.score,
-		"not_an_orphan":              checks.notOrphan,
-		"has_acceptance_criteria":    checks.hasAC,
-		"reviewed_by_reviewer_agent": checks.reviewedByReviewer,
-		"definition_of_ready":        checks.ready,
-		"project_acceptance_criteria": checks.projectAC,
-		"project_definition_of_ready": checks.projectDoR,
-		"project_definition_of_done":  checks.projectDoD,
-		"workflow_acceptance_criteria":    checks.workflowAC,
-		"stage_acceptance_criteria":   checks.stageAC,
-		"ticket_acceptance_criteria":  checks.ticketAC,
+		"score":                        checks.score,
+		"not_an_orphan":                checks.notOrphan,
+		"has_acceptance_criteria":      checks.hasAC,
+		"reviewed_by_reviewer_agent":   checks.reviewedByReviewer,
+		"definition_of_ready":          checks.ready,
+		"project_acceptance_criteria":  checks.projectAC,
+		"project_definition_of_ready":  checks.projectDoR,
+		"project_definition_of_done":   checks.projectDoD,
+		"workflow_acceptance_criteria": checks.workflowAC,
+		"stage_acceptance_criteria":    checks.stageAC,
+		"ticket_acceptance_criteria":   checks.ticketAC,
 	}
 	if outputJSON {
 		return printJSON(map[string]any{
@@ -167,7 +167,7 @@ type ticketHealthResult struct {
 	projectAC          bool
 	projectDoR         bool
 	projectDoD         bool
-	workflowAC             bool
+	workflowAC         bool
 	stageAC            bool
 	ticketAC           bool
 }
@@ -235,7 +235,7 @@ func ticketHealthCheck(ctx context.Context, svc libticket.Service, ticket store.
 		projectAC:          projectAC,
 		projectDoR:         projectDoR,
 		projectDoD:         projectDoD,
-		workflowAC:             workflowAC,
+		workflowAC:         workflowAC,
 		stageAC:            stageAC,
 		ticketAC:           ticketAC,
 	}, nil
@@ -307,8 +307,8 @@ Targets:
 		if proj.WorkflowID == nil {
 			fmt.Println("[WARN] Project has no workflow assigned")
 		} else {
-			wf, err := svc.GetWorkflow(context.Background(), *proj.WorkflowID)
-			if err == nil {
+			wf, wfErr := svc.GetWorkflow(context.Background(), *proj.WorkflowID)
+			if wfErr == nil {
 				fmt.Printf("Workflow: %s (%d stages)\n", wf.Name, len(wf.Stages))
 				for _, s := range wf.Stages {
 					var roleNames []string

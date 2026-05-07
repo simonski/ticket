@@ -11,6 +11,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -82,7 +83,7 @@ func main() {
 }
 
 // runFile processes a single markdown file.  Returns pass/fail/skip counts.
-func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
+func runFile(file, ticketBin string, verbose bool) (pass, fail, skip int, err error) {
 	blocks, err := parseBlocks(file)
 	if err != nil {
 		return 0, 0, 0, err
@@ -99,13 +100,16 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 	repoDir := filepath.Join(tmpDir, "repo")
 	homeDir := filepath.Join(tmpDir, "home")
 	ticketHome := filepath.Join(homeDir, ".ticket")
-	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+	err = os.MkdirAll(repoDir, 0o755)
+	if err != nil {
 		return 0, 0, 0, err
 	}
-	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+	err = os.MkdirAll(homeDir, 0o755)
+	if err != nil {
 		return 0, 0, 0, err
 	}
-	if err := os.MkdirAll(ticketHome, 0o755); err != nil {
+	err = os.MkdirAll(ticketHome, 0o755)
+	if err != nil {
 		return 0, 0, 0, err
 	}
 
@@ -122,7 +126,7 @@ func runFile(file, ticketBin string, verbose bool) (int, int, int, error) {
 		"PATH":        filepath.Dir(ticketBin) + ":" + os.Getenv("PATH"),
 	}
 
-	pass, fail, skip := 0, 0, 0
+	pass, fail, skip = 0, 0, 0
 	var serverCmd *exec.Cmd
 	var serverLog string
 	serverPort := 0 // set when a server is started
@@ -507,8 +511,8 @@ func rewriteInitCommands(code, replacement string) string {
 
 // extractExports pulls out `export KEY=VALUE` lines and returns them as a map.
 // The exports are also left in the code so the shell sees them during execution.
-func extractExports(code string, currentEnv map[string]string) (string, map[string]string) {
-	exports := make(map[string]string)
+func extractExports(code string, currentEnv map[string]string) (sanitizedCode string, exports map[string]string) {
+	collected := make(map[string]string)
 	for _, line := range strings.Split(code, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "export ") {
@@ -524,11 +528,11 @@ func extractExports(code string, currentEnv map[string]string) (string, map[stri
 					}
 					return os.Getenv(k)
 				})
-				exports[key] = val
+				collected[key] = val
 			}
 		}
 	}
-	return code, exports
+	return code, collected
 }
 
 // execBlock runs a code block as a shell script and returns combined output.
@@ -579,8 +583,14 @@ func startServerOnPort(ticketBin, workDir string, env map[string]string, port in
 // waitHealthz polls the server health endpoint until it responds 200 or timeout.
 func waitHealthz(serverURL string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(serverURL + "/api/healthz")
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", nil)
+		if reqErr != nil {
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -625,7 +635,11 @@ func buildEnv(env map[string]string) []string {
 		seen[k] = true
 	}
 	for _, entry := range base {
-		key := entry[:strings.Index(entry, "=")]
+		idx := strings.Index(entry, "=")
+		if idx <= 0 {
+			continue
+		}
+		key := entry[:idx]
 		if !seen[key] {
 			result = append(result, entry)
 		}

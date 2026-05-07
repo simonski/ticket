@@ -26,9 +26,9 @@ func runCurate(args []string) error {
 	var titles []string
 	for _, arg := range args {
 		ticketRef := normalizeBareTicketRef(cfg, api, arg)
-		ticket, err := api.GetTicket(context.Background(), ticketRef)
-		if err != nil {
-			return err
+		ticket, getErr := api.GetTicket(context.Background(), ticketRef)
+		if getErr != nil {
+			return getErr
 		}
 		titles = append(titles, ticket.Title)
 	}

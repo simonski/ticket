@@ -154,15 +154,16 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if hasProject {
-		projectCfg, err := loadConfigFile(projectPath)
-		if err != nil {
-			return Config{}, err
+		projectCfg, loadErr := loadConfigFile(projectPath)
+		if loadErr != nil {
+			return Config{}, loadErr
 		}
 		if strings.TrimSpace(projectCfg.Username) != "" || strings.TrimSpace(projectCfg.Token) != "" {
 			projectCfg.Username = ""
 			projectCfg.Token = ""
-			if err := saveProjectConfig(projectPath, projectCfg); err != nil {
-				return Config{}, err
+			saveErr := saveProjectConfig(projectPath, projectCfg)
+			if saveErr != nil {
+				return Config{}, saveErr
 			}
 		}
 		if strings.TrimSpace(projectCfg.Remote) != "" {
@@ -214,7 +215,8 @@ func Save(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(globalPath), 0o750); err != nil {
+	err = os.MkdirAll(filepath.Dir(globalPath), 0o750)
+	if err != nil {
 		return err
 	}
 
@@ -223,9 +225,9 @@ func Save(cfg Config) error {
 		return err
 	}
 	if hasProject {
-		projectCfg, err := loadConfigFile(projectPath)
-		if err != nil {
-			return err
+		projectCfg, loadErr := loadConfigFile(projectPath)
+		if loadErr != nil {
+			return loadErr
 		}
 		projectCfg.CurrentEpicID = cfg.CurrentEpicID
 		projectCfg.DeleteConfirmToken = cfg.DeleteConfirmToken
@@ -302,7 +304,8 @@ func SaveCredentials(creds Credentials) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	err = os.MkdirAll(filepath.Dir(path), 0o750)
+	if err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(creds, "", "  ")
@@ -630,7 +633,8 @@ func loadConfigFile(path string) (Config, error) {
 	}
 
 	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
+	err = json.Unmarshal(data, &raw)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: config at %s is not valid JSON (%v); using defaults\n", path, err)
 		return Config{}, nil
 	}
@@ -646,13 +650,13 @@ func loadConfigFile(path string) (Config, error) {
 	}
 	if v, ok := raw["tui_expanded_epics"]; ok {
 		s := strings.TrimSpace(string(v))
-		if len(s) > 0 && s[0] == '[' {
+		if s != "" && s[0] == '[' {
 			var items []json.RawMessage
 			if json.Unmarshal(v, &items) == nil {
 				converted := make([]string, 0, len(items))
 				for _, item := range items {
 					is := strings.TrimSpace(string(item))
-					if len(is) > 0 && is[0] == '"' {
+					if is != "" && is[0] == '"' {
 						var sv string
 						_ = json.Unmarshal(item, &sv)
 						converted = append(converted, sv)
@@ -660,7 +664,7 @@ func loadConfigFile(path string) (Config, error) {
 						converted = append(converted, strings.Trim(is, " "))
 					}
 				}
-				if b, err := json.Marshal(converted); err == nil {
+				if b, marshalErr := json.Marshal(converted); marshalErr == nil {
 					raw["tui_expanded_epics"] = json.RawMessage(b)
 				}
 			}

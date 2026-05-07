@@ -186,8 +186,7 @@ func extractOutputFlags(args []string) ([]string, bool, bool, error) {
 // jsonKeysToOmit lists internal keys that are stripped from all
 // CLI JSON output. Keep this list intentionally minimal so human-facing
 // identifiers (for example, ticket_id) remain stable for scripts.
-var jsonKeysToOmit = map[string]bool{
-}
+var jsonKeysToOmit = map[string]bool{}
 
 // stripJSONKeys recursively removes unwanted keys from a decoded JSON value.
 func stripJSONKeys(v any) any {
@@ -214,7 +213,8 @@ func printJSON(v any) error {
 		return err
 	}
 	var decoded any
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	err = json.Unmarshal(data, &decoded)
+	if err != nil {
 		return err
 	}
 	stripped, err := json.MarshalIndent(stripJSONKeys(decoded), "", "  ")

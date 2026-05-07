@@ -128,7 +128,8 @@ func DefaultWorkflowID(ctx context.Context, db *sql.DB) (int64, error) {
 	for _, s := range workflows {
 		if s.Default {
 			var id int64
-			if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows WHERE name = ?`, s.Name).Scan(&id); err == nil {
+			queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows WHERE name = ?`, s.Name).Scan(&id)
+			if queryErr == nil {
 				return id, nil
 			}
 		}
