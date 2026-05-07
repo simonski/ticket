@@ -1915,8 +1915,16 @@
                 return "<div class=\"entity-card\" data-intervention-ticket-id=\"" + ticket.id + "\">" +
                     "<h4>" + escapeHTML(ticket.key || ticket.id || "ticket") + " · " + escapeHTML(ticket.title || "(untitled)") + "</h4>" +
                     "<p>" + escapeHTML("stage: " + (ticket.stage || "unknown") + " · state: " + (ticket.state || "fail")) + "</p>" +
+                    "<div class=\"field\"><label>Decision</label><select data-intervention-outcome=\"" + ticket.id + "\">" +
+                    optionHTML("retry-role", "Retry role", false) +
+                    optionHTML("retry-stage", "Retry previous stage", false) +
+                    optionHTML("split-work", "Split into follow-up", false) +
+                    optionHTML("cancel", "Cancel/archive ticket", false) +
+                    "</select></div>" +
+                    "<div class=\"field\"><label>Message</label><textarea data-intervention-message=\"" + ticket.id + "\" placeholder=\"Why this decision?\"></textarea></div>" +
                     "<div class=\"entity-actions\">" +
                     "<button type=\"button\" class=\"btn-primary\" data-open-intervention-ticket=\"" + ticket.id + "\">Open ticket</button>" +
+                    "<button type=\"button\" data-apply-intervention-ticket=\"" + ticket.id + "\">Apply decision</button>" +
                     "</div>" +
                     "</div>";
             }).join("");
@@ -2506,14 +2514,24 @@
             });
             els.interventionList.addEventListener("click", (event) => {
                 const button = event.target.closest("[data-open-intervention-ticket]");
-                if (!button) {
+                if (button) {
+                    const ticket = state.interventions.find((item) => String(item.id) === button.dataset.openInterventionTicket) ||
+                        state.tickets.find((item) => String(item.id) === button.dataset.openInterventionTicket);
+                    if (ticket) {
+                        openTicketModal(ticket);
+                    }
                     return;
                 }
-                const ticket = state.interventions.find((item) => String(item.id) === button.dataset.openInterventionTicket) ||
-                    state.tickets.find((item) => String(item.id) === button.dataset.openInterventionTicket);
-                if (ticket) {
-                    openTicketModal(ticket);
+                const applyButton = event.target.closest("[data-apply-intervention-ticket]");
+                if (!applyButton) {
+                    return;
                 }
+                const ticketID = applyButton.dataset.applyInterventionTicket;
+                const outcomeInput = els.interventionList.querySelector("[data-intervention-outcome=\"" + ticketID + "\"]");
+                const messageInput = els.interventionList.querySelector("[data-intervention-message=\"" + ticketID + "\"]");
+                const outcome = outcomeInput ? outcomeInput.value : "";
+                const message = messageInput ? messageInput.value : "";
+                interveneTicket(ticketID, outcome, message).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("ticket-form").addEventListener("submit", async (event) => {
@@ -2931,6 +2949,28 @@
                     openTicketModal(updated);
                 }
                 setNotice("Ticket updated.");
+            } catch (error) {
+                setNotice(error.message, true);
+            }
+        }
+
+        async function interveneTicket(ticketID, outcome, message) {
+            if (!ticketID || !outcome) {
+                setNotice("Select an intervention decision.", true);
+                return;
+            }
+            try {
+                await api("/api/tickets/" + ticketID + "/intervene", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        outcome,
+                        message,
+                    }),
+                });
+                await loadTickets();
+                renderTicketBoard();
+                renderInterventions();
+                setNotice("Intervention decision applied.");
             } catch (error) {
                 setNotice(error.message, true);
             }

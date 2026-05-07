@@ -289,6 +289,42 @@ function installSite2Mock(page) {
       if (path.match(/^\/api\/tickets\/[^/]+\/(draft|undraft|open|close|archive|unarchive)$/) && method === "POST") {
         return json({ status: "ok" });
       }
+      if (path.match(/^\/api\/tickets\/[^/]+\/intervene$/) && method === "POST") {
+        const id = path.split("/")[3];
+        const ticket = db.tickets.find((item) => item.ticket_id === id);
+        if (!ticket) {
+          return json({ error: "not found" }, 404);
+        }
+        const outcome = String(body.outcome || "").toLowerCase();
+        if (outcome === "cancel") {
+          ticket.archived = true;
+        } else {
+          ticket.state = "idle";
+        }
+        let followUp = null;
+        if (outcome === "split-work") {
+          followUp = {
+            ticket_id: "OPS-" + String(1000 + db.tickets.length),
+            project_id: ticket.project_id,
+            type: "task",
+            title: "Follow-up: " + (ticket.title || "work"),
+            description: body.message || "",
+            acceptance_criteria: "",
+            status: "open",
+            stage: ticket.stage || "design",
+            state: "idle",
+            priority: ticket.priority || 1,
+            order: 0,
+            estimate_effort: 0,
+            health_score: 0,
+            draft: false,
+            archived: false,
+            workflow_id: ticket.workflow_id || null,
+          };
+          db.tickets.push(followUp);
+        }
+        return json({ ticket, follow_up: followUp, decision: outcome, intervention: true });
+      }
       if (path.match(/^\/api\/tickets\/[^/]+\/workflow$/) && (method === "POST" || method === "DELETE")) {
         return json({ status: "ok" });
       }

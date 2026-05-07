@@ -23,12 +23,12 @@ type projectRequest struct {
 	GitRepository      string            `json:"git_repository"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
-	WorkflowID             *int64            `json:"workflow_id,omitempty"`
+	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
 type roleRequest struct {
 	ID                 *int64            `json:"id,omitempty"`
-	WorkflowID             *int64            `json:"workflow_id,omitempty"`
+	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`
 	AcceptanceCriteria string            `json:"acceptance_criteria"`
@@ -100,6 +100,11 @@ type ticketRequest struct {
 }
 
 type messageRequest struct {
+	Message string `json:"message,omitempty"`
+}
+
+type interventionRequest struct {
+	Outcome string `json:"outcome"`
 	Message string `json:"message,omitempty"`
 }
 

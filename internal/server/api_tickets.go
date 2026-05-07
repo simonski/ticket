@@ -815,6 +815,145 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "intervene" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload interventionRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				outcome := strings.TrimSpace(strings.ToLower(payload.Outcome))
+				if outcome == "" {
+					writeError(w, http.StatusBadRequest, "outcome is required")
+					return
+				}
+				if strings.ToLower(strings.TrimSpace(ticketRef.State)) != store.StateFail {
+					writeError(w, http.StatusConflict, "ticket must be in fail state to intervene")
+					return
+				}
+
+				var (
+					ticket   store.Ticket
+					followUp *store.Ticket
+					err      error
+				)
+				switch outcome {
+				case "retry-role":
+					ticket, err = store.UpdateTicket(r.Context(), db, id, store.TicketUpdateParams{
+						Title:              ticketRef.Title,
+						Description:        ticketRef.Description,
+						AcceptanceCriteria: ticketRef.AcceptanceCriteria,
+						DORMap:             ticketRef.DORMap,
+						DODMap:             ticketRef.DODMap,
+						ACMap:              ticketRef.ACMap,
+						GitRepository:      ticketRef.GitRepository,
+						GitBranch:          ticketRef.GitBranch,
+						ParentID:           ticketRef.ParentID,
+						Assignee:           ticketRef.Assignee,
+						Stage:              ticketRef.Stage,
+						State:              store.StateIdle,
+						Priority:           ticketRef.Priority,
+						Order:              ticketRef.Order,
+						EstimateEffort:     ticketRef.EstimateEffort,
+						EstimateComplete:   ticketRef.EstimateComplete,
+						Type:               ticketRef.Type,
+						UpdatedBy:          user.ID,
+						ActorUsername:      user.Username,
+						ActorRole:          user.Role,
+					})
+				case "retry-stage":
+					ticket, err = store.PreviousTicket(r.Context(), db, id, user.Username, user.ID)
+				case "split-work":
+					followUpTitle := strings.TrimSpace("Follow-up: " + ticketRef.Title)
+					if followUpTitle == "Follow-up:" {
+						followUpTitle = "Follow-up work"
+					}
+					created, createErr := store.CreateTicket(r.Context(), db, store.TicketCreateParams{
+						ProjectID:          ticketRef.ProjectID,
+						Type:               "task",
+						Title:              followUpTitle,
+						Description:        strings.TrimSpace("Created from intervention on " + ticketRef.ID + ".\n\n" + payload.Message),
+						AcceptanceCriteria: ticketRef.AcceptanceCriteria,
+						DORMap:             ticketRef.DORMap,
+						DODMap:             ticketRef.DODMap,
+						ACMap:              ticketRef.ACMap,
+						GitRepository:      ticketRef.GitRepository,
+						GitBranch:          ticketRef.GitBranch,
+						Priority:           ticketRef.Priority,
+						EstimateEffort:     ticketRef.EstimateEffort,
+						EstimateComplete:   "",
+						Author:             user.Username,
+						CreatedBy:          user.ID,
+					})
+					if createErr != nil {
+						writeStoreError(w, createErr)
+						return
+					}
+					followUp = &created
+					ticket, err = store.UpdateTicket(r.Context(), db, id, store.TicketUpdateParams{
+						Title:              ticketRef.Title,
+						Description:        ticketRef.Description,
+						AcceptanceCriteria: ticketRef.AcceptanceCriteria,
+						DORMap:             ticketRef.DORMap,
+						DODMap:             ticketRef.DODMap,
+						ACMap:              ticketRef.ACMap,
+						GitRepository:      ticketRef.GitRepository,
+						GitBranch:          ticketRef.GitBranch,
+						ParentID:           ticketRef.ParentID,
+						Assignee:           ticketRef.Assignee,
+						Stage:              ticketRef.Stage,
+						State:              store.StateIdle,
+						Priority:           ticketRef.Priority,
+						Order:              ticketRef.Order,
+						EstimateEffort:     ticketRef.EstimateEffort,
+						EstimateComplete:   ticketRef.EstimateComplete,
+						Type:               ticketRef.Type,
+						UpdatedBy:          user.ID,
+						ActorUsername:      user.Username,
+						ActorRole:          user.Role,
+					})
+				case "cancel":
+					ticket, err = store.SetTicketArchived(r.Context(), db, id, true, user.Username, user.ID)
+				default:
+					writeError(w, http.StatusBadRequest, "invalid outcome")
+					return
+				}
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if payload.Message != "" {
+					store.AddComment(r.Context(), db, ticket.ID, user.ID, payload.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+				}
+				historyPayload := map[string]any{
+					"outcome": outcome,
+					"who":     user.Username,
+					"message": payload.Message,
+				}
+				if followUp != nil {
+					historyPayload["follow_up_ticket_id"] = followUp.ID
+					historyPayload["follow_up_ticket_key"] = followUp.ID
+				}
+				if err := store.AddHistoryEvent(r.Context(), db, ticket.ProjectID, ticket.ID, "ticket_intervention_decided", historyPayload, user.ID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				if followUp != nil {
+					notify("ticket_created", followUp.ProjectID, followUp.ID)
+				}
+				writeJSON(w, http.StatusOK, map[string]any{
+					"ticket":         ticket,
+					"follow_up":      followUp,
+					"decision":       outcome,
+					"intervention":   true,
+					"decision_actor": user.Username,
+				})
+				return
+			}
 			if len(parts) == 2 && parts[1] == "workflow" {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)

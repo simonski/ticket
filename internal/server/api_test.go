@@ -1938,6 +1938,106 @@ func TestProjectInterventionsAPIListsFailedTickets(t *testing.T) {
 	}
 }
 
+func TestTicketInterventionDecisionAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Intervention Decisions",
+		"visibility": "private",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Flaky deploy check",
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+
+	setFailResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
+		"assignee":    ticket.Assignee,
+		"priority":    ticket.Priority,
+		"order":       ticket.Order,
+		"state":       "fail",
+	}, adminToken)
+	if setFailResp.Code != http.StatusOK {
+		t.Fatalf("set fail status = %d body=%s", setFailResp.Code, setFailResp.Body.String())
+	}
+
+	splitResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/intervene", map[string]any{
+		"outcome": "split-work",
+		"message": "Break this into smaller follow-up work.",
+	}, adminToken)
+	if splitResp.Code != http.StatusOK {
+		t.Fatalf("split-work intervention status = %d body=%s", splitResp.Code, splitResp.Body.String())
+	}
+	var splitPayload struct {
+		Ticket   store.Ticket  `json:"ticket"`
+		FollowUp *store.Ticket `json:"follow_up"`
+		Decision string        `json:"decision"`
+	}
+	decodeResponse(t, splitResp, &splitPayload)
+	if splitPayload.Decision != "split-work" {
+		t.Fatalf("decision = %q, want split-work", splitPayload.Decision)
+	}
+	if splitPayload.Ticket.State != "idle" {
+		t.Fatalf("ticket state = %q, want idle", splitPayload.Ticket.State)
+	}
+	if splitPayload.FollowUp == nil || splitPayload.FollowUp.ID == "" {
+		t.Fatalf("expected follow-up ticket in response, got %#v", splitPayload.FollowUp)
+	}
+
+	historyResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/history", nil, adminToken)
+	if historyResp.Code != http.StatusOK {
+		t.Fatalf("ticket history status = %d body=%s", historyResp.Code, historyResp.Body.String())
+	}
+	var history []store.HistoryEvent
+	decodeResponse(t, historyResp, &history)
+	foundDecision := false
+	for _, item := range history {
+		if item.EventType == "ticket_intervention_decided" && strings.Contains(item.Payload, "split-work") {
+			foundDecision = true
+			break
+		}
+	}
+	if !foundDecision {
+		t.Fatalf("missing ticket_intervention_decided history event: %#v", history)
+	}
+
+	resetFailResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":       splitPayload.Ticket.Title,
+		"description": splitPayload.Ticket.Description,
+		"assignee":    splitPayload.Ticket.Assignee,
+		"priority":    splitPayload.Ticket.Priority,
+		"order":       splitPayload.Ticket.Order,
+		"state":       "fail",
+	}, adminToken)
+	if resetFailResp.Code != http.StatusOK {
+		t.Fatalf("reset fail status = %d body=%s", resetFailResp.Code, resetFailResp.Body.String())
+	}
+
+	invalidResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/intervene", map[string]any{
+		"outcome": "unknown",
+	}, adminToken)
+	if invalidResp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid intervention outcome status = %d body=%s", invalidResp.Code, invalidResp.Body.String())
+	}
+}
+
 func TestCountAPIAndAssignmentRules(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
