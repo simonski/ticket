@@ -19,7 +19,7 @@ const (
 	keyLength   = 32
 )
 
-func hashParams() (uint32, uint32) {
+func hashParams() (memory, iterations uint32) {
 	if os.Getenv("TICKET_FAST_HASH") == "1" {
 		return 1024, 1
 	}
@@ -61,13 +61,13 @@ type argonParams struct {
 	parallelism uint8
 }
 
-func parse(encoded string) (argonParams, []byte, []byte, error) {
+func parse(encoded string) (params argonParams, salt, hash []byte, err error) {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" {
 		return argonParams{}, nil, nil, errors.New("invalid argon2id hash")
 	}
 
-	params := argonParams{}
+	params = argonParams{}
 	for _, item := range strings.Split(parts[3], ",") {
 		kv := strings.SplitN(item, "=", 2)
 		if len(kv) != 2 {
@@ -89,11 +89,11 @@ func parse(encoded string) (argonParams, []byte, []byte, error) {
 		}
 	}
 
-	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	salt, err = base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
 		return argonParams{}, nil, nil, fmt.Errorf("decode salt: %w", err)
 	}
-	hash, err := base64.RawStdEncoding.DecodeString(parts[5])
+	hash, err = base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
 		return argonParams{}, nil, nil, fmt.Errorf("decode hash: %w", err)
 	}

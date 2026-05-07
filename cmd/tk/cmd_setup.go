@@ -289,7 +289,7 @@ func runSetupRemote(reader *bufio.Reader) error {
 
 	// 2. Verify connectivity
 	fmt.Printf("connecting : %s ... ", serverURL)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", nil) // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", http.NoBody) // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
 	if err != nil {
 		return err
 	}

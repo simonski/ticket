@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -1485,7 +1484,7 @@ func TestSetAndUnsetTicketWorkflow(t *testing.T) {
 		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	reviewer, err := CreateRoleWithParams(context.Background(), db, RoleCreateParams{
-		WorkflowID:      &wfBase.ID,
+		WorkflowID:  &wfBase.ID,
 		Title:       "reviewer",
 		Description: "reviews work",
 	})
@@ -1555,7 +1554,7 @@ func TestCreateTicketUsesFirstRoleFromProjectWorkflow(t *testing.T) {
 		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	role, err := CreateRoleWithParams(context.Background(), db, RoleCreateParams{
-		WorkflowID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "designer",
 		Description: "designs work",
 	})
@@ -1569,7 +1568,7 @@ func TestCreateTicketUsesFirstRoleFromProjectWorkflow(t *testing.T) {
 		Title:              project.Title,
 		Description:        project.Description,
 		AcceptanceCriteria: project.AcceptanceCriteria,
-		WorkflowID:             &wf.ID,
+		WorkflowID:         &wf.ID,
 	}); err != nil {
 		t.Fatalf("UpdateProjectWithParams() error = %v", err)
 	}
@@ -1613,7 +1612,7 @@ func TestUpdateTicketSuccessAutoAdvancesToNextStageFirstRole(t *testing.T) {
 		t.Fatalf("AddWorkflowStage(test) error = %v", err)
 	}
 	designer, err := CreateRoleWithParams(ctx, db, RoleCreateParams{
-		WorkflowID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "designer",
 		Description: "designs work",
 	})
@@ -1621,7 +1620,7 @@ func TestUpdateTicketSuccessAutoAdvancesToNextStageFirstRole(t *testing.T) {
 		t.Fatalf("CreateRole(designer) error = %v", err)
 	}
 	tester, err := CreateRoleWithParams(ctx, db, RoleCreateParams{
-		WorkflowID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "tester",
 		Description: "tests work",
 	})
@@ -1638,7 +1637,7 @@ func TestUpdateTicketSuccessAutoAdvancesToNextStageFirstRole(t *testing.T) {
 		Title:              project.Title,
 		Description:        project.Description,
 		AcceptanceCriteria: project.AcceptanceCriteria,
-		WorkflowID:             &wf.ID,
+		WorkflowID:         &wf.ID,
 	}); err != nil {
 		t.Fatalf("UpdateProjectWithParams() error = %v", err)
 	}
@@ -1775,8 +1774,8 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 		t.Fatalf("AddWorkflowStageRole(test) error = %v", err)
 	}
 	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
-		Prefix: "WF",
-		Title:  "Workflow Project",
+		Prefix:     "WF",
+		Title:      "Workflow Project",
 		WorkflowID: &wf.ID,
 	})
 	if err != nil {
@@ -1876,8 +1875,8 @@ func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
 		t.Fatalf("AddWorkflowStage(test) error = %v", err)
 	}
 	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
-		Prefix: "REF",
-		Title:  "Ref Project",
+		Prefix:     "REF",
+		Title:      "Ref Project",
 		WorkflowID: &wf.ID,
 	})
 	if err != nil {
@@ -1968,37 +1967,5 @@ func TestTicketHasChildrenUsesExistenceCheck(t *testing.T) {
 	}
 	if !hasChildren {
 		t.Fatal("ticketHasChildren(parent after child) = false, want true")
-	}
-}
-
-func assertDerivedLifecycleHistory(t *testing.T, db *sql.DB, taskID string, wantTransitions [][2]string) {
-	t.Helper()
-
-	events, err := ListHistoryEvents(context.Background(), db, taskID, 0, 0)
-	if err != nil {
-		t.Fatalf("ListHistoryEvents(%s) error = %v", taskID, err)
-	}
-
-	var derivedTransitions [][2]string
-	for _, event := range events {
-		if event.EventType != "ticket_parent_lifecycle_changed" {
-			continue
-		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			t.Fatalf("json.Unmarshal(%q) error = %v", event.Payload, err)
-		}
-		derivedTransitions = append(derivedTransitions, [2]string{
-			payload["from_status"].(string),
-			payload["to_status"].(string),
-		})
-	}
-	if len(derivedTransitions) != len(wantTransitions) {
-		t.Fatalf("derived transitions for %s = %#v, want %#v", taskID, derivedTransitions, wantTransitions)
-	}
-	for i := range wantTransitions {
-		if derivedTransitions[i] != wantTransitions[i] {
-			t.Fatalf("derived transitions for %s = %#v, want %#v", taskID, derivedTransitions, wantTransitions)
-		}
 	}
 }

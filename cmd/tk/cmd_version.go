@@ -82,7 +82,7 @@ func defaultFetchRepoVersion() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, repoVersionURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, repoVersionURL, http.NoBody)
 	if err != nil {
 		return "", err
 	}

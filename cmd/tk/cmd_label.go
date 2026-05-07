@@ -136,18 +136,19 @@ func runLabel(args []string) error {
 		}
 		var ticketID string
 		var labelID int64
-		if *idFlag != "" && fs.NArg() > 0 {
+		switch {
+		case *idFlag != "" && fs.NArg() > 0:
 			ticketID = normalizeBareTicketRef(cfg, svc, *idFlag)
 			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
-		} else if fs.NArg() >= 2 {
+		case fs.NArg() >= 2:
 			// positional fallback
 			ticketID = normalizeBareTicketRef(cfg, svc, fs.Arg(0))
 			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
-		} else {
+		default:
 			return errors.New("usage: tk label add -id <ticket-id> <label-id>")
 		}
 		return svc.AddTicketLabel(context.Background(), ticketID, labelID)
@@ -160,17 +161,18 @@ func runLabel(args []string) error {
 		}
 		var ticketID string
 		var labelID int64
-		if *idFlag != "" && fs.NArg() > 0 {
+		switch {
+		case *idFlag != "" && fs.NArg() > 0:
 			ticketID = normalizeBareTicketRef(cfg, svc, *idFlag)
 			if _, err := fmt.Sscan(fs.Arg(0), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
-		} else if fs.NArg() >= 2 {
+		case fs.NArg() >= 2:
 			ticketID = normalizeBareTicketRef(cfg, svc, fs.Arg(0))
 			if _, err := fmt.Sscan(fs.Arg(1), &labelID); err != nil {
 				return errors.New("label id must be numeric")
 			}
-		} else {
+		default:
 			return errors.New("usage: tk label remove -id <ticket-id> <label-id>")
 		}
 		return svc.RemoveTicketLabel(context.Background(), ticketID, labelID)

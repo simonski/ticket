@@ -83,14 +83,15 @@ func buildPromptForTicket(ctx context.Context, svc promptService, ticketRef stri
 		roles, roleErr := svc.ListRoles(ctx)
 		if roleErr == nil {
 			for _, role := range roles {
-				if role.ID == *ticket.RoleID {
-					roleTitle = promptValue(role.Title)
-					roleGuidance := role.ResolveGuidance(ticket.Stage)
-					roleDOR = promptValue(roleGuidance.DOR)
-					roleDOD = promptValue(roleGuidance.DOD)
-					roleAC = promptValue(roleGuidance.AC)
-					break
+				if role.ID != *ticket.RoleID {
+					continue
 				}
+				roleTitle = promptValue(role.Title)
+				roleGuidance := role.ResolveGuidance(ticket.Stage)
+				roleDOR = promptValue(roleGuidance.DOR)
+				roleDOD = promptValue(roleGuidance.DOD)
+				roleAC = promptValue(roleGuidance.AC)
+				break
 			}
 		}
 	}

@@ -37,8 +37,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 
 	path := filepath.Join(tempDir, "config.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("expected config file at %s: %v", path, err)
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Fatalf("expected config file at %s: %v", path, statErr)
 	}
 
 	if got.Token != "" {
@@ -46,8 +46,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 
 	got.ProjectID = "2"
-	if err := Save(got); err != nil {
-		t.Fatalf("Save(updated) error = %v", err)
+	if saveErr := Save(got); saveErr != nil {
+		t.Fatalf("Save(updated) error = %v", saveErr)
 	}
 	reloaded, err := Load()
 	if err != nil {
