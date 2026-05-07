@@ -301,7 +301,7 @@ func (c *Client) DeleteRole(ctx context.Context, id int64) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/roles/%d", id), nil, nil)
 }
 
-func (c *Client) CreateAgent(ctx context.Context, request AgentCreateRequest) (store.Agent, string, error) {
+func (c *Client) CreateAgent(ctx context.Context, request AgentCreateRequest) (agent store.Agent, password string, err error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -313,7 +313,7 @@ func (c *Client) CreateAgent(ctx context.Context, request AgentCreateRequest) (s
 		Agent    store.Agent `json:"agent"`
 		Password string      `json:"password"`
 	}
-	err := c.doJSON(ctx, http.MethodPost, "/api/agents", request, &response)
+	err = c.doJSON(ctx, http.MethodPost, "/api/agents", request, &response)
 	return response.Agent, response.Password, err
 }
 
@@ -386,7 +386,7 @@ func (c *Client) DeleteAgent(ctx context.Context, id string) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/agents/%s", id), nil, nil)
 }
 
-func (c *Client) SetAgentConfig(ctx context.Context, agentID string, key, value string) error {
+func (c *Client) SetAgentConfig(ctx context.Context, agentID, key, value string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -410,7 +410,7 @@ func (c *Client) ListAgentConfig(ctx context.Context, agentID string) ([]store.A
 	return entries, err
 }
 
-func (c *Client) DeleteAgentConfig(ctx context.Context, agentID string, key string) error {
+func (c *Client) DeleteAgentConfig(ctx context.Context, agentID, key string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -472,9 +472,9 @@ func (c *Client) RequestAgentWork(ctx context.Context, request AgentRequest) (Ag
 			projectID = 0
 		}
 		if projectID == 0 {
-			projects, err := store.ListProjects(ctx, db, 0)
-			if err != nil {
-				return AgentWorkResponse{}, err
+			projects, listErr := store.ListProjects(ctx, db, 0)
+			if listErr != nil {
+				return AgentWorkResponse{}, listErr
 			}
 			for _, p := range projects {
 				if p.Status == "open" {
@@ -1038,7 +1038,7 @@ func (c *Client) UpdateTicket(ctx context.Context, id string, request TicketUpda
 	return ticket, err
 }
 
-func (c *Client) CloseTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) CloseTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1064,7 +1064,7 @@ func (c *Client) CloseTicket(ctx context.Context, id string, message string) (st
 	return ticket, err
 }
 
-func (c *Client) OpenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) OpenTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1094,7 +1094,7 @@ func (c *Client) OpenTicket(ctx context.Context, id string, message string) (sto
 	return ticket, err
 }
 
-func (c *Client) ArchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) ArchiveTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1120,7 +1120,7 @@ func (c *Client) ArchiveTicket(ctx context.Context, id string, message string) (
 	return ticket, err
 }
 
-func (c *Client) UnarchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) UnarchiveTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1150,7 +1150,7 @@ func (c *Client) UnarchiveTicket(ctx context.Context, id string, message string)
 	return ticket, err
 }
 
-func (c *Client) ReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) ReadyTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1180,7 +1180,7 @@ func (c *Client) ReadyTicket(ctx context.Context, id string, message string) (st
 	return ticket, err
 }
 
-func (c *Client) NotReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) NotReadyTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1247,7 +1247,7 @@ func (c *Client) DeleteTicket(ctx context.Context, id string) error {
 	return c.doJSON(ctx, http.MethodDelete, "/api/tickets/"+url.PathEscape(id), nil, nil)
 }
 
-func (c *Client) SetTicketParent(ctx context.Context, id, parentID string, message string) (store.Ticket, error) {
+func (c *Client) SetTicketParent(ctx context.Context, id, parentID, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1268,7 +1268,7 @@ func (c *Client) SetTicketParent(ctx context.Context, id, parentID string, messa
 	})
 }
 
-func (c *Client) UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := c.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1315,7 +1315,7 @@ func (c *Client) GetTicket(ctx context.Context, ref string) (store.Ticket, error
 	return ticket, err
 }
 
-func (c *Client) CloneTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) CloneTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1404,7 +1404,7 @@ func (c *Client) ListProjectHistoryFiltered(ctx context.Context, projectID int64
 	return events, err
 }
 
-func (c *Client) AddComment(ctx context.Context, id string, comment string) (store.Comment, error) {
+func (c *Client) AddComment(ctx context.Context, id, comment string) (store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
@@ -1889,19 +1889,19 @@ func (c *Client) ReorderWorkflowStageRoles(ctx context.Context, workflowID, stag
 	return c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/workflows/stages/roles/%d/%d", workflowID, stageID), map[string][]int64{"role_ids": roleIDs}, nil)
 }
 
-func (c *Client) CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) CompleteTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return c.CloseTicket(ctx, id, message)
 }
 
-func (c *Client) ReopenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) ReopenTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return c.OpenTicket(ctx, id, message)
 }
 
-func (c *Client) DraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) DraftTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return c.NotReadyTicket(ctx, id, message)
 }
 
-func (c *Client) UndraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (c *Client) UndraftTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return c.ReadyTicket(ctx, id, message)
 }
 

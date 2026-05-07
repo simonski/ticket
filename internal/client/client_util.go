@@ -17,7 +17,7 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
-func resolveRequestLifecycle(status, stage, state string) (string, string, error) {
+func resolveRequestLifecycle(status, stage, state string) (resolvedStage, resolvedState string, err error) {
 	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
 		return stage, state, nil
 	}
@@ -50,8 +50,8 @@ func ensureLocalUser(ctx context.Context, db *sql.DB, username string) (store.Us
 		if user.Enabled {
 			return user, nil
 		}
-		if err := store.SetUserEnabled(ctx, db, username, true); err != nil {
-			return store.User{}, err
+		if setErr := store.SetUserEnabled(ctx, db, username, true); setErr != nil {
+			return store.User{}, setErr
 		}
 		return store.GetUserByUsername(ctx, db, username)
 	} else if !errors.Is(err, sql.ErrNoRows) {
@@ -127,7 +127,7 @@ func statusErrorFromResponse(resp *http.Response) error {
 }
 
 // doJSONBasicAuth is like doJSON but uses HTTP Basic Auth instead of Bearer token.
-func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, password string, body any, out any) error {
+func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, password string, body, out any) error {
 	var reader *bytes.Reader
 	if body == nil {
 		reader = bytes.NewReader(nil)
@@ -164,7 +164,7 @@ func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, pa
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, body any, out any) error {
+func (c *Client) doJSON(ctx context.Context, method, path string, body, out any) error {
 	var payload []byte
 	if body != nil {
 		encoded, err := json.Marshal(body)
