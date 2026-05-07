@@ -267,17 +267,17 @@ func TestPublicAPIContractValidationAndAuthPaths(t *testing.T) {
 		{"project nested unknown method not allowed", http.MethodGet, "/api/projects/1/unknown/path", nil, adminToken, http.StatusMethodNotAllowed},
 		{"missing project get not found", http.MethodGet, "/api/projects/999999", nil, adminToken, http.StatusNotFound},
 		{"project delete requires admin", http.MethodDelete, "/api/projects/1", nil, aliceAuth.Token, http.StatusForbidden},
-		{"sdlcs import requires admin", http.MethodPost, "/api/sdlcs/import", map[string]string{"name": "x"}, aliceAuth.Token, http.StatusForbidden},
-		{"sdlcs import rejects method", http.MethodGet, "/api/sdlcs/import", nil, adminToken, http.StatusMethodNotAllowed},
-		{"sdlc stage bad id", http.MethodGet, "/api/sdlcs/stages/not-a-number", nil, adminToken, http.StatusBadRequest},
-		{"sdlc stage missing", http.MethodGet, "/api/sdlcs/stages/999999", nil, adminToken, http.StatusNotFound},
-		{"sdlc stage role bad path", http.MethodPost, "/api/sdlcs/stages/roles/1", nil, adminToken, http.StatusBadRequest},
-		{"sdlc stage role bad sdlc id", http.MethodPost, "/api/sdlcs/stages/roles/x/1", nil, adminToken, http.StatusBadRequest},
-		{"sdlc stage role bad stage id", http.MethodPost, "/api/sdlcs/stages/roles/1/x", nil, adminToken, http.StatusBadRequest},
-		{"sdlc stage role delete requires role", http.MethodDelete, "/api/sdlcs/stages/roles/1/1", nil, adminToken, http.StatusBadRequest},
-		{"sdlc bad id", http.MethodGet, "/api/sdlcs/not-a-number", nil, adminToken, http.StatusBadRequest},
-		{"sdlc missing", http.MethodGet, "/api/sdlcs/999999", nil, adminToken, http.StatusNotFound},
-		{"sdlc direct rejects patch", http.MethodPatch, "/api/sdlcs/1", nil, adminToken, http.StatusMethodNotAllowed},
+		{"workflows import requires admin", http.MethodPost, "/api/workflows/import", map[string]string{"name": "x"}, aliceAuth.Token, http.StatusForbidden},
+		{"workflows import rejects method", http.MethodGet, "/api/workflows/import", nil, adminToken, http.StatusMethodNotAllowed},
+		{"workflow stage bad id", http.MethodGet, "/api/workflows/stages/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"workflow stage missing", http.MethodGet, "/api/workflows/stages/999999", nil, adminToken, http.StatusNotFound},
+		{"workflow stage role bad path", http.MethodPost, "/api/workflows/stages/roles/1", nil, adminToken, http.StatusBadRequest},
+		{"workflow stage role bad workflow id", http.MethodPost, "/api/workflows/stages/roles/x/1", nil, adminToken, http.StatusBadRequest},
+		{"workflow stage role bad stage id", http.MethodPost, "/api/workflows/stages/roles/1/x", nil, adminToken, http.StatusBadRequest},
+		{"workflow stage role delete requires role", http.MethodDelete, "/api/workflows/stages/roles/1/1", nil, adminToken, http.StatusBadRequest},
+		{"workflow bad id", http.MethodGet, "/api/workflows/not-a-number", nil, adminToken, http.StatusBadRequest},
+		{"workflow missing", http.MethodGet, "/api/workflows/999999", nil, adminToken, http.StatusNotFound},
+		{"workflow direct rejects patch", http.MethodPatch, "/api/workflows/1", nil, adminToken, http.StatusMethodNotAllowed},
 		{"story post rejects method", http.MethodGet, "/api/stories", nil, adminToken, http.StatusMethodNotAllowed},
 		{"story bad id", http.MethodGet, "/api/stories/not-a-number", nil, adminToken, http.StatusBadRequest},
 		{"story missing", http.MethodGet, "/api/stories/999999", nil, adminToken, http.StatusNotFound},
@@ -318,8 +318,8 @@ func TestPublicAPIContractValidationAndAuthPaths(t *testing.T) {
 		{"project create invalid json", http.MethodPost, "/api/projects", adminToken, http.StatusBadRequest},
 		{"project update invalid json", http.MethodPut, "/api/projects/1", adminToken, http.StatusBadRequest},
 		{"project set draft invalid json", http.MethodPut, "/api/projects/1/set-draft", adminToken, http.StatusBadRequest},
-		{"sdlc create invalid json", http.MethodPost, "/api/sdlcs", adminToken, http.StatusBadRequest},
-		{"sdlc stage create invalid json", http.MethodPost, "/api/sdlcs/1/stages", adminToken, http.StatusBadRequest},
+		{"workflow create invalid json", http.MethodPost, "/api/workflows", adminToken, http.StatusBadRequest},
+		{"workflow stage create invalid json", http.MethodPost, "/api/workflows/1/stages", adminToken, http.StatusBadRequest},
 		{"ticket create invalid json", http.MethodPost, "/api/tickets", adminToken, http.StatusBadRequest},
 		{"ticket update invalid json", http.MethodPut, "/api/tickets/" + ticket.ID, adminToken, http.StatusBadRequest},
 		{"story create invalid json", http.MethodPost, "/api/stories", adminToken, http.StatusBadRequest},
@@ -382,17 +382,17 @@ func TestCreateEndpointsSupportForcedIDs(t *testing.T) {
 		t.Fatalf("role id = %d, want 203", role.ID)
 	}
 
-	sdlcResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs", map[string]any{
+	workflowResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]any{
 		"id":   204,
-		"name": "Explicit SDLC",
+		"name": "Explicit Workflow",
 	}, adminToken)
-	if sdlcResp.Code != http.StatusCreated {
-		t.Fatalf("sdlc create status = %d body=%s", sdlcResp.Code, sdlcResp.Body.String())
+	if workflowResp.Code != http.StatusCreated {
+		t.Fatalf("workflow create status = %d body=%s", workflowResp.Code, workflowResp.Body.String())
 	}
-	var wf store.Sdlc
-	decodeResponse(t, sdlcResp, &wf)
+	var wf store.Workflow
+	decodeResponse(t, workflowResp, &wf)
 	if wf.ID != 204 {
-		t.Fatalf("sdlc id = %d, want 204", wf.ID)
+		t.Fatalf("workflow id = %d, want 204", wf.ID)
 	}
 
 	labelResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/labels", map[string]any{
@@ -1012,7 +1012,7 @@ func TestProjectTicketsHistoryAndStoriesAPI(t *testing.T) {
 	}
 }
 
-func TestSdlcStageRoleAPI(t *testing.T) {
+func TestWorkflowStageRoleAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
@@ -1037,13 +1037,13 @@ func TestSdlcStageRoleAPI(t *testing.T) {
 	}
 	decodeResponse(t, userLoginResp, &userAuth)
 
-	wf, err := store.CreateSdlc(context.Background(), db, "API Workflow", "stage role api test")
+	wf, err := store.CreateWorkflow(context.Background(), db, "API Workflow", "stage role api test")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := store.AddSdlcStage(context.Background(), db, wf.ID, "triage", "triage", "", 1)
+	stage, err := store.AddWorkflowStage(context.Background(), db, wf.ID, "triage", "triage", "", 1)
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	roleA, err := store.CreateRole(context.Background(), db, &wf.ID, "reviewer", "reviews work", "")
 	if err != nil {
@@ -1053,7 +1053,7 @@ func TestSdlcStageRoleAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRole(roleB) error = %v", err)
 	}
-	stagePath := fmt.Sprintf("/api/sdlcs/stages/roles/%d/%d", wf.ID, stage.ID)
+	stagePath := fmt.Sprintf("/api/workflows/stages/roles/%d/%d", wf.ID, stage.ID)
 
 	unauthorized := doJSONRequest(t, handler, http.MethodPost, stagePath, map[string]int64{"role_id": roleA.ID}, "")
 	if unauthorized.Code != http.StatusUnauthorized {
@@ -1084,12 +1084,12 @@ func TestSdlcStageRoleAPI(t *testing.T) {
 		t.Fatalf("reorder status = %d, want %d body=%s", reordered.Code, http.StatusOK, reordered.Body.String())
 	}
 
-	got, err := store.GetSdlc(context.Background(), db, wf.ID)
+	got, err := store.GetWorkflow(context.Background(), db, wf.ID)
 	if err != nil {
-		t.Fatalf("GetSdlc() error = %v", err)
+		t.Fatalf("GetWorkflow() error = %v", err)
 	}
 	if len(got.Stages) != 1 || len(got.Stages[0].Roles) != 2 {
-		t.Fatalf("GetSdlc() stages = %#v", got.Stages)
+		t.Fatalf("GetWorkflow() stages = %#v", got.Stages)
 	}
 	if got.Stages[0].Roles[0].ID != roleB.ID || got.Stages[0].Roles[1].ID != roleA.ID {
 		t.Fatalf("role order = %#v, want [%d %d]", got.Stages[0].Roles, roleB.ID, roleA.ID)
@@ -1100,9 +1100,9 @@ func TestSdlcStageRoleAPI(t *testing.T) {
 		t.Fatalf("remove status = %d, want %d body=%s", removed.Code, http.StatusOK, removed.Body.String())
 	}
 
-	got, err = store.GetSdlc(context.Background(), db, wf.ID)
+	got, err = store.GetWorkflow(context.Background(), db, wf.ID)
 	if err != nil {
-		t.Fatalf("GetSdlc(after remove) error = %v", err)
+		t.Fatalf("GetWorkflow(after remove) error = %v", err)
 	}
 	if remaining := got.Stages[0].Roles; len(remaining) != 1 || remaining[0].ID != roleB.ID {
 		t.Fatalf("remaining roles = %#v, want only roleB", remaining)
@@ -2785,29 +2785,29 @@ func TestTicketStateOpsAPI(t *testing.T) {
 		t.Fatalf("health score = %d, want 3", healthTicket.HealthScore)
 	}
 
-	// Create a sdlc to assign to the ticket.
-	wfResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs", map[string]string{
+	// Create a workflow to assign to the ticket.
+	wfResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
 		"name":        "Test WF",
-		"description": "for ticket sdlc test",
+		"description": "for ticket workflow test",
 	}, token)
 	if wfResp.Code != http.StatusCreated {
-		t.Fatalf("create sdlc status = %d body=%s", wfResp.Code, wfResp.Body.String())
+		t.Fatalf("create workflow status = %d body=%s", wfResp.Code, wfResp.Body.String())
 	}
-	var wf store.Sdlc
+	var wf store.Workflow
 	decodeResponse(t, wfResp, &wf)
 
-	// POST /api/tickets/{ref}/sdlc
-	setWfResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/sdlc", map[string]any{
-		"sdlc_id": wf.ID,
+	// POST /api/tickets/{ref}/workflow
+	setWfResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/workflow", map[string]any{
+		"workflow_id": wf.ID,
 	}, token)
 	if setWfResp.Code != http.StatusOK {
-		t.Fatalf("set ticket sdlc status = %d body=%s", setWfResp.Code, setWfResp.Body.String())
+		t.Fatalf("set ticket workflow status = %d body=%s", setWfResp.Code, setWfResp.Body.String())
 	}
 
-	// DELETE /api/tickets/{ref}/sdlc
-	unsetWfResp := doJSONRequest(t, handler, http.MethodDelete, "/api/tickets/"+ticket.ID+"/sdlc", nil, token)
+	// DELETE /api/tickets/{ref}/workflow
+	unsetWfResp := doJSONRequest(t, handler, http.MethodDelete, "/api/tickets/"+ticket.ID+"/workflow", nil, token)
 	if unsetWfResp.Code != http.StatusOK {
-		t.Fatalf("unset ticket sdlc status = %d body=%s", unsetWfResp.Code, unsetWfResp.Body.String())
+		t.Fatalf("unset ticket workflow status = %d body=%s", unsetWfResp.Code, unsetWfResp.Body.String())
 	}
 
 	for _, op := range []string{"complete", "reopen", "draft", "undraft"} {
@@ -2945,7 +2945,7 @@ func TestSystemMetricsRejectsWrongMethod(t *testing.T) {
 	}
 }
 
-func TestAgentSdlcAPI(t *testing.T) {
+func TestAgentWorkflowAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
@@ -3026,24 +3026,24 @@ func TestAgentSdlcAPI(t *testing.T) {
 	}
 }
 
-func TestSdlcImportExportReorderAPI(t *testing.T) {
+func TestWorkflowImportExportReorderAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
 
-	// Create a sdlc with two stages.
-	wfResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs", map[string]string{
+	// Create a workflow with two stages.
+	wfResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
 		"name":        "Import Export WF",
-		"description": "sdlc for import/export test",
+		"description": "workflow for import/export test",
 	}, token)
 	if wfResp.Code != http.StatusCreated {
-		t.Fatalf("create sdlc status = %d body=%s", wfResp.Code, wfResp.Body.String())
+		t.Fatalf("create workflow status = %d body=%s", wfResp.Code, wfResp.Body.String())
 	}
-	var wf store.Sdlc
+	var wf store.Workflow
 	decodeResponse(t, wfResp, &wf)
 
-	stage1Resp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs/"+strconv.FormatInt(wf.ID, 10)+"/stages", map[string]any{
+	stage1Resp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/stages", map[string]any{
 		"stage_name":  "build",
 		"description": "compile step",
 		"sort_order":  0,
@@ -3051,10 +3051,10 @@ func TestSdlcImportExportReorderAPI(t *testing.T) {
 	if stage1Resp.Code != http.StatusCreated {
 		t.Fatalf("add stage1 status = %d body=%s", stage1Resp.Code, stage1Resp.Body.String())
 	}
-	var stage1 store.SdlcStage
+	var stage1 store.WorkflowStage
 	decodeResponse(t, stage1Resp, &stage1)
 
-	stage2Resp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs/"+strconv.FormatInt(wf.ID, 10)+"/stages", map[string]any{
+	stage2Resp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/stages", map[string]any{
 		"stage_name":  "deploy",
 		"description": "deploy step",
 		"sort_order":  1,
@@ -3062,33 +3062,33 @@ func TestSdlcImportExportReorderAPI(t *testing.T) {
 	if stage2Resp.Code != http.StatusCreated {
 		t.Fatalf("add stage2 status = %d body=%s", stage2Resp.Code, stage2Resp.Body.String())
 	}
-	var stage2 store.SdlcStage
+	var stage2 store.WorkflowStage
 	decodeResponse(t, stage2Resp, &stage2)
 
-	// GET /api/sdlcs/{id}/export
-	exportResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs/"+strconv.FormatInt(wf.ID, 10)+"/export", nil, token)
+	// GET /api/workflows/{id}/export
+	exportResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/export", nil, token)
 	if exportResp.Code != http.StatusOK {
-		t.Fatalf("export sdlc status = %d body=%s", exportResp.Code, exportResp.Body.String())
+		t.Fatalf("export workflow status = %d body=%s", exportResp.Code, exportResp.Body.String())
 	}
-	var export store.SdlcExport
+	var export store.WorkflowExport
 	decodeResponse(t, exportResp, &export)
 	if export.Name != "Import Export WF" {
 		t.Fatalf("export name = %q, want 'Import Export WF'", export.Name)
 	}
 
-	// POST /api/sdlcs/import (change name to avoid unique constraint)
+	// POST /api/workflows/import (change name to avoid unique constraint)
 	export.Name = "Imported WF Copy"
-	importResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs/import", export, token)
+	importResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/import", export, token)
 	if importResp.Code != http.StatusCreated {
-		t.Fatalf("import sdlc status = %d body=%s", importResp.Code, importResp.Body.String())
+		t.Fatalf("import workflow status = %d body=%s", importResp.Code, importResp.Body.String())
 	}
 
-	// PUT /api/sdlcs/{id}/reorder
-	reorderResp := doJSONRequest(t, handler, http.MethodPut, "/api/sdlcs/"+strconv.FormatInt(wf.ID, 10)+"/reorder", map[string]any{
+	// PUT /api/workflows/{id}/reorder
+	reorderResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/"+strconv.FormatInt(wf.ID, 10)+"/reorder", map[string]any{
 		"stage_ids": []int64{stage2.ID, stage1.ID},
 	}, token)
 	if reorderResp.Code != http.StatusOK {
-		t.Fatalf("reorder sdlc status = %d body=%s", reorderResp.Code, reorderResp.Body.String())
+		t.Fatalf("reorder workflow status = %d body=%s", reorderResp.Code, reorderResp.Body.String())
 	}
 }
 
@@ -3565,50 +3565,50 @@ func TestHealthzAPI(t *testing.T) {
 	}
 }
 
-func TestSdlcAPI(t *testing.T) {
+func TestWorkflowAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
 	defer db.Close()
 	token := loginAdmin(t, handler)
 
-	// List sdlcs (should include default)
-	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs", nil, token)
+	// List workflows (should include default)
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows", nil, token)
 	if listResp.Code != http.StatusOK {
-		t.Fatalf("list sdlcs status = %d", listResp.Code)
+		t.Fatalf("list workflows status = %d", listResp.Code)
 	}
-	var sdlcs []store.Sdlc
-	decodeResponse(t, listResp, &sdlcs)
-	if len(sdlcs) == 0 {
-		t.Fatal("expected at least one default sdlc")
+	var workflows []store.Workflow
+	decodeResponse(t, listResp, &workflows)
+	if len(workflows) == 0 {
+		t.Fatal("expected at least one default workflow")
 	}
 
-	badListResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs?offset=abc", nil, token)
+	badListResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows?offset=abc", nil, token)
 	if badListResp.Code != http.StatusBadRequest {
-		t.Fatalf("bad sdlc list status = %d body=%s", badListResp.Code, badListResp.Body.String())
+		t.Fatalf("bad workflow list status = %d body=%s", badListResp.Code, badListResp.Body.String())
 	}
 
-	// Create sdlc
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs", map[string]string{
+	// Create workflow
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
 		"name":        "CI Pipeline",
 		"description": "build, test, deploy",
 	}, token)
 	if createResp.Code != http.StatusCreated {
-		t.Fatalf("create sdlc status = %d, body=%s", createResp.Code, createResp.Body.String())
+		t.Fatalf("create workflow status = %d, body=%s", createResp.Code, createResp.Body.String())
 	}
-	var created store.Sdlc
+	var created store.Workflow
 	decodeResponse(t, createResp, &created)
 	if created.Name != "CI Pipeline" {
-		t.Fatalf("created sdlc name = %q", created.Name)
+		t.Fatalf("created workflow name = %q", created.Name)
 	}
 
-	// Get sdlc with stages
-	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs/"+strconv.FormatInt(created.ID, 10), nil, token)
+	// Get workflow with stages
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(created.ID, 10), nil, token)
 	if getResp.Code != http.StatusOK {
-		t.Fatalf("get sdlc status = %d", getResp.Code)
+		t.Fatalf("get workflow status = %d", getResp.Code)
 	}
 
 	// Add stage
-	stageResp := doJSONRequest(t, handler, http.MethodPost, "/api/sdlcs/"+strconv.FormatInt(created.ID, 10)+"/stages", map[string]any{
+	stageResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(created.ID, 10)+"/stages", map[string]any{
 		"stage_name":  "build",
 		"description": "compile",
 		"sort_order":  0,
@@ -3616,19 +3616,19 @@ func TestSdlcAPI(t *testing.T) {
 	if stageResp.Code != http.StatusCreated {
 		t.Fatalf("add stage status = %d, body=%s", stageResp.Code, stageResp.Body.String())
 	}
-	var stage store.SdlcStage
+	var stage store.WorkflowStage
 	decodeResponse(t, stageResp, &stage)
 	if stage.StageName != "build" {
 		t.Fatalf("stage name = %q", stage.StageName)
 	}
 
 	// Delete stage
-	getStageResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
+	getStageResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
 	if getStageResp.Code != http.StatusOK {
 		t.Fatalf("get stage status = %d body=%s", getStageResp.Code, getStageResp.Body.String())
 	}
 
-	updateStageResp := doJSONRequest(t, handler, http.MethodPut, "/api/sdlcs/stages/"+strconv.FormatInt(stage.ID, 10), map[string]any{
+	updateStageResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/stages/"+strconv.FormatInt(stage.ID, 10), map[string]any{
 		"stage_name":         "package",
 		"ways_of_working":    "package artifacts",
 		"definition_of_done": "artifact published",
@@ -3637,21 +3637,21 @@ func TestSdlcAPI(t *testing.T) {
 		t.Fatalf("update stage status = %d body=%s", updateStageResp.Code, updateStageResp.Body.String())
 	}
 
-	delStageResp := doJSONRequest(t, handler, http.MethodDelete, "/api/sdlcs/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
+	delStageResp := doJSONRequest(t, handler, http.MethodDelete, "/api/workflows/stages/"+strconv.FormatInt(stage.ID, 10), nil, token)
 	if delStageResp.Code != http.StatusOK {
 		t.Fatalf("delete stage status = %d", delStageResp.Code)
 	}
 
-	// Export sdlc
-	exportResp := doJSONRequest(t, handler, http.MethodGet, "/api/sdlcs/"+strconv.FormatInt(created.ID, 10)+"/export", nil, token)
+	// Export workflow
+	exportResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(created.ID, 10)+"/export", nil, token)
 	if exportResp.Code != http.StatusOK {
-		t.Fatalf("export sdlc status = %d", exportResp.Code)
+		t.Fatalf("export workflow status = %d", exportResp.Code)
 	}
 
-	// Delete sdlc
-	delResp := doJSONRequest(t, handler, http.MethodDelete, "/api/sdlcs/"+strconv.FormatInt(created.ID, 10), nil, token)
+	// Delete workflow
+	delResp := doJSONRequest(t, handler, http.MethodDelete, "/api/workflows/"+strconv.FormatInt(created.ID, 10), nil, token)
 	if delResp.Code != http.StatusOK {
-		t.Fatalf("delete sdlc status = %d", delResp.Code)
+		t.Fatalf("delete workflow status = %d", delResp.Code)
 	}
 }
 

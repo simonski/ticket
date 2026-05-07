@@ -12,7 +12,7 @@ fully productive in under 30 minutes.
 3. [Prerequisites](#prerequisites)
 4. [Clone and setup](#clone-and-setup)
 5. [Daily development loop](#daily-development-loop)
-6. [Ticket sdlc](#ticket-sdlc)
+6. [Ticket workflow](#ticket-workflow)
 7. [Workflow expectations](#workflow-expectations)
 8. [Running tests](#running-tests)
 9. [Common pitfalls](#common-pitfalls)
@@ -42,7 +42,7 @@ Read these documents in order — each one builds on the last:
 3. `QUICKSTART.md` — choose local or server mode, then follow the linked guide under `docs/quickstarts/`
 4. `TESTING.md` — test strategy, how to run each suite, coverage thresholds
 5. `docs/DESIGN.md` — deeper architecture, data model, design decisions
-6. `docs/LIFECYCLE.md` — SDLC lifecycle, stages, roles, and stage-role assignments
+6. `docs/LIFECYCLE.md` — Workflow lifecycle, stages, roles, and stage-role assignments
 7. `USER_GUIDE.md` — full CLI and web UI reference
 8. `CONTRIBUTING.md` — branching, commits, PR process
 
@@ -114,7 +114,7 @@ make test
 
 ---
 
-## Ticket sdlc
+## Ticket workflow
 
 The project tracks its own work using the `tk` CLI tool (an alias for the
 `ticket` binary):
@@ -142,32 +142,32 @@ tk get TK-XXX
 See `docs/LIFECYCLE.md` for the lifecycle reference and `USER_GUIDE.md` for the
 full CLI and web workflow reference.
 
-### SDLC entities
+### Workflow entities
 
-The ticket system supports custom SDLC (Software Development Life Cycle)
-definitions. An SDLC defines a sequence of stages that tickets move through.
+The ticket system supports custom Workflow (Software Development Life Cycle)
+definitions. An Workflow defines a sequence of stages that tickets move through.
 Roles describe the responsibilities at each stage, and stage-role assignments
-connect roles to specific stages within an SDLC.
+connect roles to specific stages within an Workflow.
 
 ```bash
-# Create an SDLC definition
-tk sdlc create -name "Agile" -d "Standard agile process"
+# Create an Workflow definition
+tk workflow create -name "Agile" -d "Standard agile process"
 
-# Add stages to the SDLC
-tk sdlc add-stage -id 1 -name develop
-tk sdlc add-stage -id 1 -name test
+# Add stages to the Workflow
+tk workflow add-stage -id 1 -name develop
+tk workflow add-stage -id 1 -name test
 
 # Create a role
 tk role create -title Engineer -d "Software engineer"
 
 # Assign a role to a stage
-tk sdlc stage-role-add -sdlc_id 1 -stage_id 1 -role_id 1
+tk workflow stage-role-add -workflow_id 1 -stage_id 1 -role_id 1
 
 # List all roles
 tk role ls
 ```
 
-See `docs/LIFECYCLE.md` for the full SDLC reference.
+See `docs/LIFECYCLE.md` for the full Workflow reference.
 
 ---
 
@@ -212,7 +212,7 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 | Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
 | `tk` command not found | Run `make build-dev` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
 | `tk` is talking to the wrong backend | Run `tk status` first. Local mode normally resolves the named `local` remote to `$TICKET_HOME/ticket.db`; remote mode resolves the repo-local `remote` name through `$TICKET_HOME/config.json`. Legacy raw `location` values are compatibility-only. |
-| API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo SDLC commands, run the `spec` workflow |
+| API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo Workflow commands, run the `spec` workflow |
 | `.ticket/config.json` blocks a rebase or pull | If you do not need your local Ticket routing state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
 | `make test` times out | Playwright starts its own local static server automatically. If it still fails, rerun `make test-playwright` to isolate the browser step and check the printed startup error |
 | Local and remote mode behave differently | Read `tk status` before debugging. The same CLI can talk directly to SQLite or to a server depending on `.ticket/config.json` |

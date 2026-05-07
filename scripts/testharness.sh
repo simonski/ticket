@@ -132,24 +132,24 @@ run "$TK_BIN" ls -count -expect_equals 2
 
 reset_local_repo
 
-log "scenario: sdlc next/previous workflow"
-sdlc_id="$("$TK_BIN" sdlc create -name "review-flow" -printid)"
+log "scenario: workflow next/previous workflow"
+workflow_id="$("$TK_BIN" workflow create -name "review-flow" -printid)"
 
-stage_output="$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name design -order 0)"
+stage_output="$("$TK_BIN" workflow stage-add -id "$workflow_id" -name design -order 0)"
 design_stage_id="$(extract_numeric_id "$stage_output")"
-stage_output="$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name test -order 1)"
+stage_output="$("$TK_BIN" workflow stage-add -id "$workflow_id" -name test -order 1)"
 test_stage_id="$(extract_numeric_id "$stage_output")"
-stage_output="$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name done -order 2)"
+stage_output="$("$TK_BIN" workflow stage-add -id "$workflow_id" -name done -order 2)"
 done_stage_id="$(extract_numeric_id "$stage_output")"
 
-role_output="$("$TK_BIN" sdlc role-add -sdlc_id "$sdlc_id" -title designer)"
+role_output="$("$TK_BIN" workflow role-add -workflow_id "$workflow_id" -title designer)"
 designer_role_id="$(extract_numeric_id "$role_output")"
-role_output="$("$TK_BIN" sdlc role-add -sdlc_id "$sdlc_id" -title tester)"
+role_output="$("$TK_BIN" workflow role-add -workflow_id "$workflow_id" -title tester)"
 tester_role_id="$(extract_numeric_id "$role_output")"
 
-run "$TK_BIN" sdlc stage-role-add -sdlc_id "$sdlc_id" -stage_id "$design_stage_id" -role_id "$designer_role_id" >/dev/null
-run "$TK_BIN" sdlc stage-role-add -sdlc_id "$sdlc_id" -stage_id "$test_stage_id" -role_id "$tester_role_id" >/dev/null
-run "$TK_BIN" project sdlc "$sdlc_id" >/dev/null
+run "$TK_BIN" workflow stage-role-add -workflow_id "$workflow_id" -stage_id "$design_stage_id" -role_id "$designer_role_id" >/dev/null
+run "$TK_BIN" workflow stage-role-add -workflow_id "$workflow_id" -stage_id "$test_stage_id" -role_id "$tester_role_id" >/dev/null
+run "$TK_BIN" project workflow "$workflow_id" >/dev/null
 
 ticket_id="$("$TK_BIN" add "Workflow ticket" -printid)"
 ticket_output="$("$TK_BIN" get -id "$ticket_id")"

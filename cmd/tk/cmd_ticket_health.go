@@ -70,7 +70,7 @@ func runHealth(args []string) error {
 				"project_acceptance_criteria": checks.projectAC,
 				"project_definition_of_ready": checks.projectDoR,
 				"project_definition_of_done":  checks.projectDoD,
-				"sdlc_acceptance_criteria":    checks.sdlcAC,
+				"workflow_acceptance_criteria":    checks.workflowAC,
 				"stage_acceptance_criteria":   checks.stageAC,
 				"ticket_acceptance_criteria":  checks.ticketAC,
 				"persisted_score":            updated.HealthScore,
@@ -129,7 +129,7 @@ func runHealth(args []string) error {
 		"project_acceptance_criteria": checks.projectAC,
 		"project_definition_of_ready": checks.projectDoR,
 		"project_definition_of_done":  checks.projectDoD,
-		"sdlc_acceptance_criteria":    checks.sdlcAC,
+		"workflow_acceptance_criteria":    checks.workflowAC,
 		"stage_acceptance_criteria":   checks.stageAC,
 		"ticket_acceptance_criteria":  checks.ticketAC,
 	}
@@ -152,7 +152,7 @@ func runHealth(args []string) error {
 	fmt.Printf("project_acceptance_criteria: %t\n", checks.projectAC)
 	fmt.Printf("project_definition_of_ready: %t\n", checks.projectDoR)
 	fmt.Printf("project_definition_of_done: %t\n", checks.projectDoD)
-	fmt.Printf("sdlc_acceptance_criteria: %t\n", checks.sdlcAC)
+	fmt.Printf("workflow_acceptance_criteria: %t\n", checks.workflowAC)
 	fmt.Printf("stage_acceptance_criteria: %t\n", checks.stageAC)
 	fmt.Printf("ticket_acceptance_criteria: %t\n", checks.ticketAC)
 	return nil
@@ -167,7 +167,7 @@ type ticketHealthResult struct {
 	projectAC          bool
 	projectDoR         bool
 	projectDoD         bool
-	sdlcAC             bool
+	workflowAC             bool
 	stageAC            bool
 	ticketAC           bool
 }
@@ -194,18 +194,18 @@ func ticketHealthCheck(ctx context.Context, svc libticket.Service, ticket store.
 	projectDoR := projectAC
 	projectDoD := strings.TrimSpace(project.Notes) != ""
 
-	sdlcAC := false
+	workflowAC := false
 	stageAC := false
-	sdlcID := ticket.SdlcID
-	if sdlcID == nil {
-		sdlcID = project.SdlcID
+	workflowID := ticket.WorkflowID
+	if workflowID == nil {
+		workflowID = project.WorkflowID
 	}
-	if sdlcID != nil {
-		wf, wfErr := svc.GetSdlc(ctx, *sdlcID)
+	if workflowID != nil {
+		wf, wfErr := svc.GetWorkflow(ctx, *workflowID)
 		if wfErr != nil {
 			return ticketHealthResult{}, wfErr
 		}
-		sdlcAC = strings.TrimSpace(wf.Description) != ""
+		workflowAC = strings.TrimSpace(wf.Description) != ""
 		stage, stageErr := resolveStageForPrompt(ctx, svc, ticket, project)
 		if stageErr != nil {
 			return ticketHealthResult{}, stageErr
@@ -218,7 +218,7 @@ func ticketHealthCheck(ctx context.Context, svc libticket.Service, ticket store.
 	checks := []bool{
 		notOrphan, hasAC, reviewedByReviewer, ready,
 		projectAC, projectDoR, projectDoD,
-		sdlcAC, stageAC, ticketAC,
+		workflowAC, stageAC, ticketAC,
 	}
 	score := 0
 	for _, ok := range checks {
@@ -235,7 +235,7 @@ func ticketHealthCheck(ctx context.Context, svc libticket.Service, ticket store.
 		projectAC:          projectAC,
 		projectDoR:         projectDoR,
 		projectDoD:         projectDoD,
-		sdlcAC:             sdlcAC,
+		workflowAC:             workflowAC,
 		stageAC:            stageAC,
 		ticketAC:           ticketAC,
 	}, nil
@@ -303,13 +303,13 @@ Targets:
 
 		fmt.Printf("=== Project Doctor: %s — %s ===\n\n", proj.Prefix, proj.Title)
 
-		// Sdlc check
-		if proj.SdlcID == nil {
-			fmt.Println("[WARN] Project has no sdlc assigned")
+		// Workflow check
+		if proj.WorkflowID == nil {
+			fmt.Println("[WARN] Project has no workflow assigned")
 		} else {
-			wf, err := svc.GetSdlc(context.Background(), *proj.SdlcID)
+			wf, err := svc.GetWorkflow(context.Background(), *proj.WorkflowID)
 			if err == nil {
-				fmt.Printf("Sdlc: %s (%d stages)\n", wf.Name, len(wf.Stages))
+				fmt.Printf("Workflow: %s (%d stages)\n", wf.Name, len(wf.Stages))
 				for _, s := range wf.Stages {
 					var roleNames []string
 					for _, r := range s.Roles {
@@ -433,8 +433,8 @@ Targets:
 		if ctx.Project != nil {
 			fmt.Printf("Project:  %s — %s\n", ctx.Project.Prefix, ctx.Project.Title)
 		}
-		if ctx.Sdlc != nil {
-			fmt.Printf("Sdlc: %s\n", ctx.Sdlc.Name)
+		if ctx.Workflow != nil {
+			fmt.Printf("Workflow: %s\n", ctx.Workflow.Name)
 		}
 		if ctx.Role != nil {
 			fmt.Printf("Role:     %s\n", ctx.Role.Title)
@@ -469,8 +469,8 @@ Targets:
 			fmt.Println("  [WARN] Active but no assignee")
 			issues++
 		}
-		if ticket.SdlcID == nil && ctx.Sdlc == nil {
-			fmt.Println("  [WARN] No sdlc (inherited or explicit)")
+		if ticket.WorkflowID == nil && ctx.Workflow == nil {
+			fmt.Println("  [WARN] No workflow (inherited or explicit)")
 			issues++
 		}
 		if issues == 0 {

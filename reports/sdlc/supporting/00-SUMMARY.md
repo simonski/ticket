@@ -1,9 +1,9 @@
-# SDLC Assessment Summary
+# Workflow Assessment Summary
 
 **Date:** 2026-04-28  
 **Project:** ticket / tk  
 **Overall score:** 71/100 (was 74, -3)  
-**Assessment scope:** full repository review across CLI, HTTP API, web UI, SQLite store, tests, CI/CD, deployment artifacts, security/privacy docs, runbooks, and existing SDLC reports.
+**Assessment scope:** full repository review across CLI, HTTP API, web UI, SQLite store, tests, CI/CD, deployment artifacts, security/privacy docs, runbooks, and existing Workflow reports.
 
 ## Score table
 
@@ -74,7 +74,7 @@
 
 | Area | Original | Prior | Current | Evidence |
 |------|----------|-------|---------|----------|
-| Overall SDLC score | 72 | 74 | 71 | `reports/sdlc/history.json:5-47`, this report |
+| Overall Workflow score | 72 | 74 | 71 | `reports/workflow/history.json:5-47`, this report |
 | Go coverage gates | failing in early baseline | passing | passing | `Makefile:135-157`; `TICKET_FAST_HASH=1 make test-go-cover` |
 | OpenAPI validity | malformed | valid | valid | `openapi.yaml:1-5`; `make validate-openapi` |
 | Browser-test coverage | present | present | 12 specs | `TESTING.md:138-153`; metric command |

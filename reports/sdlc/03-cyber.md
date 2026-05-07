@@ -29,7 +29,7 @@ Request security, session/cookie behavior, deploy defaults, proxy trust, and sub
 | Threat modeling exists for major trust boundaries | SHOULD | fail | no explicit trust-boundary artifact reviewed | Still implicit. |
 | Abuse cases covered in tests | SHOULD | partial | `internal/server/server_test.go:22-39`; `internal/server/server_test.go:115-146` | Some security behavior is tested, but not as a broad abuse suite. |
 | Security tooling runs in CI | SHOULD | pass | `.github/workflows/makefile.yaml:37-40` | gosec and govulncheck are real pipeline steps. |
-| Residual risks recorded | SHOULD | partial | `reports/sdlc/10-RECOMMENDATIONS.md` | Better than baseline, but still mostly report-driven. |
+| Residual risks recorded | SHOULD | partial | `reports/workflow/10-RECOMMENDATIONS.md` | Better than baseline, but still mostly report-driven. |
 
 ## Findings
 

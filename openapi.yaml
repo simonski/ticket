@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.861
+  version: 0.1.869
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -31,8 +31,8 @@ tags:
     description: Agent lifecycle and work assignment
   - name: Roles
     description: Role management (admin only)
-  - name: Sdlcs
-    description: Sdlc and stage management
+  - name: Workflows
+    description: Workflow and stage management
   - name: Teams
     description: Team management
   - name: Projects
@@ -151,7 +151,7 @@ components:
         visibility:
           type: string
           enum: [public, private]
-        sdlc_id:
+        workflow_id:
           type: integer
           format: int64
           nullable: true
@@ -194,7 +194,7 @@ components:
           type: string
         git_branch:
           type: string
-        sdlc_stage_id:
+        workflow_stage_id:
           type: integer
           format: int64
           nullable: true
@@ -230,11 +230,11 @@ components:
           format: int64
           nullable: true
           description: Current active role
-        previous_sdlc_stage_id:
+        previous_workflow_stage_id:
           type: integer
           format: int64
           nullable: true
-          description: Previous SDLC stage before last transition
+          description: Previous Workflow stage before last transition
         previous_role_id:
           type: integer
           format: int64
@@ -251,10 +251,10 @@ components:
           type: string
           format: date-time
 
-    Sdlc:
+    Workflow:
       type: object
       properties:
-        sdlc_id:
+        workflow_id:
           type: integer
           format: int64
         name:
@@ -264,7 +264,7 @@ components:
         stages:
           type: array
           items:
-            $ref: '#/components/schemas/SdlcStage'
+            $ref: '#/components/schemas/WorkflowStage'
         created_at:
           type: string
           format: date-time
@@ -272,7 +272,7 @@ components:
           type: string
           format: date-time
 
-    SdlcExport:
+    WorkflowExport:
       type: object
       required: [name]
       properties:
@@ -296,13 +296,13 @@ components:
               sort_order:
                 type: integer
 
-    SdlcStage:
+    WorkflowStage:
       type: object
       properties:
-        sdlc_stage_id:
+        workflow_stage_id:
           type: integer
           format: int64
-        sdlc_id:
+        workflow_id:
           type: integer
           format: int64
         stage_name:
@@ -365,7 +365,7 @@ components:
         role_id:
           type: integer
           format: int64
-        sdlc_id:
+        workflow_id:
           type: integer
           format: int64
           nullable: true
@@ -578,8 +578,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
-        sdlc:
-          $ref: '#/components/schemas/Sdlc'
+        workflow:
+          $ref: '#/components/schemas/Workflow'
         role:
           $ref: '#/components/schemas/Role'
         config:
@@ -603,8 +603,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
-        sdlc:
-          $ref: '#/components/schemas/Sdlc'
+        workflow:
+          $ref: '#/components/schemas/Workflow'
         role:
           $ref: '#/components/schemas/Role'
 
@@ -724,7 +724,7 @@ components:
         title: "Customer Portal"
         description: "Customer-facing web portal project"
         visibility: "private"
-        sdlc_id: 1
+        workflow_id: 1
 
     CreateTicketRequestExample:
       summary: Create a task ticket
@@ -1928,36 +1928,36 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  # ── Sdlcs ───────────────────────────────────────────────────────
-  /api/sdlcs:
+  # ── Workflows ───────────────────────────────────────────────────────
+  /api/workflows:
     get:
-      tags: [Sdlcs]
-      summary: List all sdlcs
-      operationId: listSdlcs
+      tags: [Workflows]
+      summary: List all workflows
+      operationId: listWorkflows
       security:
         - BearerAuth: []
       parameters:
         - name: limit
           in: query
-          description: Maximum number of sdlcs to return. Defaults to 100 when omitted or set to 0.
+          description: Maximum number of workflows to return. Defaults to 100 when omitted or set to 0.
           schema:
             type: integer
             minimum: 0
         - name: offset
           in: query
-          description: Number of sdlcs to skip before returning results.
+          description: Number of workflows to skip before returning results.
           schema:
             type: integer
             minimum: 0
       responses:
         '200':
-          description: Sdlc list
+          description: Workflow list
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Sdlc'
+                  $ref: '#/components/schemas/Workflow'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1969,9 +1969,9 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
     post:
-      tags: [Sdlcs]
-      summary: Create a sdlc
-      operationId: createSdlc
+      tags: [Workflows]
+      summary: Create a workflow
+      operationId: createWorkflow
       security:
         - BearerAuth: []
       requestBody:
@@ -1988,11 +1988,11 @@ paths:
                   type: string
       responses:
         '201':
-          description: Sdlc created
+          description: Workflow created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sdlc'
+                $ref: '#/components/schemas/Workflow'
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -2004,11 +2004,11 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/import:
+  /api/workflows/import:
     post:
-      tags: [Sdlcs]
-      summary: Import a sdlc from export format
-      operationId: importSdlc
+      tags: [Workflows]
+      summary: Import a workflow from export format
+      operationId: importWorkflow
       security:
         - BearerAuth: []
       requestBody:
@@ -2016,14 +2016,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SdlcExport'
+              $ref: '#/components/schemas/WorkflowExport'
       responses:
         '201':
-          description: Sdlc imported
+          description: Workflow imported
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sdlc'
+                $ref: '#/components/schemas/Workflow'
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -2035,15 +2035,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/{sdlc_id}:
+  /api/workflows/{workflow_id}:
     get:
-      tags: [Sdlcs]
-      summary: Get sdlc with stages
-      operationId: getSdlc
+      tags: [Workflows]
+      summary: Get workflow with stages
+      operationId: getWorkflow
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2051,11 +2051,11 @@ paths:
             format: int64
       responses:
         '200':
-          description: Sdlc details
+          description: Workflow details
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sdlc'
+                $ref: '#/components/schemas/Workflow'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2067,13 +2067,13 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
     delete:
-      tags: [Sdlcs]
-      summary: Delete a sdlc
-      operationId: deleteSdlc
+      tags: [Workflows]
+      summary: Delete a workflow
+      operationId: deleteWorkflow
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2081,7 +2081,7 @@ paths:
             format: int64
       responses:
         '200':
-          description: Sdlc deleted
+          description: Workflow deleted
           content:
             application/json:
               schema:
@@ -2100,15 +2100,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/{sdlc_id}/stages:
+  /api/workflows/{workflow_id}/stages:
     post:
-      tags: [Sdlcs]
-      summary: Add a stage to a sdlc
-      operationId: addSdlcStage
+      tags: [Workflows]
+      summary: Add a stage to a workflow
+      operationId: addWorkflowStage
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2136,7 +2136,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SdlcStage'
+                $ref: '#/components/schemas/WorkflowStage'
 
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -2148,15 +2148,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/{sdlc_id}/reorder:
+  /api/workflows/{workflow_id}/reorder:
     put:
-      tags: [Sdlcs]
-      summary: Reorder sdlc stages
-      operationId: reorderSdlcStages
+      tags: [Workflows]
+      summary: Reorder workflow stages
+      operationId: reorderWorkflowStages
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2196,15 +2196,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/{sdlc_id}/export:
+  /api/workflows/{workflow_id}/export:
     get:
-      tags: [Sdlcs]
-      summary: Export sdlc configuration
-      operationId: exportSdlc
+      tags: [Workflows]
+      summary: Export workflow configuration
+      operationId: exportWorkflow
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2212,7 +2212,7 @@ paths:
             format: int64
       responses:
         '200':
-          description: Sdlc export
+          description: Workflow export
           content:
             application/json:
               schema:
@@ -2228,11 +2228,11 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/stages/{stage_id}:
+  /api/workflows/stages/{stage_id}:
     delete:
-      tags: [Sdlcs]
-      summary: Delete a sdlc stage
-      operationId: deleteSdlcStage
+      tags: [Workflows]
+      summary: Delete a workflow stage
+      operationId: deleteWorkflowStage
       security:
         - BearerAuth: []
       parameters:
@@ -2263,15 +2263,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/stages/roles/{sdlc_id}/{stage_id}:
+  /api/workflows/stages/roles/{workflow_id}/{stage_id}:
     post:
-      tags: [Sdlcs]
+      tags: [Workflows]
       summary: Assign role to stage
       operationId: assignRoleToStage
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2316,13 +2316,13 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
     put:
-      tags: [Sdlcs]
+      tags: [Workflows]
       summary: Reorder roles within a stage
       operationId: reorderStageRoles
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2368,15 +2368,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/sdlcs/stages/roles/{sdlc_id}/{stage_id}/{role_id}:
+  /api/workflows/stages/roles/{workflow_id}/{stage_id}/{role_id}:
     delete:
-      tags: [Sdlcs]
+      tags: [Workflows]
       summary: Remove role from stage
       operationId: removeRoleFromStage
       security:
         - BearerAuth: []
       parameters:
-        - name: sdlc_id
+        - name: workflow_id
           in: path
           required: true
           schema:
@@ -2881,7 +2881,7 @@ paths:
                 visibility:
                   type: string
                   enum: [public, private]
-                sdlc_id:
+                workflow_id:
                   type: integer
                   format: int64
             examples:
@@ -2978,7 +2978,7 @@ paths:
                 visibility:
                   type: string
                   enum: [public, private]
-                sdlc_id:
+                workflow_id:
                   type: integer
                   format: int64
             examples:
@@ -2987,7 +2987,7 @@ paths:
                   title: "Customer Portal"
                   description: "Customer-facing web portal project"
                   visibility: "private"
-                  sdlc_id: 1
+                  workflow_id: 1
       responses:
         '200':
           description: Project updated
@@ -4792,11 +4792,11 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/tickets/{ticket_ref}/sdlc:
+  /api/tickets/{ticket_ref}/workflow:
     post:
       tags: [Tickets]
-      summary: Set sdlc on a ticket
-      operationId: setTicketSdlc
+      summary: Set workflow on a ticket
+      operationId: setTicketWorkflow
       security:
         - BearerAuth: []
       parameters:
@@ -4811,14 +4811,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [sdlc_id]
+              required: [workflow_id]
               properties:
-                sdlc_id:
+                workflow_id:
                   type: integer
                   format: int64
       responses:
         '200':
-          description: Sdlc set
+          description: Workflow set
           content:
             application/json:
               schema:
@@ -4835,8 +4835,8 @@ paths:
           $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [Tickets]
-      summary: Remove sdlc from a ticket
-      operationId: removeTicketSdlc
+      summary: Remove workflow from a ticket
+      operationId: removeTicketWorkflow
       security:
         - BearerAuth: []
       parameters:
@@ -4847,7 +4847,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Sdlc removed
+          description: Workflow removed
           content:
             application/json:
               schema:

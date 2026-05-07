@@ -185,7 +185,7 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 			Notes:              matchedProject.Notes,
 			Status:             matchedProject.Status,
 			Visibility:         matchedProject.Visibility,
-			SdlcID:             matchedProject.SdlcID,
+			WorkflowID:             matchedProject.WorkflowID,
 		})
 		if err != nil {
 			return err
@@ -276,7 +276,7 @@ func isMutableCommand(args []string) bool {
 		"comment", "clone", "close", "open", "archive", "unarchive", "ready", "notready", "rm", "delete",
 		"note", "question", "bug", "epic":
 		return true
-	case "project", "story", "sdlc", "team", "user", "label", "role", "req", "requirement", "agent", "time":
+	case "project", "story", "workflow", "team", "user", "label", "role", "req", "requirement", "agent", "time":
 		if len(args) < 2 {
 			return false
 		}

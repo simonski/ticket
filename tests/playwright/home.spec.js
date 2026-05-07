@@ -328,8 +328,8 @@ test("new ticket modal hides labels and time sections", async ({ page }) => {
     // Need a project selected
     projects = [{ project_id: 1, title: "Test", prefix: "TK", status: "open", default_draft: true }];
     window.call = async (url) => {
-      if (url === "/api/sdlcs") {
-        return [{ sdlc_id: 8, name: "Delivery Flow" }];
+      if (url === "/api/workflows") {
+        return [{ workflow_id: 8, name: "Delivery Flow" }];
       }
       return [];
     };
@@ -338,13 +338,13 @@ test("new ticket modal hides labels and time sections", async ({ page }) => {
     const labelsSection = document.getElementById("ticket-labels-section");
     const timeSection = document.getElementById("ticket-time-section");
     const draftField = document.getElementById("ticket-draft");
-    const sdlcField = document.getElementById("ticket-sdlc");
+    const workflowField = document.getElementById("ticket-workflow");
     return {
       labelsHidden: labelsSection ? labelsSection.style.display === "none" : null,
       timeHidden: timeSection ? timeSection.style.display === "none" : null,
       hasDraftField: Boolean(draftField),
       draftValue: draftField ? draftField.value : null,
-      hasSdlcField: Boolean(sdlcField),
+      hasWorkflowField: Boolean(workflowField),
     };
   });
 
@@ -353,7 +353,7 @@ test("new ticket modal hides labels and time sections", async ({ page }) => {
   expect(result.timeHidden).toBe(true);
   expect(result.hasDraftField).toBe(true);
   expect(result.draftValue).toBe("true");
-  expect(result.hasSdlcField).toBe(true);
+  expect(result.hasWorkflowField).toBe(true);
 });
 
 test("board lanes expose quick new-ticket actions", async ({ page }) => {
@@ -366,7 +366,7 @@ test("board lanes expose quick new-ticket actions", async ({ page }) => {
     tickets = [];
     localStorage.setItem("task-project", "1");
     window.call = async (url) => {
-      if (url === "/api/sdlcs") return [];
+      if (url === "/api/workflows") return [];
       return [];
     };
     renderBoard();
@@ -386,23 +386,23 @@ test("board lanes expose quick new-ticket actions", async ({ page }) => {
   expect(result.selectedStage).toBe("develop");
 });
 
-test("sdlc editor renders draggable stage cards with inline role controls", async ({ page }) => {
+test("workflow editor renders draggable stage cards with inline role controls", async ({ page }) => {
   await page.goto("/");
 
   const result = await page.evaluate(async () => {
-    if (typeof showApp !== "function" || typeof openSdlcEditor !== "function") return null;
+    if (typeof showApp !== "function" || typeof openWorkflowEditor !== "function") return null;
     showApp("admin", "admin");
     window.call = async (url) => {
       if (url === "/api/roles") {
         return [{ role_id: 2, title: "Engineer" }, { role_id: 3, title: "QA" }];
       }
-      if (url === "/api/sdlcs/9") {
+      if (url === "/api/workflows/9") {
         return {
-          sdlc_id: 9,
+          workflow_id: 9,
           name: "Delivery",
           stages: [{
-            sdlc_stage_id: 41,
-            sdlc_id: 9,
+            workflow_stage_id: 41,
+            workflow_id: 9,
             stage_name: "develop",
             description: "Build the thing",
             definition_of_ready: "Specs ready",
@@ -414,14 +414,14 @@ test("sdlc editor renders draggable stage cards with inline role controls", asyn
       }
       return [];
     };
-    await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
-    const card = document.querySelector(".sdlc-stage-card");
-    const roleChip = card ? card.querySelector(".sdlc-role-chip") : null;
+    await openWorkflowEditor({ workflow_id: 9, name: "Delivery", description: "Ship changes" });
+    const card = document.querySelector(".workflow-stage-card");
+    const roleChip = card ? card.querySelector(".workflow-role-chip") : null;
     return {
       hasCard: Boolean(card),
       draggable: card ? card.draggable : false,
       hasSaveButton: Boolean(card && card.querySelector('[data-stage-action="save"]')),
-      hasRoleChip: Boolean(card && card.querySelector(".sdlc-role-chip")),
+      hasRoleChip: Boolean(card && card.querySelector(".workflow-role-chip")),
       roleChipDraggable: roleChip ? roleChip.draggable : false,
       hasRoleSelect: Boolean(card && card.querySelector("[data-stage-role-select]")),
       hasDorField: Boolean(card && card.querySelector('[data-stage-field="dor"]')),
@@ -438,19 +438,19 @@ test("sdlc editor renders draggable stage cards with inline role controls", asyn
   expect(result.hasDorField).toBe(true);
 });
 
-test("sdlc role reordering sends the updated role order", async ({ page }) => {
+test("workflow role reordering sends the updated role order", async ({ page }) => {
   await page.goto("/");
 
   const result = await page.evaluate(async () => {
-    if (typeof showApp !== "function" || typeof openSdlcEditor !== "function" || typeof reorderStageRoles !== "function") return null;
+    if (typeof showApp !== "function" || typeof openWorkflowEditor !== "function" || typeof reorderStageRoles !== "function") return null;
     showApp("admin", "admin");
     const requests = [];
     const detail = {
-      sdlc_id: 9,
+      workflow_id: 9,
       name: "Delivery",
       stages: [{
-        sdlc_stage_id: 41,
-        sdlc_id: 9,
+        workflow_stage_id: 41,
+        workflow_id: 9,
         stage_name: "develop",
         description: "Build the thing",
         definition_of_ready: "Specs ready",
@@ -464,14 +464,14 @@ test("sdlc role reordering sends the updated role order", async ({ page }) => {
       if (url === "/api/roles") {
         return [{ role_id: 2, title: "Engineer" }, { role_id: 3, title: "QA" }];
       }
-      if (url === "/api/sdlcs/9") {
+      if (url === "/api/workflows/9") {
         return detail;
       }
       return { status: "ok" };
     };
-    await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
+    await openWorkflowEditor({ workflow_id: 9, name: "Delivery", description: "Ship changes" });
     await reorderStageRoles(detail.stages[0], 3, 2);
-    const reorderRequest = requests.find((req) => req.url === "/api/sdlcs/stages/roles/9/41" && req.method === "PUT");
+    const reorderRequest = requests.find((req) => req.url === "/api/workflows/stages/roles/9/41" && req.method === "PUT");
     return reorderRequest ? JSON.parse(reorderRequest.body) : null;
   });
 
@@ -479,23 +479,23 @@ test("sdlc role reordering sends the updated role order", async ({ page }) => {
   expect(result.role_ids).toEqual([3, 2]);
 });
 
-test("sdlc editor keyboard shortcuts focus the new stage input and selected stage field", async ({ page }) => {
+test("workflow editor keyboard shortcuts focus the new stage input and selected stage field", async ({ page }) => {
   await page.goto("/");
 
   const result = await page.evaluate(async () => {
-    if (typeof showApp !== "function" || typeof openSdlcEditor !== "function") return null;
+    if (typeof showApp !== "function" || typeof openWorkflowEditor !== "function") return null;
     showApp("admin", "admin");
     window.call = async (url) => {
       if (url === "/api/roles") {
         return [{ role_id: 2, title: "Engineer" }];
       }
-      if (url === "/api/sdlcs/9") {
+      if (url === "/api/workflows/9") {
         return {
-          sdlc_id: 9,
+          workflow_id: 9,
           name: "Delivery",
           stages: [{
-            sdlc_stage_id: 41,
-            sdlc_id: 9,
+            workflow_stage_id: 41,
+            workflow_id: 9,
             stage_name: "develop",
             description: "Build the thing",
             definition_of_ready: "Specs ready",
@@ -507,15 +507,15 @@ test("sdlc editor keyboard shortcuts focus the new stage input and selected stag
       }
       return [];
     };
-    await openSdlcEditor({ sdlc_id: 9, name: "Delivery", description: "Ship changes" });
+    await openWorkflowEditor({ workflow_id: 9, name: "Delivery", description: "Ship changes" });
     document.body.focus();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true }));
-    const newStageFocused = document.activeElement && document.activeElement.id === "sdlc-stage-name";
-    const selectedCardEl = document.querySelector(".sdlc-stage-card");
+    const newStageFocused = document.activeElement && document.activeElement.id === "workflow-stage-name";
+    const selectedCardEl = document.querySelector(".workflow-stage-card");
     if (selectedCardEl) selectedCardEl.focus();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true }));
     const selectedField = document.activeElement;
-    const selectedCard = document.querySelector(".sdlc-stage-card.selected");
+    const selectedCard = document.querySelector(".workflow-stage-card.selected");
     return {
       newStageFocused,
       selectedFieldName: selectedField ? selectedField.getAttribute("data-stage-field") : null,
@@ -529,13 +529,13 @@ test("sdlc editor keyboard shortcuts focus the new stage input and selected stag
   expect(result.selectedStageId).toBe("41");
 });
 
-test("backlog perspective groups tickets by effective sdlc and filters by role", async ({ page }) => {
+test("backlog perspective groups tickets by effective workflow and filters by role", async ({ page }) => {
   await page.goto("/");
 
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof activatePerspective !== "function") return null;
     showApp("admin", "admin");
-    projects = [{ project_id: 1, prefix: "OPS", title: "Ops Console", sdlc_id: 8 }];
+    projects = [{ project_id: 1, prefix: "OPS", title: "Ops Console", workflow_id: 8 }];
     setSelectedProjectID(1);
     tickets = [
       {
@@ -558,7 +558,7 @@ test("backlog perspective groups tickets by effective sdlc and filters by role",
         type: "task",
         stage: "develop",
         state: "active",
-        sdlc_id: 9,
+        workflow_id: 9,
         role_id: 3,
         created_at: "2026-01-01T00:00:00Z",
         updated_at: "2026-01-02T00:00:00Z",
@@ -578,41 +578,41 @@ test("backlog perspective groups tickets by effective sdlc and filters by role",
       },
     ];
     window.call = async (url) => {
-      if (url === "/api/sdlcs") {
+      if (url === "/api/workflows") {
         return [
-          { sdlc_id: 8, name: "Default Flow" },
-          { sdlc_id: 9, name: "Expedite" },
+          { workflow_id: 8, name: "Default Flow" },
+          { workflow_id: 9, name: "Expedite" },
         ];
       }
-      if (url === "/api/sdlcs/8") {
+      if (url === "/api/workflows/8") {
         return {
-          sdlc_id: 8,
+          workflow_id: 8,
           name: "Default Flow",
           stages: [
-            { sdlc_stage_id: 41, stage_name: "design", sort_order: 1, roles: [{ role_id: 2, title: "Architect" }] },
-            { sdlc_stage_id: 42, stage_name: "develop", sort_order: 2, roles: [{ role_id: 3, title: "Engineer" }] },
+            { workflow_stage_id: 41, stage_name: "design", sort_order: 1, roles: [{ role_id: 2, title: "Architect" }] },
+            { workflow_stage_id: 42, stage_name: "develop", sort_order: 2, roles: [{ role_id: 3, title: "Engineer" }] },
           ],
         };
       }
-      if (url === "/api/sdlcs/9") {
+      if (url === "/api/workflows/9") {
         return {
-          sdlc_id: 9,
+          workflow_id: 9,
           name: "Expedite",
           stages: [
-            { sdlc_stage_id: 51, stage_name: "develop", sort_order: 1, roles: [{ role_id: 3, title: "Engineer" }] },
-            { sdlc_stage_id: 52, stage_name: "test", sort_order: 2, roles: [{ role_id: 4, title: "QA" }] },
+            { workflow_stage_id: 51, stage_name: "develop", sort_order: 1, roles: [{ role_id: 3, title: "Engineer" }] },
+            { workflow_stage_id: 52, stage_name: "test", sort_order: 2, roles: [{ role_id: 4, title: "QA" }] },
           ],
         };
       }
       return [];
     };
 
-    await loadBacklogSdlcData();
+    await loadBacklogWorkflowData();
     activatePerspective("backlog");
     renderBacklog();
 
-    const groups = Array.from(document.querySelectorAll(".backlog-sdlc-group")).map((group) => ({
-      sdlcId: group.dataset.sdlcId,
+    const groups = Array.from(document.querySelectorAll(".backlog-workflow-group")).map((group) => ({
+      workflowId: group.dataset.workflowId,
       title: group.querySelector(".backlog-group-title")?.textContent?.trim() || "",
       ticketTitles: Array.from(group.querySelectorAll(".backlog-ticket strong")).map((el) => el.textContent.trim()),
     }));
@@ -630,8 +630,8 @@ test("backlog perspective groups tickets by effective sdlc and filters by role",
   expect(result).not.toBeNull();
   expect(result.projectPill).toContain("Ops Console");
   expect(result.groups).toEqual([
-    { sdlcId: "8", title: "Default Flow", ticketTitles: ["Plan rollout"] },
-    { sdlcId: "9", title: "Expedite", ticketTitles: ["Build rollout", "Verify rollout"] },
+    { workflowId: "8", title: "Default Flow", ticketTitles: ["Plan rollout"] },
+    { workflowId: "9", title: "Expedite", ticketTitles: ["Build rollout", "Verify rollout"] },
   ]);
   expect(result.filteredTitles).toEqual(["Build rollout"]);
 });
@@ -642,7 +642,7 @@ test("ticket history modal renders a staged replay and filters project history t
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof openTicketHistoryModal !== "function") return null;
     showApp("admin", "admin");
-    projects = [{ project_id: 1, prefix: "OPS", title: "Ops Console", sdlc_id: 9 }];
+    projects = [{ project_id: 1, prefix: "OPS", title: "Ops Console", workflow_id: 9 }];
     setSelectedProjectID(1);
     tickets = [{
       ticket_id: 201,
@@ -652,21 +652,21 @@ test("ticket history modal renders a staged replay and filters project history t
       type: "task",
       stage: "test",
       state: "active",
-      sdlc_id: 9,
+      workflow_id: 9,
       role_id: 4,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-03T00:00:00Z",
     }];
     window.call = async (url) => {
-      if (url === "/api/sdlcs") return [{ sdlc_id: 9, name: "Delivery Flow" }];
-      if (url === "/api/sdlcs/9") {
+      if (url === "/api/workflows") return [{ workflow_id: 9, name: "Delivery Flow" }];
+      if (url === "/api/workflows/9") {
         return {
-          sdlc_id: 9,
+          workflow_id: 9,
           name: "Delivery Flow",
           stages: [
-            { sdlc_stage_id: 41, stage_name: "design", sort_order: 1, roles: [{ role_id: 2, title: "Architect" }] },
-            { sdlc_stage_id: 42, stage_name: "develop", sort_order: 2, roles: [{ role_id: 3, title: "Engineer" }] },
-            { sdlc_stage_id: 43, stage_name: "test", sort_order: 3, roles: [{ role_id: 4, title: "QA" }] },
+            { workflow_stage_id: 41, stage_name: "design", sort_order: 1, roles: [{ role_id: 2, title: "Architect" }] },
+            { workflow_stage_id: 42, stage_name: "develop", sort_order: 2, roles: [{ role_id: 3, title: "Engineer" }] },
+            { workflow_stage_id: 43, stage_name: "test", sort_order: 3, roles: [{ role_id: 4, title: "QA" }] },
           ],
         };
       }

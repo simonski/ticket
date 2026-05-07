@@ -26,7 +26,7 @@ executed without reopening the same scope questions every session.
 1. **Phase 1 is CLI + API only.** The website and TUI are explicitly deferred to
    Phase 4.
 2. **Phase 1 uses the broad admin surface.** “Entities and entity management are
-   done” means: projects, tickets, stories, labels, SDLCs, stages, roles,
+   done” means: projects, tickets, stories, labels, Workflows, stages, roles,
    teams, users, agents, comments, dependencies, and time tracking all have
    agreed CLI/API CRUD and lifecycle behavior.
 3. **Upgrade compatibility is mandatory.** The existing `.ticket/ticket.db` must
@@ -50,16 +50,16 @@ Current status:
 - `QUICKSTART_CLIENT.md` passes through `cmd/tk-test`
 - `QUICKSTART_SERVER.md` passes through `cmd/tk-test`
 - `scripts/testharness.sh` now covers both scripting/count assertions and an
-  SDLC workflow scenario
+  Workflow workflow scenario
 - focused Go regression checks pass for `./internal/store` and `./cmd/tk`
-- SDLC role-routing defects found during this pass were fixed and covered
+- Workflow role-routing defects found during this pass were fixed and covered
 
 Outcome of this phase:
 
 1. The quickstarts are a credible smoke contract for local and remote use.
 2. The shell harness is now part of the repeatable CLI/workflow contract.
 3. Core CRUD confidence is good for projects, tickets, stories, labels,
-   dependencies, time entries, users, teams, roles, SDLCs, and stages.
+   dependencies, time entries, users, teams, roles, Workflows, and stages.
 4. Weaker broad-scope areas still need a deliberate pass before `mvp-1`
    sign-off: comments, ideas, decisions, and some agent/admin flows.
 
@@ -70,7 +70,7 @@ Prove the core product is operational without depending on the website or TUI.
 Exit criteria:
 
 - CLI and HTTP API support the full entity/admin surface listed above.
-- SDLC lifecycle behavior is implemented and considered stable.
+- Workflow lifecycle behavior is implemented and considered stable.
 - Local mode and remote client/server mode are both installable and usable.
 - Test coverage includes unit, integration, contract, and executable scripting
   harnesses/examples.
@@ -126,7 +126,7 @@ Phase 4 progress update (2026-04-18):
   comment workflow check and passes at 8/8.
 - Website parity closed for labels, dependencies, and time tracking in the
   ticket modal; browser coverage now passes at 9/9.
-- TUI board coverage expanded with tests for SDLC stage ordering and board
+- TUI board coverage expanded with tests for Workflow stage ordering and board
   navigation/selection behavior.
 - Reproducible tutorial package added: `QUICKSTART_TODO_EXAMPLE.md`,
   `scripts/populate_todo_example.sh`, and `scripts/verify_todo_example.sh`
@@ -138,7 +138,7 @@ Phase 4 parity matrix (2026-04-18):
 |---|---|---|---|---|
 | Projects | complete | complete | complete | done |
 | Ticket board + lifecycle | complete | complete (drag/drop + modal) | complete | done |
-| SDLC/stage/role management | complete | complete (editor + reorder + role attach) | complete | done |
+| Workflow/stage/role management | complete | complete (editor + reorder + role attach) | complete | done |
 | Comments | complete | complete (load + add in ticket modal) | complete | done |
 | Labels | complete | complete | complete | done |
 | Dependencies | complete | complete | complete | done |
@@ -148,7 +148,7 @@ Phase 4 parity matrix (2026-04-18):
 Initial Phase 4 delivery sequence:
 
 1. Document workflow parity matrix (CLI/API vs website vs TUI) for project, ticket,
-   SDLC/stage/role, comments, labels, dependencies, time, and agent flows.
+   Workflow/stage/role, comments, labels, dependencies, time, and agent flows.
 2. Open and prioritize explicit parity-gap tickets in `release` (must-have for
    `beta-3` vs follow-up).
 3. Expand Playwright and TUI coverage for any missing must-have workflows before
@@ -176,7 +176,7 @@ Initial Phase 4 delivery sequence:
    - remote client/server quickstart: verified
    - scripted CLI harness: verified
 2. **Workflow stability**
-   - SDLC stage/role initialization and stage-change role persistence were
+   - Workflow stage/role initialization and stage-change role persistence were
      defective and are now fixed
    - workflow progression/regression is now covered more directly
 3. **Broad CRUD confidence**

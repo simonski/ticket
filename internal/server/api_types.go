@@ -23,12 +23,12 @@ type projectRequest struct {
 	GitRepository      string            `json:"git_repository"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
-	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	WorkflowID             *int64            `json:"workflow_id,omitempty"`
 }
 
 type roleRequest struct {
 	ID                 *int64            `json:"id,omitempty"`
-	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	WorkflowID             *int64            `json:"workflow_id,omitempty"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`
 	AcceptanceCriteria string            `json:"acceptance_criteria"`
@@ -37,13 +37,13 @@ type roleRequest struct {
 	ACMap              store.GuidanceMap `json:"ac_map,omitempty"`
 }
 
-type sdlcRequest struct {
+type workflowRequest struct {
 	ID          *int64 `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-type sdlcStageRequest struct {
+type workflowStageRequest struct {
 	StageName          string `json:"stage_name"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
@@ -53,7 +53,7 @@ type sdlcStageRequest struct {
 	SortOrder          int    `json:"sort_order"`
 }
 
-type sdlcReorderRequest struct {
+type workflowReorderRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 

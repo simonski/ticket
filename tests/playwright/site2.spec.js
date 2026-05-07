@@ -14,7 +14,7 @@ function installSite2Mock(page) {
           acceptance_criteria: "",
           git_repository: "acme/ops",
           visibility: "public",
-          sdlc_id: 1,
+          workflow_id: 1,
           default_draft: false,
         },
       ],
@@ -34,7 +34,7 @@ function installSite2Mock(page) {
           health_score: 5,
           draft: false,
           archived: false,
-          sdlc_id: null,
+          workflow_id: null,
         },
       ],
       commentsByTicket: {
@@ -50,22 +50,22 @@ function installSite2Mock(page) {
         "OPS-101": [{ time_entry_id: 81, ticket_id: "OPS-101", user_id: "admin", minutes: 30, note: "Initial effort", created_at: "now" }],
       },
       nextTimeEntryID: 82,
-      sdlcs: [
+      workflows: [
         {
-          sdlc_id: 1,
+          workflow_id: 1,
           name: "Delivery",
           description: "Default flow",
           stages: [
-            { sdlc_stage_id: 11, sdlc_id: 1, stage_name: "backlog", description: "", definition_of_ready: "", definition_of_done: "", roles: [{ role_id: 5, title: "Engineer" }] },
-            { sdlc_stage_id: 12, sdlc_id: 1, stage_name: "todo", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
-            { sdlc_stage_id: 13, sdlc_id: 1, stage_name: "doing", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
-            { sdlc_stage_id: 14, sdlc_id: 1, stage_name: "done", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
+            { workflow_stage_id: 11, workflow_id: 1, stage_name: "backlog", description: "", definition_of_ready: "", definition_of_done: "", roles: [{ role_id: 5, title: "Engineer" }] },
+            { workflow_stage_id: 12, workflow_id: 1, stage_name: "todo", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
+            { workflow_stage_id: 13, workflow_id: 1, stage_name: "doing", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
+            { workflow_stage_id: 14, workflow_id: 1, stage_name: "done", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
           ],
         },
       ],
       roles: [
-        { role_id: 5, title: "Engineer", description: "Build", acceptance_criteria: "", sdlc_id: 1 },
-        { role_id: 6, title: "QA", description: "Verify", acceptance_criteria: "", sdlc_id: 1 },
+        { role_id: 5, title: "Engineer", description: "Build", acceptance_criteria: "", workflow_id: 1 },
+        { role_id: 6, title: "QA", description: "Verify", acceptance_criteria: "", workflow_id: 1 },
       ],
       agents: [{ user_id: "agent-1", enabled: true }],
       teams: [{ team_id: 21, name: "Platform", parent_team_id: null }],
@@ -120,7 +120,7 @@ function installSite2Mock(page) {
           acceptance_criteria: body.acceptance_criteria || "",
           git_repository: body.git_repository || "",
           visibility: body.visibility || "public",
-          sdlc_id: body.sdlc_id || null,
+          workflow_id: body.workflow_id || null,
           default_draft: false,
         };
         db.projects.push(project);
@@ -151,12 +151,12 @@ function installSite2Mock(page) {
         const id = Number(path.split("/")[3]);
         return json(db.labels.filter((label) => label.project_id === id));
       }
-      if (path === "/api/sdlcs" && method === "GET") {
-        return json(db.sdlcs.map(({ stages, ...sdlc }) => sdlc));
+      if (path === "/api/workflows" && method === "GET") {
+        return json(db.workflows.map(({ stages, ...workflow }) => workflow));
       }
-      if (path.match(/^\/api\/sdlcs\/\d+$/) && method === "GET") {
+      if (path.match(/^\/api\/workflows\/\d+$/) && method === "GET") {
         const id = Number(last(path.split("/")));
-        return json(db.sdlcs.find((item) => item.sdlc_id === id));
+        return json(db.workflows.find((item) => item.workflow_id === id));
       }
       if (path === "/api/roles" && method === "GET") {
         return json(db.roles);
@@ -275,7 +275,7 @@ function installSite2Mock(page) {
             ticket_id: "OPS-999",
             archived: false,
             draft: false,
-            sdlc_id: null,
+            workflow_id: null,
           },
           body,
         );
@@ -285,26 +285,26 @@ function installSite2Mock(page) {
       if (path.match(/^\/api\/tickets\/[^/]+\/(draft|undraft|open|close|archive|unarchive)$/) && method === "POST") {
         return json({ status: "ok" });
       }
-      if (path.match(/^\/api\/tickets\/[^/]+\/sdlc$/) && (method === "POST" || method === "DELETE")) {
+      if (path.match(/^\/api\/tickets\/[^/]+\/workflow$/) && (method === "POST" || method === "DELETE")) {
         return json({ status: "ok" });
       }
-      if (path.match(/^\/api\/sdlcs\/\d+\/reorder$/) && method === "PUT") {
-        const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(path.split("/")[3]));
-        sdlc.stages = body.stage_ids.map((id) => sdlc.stages.find((stage) => stage.sdlc_stage_id === id));
+      if (path.match(/^\/api\/workflows\/\d+\/reorder$/) && method === "PUT") {
+        const workflow = db.workflows.find((item) => item.workflow_id === Number(path.split("/")[3]));
+        workflow.stages = body.stage_ids.map((id) => workflow.stages.find((stage) => stage.workflow_stage_id === id));
         return json({ status: "reordered" });
       }
-      if (path.match(/^\/api\/sdlcs\/stages\/roles\/\d+\/\d+$/) && method === "POST") {
+      if (path.match(/^\/api\/workflows\/stages\/roles\/\d+\/\d+$/) && method === "POST") {
         const parts = path.split("/");
-        const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(parts[5]));
-        const stage = sdlc.stages.find((item) => item.sdlc_stage_id === Number(parts[6]));
+        const workflow = db.workflows.find((item) => item.workflow_id === Number(parts[5]));
+        const stage = workflow.stages.find((item) => item.workflow_stage_id === Number(parts[6]));
         const role = db.roles.find((item) => item.role_id === Number(body.role_id));
         stage.roles.push({ role_id: role.role_id, title: role.title });
         return json({ status: "created" }, 201);
       }
-      if (path.match(/^\/api\/sdlcs\/stages\/roles\/\d+\/\d+$/) && method === "PUT") {
+      if (path.match(/^\/api\/workflows\/stages\/roles\/\d+\/\d+$/) && method === "PUT") {
         const parts = path.split("/");
-        const sdlc = db.sdlcs.find((item) => item.sdlc_id === Number(parts[5]));
-        const stage = sdlc.stages.find((item) => item.sdlc_stage_id === Number(parts[6]));
+        const workflow = db.workflows.find((item) => item.workflow_id === Number(parts[5]));
+        const stage = workflow.stages.find((item) => item.workflow_stage_id === Number(parts[6]));
         stage.roles = body.role_ids.map((id) => {
           const role = db.roles.find((item) => item.role_id === id);
           return { role_id: role.role_id, title: role.title };
@@ -405,24 +405,24 @@ test("moves a ticket across the board with drag and drop", async ({ page }) => {
   expect(requests.some((request) => request.body.stage === "done")).toBeTruthy();
 });
 
-test("reorders board stages through the SDLC reorder endpoint", async ({ page }) => {
-  await page.dragAndDrop('[data-sdlc-stage-id="11"]', '[data-sdlc-stage-id="14"]');
+test("reorders board stages through the Workflow reorder endpoint", async ({ page }) => {
+  await page.dragAndDrop('[data-workflow-stage-id="11"]', '[data-workflow-stage-id="14"]');
 
-  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/sdlcs/1/reorder"));
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/1/reorder"));
   expect(requests.length).toBeGreaterThan(0);
 });
 
-test("adds a role inside the SDLC editor using the existing stage-role API", async ({ page }) => {
-  await page.getByRole("button", { name: "SDLCs" }).click();
+test("adds a role inside the Workflow editor using the existing stage-role API", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
   await expect(page.locator("#stage-grid")).toContainText("backlog");
-  await expect(page.locator("#sdlc-role-bank")).toContainText("Engineer");
+  await expect(page.locator("#workflow-role-bank")).toContainText("Engineer");
   await page.locator('[data-add-role-select="12"]').selectOption("6");
   await page.locator('[data-add-role="12"]').click();
 
   const requests = await page.evaluate(() => window.__site2Requests);
   expect(requests).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ method: "POST", path: "/api/sdlcs/stages/roles/1/12", body: { role_id: 6 } }),
+      expect.objectContaining({ method: "POST", path: "/api/workflows/stages/roles/1/12", body: { role_id: 6 } }),
     ]),
   );
 });

@@ -30,7 +30,7 @@ type ProjectCreateRequest struct {
 	GitRepository      string            `json:"git_repository"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
-	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
 type ProjectUpdateRequest struct {
@@ -44,7 +44,7 @@ type ProjectUpdateRequest struct {
 	Notes              string            `json:"notes"`
 	Status             string            `json:"status"`
 	Visibility         string            `json:"visibility"`
-	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
 type ProjectMemberRequest struct {
@@ -69,13 +69,13 @@ type TeamMemberRequest struct {
 	JobTitle string `json:"job_title"`
 }
 
-type SdlcRequest struct {
+type WorkflowRequest struct {
 	ID          *int64 `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-type SdlcStageRequest struct {
+type WorkflowStageRequest struct {
 	StageName          string `json:"stage_name"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
@@ -85,7 +85,9 @@ type SdlcStageRequest struct {
 	SortOrder          int    `json:"sort_order"`
 }
 
-type SdlcReorderRequest struct {
+type WorkflowPhaseRequest = WorkflowStageRequest
+
+type WorkflowReorderRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 
@@ -178,23 +180,23 @@ type TicketRequest struct {
 }
 
 type TicketRequestResponse struct {
-	Status  string                `json:"status"`
-	Ticket  *store.Ticket         `json:"ticket,omitempty"`
-	Project *store.Project        `json:"project,omitempty"`
-	Parents []store.Ticket        `json:"parents,omitempty"`
-	Sdlc    *store.SdlcWithStages `json:"sdlc,omitempty"`
-	Role    *store.Role           `json:"role,omitempty"`
+	Status   string                    `json:"status"`
+	Ticket   *store.Ticket             `json:"ticket,omitempty"`
+	Project  *store.Project            `json:"project,omitempty"`
+	Parents  []store.Ticket            `json:"parents,omitempty"`
+	Workflow *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Role     *store.Role               `json:"role,omitempty"`
 }
 
 type AgentWorkResponse struct {
-	Status          string                `json:"status"`
-	Project         *store.Project        `json:"project"`
-	Ticket          *store.Ticket         `json:"ticket"`
-	Parents         []store.Ticket        `json:"parents"`
-	Sdlc            *store.SdlcWithStages `json:"sdlc,omitempty"`
-	Role            *store.Role           `json:"role,omitempty"`
-	Config          map[string]string     `json:"config,omitempty"`
-	ConfigUpdatedAt string                `json:"config_updated_at,omitempty"`
+	Status          string                    `json:"status"`
+	Project         *store.Project            `json:"project"`
+	Ticket          *store.Ticket             `json:"ticket"`
+	Parents         []store.Ticket            `json:"parents"`
+	Workflow        *store.WorkflowWithStages `json:"workflow,omitempty"`
+	Role            *store.Role               `json:"role,omitempty"`
+	Config          map[string]string         `json:"config,omitempty"`
+	ConfigUpdatedAt string                    `json:"config_updated_at,omitempty"`
 }
 
 type AgentCreateRequest struct {
@@ -203,7 +205,7 @@ type AgentCreateRequest struct {
 
 type RoleRequest struct {
 	ID                 *int64            `json:"id,omitempty"`
-	SdlcID             *int64            `json:"sdlc_id,omitempty"`
+	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 	Title              string            `json:"title"`
 	Description        string            `json:"description"`
 	AcceptanceCriteria string            `json:"acceptance_criteria"`

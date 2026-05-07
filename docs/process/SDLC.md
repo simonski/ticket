@@ -1,25 +1,25 @@
-# SDLC Methodology
+# Workflow Methodology
 
-This document defines the standard for running a repeatable SDLC assessment of this project. It is intentionally stricter than "good". The benchmark is professional excellence backed by evidence, not a vague sense that the project is probably fine.
+This document defines the standard for running a repeatable Workflow assessment of this project. It is intentionally stricter than "good". The benchmark is professional excellence backed by evidence, not a vague sense that the project is probably fine.
 
 This methodology is for **writing the assessment**, **structuring the outputs**, and **scoring progress across repeated runs**. It does **not** perform the assessment itself.
 
-## Relationship to the SDLC skill
+## Relationship to the Workflow skill
 
-This methodology defines the **stable reporting contract** for future SDLC runs.
+This methodology defines the **stable reporting contract** for future Workflow runs.
 
-- The existing SDLC skill may assess the repository through many specialist lenses.
+- The existing Workflow skill may assess the repository through many specialist lenses.
 - Those specialist findings MUST be consolidated into the nine domains in this document.
-- If a future SDLC run uses more granular role reports, those role reports are supporting evidence, not a replacement for the domain reports required here.
-- `docs/process/SDLC.md` is the governing methodology; the skill implementation must conform to it.
+- If a future Workflow run uses more granular role reports, those role reports are supporting evidence, not a replacement for the domain reports required here.
+- `docs/process/Workflow.md` is the governing methodology; the skill implementation must conform to it.
 
 ## 1. Objectives
 
-The SDLC assessment must:
+The Workflow assessment must:
 
 1. assess the project across the full delivery lifecycle, not only code style
 2. score the project against explicit requirements
-3. produce a stable set of reports under `./reports/sdlc/`
+3. produce a stable set of reports under `./reports/workflow/`
 4. preserve prior summary scores between runs so progress can be tracked
 5. produce recommendations that are specific, evidence-backed, and actionable
 
@@ -34,10 +34,10 @@ The standard is **distance from excellence**, not distance from failure.
 
 ## 3. Required output structure
 
-Each SDLC run must write or update the following files under `./reports/sdlc/`:
+Each Workflow run must write or update the following files under `./reports/workflow/`:
 
 ```text
-reports/sdlc/
+reports/workflow/
   00-SUMMARY.md
   01-standards.md
   02-testing.md
@@ -58,13 +58,13 @@ reports/sdlc/
 - `01-09` are domain reports, one per assessment area.
 - `10-RECOMMENDATIONS.md` is the consolidated action register.
 - `history.json` is the machine-readable score history and **must persist between runs**.
-- If a future SDLC run generates specialist or role-level reports, they SHOULD be written under `reports/sdlc/supporting/` so the stable top-level contract remains unchanged.
+- If a future Workflow run generates specialist or role-level reports, they SHOULD be written under `reports/workflow/supporting/` so the stable top-level contract remains unchanged.
 
 ## 4. Summary requirements
 
-`reports/sdlc/00-SUMMARY.md` MUST include:
+`reports/workflow/00-SUMMARY.md` MUST include:
 
-- methodology version or reference to `docs/process/SDLC.md`
+- methodology version or reference to `docs/process/Workflow.md`
 - assessment date
 - project name
 - scope reviewed
@@ -83,11 +83,11 @@ reports/sdlc/
 
 ## 5. Score persistence requirements
 
-Score history must survive future runs of the SDLC agent skill.
+Score history must survive future runs of the Workflow agent skill.
 
 ### Persistence rules
 
-- `reports/sdlc/history.json` MUST be created on the first run.
+- `reports/workflow/history.json` MUST be created on the first run.
 - Future runs MUST append a new entry rather than overwrite prior history.
 - `00-SUMMARY.md` MUST show the current score and at least the previous score and delta.
 - If prior history exists, the summary MUST include a cumulative history table.
@@ -268,7 +268,7 @@ What part of the system this domain reviewed in the current run.
 
 ## 9. Assessment workflow
 
-Each SDLC run SHOULD follow this order:
+Each Workflow run SHOULD follow this order:
 
 1. establish project intent from docs, specs, and user-facing flows
 2. map current implementation and operational reality
@@ -300,7 +300,7 @@ Where a finding belongs to multiple domains, the report that owns the root cause
 
 ## 11. Assessment domains
 
-The SDLC assessment consists of nine required domains.
+The Workflow assessment consists of nine required domains.
 
 ---
 
@@ -643,4 +643,4 @@ This document does not run the assessment. It defines:
 - where to write the outputs
 - how to preserve score history between runs
 
-The actual SDLC review should be executed separately using this document as the governing methodology.
+The actual Workflow review should be executed separately using this document as the governing methodology.

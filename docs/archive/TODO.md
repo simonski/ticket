@@ -1,11 +1,15 @@
 GOAL
 
+Now I wantt o use this server
+    to POPULATE ATOM!!!!!!
+    
+
 Perform an assessment of how far the project is from being used by itself.  Then create a plan to achieve the MVP for a phased set of beta releases.   This is a "self-improvement" piece of work that we will "race to a release".   Review this goal and give feedback until all the ambiguity is resolved.
 
 Phase1: confirm capability, baseline the features such that
     All entity and entity management API and CLIs are agreed as "Done"
     The website and TUI are put to one side for now.
-    The workflow of the SDLC is done.
+    The workflow of the Workflow is done.
     A test harness exists for all - unit and integration, and examples.
     It is installable and useable 
         - as a server
@@ -30,7 +34,7 @@ Step0:
 THE GOAL IS A TICKET SYSTEM THAT
 
 IN SCOPE
-    1. uses an SDLC
+    1. uses an Workflow
     2. uses an agent SKILL
     3. uses a PROMPT per step
     4. allows for a tcket to walk through the stages
@@ -101,10 +105,10 @@ phase0: make a plan to achieve below and call it WEBSITE_IMPROVEMENTS.md
 
 Use cases.  
 
-"As an admin I want to author and manage SDLC, Stage, Role creation, order": 
+"As an admin I want to author and manage Workflow, Stage, Role creation, order": 
 
-    - phase 1: a smooth method of creating from scratch an SDLC or editing an existing one (trello is an example reference)
-    - phase 2: a backlog view that shows the tickets and their place in the SDLC
+    - phase 1: a smooth method of creating from scratch an Workflow or editing an existing one (trello is an example reference)
+    - phase 2: a backlog view that shows the tickets and their place in the Workflow
     - phase 3: a history view that shows where a given ticket has been in a mario-kart ghost style showing all the stages and roles, where the user can click or move through them and see the feedback/actions taken
 
 
@@ -125,12 +129,12 @@ We will work in phases.  For now it is phase1.
 
 In this phase I want a back-and-forth conversation with you having read the docs and codebase agains this new requirement.  The final output should new definition document that describes the entities below, their purpose and usage.  It should be useable for humans as well as act as a design document.  
 
-PROJECT, SDLC, STAGE, ROLE, TICKET
+PROJECT, Workflow, STAGE, ROLE, TICKET
 
-PROJECT has a default SDLC but any epic or story (synonym for ticket) can use a different SDLC 
+PROJECT has a default Workflow but any epic or story (synonym for ticket) can use a different Workflow 
 
-This means a ticket of any type has an sdlc foreign key ewhich may-or-may not be populated. If it is, use that
-as teh sdlc for that story.  If it is not, check any parent ticket until you find an sdlc, otherwise use project sdlc, which is non-null.   
+This means a ticket of any type has an workflow foreign key ewhich may-or-may not be populated. If it is, use that
+as teh workflow for that story.  If it is not, check any parent ticket until you find an workflow, otherwise use project workflow, which is non-null.   
 
 dor: definition of ready
 dod: definition of done
@@ -142,13 +146,13 @@ PROJECT has
     dor: text describing definition of ready
     dod: text describing definition of done
     default_draft:boolean, indicates if tickets start in draft
-    default_sdlc:link to sdlc
+    default_workflow:link to workflow
 
-SDLC has
+Workflow has
     title
     description
     list of stanges (ordered)
-    each stage in the SDLC has a list of roles
+    each stage in the Workflow has a list of roles
 
 STAGE has
     title
@@ -166,7 +170,7 @@ ROLE has
 
     Note1: the role dod, dor, ac values are keyed by stage however if the value for the current stage is missing, then the 'default' key is used.   in this way a role can 'specialise' for a stage or be general purpose across any stage it is called on to do work.
 
-    Note2: a role can be put in any stage in any order - this is specific to the SDLC.   A Stage can be included or excluded in any SDLC also.  
+    Note2: a role can be put in any stage in any order - this is specific to the Workflow.   A Stage can be included or excluded in any Workflow also.  
 
 TICKET has
     id (prefix+integer) "TK-123"
@@ -182,7 +186,7 @@ TICKET has
     archived:
     compelte:
     draft: boolean
-    sdlc: optional
+    workflow: optional
     parent ticket id: optional
     project
 
@@ -231,8 +235,8 @@ project + stage + role + ticket
     T-TITLE
     T-DESCRIPTION
     
-tk sdlc ls
-tk sdlc get -id N / -name foo
+tk workflow ls
+tk workflow get -id N / -name foo
 
 
 renders
@@ -252,9 +256,9 @@ Ticket can ALSO be a client to a different backend
 A project is the container of work.
 A project has a title, description.
 
-A project has one SDLC (formerly called "Workflow") attached to it.
+A project has one Workflow (formerly called "Workflow") attached to it.
 
-An SDLC can be exported and given to "other" projects via an `sdlc_<name>.json` import/export file
+An Workflow can be exported and given to "other" projects via an `workflow_<name>.json` import/export file
 
 A project contains tickets.
 A ticket can have child tickets.
@@ -275,7 +279,7 @@ A ticket is either (draft: true/false)
     ready      - it is now ready to be worked on
 
 A ticket is in a stage (stage: STRING)
-    the value of which is defined in an SDLC process, which is part of the project.
+    the value of which is defined in an Workflow process, which is part of the project.
     if a ticket is marked as complete=true, then the stage is always "done"
 
 A stage
@@ -287,7 +291,7 @@ A stage has a status
     "success"
     "failed"
 
-A project has SDLC "yolo"
+A project has Workflow "yolo"
     Which has one role: "Solo developer does it all in one."
 
 

@@ -86,7 +86,7 @@ func TestInitFailsIfDatabaseAlreadyExists(t *testing.T) {
 
 func TestFixStaleForeignKeysMigration(t *testing.T) {
 	t.Parallel()
-	t.Skip("migration tests are not applicable after SDLC schema refactor — we accept data loss")
+	t.Skip("migration tests are not applicable after Workflow schema refactor — we accept data loss")
 	dbPath := filepath.Join(t.TempDir(), "ticket.db")
 
 	// Create a DB with the old "tasks" table and stale FK references (pre-migration state).
@@ -98,9 +98,9 @@ func TestFixStaleForeignKeysMigration(t *testing.T) {
 		PRAGMA foreign_keys = ON;
 		CREATE TABLE users (user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, user_type TEXT NOT NULL DEFAULT 'user', description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
 		INSERT INTO users (user_id, username, password_hash, role, display_name) VALUES ('u1', 'admin', 'hash', 'admin', 'admin');
-		CREATE TABLE projects (project_id INTEGER PRIMARY KEY AUTOINCREMENT, prefix TEXT NOT NULL DEFAULT 'TK', title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', visibility TEXT NOT NULL DEFAULT 'public', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, ticket_sequence INTEGER NOT NULL DEFAULT 0, sdlc_id INTEGER, FOREIGN KEY(created_by) REFERENCES users(user_id));
+		CREATE TABLE projects (project_id INTEGER PRIMARY KEY AUTOINCREMENT, prefix TEXT NOT NULL DEFAULT 'TK', title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'open', visibility TEXT NOT NULL DEFAULT 'public', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, ticket_sequence INTEGER NOT NULL DEFAULT 0, workflow_id INTEGER, FOREIGN KEY(created_by) REFERENCES users(user_id));
 		INSERT INTO projects (title, created_by, ticket_sequence) VALUES ('Test', 'u1', 1);
-		CREATE TABLE tasks (task_id TEXT PRIMARY KEY, project_id INTEGER NOT NULL, parent_id TEXT, clone_of TEXT, type TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', sdlc_id INTEGER, sdlc_stage_id INTEGER, stage TEXT NOT NULL DEFAULT 'design', state TEXT NOT NULL DEFAULT 'idle', status TEXT NOT NULL DEFAULT 'open', priority INTEGER NOT NULL DEFAULT 3, sort_order INTEGER NOT NULL DEFAULT 0, estimate_effort INTEGER NOT NULL DEFAULT 0, estimate_complete TEXT NOT NULL DEFAULT '', health_score INTEGER NOT NULL DEFAULT 0, assignee TEXT NOT NULL DEFAULT '', ready INTEGER NOT NULL DEFAULT 0, open INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(parent_id) REFERENCES tasks(task_id), FOREIGN KEY(clone_of) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
+		CREATE TABLE tasks (task_id TEXT PRIMARY KEY, project_id INTEGER NOT NULL, parent_id TEXT, clone_of TEXT, type TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', acceptance_criteria TEXT NOT NULL DEFAULT '', git_repository TEXT NOT NULL DEFAULT '', git_branch TEXT NOT NULL DEFAULT '', workflow_id INTEGER, workflow_stage_id INTEGER, stage TEXT NOT NULL DEFAULT 'design', state TEXT NOT NULL DEFAULT 'idle', status TEXT NOT NULL DEFAULT 'open', priority INTEGER NOT NULL DEFAULT 3, sort_order INTEGER NOT NULL DEFAULT 0, estimate_effort INTEGER NOT NULL DEFAULT 0, estimate_complete TEXT NOT NULL DEFAULT '', health_score INTEGER NOT NULL DEFAULT 0, assignee TEXT NOT NULL DEFAULT '', ready INTEGER NOT NULL DEFAULT 0, open INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(parent_id) REFERENCES tasks(task_id), FOREIGN KEY(clone_of) REFERENCES tasks(task_id), FOREIGN KEY(created_by) REFERENCES users(user_id));
 		INSERT INTO tasks (task_id, project_id, type, title, created_by) VALUES ('TK-1', 1, 'task', 'Old task', 'u1');
 
 		-- These tables have stale FKs referencing tasks instead of tickets
@@ -174,7 +174,7 @@ func TestUpgradeDatabaseDropsLegacyProjectGitBranchColumn(t *testing.T) {
 	_, err = rawDB.Exec(`
 		PRAGMA foreign_keys = ON;
 		CREATE TABLE users (user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, user_type TEXT NOT NULL DEFAULT 'user', description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '', last_seen TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
-		CREATE TABLE sdlcs (sdlc_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+		CREATE TABLE workflows (workflow_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 		CREATE TABLE projects (
 			project_id INTEGER PRIMARY KEY AUTOINCREMENT,
 			prefix TEXT NOT NULL DEFAULT 'TK',
@@ -194,7 +194,7 @@ func TestUpgradeDatabaseDropsLegacyProjectGitBranchColumn(t *testing.T) {
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			ticket_sequence INTEGER NOT NULL DEFAULT 0,
-			sdlc_id INTEGER
+			workflow_id INTEGER
 		);
 		INSERT INTO projects (prefix, title, git_repository, git_branch) VALUES ('TK', 'Legacy', 'https://example.com/repo.git', 'main');
 	`)

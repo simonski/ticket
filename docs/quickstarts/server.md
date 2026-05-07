@@ -46,11 +46,11 @@ restarts and image upgrades.
 If you need the compose YAML generated directly from the Ticket binary, run
 `tk docker-compose > compose.yaml` and review it before deploying.
 
-To try the fresh replacement frontend without removing the original one, start
-the server with:
+`tk server` serves the replacement frontend (`site2`) by default. To run the
+original frontend instead, start the server with:
 
 ```bash
-tk server -site site2
+tk server -site default
 ```
 
 ## 2. Configure the CLI for the running server
@@ -126,7 +126,7 @@ tk agent run -v
 
 Open `http://localhost:8080` in a browser:
 
-- Kanban board grouped by SDLC stage
+- Kanban board grouped by Workflow stage
 - Ticket creation and inline editing
 - Drag-and-drop stage transitions
 - Team and user management

@@ -24,10 +24,10 @@
         </externalReferences>
       </tool>
     </tools>
-    <component bom-ref="pkg:golang/github.com/simonski/ticket@v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841?type=module" type="application">
+    <component bom-ref="pkg:golang/github.com/simonski/ticket@v0.1.750-pre-workflow-refactor.0.20260409165753-2d74f39ff841?type=module" type="application">
       <name>github.com/simonski/ticket</name>
-      <version>v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841</version>
-      <purl>pkg:golang/github.com/simonski/ticket@v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
+      <version>v0.1.750-pre-workflow-refactor.0.20260409165753-2d74f39ff841</version>
+      <purl>pkg:golang/github.com/simonski/ticket@v0.1.750-pre-workflow-refactor.0.20260409165753-2d74f39ff841?goarch=amd64&amp;goos=darwin&amp;type=module</purl>
       <externalReferences>
         <reference type="vcs">
           <url>https://github.com/simonski/ticket</url>
@@ -474,7 +474,7 @@
     </component>
   </components>
   <dependencies>
-    <dependency ref="pkg:golang/github.com/simonski/ticket@v0.1.750-pre-sdlc-refactor.0.20260409165753-2d74f39ff841?type=module">
+    <dependency ref="pkg:golang/github.com/simonski/ticket@v0.1.750-pre-workflow-refactor.0.20260409165753-2d74f39ff841?type=module">
       <dependency ref="pkg:golang/github.com/charmbracelet/bubbles@v1.0.0?type=module"></dependency>
       <dependency ref="pkg:golang/github.com/charmbracelet/bubbletea@v1.3.10?type=module"></dependency>
       <dependency ref="pkg:golang/github.com/charmbracelet/lipgloss@v1.1.0?type=module"></dependency>

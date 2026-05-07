@@ -196,7 +196,7 @@ func TestLocalServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	}
 }
 
-func TestLocalServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
+func TestLocalServiceCoversLifecycleAliasesWorkflowStagesAndAgentOps(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -229,11 +229,11 @@ func TestLocalServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
 		t.Fatalf("GetProject().DefaultDraft = %v, want true", projectAfter.DefaultDraft)
 	}
 
-	wf, err := svc.CreateSdlc(ctx, libticket.SdlcRequest{Name: "wf-advanced", Description: "d"})
+	wf, err := svc.CreateWorkflow(ctx, libticket.WorkflowRequest{Name: "wf-advanced", Description: "d"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(ctx, wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddWorkflowStage(ctx, wf.ID, libticket.WorkflowStageRequest{
 		StageName:          "develop",
 		Description:        "ways",
 		AcceptanceCriteria: "ready",
@@ -241,41 +241,41 @@ func TestLocalServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
 		SortOrder:          1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	stage, err = svc.UpdateSdlcStage(ctx, stage.ID, libticket.SdlcStageRequest{
+	stage, err = svc.UpdateWorkflowStage(ctx, stage.ID, libticket.WorkflowStageRequest{
 		StageName:          "develop",
 		Description:        "updated ways",
 		AcceptanceCriteria: "updated ready",
 		DefinitionOfDone:   "updated done",
 	})
 	if err != nil {
-		t.Fatalf("UpdateSdlcStage() error = %v", err)
+		t.Fatalf("UpdateWorkflowStage() error = %v", err)
 	}
 	if stage.Description != "updated ways" || stage.DefinitionOfReady != "updated ready" {
-		t.Fatalf("UpdateSdlcStage() = %#v", stage)
+		t.Fatalf("UpdateWorkflowStage() = %#v", stage)
 	}
-	if _, err := svc.GetSdlcStage(ctx, stage.ID); err != nil {
-		t.Fatalf("GetSdlcStage() error = %v", err)
+	if _, err := svc.GetWorkflowStage(ctx, stage.ID); err != nil {
+		t.Fatalf("GetWorkflowStage() error = %v", err)
 	}
-	if stages, err := svc.ListSdlcStages(ctx, wf.ID); err != nil {
-		t.Fatalf("ListSdlcStages() error = %v", err)
+	if stages, err := svc.ListWorkflowStages(ctx, wf.ID); err != nil {
+		t.Fatalf("ListWorkflowStages() error = %v", err)
 	} else if len(stages) != 1 {
-		t.Fatalf("ListSdlcStages() len = %d, want 1", len(stages))
+		t.Fatalf("ListWorkflowStages() len = %d, want 1", len(stages))
 	}
 
 	role, err := svc.CreateRole(ctx, libticket.RoleRequest{Title: "Engineer"})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := svc.AddSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := svc.AddWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
-	if err := svc.ReorderSdlcStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
-		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	if err := svc.ReorderWorkflowStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
+		t.Fatalf("ReorderWorkflowStageRoles() error = %v", err)
 	}
-	if err := svc.RemoveSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	if err := svc.RemoveWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("RemoveWorkflowStageRole() error = %v", err)
 	}
 
 	ticket, err := svc.CreateTicket(ctx, libticket.TicketCreateRequest{ProjectID: project.ID, Type: "task", Title: "Lifecycle task"})
@@ -344,7 +344,7 @@ func TestLocalServiceIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	// Advance through all stages: design -> develop -> test -> done (4-stage SDLC)
+	// Advance through all stages: design -> develop -> test -> done (4-stage Workflow)
 	// Each state=success on a non-final stage auto-advances to next stage with state=idle
 	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
 		ticket, err = svc.GetTicketByID(context.Background(), ticket.ID)
@@ -447,29 +447,29 @@ func TestLocalServiceNotReadyTicket(t *testing.T) {
 	}
 }
 
-func TestLocalServiceSetUnsetTicketSdlc(t *testing.T) {
+func TestLocalServiceSetUnsetTicketWorkflow(t *testing.T) {
 	svc := newLocalSvc(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Test WF"})
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{Name: "Test WF"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
 	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{ProjectID: 1, Type: "task", Title: "WF test"})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	updated, err := svc.SetTicketSdlc(context.Background(), ticket.ID, wf.ID)
+	updated, err := svc.SetTicketWorkflow(context.Background(), ticket.ID, wf.ID)
 	if err != nil {
-		t.Fatalf("SetTicketSdlc() error = %v", err)
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
-	if updated.SdlcID == nil || *updated.SdlcID != wf.ID {
-		t.Fatalf("SetTicketSdlc() sdlc_id = %v, want %d", updated.SdlcID, wf.ID)
+	if updated.WorkflowID == nil || *updated.WorkflowID != wf.ID {
+		t.Fatalf("SetTicketWorkflow() workflow_id = %v, want %d", updated.WorkflowID, wf.ID)
 	}
-	unset, err := svc.UnsetTicketSdlc(context.Background(), ticket.ID)
+	unset, err := svc.UnsetTicketWorkflow(context.Background(), ticket.ID)
 	if err != nil {
-		t.Fatalf("UnsetTicketSdlc() error = %v", err)
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
 	}
-	if unset.SdlcID != nil {
-		t.Fatalf("UnsetTicketSdlc() sdlc_id = %v, want nil", unset.SdlcID)
+	if unset.WorkflowID != nil {
+		t.Fatalf("UnsetTicketWorkflow() workflow_id = %v, want nil", unset.WorkflowID)
 	}
 }
 

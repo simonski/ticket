@@ -54,7 +54,7 @@ func (r *router) registerProjectHandlers() {
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
-				SdlcID:             projectPayload.SdlcID,
+				WorkflowID:             projectPayload.WorkflowID,
 			})
 			if err != nil {
 				writeStoreError(w, err)
@@ -608,7 +608,7 @@ func (r *router) registerProjectHandlers() {
 				GitRepository:      projectPayload.GitRepository,
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
-				SdlcID:             projectPayload.SdlcID,
+				WorkflowID:             projectPayload.WorkflowID,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {

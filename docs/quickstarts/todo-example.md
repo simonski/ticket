@@ -19,7 +19,7 @@ make build-dev
 The script creates:
 
 - project `DEMO` (title: `demo`)
-- reference SDLC (`demo-flow-*`) with stage-role assignments
+- reference Workflow (`demo-flow-*`) with stage-role assignments
 - epic + child tasks + bug
 - story, decision, and idea entries
 - labels, dependencies, comments, and time entries

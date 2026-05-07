@@ -76,14 +76,14 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// SeedFunc is called during Init to seed the database with SDLCs and roles.
-// It receives the opened database and should create at least one SDLC.
-// The first SDLC found after seeding is assigned to the default project.
+// SeedFunc is called during Init to seed the database with Workflows and roles.
+// It receives the opened database and should create at least one Workflow.
+// The first Workflow found after seeding is assigned to the default project.
 type SeedFunc func(ctx context.Context, db *sql.DB) error
 
 // Init creates a new database at path with an admin user and a default project.
-// The seedFn (if non-nil) is called to populate SDLCs and roles from embedded
-// static files. If nil, no SDLCs are created and the project has no lifecycle.
+// The seedFn (if non-nil) is called to populate Workflows and roles from embedded
+// static files. If nil, no Workflows are created and the project has no lifecycle.
 func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	ctx := context.Background()
 	if adminUsername == "" || adminPassword == "" {
@@ -127,29 +127,29 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		return err
 	}
 
-	// Run the seed function to populate SDLCs and roles.
-	// If no seed function is provided, create a minimal develop→done SDLC
+	// Run the seed function to populate Workflows and roles.
+	// If no seed function is provided, create a minimal develop→done Workflow
 	// so tickets always have valid stages.
 	if len(seedFn) > 0 && seedFn[0] != nil {
 		if err := seedFn[0](ctx, db); err != nil {
 			return err
 		}
 	} else {
-		sdlc, sErr := CreateSdlc(ctx, db, "default", "Minimal bootstrap SDLC")
+		workflow, sErr := CreateWorkflow(ctx, db, "default", "Minimal bootstrap Workflow")
 		if sErr == nil {
 			for i, name := range []string{StageDevelop, StageDone} {
-				if _, stageErr := AddSdlcStage(ctx, db, sdlc.ID, name, "", "", i); stageErr != nil {
+				if _, stageErr := AddWorkflowStage(ctx, db, workflow.ID, name, "", "", i); stageErr != nil {
 					return stageErr
 				}
 			}
 		}
 	}
 
-	// Assign the first SDLC (if any) to the default project.
-	var sdlcID *int64
+	// Assign the first Workflow (if any) to the default project.
+	var workflowID *int64
 	var id int64
-	if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs LIMIT 1`).Scan(&id); err == nil {
-		sdlcID = &id
+	if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows LIMIT 1`).Scan(&id); err == nil {
+		workflowID = &id
 	}
 	if _, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix:             defaultProjectPrefix,
@@ -157,7 +157,7 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
 		CreatedBy:          adminID,
-		SdlcID:             sdlcID,
+		WorkflowID:             workflowID,
 	}); err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS roles (
 	role_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	sdlc_id INTEGER,
+	workflow_id INTEGER,
 	title TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
@@ -242,8 +242,8 @@ CREATE TABLE IF NOT EXISTS roles (
 	ac_map TEXT NOT NULL DEFAULT '{}',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
-	UNIQUE(sdlc_id, title)
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
+	UNIQUE(workflow_id, title)
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -264,9 +264,9 @@ CREATE TABLE IF NOT EXISTS projects (
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	ticket_sequence INTEGER NOT NULL DEFAULT 0,
 	default_draft INTEGER NOT NULL DEFAULT 0,
-	sdlc_id INTEGER,
+	workflow_id INTEGER,
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
-	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id)
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id)
 );
 
 CREATE TABLE IF NOT EXISTS tickets (
@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	ac_map TEXT NOT NULL DEFAULT '{}',
 	git_repository TEXT NOT NULL DEFAULT '',
 	git_branch TEXT NOT NULL DEFAULT '',
-	sdlc_stage_id INTEGER,
+	workflow_stage_id INTEGER,
 	role_id INTEGER,
 	stage TEXT NOT NULL DEFAULT 'develop',
 	state TEXT NOT NULL DEFAULT 'idle',
@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	complete INTEGER NOT NULL DEFAULT 0,
 	archived INTEGER NOT NULL DEFAULT 0,
 	deleted INTEGER NOT NULL DEFAULT 0,
-	previous_sdlc_stage_id INTEGER,
+	previous_workflow_stage_id INTEGER,
 	previous_role_id INTEGER,
 	created_by TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -307,7 +307,7 @@ CREATE TABLE IF NOT EXISTS tickets (
 	FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
-	FOREIGN KEY(sdlc_stage_id) REFERENCES sdlc_stages(sdlc_stage_id),
+	FOREIGN KEY(workflow_stage_id) REFERENCES workflow_stages(workflow_stage_id),
 	FOREIGN KEY(role_id) REFERENCES roles(role_id)
 );
 
@@ -437,8 +437,8 @@ CREATE TABLE IF NOT EXISTS project_teams (
 	FOREIGN KEY(team_id) REFERENCES teams(team_id)
 );
 
-CREATE TABLE IF NOT EXISTS sdlcs (
-	sdlc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS workflows (
+	workflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL UNIQUE,
 	description TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -475,28 +475,28 @@ CREATE TABLE IF NOT EXISTS time_entries (
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
-CREATE TABLE IF NOT EXISTS sdlc_stages (
-	sdlc_stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
-	sdlc_id INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS workflow_stages (
+	workflow_stage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	workflow_id INTEGER NOT NULL,
 	stage_name TEXT NOT NULL,
 	description TEXT NOT NULL DEFAULT '',
 	acceptance_criteria TEXT NOT NULL DEFAULT '',
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
-	UNIQUE(sdlc_id, stage_name)
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
+	UNIQUE(workflow_id, stage_name)
 );
 
-CREATE TABLE IF NOT EXISTS sdlc_stage_roles (
-	sdlc_id INTEGER NOT NULL,
+CREATE TABLE IF NOT EXISTS workflow_stage_roles (
+	workflow_id INTEGER NOT NULL,
 	stage_id INTEGER NOT NULL,
 	role_id INTEGER NOT NULL,
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY(sdlc_id, stage_id, role_id),
-	FOREIGN KEY(sdlc_id) REFERENCES sdlcs(sdlc_id),
-	FOREIGN KEY(stage_id) REFERENCES sdlc_stages(sdlc_stage_id),
+	PRIMARY KEY(workflow_id, stage_id, role_id),
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
+	FOREIGN KEY(stage_id) REFERENCES workflow_stages(workflow_stage_id),
 	FOREIGN KEY(role_id) REFERENCES roles(role_id)
 );
 
@@ -660,12 +660,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "projects", "sdlc_id") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN sdlc_id INTEGER REFERENCES sdlcs(sdlc_id)`); err != nil {
+	if !columnExists(ctx, db, "projects", "workflow_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
 			return err
 		}
 	}
-	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_projects_sdlc_id ON projects(sdlc_id)`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id)`); err != nil {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
@@ -762,13 +762,13 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "tickets", "sdlc_stage_id") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN sdlc_stage_id INTEGER REFERENCES sdlc_stages(sdlc_stage_id)`); err != nil {
+	if !columnExists(ctx, db, "tickets", "workflow_stage_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN workflow_stage_id INTEGER REFERENCES workflow_stages(workflow_stage_id)`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "tickets", "sdlc_id") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN sdlc_id INTEGER REFERENCES sdlcs(sdlc_id)`); err != nil {
+	if !columnExists(ctx, db, "tickets", "workflow_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tickets ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
 			return err
 		}
 	}
@@ -787,7 +787,7 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tickets_sdlc_stage_id ON tickets(sdlc_stage_id)`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_tickets_workflow_stage_id ON tickets(workflow_stage_id)`); err != nil {
 		return err
 	}
 	if !tableExists(ctx, db, "stories") {
@@ -882,20 +882,20 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	`); err != nil {
 		return err
 	}
-	// Roles and SDLCs are now seeded from static files by tk init (runInitCheckDefaults).
+	// Roles and Workflows are now seeded from static files by tk init (runInitCheckDefaults).
 	// The legacy seed functions are retained for backward compatibility with existing databases
 	// but are no longer called on new databases.
-	if err := backfillTicketSdlcStages(ctx, db); err != nil {
+	if err := backfillTicketWorkflowStages(ctx, db); err != nil {
 		return err
 	}
-	// Add DoR/DoD to sdlc stages
-	if !columnExists(ctx, db, "sdlc_stages", "definition_of_ready") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE sdlc_stages ADD COLUMN definition_of_ready TEXT NOT NULL DEFAULT ''`); err != nil {
+	// Add DoR/DoD to workflow stages
+	if !columnExists(ctx, db, "workflow_stages", "definition_of_ready") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages ADD COLUMN definition_of_ready TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	if !columnExists(ctx, db, "sdlc_stages", "definition_of_done") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE sdlc_stages ADD COLUMN definition_of_done TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !columnExists(ctx, db, "workflow_stages", "definition_of_done") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflow_stages ADD COLUMN definition_of_done TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
@@ -1136,10 +1136,10 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		{table: "team_agents", column: "user_id", stmt: `CREATE INDEX IF NOT EXISTS idx_team_agents_user_id ON team_agents(user_id)`},
 		{table: "ticket_labels", column: "ticket_id", stmt: `CREATE INDEX IF NOT EXISTS idx_ticket_labels_ticket_id ON ticket_labels(ticket_id)`},
 		{table: "users", column: "username", stmt: `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`},
-		{table: "roles", column: "sdlc_id", stmt: `CREATE INDEX IF NOT EXISTS idx_roles_sdlc_id ON roles(sdlc_id)`},
-		{table: "sdlc_stages", column: "sdlc_id", stmt: `CREATE INDEX IF NOT EXISTS idx_sdlc_stages_sdlc_id ON sdlc_stages(sdlc_id)`},
-		{table: "sdlc_stage_roles", column: "stage_id", stmt: `CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_stage_id ON sdlc_stage_roles(stage_id)`},
-		{table: "sdlc_stage_roles", column: "role_id", stmt: `CREATE INDEX IF NOT EXISTS idx_sdlc_stage_roles_role_id ON sdlc_stage_roles(role_id)`},
+		{table: "roles", column: "workflow_id", stmt: `CREATE INDEX IF NOT EXISTS idx_roles_workflow_id ON roles(workflow_id)`},
+		{table: "workflow_stages", column: "workflow_id", stmt: `CREATE INDEX IF NOT EXISTS idx_workflow_stages_workflow_id ON workflow_stages(workflow_id)`},
+		{table: "workflow_stage_roles", column: "stage_id", stmt: `CREATE INDEX IF NOT EXISTS idx_workflow_stage_roles_stage_id ON workflow_stage_roles(stage_id)`},
+		{table: "workflow_stage_roles", column: "role_id", stmt: `CREATE INDEX IF NOT EXISTS idx_workflow_stage_roles_role_id ON workflow_stage_roles(role_id)`},
 	}
 	for _, idx := range missingIndexes {
 		if !columnExists(ctx, db, idx.table, idx.column) {
@@ -1152,21 +1152,21 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func backfillTicketSdlcStages(ctx context.Context, db *sql.DB) error {
-	// For tickets that have a stage name but no sdlc_stage_id,
-	// resolve the stage from the project's sdlc.
+func backfillTicketWorkflowStages(ctx context.Context, db *sql.DB) error {
+	// For tickets that have a stage name but no workflow_stage_id,
+	// resolve the stage from the project's workflow.
 	_, err := db.ExecContext(ctx, `
 		UPDATE tickets
-		SET sdlc_stage_id = (
-			SELECT ws.sdlc_stage_id
+		SET workflow_stage_id = (
+			SELECT ws.workflow_stage_id
 			FROM projects p
-			JOIN sdlc_stages ws ON ws.sdlc_id = p.sdlc_id AND ws.stage_name = tickets.stage
+			JOIN workflow_stages ws ON ws.workflow_id = p.workflow_id AND ws.stage_name = tickets.stage
 			WHERE p.project_id = tickets.project_id
 		)
-		WHERE sdlc_stage_id IS NULL
+		WHERE workflow_stage_id IS NULL
 		  AND EXISTS (
 			SELECT 1 FROM projects p
-			JOIN sdlc_stages ws ON ws.sdlc_id = p.sdlc_id AND ws.stage_name = tickets.stage
+			JOIN workflow_stages ws ON ws.workflow_id = p.workflow_id AND ws.stage_name = tickets.stage
 			WHERE p.project_id = tickets.project_id
 		)
 	`)
@@ -1307,8 +1307,8 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 			ac_map TEXT NOT NULL DEFAULT '{}',
 			git_repository TEXT NOT NULL DEFAULT '',
 			git_branch TEXT NOT NULL DEFAULT '',
-			sdlc_id INTEGER,
-			sdlc_stage_id INTEGER,
+			workflow_id INTEGER,
+			workflow_stage_id INTEGER,
 			stage TEXT NOT NULL DEFAULT 'design',
 			state TEXT NOT NULL DEFAULT 'idle',
 			status TEXT NOT NULL DEFAULT 'open',
@@ -1329,7 +1329,7 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 			FOREIGN KEY(parent_id) REFERENCES tickets(ticket_id),
 			FOREIGN KEY(clone_of) REFERENCES tickets(ticket_id),
 			FOREIGN KEY(created_by) REFERENCES users(user_id),
-			FOREIGN KEY(sdlc_stage_id) REFERENCES sdlc_stages(sdlc_stage_id)
+			FOREIGN KEY(workflow_stage_id) REFERENCES workflow_stages(workflow_stage_id)
 		)
 	`); err != nil {
 		return fmt.Errorf("migrateTicketIDToText: create new tickets: %w", err)
@@ -1343,7 +1343,7 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 		"health_score", "assignee", "open", "archived", "deleted", "created_by",
 		"created_at", "updated_at",
 	}
-	optionalCols := []string{"sdlc_id", "sdlc_stage_id", "ready"}
+	optionalCols := []string{"workflow_id", "workflow_stage_id", "ready"}
 	var presentCols []string
 	for _, c := range oldCols {
 		if columnExists(ctx, db, "tickets_old_int", c) {

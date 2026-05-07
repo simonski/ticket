@@ -19,9 +19,9 @@ type boardColumn struct {
 // buildBoardColumns groups open tickets by stage into columns.
 func (m *Model) buildBoardColumns() {
 	stages := []string{store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone}
-	if len(m.sdlcs) > 0 && len(m.sdlcs[0].Stages) > 0 {
+	if len(m.workflows) > 0 && len(m.workflows[0].Stages) > 0 {
 		stages = stages[:0]
-		for _, ws := range m.sdlcs[0].Stages {
+		for _, ws := range m.workflows[0].Stages {
 			stages = append(stages, ws.StageName)
 		}
 	}

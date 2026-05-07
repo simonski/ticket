@@ -35,13 +35,13 @@ const (
 	modeProjects // new: inline projects panel (replaces the modal modeProjectPicker)
 	modeProjectEdit
 	modeIdeas // new: list of top-level non-epic tickets (m.toplevel)
-	modeSdlcs // sdlc list with expandable stages
+	modeWorkflows // workflow list with expandable stages
 	modeBoard // kanban board: tickets by stage columns
 )
 
-// tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Sdlcs > Config.
-var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeBoard, modeSdlcs, modeSettings}
-var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Board", "Sdlcs", "Config"}
+// tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Workflows > Config.
+var tabModes = []viewMode{modeSummary, modeProjects, modeIdeas, modeList, modeBoard, modeWorkflows, modeSettings}
+var tabNames = []string{"Home", "Projects", "Ideas", "Tickets", "Board", "Workflows", "Config"}
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ type ticketCreatedMsg store.Ticket
 type updateAvailableMsg string
 type errMsg struct{ err error }
 type projectsLoadedMsg []store.Project
-type sdlcLoadedMsg []store.SdlcWithStages
+type workflowLoadedMsg []store.WorkflowWithStages
 type rolesLoadedMsg []store.Role
 type projectSwitchedMsg struct {
 	project store.Project
@@ -119,11 +119,11 @@ type Model struct {
 	ideasCursor int
 	ideasOffset int
 
-	// sdlcs panel
-	sdlcs         []store.SdlcWithStages
+	// workflows panel
+	workflows         []store.WorkflowWithStages
 	roles         []store.Role
 	wfCursor      int
-	wfExpanded    map[int64]bool // expanded sdlc IDs
+	wfExpanded    map[int64]bool // expanded workflow IDs
 	wfAddingStage bool
 	wfStageInput  textinput.Model
 
@@ -131,7 +131,7 @@ type Model struct {
 	boardCol      int           // active column index
 	boardRow      int           // cursor row within the active column
 	boardOffset   int           // scroll offset within the active column
-	boardCols     []boardColumn // columns built from sdlc stages
+	boardCols     []boardColumn // columns built from workflow stages
 	boardInHeader bool          // true when focus is on the stage header row
 	boardInTabBar bool          // true when focus is on the panel tab bar
 
@@ -183,7 +183,7 @@ func newModel(svc libticket.Service, cfg config.Config, th Theme) Model {
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadTickets(m.svc, m.cfg),
-		loadSdlcs(m.svc),
+		loadWorkflows(m.svc),
 		loadRoles(m.svc),
 		checkUpdate(m.svc),
 		tickCmd(),
@@ -266,8 +266,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case sdlcLoadedMsg:
-		m.sdlcs = []store.SdlcWithStages(msg)
+	case workflowLoadedMsg:
+		m.workflows = []store.WorkflowWithStages(msg)
 		m.buildBoardColumns()
 
 	case rolesLoadedMsg:
@@ -416,8 +416,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleKeyProjectEdit(msg)
 	case modeIdeas:
 		return m.handleKeyIdeas(key)
-	case modeSdlcs:
-		return m.handleKeySdlcs(msg)
+	case modeWorkflows:
+		return m.handleKeyWorkflows(msg)
 	case modeBoard:
 		return m.handleKeyBoard(key)
 	}
@@ -698,8 +698,8 @@ func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				f.visibility = val
 			case "default_draft":
 				f.defaultDraft = parseBoolPickerValue(val)
-			case "sdlc":
-				f.sdlcID = parseSdlcPickerValue(val)
+			case "workflow":
+				f.workflowID = parseWorkflowPickerValue(val)
 			}
 			f.picker = nil
 		}
@@ -720,7 +720,7 @@ func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		f.applyFocus(m.width - 2)
 	case "enter", " ":
 		// Space must reach text input fields, not trigger save action
-		if key == " " && f.focus != pfSave && f.focus != pfVisibility && f.focus != pfDefaultDraft && f.focus != pfSdlc {
+		if key == " " && f.focus != pfSave && f.focus != pfVisibility && f.focus != pfDefaultDraft && f.focus != pfWorkflow {
 			cmd := f.update(msg)
 			return m, cmd
 		}
@@ -729,9 +729,9 @@ func (m Model) handleKeyProjectEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			f.picker = &pickerPopup{items: projectVisibilities, cursor: indexOf(projectVisibilities, f.visibility), forField: "visibility"}
 		case pfDefaultDraft:
 			f.picker = &pickerPopup{items: boolPickerItems, cursor: boolPickerCursor(f.defaultDraft), forField: "default_draft"}
-		case pfSdlc:
-			items := projectSdlcPickerItems(m.sdlcs)
-			f.picker = &pickerPopup{items: items, cursor: sdlcPickerCursor(items, f.sdlcID), forField: "sdlc"}
+		case pfWorkflow:
+			items := projectWorkflowPickerItems(m.workflows)
+			f.picker = &pickerPopup{items: items, cursor: workflowPickerCursor(items, f.workflowID), forField: "workflow"}
 		case pfSave:
 			return m, m.saveProject()
 		}
@@ -760,7 +760,7 @@ func (m Model) saveProject() tea.Cmd {
 		GitRepository:      f.gitRepo.Value(),
 		Notes:              f.dod.Value(),
 		Visibility:         f.visibility,
-		SdlcID:             f.sdlcID,
+		WorkflowID:             f.workflowID,
 	}
 	svc := m.svc
 	defaultDraft := f.defaultDraft
@@ -876,7 +876,7 @@ func (m Model) goBack() (tea.Model, tea.Cmd) {
 		m.mode = modeList
 	case modeBoard:
 		m.mode = modeSummary
-	case modeProjects, modeIdeas, modeSdlcs:
+	case modeProjects, modeIdeas, modeWorkflows:
 		m.mode = modeSummary
 	case modeList:
 		m.mode = modeSummary
@@ -958,8 +958,8 @@ func (m Model) View() string {
 		content = m.viewProjectEdit()
 	case modeIdeas:
 		content = m.viewIdeas()
-	case modeSdlcs:
-		content = m.viewSdlcs()
+	case modeWorkflows:
+		content = m.viewWorkflows()
 	case modeBoard:
 		content = m.viewBoard()
 	}
@@ -1107,7 +1107,7 @@ func (m Model) statusBar(w int) string {
 			modeProjects:      "↑↓ nav · space switch · enter/e edit · esc back",
 			modeProjectEdit:   "tab next · enter save · ctrl+s save · esc cancel",
 			modeIdeas:         "↑↓/wasd · enter · e edit · n new · esc back",
-			modeSdlcs:         "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
+			modeWorkflows:         "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
 		}
 		hint := hints[m.mode]
 		text = " " + moon + "  " + hint
@@ -1231,15 +1231,15 @@ func (m Model) viewDetail() []string {
 		add("flags", flags)
 	}
 
-	explicitSdlc := formatTicketSdlcChoice(t.SdlcID, m.sdlcs)
-	if t.SdlcID != nil {
-		add("ticket sdlc", explicitSdlc)
+	explicitWorkflow := formatTicketWorkflowChoice(t.WorkflowID, m.workflows)
+	if t.WorkflowID != nil {
+		add("ticket workflow", explicitWorkflow)
 	}
-	if effectiveSdlc, source := m.effectiveTicketSdlc(*t); effectiveSdlc != nil {
-		add("effective sdlc", fmt.Sprintf("%s (%s)", effectiveSdlc.Name, source))
+	if effectiveWorkflow, source := m.effectiveTicketWorkflow(*t); effectiveWorkflow != nil {
+		add("effective workflow", fmt.Sprintf("%s (%s)", effectiveWorkflow.Name, source))
 	}
-	if t.SdlcStageID != nil {
-		add("stage id", fmt.Sprintf("%d", *t.SdlcStageID))
+	if t.WorkflowStageID != nil {
+		add("stage id", fmt.Sprintf("%d", *t.WorkflowStageID))
 	}
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 
@@ -1308,9 +1308,9 @@ func (m Model) ticketFlags(ticket store.Ticket) string {
 	return strings.Join(flags, ", ")
 }
 
-func (m Model) effectiveTicketSdlc(ticket store.Ticket) (*store.SdlcWithStages, string) {
-	if ticket.SdlcID != nil {
-		return m.findSdlc(*ticket.SdlcID), "ticket override"
+func (m Model) effectiveTicketWorkflow(ticket store.Ticket) (*store.WorkflowWithStages, string) {
+	if ticket.WorkflowID != nil {
+		return m.findWorkflow(*ticket.WorkflowID), "ticket override"
 	}
 	seen := map[string]bool{ticket.ID: true}
 	parentID := ticket.ParentID
@@ -1320,21 +1320,21 @@ func (m Model) effectiveTicketSdlc(ticket store.Ticket) (*store.SdlcWithStages, 
 			break
 		}
 		seen[parent.ID] = true
-		if parent.SdlcID != nil {
-			return m.findSdlc(*parent.SdlcID), "inherited from " + parent.ID
+		if parent.WorkflowID != nil {
+			return m.findWorkflow(*parent.WorkflowID), "inherited from " + parent.ID
 		}
 		parentID = parent.ParentID
 	}
-	if m.project.SdlcID != nil {
-		return m.findSdlc(*m.project.SdlcID), "project default"
+	if m.project.WorkflowID != nil {
+		return m.findWorkflow(*m.project.WorkflowID), "project default"
 	}
 	return nil, ""
 }
 
-func (m Model) findSdlc(id int64) *store.SdlcWithStages {
-	for idx := range m.sdlcs {
-		if m.sdlcs[idx].ID == id {
-			return &m.sdlcs[idx]
+func (m Model) findWorkflow(id int64) *store.WorkflowWithStages {
+	for idx := range m.workflows {
+		if m.workflows[idx].ID == id {
+			return &m.workflows[idx]
 		}
 	}
 	return nil
@@ -1682,7 +1682,7 @@ func (m Model) viewProjectEdit() []string {
 	lines = append(lines, "")
 	lines = append(lines, field(pfDefaultDraft, "default draft", formatBoolPickerValue(f.defaultDraft)))
 	lines = append(lines, "")
-	lines = append(lines, field(pfSdlc, "default sdlc", formatProjectSdlcChoice(f.sdlcID, m.sdlcs)))
+	lines = append(lines, field(pfWorkflow, "default workflow", formatProjectWorkflowChoice(f.workflowID, m.workflows)))
 	lines = append(lines, "")
 
 	repoLbl := fmt.Sprintf("  %-14s", "git repo:")

@@ -178,7 +178,7 @@ func TestLocalModeClientIgnoresOwnershipForStatusChanges(t *testing.T) {
 		t.Fatalf("CreateTicket().Assignee = %q, want unassigned", ticket.Assignee)
 	}
 
-	// Advance through all stages to reach done/success (4-stage SDLC: design, develop, test, done)
+	// Advance through all stages to reach done/success (4-stage Workflow: design, develop, test, done)
 	for _, wantStatus := range []string{"develop/idle", "test/idle", "done/idle", "done/success"} {
 		ticket, err = api.GetTicketByID(context.Background(), ticket.ID)
 		if err != nil {
@@ -490,7 +490,7 @@ func TestLocalModeClientDependencies(t *testing.T) {
 	}
 }
 
-func TestLocalModeClientSdlcs(t *testing.T) {
+func TestLocalModeClientWorkflows(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -499,53 +499,53 @@ func TestLocalModeClientSdlcs(t *testing.T) {
 	}
 	api := New(localClientConfig(dbPath))
 
-	wf, err := api.CreateSdlc(context.Background(), SdlcRequest{Name: "wf1", Description: "d"})
+	wf, err := api.CreateWorkflow(context.Background(), WorkflowRequest{Name: "wf1", Description: "d"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := api.ListSdlcs(context.Background()); err != nil {
-		t.Fatalf("ListSdlcs() error = %v", err)
+	if _, err := api.ListWorkflows(context.Background()); err != nil {
+		t.Fatalf("ListWorkflows() error = %v", err)
 	}
-	if _, err := api.GetSdlc(context.Background(), wf.ID); err != nil {
-		t.Fatalf("GetSdlc() error = %v", err)
+	if _, err := api.GetWorkflow(context.Background(), wf.ID); err != nil {
+		t.Fatalf("GetWorkflow() error = %v", err)
 	}
-	stage, err := api.AddSdlcStage(context.Background(), wf.ID, SdlcStageRequest{StageName: "design", SortOrder: 0})
+	stage, err := api.AddWorkflowStage(context.Background(), wf.ID, WorkflowStageRequest{StageName: "design", SortOrder: 0})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	if err := api.ReorderSdlcStages(context.Background(), wf.ID, []int64{stage.ID}); err != nil {
-		t.Fatalf("ReorderSdlcStages() error = %v", err)
+	if err := api.ReorderWorkflowStages(context.Background(), wf.ID, []int64{stage.ID}); err != nil {
+		t.Fatalf("ReorderWorkflowStages() error = %v", err)
 	}
-	if err := api.RemoveSdlcStage(context.Background(), stage.ID); err != nil {
-		t.Fatalf("RemoveSdlcStage() error = %v", err)
+	if err := api.RemoveWorkflowStage(context.Background(), stage.ID); err != nil {
+		t.Fatalf("RemoveWorkflowStage() error = %v", err)
 	}
-	export, err := api.ExportSdlc(context.Background(), wf.ID)
+	export, err := api.ExportWorkflow(context.Background(), wf.ID)
 	if err != nil {
-		t.Fatalf("ExportSdlc() error = %v", err)
+		t.Fatalf("ExportWorkflow() error = %v", err)
 	}
 	export.Name = "imported-wf"
-	if _, err := api.ImportSdlc(context.Background(), export); err != nil {
-		t.Fatalf("ImportSdlc() error = %v", err)
+	if _, err := api.ImportWorkflow(context.Background(), export); err != nil {
+		t.Fatalf("ImportWorkflow() error = %v", err)
 	}
 
-	// Test SetTicketSdlc/UnsetTicketSdlc
+	// Test SetTicketWorkflow/UnsetTicketWorkflow
 	ticket, err := api.CreateTicket(context.Background(), TicketCreateRequest{ProjectID: 1, Type: "task", Title: "wf-test"})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.SetTicketSdlc(context.Background(), ticket.ID, wf.ID); err != nil {
-		t.Fatalf("SetTicketSdlc() error = %v", err)
+	if _, err := api.SetTicketWorkflow(context.Background(), ticket.ID, wf.ID); err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
-	if _, err := api.UnsetTicketSdlc(context.Background(), ticket.ID); err != nil {
-		t.Fatalf("UnsetTicketSdlc() error = %v", err)
+	if _, err := api.UnsetTicketWorkflow(context.Background(), ticket.ID); err != nil {
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
 	}
 
-	if err := api.DeleteSdlc(context.Background(), wf.ID); err != nil {
-		t.Fatalf("DeleteSdlc() error = %v", err)
+	if err := api.DeleteWorkflow(context.Background(), wf.ID); err != nil {
+		t.Fatalf("DeleteWorkflow() error = %v", err)
 	}
 }
 
-func TestLocalModeClientSdlcStagesProjectDraftAndTicketAliases(t *testing.T) {
+func TestLocalModeClientWorkflowStagesProjectDraftAndTicketAliases(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
@@ -555,11 +555,11 @@ func TestLocalModeClientSdlcStagesProjectDraftAndTicketAliases(t *testing.T) {
 	api := New(localClientConfig(dbPath))
 
 	ctx := context.Background()
-	wf, err := api.CreateSdlc(ctx, SdlcRequest{Name: "wf-advanced", Description: "d"})
+	wf, err := api.CreateWorkflow(ctx, WorkflowRequest{Name: "wf-advanced", Description: "d"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := api.AddSdlcStage(ctx, wf.ID, SdlcStageRequest{
+	stage, err := api.AddWorkflowStage(ctx, wf.ID, WorkflowStageRequest{
 		StageName:          "develop",
 		Description:        "ways",
 		AcceptanceCriteria: "ready",
@@ -567,50 +567,50 @@ func TestLocalModeClientSdlcStagesProjectDraftAndTicketAliases(t *testing.T) {
 		SortOrder:          1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	if stage.Description != "ways" || stage.DefinitionOfReady != "ready" || stage.DefinitionOfDone != "done" {
-		t.Fatalf("AddSdlcStage() = %#v, want fallback values copied", stage)
+		t.Fatalf("AddWorkflowStage() = %#v, want fallback values copied", stage)
 	}
-	stage, err = api.UpdateSdlcStage(ctx, stage.ID, SdlcStageRequest{
+	stage, err = api.UpdateWorkflowStage(ctx, stage.ID, WorkflowStageRequest{
 		StageName:          "develop",
 		Description:        "updated ways",
 		AcceptanceCriteria: "updated ready",
 		DefinitionOfDone:   "updated done",
 	})
 	if err != nil {
-		t.Fatalf("UpdateSdlcStage() error = %v", err)
+		t.Fatalf("UpdateWorkflowStage() error = %v", err)
 	}
 	if stage.Description != "updated ways" || stage.DefinitionOfReady != "updated ready" {
-		t.Fatalf("UpdateSdlcStage() = %#v, want updated fallback values", stage)
+		t.Fatalf("UpdateWorkflowStage() = %#v, want updated fallback values", stage)
 	}
-	gotStage, err := api.GetSdlcStage(ctx, stage.ID)
+	gotStage, err := api.GetWorkflowStage(ctx, stage.ID)
 	if err != nil {
-		t.Fatalf("GetSdlcStage() error = %v", err)
+		t.Fatalf("GetWorkflowStage() error = %v", err)
 	}
 	if gotStage.ID != stage.ID {
-		t.Fatalf("GetSdlcStage().ID = %d, want %d", gotStage.ID, stage.ID)
+		t.Fatalf("GetWorkflowStage().ID = %d, want %d", gotStage.ID, stage.ID)
 	}
-	stages, err := api.ListSdlcStages(ctx, wf.ID)
+	stages, err := api.ListWorkflowStages(ctx, wf.ID)
 	if err != nil {
-		t.Fatalf("ListSdlcStages() error = %v", err)
+		t.Fatalf("ListWorkflowStages() error = %v", err)
 	}
 	if len(stages) != 1 {
-		t.Fatalf("ListSdlcStages() len = %d, want 1", len(stages))
+		t.Fatalf("ListWorkflowStages() len = %d, want 1", len(stages))
 	}
 
 	role, err := api.CreateRole(ctx, RoleRequest{Title: "Engineer"})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := api.AddSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := api.AddWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
-	if err := api.ReorderSdlcStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
-		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	if err := api.ReorderWorkflowStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
+		t.Fatalf("ReorderWorkflowStageRoles() error = %v", err)
 	}
-	if err := api.RemoveSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	if err := api.RemoveWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("RemoveWorkflowStageRole() error = %v", err)
 	}
 
 	projectBefore, err := api.GetProject(ctx, "1")

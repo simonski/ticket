@@ -21,7 +21,7 @@
         "medium": 8,
         "low": 2
       },
-      "summary": "Baseline SDLC assessment under reports/sdlc."
+      "summary": "Baseline Workflow assessment under reports/workflow."
     },
     {
       "date": "2026-04-26",
@@ -43,7 +43,7 @@
         "medium": 6,
         "low": 2
       },
-      "summary": "Second SDLC run after OpenAPI, coverage, Playwright, and documentation fixes; remaining risks center on deploy defaults, provenance, trust boundaries, and residual contract drift."
+      "summary": "Second Workflow run after OpenAPI, coverage, Playwright, and documentation fixes; remaining risks center on deploy defaults, provenance, trust boundaries, and residual contract drift."
     }
   ]
 }

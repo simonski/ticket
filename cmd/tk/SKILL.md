@@ -7,7 +7,7 @@ metadata:
 
 # tk Ticket Management Skill
 
-`tk` is the project's ticket and sdlc management CLI. You must use it to read and update task state throughout your work. Do not rely on memory or conversation history for ticket state — always query `tk` directly.
+`tk` is the project's ticket and workflow management CLI. You must use it to read and update task state throughout your work. Do not rely on memory or conversation history for ticket state — always query `tk` directly.
 
 ## Core Principle
 
@@ -37,14 +37,14 @@ tk summary
 tk list
 ```
 
-## SDLC Stages
+## Workflow Stages
 
-The default sdlc has four stages: `design`, `develop`, `test`, `done`. Each ticket also has a state (e.g. `idle`, `active`, `success`, `failed`). Together these form the ticket's status as `stage/state` (e.g. `develop/active`).
+The default workflow has four stages: `design`, `develop`, `test`, `done`. Each ticket also has a state (e.g. `idle`, `active`, `success`, `failed`). Together these form the ticket's status as `stage/state` (e.g. `develop/active`).
 
-Always check the project's available sdlc stages before transitioning — don't assume stage names:
+Always check the project's available workflow stages before transitioning — don't assume stage names:
 ```bash
-tk sdlc list
-tk sdlc get -id <sdlc-id>
+tk workflow list
+tk workflow get -id <workflow-id>
 ```
 
 ## Starting Work
@@ -167,7 +167,7 @@ tk label <id> <label>
 
 # Ticket — Issue Tracking for Agents
 
-This project uses `tk` for issue tracking. All work is managed through CLI commands using a sdlc.
+This project uses `tk` for issue tracking. All work is managed through CLI commands using a workflow.
 
 ## Setup
 
@@ -244,17 +244,17 @@ tk unset-parent -id <child-id>
 
 Tickets have a two-part status: `stage/state` (e.g. `develop/active`, `done/success`).
 
-### SDLC-Driven Stages
+### Workflow-Driven Stages
 
-Stages are defined by the project's sdlc (an ordered sequence of stages). The default sdlc has: `design → develop → test → done`.
+Stages are defined by the project's workflow (an ordered sequence of stages). The default workflow has: `design → develop → test → done`.
 
-Stages advance automatically: when a ticket's state is set to `success`, it moves to the next sdlc stage with state `idle`. On the final stage, `success` means the ticket is complete.
+Stages advance automatically: when a ticket's state is set to `success`, it moves to the next workflow stage with state `idle`. On the final stage, `success` means the ticket is complete.
 
 You cannot set a ticket's stage directly — use state commands to drive progression.
 
 ```bash
-# View a project's sdlc stages
-tk sdlc get -id <sdlc-id>
+# View a project's workflow stages
+tk workflow get -id <workflow-id>
 ```
 
 ### State Commands
@@ -331,7 +331,7 @@ tk time delete <entry-id>
 ## Board View
 
 ```bash
-# Kanban-style view grouped by sdlc stage
+# Kanban-style view grouped by workflow stage
 tk board
 ```
 
@@ -401,7 +401,7 @@ tk init                            # Guided repo setup flow
 tk project init                    # Non-interactive project bind/create helper
 ```
 
-## SDLC Guidelines
+## Workflow Guidelines
 
 1. **Pick up work**: `tk ls --status design/idle`, then `tk claim -id <id>` and `tk state -id <id> active`
 2. **Advance to develop before coding**: Once design is done and you are about to write code, run `tk complete -id <id>` to advance the ticket from design → develop, then `tk state -id <id> active` to set it to develop/active. **Never start coding on a ticket that is still in design/active.**

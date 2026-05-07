@@ -351,10 +351,10 @@ func resolveLifecycleInput(status, stage, state string) (string, string, error) 
 }
 
 func ticketWorkflowStageNames(svc libticket.Service, ticket store.Ticket) ([]string, error) {
-	if ticket.SdlcStageID != nil {
-		stage, err := svc.GetSdlcStage(context.Background(), *ticket.SdlcStageID)
+	if ticket.WorkflowStageID != nil {
+		stage, err := svc.GetWorkflowStage(context.Background(), *ticket.WorkflowStageID)
 		if err == nil {
-			stages, err := svc.ListSdlcStages(context.Background(), stage.SdlcID)
+			stages, err := svc.ListWorkflowStages(context.Background(), stage.WorkflowID)
 			if err != nil {
 				return nil, err
 			}
@@ -363,8 +363,8 @@ func ticketWorkflowStageNames(svc libticket.Service, ticket store.Ticket) ([]str
 			}
 		}
 	}
-	if ticket.SdlcID != nil {
-		stages, err := svc.ListSdlcStages(context.Background(), *ticket.SdlcID)
+	if ticket.WorkflowID != nil {
+		stages, err := svc.ListWorkflowStages(context.Background(), *ticket.WorkflowID)
 		if err != nil {
 			return nil, err
 		}
@@ -383,8 +383,8 @@ func ticketWorkflowStageNames(svc libticket.Service, ticket store.Ticket) ([]str
 	if err != nil {
 		return nil, err
 	}
-	if project.SdlcID != nil {
-		stages, err := svc.ListSdlcStages(context.Background(), *project.SdlcID)
+	if project.WorkflowID != nil {
+		stages, err := svc.ListWorkflowStages(context.Background(), *project.WorkflowID)
 		if err != nil {
 			return nil, err
 		}
@@ -395,7 +395,7 @@ func ticketWorkflowStageNames(svc libticket.Service, ticket store.Ticket) ([]str
 	return []string{store.StageDesign, store.StageDevelop, store.StageTest, store.StageDone}, nil
 }
 
-func normalizeWorkflowStageNames(stages []store.SdlcStage) []string {
+func normalizeWorkflowStageNames(stages []store.WorkflowStage) []string {
 	names := make([]string, 0, len(stages))
 	seen := make(map[string]bool, len(stages))
 	for _, stage := range stages {
@@ -637,14 +637,14 @@ func runBoard(args []string) error {
 	if outputJSON {
 		return printJSON(tickets)
 	}
-	var sdlcStages []store.SdlcStage
-	if project.SdlcID != nil {
-		if wf, err := api.GetSdlc(context.Background(), *project.SdlcID); err == nil {
-			sdlcStages = wf.Stages
+	var workflowStages []store.WorkflowStage
+	if project.WorkflowID != nil {
+		if wf, err := api.GetWorkflow(context.Background(), *project.WorkflowID); err == nil {
+			workflowStages = wf.Stages
 		}
 	}
-	if len(sdlcStages) == 0 {
-		fmt.Println("no sdlc stages defined for this project")
+	if len(workflowStages) == 0 {
+		fmt.Println("no workflow stages defined for this project")
 		return nil
 	}
 
@@ -669,7 +669,7 @@ func runBoard(args []string) error {
 	}
 
 	// Print each stage as a lane
-	for _, ws := range sdlcStages {
+	for _, ws := range workflowStages {
 		stageTickets := byStage[ws.StageName]
 		fmt.Printf("── %s (%d) ──\n", strings.ToUpper(ws.StageName), len(stageTickets))
 		if len(stageTickets) == 0 {
@@ -768,12 +768,12 @@ func runGet(args []string) error {
 	if outputJSON {
 		return printJSON(ticket)
 	}
-	// Look up sdlc stages for progress display
-	var sdlcStages []store.SdlcStage
+	// Look up workflow stages for progress display
+	var workflowStages []store.WorkflowStage
 	project, projectErr := svc.GetProject(context.Background(), fmt.Sprintf("%d", ticket.ProjectID))
-	if projectErr == nil && project.SdlcID != nil {
-		if wf, err := svc.GetSdlc(context.Background(), *project.SdlcID); err == nil {
-			sdlcStages = wf.Stages
+	if projectErr == nil && project.WorkflowID != nil {
+		if wf, err := svc.GetWorkflow(context.Background(), *project.WorkflowID); err == nil {
+			workflowStages = wf.Stages
 		}
 	}
 	ticketLabels, _ := svc.ListTicketLabels(context.Background(), ticket.ID)
@@ -801,7 +801,7 @@ func runGet(args []string) error {
 		}
 		childTotal, childOpen, childClosed = childTicketCounts(children)
 	}
-	printTicketDetails(ticket, dependencies, history, sdlcStages, ticketLabels, totalTime, parentKey, cloneKey, childTotal, childOpen, childClosed)
+	printTicketDetails(ticket, dependencies, history, workflowStages, ticketLabels, totalTime, parentKey, cloneKey, childTotal, childOpen, childClosed)
 	if len(children) > 0 {
 		printTicketChildren(children)
 	}
@@ -1767,17 +1767,20 @@ func runDependency(args []string) error {
 
 func runRequest(args []string) error {
 	dryRun := false
+	explain := false
 	var requestedRef string
 	for _, arg := range args {
 		switch arg {
 		case "--dryrun", "-dryrun":
 			dryRun = true
+		case "--explain", "-explain":
+			explain = true
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("usage: tk request [--dryrun] [<id>]")
+				return fmt.Errorf("usage: tk request [--dryrun] [--explain] [<id>]")
 			}
 			if requestedRef != "" {
-				return fmt.Errorf("usage: tk request [--dryrun] [<id>]")
+				return fmt.Errorf("usage: tk request [--dryrun] [--explain] [<id>]")
 			}
 			requestedRef = arg
 		}
@@ -1809,7 +1812,28 @@ func runRequest(args []string) error {
 		return nil
 	}
 	fmt.Println(response.Status)
+	if explain {
+		fmt.Println(requestStatusExplanation(response.Status, requestedRef))
+	}
 	return nil
+}
+
+func requestStatusExplanation(status, requestedRef string) string {
+	switch strings.TrimSpace(status) {
+	case "NO-WORK":
+		return "explain: no eligible ticket was found for assignment. Check project status, ticket stage/state, draft/archive/complete flags, and dependencies."
+	case "REJECTED":
+		if strings.TrimSpace(requestedRef) != "" {
+			return "explain: the requested ticket is not claimable for your current context (already assigned, wrong project, blocked, or not in a claimable stage/state)."
+		}
+		return "explain: request was rejected because the selected ticket is not claimable in your current context."
+	case "ASSIGNED":
+		return "explain: work was assigned to you."
+	case "AVAILABLE":
+		return "explain: dry-run found assignable work."
+	default:
+		return "explain: no additional detail available for this status."
+	}
 }
 
 func runRequestDryRun(args []string) error {

@@ -177,7 +177,7 @@ func TestHTTPServiceUpdateTicketSupportsExpandedFields(t *testing.T) {
 	}
 }
 
-func TestHTTPServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
+func TestHTTPServiceCoversLifecycleAliasesWorkflowStagesAndAgentOps(t *testing.T) {
 	_, svc := newRemoteFixture(t)
 	ctx := context.Background()
 
@@ -199,11 +199,11 @@ func TestHTTPServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
 		t.Fatalf("GetProject().DefaultDraft = %v, want true", projectAfter.DefaultDraft)
 	}
 
-	wf, err := svc.CreateSdlc(ctx, libticket.SdlcRequest{Name: "wf-advanced", Description: "d"})
+	wf, err := svc.CreateWorkflow(ctx, libticket.WorkflowRequest{Name: "wf-advanced", Description: "d"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(ctx, wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddWorkflowStage(ctx, wf.ID, libticket.WorkflowStageRequest{
 		StageName:          "develop",
 		Description:        "ways",
 		AcceptanceCriteria: "ready",
@@ -211,38 +211,38 @@ func TestHTTPServiceCoversLifecycleAliasesSdlcStagesAndAgentOps(t *testing.T) {
 		SortOrder:          1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	stage, err = svc.UpdateSdlcStage(ctx, stage.ID, libticket.SdlcStageRequest{
+	stage, err = svc.UpdateWorkflowStage(ctx, stage.ID, libticket.WorkflowStageRequest{
 		StageName:          "develop",
 		Description:        "updated ways",
 		AcceptanceCriteria: "updated ready",
 		DefinitionOfDone:   "updated done",
 	})
 	if err != nil {
-		t.Fatalf("UpdateSdlcStage() error = %v", err)
+		t.Fatalf("UpdateWorkflowStage() error = %v", err)
 	}
-	if _, err := svc.GetSdlcStage(ctx, stage.ID); err != nil {
-		t.Fatalf("GetSdlcStage() error = %v", err)
+	if _, err := svc.GetWorkflowStage(ctx, stage.ID); err != nil {
+		t.Fatalf("GetWorkflowStage() error = %v", err)
 	}
-	if stages, err := svc.ListSdlcStages(ctx, wf.ID); err != nil {
-		t.Fatalf("ListSdlcStages() error = %v", err)
+	if stages, err := svc.ListWorkflowStages(ctx, wf.ID); err != nil {
+		t.Fatalf("ListWorkflowStages() error = %v", err)
 	} else if len(stages) != 1 {
-		t.Fatalf("ListSdlcStages() len = %d, want 1", len(stages))
+		t.Fatalf("ListWorkflowStages() len = %d, want 1", len(stages))
 	}
 
 	role, err := svc.CreateRole(ctx, libticket.RoleRequest{Title: "Engineer"})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := svc.AddSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := svc.AddWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
-	if err := svc.ReorderSdlcStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
-		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	if err := svc.ReorderWorkflowStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
+		t.Fatalf("ReorderWorkflowStageRoles() error = %v", err)
 	}
-	if err := svc.RemoveSdlcStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	if err := svc.RemoveWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("RemoveWorkflowStageRole() error = %v", err)
 	}
 
 	ticket, err := svc.CreateTicket(ctx, libticket.TicketCreateRequest{ProjectID: project.ID, Type: "task", Title: "Lifecycle task"})

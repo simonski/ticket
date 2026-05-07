@@ -107,7 +107,7 @@ bump-version:
 	fi
 
 sync-openapi-version:
-	@perl -0pi -e 's/^(  version: ).*/$$1$(VERSION)/m' openapi.yaml
+	@perl -0pi -e 's/^(  version: ).*/$${1}$(VERSION)/m' openapi.yaml
 
 validate-openapi:
 	@ruby -e 'require "yaml"; doc = YAML.safe_load(File.read("openapi.yaml"), permitted_classes: [], aliases: true); abort("openapi.yaml missing openapi version") unless doc.is_a?(Hash) && !doc["openapi"].to_s.empty?; info = doc["info"].is_a?(Hash) ? doc["info"] : {}; abort("openapi.yaml missing info.title") if info["title"].to_s.empty?; abort("openapi.yaml missing info.version") if info["version"].to_s.empty?'

@@ -11,12 +11,12 @@ import (
 	"strings"
 )
 
-// ─── sdlc key handler ─────────────────────────────────────────────────────
+// ─── workflow key handler ─────────────────────────────────────────────────────
 
-// wfRowCount returns the total visible rows (sdlcs + expanded stages).
+// wfRowCount returns the total visible rows (workflows + expanded stages).
 func (m Model) wfRowCount() int {
-	n := len(m.sdlcs)
-	for _, wf := range m.sdlcs {
+	n := len(m.workflows)
+	for _, wf := range m.workflows {
 		if m.wfExpanded[wf.ID] {
 			n += len(wf.Stages)
 		}
@@ -24,11 +24,11 @@ func (m Model) wfRowCount() int {
 	return n
 }
 
-// wfRowAt returns the sdlc index and stage index at the given flat row.
-// stageIdx == -1 means the row is a sdlc header.
+// wfRowAt returns the workflow index and stage index at the given flat row.
+// stageIdx == -1 means the row is a workflow header.
 func (m Model) wfRowAt(row int) (wfIdx int, stageIdx int) {
 	cur := 0
-	for i, wf := range m.sdlcs {
+	for i, wf := range m.workflows {
 		if cur == row {
 			return i, -1
 		}
@@ -45,7 +45,7 @@ func (m Model) wfRowAt(row int) (wfIdx int, stageIdx int) {
 	return 0, -1
 }
 
-func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKeyWorkflows(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
 	// Stage name input mode
@@ -57,20 +57,20 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			name := strings.TrimSpace(m.wfStageInput.Value())
 			if name != "" {
 				wfIdx, _ := m.wfRowAt(m.wfCursor)
-				if wfIdx < len(m.sdlcs) {
-					wf := m.sdlcs[wfIdx]
+				if wfIdx < len(m.workflows) {
+					wf := m.workflows[wfIdx]
 					svc := m.svc
 					order := len(wf.Stages)
 					m.wfAddingStage = false
 					return m, func() tea.Msg {
-						_, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+						_, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 							StageName: name,
 							SortOrder: order,
 						})
 						if err != nil {
 							return errMsg{err}
 						}
-						return loadSdlcs(svc)()
+						return loadWorkflows(svc)()
 					}
 				}
 			}
@@ -96,17 +96,17 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.wfCursor++
 		}
 	case "enter", " ":
-		// Toggle expand on sdlc headers
+		// Toggle expand on workflow headers
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx == -1 && wfIdx < len(m.sdlcs) {
-			wfID := m.sdlcs[wfIdx].ID
+		if stageIdx == -1 && wfIdx < len(m.workflows) {
+			wfID := m.workflows[wfIdx].ID
 			m.wfExpanded[wfID] = !m.wfExpanded[wfID]
 		}
 	case "n":
-		// Add a stage to the sdlc under cursor
+		// Add a stage to the workflow under cursor
 		wfIdx, _ := m.wfRowAt(m.wfCursor)
-		if wfIdx < len(m.sdlcs) {
-			m.wfExpanded[m.sdlcs[wfIdx].ID] = true
+		if wfIdx < len(m.workflows) {
+			m.wfExpanded[m.workflows[wfIdx].ID] = true
 			m.wfAddingStage = true
 			ti := textinput.New()
 			ti.Placeholder = "stage name..."
@@ -117,21 +117,21 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		// Delete stage under cursor
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx >= 0 && wfIdx < len(m.sdlcs) {
-			stage := m.sdlcs[wfIdx].Stages[stageIdx]
+		if stageIdx >= 0 && wfIdx < len(m.workflows) {
+			stage := m.workflows[wfIdx].Stages[stageIdx]
 			svc := m.svc
 			return m, func() tea.Msg {
-				if err := svc.RemoveSdlcStage(context.Background(), stage.ID); err != nil {
+				if err := svc.RemoveWorkflowStage(context.Background(), stage.ID); err != nil {
 					return errMsg{err}
 				}
-				return loadSdlcs(svc)()
+				return loadWorkflows(svc)()
 			}
 		}
 	case "shift+up", "K":
 		// Move stage up
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx > 0 && wfIdx < len(m.sdlcs) {
-			wf := m.sdlcs[wfIdx]
+		if stageIdx > 0 && wfIdx < len(m.workflows) {
+			wf := m.workflows[wfIdx]
 			ids := make([]int64, len(wf.Stages))
 			for i, s := range wf.Stages {
 				ids[i] = s.ID
@@ -141,17 +141,17 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			wfID := wf.ID
 			m.wfCursor--
 			return m, func() tea.Msg {
-				if err := svc.ReorderSdlcStages(context.Background(), wfID, ids); err != nil {
+				if err := svc.ReorderWorkflowStages(context.Background(), wfID, ids); err != nil {
 					return errMsg{err}
 				}
-				return loadSdlcs(svc)()
+				return loadWorkflows(svc)()
 			}
 		}
 	case "shift+down", "J":
 		// Move stage down
 		wfIdx, stageIdx := m.wfRowAt(m.wfCursor)
-		if stageIdx >= 0 && wfIdx < len(m.sdlcs) {
-			wf := m.sdlcs[wfIdx]
+		if stageIdx >= 0 && wfIdx < len(m.workflows) {
+			wf := m.workflows[wfIdx]
 			if stageIdx < len(wf.Stages)-1 {
 				ids := make([]int64, len(wf.Stages))
 				for i, s := range wf.Stages {
@@ -162,10 +162,10 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				wfID := wf.ID
 				m.wfCursor++
 				return m, func() tea.Msg {
-					if err := svc.ReorderSdlcStages(context.Background(), wfID, ids); err != nil {
+					if err := svc.ReorderWorkflowStages(context.Background(), wfID, ids); err != nil {
 						return errMsg{err}
 					}
-					return loadSdlcs(svc)()
+					return loadWorkflows(svc)()
 				}
 			}
 		}
@@ -177,27 +177,27 @@ func (m Model) handleKeySdlcs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func loadSdlcs(svc libticket.Service) tea.Cmd {
+func loadWorkflows(svc libticket.Service) tea.Cmd {
 	return func() tea.Msg {
-		wfs, err := svc.ListSdlcs(context.Background())
+		wfs, err := svc.ListWorkflows(context.Background())
 		if err != nil {
 			return errMsg{err}
 		}
-		var result []store.SdlcWithStages
+		var result []store.WorkflowWithStages
 		for _, wf := range wfs {
-			ws, err := svc.GetSdlc(context.Background(), wf.ID)
+			ws, err := svc.GetWorkflow(context.Background(), wf.ID)
 			if err != nil {
 				continue
 			}
 			result = append(result, ws)
 		}
-		return sdlcLoadedMsg(result)
+		return workflowLoadedMsg(result)
 	}
 }
 
-// ─── sdlcs panel view ─────────────────────────────────────────────────────
+// ─── workflows panel view ─────────────────────────────────────────────────────
 
-func (m Model) viewSdlcs() []string {
+func (m Model) viewWorkflows() []string {
 	th := m.theme
 	inner := m.width - 2
 
@@ -208,14 +208,14 @@ func (m Model) viewSdlcs() []string {
 
 	var lines []string
 	lines = append(lines, m.tabBar(inner))
-	lines = append(lines, headerStyle.Render(padRight("  sdlcs", inner)))
+	lines = append(lines, headerStyle.Render(padRight("  workflows", inner)))
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
 
-	if len(m.sdlcs) == 0 {
-		lines = append(lines, mutedStyle.Render(padRight("  (no sdlcs)", inner)))
+	if len(m.workflows) == 0 {
+		lines = append(lines, mutedStyle.Render(padRight("  (no workflows)", inner)))
 	} else {
 		row := 0
-		for _, wf := range m.sdlcs {
+		for _, wf := range m.workflows {
 			expanded := m.wfExpanded[wf.ID]
 			arrow := "▸"
 			if expanded {

@@ -11,12 +11,12 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
-func (r *router) registerSdlcHandlers() {
+func (r *router) registerWorkflowHandlers() {
 	db := r.db
 	mux := r.mux
 
-	// Sdlc endpoints
-	mux.HandleFunc("/api/sdlcs/import", func(w http.ResponseWriter, r *http.Request) {
+	// Workflow endpoints
+	mux.HandleFunc("/api/workflows/import", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := requireAdmin(db, r); err != nil {
 			writeAuthError(w, err)
 			return
@@ -25,12 +25,12 @@ func (r *router) registerSdlcHandlers() {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		var export store.SdlcExport
+		var export store.WorkflowExport
 		if err := json.NewDecoder(r.Body).Decode(&export); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		wf, err := store.ImportSdlc(r.Context(), db, export)
+		wf, err := store.ImportWorkflow(r.Context(), db, export)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -38,8 +38,8 @@ func (r *router) registerSdlcHandlers() {
 		writeJSON(w, http.StatusCreated, wf)
 	})
 
-	mux.HandleFunc("/api/sdlcs/stages/", func(w http.ResponseWriter, r *http.Request) {
-		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/stages/")
+	mux.HandleFunc("/api/workflows/stages/", func(w http.ResponseWriter, r *http.Request) {
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/workflows/stages/")
 		// Skip if this is a roles sub-path (handled by a different handler)
 		if strings.HasPrefix(trimmed, "roles/") {
 			return
@@ -55,10 +55,10 @@ func (r *router) registerSdlcHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			stage, err := store.GetSdlcStage(r.Context(), db, stageID)
+			stage, err := store.GetWorkflowStage(r.Context(), db, stageID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					writeError(w, http.StatusNotFound, "sdlc stage not found")
+					writeError(w, http.StatusNotFound, "workflow stage not found")
 					return
 				}
 				writeStoreError(w, err)
@@ -70,7 +70,7 @@ func (r *router) registerSdlcHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			var payload sdlcStageRequest
+			var payload workflowStageRequest
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
@@ -83,10 +83,10 @@ func (r *router) registerSdlcHandlers() {
 			if dor == "" {
 				dor = payload.AcceptanceCriteria
 			}
-			stage, err := store.UpdateSdlcStageWithDefinitions(r.Context(), db, stageID, payload.StageName, wow, dor, payload.DefinitionOfDone)
+			stage, err := store.UpdateWorkflowStageWithDefinitions(r.Context(), db, stageID, payload.StageName, wow, dor, payload.DefinitionOfDone)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					writeError(w, http.StatusNotFound, "sdlc stage not found")
+					writeError(w, http.StatusNotFound, "workflow stage not found")
 					return
 				}
 				writeStoreError(w, err)
@@ -98,9 +98,9 @@ func (r *router) registerSdlcHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			if err := store.RemoveSdlcStage(r.Context(), db, stageID); err != nil {
+			if err := store.RemoveWorkflowStage(r.Context(), db, stageID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					writeError(w, http.StatusNotFound, "sdlc stage not found")
+					writeError(w, http.StatusNotFound, "workflow stage not found")
 					return
 				}
 				writeStoreError(w, err)
@@ -112,23 +112,23 @@ func (r *router) registerSdlcHandlers() {
 		}
 	})
 
-	// Stage-role management: /api/sdlcs/{id}/stages/{stageId}/roles[/{roleId}]
-	mux.HandleFunc("/api/sdlcs/stages/roles/", func(w http.ResponseWriter, r *http.Request) {
+	// Stage-role management: /api/workflows/{id}/stages/{stageId}/roles[/{roleId}]
+	mux.HandleFunc("/api/workflows/stages/roles/", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := requireAdmin(db, r); err != nil {
 			writeAuthError(w, err)
 			return
 		}
-		// Parse: /api/sdlcs/stages/roles/{sdlcId}/{stageId}[/{roleId}]
-		// This is a simplified routing — we use sdlcId/stageId/roleId in the path
-		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/stages/roles/")
+		// Parse: /api/workflows/stages/roles/{workflowId}/{stageId}[/{roleId}]
+		// This is a simplified routing — we use workflowId/stageId/roleId in the path
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/workflows/stages/roles/")
 		pathParts := strings.Split(trimmed, "/")
 		if len(pathParts) < 2 {
 			writeError(w, http.StatusBadRequest, "invalid path")
 			return
 		}
-		var sdlcID, stageID int64
-		if _, err := fmt.Sscan(pathParts[0], &sdlcID); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid sdlc id")
+		var workflowID, stageID int64
+		if _, err := fmt.Sscan(pathParts[0], &workflowID); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid workflow id")
 			return
 		}
 		if _, err := fmt.Sscan(pathParts[1], &stageID); err != nil {
@@ -144,7 +144,7 @@ func (r *router) registerSdlcHandlers() {
 				writeError(w, http.StatusBadRequest, "role_id is required")
 				return
 			}
-			if err := store.AddSdlcStageRole(r.Context(), db, sdlcID, stageID, payload.RoleID); err != nil {
+			if err := store.AddWorkflowStageRole(r.Context(), db, workflowID, stageID, payload.RoleID); err != nil {
 				writeStoreError(w, err)
 				return
 			}
@@ -159,7 +159,7 @@ func (r *router) registerSdlcHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid role id")
 				return
 			}
-			if err := store.RemoveSdlcStageRole(r.Context(), db, sdlcID, stageID, roleID); err != nil {
+			if err := store.RemoveWorkflowStageRole(r.Context(), db, workflowID, stageID, roleID); err != nil {
 				writeStoreError(w, err)
 				return
 			}
@@ -172,7 +172,7 @@ func (r *router) registerSdlcHandlers() {
 				writeError(w, http.StatusBadRequest, "role_ids array is required")
 				return
 			}
-			if err := store.ReorderSdlcStageRoles(r.Context(), db, sdlcID, stageID, payload.RoleIDs); err != nil {
+			if err := store.ReorderWorkflowStageRoles(r.Context(), db, workflowID, stageID, payload.RoleIDs); err != nil {
 				writeStoreError(w, err)
 				return
 			}
@@ -182,7 +182,7 @@ func (r *router) registerSdlcHandlers() {
 		}
 	})
 
-	mux.HandleFunc("/api/sdlcs", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/workflows", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if _, err := requireUser(db, r); err != nil {
@@ -199,23 +199,23 @@ func (r *router) registerSdlcHandlers() {
 				writeStoreError(w, err)
 				return
 			}
-			sdlcs, err := store.ListSdlcs(r.Context(), db, limit, offset)
+			workflows, err := store.ListWorkflows(r.Context(), db, limit, offset)
 			if err != nil {
 				writeStoreError(w, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, sdlcs)
+			writeJSON(w, http.StatusOK, workflows)
 		case http.MethodPost:
 			if _, err := requireAdmin(db, r); err != nil {
 				writeAuthError(w, err)
 				return
 			}
-			var payload sdlcRequest
+			var payload workflowRequest
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			wf, err := store.CreateSdlcWithParams(r.Context(), db, payload.ID, payload.Name, payload.Description)
+			wf, err := store.CreateWorkflowWithParams(r.Context(), db, payload.ID, payload.Name, payload.Description)
 			if err != nil {
 				writeStoreError(w, err)
 				return
@@ -226,8 +226,8 @@ func (r *router) registerSdlcHandlers() {
 		}
 	})
 
-	mux.HandleFunc("/api/sdlcs/", func(w http.ResponseWriter, r *http.Request) {
-		trimmed := strings.TrimPrefix(r.URL.Path, "/api/sdlcs/")
+	mux.HandleFunc("/api/workflows/", func(w http.ResponseWriter, r *http.Request) {
+		trimmed := strings.TrimPrefix(r.URL.Path, "/api/workflows/")
 		parts := strings.Split(trimmed, "/")
 		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
 			writeError(w, http.StatusNotFound, "not found")
@@ -235,7 +235,7 @@ func (r *router) registerSdlcHandlers() {
 		}
 		var wfID int64
 		if _, err := fmt.Sscan(parts[0], &wfID); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid sdlc id")
+			writeError(w, http.StatusBadRequest, "invalid workflow id")
 			return
 		}
 		// Sub-resource routing
@@ -250,7 +250,7 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
 				}
-				var payload sdlcStageRequest
+				var payload workflowStageRequest
 				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
@@ -263,7 +263,7 @@ func (r *router) registerSdlcHandlers() {
 				if dor == "" {
 					dor = payload.AcceptanceCriteria
 				}
-				stage, err := store.AddSdlcStageWithDefinitions(r.Context(), db, wfID, payload.StageName, wow, dor, payload.DefinitionOfDone, payload.SortOrder)
+				stage, err := store.AddWorkflowStageWithDefinitions(r.Context(), db, wfID, payload.StageName, wow, dor, payload.DefinitionOfDone, payload.SortOrder)
 				if err != nil {
 					writeStoreError(w, err)
 					return
@@ -279,13 +279,13 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
 				}
-				var payload sdlcReorderRequest
+				var payload workflowReorderRequest
 				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
 					return
 				}
-				if err := store.ReorderSdlcStages(r.Context(), db, wfID, payload.StageIDs); err != nil {
-					if errors.Is(err, store.ErrSdlcStageNotFound) {
+				if err := store.ReorderWorkflowStages(r.Context(), db, wfID, payload.StageIDs); err != nil {
+					if errors.Is(err, store.ErrWorkflowStageNotFound) {
 						writeStoreError(w, err)
 					} else {
 						writeError(w, http.StatusInternalServerError, err.Error())
@@ -303,10 +303,10 @@ func (r *router) registerSdlcHandlers() {
 					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 					return
 				}
-				export, err := store.ExportSdlc(r.Context(), db, wfID)
+				export, err := store.ExportWorkflow(r.Context(), db, wfID)
 				if err != nil {
 					if errors.Is(err, sql.ErrNoRows) {
-						writeError(w, http.StatusNotFound, "sdlc not found")
+						writeError(w, http.StatusNotFound, "workflow not found")
 						return
 					}
 					writeError(w, http.StatusInternalServerError, err.Error())
@@ -316,17 +316,17 @@ func (r *router) registerSdlcHandlers() {
 				return
 			}
 		}
-		// Direct sdlc resource — auth check moved here for non-sub-resource paths
+		// Direct workflow resource — auth check moved here for non-sub-resource paths
 		if _, err := requireUser(db, r); err != nil {
 			writeAuthError(w, err)
 			return
 		}
 		switch r.Method {
 		case http.MethodGet:
-			wf, err := store.GetSdlc(r.Context(), db, wfID)
+			wf, err := store.GetWorkflow(r.Context(), db, wfID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					writeError(w, http.StatusNotFound, "sdlc not found")
+					writeError(w, http.StatusNotFound, "workflow not found")
 					return
 				}
 				writeStoreError(w, err)
@@ -334,9 +334,9 @@ func (r *router) registerSdlcHandlers() {
 			}
 			writeJSON(w, http.StatusOK, wf)
 		case http.MethodDelete:
-			if err := store.DeleteSdlc(r.Context(), db, wfID); err != nil {
+			if err := store.DeleteWorkflow(r.Context(), db, wfID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					writeError(w, http.StatusNotFound, "sdlc not found")
+					writeError(w, http.StatusNotFound, "workflow not found")
 					return
 				}
 				writeStoreError(w, err)

@@ -60,14 +60,14 @@ func runProject(args []string) error {
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		id := fs.Int64("id", 0, "force project id")
 		printID := fs.Bool("printid", false, "print only the created project id")
-		sdlcID := fs.Int64("sdlc", 0, "sdlc id to associate")
+		workflowID := fs.Int64("workflow", 0, "workflow id to associate")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if strings.TrimSpace(*title) == "" && fs.NArg() > 0 {
 			*title = strings.Join(fs.Args(), " ")
 		} else if fs.NArg() != 0 {
-			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-id <id>] [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-sdlc id]")
+			return errors.New("usage: tk project create -title <title> -prefix <prefix> [-id <id>] [-wow text] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-description text] [-workflow id]")
 		}
 		if strings.TrimSpace(*prefix) == "" {
 			return errors.New("project prefix is required")
@@ -76,8 +76,8 @@ func runProject(args []string) error {
 			return errors.New("project title is required")
 		}
 		var wfID *int64
-		if *sdlcID > 0 {
-			wfID = sdlcID
+		if *workflowID > 0 {
+			wfID = workflowID
 		}
 		projectWoW := strings.TrimSpace(*wow)
 		if projectWoW == "" {
@@ -106,7 +106,7 @@ func runProject(args []string) error {
 			ACMap:              projectACMap,
 			Notes:              strings.TrimSpace(*dod),
 			GitRepository:      strings.TrimSpace(*gitRepository),
-			SdlcID:             wfID,
+			WorkflowID:             wfID,
 		})
 		if err != nil {
 			return err
@@ -132,13 +132,13 @@ func runProject(args []string) error {
 		if outputJSON {
 			return printJSON(projects)
 		}
-		sdlcNames := map[int64]string{}
-		if wfs, err := svc.ListSdlcs(context.Background()); err == nil {
+		workflowNames := map[int64]string{}
+		if wfs, err := svc.ListWorkflows(context.Background()); err == nil {
 			for _, wf := range wfs {
-				sdlcNames[wf.ID] = wf.Name
+				workflowNames[wf.ID] = wf.Name
 			}
 		}
-		printProjectTable(projects, cfg.ProjectID, sdlcNames)
+		printProjectTable(projects, cfg.ProjectID, workflowNames)
 		return nil
 	case "get":
 		if len(args) > 2 {
@@ -204,7 +204,7 @@ func runProject(args []string) error {
 			fs.String("git-repository", "", "")
 			fs.String("git", "", "")
 			fs.String("status", "", "")
-			fs.Int64("sdlc", 0, "")
+			fs.Int64("workflow", 0, "")
 			if err := fs.Parse(args[1:]); err != nil {
 				return err
 			}
@@ -255,8 +255,8 @@ func runProject(args []string) error {
 		}
 		fmt.Printf("default_draft set to %v\n", draft)
 		return nil
-	case "sdlc":
-		return runProjectSdlc(cfg, svc, args[1:])
+	case "workflow":
+		return runProjectWorkflow(cfg, svc, args[1:])
 	case "rename-prefix":
 		if len(args) < 2 {
 			return errors.New("usage: tk project rename-prefix <new-prefix>")
@@ -454,8 +454,8 @@ func runProjectRemote(cfg config.Config, args []string) error {
 	return nil
 }
 
-func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) error {
-	usage := "tk project sdlc <sdlc-id>   (use 0 to clear)"
+func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string) error {
+	usage := "tk project workflow <workflow-id>   (use 0 to clear)"
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		fmt.Println(usage)
 		return nil
@@ -471,14 +471,14 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 	if err != nil {
 		return fmt.Errorf("usage: %s", usage)
 	}
-	nextSdlcID := &wfIDRaw
+	nextWorkflowID := &wfIDRaw
 	project, err := svc.UpdateProject(context.Background(), current.ID, libticket.ProjectUpdateRequest{
 		Title:              current.Title,
 		Description:        current.Description,
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		GitRepository:      current.GitRepository,
 		Status:             current.Status,
-		SdlcID:             nextSdlcID,
+		WorkflowID:             nextWorkflowID,
 	})
 	if err != nil {
 		return err
@@ -487,9 +487,9 @@ func runProjectSdlc(cfg config.Config, svc libticket.Service, args []string) err
 		return printJSON(project)
 	}
 	if wfIDRaw == 0 {
-		fmt.Printf("cleared sdlc from project %s\n", project.Prefix)
+		fmt.Printf("cleared workflow from project %s\n", project.Prefix)
 	} else {
-		fmt.Printf("set sdlc %d on project %s\n", wfIDRaw, project.Prefix)
+		fmt.Printf("set workflow %d on project %s\n", wfIDRaw, project.Prefix)
 	}
 	printProject(project)
 	return nil
@@ -626,7 +626,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		gitRepository := fs.String("git-repository", "", "project git repository")
 		gitShort := fs.String("git", "", "project git repository (shorthand for -git-repository)")
 		status := fs.String("status", "", "project status (open|closed)")
-		sdlcID := fs.Int64("sdlc", 0, "sdlc ID to associate with project")
+		workflowID := fs.Int64("workflow", 0, "workflow ID to associate with project")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -668,13 +668,13 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 				return err
 			}
 		}
-		var nextSdlcID *int64
-		if containsFlag(args[1:], "-sdlc") {
-			if *sdlcID > 0 {
-				nextSdlcID = sdlcID
+		var nextWorkflowID *int64
+		if containsFlag(args[1:], "-workflow") {
+			if *workflowID > 0 {
+				nextWorkflowID = workflowID
 			}
 		} else {
-			nextSdlcID = current.SdlcID
+			nextWorkflowID = current.WorkflowID
 		}
 		nextDORMap, err := mergeGuidanceMap(current.DORMap, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
 		if err != nil {
@@ -698,7 +698,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			Notes:              nextNotes,
 			GitRepository:      nextRepo,
 			Status:             nextStatus,
-			SdlcID:             nextSdlcID,
+			WorkflowID:             nextWorkflowID,
 		})
 		if err != nil {
 			return err

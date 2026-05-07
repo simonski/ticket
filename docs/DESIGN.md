@@ -13,7 +13,7 @@ It is designed for small teams that want low-friction ticket tracking without se
 The system has four interfaces:
 
 1. A server that owns persistence, authentication, and collaboration.
-2. A CLI for fast, explicit terminal sdlcs.
+2. A CLI for fast, explicit terminal workflows.
 3. A TUI for interactive terminal navigation and editing.
 4. An embedded web application for browsing, editing, and status management.
 
@@ -31,17 +31,17 @@ uses that root for repo-local routing. The steady-state model is:
 
 ## Product Principles
 
-1. The server defines the single system of record and the shared data model used by both remote and local sdlcs.
+1. The server defines the single system of record and the shared data model used by both remote and local workflows.
 2. The CLI and web app use the same API semantics and data model.
 3. Common operations should be fast and predictable from the terminal.
 4. Projects should support lightweight hierarchy through epics and child tickets.
 5. Every meaningful change should be traceable through history and comments.
 
-## Primary Users And SDLCs
+## Primary Users And Workflows
 
 The primary user is a small software team managing projects, epics, tasks, bugs.
 
-The first release must support these sdlcs end to end:
+The first release must support these workflows end to end:
 
 1. Initialize a local SQLite-backed workspace.
 2. Store passwords as Argon2id hashes in SQLite.
@@ -107,7 +107,7 @@ Notes:
 ### Role
 
 - `role_id`
-- `sdlc_id` (FK → sdlcs; roles are scoped to an SDLC)
+- `workflow_id` (FK → workflows; roles are scoped to an Workflow)
 - `title`
 - `description`
 - `acceptance_criteria`
@@ -117,7 +117,7 @@ Notes:
 Notes:
 
 - roles represent reusable agent personas for ticket work
-- roles are scoped to an SDLC and assigned to stages via the `sdlc_stage_roles` junction table
+- roles are scoped to an Workflow and assigned to stages via the `workflow_stage_roles` junction table
 - each stage can have multiple ordered roles; a ticket progresses through each role within a stage before advancing
 
 ### Project
@@ -131,7 +131,7 @@ Notes:
 - `notes`
 - `visibility`
 - `default_draft`
-- `sdlc_id`
+- `workflow_id`
 - `created_at`
 - `created_by`
 - `status`
@@ -146,7 +146,7 @@ Projects are the top-level container for work items.
 - `project_id`
 - `parent_id`
 - `clone_of`
-- `sdlc_stage_id`
+- `workflow_stage_id`
 - `type`
 - `title`
 - `description`
@@ -165,20 +165,20 @@ Projects are the top-level container for work items.
 - `draft`
 - `complete`
 - `role_id`
-- `sdlc_stage_id`
+- `workflow_stage_id`
 - `comments`
 - `created_at`
 - `created_by`
 - `updated_at`
 - `archived`
 
-Stages are defined by the project's sdlc (default: design → develop → test → done).
+Stages are defined by the project's workflow (default: design → develop → test → done).
 
 States: `idle`, `active`, `success`, `fail`
 
 - idle: not active in the stage
 - active: currently being worked on in the stage
-- success: completed this stage successfully (auto-advances to next sdlc stage)
+- success: completed this stage successfully (auto-advances to next workflow stage)
 - fail: completed this stage and deemed a failure
 
 
@@ -219,20 +219,20 @@ CLI creation defaults:
 - if `-parent` is omitted, the ticket is created without a parent
 - if `-project` is omitted, the active project is used
 
-### SDLC
+### Workflow
 
-SDLCs define the ordered sequence of stages a ticket progresses through.
+Workflows define the ordered sequence of stages a ticket progresses through.
 
-- `sdlc_id`
+- `workflow_id`
 - `name`
 - `description`
 - `created_at`
 - `updated_at`
 
-Each sdlc has an ordered set of stages:
+Each workflow has an ordered set of stages:
 
-- `sdlc_stage_id`
-- `sdlc_id`
+- `workflow_stage_id`
+- `workflow_id`
 - `stage_name`
 - `description`
 - `role_id` (optional, links to a Role for agent persona context)
@@ -242,12 +242,12 @@ Each sdlc has an ordered set of stages:
 
 Notes:
 
-- a default sdlc is seeded on init with stages: design → develop → test → done
+- a default workflow is seeded on init with stages: design → develop → test → done
 - each stage can be linked to a role, giving agents persona context when working that stage
-- projects reference a sdlc; tickets inherit stages from their project's sdlc
-- when a ticket's state is set to `success`, it auto-advances to the next sdlc stage with state `idle`
+- projects reference a workflow; tickets inherit stages from their project's workflow
+- when a ticket's state is set to `success`, it auto-advances to the next workflow stage with state `idle`
 - on the final stage, `success` means the ticket is complete
-- sdlcs can be exported/imported as JSON for portability between instances
+- workflows can be exported/imported as JSON for portability between instances
 
 ### Label
 
@@ -597,20 +597,20 @@ The CLI should support `-json` on client-facing commands and pretty-print the re
 
 `tk list` should render a readable table that includes at least the id, type, status, assignee, priority, and title.
 
-### SDLC And Lifecycle Management
+### Workflow And Lifecycle Management
 
 The system should support ticket progression through explicit stage/state
 changes.
 
 The lifecycle model is:
 
-- stages: defined by the project's sdlc (default: `design`, `develop`, `test`, `done`)
+- stages: defined by the project's workflow (default: `design`, `develop`, `test`, `done`)
 - states: `idle`, `active`, `success`, `fail`
 - rendered status: `<stage>/<state>`
 
 The CLI and web app must both support easy lifecycle changes.
 
-Assignment sdlcs must support:
+Assignment workflows must support:
 
 - `ticket assign <key-or-id> <name>` for admins
 - `ticket unassign <key-or-id> <name>` for admins
@@ -814,8 +814,8 @@ Storage areas (22 tables):
 5. tickets
 6. ticket_history
 7. comments
-8. sdlcs
-9. sdlc_stages
+8. workflows
+9. workflow_stages
 10. labels
 11. ticket_labels
 12. time_entries
@@ -850,7 +850,7 @@ Non-goals:
 
 - multiple database backends
 - direct client access to SQLite
-- heavyweight enterprise sdlc configuration
+- heavyweight enterprise workflow configuration
 - advanced portfolio planning
 - deeply nested issue taxonomies beyond simple parent-child hierarchy
 
@@ -885,11 +885,11 @@ The product is successful if a user can:
 
 Tickets have a two-part status: `stage/state` (e.g. `develop/active`, `done/success`).
 
-### SDLC-Driven Stages
+### Workflow-Driven Stages
 
-Stages are defined by the project's sdlc (an ordered sequence of stages). The default sdlc has: `design → develop → test → done`.
+Stages are defined by the project's workflow (an ordered sequence of stages). The default workflow has: `design → develop → test → done`.
 
-Stages advance automatically: when a ticket's state is set to `success`, it moves to the next sdlc stage with state `idle`. On the final stage, `success` means the ticket is complete.
+Stages advance automatically: when a ticket's state is set to `success`, it moves to the next workflow stage with state `idle`. On the final stage, `success` means the ticket is complete.
 
 You cannot set a ticket's stage directly — use state commands to drive progression.
 

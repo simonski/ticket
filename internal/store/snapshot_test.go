@@ -281,15 +281,15 @@ func TestImportSnapshotIgnoresUnknownLegacyColumns(t *testing.T) {
 	}
 }
 
-func TestImportSnapshotPreservesRoleSdlcForeignKeys(t *testing.T) {
+func TestImportSnapshotPreservesRoleWorkflowForeignKeys(t *testing.T) {
 	t.Parallel()
 
 	sourceDB := testDB(t)
-	sdlc, err := CreateSdlc(context.Background(), sourceDB, "FK SDLC", "foreign key coverage")
+	workflow, err := CreateWorkflow(context.Background(), sourceDB, "FK Workflow", "foreign key coverage")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	role, err := CreateRole(context.Background(), sourceDB, &sdlc.ID, "FK Role", "", "")
+	role, err := CreateRole(context.Background(), sourceDB, &workflow.ID, "FK Role", "", "")
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
@@ -307,8 +307,8 @@ func TestImportSnapshotPreservesRoleSdlcForeignKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRoleByID() error = %v", err)
 	}
-	if imported.SdlcID == nil || *imported.SdlcID != sdlc.ID {
-		t.Fatalf("imported.SdlcID = %#v, want %d", imported.SdlcID, sdlc.ID)
+	if imported.WorkflowID == nil || *imported.WorkflowID != workflow.ID {
+		t.Fatalf("imported.WorkflowID = %#v, want %d", imported.WorkflowID, workflow.ID)
 	}
 }
 

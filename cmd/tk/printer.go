@@ -80,12 +80,12 @@ func printProject(project store.Project) {
 	if project.GitRepository != "" {
 		fmt.Printf("git_repository: %s\n", project.GitRepository)
 	}
-	if project.SdlcID != nil {
-		fmt.Printf("sdlc_id: %d\n", *project.SdlcID)
+	if project.WorkflowID != nil {
+		fmt.Printf("workflow_id: %d\n", *project.WorkflowID)
 	}
 }
 
-func printProjectTable(projects []store.Project, currentProjectID string, sdlcNames map[int64]string) {
+func printProjectTable(projects []store.Project, currentProjectID string, workflowNames map[int64]string) {
 	if len(projects) == 0 {
 		printNoEntitiesAvailable("projects")
 		return
@@ -101,15 +101,15 @@ func printProjectTable(projects []store.Project, currentProjectID string, sdlcNa
 		if len(desc) > 60 {
 			desc = desc[:57] + "..."
 		}
-		sdlc := ""
-		if project.SdlcID != nil {
-			if name, ok := sdlcNames[*project.SdlcID]; ok {
-				sdlc = name
+		workflow := ""
+		if project.WorkflowID != nil {
+			if name, ok := workflowNames[*project.WorkflowID]; ok {
+				workflow = name
 			}
 		}
-		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, sdlc, project.GitRepository, desc))
+		rows = append(rows, fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s", marker, project.ID, project.Prefix, project.Title, project.Status, workflow, project.GitRepository, desc))
 	}
-	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tSDLC\tGIT\tDESCRIPTION", rows)
+	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWorkflow\tGIT\tDESCRIPTION", rows)
 }
 
 func ticketLabel(ticket store.Ticket) string {
@@ -222,12 +222,12 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 			fmt.Printf("  %s [%s] %s\n", p.ID, p.Type, p.Title)
 		}
 	}
-	if resp.Sdlc != nil {
+	if resp.Workflow != nil {
 		fmt.Println()
-		fmt.Printf("sdlc: %s\n", resp.Sdlc.Name)
-		for _, stage := range resp.Sdlc.Stages {
+		fmt.Printf("workflow: %s\n", resp.Workflow.Name)
+		for _, stage := range resp.Workflow.Stages {
 			marker := "  "
-			if resp.Ticket != nil && resp.Ticket.SdlcStageID != nil && stage.ID == *resp.Ticket.SdlcStageID {
+			if resp.Ticket != nil && resp.Ticket.WorkflowStageID != nil && stage.ID == *resp.Ticket.WorkflowStageID {
 				marker = "> "
 			}
 			role := ""
@@ -253,7 +253,7 @@ func printRequestContext(resp libticket.TicketRequestResponse) {
 	}
 }
 
-func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, sdlcStages []store.SdlcStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string, childTotal, childOpen, childClosed int) {
+func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, history []store.HistoryEvent, workflowStages []store.WorkflowStage, labels []store.Label, totalMinutes int, parentKey, cloneKey string, childTotal, childOpen, childClosed int) {
 	dependsOn := formatDependsOn(dependencies)
 
 	type ticketField struct {
@@ -283,8 +283,8 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 		ticketField{label: "Stage", value: ticket.Stage},
 		ticketField{label: "State", value: ticket.State},
 	)
-	if len(sdlcStages) > 0 {
-		fields = append(fields, ticketField{label: "Sdlc", value: renderSdlcProgress(ticket.Stage, sdlcStages)})
+	if len(workflowStages) > 0 {
+		fields = append(fields, ticketField{label: "Workflow", value: renderWorkflowProgress(ticket.Stage, workflowStages)})
 	}
 	fields = append(fields,
 		ticketField{label: "Draft", value: fmt.Sprintf("%t", ticket.Draft)},
@@ -403,7 +403,7 @@ func childTicketColor(ticket store.Ticket) string {
 	}
 }
 
-func renderSdlcProgress(currentStage string, stages []store.SdlcStage) string {
+func renderWorkflowProgress(currentStage string, stages []store.WorkflowStage) string {
 	var parts []string
 	for _, s := range stages {
 		if s.StageName == currentStage {

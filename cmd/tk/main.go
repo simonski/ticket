@@ -109,7 +109,7 @@ func run(args []string) error {
 	}
 	if len(trimmedArgs) == 1 {
 		switch trimmedArgs[0] {
-		case "project", "sdlc", "team", "story", "user", "label", "dep", "decision", "agent", "role", "idea":
+		case "project", "workflow", "team", "story", "user", "label", "dep", "decision", "agent", "role", "idea":
 			noInitRequired[trimmedArgs[0]] = true
 		}
 	}
@@ -213,8 +213,8 @@ func run(args []string) error {
 		return runRole(trimmedArgs[1:])
 	case "story":
 		return runStory(trimmedArgs[1:])
-	case "sdlc":
-		return runSdlc(trimmedArgs[1:])
+	case "workflow":
+		return runWorkflow(trimmedArgs[1:])
 	case "board":
 		return runBoard(trimmedArgs[1:])
 	case "label":

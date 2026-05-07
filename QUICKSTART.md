@@ -97,13 +97,13 @@ tk -g
 ```
 
 Full-screen terminal UI. Navigate with Tab / arrow keys.  
-Tabs: **Home · Projects · Ideas · Tickets · SDLCs · Config**
+Tabs: **Home · Projects · Ideas · Tickets · Workflows · Config**
 
 ---
 
 ## Reproducible example scenario (todo app planning)
 
-Use the dedicated tutorial to seed a realistic project with SDLC, epics, tasks,
+Use the dedicated tutorial to seed a realistic project with Workflow, epics, tasks,
 labels, dependencies, time entries, and decision/idea artifacts:
 
 ```bash

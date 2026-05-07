@@ -22,7 +22,7 @@ const (
 	efType   = 3
 	efStatus = 4
 	efDraft  = 5
-	efSdlc   = 6
+	efWorkflow   = 6
 	efSave   = 7
 	efCount  = 8
 )
@@ -34,7 +34,7 @@ type editForm struct {
 	ticketType string
 	status     string
 	draft      bool
-	sdlcID     *int64
+	workflowID     *int64
 	focus      int
 	picker     *pickerPopup
 }
@@ -66,7 +66,7 @@ func newEditForm(t store.Ticket) editForm {
 		ticketType: t.Type,
 		status:     t.Status,
 		draft:      t.Draft,
-		sdlcID:     t.SdlcID,
+		workflowID:     t.WorkflowID,
 		focus:      efTitle,
 	}
 }
@@ -114,7 +114,7 @@ const (
 	pfTitle        = 0
 	pfVisibility   = 1
 	pfDefaultDraft = 2
-	pfSdlc         = 3
+	pfWorkflow         = 3
 	pfRepo         = 4
 	pfDesc         = 5
 	pfDoR          = 6
@@ -129,7 +129,7 @@ type projectEditForm struct {
 	title        textinput.Model
 	visibility   string
 	defaultDraft bool
-	sdlcID       *int64
+	workflowID       *int64
 	gitRepo      textinput.Model
 	desc         textarea.Model
 	dor          textarea.Model
@@ -183,7 +183,7 @@ func newProjectEditForm(p store.Project) *projectEditForm {
 		title:        ti,
 		visibility:   p.Visibility,
 		defaultDraft: p.DefaultDraft,
-		sdlcID:       p.SdlcID,
+		workflowID:       p.WorkflowID,
 		gitRepo:      repo,
 		desc:         desc,
 		dor:          dor,
@@ -257,7 +257,7 @@ const (
 	nfState = 4
 	nfStage = 5
 	nfDraft = 6
-	nfSdlc  = 7
+	nfWorkflow  = 7
 	nfSave  = 8
 	nfCount = 9
 )
@@ -282,7 +282,7 @@ type newTicketForm struct {
 	state      string
 	stage      string
 	draft      bool
-	sdlcID     *int64
+	workflowID     *int64
 	focus      int
 	picker     *pickerPopup
 }
@@ -368,8 +368,8 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				f.status = val
 			case "draft":
 				f.draft = parseBoolPickerValue(val)
-			case "sdlc":
-				f.sdlcID = parseSdlcPickerValue(val)
+			case "workflow":
+				f.workflowID = parseWorkflowPickerValue(val)
 			}
 			f.picker = nil
 		}
@@ -401,9 +401,9 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			f.picker = &pickerPopup{items: statuses, cursor: indexOf(statuses, f.status), forField: "status"}
 		case efDraft:
 			f.picker = &pickerPopup{items: boolPickerItems, cursor: boolPickerCursor(f.draft), forField: "draft"}
-		case efSdlc:
-			items := ticketSdlcPickerItems(m.sdlcs)
-			f.picker = &pickerPopup{items: items, cursor: sdlcPickerCursor(items, f.sdlcID), forField: "sdlc"}
+		case efWorkflow:
+			items := ticketWorkflowPickerItems(m.workflows)
+			f.picker = &pickerPopup{items: items, cursor: workflowPickerCursor(items, f.workflowID), forField: "workflow"}
 		case efSave:
 			return m, m.saveTicket()
 		}
@@ -448,8 +448,8 @@ func (m Model) handleKeyNew(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				f.stage = val
 			case "draft":
 				f.draft = parseBoolPickerValue(val)
-			case "sdlc":
-				f.sdlcID = parseSdlcPickerValue(val)
+			case "workflow":
+				f.workflowID = parseWorkflowPickerValue(val)
 			}
 			f.picker = nil
 		}
@@ -480,9 +480,9 @@ func (m Model) handleKeyNew(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			f.picker = &pickerPopup{items: ticketStages, cursor: indexOf(ticketStages, f.stage), forField: "stage"}
 		case nfDraft:
 			f.picker = &pickerPopup{items: boolPickerItems, cursor: boolPickerCursor(f.draft), forField: "draft"}
-		case nfSdlc:
-			items := ticketSdlcPickerItems(m.sdlcs)
-			f.picker = &pickerPopup{items: items, cursor: sdlcPickerCursor(items, f.sdlcID), forField: "sdlc"}
+		case nfWorkflow:
+			items := ticketWorkflowPickerItems(m.workflows)
+			f.picker = &pickerPopup{items: items, cursor: workflowPickerCursor(items, f.workflowID), forField: "workflow"}
 		case nfSave:
 			return m, m.createTicket()
 		default:
@@ -529,9 +529,9 @@ func (m Model) saveTicket() tea.Cmd {
 	svc := m.svc
 	cfg := m.cfg
 	wasDraft := m.selected.Draft
-	prevSdlcID := m.selected.SdlcID
+	prevWorkflowID := m.selected.WorkflowID
 	nextDraft := m.form.draft
-	nextSdlcID := m.form.sdlcID
+	nextWorkflowID := m.form.workflowID
 	return func() tea.Msg {
 		_, err := svc.UpdateTicket(context.Background(), id, req)
 		if err != nil {
@@ -547,11 +547,11 @@ func (m Model) saveTicket() tea.Cmd {
 				return errMsg{err}
 			}
 		}
-		if !equalOptionalInt64(prevSdlcID, nextSdlcID) {
-			if nextSdlcID == nil {
-				_, err = svc.UnsetTicketSdlc(context.Background(), id)
+		if !equalOptionalInt64(prevWorkflowID, nextWorkflowID) {
+			if nextWorkflowID == nil {
+				_, err = svc.UnsetTicketWorkflow(context.Background(), id)
 			} else {
-				_, err = svc.SetTicketSdlc(context.Background(), id, *nextSdlcID)
+				_, err = svc.SetTicketWorkflow(context.Background(), id, *nextWorkflowID)
 			}
 			if err != nil {
 				return errMsg{err}
@@ -583,7 +583,7 @@ func (m Model) createTicket() tea.Cmd {
 		Stage:              f.stage,
 	}
 	nextDraft := f.draft
-	nextSdlcID := f.sdlcID
+	nextWorkflowID := f.workflowID
 	return func() tea.Msg {
 		t, err := svc.CreateTicket(context.Background(), req)
 		if err != nil {
@@ -595,8 +595,8 @@ func (m Model) createTicket() tea.Cmd {
 				return errMsg{err}
 			}
 		}
-		if nextSdlcID != nil {
-			t, err = svc.SetTicketSdlc(context.Background(), t.ID, *nextSdlcID)
+		if nextWorkflowID != nil {
+			t, err = svc.SetTicketWorkflow(context.Background(), t.ID, *nextWorkflowID)
 			if err != nil {
 				return errMsg{err}
 			}
@@ -707,7 +707,7 @@ func (m Model) viewNewTicket() []string {
 	lines = append(lines, "")
 	lines = append(lines, field(nfDraft, "draft", formatBoolPickerValue(f.draft)))
 	lines = append(lines, "")
-	lines = append(lines, field(nfSdlc, "sdlc", formatTicketSdlcChoice(f.sdlcID, m.sdlcs)))
+	lines = append(lines, field(nfWorkflow, "workflow", formatTicketWorkflowChoice(f.workflowID, m.workflows)))
 	lines = append(lines, "")
 
 	// Save button
@@ -867,7 +867,7 @@ func (m Model) viewForm(title string) []string {
 	lines = append(lines, field(efDraft, "draft", formatBoolPickerValue(f.draft)))
 	lines = append(lines, "")
 
-	lines = append(lines, field(efSdlc, "sdlc", formatTicketSdlcChoice(f.sdlcID, m.sdlcs)))
+	lines = append(lines, field(efWorkflow, "workflow", formatTicketWorkflowChoice(f.workflowID, m.workflows)))
 	lines = append(lines, "")
 
 	// Save button
@@ -908,23 +908,23 @@ func boolPickerCursor(value bool) int {
 	return 0
 }
 
-func ticketSdlcPickerItems(sdlcs []store.SdlcWithStages) []string {
+func ticketWorkflowPickerItems(workflows []store.WorkflowWithStages) []string {
 	items := []string{"(inherit project default)"}
-	for _, sdlc := range sdlcs {
-		items = append(items, fmt.Sprintf("%d %s", sdlc.ID, sdlc.Name))
+	for _, workflow := range workflows {
+		items = append(items, fmt.Sprintf("%d %s", workflow.ID, workflow.Name))
 	}
 	return items
 }
 
-func projectSdlcPickerItems(sdlcs []store.SdlcWithStages) []string {
+func projectWorkflowPickerItems(workflows []store.WorkflowWithStages) []string {
 	items := []string{"(none)"}
-	for _, sdlc := range sdlcs {
-		items = append(items, fmt.Sprintf("%d %s", sdlc.ID, sdlc.Name))
+	for _, workflow := range workflows {
+		items = append(items, fmt.Sprintf("%d %s", workflow.ID, workflow.Name))
 	}
 	return items
 }
 
-func sdlcPickerCursor(items []string, selected *int64) int {
+func workflowPickerCursor(items []string, selected *int64) int {
 	if selected == nil {
 		return 0
 	}
@@ -937,7 +937,7 @@ func sdlcPickerCursor(items []string, selected *int64) int {
 	return 0
 }
 
-func parseSdlcPickerValue(value string) *int64 {
+func parseWorkflowPickerValue(value string) *int64 {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || strings.HasPrefix(trimmed, "(") {
 		return nil
@@ -953,24 +953,24 @@ func parseSdlcPickerValue(value string) *int64 {
 	return &id
 }
 
-func formatTicketSdlcChoice(id *int64, sdlcs []store.SdlcWithStages) string {
+func formatTicketWorkflowChoice(id *int64, workflows []store.WorkflowWithStages) string {
 	if id == nil {
 		return "(inherit project default)"
 	}
-	return formatNamedSdlcChoice(*id, sdlcs)
+	return formatNamedWorkflowChoice(*id, workflows)
 }
 
-func formatProjectSdlcChoice(id *int64, sdlcs []store.SdlcWithStages) string {
+func formatProjectWorkflowChoice(id *int64, workflows []store.WorkflowWithStages) string {
 	if id == nil {
 		return "(none)"
 	}
-	return formatNamedSdlcChoice(*id, sdlcs)
+	return formatNamedWorkflowChoice(*id, workflows)
 }
 
-func formatNamedSdlcChoice(id int64, sdlcs []store.SdlcWithStages) string {
-	for _, sdlc := range sdlcs {
-		if sdlc.ID == id {
-			return fmt.Sprintf("%d %s", sdlc.ID, sdlc.Name)
+func formatNamedWorkflowChoice(id int64, workflows []store.WorkflowWithStages) string {
+	for _, workflow := range workflows {
+		if workflow.ID == id {
+			return fmt.Sprintf("%d %s", workflow.ID, workflow.Name)
 		}
 	}
 	return strconv.FormatInt(id, 10)

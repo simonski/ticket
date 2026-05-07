@@ -1,6 +1,6 @@
 # tk User Guide (Simulated)
 
-This is a simulated walkthrough of the `tk` CLI as it will work after the SDLC refactor. Every command and output shown here is the target behaviour. Use this to validate the design before writing code.
+This is a simulated walkthrough of the `tk` CLI as it will work after the Workflow refactor. Every command and output shown here is the target behaviour. Use this to validate the design before writing code.
 
 ---
 
@@ -11,12 +11,12 @@ $ tk init
 admin user: admin
 admin password: secret
 default project: 1
-sdlc       : "default" (2 stages: develop, done)
+workflow       : "default" (2 stages: develop, done)
 roles      : 0 found
 initialized database at /path/to/.ticket/ticket.db
 ```
 
-A fresh project starts with a minimal SDLC called "default" containing two stages: `develop` and `done`. No roles are assigned yet.
+A fresh project starts with a minimal Workflow called "default" containing two stages: `develop` and `done`. No roles are assigned yet.
 
 ```bash
 $ tk project list
@@ -25,19 +25,19 @@ ID  PREFIX  TITLE
 
 $ tk status
   project  : TK (ticket)
-  sdlc     : default (2 stages)
+  workflow     : default (2 stages)
   draft    : false
 ```
 
 ---
 
-## 2. Set Up an SDLC
+## 2. Set Up an Workflow
 
-### 2.1 Create an SDLC
+### 2.1 Create an Workflow
 
 ```bash
-$ tk sdlc create -name "Agile v1.0" -d "Standard agile lifecycle with design, develop, test and UAT"
-created sdlc #2 "Agile v1.0"
+$ tk workflow create -name "Agile v1.0" -d "Standard agile lifecycle with design, develop, test and UAT"
+created workflow #2 "Agile v1.0"
 ```
 
 ### 2.2 Add Stages
@@ -45,48 +45,48 @@ created sdlc #2 "Agile v1.0"
 Stages are added in order. The last stage should always be `done`.
 
 ```bash
-$ tk sdlc stage-add -sdlc_id 2 -name design
+$ tk workflow stage-add -workflow_id 2 -name design
 added stage: design (id 1, order 1)
 
-$ tk sdlc stage-add -sdlc_id 2 -name develop
+$ tk workflow stage-add -workflow_id 2 -name develop
 added stage: develop (id 2, order 2)
 
-$ tk sdlc stage-add -sdlc_id 2 -name test
+$ tk workflow stage-add -workflow_id 2 -name test
 added stage: test (id 3, order 3)
 
-$ tk sdlc stage-add -sdlc_id 2 -name uat
+$ tk workflow stage-add -workflow_id 2 -name uat
 added stage: uat (id 4, order 4)
 
-$ tk sdlc stage-add -sdlc_id 2 -name done
+$ tk workflow stage-add -workflow_id 2 -name done
 added stage: done (id 5, order 5)
 ```
 
 Update a stage with description and acceptance criteria:
 
 ```bash
-$ tk sdlc stage-update -sdlc_id 2 -stage_id 1 -description "Architecture and requirements gathering" -ac "All requirements documented and architecture approved"
+$ tk workflow stage-update -workflow_id 2 -stage_id 1 -description "Architecture and requirements gathering" -ac "All requirements documented and architecture approved"
 updated stage #1 (design)
 
-$ tk sdlc stage-update -sdlc_id 2 -stage_id 2 -description "Implementation" -ac "Code written, unit tests passing"
+$ tk workflow stage-update -workflow_id 2 -stage_id 2 -description "Implementation" -ac "Code written, unit tests passing"
 updated stage #2 (develop)
 ```
 
 ### 2.3 Add Roles
 
 ```bash
-$ tk sdlc role-add -sdlc_id 2 -title "Product Owner" -description "Owns the product vision and priorities" -ac "Requirements are clear and prioritised"
+$ tk workflow role-add -workflow_id 2 -title "Product Owner" -description "Owns the product vision and priorities" -ac "Requirements are clear and prioritised"
 created role #1 "Product Owner"
 
-$ tk sdlc role-add -sdlc_id 2 -title "Business Analyst" -description "Translates business needs to requirements" -ac "Requirements documented in acceptance criteria"
+$ tk workflow role-add -workflow_id 2 -title "Business Analyst" -description "Translates business needs to requirements" -ac "Requirements documented in acceptance criteria"
 created role #2 "Business Analyst"
 
-$ tk sdlc role-add -sdlc_id 2 -title "Architect" -description "Ensures structural integrity" -ac "Architecture reviewed and approved"
+$ tk workflow role-add -workflow_id 2 -title "Architect" -description "Ensures structural integrity" -ac "Architecture reviewed and approved"
 created role #3 "Architect"
 
-$ tk sdlc role-add -sdlc_id 2 -title "Engineer" -description "Implements features and fixes" -ac "Code complete with tests"
+$ tk workflow role-add -workflow_id 2 -title "Engineer" -description "Implements features and fixes" -ac "Code complete with tests"
 created role #4 "Engineer"
 
-$ tk sdlc role-add -sdlc_id 2 -title "QA" -description "Validates quality" -ac "All test cases pass"
+$ tk workflow role-add -workflow_id 2 -title "QA" -description "Validates quality" -ac "All test cases pass"
 created role #5 "QA"
 ```
 
@@ -95,29 +95,29 @@ created role #5 "QA"
 Design has three roles (in order). Develop and Test have one each. UAT reuses the Product Owner. Done has no roles.
 
 ```bash
-$ tk sdlc stage-role-add -sdlc_id 2 -stage_id 1 -role_id 1
+$ tk workflow stage-role-add -workflow_id 2 -stage_id 1 -role_id 1
 assigned "Product Owner" to stage "design" (position 1)
 
-$ tk sdlc stage-role-add -sdlc_id 2 -stage_id 1 -role_id 2
+$ tk workflow stage-role-add -workflow_id 2 -stage_id 1 -role_id 2
 assigned "Business Analyst" to stage "design" (position 2)
 
-$ tk sdlc stage-role-add -sdlc_id 2 -stage_id 1 -role_id 3
+$ tk workflow stage-role-add -workflow_id 2 -stage_id 1 -role_id 3
 assigned "Architect" to stage "design" (position 3)
 
-$ tk sdlc stage-role-add -sdlc_id 2 -stage_id 2 -role_id 4
+$ tk workflow stage-role-add -workflow_id 2 -stage_id 2 -role_id 4
 assigned "Engineer" to stage "develop" (position 1)
 
-$ tk sdlc stage-role-add -sdlc_id 2 -stage_id 3 -role_id 5
+$ tk workflow stage-role-add -workflow_id 2 -stage_id 3 -role_id 5
 assigned "QA" to stage "test" (position 1)
 
-$ tk sdlc stage-role-add -sdlc_id 2 -stage_id 4 -role_id 1
+$ tk workflow stage-role-add -workflow_id 2 -stage_id 4 -role_id 1
 assigned "Product Owner" to stage "uat" (position 1)
 ```
 
-### 2.5 Review the SDLC
+### 2.5 Review the Workflow
 
 ```bash
-$ tk sdlc get -sdlc_id 2
+$ tk workflow get -workflow_id 2
 ID          : 2
 Name        : Agile v1.0
 Description : Standard agile lifecycle with design, develop, test and UAT
@@ -139,15 +139,15 @@ Roles:
   5   QA                Validates quality
 ```
 
-### 2.6 Attach SDLC to Project
+### 2.6 Attach Workflow to Project
 
 ```bash
-$ tk project set-sdlc -project_id 1 -sdlc_id 2
-project "ticket" now uses sdlc "Agile v1.0"
+$ tk project set-workflow -project_id 1 -workflow_id 2
+project "ticket" now uses workflow "Agile v1.0"
 
 $ tk status
   project  : TK (ticket)
-  sdlc     : Agile v1.0 (5 stages, 5 roles)
+  workflow     : Agile v1.0 (5 stages, 5 roles)
   draft    : false
 ```
 
@@ -224,7 +224,7 @@ Archived  : false
 
 ## 4. Moving a Ticket Through the Lifecycle
 
-Let's walk TK-1 through the full "Agile v1.0" SDLC.
+Let's walk TK-1 through the full "Agile v1.0" Workflow.
 
 ### 4.1 Design Stage - Product Owner (role 1 of 3)
 
@@ -454,7 +454,7 @@ This always sets the role to the first role in the target stage and resets state
 ### 9.1 Reorder Stages
 
 ```bash
-$ tk sdlc stage-order -sdlc_id 2 -stages 1,3,2,4,5
+$ tk workflow stage-order -workflow_id 2 -stages 1,3,2,4,5
 reordered stages: design, test, develop, uat, done
 ```
 
@@ -462,33 +462,33 @@ reordered stages: design, test, develop, uat, done
 
 ```bash
 # Move Architect before Business Analyst in the design stage
-$ tk sdlc stage-role-order -sdlc_id 2 -stage_id 1 -roles 1,3,2
+$ tk workflow stage-role-order -workflow_id 2 -stage_id 1 -roles 1,3,2
 reordered roles in "design": Product Owner, Architect, Business Analyst
 ```
 
 ### 9.3 Remove a Role from a Stage
 
 ```bash
-$ tk sdlc stage-role-rm -sdlc_id 2 -stage_id 1 -role_id 2
+$ tk workflow stage-role-rm -workflow_id 2 -stage_id 1 -role_id 2
 removed "Business Analyst" from stage "design"
 ```
 
 ---
 
-## 10. Export and Import SDLCs
+## 10. Export and Import Workflows
 
-Share an SDLC definition between projects:
+Share an Workflow definition between projects:
 
 ```bash
-$ tk sdlc export -sdlc_id 2 -o agile_v1.json
+$ tk workflow export -workflow_id 2 -o agile_v1.json
 exported "Agile v1.0" to agile_v1.json
 
-$ tk sdlc import -f agile_v1.json
-imported sdlc "Agile v1.0" (id 3, 5 stages, 5 roles)
+$ tk workflow import -f agile_v1.json
+imported workflow "Agile v1.0" (id 3, 5 stages, 5 roles)
 
 # Use it in another project
-$ tk project set-sdlc -project_id 2 -sdlc_id 3
-project "other-project" now uses sdlc "Agile v1.0"
+$ tk project set-workflow -project_id 2 -workflow_id 3
+project "other-project" now uses workflow "Agile v1.0"
 ```
 
 ---
@@ -530,14 +530,14 @@ Complete  : true
 
 ## 12. Board View
 
-The TUI board shows tickets organised by stage columns. Each column corresponds to a stage in the project's SDLC:
+The TUI board shows tickets organised by stage columns. Each column corresponds to a stage in the project's Workflow:
 
 ```bash
 $ tk tui
 ```
 
 ```
- Home | Projects | Ideas | Tickets | Board | SDLCs | Config
+ Home | Projects | Ideas | Tickets | Board | Workflows | Config
  ticket
  ─────────────────────────────────────────────────────────────
  DESIGN (2)     DEVELOP (1)    TEST (0)       UAT (0)        DONE (1)
@@ -554,28 +554,28 @@ Navigation: arrows/wasd move between columns and tickets. Enter opens detail. Ta
 
 ---
 
-## 13. Minimal SDLC (Simplest Setup)
+## 13. Minimal Workflow (Simplest Setup)
 
 Not every project needs a full lifecycle. The minimum is two stages and one role:
 
 ```bash
-$ tk sdlc create -name "Simple" -d "Just build it"
-created sdlc #4 "Simple"
+$ tk workflow create -name "Simple" -d "Just build it"
+created workflow #4 "Simple"
 
-$ tk sdlc stage-add -sdlc_id 4 -name develop
+$ tk workflow stage-add -workflow_id 4 -name develop
 added stage: develop (id 10, order 1)
 
-$ tk sdlc stage-add -sdlc_id 4 -name done
+$ tk workflow stage-add -workflow_id 4 -name done
 added stage: done (id 11, order 2)
 
-$ tk sdlc role-add -sdlc_id 4 -title "Developer" -description "Does all the work" -ac "Code complete"
+$ tk workflow role-add -workflow_id 4 -title "Developer" -description "Does all the work" -ac "Code complete"
 created role #6 "Developer"
 
-$ tk sdlc stage-role-add -sdlc_id 4 -stage_id 10 -role_id 6
+$ tk workflow stage-role-add -workflow_id 4 -stage_id 10 -role_id 6
 assigned "Developer" to stage "develop" (position 1)
 
-$ tk project set-sdlc -project_id 1 -sdlc_id 4
-project "ticket" now uses sdlc "Simple"
+$ tk project set-workflow -project_id 1 -workflow_id 4
+project "ticket" now uses workflow "Simple"
 ```
 
 Now tickets go: `develop/Developer` (idle -> active -> success) -> `done`. Two commands to complete a ticket:

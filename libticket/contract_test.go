@@ -220,7 +220,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		// Ticket starts at design/idle (4-stage SDLC: design, develop, test, done)
+		// Ticket starts at design/idle (4-stage Workflow: design, develop, test, done)
 		// Mark ready, advance to develop/idle, then request
 		if _, err := svc.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)
@@ -703,105 +703,105 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 	})
 
-	t.Run("sdlc-crud-and-stages", func(t *testing.T) {
+	t.Run("workflow-crud-and-stages", func(t *testing.T) {
 		svc := factory(t)
 
-		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
-			Name:        "test-sdlc",
-			Description: "A test sdlc",
+		wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
+			Name:        "test-workflow",
+			Description: "A test workflow",
 		})
 		if err != nil {
-			t.Fatalf("CreateSdlc() error = %v", err)
+			t.Fatalf("CreateWorkflow() error = %v", err)
 		}
-		if wf.Name != "test-sdlc" {
-			t.Fatalf("CreateSdlc().Name = %q", wf.Name)
+		if wf.Name != "test-workflow" {
+			t.Fatalf("CreateWorkflow().Name = %q", wf.Name)
 		}
 
-		sdlcs, err := svc.ListSdlcs(context.Background())
+		workflows, err := svc.ListWorkflows(context.Background())
 		if err != nil {
-			t.Fatalf("ListSdlcs() error = %v", err)
+			t.Fatalf("ListWorkflows() error = %v", err)
 		}
 		var found bool
-		for _, w := range sdlcs {
+		for _, w := range workflows {
 			if w.ID == wf.ID {
 				found = true
 			}
 		}
 		if !found {
-			t.Fatalf("ListSdlcs() missing created sdlc")
+			t.Fatalf("ListWorkflows() missing created workflow")
 		}
 
-		stage1, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		stage1, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 			StageName: "alpha",
 			SortOrder: 0,
 		})
 		if err != nil {
-			t.Fatalf("AddSdlcStage(alpha) error = %v", err)
+			t.Fatalf("AddWorkflowStage(alpha) error = %v", err)
 		}
 
-		stage2, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		stage2, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 			StageName: "beta",
 			SortOrder: 1,
 		})
 		if err != nil {
-			t.Fatalf("AddSdlcStage(beta) error = %v", err)
+			t.Fatalf("AddWorkflowStage(beta) error = %v", err)
 		}
 
-		withStages, err := svc.GetSdlc(context.Background(), wf.ID)
+		withStages, err := svc.GetWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("GetSdlc() error = %v", err)
+			t.Fatalf("GetWorkflow() error = %v", err)
 		}
 		if len(withStages.Stages) != 2 {
-			t.Fatalf("GetSdlc().Stages len = %d, want 2", len(withStages.Stages))
+			t.Fatalf("GetWorkflow().Stages len = %d, want 2", len(withStages.Stages))
 		}
 
 		// Reorder stages
-		if err := svc.ReorderSdlcStages(context.Background(), wf.ID, []int64{stage2.ID, stage1.ID}); err != nil {
-			t.Fatalf("ReorderSdlcStages() error = %v", err)
+		if err := svc.ReorderWorkflowStages(context.Background(), wf.ID, []int64{stage2.ID, stage1.ID}); err != nil {
+			t.Fatalf("ReorderWorkflowStages() error = %v", err)
 		}
 
-		reordered, err := svc.GetSdlc(context.Background(), wf.ID)
+		reordered, err := svc.GetWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("GetSdlc() after reorder error = %v", err)
+			t.Fatalf("GetWorkflow() after reorder error = %v", err)
 		}
 		if reordered.Stages[0].StageName != "beta" {
-			t.Fatalf("ReorderSdlcStages() first stage = %q, want beta", reordered.Stages[0].StageName)
+			t.Fatalf("ReorderWorkflowStages() first stage = %q, want beta", reordered.Stages[0].StageName)
 		}
 
 		// Export/Import
-		exported, err := svc.ExportSdlc(context.Background(), wf.ID)
+		exported, err := svc.ExportWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("ExportSdlc() error = %v", err)
+			t.Fatalf("ExportWorkflow() error = %v", err)
 		}
-		if exported.Name != "test-sdlc" || len(exported.Stages) != 2 {
-			t.Fatalf("ExportSdlc() = %#v", exported)
+		if exported.Name != "test-workflow" || len(exported.Stages) != 2 {
+			t.Fatalf("ExportWorkflow() = %#v", exported)
 		}
 
-		exported.Name = "imported-sdlc"
-		imported, err := svc.ImportSdlc(context.Background(), exported)
+		exported.Name = "imported-workflow"
+		imported, err := svc.ImportWorkflow(context.Background(), exported)
 		if err != nil {
-			t.Fatalf("ImportSdlc() error = %v", err)
+			t.Fatalf("ImportWorkflow() error = %v", err)
 		}
-		if imported.Name != "imported-sdlc" {
-			t.Fatalf("ImportSdlc().Name = %q", imported.Name)
+		if imported.Name != "imported-workflow" {
+			t.Fatalf("ImportWorkflow().Name = %q", imported.Name)
 		}
 
-		// RemoveSdlcStage
-		if err := svc.RemoveSdlcStage(context.Background(), stage1.ID); err != nil {
-			t.Fatalf("RemoveSdlcStage() error = %v", err)
+		// RemoveWorkflowStage
+		if err := svc.RemoveWorkflowStage(context.Background(), stage1.ID); err != nil {
+			t.Fatalf("RemoveWorkflowStage() error = %v", err)
 		}
 
-		afterRemove, err := svc.GetSdlc(context.Background(), wf.ID)
+		afterRemove, err := svc.GetWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("GetSdlc() after remove error = %v", err)
+			t.Fatalf("GetWorkflow() after remove error = %v", err)
 		}
 		if len(afterRemove.Stages) != 1 {
-			t.Fatalf("GetSdlc().Stages after remove len = %d, want 1", len(afterRemove.Stages))
+			t.Fatalf("GetWorkflow().Stages after remove len = %d, want 1", len(afterRemove.Stages))
 		}
 
-		// DeleteSdlc
-		if err := svc.DeleteSdlc(context.Background(), wf.ID); err != nil {
-			t.Fatalf("DeleteSdlc() error = %v", err)
+		// DeleteWorkflow
+		if err := svc.DeleteWorkflow(context.Background(), wf.ID); err != nil {
+			t.Fatalf("DeleteWorkflow() error = %v", err)
 		}
 	})
 
@@ -854,30 +854,30 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	t.Run("stage-role-crud", func(t *testing.T) {
 		svc := factory(t)
 
-		// Create an SDLC
-		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
-			Name:        "stage-role-sdlc",
-			Description: "sdlc for stage-role tests",
+		// Create an Workflow
+		wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
+			Name:        "stage-role-workflow",
+			Description: "workflow for stage-role tests",
 		})
 		if err != nil {
-			t.Fatalf("CreateSdlc() error = %v", err)
+			t.Fatalf("CreateWorkflow() error = %v", err)
 		}
 
 		// Add two stages
-		stage1, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		stage1, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 			StageName: "design",
 			SortOrder: 0,
 		})
 		if err != nil {
-			t.Fatalf("AddSdlcStage(design) error = %v", err)
+			t.Fatalf("AddWorkflowStage(design) error = %v", err)
 		}
 
-		_, err = svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		_, err = svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 			StageName: "develop",
 			SortOrder: 1,
 		})
 		if err != nil {
-			t.Fatalf("AddSdlcStage(develop) error = %v", err)
+			t.Fatalf("AddWorkflowStage(develop) error = %v", err)
 		}
 
 		// Create two roles
@@ -898,19 +898,19 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Assign both roles to stage1
-		if err := svc.AddSdlcStageRole(context.Background(), wf.ID, stage1.ID, roleA.ID); err != nil {
-			t.Fatalf("AddSdlcStageRole(Analyst) error = %v", err)
+		if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, stage1.ID, roleA.ID); err != nil {
+			t.Fatalf("AddWorkflowStageRole(Analyst) error = %v", err)
 		}
-		if err := svc.AddSdlcStageRole(context.Background(), wf.ID, stage1.ID, roleB.ID); err != nil {
-			t.Fatalf("AddSdlcStageRole(Developer) error = %v", err)
+		if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, stage1.ID, roleB.ID); err != nil {
+			t.Fatalf("AddWorkflowStageRole(Developer) error = %v", err)
 		}
 
-		// Verify roles via GetSdlc
-		got, err := svc.GetSdlc(context.Background(), wf.ID)
+		// Verify roles via GetWorkflow
+		got, err := svc.GetWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("GetSdlc() error = %v", err)
+			t.Fatalf("GetWorkflow() error = %v", err)
 		}
-		var designStage *store.SdlcStage
+		var designStage *store.WorkflowStage
 		for i := range got.Stages {
 			if got.Stages[i].StageName == "design" {
 				designStage = &got.Stages[i]
@@ -918,7 +918,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			}
 		}
 		if designStage == nil {
-			t.Fatal("GetSdlc() missing design stage")
+			t.Fatal("GetWorkflow() missing design stage")
 		}
 		if len(designStage.Roles) != 2 {
 			t.Fatalf("design stage roles len = %d, want 2", len(designStage.Roles))
@@ -928,12 +928,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Reorder roles: swap order
-		if err := svc.ReorderSdlcStageRoles(context.Background(), wf.ID, stage1.ID, []int64{roleB.ID, roleA.ID}); err != nil {
-			t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+		if err := svc.ReorderWorkflowStageRoles(context.Background(), wf.ID, stage1.ID, []int64{roleB.ID, roleA.ID}); err != nil {
+			t.Fatalf("ReorderWorkflowStageRoles() error = %v", err)
 		}
-		reordered, err := svc.GetSdlc(context.Background(), wf.ID)
+		reordered, err := svc.GetWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("GetSdlc() after reorder error = %v", err)
+			t.Fatalf("GetWorkflow() after reorder error = %v", err)
 		}
 		for i := range reordered.Stages {
 			if reordered.Stages[i].StageName == "design" {
@@ -946,12 +946,12 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Remove roleA from stage
-		if err := svc.RemoveSdlcStageRole(context.Background(), wf.ID, stage1.ID, roleA.ID); err != nil {
-			t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+		if err := svc.RemoveWorkflowStageRole(context.Background(), wf.ID, stage1.ID, roleA.ID); err != nil {
+			t.Fatalf("RemoveWorkflowStageRole() error = %v", err)
 		}
-		afterRemove, err := svc.GetSdlc(context.Background(), wf.ID)
+		afterRemove, err := svc.GetWorkflow(context.Background(), wf.ID)
 		if err != nil {
-			t.Fatalf("GetSdlc() after remove error = %v", err)
+			t.Fatalf("GetWorkflow() after remove error = %v", err)
 		}
 		for i := range afterRemove.Stages {
 			if afterRemove.Stages[i].StageName == "design" {
@@ -967,7 +967,7 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 
 		// Cleanup
-		_ = svc.DeleteSdlc(context.Background(), wf.ID)
+		_ = svc.DeleteWorkflow(context.Background(), wf.ID)
 		_ = svc.DeleteRole(context.Background(), roleA.ID)
 		_ = svc.DeleteRole(context.Background(), roleB.ID)
 	})
@@ -1483,15 +1483,15 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 	})
 
-	t.Run("set-unset-ticket-sdlc", func(t *testing.T) {
+	t.Run("set-unset-ticket-workflow", func(t *testing.T) {
 		svc := factory(t)
 
-		wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
+		wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
 			Name:        "ticket-wf",
-			Description: "For ticket sdlc test",
+			Description: "For ticket workflow test",
 		})
 		if err != nil {
-			t.Fatalf("CreateSdlc() error = %v", err)
+			t.Fatalf("CreateWorkflow() error = %v", err)
 		}
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "WF Ticket"})
@@ -1502,30 +1502,30 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 			ProjectID: project.ID,
 			Type:      "task",
-			Title:     "Sdlc Task",
+			Title:     "Workflow Task",
 		})
 		if err != nil {
 			t.Fatalf("CreateTicket() error = %v", err)
 		}
 
-		withWF, err := svc.SetTicketSdlc(context.Background(), ticket.ID, wf.ID)
+		withWF, err := svc.SetTicketWorkflow(context.Background(), ticket.ID, wf.ID)
 		if err != nil {
-			t.Fatalf("SetTicketSdlc() error = %v", err)
+			t.Fatalf("SetTicketWorkflow() error = %v", err)
 		}
-		if withWF.SdlcID == nil || *withWF.SdlcID != wf.ID {
-			t.Fatalf("SetTicketSdlc().SdlcID = %v, want %d", withWF.SdlcID, wf.ID)
+		if withWF.WorkflowID == nil || *withWF.WorkflowID != wf.ID {
+			t.Fatalf("SetTicketWorkflow().WorkflowID = %v, want %d", withWF.WorkflowID, wf.ID)
 		}
 
-		withoutWF, err := svc.UnsetTicketSdlc(context.Background(), ticket.ID)
+		withoutWF, err := svc.UnsetTicketWorkflow(context.Background(), ticket.ID)
 		if err != nil {
-			t.Fatalf("UnsetTicketSdlc() error = %v", err)
+			t.Fatalf("UnsetTicketWorkflow() error = %v", err)
 		}
-		if withoutWF.SdlcID != nil {
-			t.Fatalf("UnsetTicketSdlc().SdlcID = %v, want nil", withoutWF.SdlcID)
+		if withoutWF.WorkflowID != nil {
+			t.Fatalf("UnsetTicketWorkflow().WorkflowID = %v, want nil", withoutWF.WorkflowID)
 		}
 
 		// Cleanup
-		_ = svc.DeleteSdlc(context.Background(), wf.ID)
+		_ = svc.DeleteWorkflow(context.Background(), wf.ID)
 	})
 
 	t.Run("agent-config", func(t *testing.T) {

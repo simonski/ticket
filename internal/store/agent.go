@@ -264,7 +264,7 @@ type AgentStatus struct {
 	Agent       Agent   `json:"agent"`
 	TicketKey   *string `json:"ticket_key,omitempty"`
 	ProjectName string  `json:"project_name,omitempty"`
-	SdlcName    string  `json:"sdlc_name,omitempty"`
+	WorkflowName    string  `json:"workflow_name,omitempty"`
 	RoleTitle   string  `json:"role_title,omitempty"`
 }
 
@@ -291,8 +291,8 @@ func ListAgentStatuses(ctx context.Context, db *sql.DB) ([]AgentStatus, error) {
 				if ctx.Project != nil {
 					as.ProjectName = ctx.Project.Prefix
 				}
-				if ctx.Sdlc != nil {
-					as.SdlcName = ctx.Sdlc.Name
+				if ctx.Workflow != nil {
+					as.WorkflowName = ctx.Workflow.Name
 				}
 				if ctx.Role != nil {
 					as.RoleTitle = ctx.Role.Title

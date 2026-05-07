@@ -1,6 +1,6 @@
 ---
 name: compliance
-description: Use this skill when performing a full-codebase compliance review. Applies when the user wants to check whether the entire repository meets its documented SDLC, contribution, security, documentation, and release expectations.
+description: Use this skill when performing a full-codebase compliance review. Applies when the user wants to check whether the entire repository meets its documented Workflow, contribution, security, documentation, and release expectations.
 metadata:
     version: 0.0.1
 ---
@@ -13,7 +13,7 @@ check whether the **entire codebase** complies with the standards explained in
 the documentation. The goal is not legal theater or generic policy prose. The
 goal is to determine whether the codebase, tests, CI, docs, templates,
 artifacts, and workflows actually comply with the expectations set by
-`docs/process/SDLC.md`, `CONTRIBUTING.md`, and the repository-facing support documents.
+`docs/process/Workflow.md`, `CONTRIBUTING.md`, and the repository-facing support documents.
 
 ## Core Principle
 
@@ -28,7 +28,7 @@ artifacts, and workflows actually comply with the expectations set by
 
 Read these first:
 
-1. `docs/process/SDLC.md`
+1. `docs/process/Workflow.md`
 2. `CONTRIBUTING.md`
 3. `SECURITY.md`
 4. `CODE_OF_CONDUCT.md`
@@ -56,7 +56,7 @@ expectations across five areas:
 2. **Security process** — private vulnerability reporting, safe defaults, security documentation
 3. **Engineering controls** — testing, linting, coverage, build/release guidance
 4. **Documentation integrity** — README/quickstarts/guides/specs agree with implementation
-5. **SDLC evidence** — the repo can support the kind of evidence-backed assessment required by `docs/process/SDLC.md`
+5. **Workflow evidence** — the repo can support the kind of evidence-backed assessment required by `docs/process/Workflow.md`
 
 Do not treat this as a docs-only review. Inspect the whole repository.
 
@@ -112,9 +112,9 @@ Check whether `SECURITY.md` matches repository reality:
 - security-sensitive workflows point to the right channels
 - security-related docs do not contradict each other
 
-### 4. SDLC methodology compliance
+### 4. Workflow methodology compliance
 
-Use `docs/process/SDLC.md` as the governing standard for evidence and reporting discipline.
+Use `docs/process/Workflow.md` as the governing standard for evidence and reporting discipline.
 Assess whether the repo supports that methodology by checking:
 
 - required reports and report locations exist where expected

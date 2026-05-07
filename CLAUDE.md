@@ -63,8 +63,8 @@ Mode is determined from the selected remote binding: repo-local `.ticket/config.
 
 - **Projects** have prefixes (e.g. `CUS`). **Tickets** have human keys (e.g. `CUS-42`).
 - Ticket types: epic, task, bug, spike, chore, story, note, question, requirement, decision.
-- **SDLCs** define configurable lifecycle processes attached to projects. An SDLC has ordered **stages** (e.g. `design → develop → test → done`) and **roles** (e.g. architect, engineer, QA). Roles are assigned to stages via a stage-role junction table with ordering. SDLCs can be exported/imported as JSON.
-- Ticket lifecycle fields: `stage` (from SDLC), `role` (current role within stage), `state` (`idle | active | success | fail`), `draft` (bool), `complete` (bool), `archived` (bool).
+- **Workflows** define configurable lifecycle processes attached to projects. An Workflow has ordered **stages** (e.g. `design → develop → test → done`) and **roles** (e.g. architect, engineer, QA). Roles are assigned to stages via a stage-role junction table with ordering. Workflows can be exported/imported as JSON.
+- Ticket lifecycle fields: `stage` (from Workflow), `role` (current role within stage), `state` (`idle | active | success | fail`), `draft` (bool), `complete` (bool), `archived` (bool).
 - `tk next` advances a ticket to the next role or stage (on success); `tk previous` moves it back (on fail).
 - Parent tickets derive their lifecycle from descendants — only leaf tickets can be directly mutated.
 - The authoritative lifecycle specification is `docs/LIFECYCLE.md`.
@@ -83,7 +83,7 @@ Contract tests in `libticket/contract_test.go` define a `Factory` pattern and ve
 
 ## Special Commands
 
-These words as user input trigger specific sdlcs.
+These words as user input trigger specific workflows.
 
 - `spec` — Rebuild SPEC.md and openapi.yaml from the codebase
 - `drift` — Check documentation vs implementation drift

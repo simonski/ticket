@@ -25,7 +25,7 @@ func openRoleTestDB(t *testing.T) *sql.DB {
 func TestDefaultRolesSeeded(t *testing.T) {
 	t.Parallel()
 
-	t.Skip("no default roles — roles are now per-SDLC")
+	t.Skip("no default roles — roles are now per-Workflow")
 }
 
 func TestRoleCRUD(t *testing.T) {
@@ -112,14 +112,14 @@ func TestRoleGuidanceMapsPersistAndResolve(t *testing.T) {
 	}
 }
 
-func TestListRolesBySdlcAndGetRoleByTitle(t *testing.T) {
+func TestListRolesByWorkflowAndGetRoleByTitle(t *testing.T) {
 	t.Parallel()
 	db := openRoleTestDB(t)
 	defer db.Close()
 
-	wf, err := CreateSdlc(context.Background(), db, "role-scope", "scoped roles")
+	wf, err := CreateWorkflow(context.Background(), db, "role-scope", "scoped roles")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
 	globalRole, err := CreateRole(context.Background(), db, nil, "Global QA", "global", "covers all workflows")
 	if err != nil {
@@ -138,12 +138,12 @@ func TestListRolesBySdlcAndGetRoleByTitle(t *testing.T) {
 		t.Fatalf("ListRoles() len = %d, want at least 2", len(allRoles))
 	}
 
-	scopedRoles, err := ListRolesBySdlc(context.Background(), db, wf.ID)
+	scopedRoles, err := ListRolesByWorkflow(context.Background(), db, wf.ID)
 	if err != nil {
-		t.Fatalf("ListRolesBySdlc() error = %v", err)
+		t.Fatalf("ListRolesByWorkflow() error = %v", err)
 	}
 	if len(scopedRoles) != 1 || scopedRoles[0].ID != scopedRole.ID {
-		t.Fatalf("ListRolesBySdlc() = %#v, want only scoped role %d", scopedRoles, scopedRole.ID)
+		t.Fatalf("ListRolesByWorkflow() = %#v, want only scoped role %d", scopedRoles, scopedRole.ID)
 	}
 
 	byTitle, err := GetRoleByTitle(context.Background(), db, " Workflow QA ")
@@ -160,7 +160,7 @@ func TestListRolesBySdlcAndGetRoleByTitle(t *testing.T) {
 
 func TestDefaultRoleContentIsDetailed(t *testing.T) {
 	t.Parallel()
-	t.Skip("no default roles — roles are now per-SDLC")
+	t.Skip("no default roles — roles are now per-Workflow")
 	db := openRoleTestDB(t)
 	defer db.Close()
 

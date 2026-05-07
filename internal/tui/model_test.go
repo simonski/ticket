@@ -62,7 +62,7 @@ func TestModelUpdateHandlesWindowSizeAndTick(t *testing.T) {
 
 func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 	roleID := int64(7)
-	projectSdlcID := int64(11)
+	projectWorkflowID := int64(11)
 	parentID := "PRJ-1"
 	selected := store.Ticket{
 		ID:                 "PRJ-2",
@@ -70,7 +70,7 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 		Type:               "task",
 		Title:              "Implement lifecycle UI",
 		Description:        "Show richer lifecycle details in the TUI.",
-		AcceptanceCriteria: "Display draft and SDLC context.",
+		AcceptanceCriteria: "Display draft and Workflow context.",
 		RoleID:             &roleID,
 		Stage:              store.StageDevelop,
 		State:              store.StateActive,
@@ -86,7 +86,7 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 		ID:     1,
 		Prefix: "PRJ",
 		Title:  "Project Alpha",
-		SdlcID: &projectSdlcID,
+		WorkflowID: &projectWorkflowID,
 		DODMap: store.GuidanceMap{store.DefaultGuidanceStageKey: "Project DoD"},
 		ACMap:  store.GuidanceMap{store.DefaultGuidanceStageKey: "Project AC"},
 		Status: "open",
@@ -96,8 +96,8 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 		ID:    roleID,
 		Title: "Engineer",
 	}}
-	m.sdlcs = []store.SdlcWithStages{{
-		Sdlc: store.Sdlc{ID: projectSdlcID, Name: "Default Flow"},
+	m.workflows = []store.WorkflowWithStages{{
+		Workflow: store.Workflow{ID: projectWorkflowID, Name: "Default Flow"},
 	}}
 	m.items = []listItem{{
 		ticket: store.Ticket{ID: parentID},
@@ -107,7 +107,7 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 	for _, needle := range []string{
 		"flags",
 		"draft",
-		"effective sdlc",
+		"effective workflow",
 		"Default Flow (project default)",
 		"role",
 		"Engineer",
@@ -121,47 +121,47 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 }
 
 func TestProjectEditAndNewTicketViewsShowLifecycleFields(t *testing.T) {
-	projectSdlcID := int64(3)
-	ticketSdlcID := int64(5)
+	projectWorkflowID := int64(3)
+	ticketWorkflowID := int64(5)
 
 	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
 	m.width = 100
 	m.height = 30
-	m.sdlcs = []store.SdlcWithStages{
-		{Sdlc: store.Sdlc{ID: projectSdlcID, Name: "Project Flow"}},
-		{Sdlc: store.Sdlc{ID: ticketSdlcID, Name: "Ticket Flow"}},
+	m.workflows = []store.WorkflowWithStages{
+		{Workflow: store.Workflow{ID: projectWorkflowID, Name: "Project Flow"}},
+		{Workflow: store.Workflow{ID: ticketWorkflowID, Name: "Ticket Flow"}},
 	}
 	m.projectForm = newProjectEditForm(store.Project{
 		Prefix:        "PRJ",
 		Visibility:    store.ProjectVisibilityPublic,
 		DefaultDraft:  true,
-		SdlcID:        &projectSdlcID,
+		WorkflowID:        &projectWorkflowID,
 		GitRepository: "github.com/example/project",
 	})
 	m.newForm = makeNewTicketForm()
 	m.newForm.draft = true
-	m.newForm.sdlcID = &ticketSdlcID
+	m.newForm.workflowID = &ticketWorkflowID
 
 	projectOut := strings.Join(m.viewProjectEdit(), "\n")
-	for _, needle := range []string{"visibility:", "default draft:", "default sdlc:", "git repo:"} {
+	for _, needle := range []string{"visibility:", "default draft:", "default workflow:", "git repo:"} {
 		if !strings.Contains(projectOut, needle) {
 			t.Fatalf("project edit view missing %q:\n%s", needle, projectOut)
 		}
 	}
 
 	newTicketOut := strings.Join(m.viewNewTicket(), "\n")
-	for _, needle := range []string{"draft:", "sdlc:", "Ticket Flow"} {
+	for _, needle := range []string{"draft:", "workflow:", "Ticket Flow"} {
 		if !strings.Contains(newTicketOut, needle) {
 			t.Fatalf("new ticket view missing %q:\n%s", needle, newTicketOut)
 		}
 	}
 }
 
-func TestBuildBoardColumnsUsesSdlcStageOrder(t *testing.T) {
+func TestBuildBoardColumnsUsesWorkflowStageOrder(t *testing.T) {
 	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
-	m.sdlcs = []store.SdlcWithStages{{
-		Sdlc: store.Sdlc{ID: 1, Name: "Flow"},
-		Stages: []store.SdlcStage{
+	m.workflows = []store.WorkflowWithStages{{
+		Workflow: store.Workflow{ID: 1, Name: "Flow"},
+		Stages: []store.WorkflowStage{
 			{StageName: "backlog"},
 			{StageName: "doing"},
 			{StageName: "done"},

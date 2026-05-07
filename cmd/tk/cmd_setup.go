@@ -98,7 +98,7 @@ func promptYN(reader *bufio.Reader, question string, defaultYes bool) bool {
 
 // initFlags holds optional flags passed to tk init that override interactive prompts.
 type initFlags struct {
-	sdlc   string
+	workflow   string
 	prefix string
 	name   string
 	git    string
@@ -107,7 +107,7 @@ type initFlags struct {
 func runSetup(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	sdlcFlag := fs.String("sdlc", "", "SDLC to assign (e.g. agile, yolo)")
+	workflowFlag := fs.String("workflow", "", "Workflow to assign (e.g. agile, yolo)")
 	prefixFlag := fs.String("prefix", "", "project prefix (e.g. TK, PRJ)")
 	nameFlag := fs.String("name", "", "project name")
 	gitFlag := fs.String("git", "", "git repository URL")
@@ -115,7 +115,7 @@ func runSetup(args []string) error {
 		return err
 	}
 	flags := initFlags{
-		sdlc:   strings.TrimSpace(*sdlcFlag),
+		workflow:   strings.TrimSpace(*workflowFlag),
 		prefix: strings.ToUpper(strings.TrimSpace(*prefixFlag)),
 		name:   strings.TrimSpace(*nameFlag),
 		git:    strings.TrimSpace(*gitFlag),
@@ -127,24 +127,24 @@ func runSetup(args []string) error {
 			return fmt.Errorf("invalid prefix %q: must be 1-5 uppercase letters", flags.prefix)
 		}
 	}
-	if flags.sdlc != "" {
-		builtinSdlcs, err := static.LoadSdlcs()
+	if flags.workflow != "" {
+		builtinWorkflows, err := static.LoadWorkflows()
 		if err != nil {
-			return fmt.Errorf("could not load SDLCs: %w", err)
+			return fmt.Errorf("could not load Workflows: %w", err)
 		}
 		found := false
-		for _, s := range builtinSdlcs {
-			if strings.EqualFold(s.Name, flags.sdlc) {
+		for _, s := range builtinWorkflows {
+			if strings.EqualFold(s.Name, flags.workflow) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			names := make([]string, len(builtinSdlcs))
-			for i, s := range builtinSdlcs {
+			names := make([]string, len(builtinWorkflows))
+			for i, s := range builtinWorkflows {
 				names[i] = strings.ToLower(s.Name)
 			}
-			return fmt.Errorf("unknown sdlc %q: available SDLCs are %s", flags.sdlc, strings.Join(names, ", "))
+			return fmt.Errorf("unknown workflow %q: available Workflows are %s", flags.workflow, strings.Join(names, ", "))
 		}
 	}
 
@@ -357,7 +357,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	fmt.Printf("  password : %s\n", defaultAdminPassword)
 	fmt.Println()
 
-	return runSetupPostInit(reader, f.sdlc)
+	return runSetupPostInit(reader, f.workflow)
 }
 
 func runSetupRemote(reader *bufio.Reader) error {
@@ -559,10 +559,10 @@ func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg c
 	return runSetupPostInit(reader)
 }
 
-func runSetupPostInit(reader *bufio.Reader, sdlcName ...string) error {
-	sdlc := ""
-	if len(sdlcName) > 0 {
-		sdlc = sdlcName[0]
+func runSetupPostInit(reader *bufio.Reader, workflowName ...string) error {
+	workflow := ""
+	if len(workflowName) > 0 {
+		workflow = workflowName[0]
 	}
 	// Detect claude / codex
 	claudePath, _ := exec.LookPath("claude")
@@ -697,10 +697,10 @@ func runSetupPostInit(reader *bufio.Reader, sdlcName ...string) error {
 
 	fmt.Println()
 
-	// Check that sdlcs and roles are populated.
+	// Check that workflows and roles are populated.
 	cfg, cfgErr := config.Load()
 	if cfgErr == nil {
-		if err := runInitCheckDefaults(reader, cfg, sdlc); err != nil {
+		if err := runInitCheckDefaults(reader, cfg, workflow); err != nil {
 			fmt.Printf("warning: could not check defaults: %v\n", err)
 		}
 	}
@@ -717,7 +717,7 @@ func runInitDB(args []string) error {
 	passwordFlag := fs.String("password", "", "bootstrap password")
 	force := fs.Bool("force", false, "overwrite the database file if it exists")
 	populate := fs.Bool("populate", false, "seed example projects, stories, tickets, users, and teams")
-	sdlcFlag := fs.String("sdlc", "", "SDLC to assign to the project (e.g. agile, yolo)")
+	workflowFlag := fs.String("workflow", "", "Workflow to assign to the project (e.g. agile, yolo)")
 	prefixFlag := fs.String("prefix", "", "project prefix (e.g. TK, PRJ)")
 	nameFlag := fs.String("name", "", "project name")
 	gitFlag := fs.String("git", "", "git repository URL")
@@ -806,10 +806,10 @@ func runInitDB(args []string) error {
 		}
 	}
 
-	// Seed built-in roles and SDLCs on a fresh init.
+	// Seed built-in roles and Workflows on a fresh init.
 	if !dbExists || *force {
 		reader := bufio.NewReader(os.Stdin)
-		if err := runInitCheckDefaults(reader, cfg, *sdlcFlag); err != nil {
+		if err := runInitCheckDefaults(reader, cfg, *workflowFlag); err != nil {
 			fmt.Printf("warning: could not check defaults: %v\n", err)
 		}
 	}
@@ -855,16 +855,16 @@ func runInitDB(args []string) error {
 	return nil
 }
 
-// runInitCheckDefaults checks whether the current project has a sdlc with
+// runInitCheckDefaults checks whether the current project has a workflow with
 // stages, and whether any roles exist. If not, it seeds them from the
-// built-in role and SDLC templates in internal/static/.
-func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName string) error {
+// built-in role and Workflow templates in internal/static/.
+func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, workflowName string) error {
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
 	}
 
-	// ── Roles (seed first — SDLCs reference them) ────────────────────────
+	// ── Roles (seed first — Workflows reference them) ────────────────────────
 	existingRoles, err := svc.ListRoles(context.Background())
 	if err != nil {
 		return err
@@ -898,101 +898,101 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 		fmt.Printf("roles      : %d found\n", len(existingRoles))
 	}
 
-	// ── SDLC ─────────────────────────────────────────────────────────────
+	// ── Workflow ─────────────────────────────────────────────────────────────
 	project, err := svc.GetProject(context.Background(), cfg.ProjectID)
 	if err != nil {
 		return err
 	}
 
-	// ── SDLCs ────────────────────────────────────────────────────────────
-	// Create all built-in SDLCs from static seed files.
-	builtinSdlcs, loadErr := static.LoadSdlcs()
+	// ── Workflows ────────────────────────────────────────────────────────────
+	// Create all built-in Workflows from static seed files.
+	builtinWorkflows, loadErr := static.LoadWorkflows()
 	if loadErr != nil {
-		fmt.Printf("  warning: could not load built-in SDLCs: %v\n", loadErr)
+		fmt.Printf("  warning: could not load built-in Workflows: %v\n", loadErr)
 	}
 	// Track which seed is the default.
 	defaultSeedName := ""
 	seedNames := make(map[string]bool)
-	for _, seed := range builtinSdlcs {
+	for _, seed := range builtinWorkflows {
 		seedNames[strings.ToLower(seed.Name)] = true
 		if seed.Default {
 			defaultSeedName = seed.Name
 		}
 	}
-	// Remove the bootstrap "default" SDLC created by store.Init if it's
-	// not one of the static seed SDLCs.
-	existingSdlcs, err := svc.ListSdlcs(context.Background())
+	// Remove the bootstrap "default" Workflow created by store.Init if it's
+	// not one of the static seed Workflows.
+	existingWorkflows, err := svc.ListWorkflows(context.Background())
 	if err != nil {
 		return err
 	}
-	for _, s := range existingSdlcs {
+	for _, s := range existingWorkflows {
 		if !seedNames[strings.ToLower(s.Name)] {
-			if delErr := svc.DeleteSdlc(context.Background(), s.ID); delErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not delete SDLC %q: %v\n", s.Name, delErr)
+			if delErr := svc.DeleteWorkflow(context.Background(), s.ID); delErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not delete Workflow %q: %v\n", s.Name, delErr)
 			}
 		}
 	}
-	// Now create the real SDLCs from static files.
-	existingSdlcs, err = svc.ListSdlcs(context.Background())
+	// Now create the real Workflows from static files.
+	existingWorkflows, err = svc.ListWorkflows(context.Background())
 	if err != nil {
 		return err
 	}
 	existingNames := make(map[string]bool)
-	for _, s := range existingSdlcs {
+	for _, s := range existingWorkflows {
 		existingNames[strings.ToLower(s.Name)] = true
 	}
-	for _, seed := range builtinSdlcs {
+	for _, seed := range builtinWorkflows {
 		if existingNames[strings.ToLower(seed.Name)] {
 			continue
 		}
-		wf, wfErr := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
+		wf, wfErr := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
 			Name:        seed.Name,
 			Description: seed.Description,
 		})
 		if wfErr != nil {
-			fmt.Printf("  warning: could not create sdlc %q: %v\n", seed.Name, wfErr)
+			fmt.Printf("  warning: could not create workflow %q: %v\n", seed.Name, wfErr)
 			continue
 		}
-		if err := seedSdlcStages(svc, wf.ID, seed, roleIDByRef); err != nil {
+		if err := seedWorkflowStages(svc, wf.ID, seed, roleIDByRef); err != nil {
 			fmt.Printf("  warning: could not add stages to %q: %v\n", seed.Name, err)
 		}
 	}
 
-	// Assign an SDLC to the project.
-	allSdlcs, _ := svc.ListSdlcs(context.Background())
-	needsSdlc := project.SdlcID == nil || sdlcName != ""
-	if needsSdlc && len(allSdlcs) > 0 {
+	// Assign an Workflow to the project.
+	allWorkflows, _ := svc.ListWorkflows(context.Background())
+	needsWorkflow := project.WorkflowID == nil || workflowName != ""
+	if needsWorkflow && len(allWorkflows) > 0 {
 		var chosenID int64
-		if sdlcName != "" {
+		if workflowName != "" {
 			// Flag provided — find by name.
-			for _, s := range allSdlcs {
-				if strings.EqualFold(s.Name, sdlcName) {
+			for _, s := range allWorkflows {
+				if strings.EqualFold(s.Name, workflowName) {
 					chosenID = s.ID
 					break
 				}
 			}
 			if chosenID == 0 {
-				fmt.Printf("  warning: sdlc %q not found, using default\n", sdlcName)
+				fmt.Printf("  warning: workflow %q not found, using default\n", workflowName)
 			}
 		}
-		if chosenID == 0 && len(allSdlcs) == 1 {
-			chosenID = allSdlcs[0].ID
+		if chosenID == 0 && len(allWorkflows) == 1 {
+			chosenID = allWorkflows[0].ID
 		}
 		if chosenID == 0 {
 			defaultIdx := 0
-			for i, s := range allSdlcs {
+			for i, s := range allWorkflows {
 				if s.Name == defaultSeedName {
 					defaultIdx = i
 				}
 			}
 			// If stdin is a terminal and no flag was given, prompt the user.
-			if sdlcName == "" && term.IsTerminal(int(os.Stdin.Fd())) {
+			if workflowName == "" && term.IsTerminal(int(os.Stdin.Fd())) {
 				fmt.Println()
-				options := make([]string, len(allSdlcs))
-				for i, s := range allSdlcs {
-					sdlcDetail, _ := svc.GetSdlc(context.Background(), s.ID)
-					stageNames := make([]string, len(sdlcDetail.Stages))
-					for j, st := range sdlcDetail.Stages {
+				options := make([]string, len(allWorkflows))
+				for i, s := range allWorkflows {
+					workflowDetail, _ := svc.GetWorkflow(context.Background(), s.ID)
+					stageNames := make([]string, len(workflowDetail.Stages))
+					for j, st := range workflowDetail.Stages {
 						stageNames[j] = st.StageName
 					}
 					label := fmt.Sprintf("%s — %s (%s)", s.Name, s.Description, strings.Join(stageNames, " → "))
@@ -1001,38 +1001,38 @@ func runInitCheckDefaults(reader *bufio.Reader, cfg config.Config, sdlcName stri
 					}
 					options[i] = label
 				}
-				choice := promptChoiceWithDefault(reader, "Choose an SDLC for this project:", options, defaultIdx)
-				chosenID = allSdlcs[choice].ID
+				choice := promptChoiceWithDefault(reader, "Choose an Workflow for this project:", options, defaultIdx)
+				chosenID = allWorkflows[choice].ID
 			} else {
-				chosenID = allSdlcs[defaultIdx].ID
+				chosenID = allWorkflows[defaultIdx].ID
 			}
 		}
 		projectID, parseErr := strconv.ParseInt(cfg.ProjectID, 10, 64)
 		if parseErr == nil {
-			if _, pErr := svc.UpdateProject(context.Background(), projectID, libticket.ProjectUpdateRequest{SdlcID: &chosenID}); pErr != nil {
-				fmt.Printf("  warning: could not assign sdlc: %v\n", pErr)
+			if _, pErr := svc.UpdateProject(context.Background(), projectID, libticket.ProjectUpdateRequest{WorkflowID: &chosenID}); pErr != nil {
+				fmt.Printf("  warning: could not assign workflow: %v\n", pErr)
 			}
 		}
-		chosen, _ := svc.GetSdlc(context.Background(), chosenID)
+		chosen, _ := svc.GetWorkflow(context.Background(), chosenID)
 		stageNames := make([]string, len(chosen.Stages))
 		for i, s := range chosen.Stages {
 			stageNames[i] = s.StageName
 		}
-		fmt.Printf("sdlc       : %q (%s)\n", chosen.Name, strings.Join(stageNames, " → "))
-	} else if project.SdlcID != nil {
-		wf, wfErr := svc.GetSdlc(context.Background(), *project.SdlcID)
+		fmt.Printf("workflow       : %q (%s)\n", chosen.Name, strings.Join(stageNames, " → "))
+	} else if project.WorkflowID != nil {
+		wf, wfErr := svc.GetWorkflow(context.Background(), *project.WorkflowID)
 		if wfErr == nil {
-			fmt.Printf("sdlc       : %q (%d stages)\n", wf.Name, len(wf.Stages))
+			fmt.Printf("workflow       : %q (%d stages)\n", wf.Name, len(wf.Stages))
 		}
 	}
 
 	return nil
 }
 
-// seedSdlcStages creates stages and assigns roles from an SDLC seed template.
-func seedSdlcStages(svc libticket.Service, sdlcID int64, seed static.Sdlc, roleIDByRef map[string]int64) error {
+// seedWorkflowStages creates stages and assigns roles from an Workflow seed template.
+func seedWorkflowStages(svc libticket.Service, workflowID int64, seed static.Workflow, roleIDByRef map[string]int64) error {
 	for _, s := range seed.Stages {
-		stage, err := svc.AddSdlcStage(context.Background(), sdlcID, libticket.SdlcStageRequest{
+		stage, err := svc.AddWorkflowStage(context.Background(), workflowID, libticket.WorkflowStageRequest{
 			StageName:   s.Name,
 			Description: s.Description,
 			SortOrder:   s.Order,
@@ -1043,7 +1043,7 @@ func seedSdlcStages(svc libticket.Service, sdlcID int64, seed static.Sdlc, roleI
 		// Assign roles to the stage.
 		for _, roleRef := range s.Roles {
 			if rid, ok := roleIDByRef[roleRef.RoleRef]; ok {
-				if err := svc.AddSdlcStageRole(context.Background(), sdlcID, stage.ID, rid); err != nil {
+				if err := svc.AddWorkflowStageRole(context.Background(), workflowID, stage.ID, rid); err != nil {
 					fmt.Printf("  warning: could not assign role %q to stage %q: %v\n", roleRef.RoleRef, s.Name, err)
 				}
 			}
@@ -1149,12 +1149,12 @@ func seedExampleData(db *sql.DB) error {
 		{
 			prefix:      "CRM",
 			title:       "Customer Relationship Portal",
-			description: "Sample CRM modernization project with customer sdlcs.",
+			description: "Sample CRM modernization project with customer workflows.",
 			stories: []seedStory{
 				{
 					title:       "Customer onboarding lifecycle",
 					description: "As operations, we need guided onboarding states and notifications.",
-					epicTitle:   "Onboarding sdlc foundation",
+					epicTitle:   "Onboarding workflow foundation",
 					taskTitle:   "Implement onboarding timeline UI",
 					bugTitle:    "Fix duplicate welcome email trigger",
 					choreTitle:  "Refactor onboarding API response contract",
@@ -1325,7 +1325,7 @@ func runServer(args []string) error {
 	port := fs.Int("p", 0, "HTTP listen port (shorthand for -addr :<port>)")
 	verbose := fs.Bool("v", false, "print verbose request/response logs to stdout")
 	staticPath := fs.String("path", "", "serve static files from this filesystem path instead of embedded assets")
-	siteName := fs.String("site", web.DefaultSite, "embedded site bundle to serve (default or site2)")
+	siteName := fs.String("site", web.Site2, "embedded site bundle to serve (default or site2)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1368,7 +1368,7 @@ func runServer(args []string) error {
 
 	selectedSite := strings.TrimSpace(*siteName)
 	if selectedSite == "" {
-		selectedSite = web.DefaultSite
+		selectedSite = web.Site2
 	}
 
 	srv, err := server.New(listenAddr, db, strings.TrimSpace(embeddedVersion), *verbose, os.Stdout, *staticPath, selectedSite)

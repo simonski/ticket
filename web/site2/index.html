@@ -761,8 +761,9 @@
                 </div>
                 <nav class="nav" id="main-nav">
                     <button type="button" data-view="tickets" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg></span><span>Board</span></button>
+                    <button type="button" data-view="interventions"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v8"></path><path d="M12 16h.01"></path><circle cx="12" cy="12" r="9"></circle></svg></span><span>Interventions</span></button>
                     <button type="button" data-view="projects"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18"></path><path d="M6 7v10"></path><path d="M12 7v10"></path><path d="M18 7v10"></path><path d="M3 17h18"></path></svg></span><span>Projects</span></button>
-                    <button type="button" data-view="sdlcs"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14"></path><path d="M5 12h9"></path><path d="M5 18h14"></path><path d="M17 10l2 2-2 2"></path></svg></span><span>SDLCs</span></button>
+                    <button type="button" data-view="workflows"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14"></path><path d="M5 12h9"></path><path d="M5 18h14"></path><path d="M17 10l2 2-2 2"></path></svg></span><span>Workflows</span></button>
                     <button type="button" data-view="roles"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0.001 0"></path><path d="M17 16a3 3 0 1 0 0.001 0"></path><path d="M9.5 10.5l5 3"></path></svg></span><span>Roles</span></button>
                     <button type="button" data-view="agents"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4"></path><path d="M8 8a4 4 0 1 1 8 0"></path><path d="M7 13h10v7H7z"></path></svg></span><span>Agents</span></button>
                     <button type="button" data-view="teams"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11a2.5 2.5 0 1 0 0.001 0"></path><path d="M16 9a2 2 0 1 0 0.001 0"></path><path d="M4 19a4 4 0 0 1 8 0"></path><path d="M14 19a3 3 0 0 1 6 0"></path></svg></span><span>Teams</span></button>
@@ -786,6 +787,18 @@
                             </div>
                         </div>
                         <div id="ticket-board" class="board"></div>
+                    </div>
+                </section>
+
+                <section id="view-interventions" class="view">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>Interventions</h2>
+                                <p class="meta">Tickets in <code>fail</code> state that require accountable human action.</p>
+                            </div>
+                        </div>
+                        <div id="intervention-list" class="entity-list"></div>
                     </div>
                 </section>
 
@@ -829,8 +842,8 @@
                                     </select>
                                 </div>
                                 <div class="field">
-                                    <label for="project-sdlc">Default SDLC</label>
-                                    <select id="project-sdlc"></select>
+                                    <label for="project-workflow">Default Workflow</label>
+                                    <select id="project-workflow"></select>
                                 </div>
                             </div>
                             <div class="field">
@@ -854,36 +867,36 @@
                     </div>
                 </section>
 
-                <section id="view-sdlcs" class="view split">
+                <section id="view-workflows" class="view split">
                     <div class="panel">
                         <div class="panel-head">
-                            <h2>SDLCs</h2>
-                            <button id="new-sdlc-button" type="button" class="btn-primary">New SDLC</button>
+                            <h2>Workflows</h2>
+                            <button id="new-workflow-button" type="button" class="btn-primary">New Workflow</button>
                         </div>
-                        <div id="sdlc-list" class="entity-list"></div>
+                        <div id="workflow-list" class="entity-list"></div>
                     </div>
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <h2 id="sdlc-editor-title">SDLC editor</h2>
+                                <h2 id="workflow-editor-title">Workflow editor</h2>
                                 <p class="meta">Reorder stages and roles with drag/drop. Stage updates are saved inline.</p>
                             </div>
                         </div>
-                        <form id="sdlc-form" class="stack">
+                        <form id="workflow-form" class="stack">
                             <div class="row">
                                 <div class="field">
-                                    <label for="sdlc-name">Name</label>
-                                    <input id="sdlc-name" required>
+                                    <label for="workflow-name">Name</label>
+                                    <input id="workflow-name" required>
                                 </div>
                             </div>
                             <div class="field">
-                                <label for="sdlc-description">Description</label>
-                                <textarea id="sdlc-description"></textarea>
+                                <label for="workflow-description">Description</label>
+                                <textarea id="workflow-description"></textarea>
                             </div>
                             <div class="editor-actions">
-                                <button id="save-sdlc-button" type="submit" class="btn-primary">Save SDLC</button>
-                                <button id="delete-sdlc-button" type="button" class="btn-danger">Delete</button>
-                                <button id="reset-sdlc-button" type="button" class="btn-ghost">Clear</button>
+                                <button id="save-workflow-button" type="submit" class="btn-primary">Save Workflow</button>
+                                <button id="delete-workflow-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-workflow-button" type="button" class="btn-ghost">Clear</button>
                             </div>
                         </form>
 
@@ -893,7 +906,7 @@
                         </div>
                         <div class="field">
                             <label>Roles</label>
-                            <div id="sdlc-role-bank" class="role-bank"></div>
+                            <div id="workflow-role-bank" class="role-bank"></div>
                         </div>
                         <div id="stage-grid" class="stage-grid"></div>
 
@@ -943,7 +956,7 @@
                     <div class="panel">
                         <div class="panel-head">
                             <h2 id="role-editor-title">Role editor</h2>
-                            <span class="meta">Attach roles to a default SDLC, then drag them into stages in the SDLC editor.</span>
+                            <span class="meta">Attach roles to a default Workflow, then drag them into stages in the Workflow editor.</span>
                         </div>
                         <form id="role-form" class="stack">
                             <div class="row">
@@ -952,8 +965,8 @@
                                     <input id="role-title" required>
                                 </div>
                                 <div class="field">
-                                    <label for="role-sdlc">Default SDLC</label>
-                                    <select id="role-sdlc"></select>
+                                    <label for="role-workflow">Default Workflow</label>
+                                    <select id="role-workflow"></select>
                                 </div>
                             </div>
                             <div class="field">
@@ -1099,8 +1112,8 @@
                             <input id="ticket-parent" placeholder="CUS-1">
                         </div>
                         <div class="field">
-                            <label for="ticket-sdlc">Override SDLC</label>
-                            <select id="ticket-sdlc"></select>
+                            <label for="ticket-workflow">Override Workflow</label>
+                            <select id="ticket-workflow"></select>
                         </div>
                         <div class="field">
                             <label for="ticket-draft">Draft</label>
@@ -1203,14 +1216,14 @@
             status: null,
             projects: [],
             tickets: [],
-            sdlcs: [],
+            workflows: [],
             roles: [],
             agents: [],
             teams: [],
             selectedProjectID: null,
             selectedProjectDraft: emptyProject(),
-            selectedSdlcID: null,
-            selectedSdlcDraft: emptySdlc(),
+            selectedWorkflowID: null,
+            selectedWorkflowDraft: emptyWorkflow(),
             selectedRoleID: null,
             selectedRoleDraft: emptyRole(),
             selectedAgentID: null,
@@ -1248,13 +1261,14 @@
             accountMenuDropdown: document.getElementById("account-menu-dropdown"),
             accountMenuName: document.getElementById("account-menu-name"),
             projectList: document.getElementById("project-list"),
-            sdlcList: document.getElementById("sdlc-list"),
+            workflowList: document.getElementById("workflow-list"),
             roleList: document.getElementById("role-list"),
             agentList: document.getElementById("agent-list"),
             teamList: document.getElementById("team-list"),
             ticketBoard: document.getElementById("ticket-board"),
+            interventionList: document.getElementById("intervention-list"),
             stageGrid: document.getElementById("stage-grid"),
-            sdlcRoleBank: document.getElementById("sdlc-role-bank"),
+            workflowRoleBank: document.getElementById("workflow-role-bank"),
             ticketModal: document.getElementById("ticket-modal"),
             ticketHistory: document.getElementById("ticket-history"),
             ticketComments: document.getElementById("ticket-comments"),
@@ -1282,17 +1296,17 @@
                 acceptance_criteria: "",
                 git_repository: "",
                 visibility: "public",
-                sdlc_id: null,
+                workflow_id: null,
                 default_draft: false,
             };
         }
 
-        function emptySdlc() {
+        function emptyWorkflow() {
             return { id: null, name: "", description: "" };
         }
 
         function emptyRole() {
-            return { id: null, title: "", description: "", acceptance_criteria: "", sdlc_id: null };
+            return { id: null, title: "", description: "", acceptance_criteria: "", workflow_id: null };
         }
 
         function emptyTeam() {
@@ -1317,7 +1331,7 @@
                 health: 0,
                 draft: false,
                 archived: false,
-                sdlc_id: null,
+                workflow_id: null,
             };
         }
 
@@ -1339,14 +1353,14 @@
         function normalizeRole(role) {
             return Object.assign({}, role, {
                 id: role.id !== undefined ? role.id : role.role_id,
-                sdlc_id: toNullableNumber(role.sdlc_id),
+                workflow_id: toNullableNumber(role.workflow_id),
             });
         }
 
         function normalizeStage(stage) {
             return Object.assign({}, stage, {
-                id: stage.id !== undefined ? stage.id : stage.sdlc_stage_id,
-                sdlc_id: Number(stage.sdlc_id),
+                id: stage.id !== undefined ? stage.id : stage.workflow_stage_id,
+                workflow_id: Number(stage.workflow_id),
                 name: stage.name || stage.stage_name,
                 wow: stage.wow !== undefined ? stage.wow : (stage.description || ""),
                 dor: stage.dor !== undefined ? stage.dor : (stage.definition_of_ready || ""),
@@ -1355,17 +1369,17 @@
             });
         }
 
-        function normalizeSdlc(sdlc) {
-            return Object.assign({}, sdlc, {
-                id: sdlc.id !== undefined ? sdlc.id : sdlc.sdlc_id,
-                stages: Array.isArray(sdlc.stages) ? sdlc.stages.map(normalizeStage) : [],
+        function normalizeWorkflow(workflow) {
+            return Object.assign({}, workflow, {
+                id: workflow.id !== undefined ? workflow.id : workflow.workflow_id,
+                stages: Array.isArray(workflow.stages) ? workflow.stages.map(normalizeStage) : [],
             });
         }
 
         function normalizeProject(project) {
             return Object.assign({}, project, {
                 id: project.id !== undefined ? project.id : project.project_id,
-                sdlc_id: toNullableNumber(project.sdlc_id),
+                workflow_id: toNullableNumber(project.workflow_id),
             });
         }
 
@@ -1373,8 +1387,8 @@
             return Object.assign({}, ticket, {
                 id: ticket.id !== undefined ? ticket.id : ticket.ticket_id,
                 project_id: Number(ticket.project_id),
-                sdlc_id: toNullableNumber(ticket.sdlc_id),
-                sdlc_stage_id: toNullableNumber(ticket.sdlc_stage_id),
+                workflow_id: toNullableNumber(ticket.workflow_id),
+                workflow_stage_id: toNullableNumber(ticket.workflow_stage_id),
                 role_id: toNullableNumber(ticket.role_id),
                 health: ticket.health !== undefined ? ticket.health : (ticket.health_score || 0),
             });
@@ -1479,14 +1493,14 @@
 
         function getCurrentProjectWorkflow() {
             const project = getCurrentProject();
-            if (!project || !project.sdlc_id) {
+            if (!project || !project.workflow_id) {
                 return null;
             }
-            return state.sdlcs.find((item) => item.id === project.sdlc_id) || null;
+            return state.workflows.find((item) => item.id === project.workflow_id) || null;
         }
 
-        function getCurrentSdlc() {
-            return state.sdlcs.find((item) => item.id === state.selectedSdlcID) || null;
+        function getCurrentWorkflow() {
+            return state.workflows.find((item) => item.id === state.selectedWorkflowID) || null;
         }
 
         function getCurrentRole() {
@@ -1503,12 +1517,12 @@
 
         function getStageOptions() {
             const workflow = getCurrentProjectWorkflow();
-            const fromSdlc = workflow && Array.isArray(workflow.stages) && workflow.stages.length
+            const fromWorkflow = workflow && Array.isArray(workflow.stages) && workflow.stages.length
                 ? workflow.stages.map((stage) => stage.name)
                 : [];
             const fromTickets = state.tickets.map((ticket) => ticket.stage).filter(Boolean);
-            const stages = fromSdlc.length
-                ? fromSdlc.concat(fromTickets)
+            const stages = fromWorkflow.length
+                ? fromWorkflow.concat(fromTickets)
                 : (fromTickets.length ? fromTickets : FALLBACK_STAGES.slice());
             return Array.from(new Set(stages.filter(Boolean)));
         }
@@ -1518,7 +1532,7 @@
             const stageMap = new Map((workflow && workflow.stages ? workflow.stages : []).map((stage) => [stage.name, stage.id]));
             return getStageOptions().map((name) => ({
                 name,
-                sdlcStageID: stageMap.get(name) || null,
+                workflowStageID: stageMap.get(name) || null,
             }));
         }
 
@@ -1559,13 +1573,13 @@
             renderAll();
         }
 
-        function populateSdlcSelects() {
+        function populateWorkflowSelects() {
             const options = [optionHTML("", "None", false)].concat(
-                state.sdlcs.map((sdlc) => optionHTML(sdlc.id, sdlc.name, false))
+                state.workflows.map((workflow) => optionHTML(workflow.id, workflow.name, false))
             ).join("");
-            document.getElementById("project-sdlc").innerHTML = options;
-            document.getElementById("role-sdlc").innerHTML = options;
-            document.getElementById("ticket-sdlc").innerHTML = options;
+            document.getElementById("project-workflow").innerHTML = options;
+            document.getElementById("role-workflow").innerHTML = options;
+            document.getElementById("ticket-workflow").innerHTML = options;
         }
 
         function populateTeamParentSelect() {
@@ -1608,16 +1622,16 @@
             state.tickets = (await api("/api/projects/" + state.selectedProjectID + "/tickets")).map(normalizeTicket);
         }
 
-        async function loadSdlcs() {
-            const summaries = await api("/api/sdlcs");
-            state.sdlcs = await Promise.all(summaries.map(async (summary) => normalizeSdlc(await api("/api/sdlcs/" + (summary.sdlc_id || summary.id)))));
-            if (!state.selectedSdlcID && state.sdlcs.length) {
-                state.selectedSdlcID = state.sdlcs[0].id;
+        async function loadWorkflows() {
+            const summaries = await api("/api/workflows");
+            state.workflows = await Promise.all(summaries.map(async (summary) => normalizeWorkflow(await api("/api/workflows/" + (summary.workflow_id || summary.id)))));
+            if (!state.selectedWorkflowID && state.workflows.length) {
+                state.selectedWorkflowID = state.workflows[0].id;
             }
-            if (state.selectedSdlcID && !state.sdlcs.some((item) => item.id === state.selectedSdlcID)) {
-                state.selectedSdlcID = state.sdlcs.length ? state.sdlcs[0].id : null;
+            if (state.selectedWorkflowID && !state.workflows.some((item) => item.id === state.selectedWorkflowID)) {
+                state.selectedWorkflowID = state.workflows.length ? state.workflows[0].id : null;
             }
-            state.selectedSdlcDraft = getCurrentSdlc() ? structuredClone(getCurrentSdlc()) : emptySdlc();
+            state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
         }
 
         async function loadRoles() {
@@ -1659,9 +1673,9 @@
 
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadSdlcs(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
+            await Promise.all([loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
             renderProjectMenu();
-            populateSdlcSelects();
+            populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
             await loadTickets();
@@ -1735,15 +1749,16 @@
 
         function renderAll() {
             renderProjectMenu();
-            populateSdlcSelects();
+            populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
             renderProjects();
-            renderSdlcs();
+            renderWorkflows();
             renderRoles();
             renderAgents();
             renderTeams();
             renderTicketBoard();
+            renderInterventions();
             renderEditors();
         }
 
@@ -1764,32 +1779,32 @@
             }).join("");
         }
 
-        function renderSdlcs() {
-            els.sdlcRoleBank.innerHTML = state.roles.length
+        function renderWorkflows() {
+            els.workflowRoleBank.innerHTML = state.roles.length
                 ? state.roles.map((role) => "<span class=\"role-chip\" draggable=\"true\" data-role-bank-id=\"" + role.id + "\">" + escapeHTML(role.title) + "</span>").join("")
                 : "<span class=\"meta\">No roles yet.</span>";
 
-            if (!state.sdlcs.length) {
-                els.sdlcList.innerHTML = "<div class=\"empty\">No SDLCs yet.</div>";
+            if (!state.workflows.length) {
+                els.workflowList.innerHTML = "<div class=\"empty\">No Workflows yet.</div>";
                 els.stageGrid.innerHTML = "";
                 return;
             }
-            els.sdlcList.innerHTML = state.sdlcs.map((sdlc) => {
-                const active = sdlc.id === state.selectedSdlcID ? " active" : "";
-                return "<div class=\"entity-card" + active + "\" data-sdlc-id=\"" + sdlc.id + "\">" +
-                    "<h4>" + escapeHTML(sdlc.name) + "</h4>" +
-                    "<p>" + escapeHTML(sdlc.description || "No description") + "</p>" +
-                    "<p class=\"meta meta-top\">" + (sdlc.stages ? sdlc.stages.length : 0) + " stages</p>" +
+            els.workflowList.innerHTML = state.workflows.map((workflow) => {
+                const active = workflow.id === state.selectedWorkflowID ? " active" : "";
+                return "<div class=\"entity-card" + active + "\" data-workflow-id=\"" + workflow.id + "\">" +
+                    "<h4>" + escapeHTML(workflow.name) + "</h4>" +
+                    "<p>" + escapeHTML(workflow.description || "No description") + "</p>" +
+                    "<p class=\"meta meta-top\">" + (workflow.stages ? workflow.stages.length : 0) + " stages</p>" +
                     "</div>";
             }).join("");
 
-            const sdlc = getCurrentSdlc();
-            if (!sdlc || !Array.isArray(sdlc.stages) || !sdlc.stages.length) {
+            const workflow = getCurrentWorkflow();
+            if (!workflow || !Array.isArray(workflow.stages) || !workflow.stages.length) {
                 els.stageGrid.innerHTML = "<div class=\"empty\">No stages yet.</div>";
                 return;
             }
 
-            els.stageGrid.innerHTML = sdlc.stages.map((stage) => {
+            els.stageGrid.innerHTML = workflow.stages.map((stage) => {
                 const roleNames = (stage.roles || []).map((role) => {
                     const fullRole = state.roles.find((item) => item.id === role.id);
                     const label = fullRole ? fullRole.title : role.title || ("role " + role.id);
@@ -1827,11 +1842,11 @@
             }
             els.roleList.innerHTML = state.roles.map((role) => {
                 const active = role.id === state.selectedRoleID ? " active" : "";
-                const sdlc = state.sdlcs.find((item) => item.id === role.sdlc_id);
+                const workflow = state.workflows.find((item) => item.id === role.workflow_id);
                 return "<div class=\"entity-card" + active + "\" data-role-id=\"" + role.id + "\">" +
                     "<h4>" + escapeHTML(role.title) + "</h4>" +
                     "<p>" + escapeHTML(role.description || "No description") + "</p>" +
-                    "<p class=\"meta meta-top\">SDLC: " + escapeHTML(sdlc ? sdlc.name : "None") + "</p>" +
+                    "<p class=\"meta meta-top\">Workflow: " + escapeHTML(workflow ? workflow.name : "None") + "</p>" +
                     "</div>";
             }).join("");
         }
@@ -1873,11 +1888,30 @@
                     .sort((a, b) => (a.order || 0) - (b.order || 0))
                     .map((ticket) => renderTicketCard(ticket))
                     .join("");
-                const draggable = lane.sdlcStageID ? "true" : "false";
-                const stageAttr = lane.sdlcStageID ? " data-sdlc-stage-id=\"" + lane.sdlcStageID + "\"" : "";
+                const draggable = lane.workflowStageID ? "true" : "false";
+                const stageAttr = lane.workflowStageID ? " data-workflow-stage-id=\"" + lane.workflowStageID + "\"" : "";
                 return "<div class=\"lane\" draggable=\"" + draggable + "\" data-lane-stage=\"" + escapeHTML(lane.name) + "\"" + stageAttr + ">" +
                     "<div class=\"lane-head\"><h3>" + escapeHTML(lane.name) + "</h3><span class=\"chip\">" + state.tickets.filter((ticket) => (ticket.stage || lanes[0].name) === lane.name).length + "</span></div>" +
                     (cards || "<div class=\"empty\">No tickets</div>") +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderInterventions() {
+            const failed = state.tickets
+                .filter((ticket) => (ticket.state || "").toLowerCase() === "fail")
+                .sort((a, b) => (a.order || 0) - (b.order || 0));
+            if (!failed.length) {
+                els.interventionList.innerHTML = "<div class=\"empty\">No intervention items.</div>";
+                return;
+            }
+            els.interventionList.innerHTML = failed.map((ticket) => {
+                return "<div class=\"entity-card\" data-intervention-ticket-id=\"" + ticket.id + "\">" +
+                    "<h4>" + escapeHTML(ticket.key || ticket.id || "ticket") + " · " + escapeHTML(ticket.title || "(untitled)") + "</h4>" +
+                    "<p>" + escapeHTML("stage: " + (ticket.stage || "unknown") + " · state: " + (ticket.state || "fail")) + "</p>" +
+                    "<div class=\"entity-actions\">" +
+                    "<button type=\"button\" class=\"btn-primary\" data-open-intervention-ticket=\"" + ticket.id + "\">Open ticket</button>" +
+                    "</div>" +
                     "</div>";
             }).join("");
         }
@@ -1895,7 +1929,7 @@
 
         function renderEditors() {
             renderProjectEditor();
-            renderSdlcEditor();
+            renderWorkflowEditor();
             renderRoleEditor();
             renderAgentEditor();
             renderTeamEditor();
@@ -1911,16 +1945,16 @@
             document.getElementById("project-git-repository").value = project.git_repository || "";
             document.getElementById("project-visibility").value = project.visibility || "public";
             document.getElementById("project-default-draft").value = String(Boolean(project.default_draft));
-            document.getElementById("project-sdlc").value = project.sdlc_id || "";
+            document.getElementById("project-workflow").value = project.workflow_id || "";
             document.getElementById("delete-project-button").disabled = !project.id;
         }
 
-        function renderSdlcEditor() {
-            const sdlc = state.selectedSdlcDraft || emptySdlc();
-            document.getElementById("sdlc-editor-title").textContent = sdlc.id ? "SDLC: " + sdlc.name : "SDLC editor";
-            document.getElementById("sdlc-name").value = sdlc.name || "";
-            document.getElementById("sdlc-description").value = sdlc.description || "";
-            document.getElementById("delete-sdlc-button").disabled = !sdlc.id;
+        function renderWorkflowEditor() {
+            const workflow = state.selectedWorkflowDraft || emptyWorkflow();
+            document.getElementById("workflow-editor-title").textContent = workflow.id ? "Workflow: " + workflow.name : "Workflow editor";
+            document.getElementById("workflow-name").value = workflow.name || "";
+            document.getElementById("workflow-description").value = workflow.description || "";
+            document.getElementById("delete-workflow-button").disabled = !workflow.id;
         }
 
         function renderRoleEditor() {
@@ -1929,7 +1963,7 @@
             document.getElementById("role-title").value = role.title || "";
             document.getElementById("role-description").value = role.description || "";
             document.getElementById("role-ac").value = role.acceptance_criteria || "";
-            document.getElementById("role-sdlc").value = role.sdlc_id || "";
+            document.getElementById("role-workflow").value = role.workflow_id || "";
             document.getElementById("delete-role-button").disabled = !role.id;
         }
 
@@ -2027,7 +2061,7 @@
                     acceptance_criteria: document.getElementById("project-ac").value.trim(),
                     git_repository: document.getElementById("project-git-repository").value.trim(),
                     visibility: document.getElementById("project-visibility").value,
-                    sdlc_id: document.getElementById("project-sdlc").value ? Number(document.getElementById("project-sdlc").value) : null,
+                    workflow_id: document.getElementById("project-workflow").value ? Number(document.getElementById("project-workflow").value) : null,
                 };
                 try {
                     const project = normalizeProject(draft.id
@@ -2038,7 +2072,7 @@
                         body: JSON.stringify({ draft: normalizeBool(document.getElementById("project-default-draft").value) }),
                     });
                     state.selectedProjectID = project.id;
-                    await Promise.all([loadProjects(), loadSdlcs()]);
+                    await Promise.all([loadProjects(), loadWorkflows()]);
                     await loadTickets();
                     renderAll();
                     setNotice("Project saved.");
@@ -2066,60 +2100,60 @@
             });
         }
 
-        function bindSdlcHandlers() {
-            els.sdlcList.addEventListener("click", (event) => {
-                const card = event.target.closest("[data-sdlc-id]");
+        function bindWorkflowHandlers() {
+            els.workflowList.addEventListener("click", (event) => {
+                const card = event.target.closest("[data-workflow-id]");
                 if (!card) {
                     return;
                 }
-                state.selectedSdlcID = Number(card.dataset.sdlcId);
-                state.selectedSdlcDraft = getCurrentSdlc() ? structuredClone(getCurrentSdlc()) : emptySdlc();
+                state.selectedWorkflowID = Number(card.dataset.workflowId);
+                state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
                 renderAll();
             });
 
-            document.getElementById("new-sdlc-button").addEventListener("click", () => {
-                state.selectedSdlcID = null;
-                state.selectedSdlcDraft = emptySdlc();
+            document.getElementById("new-workflow-button").addEventListener("click", () => {
+                state.selectedWorkflowID = null;
+                state.selectedWorkflowDraft = emptyWorkflow();
                 renderEditors();
             });
 
-            document.getElementById("reset-sdlc-button").addEventListener("click", () => {
-                state.selectedSdlcDraft = getCurrentSdlc() ? structuredClone(getCurrentSdlc()) : emptySdlc();
+            document.getElementById("reset-workflow-button").addEventListener("click", () => {
+                state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
                 renderEditors();
             });
 
-            document.getElementById("sdlc-form").addEventListener("submit", async (event) => {
+            document.getElementById("workflow-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
-                const draft = state.selectedSdlcDraft;
+                const draft = state.selectedWorkflowDraft;
                 const payload = {
-                    name: document.getElementById("sdlc-name").value.trim(),
-                    description: document.getElementById("sdlc-description").value.trim(),
+                    name: document.getElementById("workflow-name").value.trim(),
+                    description: document.getElementById("workflow-description").value.trim(),
                 };
                 try {
-                    const sdlc = normalizeSdlc(draft.id
-                        ? await api("/api/sdlcs/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/sdlcs", { method: "POST", body: JSON.stringify(payload) }));
-                    state.selectedSdlcID = sdlc.id;
-                    await Promise.all([loadSdlcs(), loadProjects(), loadRoles()]);
+                    const workflow = normalizeWorkflow(draft.id
+                        ? await api("/api/workflows/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
+                        : await api("/api/workflows", { method: "POST", body: JSON.stringify(payload) }));
+                    state.selectedWorkflowID = workflow.id;
+                    await Promise.all([loadWorkflows(), loadProjects(), loadRoles()]);
                     renderAll();
-                    setNotice("SDLC saved.");
+                    setNotice("Workflow saved.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }
             });
 
-            document.getElementById("delete-sdlc-button").addEventListener("click", async () => {
-                const draft = state.selectedSdlcDraft;
+            document.getElementById("delete-workflow-button").addEventListener("click", async () => {
+                const draft = state.selectedWorkflowDraft;
                 if (!draft.id) {
                     return;
                 }
                 try {
-                    await api("/api/sdlcs/" + draft.id, { method: "DELETE" });
-                    state.selectedSdlcID = null;
-                    state.selectedSdlcDraft = emptySdlc();
-                    await Promise.all([loadSdlcs(), loadProjects(), loadRoles()]);
+                    await api("/api/workflows/" + draft.id, { method: "DELETE" });
+                    state.selectedWorkflowID = null;
+                    state.selectedWorkflowDraft = emptyWorkflow();
+                    await Promise.all([loadWorkflows(), loadProjects(), loadRoles()]);
                     renderAll();
-                    setNotice("SDLC deleted.");
+                    setNotice("Workflow deleted.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }
@@ -2127,13 +2161,13 @@
 
             document.getElementById("new-stage-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
-                const sdlc = getCurrentSdlc();
-                if (!sdlc) {
-                    setNotice("Select an SDLC first.", true);
+                const workflow = getCurrentWorkflow();
+                if (!workflow) {
+                    setNotice("Select an Workflow first.", true);
                     return;
                 }
                 try {
-                    await api("/api/sdlcs/" + sdlc.id + "/stages", {
+                    await api("/api/workflows/" + workflow.id + "/stages", {
                         method: "POST",
                         body: JSON.stringify({
                             stage_name: document.getElementById("new-stage-name").value.trim(),
@@ -2144,7 +2178,7 @@
                         }),
                     });
                     document.getElementById("new-stage-form").reset();
-                    await loadSdlcs();
+                    await loadWorkflows();
                     renderAll();
                     setNotice("Stage added.");
                 } catch (error) {
@@ -2163,8 +2197,8 @@
                 if (deleteButton) {
                     const stageID = Number(deleteButton.dataset.deleteStage);
                     try {
-                        await api("/api/sdlcs/stages/" + stageID, { method: "DELETE" });
-                        await loadSdlcs();
+                        await api("/api/workflows/stages/" + stageID, { method: "DELETE" });
+                        await loadWorkflows();
                         renderAll();
                         setNotice("Stage deleted.");
                     } catch (error) {
@@ -2175,17 +2209,17 @@
                 const addRoleButton = event.target.closest("[data-add-role]");
                 if (addRoleButton) {
                     const stageID = Number(addRoleButton.dataset.addRole);
-                    const sdlc = getCurrentSdlc();
+                    const workflow = getCurrentWorkflow();
                     const select = document.querySelector("[data-add-role-select=\"" + stageID + "\"]");
-                    if (!sdlc || !select || !select.value) {
+                    if (!workflow || !select || !select.value) {
                         return;
                     }
                     try {
-                        await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + stageID, {
+                        await api("/api/workflows/stages/roles/" + workflow.id + "/" + stageID, {
                             method: "POST",
                             body: JSON.stringify({ role_id: Number(select.value) }),
                         });
-                        await loadSdlcs();
+                        await loadWorkflows();
                         renderAll();
                     } catch (error) {
                         setNotice(error.message, true);
@@ -2198,7 +2232,7 @@
 
         async function saveStage(stageID) {
             try {
-                await api("/api/sdlcs/stages/" + stageID, {
+                await api("/api/workflows/stages/" + stageID, {
                     method: "PUT",
                     body: JSON.stringify({
                         stage_name: document.querySelector("[data-stage-name=\"" + stageID + "\"]").value.trim(),
@@ -2207,7 +2241,7 @@
                         dod: document.querySelector("[data-stage-dod=\"" + stageID + "\"]").value.trim(),
                     }),
                 });
-                await loadSdlcs();
+                await loadWorkflows();
                 renderAll();
                 setNotice("Stage saved.");
             } catch (error) {
@@ -2244,14 +2278,14 @@
                     title: document.getElementById("role-title").value.trim(),
                     description: document.getElementById("role-description").value.trim(),
                     acceptance_criteria: document.getElementById("role-ac").value.trim(),
-                    sdlc_id: document.getElementById("role-sdlc").value ? Number(document.getElementById("role-sdlc").value) : null,
+                    workflow_id: document.getElementById("role-workflow").value ? Number(document.getElementById("role-workflow").value) : null,
                 };
                 try {
                     const role = normalizeRole(draft.id
                         ? await api("/api/roles/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
                         : await api("/api/roles", { method: "POST", body: JSON.stringify(payload) }));
                     state.selectedRoleID = role.id;
-                    await Promise.all([loadRoles(), loadSdlcs()]);
+                    await Promise.all([loadRoles(), loadWorkflows()]);
                     renderAll();
                     setNotice("Role saved.");
                 } catch (error) {
@@ -2268,7 +2302,7 @@
                     await api("/api/roles/" + draft.id, { method: "DELETE" });
                     state.selectedRoleID = null;
                     state.selectedRoleDraft = emptyRole();
-                    await Promise.all([loadRoles(), loadSdlcs()]);
+                    await Promise.all([loadRoles(), loadWorkflows()]);
                     renderAll();
                     setNotice("Role deleted.");
                 } catch (error) {
@@ -2464,6 +2498,16 @@
                     openTicketModal(ticket);
                 }
             });
+            els.interventionList.addEventListener("click", (event) => {
+                const button = event.target.closest("[data-open-intervention-ticket]");
+                if (!button) {
+                    return;
+                }
+                const ticket = state.tickets.find((item) => String(item.id) === button.dataset.openInterventionTicket);
+                if (ticket) {
+                    openTicketModal(ticket);
+                }
+            });
 
             document.getElementById("ticket-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
@@ -2531,7 +2575,7 @@
             document.getElementById("ticket-description").value = ticket.description || "";
             document.getElementById("ticket-ac").value = ticket.acceptance_criteria || "";
             document.getElementById("ticket-parent").value = ticket.parent_id || "";
-            document.getElementById("ticket-sdlc").value = ticket.sdlc_id || "";
+            document.getElementById("ticket-workflow").value = ticket.workflow_id || "";
             document.getElementById("ticket-draft").value = String(Boolean(ticket.draft));
             document.getElementById("ticket-priority").value = ticket.priority || 0;
             document.getElementById("ticket-order").value = ticket.order || 0;
@@ -2848,14 +2892,14 @@
                     await api("/api/tickets/" + ticket.id + "/" + (wantsDraft ? "draft" : "undraft"), { method: "POST" });
                 }
 
-                const sdlcValue = document.getElementById("ticket-sdlc").value;
-                if (sdlcValue) {
-                    await api("/api/tickets/" + ticket.id + "/sdlc", {
+                const workflowValue = document.getElementById("ticket-workflow").value;
+                if (workflowValue) {
+                    await api("/api/tickets/" + ticket.id + "/workflow", {
                         method: "POST",
-                        body: JSON.stringify({ sdlc_id: Number(sdlcValue) }),
+                        body: JSON.stringify({ workflow_id: Number(workflowValue) }),
                     });
-                } else if (ticket.sdlc_id) {
-                    await api("/api/tickets/" + ticket.id + "/sdlc", { method: "DELETE" });
+                } else if (ticket.workflow_id) {
+                    await api("/api/tickets/" + ticket.id + "/workflow", { method: "DELETE" });
                 }
 
                 closeTicketModal();
@@ -2889,13 +2933,13 @@
             els.ticketBoard.addEventListener("dragstart", (event) => {
                 const card = event.target.closest("[data-ticket-id]");
                 if (!card) {
-                    const lane = event.target.closest("[data-sdlc-stage-id]");
+                    const lane = event.target.closest("[data-workflow-stage-id]");
                     if (!lane) {
                         return;
                     }
                     state.drag = {
                         type: "board-stage",
-                        sdlcStageID: Number(lane.dataset.sdlcStageId),
+                        workflowStageID: Number(lane.dataset.workflowStageId),
                     };
                     event.dataTransfer.effectAllowed = "move";
                     return;
@@ -2915,7 +2959,7 @@
                     lane.classList.add("drag-target");
                     return;
                 }
-                if (state.drag.type === "board-stage" && lane.dataset.sdlcStageId) {
+                if (state.drag.type === "board-stage" && lane.dataset.workflowStageId) {
                     event.preventDefault();
                     document.querySelectorAll(".lane").forEach((item) => item.classList.remove("drag-target"));
                     lane.classList.add("drag-target");
@@ -2954,27 +2998,27 @@
                     }
                     return;
                 }
-                if (state.drag.type === "board-stage" && lane.dataset.sdlcStageId) {
+                if (state.drag.type === "board-stage" && lane.dataset.workflowStageId) {
                     event.preventDefault();
                     lane.classList.remove("drag-target");
                     const workflow = getCurrentProjectWorkflow();
-                    const targetStageID = Number(lane.dataset.sdlcStageId);
-                    if (!workflow || !targetStageID || targetStageID === state.drag.sdlcStageID) {
+                    const targetStageID = Number(lane.dataset.workflowStageId);
+                    if (!workflow || !targetStageID || targetStageID === state.drag.workflowStageID) {
                         state.drag = null;
                         return;
                     }
-                    const ordered = Array.from(els.ticketBoard.querySelectorAll("[data-sdlc-stage-id]"))
-                        .map((item) => Number(item.dataset.sdlcStageId))
-                        .filter((stageID) => stageID !== state.drag.sdlcStageID);
+                    const ordered = Array.from(els.ticketBoard.querySelectorAll("[data-workflow-stage-id]"))
+                        .map((item) => Number(item.dataset.workflowStageId))
+                        .filter((stageID) => stageID !== state.drag.workflowStageID);
                     const targetIndex = ordered.indexOf(targetStageID);
-                    ordered.splice(targetIndex >= 0 ? targetIndex : ordered.length, 0, state.drag.sdlcStageID);
+                    ordered.splice(targetIndex >= 0 ? targetIndex : ordered.length, 0, state.drag.workflowStageID);
                     state.drag = null;
                     try {
-                        await api("/api/sdlcs/" + workflow.id + "/reorder", {
+                        await api("/api/workflows/" + workflow.id + "/reorder", {
                             method: "PUT",
                             body: JSON.stringify({ stage_ids: ordered }),
                         });
-                        await loadSdlcs();
+                        await loadWorkflows();
                         await loadTickets();
                         renderAll();
                     } catch (error) {
@@ -2985,7 +3029,7 @@
         }
 
         function bindStageDragAndDrop() {
-            els.sdlcRoleBank.addEventListener("dragstart", (event) => {
+            els.workflowRoleBank.addEventListener("dragstart", (event) => {
                 const role = event.target.closest("[data-role-bank-id]");
                 if (!role) {
                     return;
@@ -3040,8 +3084,8 @@
                 if (!state.drag) {
                     return;
                 }
-                const sdlc = getCurrentSdlc();
-                if (!sdlc) {
+                const workflow = getCurrentWorkflow();
+                if (!workflow) {
                     state.drag = null;
                     return;
                 }
@@ -3054,26 +3098,26 @@
                     event.preventDefault();
                     roleRow.classList.remove("drag-target");
                     const targetStageID = Number(roleRow.dataset.stageRoleRow);
-                    const stage = sdlc.stages.find((item) => item.id === targetStageID);
+                    const stage = workflow.stages.find((item) => item.id === targetStageID);
                     if (!stage) {
                         state.drag = null;
                         return;
                     }
                     try {
                         if (state.drag.stageID && state.drag.stageID !== targetStageID) {
-                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + state.drag.stageID + "/" + state.drag.roleID, { method: "DELETE" });
-                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
+                            await api("/api/workflows/stages/roles/" + workflow.id + "/" + state.drag.stageID + "/" + state.drag.roleID, { method: "DELETE" });
+                            await api("/api/workflows/stages/roles/" + workflow.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
                         } else if (!state.drag.stageID) {
-                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
+                            await api("/api/workflows/stages/roles/" + workflow.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
                         } else {
                             const roleIDs = (stage.roles || []).map((role) => role.id).filter((roleID) => roleID !== state.drag.roleID);
                             roleIDs.push(state.drag.roleID);
-                            await api("/api/sdlcs/stages/roles/" + sdlc.id + "/" + targetStageID, {
+                            await api("/api/workflows/stages/roles/" + workflow.id + "/" + targetStageID, {
                                 method: "PUT",
                                 body: JSON.stringify({ role_ids: roleIDs }),
                             });
                         }
-                        await loadSdlcs();
+                        await loadWorkflows();
                         renderAll();
                     } catch (error) {
                         setNotice(error.message, true);
@@ -3095,11 +3139,11 @@
                 const targetIndex = ordered.indexOf(Number(targetStage.dataset.stageId));
                 ordered.splice(targetIndex >= 0 ? targetIndex : ordered.length, 0, state.drag.stageID);
                 try {
-                    await api("/api/sdlcs/" + sdlc.id + "/reorder", {
+                    await api("/api/workflows/" + workflow.id + "/reorder", {
                         method: "PUT",
                         body: JSON.stringify({ stage_ids: ordered }),
                     });
-                    await loadSdlcs();
+                    await loadWorkflows();
                     renderAll();
                 } catch (error) {
                     setNotice(error.message, true);
@@ -3157,7 +3201,7 @@
 
         bindViewNavigation();
         bindProjectHandlers();
-        bindSdlcHandlers();
+        bindWorkflowHandlers();
         bindRolesHandlers();
         bindAgentsHandlers();
         bindTeamsHandlers();

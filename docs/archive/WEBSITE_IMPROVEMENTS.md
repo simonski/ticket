@@ -23,8 +23,8 @@ Update the website UX so it is:
 The website already has useful foundations:
 
 - a stage board with drag/drop ticket moves
-- ticket modal editing with draft + SDLC override controls
-- SDLC stage cards with inline stage editing
+- ticket modal editing with draft + Workflow override controls
+- Workflow stage cards with inline stage editing
 - drag/drop stage ordering
 - add/remove stage-role controls
 - drag/drop stage-role ordering
@@ -39,24 +39,24 @@ backend expansion.
 | Need | Existing API surface |
 | --- | --- |
 | list/edit projects | `/api/projects`, `/api/projects/{id}`, `/api/projects/{id}/set-draft` |
-| list/edit tickets | `/api/projects/{id}/tickets`, `/api/tickets/{id}`, `/api/tickets/{id}/draft`, `/api/tickets/{id}/undraft`, `/api/tickets/{id}/sdlc` |
+| list/edit tickets | `/api/projects/{id}/tickets`, `/api/tickets/{id}`, `/api/tickets/{id}/draft`, `/api/tickets/{id}/undraft`, `/api/tickets/{id}/workflow` |
 | ticket history | `/api/tickets/{id}/history` |
 | project history | `/api/projects/{id}/history` |
-| list/edit SDLCs | `/api/sdlcs`, `/api/sdlcs/{id}`, `/api/sdlcs/{id}/stages`, `/api/sdlcs/{id}/reorder` |
-| edit stages | `/api/sdlcs/stages/{stageId}` |
-| add/remove/reorder roles in a stage | `/api/sdlcs/stages/roles/{sdlcId}/{stageId}` and `/api/sdlcs/stages/roles/{sdlcId}/{stageId}/{roleId}` |
+| list/edit Workflows | `/api/workflows`, `/api/workflows/{id}`, `/api/workflows/{id}/stages`, `/api/workflows/{id}/reorder` |
+| edit stages | `/api/workflows/stages/{stageId}` |
+| add/remove/reorder roles in a stage | `/api/workflows/stages/roles/{workflowId}/{stageId}` and `/api/workflows/stages/roles/{workflowId}/{stageId}/{roleId}` |
 | list roles | `/api/roles` |
 
-## Phase 1 — SDLC / stage / role authoring
+## Phase 1 — Workflow / stage / role authoring
 
 ### Outcome
 
-An admin can create or edit an SDLC from a single smooth workspace that feels
+An admin can create or edit an Workflow from a single smooth workspace that feels
 closer to Trello than to a form dump.
 
 ### UX direction
 
-1. Keep the SDLC browser on the left and open the selected SDLC into a richer
+1. Keep the Workflow browser on the left and open the selected Workflow into a richer
    editor workspace.
 2. Treat each stage as a draggable card/column with inline editing for:
    - title
@@ -75,15 +75,15 @@ closer to Trello than to a form dump.
 
 ### Implementation notes
 
-- Continue using the existing SDLC modal/editor surface rather than building a
+- Continue using the existing Workflow modal/editor surface rather than building a
   second admin flow.
 - Maintain optimistic UI updates where safe, then reconcile with reloads from
-  `/api/sdlcs/{id}`.
+  `/api/workflows/{id}`.
 - Reuse the current stage-card and role-chip drag/drop patterns as the base.
 
 ### Definition of done
 
-- full CRUD for SDLC + stage + stage-role assignment remains available
+- full CRUD for Workflow + stage + stage-role assignment remains available
 - stage and role ordering are both visual
 - keyboard shortcuts exist for the highest-frequency actions
 - Playwright covers create, edit, reorder, assign, remove
@@ -92,7 +92,7 @@ closer to Trello than to a form dump.
 
 Implemented in the current branch:
 
-- SDLC stages now render in a more board-like workspace instead of a plain
+- Workflow stages now render in a more board-like workspace instead of a plain
   vertical list
 - stage cards and role chips both support visual ordering
 - stage/role selection is explicit and visible
@@ -109,19 +109,19 @@ Still open inside phase 1:
 - more discoverable hover/focus affordances
 - fuller Playwright coverage for destructive shortcut paths
 
-## Phase 2 — backlog view showing ticket position in the SDLC
+## Phase 2 — backlog view showing ticket position in the Workflow
 
 ### Outcome
 
-An admin can see the backlog as work flowing through the effective SDLC, not
+An admin can see the backlog as work flowing through the effective Workflow, not
 just as flat cards in a single board lane list.
 
 ### UX direction
 
 Build a dedicated **backlog** perspective that complements the current board:
 
-1. Group tickets by **effective SDLC** first.
-2. Within each SDLC, show ordered stage lanes.
+1. Group tickets by **effective Workflow** first.
+2. Within each Workflow, show ordered stage lanes.
 3. Within each stage, show the role sequence and the ticket’s current role
    position when available.
 4. Make the view useful for both unstarted and active work:
@@ -131,7 +131,7 @@ Build a dedicated **backlog** perspective that complements the current board:
    - success/fail
 5. Support quick filters:
    - project
-   - SDLC
+   - Workflow
    - stage
    - role
    - draft/archived/completed
@@ -141,16 +141,16 @@ Build a dedicated **backlog** perspective that complements the current board:
 This phase should **not** need new endpoints.
 
 - tickets come from `/api/projects/{id}/tickets`
-- SDLC definitions come from `/api/sdlcs` + `/api/sdlcs/{id}`
-- effective SDLC is derived in the client:
-  1. ticket SDLC override
-  2. nearest parent ticket SDLC override
-  3. project default SDLC
+- Workflow definitions come from `/api/workflows` + `/api/workflows/{id}`
+- effective Workflow is derived in the client:
+  1. ticket Workflow override
+  2. nearest parent ticket Workflow override
+  3. project default Workflow
 
 ### Definition of done
 
 - backlog perspective exists beside the current board
-- ticket position in SDLC is visible without opening the ticket modal
+- ticket position in Workflow is visible without opening the ticket modal
 - filters are keyboard reachable and low-friction
 - drag/drop or shortcut movement preserves current ticket update APIs
 
@@ -159,12 +159,12 @@ This phase should **not** need new endpoints.
 Implemented in the current branch:
 
 - added a dedicated **backlog** perspective beside the board and hierarchy views
-- grouped tickets by effective SDLC in the browser using existing data only:
-  - ticket SDLC override
-  - nearest parent ticket SDLC override
-  - project default SDLC
-- rendered ordered stage lanes per SDLC with visible role tracks
-- surfaced quick filters for SDLC, stage, role, and ticket status
+- grouped tickets by effective Workflow in the browser using existing data only:
+  - ticket Workflow override
+  - nearest parent ticket Workflow override
+  - project default Workflow
+- rendered ordered stage lanes per Workflow with visible role tracks
+- surfaced quick filters for Workflow, stage, role, and ticket status
 - preserved drag/drop stage movement using the existing ticket update API
 
 Still open inside phase 2:
@@ -183,7 +183,7 @@ An admin can inspect a ticket’s journey through stages and roles in a
 ### UX direction
 
 1. Add a **history** view for a selected ticket.
-2. Render the SDLC path as an ordered track:
+2. Render the Workflow path as an ordered track:
    - stages laid out in sequence
    - roles shown within each stage
    - event markers placed where the ticket moved, failed, succeeded, commented,
@@ -199,7 +199,7 @@ An admin can inspect a ticket’s journey through stages and roles in a
 
 - `/api/tickets/{id}/history`
 - `/api/projects/{id}/history`
-- current ticket + SDLC detail to map events onto stages/roles
+- current ticket + Workflow detail to map events onto stages/roles
 
 ### Rendering strategy
 
@@ -220,7 +220,7 @@ Implemented in the current branch:
 
 - tickets now expose a **History** action in the web ticket modal
 - the history modal renders the ticket journey as a staged track using the
-  current SDLC layout when available
+  current Workflow layout when available
 - users can step backward/forward through events or click any event marker
 - event payload details are visible inline for inspection
 - the view can switch between:
@@ -253,20 +253,20 @@ These apply across all phases:
 
 ## Execution order
 
-1. finish phase-1 SDLC authoring polish around shortcuts, selection model, and
+1. finish phase-1 Workflow authoring polish around shortcuts, selection model, and
    reduced friction
-2. add the backlog perspective using existing ticket + SDLC APIs
+2. add the backlog perspective using existing ticket + Workflow APIs
 3. build the history/ghost view on top of ticket/project history APIs
 4. refine performance and keyboard interactions after each slice, not only at
    the end
 
 ## Risks / watchouts
 
-- the browser must derive effective SDLC correctly when parent lineage is
+- the browser must derive effective Workflow correctly when parent lineage is
   involved
 - drag/drop can become brittle without focused Playwright coverage
 - history events may not always encode stage/role transitions directly, so the
-  view may need to infer some positioning from event metadata and current SDLC
+  view may need to infer some positioning from event metadata and current Workflow
   structure
 - phase 2 and phase 3 should avoid creating parallel concepts that duplicate the
   current board and hierarchy views without adding real clarity
@@ -280,17 +280,17 @@ The work has now split into two website surfaces:
 
 Current `site2` progress:
 
-1. a new shell exists with separate navigation for tickets, projects, SDLCs,
+1. a new shell exists with separate navigation for tickets, projects, Workflows,
    roles, agents, and teams
 2. ticket board interactions use the existing ticket APIs, including drag/drop
-   stage movement, editing, draft toggles, history, lifecycle actions, and SDLC
+   stage movement, editing, draft toggles, history, lifecycle actions, and Workflow
    override
 3. project CRUD uses `/api/projects`, `/api/projects/{id}`, and
    `/api/projects/{id}/set-draft`
-4. SDLC CRUD and stage CRUD use `/api/sdlcs`, `/api/sdlcs/{id}`,
-   `/api/sdlcs/{id}/stages`, and `/api/sdlcs/stages/{stageId}`
+4. Workflow CRUD and stage CRUD use `/api/workflows`, `/api/workflows/{id}`,
+   `/api/workflows/{id}/stages`, and `/api/workflows/stages/{stageId}`
 5. stage-role assignment in `site2` uses the existing
-   `/api/sdlcs/stages/roles/...` endpoints
+   `/api/workflows/stages/roles/...` endpoints
 6. role, agent, and team CRUD now have dedicated editors in `site2`
 
 Still open on the site2 track:
@@ -304,11 +304,11 @@ Latest regression coverage added for `site2`:
 
 - project creation + default draft persistence
 - ticket board drag/drop stage movement
-- SDLC stage-role assignment
+- Workflow stage-role assignment
 
 ## Initial todos
 
-1. Phase 1: smooth SDLC/stage/role authoring workspace
-2. Phase 2: backlog perspective with SDLC-aware ticket position
+1. Phase 1: smooth Workflow/stage/role authoring workspace
+2. Phase 2: backlog perspective with Workflow-aware ticket position
 3. Phase 3: ticket history ghost/timeline view
 4. Shared: shortcuts, drag/drop polish, and Playwright coverage

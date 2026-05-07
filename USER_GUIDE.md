@@ -89,7 +89,7 @@ Bootstrap resolution works like this:
 - existing database file: overwritten only when `--force` is supplied
 - optional seed data: include `--populate` to create 3 example projects (with stories, epics, tasks, bugs, chores) and example users across 3 teams
 - non-interactive project setup: use `-prefix`, `-name`, and `-git` to rename the default project after bootstrap
-- initial workflow selection: use `-sdlc <name>` to assign one of the built-in SDLCs during bootstrap
+- initial workflow selection: use `-workflow <name>` to assign one of the built-in Workflows during bootstrap
 - project prefixes must be 1-5 uppercase ASCII letters
 
 Bind the current git repo to a project:
@@ -115,7 +115,7 @@ tk project remote prod
 For example:
 
 ```bash
-tk init -prefix CUS -name "Customer Portal" -git https://github.com/acme/customer-portal.git -sdlc agile
+tk init -prefix CUS -name "Customer Portal" -git https://github.com/acme/customer-portal.git -workflow agile
 ```
 
 Create or restore database snapshots (LOCAL mode):
@@ -144,7 +144,7 @@ tk server
 If `-f` is omitted, `tk server` uses the local database resolved from the
 current configuration, which defaults to `$TICKET_HOME/ticket.db`.
 If `-f` is provided, `tk server` uses that exact database file for that run.
-Use `-site default` to serve the existing embedded website, or `-site site2` to serve the fresh replacement frontend while keeping the old one available.
+`tk server` serves `site2` by default. Use `-site default` to serve the original embedded website.
 
 If `-v` is supplied, `tk server` prints verbose request and response logs to stdout.
 In `-v` mode, chat sessions also print prompt/output activity, heartbeat status with active connection/process counts, and per-process running/completed/error activity telemetry. The chat process starts when the first prompt is sent.
@@ -371,7 +371,7 @@ tk logout
 
 `ticket logout` removes the matching entry from `$TICKET_HOME/credentials.json`.
 
-The web app uses the same account system. Once logged in, your session is shared across normal browser sdlcs.
+The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
 
 Top banner behavior in the web UI:
 
@@ -381,7 +381,7 @@ Top banner behavior in the web UI:
 - the center banner area renders an animated 8-bit activity stream using websocket event activity
 - login/register pages use the same animated logo renderer in place of a static `ticket` heading and do not open websocket activity streams
 
-## Typical SDLC
+## Typical Workflow
 
 Most teams use `ticket` in this order:
 
@@ -710,7 +710,7 @@ The TUI has six top-level panels, navigated with **Tab** (forward) or
 | Projects  | All projects; select one to make it active            |
 | Ideas     | Captured requirements/ideas (raw, unprocessed tickets) |
 | Tickets   | Ticket tree — epics with nested tasks, bugs, etc.     |
-| SDLCs | SDLC definitions and stages                       |
+| Workflows | Workflow definitions and stages                       |
 | Config    | Theme picker and TUI settings                         |
 
 ### Navigation
@@ -735,10 +735,10 @@ allowing you to update all fields inline without leaving the terminal.
 Recent TUI workflow improvements:
 
 - ticket detail now shows lifecycle context such as draft/archive/delete flags,
-  lineage, effective SDLC source, current role, and resolved project / role /
+  lineage, effective Workflow source, current role, and resolved project / role /
   ticket guidance
-- ticket create/edit forms expose draft and SDLC controls
-- project edit exposes visibility, default draft, default SDLC, default
+- ticket create/edit forms expose draft and Workflow controls
+- project edit exposes visibility, default draft, default Workflow, default
   guidance, and git repository fields
 
 ### Themes
@@ -836,19 +836,19 @@ Keyboard shortcuts in the board view:
 - agents support create/update/enable/disable/delete using the same API
 - roles support create/update/delete role personas (`title`, `description`, `acceptance_criteria`)
 - the ticket board supports drag-and-drop stage moves and shows card badges for
-  draft, archived, and ticket-level SDLC overrides
-- the new backlog perspective groups tickets by effective SDLC, lays out the
-  ordered stage lanes for each workflow, and exposes quick SDLC/stage/role/status
+  draft, archived, and ticket-level Workflow overrides
+- the new backlog perspective groups tickets by effective Workflow, lays out the
+  ordered stage lanes for each workflow, and exposes quick Workflow/stage/role/status
   filters without needing any new server endpoints
-- each ticket now has a History view that replays its journey across the SDLC as
+- each ticket now has a History view that replays its journey across the Workflow as
   a stage track, with step-through controls and a switch between ticket-only and
   project-stream history using the existing history APIs
-- the SDLC editor uses draggable stage cards so admins can reorder stages,
+- the Workflow editor uses draggable stage cards so admins can reorder stages,
   edit ways-of-working / DoR / DoD inline, and add or remove stage roles from
   the same popup
 - stage-role chips are draggable as well, so role order within a stage can be
   adjusted visually instead of only through CLI commands
-- the SDLC editor now keeps an explicit stage/role selection and supports
+- the Workflow editor now keeps an explicit stage/role selection and supports
   keyboard shortcuts for common authoring flows:
   - `N` focuses the new-stage composer
   - `E` focuses the selected stage title field
@@ -1009,19 +1009,19 @@ workflow. If it is invalid, `tk update` prints the valid stages for that ticket.
 `tk reject -id <key-or-id>` sends a ticket back to the first stage in its current
 workflow, sets the state to `idle`, and marks it as draft.
 
-tk sdlc list
-tk sdlc create -name <name> [-d <description>]
-tk sdlc get -id <id>
-tk sdlc delete -id <id>
-tk sdlc add-stage -id <sdlc-id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-order <n>]
-tk sdlc stage-update -stage-id <id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-ac <criteria>]
-tk sdlc remove-stage -stage-id <id>
-tk sdlc reorder-stages -id <sdlc-id> <stage_id,stage_id,...>
-tk sdlc export -id <id> [-o <file>]
-tk sdlc set -ticket <ticket-id> -sdlc <sdlc-id>
-tk sdlc stage-role-add -sdlc_id <id> -stage_id <id> -role_id <id>
-tk sdlc stage-role-rm -sdlc_id <id> -stage_id <id> -role_id <id>
-tk sdlc stage-role-order -sdlc_id <id> -stage_id <id> -roles <id,id,...>
+tk workflow list
+tk workflow create -name <name> [-d <description>]
+tk workflow get -id <id>
+tk workflow delete -id <id>
+tk workflow add-stage -id <workflow-id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-order <n>]
+tk workflow stage-update -stage-id <id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-ac <criteria>]
+tk workflow remove-stage -stage-id <id>
+tk workflow reorder-stages -id <workflow-id> <stage_id,stage_id,...>
+tk workflow export -id <id> [-o <file>]
+tk workflow set -ticket <ticket-id> -workflow <workflow-id>
+tk workflow stage-role-add -workflow_id <id> -stage_id <id> -role_id <id>
+tk workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>
+tk workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <id,id,...>
 
 tk role list
 tk role create -title <title> [-description <desc>] [-dor <text>] [-dod <text>] [-ac <criteria>] [-dor-map stage=text] [-dod-map stage=text] [-ac-map stage=text]

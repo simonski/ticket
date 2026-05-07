@@ -16,18 +16,18 @@ function mockAPI(page, routes) {
 }
 
 const SAMPLE_WORKFLOWS = [
-  { sdlc_id: 1, name: "default", description: "Standard lifecycle" },
-  { sdlc_id: 2, name: "kanban", description: "Simple kanban" },
+  { workflow_id: 1, name: "default", description: "Standard lifecycle" },
+  { workflow_id: 2, name: "kanban", description: "Simple kanban" },
 ];
 
 const SAMPLE_STAGES = [
-  { sdlc_stage_id: 1, sdlc_id: 1, stage_name: "design", description: "", role_id: 5, role_title: "BA", sort_order: 0 },
-  { sdlc_stage_id: 2, sdlc_id: 1, stage_name: "develop", description: "", role_id: 6, role_title: "Lead Engineer", sort_order: 1 },
-  { sdlc_stage_id: 3, sdlc_id: 1, stage_name: "test", description: "", role_id: 4, role_title: "QA/Tester", sort_order: 2 },
-  { sdlc_stage_id: 4, sdlc_id: 1, stage_name: "done", description: "", role_id: 1, role_title: "Product Owner", sort_order: 3 },
+  { workflow_stage_id: 1, workflow_id: 1, stage_name: "design", description: "", role_id: 5, role_title: "BA", sort_order: 0 },
+  { workflow_stage_id: 2, workflow_id: 1, stage_name: "develop", description: "", role_id: 6, role_title: "Lead Engineer", sort_order: 1 },
+  { workflow_stage_id: 3, workflow_id: 1, stage_name: "test", description: "", role_id: 4, role_title: "QA/Tester", sort_order: 2 },
+  { workflow_stage_id: 4, workflow_id: 1, stage_name: "done", description: "", role_id: 1, role_title: "Product Owner", sort_order: 3 },
 ];
 
-async function setupSDLCs(page) {
+async function setupWorkflows(page) {
   await mockAPI(page, [
     ["**/api/board/ws", (route) => route.abort()],
   ]);
@@ -37,25 +37,25 @@ async function setupSDLCs(page) {
     projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
     localStorage.setItem("task-project", "1");
     tickets = [];
-    sdlcs = wfs;
+    workflows = wfs;
     renderBoard();
-    activatePerspective("sdlcs");
-    renderSdlcList();
+    activatePerspective("workflows");
+    renderWorkflowList();
   }, SAMPLE_WORKFLOWS);
 }
 
-test.describe("sdlc management", () => {
-  test("sdlc list renders cards", async ({ page }) => {
-    await setupSDLCs(page);
+test.describe("workflow management", () => {
+  test("workflow list renders cards", async ({ page }) => {
+    await setupWorkflows(page);
 
-    const cards = await page.locator("#sdlc-list .management-card, #sdlc-list .sdlc-card").count();
+    const cards = await page.locator("#workflow-list .management-card, #workflow-list .workflow-card").count();
     expect(cards).toBe(2);
   });
 
-  test("clicking sdlc card opens editor", async ({ page }) => {
+  test("clicking workflow card opens editor", async ({ page }) => {
     await mockAPI(page, [
-      ["**/api/sdlcs/1", {
-        sdlc_id: 1, name: "default", description: "Standard lifecycle",
+      ["**/api/workflows/1", {
+        workflow_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
       ["**/api/board/ws", (route) => route.abort()],
@@ -66,27 +66,27 @@ test.describe("sdlc management", () => {
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
       tickets = [];
-      sdlcs = wfs;
+      workflows = wfs;
       renderBoard();
-      activatePerspective("sdlcs");
-      renderSdlcList();
+      activatePerspective("workflows");
+      renderWorkflowList();
     }, SAMPLE_WORKFLOWS);
 
-    await page.evaluate(() => openSdlcEditor(sdlcs[0]));
+    await page.evaluate(() => openWorkflowEditor(workflows[0]));
 
-    await expect(page.locator("#sdlc-modal-overlay")).toBeVisible();
-    await expect(page.locator("#sdlc-name")).toHaveValue("default");
+    await expect(page.locator("#workflow-modal-overlay")).toBeVisible();
+    await expect(page.locator("#workflow-name")).toHaveValue("default");
   });
 
-  test("create sdlc posts to API", async ({ page }) => {
+  test("create workflow posts to API", async ({ page }) => {
     let postBody = null;
     await mockAPI(page, [
-      ["**/api/sdlcs", (route) => {
+      ["**/api/workflows", (route) => {
         if (route.request().method() === "POST") {
           postBody = route.request().postDataJSON();
           return route.fulfill({
             status: 200, contentType: "application/json",
-            body: JSON.stringify({ sdlc_id: 99, name: postBody?.name, description: postBody?.description }),
+            body: JSON.stringify({ workflow_id: 99, name: postBody?.name, description: postBody?.description }),
           });
         }
         return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
@@ -99,26 +99,26 @@ test.describe("sdlc management", () => {
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
       tickets = [];
-      sdlcs = [];
+      workflows = [];
       renderBoard();
-      activatePerspective("sdlcs");
-      renderSdlcList();
-      openSdlcEditor();
+      activatePerspective("workflows");
+      renderWorkflowList();
+      openWorkflowEditor();
     });
 
-    await page.fill("#sdlc-name", "custom");
-    await page.fill("#sdlc-description", "Custom sdlc");
-    await page.click("#sdlc-save");
+    await page.fill("#workflow-name", "custom");
+    await page.fill("#workflow-description", "Custom workflow");
+    await page.click("#workflow-save");
     await page.waitForTimeout(300);
 
     expect(postBody).not.toBeNull();
     expect(postBody.name).toBe("custom");
   });
 
-  test("delete sdlc calls DELETE", async ({ page }) => {
+  test("delete workflow calls DELETE", async ({ page }) => {
     let deleteCalled = false;
     await mockAPI(page, [
-      ["**/api/sdlcs/1", (route) => {
+      ["**/api/workflows/1", (route) => {
         if (route.request().method() === "DELETE") {
           deleteCalled = true;
           return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
@@ -126,12 +126,12 @@ test.describe("sdlc management", () => {
         if (route.request().method() === "GET") {
           return route.fulfill({
             status: 200, contentType: "application/json",
-            body: JSON.stringify({ sdlc_id: 1, name: "default", description: "", stages: SAMPLE_STAGES }),
+            body: JSON.stringify({ workflow_id: 1, name: "default", description: "", stages: SAMPLE_STAGES }),
           });
         }
         return route.continue();
       }],
-      ["**/api/sdlcs", []],
+      ["**/api/workflows", []],
       ["**/api/board/ws", (route) => route.abort()],
     ]);
     await page.goto("/");
@@ -140,15 +140,15 @@ test.describe("sdlc management", () => {
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
       tickets = [];
-      sdlcs = wfs;
+      workflows = wfs;
       renderBoard();
-      activatePerspective("sdlcs");
-      renderSdlcList();
-      openSdlcEditor(sdlcs[0]);
+      activatePerspective("workflows");
+      renderWorkflowList();
+      openWorkflowEditor(workflows[0]);
     }, SAMPLE_WORKFLOWS);
 
     await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
-    const deleteBtn = page.locator("#sdlc-delete");
+    const deleteBtn = page.locator("#workflow-delete");
     if (await deleteBtn.count() > 0) {
       await deleteBtn.click();
       await page.waitForTimeout(300);
@@ -160,18 +160,18 @@ test.describe("sdlc management", () => {
   test("add stage posts to API", async ({ page }) => {
     let stageBody = null;
     await mockAPI(page, [
-      ["**/api/sdlcs/1/stages", (route) => {
+      ["**/api/workflows/1/stages", (route) => {
         if (route.request().method() === "POST") {
           stageBody = route.request().postDataJSON();
           return route.fulfill({
             status: 200, contentType: "application/json",
-            body: JSON.stringify({ sdlc_stage_id: 99, ...stageBody }),
+            body: JSON.stringify({ workflow_stage_id: 99, ...stageBody }),
           });
         }
         return route.continue();
       }],
-      ["**/api/sdlcs/1", {
-        sdlc_id: 1, name: "default", description: "Standard lifecycle",
+      ["**/api/workflows/1", {
+        workflow_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
       ["**/api/board/ws", (route) => route.abort()],
@@ -182,16 +182,16 @@ test.describe("sdlc management", () => {
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
       tickets = [];
-      sdlcs = wfs;
+      workflows = wfs;
       renderBoard();
-      activatePerspective("sdlcs");
-      renderSdlcList();
-      openSdlcEditor(sdlcs[0]);
+      activatePerspective("workflows");
+      renderWorkflowList();
+      openWorkflowEditor(workflows[0]);
     }, SAMPLE_WORKFLOWS);
 
     // Fill stage form and click add
-    const stageNameInput = page.locator("#sdlc-stage-name, #stage-name");
-    const stageAddBtn = page.locator("#sdlc-stage-add, #stage-add");
+    const stageNameInput = page.locator("#workflow-stage-name, #stage-name");
+    const stageAddBtn = page.locator("#workflow-stage-add, #stage-add");
 
     if (await stageNameInput.count() > 0 && await stageAddBtn.count() > 0) {
       await stageNameInput.fill("review");
@@ -202,10 +202,10 @@ test.describe("sdlc management", () => {
     }
   });
 
-  test("sdlc stages are displayed after opening editor", async ({ page }) => {
+  test("workflow stages are displayed after opening editor", async ({ page }) => {
     await mockAPI(page, [
-      ["**/api/sdlcs/1", {
-        sdlc_id: 1, name: "default", description: "Standard lifecycle",
+      ["**/api/workflows/1", {
+        workflow_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
       ["**/api/board/ws", (route) => route.abort()],
@@ -216,17 +216,17 @@ test.describe("sdlc management", () => {
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
       tickets = [];
-      sdlcs = wfs;
+      workflows = wfs;
       renderBoard();
-      activatePerspective("sdlcs");
-      renderSdlcList();
-      openSdlcEditor(sdlcs[0]);
+      activatePerspective("workflows");
+      renderWorkflowList();
+      openWorkflowEditor(workflows[0]);
     }, SAMPLE_WORKFLOWS);
 
     await page.waitForTimeout(500);
 
     const stagesContent = await page.evaluate(() => {
-      const stagesList = document.getElementById("sdlc-stages-list") || document.getElementById("sdlc-stages");
+      const stagesList = document.getElementById("workflow-stages-list") || document.getElementById("workflow-stages");
       return stagesList?.textContent || "";
     });
 
@@ -234,30 +234,30 @@ test.describe("sdlc management", () => {
     expect(stagesContent).toContain("develop");
   });
 
-  test("close sdlc modal hides overlay", async ({ page }) => {
-    await setupSDLCs(page);
+  test("close workflow modal hides overlay", async ({ page }) => {
+    await setupWorkflows(page);
 
-    await page.evaluate(() => openSdlcEditor(sdlcs[0]));
+    await page.evaluate(() => openWorkflowEditor(workflows[0]));
 
-    // closeSdlcModal might not exist — check first
+    // closeWorkflowModal might not exist — check first
     const closed = await page.evaluate(() => {
-      if (typeof closeSdlcModal === "function") {
-        closeSdlcModal();
+      if (typeof closeWorkflowModal === "function") {
+        closeWorkflowModal();
         return true;
       }
-      const overlay = document.getElementById("sdlc-modal-overlay");
+      const overlay = document.getElementById("workflow-modal-overlay");
       if (overlay) { overlay.classList.add("hidden"); return true; }
       return false;
     });
 
     if (closed) {
-      await expect(page.locator("#sdlc-modal-overlay")).not.toBeVisible();
+      await expect(page.locator("#workflow-modal-overlay")).not.toBeVisible();
     }
   });
 
-  test("export button triggers download for existing sdlc", async ({ page }) => {
+  test("export button triggers download for existing workflow", async ({ page }) => {
     await mockAPI(page, [
-      ["**/api/sdlcs/1/export", {
+      ["**/api/workflows/1/export", {
         name: "default",
         description: "Standard lifecycle",
         stages: [
@@ -265,8 +265,8 @@ test.describe("sdlc management", () => {
           { stage_name: "develop", description: "", role: "Lead Engineer", sort_order: 1 },
         ],
       }],
-      ["**/api/sdlcs/1", {
-        sdlc_id: 1, name: "default", description: "Standard lifecycle",
+      ["**/api/workflows/1", {
+        workflow_id: 1, name: "default", description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
       ["**/api/board/ws", (route) => route.abort()],
@@ -277,24 +277,24 @@ test.describe("sdlc management", () => {
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
       tickets = [];
-      sdlcs = wfs;
+      workflows = wfs;
       renderBoard();
-      activatePerspective("sdlcs");
-      renderSdlcList();
-      openSdlcEditor(sdlcs[0]);
+      activatePerspective("workflows");
+      renderWorkflowList();
+      openWorkflowEditor(workflows[0]);
     }, SAMPLE_WORKFLOWS);
 
-    const exportBtn = page.locator("#sdlc-export");
+    const exportBtn = page.locator("#workflow-export");
     if (await exportBtn.count() > 0) {
-      // Export button should be visible for existing sdlcs
+      // Export button should be visible for existing workflows
       await expect(exportBtn).toBeVisible();
     }
   });
 
-  test("import button exists in sdlc view", async ({ page }) => {
-    await setupSDLCs(page);
+  test("import button exists in workflow view", async ({ page }) => {
+    await setupWorkflows(page);
 
-    const importBtn = page.locator("#sdlc-import, button:has-text('Import')");
+    const importBtn = page.locator("#workflow-import, button:has-text('Import')");
     if (await importBtn.count() > 0) {
       await expect(importBtn.first()).toBeVisible();
     }

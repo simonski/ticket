@@ -129,7 +129,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  decision",
 		"  doctor",
 		"  role",
-		"  sdlc",
+		"  workflow",
 		"  team",
 		"  agent",
 		"  user",
@@ -403,7 +403,7 @@ func TestRunHealthReportsTicketHealthSection(t *testing.T) {
 		"project_acceptance_criteria:",
 		"project_definition_of_ready:",
 		"project_definition_of_done:",
-		"sdlc_acceptance_criteria:",
+		"workflow_acceptance_criteria:",
 		"stage_acceptance_criteria:",
 		"ticket_acceptance_criteria:",
 	} {
@@ -458,7 +458,7 @@ func TestRunHealthSupportsJSONOutput(t *testing.T) {
 		"project_acceptance_criteria",
 		"project_definition_of_ready",
 		"project_definition_of_done",
-		"sdlc_acceptance_criteria",
+		"workflow_acceptance_criteria",
 		"stage_acceptance_criteria",
 		"ticket_acceptance_criteria",
 	} {
@@ -682,7 +682,7 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 		"tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-site <name>] [-v]",
 		"If `-f` is omitted, the server uses the database resolved from the current remote/project configuration.",
 		"If `-f` is provided, that exact database file is used directly",
-		"`default` serves the original site and `site2` serves the new replacement frontend",
+		"`site2` is the default, and `default` serves the original site",
 		"tk server -f /path/to/ticket.db -p 9999 -site site2 -v",
 	} {
 		if !strings.Contains(help, want) {
@@ -694,7 +694,7 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
 	help := renderCommandHelp("project")
 	for _, want := range []string{
-		"tk project <create|list|get|use|set-draft|sdlc|add-user|remove-user|add-team|remove-team>",
+		"tk project <create|list|get|use|set-draft|workflow|add-user|remove-user|add-team|remove-team>",
 		"`set-draft` controls whether new tickets default to draft mode for the project.",
 	} {
 		if !strings.Contains(help, want) {
@@ -1632,7 +1632,8 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	for _, want := range []string{
 		"project          : SUM — Summary Test",
 		"git              : https://github.com/example/summary.git",
-		"sdlc             : Agile",
+		"workflow",
+		"Agile",
 		"draft            : false",
 	} {
 		if !strings.Contains(statusOut, want) {
@@ -1654,7 +1655,7 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	for _, unwanted := range []string{
 		"project          :",
 		"git              :",
-		"sdlc             :",
+		"workflow",
 		"draft            :",
 		"TICKET_HOME",
 		"AGENT_ID",
@@ -1669,7 +1670,7 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 			t.Fatalf("list output should not include %q:\n%s", unwanted, listOut)
 		}
 	}
-	for _, unwanted := range []string{"git repo", "project_sdlc", "project_default_draft"} {
+	for _, unwanted := range []string{"git repo", "project_workflow", "project_default_draft"} {
 		if strings.Contains(listOut, unwanted) || strings.Contains(statusOut, unwanted) {
 			t.Fatalf("output should not include legacy key %q:\nstatus:\n%s\nlist:\n%s", unwanted, statusOut, listOut)
 		}
@@ -1759,17 +1760,17 @@ func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 	}
 }
 
-func TestRenderSdlcProgress(t *testing.T) {
+func TestRenderWorkflowProgress(t *testing.T) {
 	noColorOutput = true
 	defer func() { noColorOutput = false }()
-	stages := []store.SdlcStage{
+	stages := []store.WorkflowStage{
 		{StageName: "develop"},
 		{StageName: "done"},
 	}
-	got := renderSdlcProgress("develop", stages)
+	got := renderWorkflowProgress("develop", stages)
 	want := "[develop] → done"
 	if got != want {
-		t.Fatalf("renderSdlcProgress() = %q, want %q", got, want)
+		t.Fatalf("renderWorkflowProgress() = %q, want %q", got, want)
 	}
 }
 
@@ -1829,39 +1830,39 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
 
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
 		Name:        "Lifecycle Workflow",
 		Description: "workflow for next/previous command coverage",
 	})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	designStage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+	designStage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 		StageName:   "design",
 		Description: "design",
 		SortOrder:   0,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage(design) error = %v", err)
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
 	}
-	testStage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+	testStage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 		StageName:   "test",
 		Description: "test",
 		SortOrder:   1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage(test) error = %v", err)
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
 	}
-	_, err = svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+	_, err = svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 		StageName:   "done",
 		Description: "done",
 		SortOrder:   2,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage(done) error = %v", err)
+		t.Fatalf("AddWorkflowStage(done) error = %v", err)
 	}
 	designer, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
-		SdlcID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "designer",
 		Description: "designs work",
 	})
@@ -1869,25 +1870,25 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 		t.Fatalf("CreateRole(designer) error = %v", err)
 	}
 	tester, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
-		SdlcID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "tester",
 		Description: "tests work",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole(tester) error = %v", err)
 	}
-	if err := svc.AddSdlcStageRole(context.Background(), wf.ID, designStage.ID, designer.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole(design) error = %v", err)
+	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, designStage.ID, designer.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(design) error = %v", err)
 	}
-	if err := svc.AddSdlcStageRole(context.Background(), wf.ID, testStage.ID, tester.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole(test) error = %v", err)
+	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, testStage.ID, tester.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(test) error = %v", err)
 	}
 	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) error = %v", err)
 	}
-	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{SdlcID: &wf.ID}); err != nil {
-		t.Fatalf("UpdateProject(sdlc) error = %v", err)
+	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{WorkflowID: &wf.ID}); err != nil {
+		t.Fatalf("UpdateProject(workflow) error = %v", err)
 	}
 
 	taskID := createLocalTask(t, []string{"add", "Workflow Ticket"})
@@ -1895,7 +1896,7 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket(initial) error = %v", err)
 	}
-	if initial.RoleID == nil || *initial.RoleID != designer.ID || initial.SdlcStageID == nil || *initial.SdlcStageID != designStage.ID {
+	if initial.RoleID == nil || *initial.RoleID != designer.ID || initial.WorkflowStageID == nil || *initial.WorkflowStageID != designStage.ID {
 		t.Fatalf("initial ticket = %#v, want design stage with designer role", initial)
 	}
 
@@ -1906,7 +1907,7 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket(after success) error = %v", err)
 	}
-	if advanced.Stage != "test" || advanced.State != store.StateIdle || advanced.RoleID == nil || *advanced.RoleID != tester.ID || advanced.SdlcStageID == nil || *advanced.SdlcStageID != testStage.ID {
+	if advanced.Stage != "test" || advanced.State != store.StateIdle || advanced.RoleID == nil || *advanced.RoleID != tester.ID || advanced.WorkflowStageID == nil || *advanced.WorkflowStageID != testStage.ID {
 		t.Fatalf("advanced ticket = %#v, want test stage with tester role idle", advanced)
 	}
 
@@ -1925,7 +1926,7 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket(after previous) error = %v", err)
 	}
-	if regressed.Stage != "design" || regressed.State != store.StateIdle || regressed.RoleID == nil || *regressed.RoleID != designer.ID || regressed.SdlcStageID == nil || *regressed.SdlcStageID != designStage.ID {
+	if regressed.Stage != "design" || regressed.State != store.StateIdle || regressed.RoleID == nil || *regressed.RoleID != designer.ID || regressed.WorkflowStageID == nil || *regressed.WorkflowStageID != designStage.ID {
 		t.Fatalf("regressed ticket = %#v, want design stage with designer role idle", regressed)
 	}
 }
@@ -2195,19 +2196,19 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject() error = %v", err)
 	}
-	if project.SdlcID != nil {
-		stages, err := svc.ListSdlcStages(context.Background(), *project.SdlcID)
+	if project.WorkflowID != nil {
+		stages, err := svc.ListWorkflowStages(context.Background(), *project.WorkflowID)
 		if err != nil {
-			t.Fatalf("ListSdlcStages() error = %v", err)
+			t.Fatalf("ListWorkflowStages() error = %v", err)
 		}
 		for _, stage := range stages {
-			if _, err := svc.UpdateSdlcStage(context.Background(), stage.ID, libticket.SdlcStageRequest{
+			if _, err := svc.UpdateWorkflowStage(context.Background(), stage.ID, libticket.WorkflowStageRequest{
 				StageName:          stage.StageName,
 				Description:        stage.Description,
 				AcceptanceCriteria: "Stage acceptance criteria",
 				DefinitionOfReady:  "Stage acceptance criteria",
 			}); err != nil {
-				t.Fatalf("UpdateSdlcStage() error = %v", err)
+				t.Fatalf("UpdateWorkflowStage() error = %v", err)
 			}
 		}
 	}
@@ -2221,7 +2222,7 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 		DORMap:             store.GuidanceMap{"default": "Project default DOR"},
 		DODMap:             store.GuidanceMap{"default": "Project default DOD"},
 		ACMap:              store.GuidanceMap{"default": "Project default AC"},
-		SdlcID:             project.SdlcID,
+		WorkflowID:         project.WorkflowID,
 	}); err != nil {
 		t.Fatalf("UpdateProject() error = %v", err)
 	}
@@ -3680,83 +3681,95 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestRunSdlcListInLocalMode(t *testing.T) {
+func TestRunWorkflowListInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "list"}); err != nil {
-			t.Fatalf("sdlc list error = %v", err)
+		if err := run([]string{"workflow", "list"}); err != nil {
+			t.Fatalf("workflow list error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "Agile") {
-		t.Fatalf("sdlc list missing Agile sdlc:\n%s", output)
+		t.Fatalf("workflow list missing Agile workflow:\n%s", output)
 	}
 }
 
-func TestRunSdlcGetShowsStages(t *testing.T) {
+func TestRunWorkflowAliasListInLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "get", "-id", "1"}); err != nil {
-			t.Fatalf("sdlc get error = %v", err)
+		if err := run([]string{"workflow", "list"}); err != nil {
+			t.Fatalf("workflow list error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "Agile") {
+		t.Fatalf("workflow list missing Agile workflow:\n%s", output)
+	}
+}
+
+func TestRunWorkflowGetShowsStages(t *testing.T) {
+	setupLocalCLI(t)
+	output := captureStdout(t, func() {
+		if err := run([]string{"workflow", "get", "-id", "1"}); err != nil {
+			t.Fatalf("workflow get error = %v", err)
 		}
 	})
 	for _, want := range []string{"develop", "done"} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("sdlc get missing %q:\n%s", want, output)
+			t.Fatalf("workflow get missing %q:\n%s", want, output)
 		}
 	}
 }
 
-func TestRunSdlcGetShowsStageAcceptanceCriteria(t *testing.T) {
+func TestRunWorkflowGetShowsStageAcceptanceCriteria(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "AC Workflow", Description: "workflow with stage acceptance criteria"})
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{Name: "AC Workflow", Description: "workflow with stage acceptance criteria"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 		StageName:   "triage",
 		Description: "triage",
 		SortOrder:   1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	if _, err := svc.UpdateSdlcStage(context.Background(), stage.ID, libticket.SdlcStageRequest{
+	if _, err := svc.UpdateWorkflowStage(context.Background(), stage.ID, libticket.WorkflowStageRequest{
 		StageName:          "triage",
 		Description:        "triage",
 		AcceptanceCriteria: "Clarified with the product owner",
 	}); err != nil {
-		t.Fatalf("UpdateSdlcStage() error = %v", err)
+		t.Fatalf("UpdateWorkflowStage() error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "get", "-id", strconv.FormatInt(wf.ID, 10)}); err != nil {
-			t.Fatalf("sdlc get error = %v", err)
+		if err := run([]string{"workflow", "get", "-id", strconv.FormatInt(wf.ID, 10)}); err != nil {
+			t.Fatalf("workflow get error = %v", err)
 		}
 	})
 	for _, want := range []string{"ACCEPTANCE CRITERIA", "Clarified with the product owner"} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("sdlc get missing %q:\n%s", want, output)
+			t.Fatalf("workflow get missing %q:\n%s", want, output)
 		}
 	}
 }
 
-func TestRunSdlcRoleCRUD(t *testing.T) {
+func TestRunWorkflowRoleCRUD(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Role Workflow", Description: "workflow for scoped roles"})
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{Name: "Role Workflow", Description: "workflow for scoped roles"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	sdlcID := strconv.FormatInt(wf.ID, 10)
+	workflowID := strconv.FormatInt(wf.ID, 10)
 
 	createOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "role-add", "-sdlc_id", sdlcID, "-title", "reviewer", "-description", "Reviews work", "-ac", "Approves the release"}); err != nil {
-			t.Fatalf("sdlc role-add error = %v", err)
+		if err := run([]string{"workflow", "role-add", "-workflow_id", workflowID, "-title", "reviewer", "-description", "Reviews work", "-ac", "Approves the release"}); err != nil {
+			t.Fatalf("workflow role-add error = %v", err)
 		}
 	})
-	if !strings.Contains(createOutput, "created sdlc role") || !strings.Contains(createOutput, "reviewer") {
-		t.Fatalf("unexpected sdlc role-add output:\n%s", createOutput)
+	if !strings.Contains(createOutput, "created workflow role") || !strings.Contains(createOutput, "reviewer") {
+		t.Fatalf("unexpected workflow role-add output:\n%s", createOutput)
 	}
 
 	var created store.Role
@@ -3765,43 +3778,43 @@ func TestRunSdlcRoleCRUD(t *testing.T) {
 		t.Fatalf("ListRoles() error = %v", err)
 	}
 	for _, role := range roles {
-		if role.Title == "reviewer" && role.SdlcID != nil && *role.SdlcID == wf.ID {
+		if role.Title == "reviewer" && role.WorkflowID != nil && *role.WorkflowID == wf.ID {
 			created = role
 			break
 		}
 	}
 	if created.ID == 0 {
-		t.Fatal("expected scoped sdlc role to be created")
+		t.Fatal("expected scoped workflow role to be created")
 	}
 	roleID := strconv.FormatInt(created.ID, 10)
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "role-get", "-sdlc_id", sdlcID, "-role_id", roleID}); err != nil {
-			t.Fatalf("sdlc role-get error = %v", err)
+		if err := run([]string{"workflow", "role-get", "-workflow_id", workflowID, "-role_id", roleID}); err != nil {
+			t.Fatalf("workflow role-get error = %v", err)
 		}
 	})
 	for _, want := range []string{"Title:               reviewer", "Acceptance Criteria: Approves the release"} {
 		if !strings.Contains(getOutput, want) {
-			t.Fatalf("sdlc role-get missing %q:\n%s", want, getOutput)
+			t.Fatalf("workflow role-get missing %q:\n%s", want, getOutput)
 		}
 	}
 
 	updateOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "role-update", "-sdlc_id", sdlcID, "-role_id", roleID, "-title", "qa-reviewer", "-description", "Reviews work", "-ac", "Ships the release"}); err != nil {
-			t.Fatalf("sdlc role-update error = %v", err)
+		if err := run([]string{"workflow", "role-update", "-workflow_id", workflowID, "-role_id", roleID, "-title", "qa-reviewer", "-description", "Reviews work", "-ac", "Ships the release"}); err != nil {
+			t.Fatalf("workflow role-update error = %v", err)
 		}
 	})
-	if !strings.Contains(updateOutput, "updated sdlc role") || !strings.Contains(updateOutput, "qa-reviewer") {
-		t.Fatalf("unexpected sdlc role-update output:\n%s", updateOutput)
+	if !strings.Contains(updateOutput, "updated workflow role") || !strings.Contains(updateOutput, "qa-reviewer") {
+		t.Fatalf("unexpected workflow role-update output:\n%s", updateOutput)
 	}
 
 	deleteOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "role-rm", "-sdlc_id", sdlcID, "-role_id", roleID}); err != nil {
-			t.Fatalf("sdlc role-rm error = %v", err)
+		if err := run([]string{"workflow", "role-rm", "-workflow_id", workflowID, "-role_id", roleID}); err != nil {
+			t.Fatalf("workflow role-rm error = %v", err)
 		}
 	})
-	if !strings.Contains(deleteOutput, "deleted sdlc role") {
-		t.Fatalf("unexpected sdlc role-rm output:\n%s", deleteOutput)
+	if !strings.Contains(deleteOutput, "deleted workflow role") {
+		t.Fatalf("unexpected workflow role-rm output:\n%s", deleteOutput)
 	}
 
 	roles, err = svc.ListRoles(context.Background())
@@ -3815,23 +3828,23 @@ func TestRunSdlcRoleCRUD(t *testing.T) {
 	}
 }
 
-func TestRunSdlcStageRoleCommands(t *testing.T) {
+func TestRunWorkflowStageRoleCommands(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Stage Role Workflow", Description: "workflow for stage role commands"})
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{Name: "Stage Role Workflow", Description: "workflow for stage role commands"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 		StageName:   "triage",
 		Description: "triage",
 		SortOrder:   1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	roleA, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
-		SdlcID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "reviewer",
 		Description: "reviews work",
 	})
@@ -3839,23 +3852,23 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("CreateRole(roleA) error = %v", err)
 	}
 	roleB, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
-		SdlcID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "qa",
 		Description: "verifies work",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole(roleB) error = %v", err)
 	}
-	sdlcID := strconv.FormatInt(wf.ID, 10)
+	workflowID := strconv.FormatInt(wf.ID, 10)
 	stageID := strconv.FormatInt(stage.ID, 10)
 	roleAID := strconv.FormatInt(roleA.ID, 10)
 	roleBID := strconv.FormatInt(roleB.ID, 10)
 
 	addOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "stage-role-add", "-sdlc_id", sdlcID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
+		if err := run([]string{"workflow", "stage-role-add", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
 			t.Fatalf("stage-role-add roleA error = %v", err)
 		}
-		if err := run([]string{"sdlc", "stage-role-add", "-sdlc_id", sdlcID, "-stage_id", stageID, "-role_id", roleBID}); err != nil {
+		if err := run([]string{"workflow", "stage-role-add", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleBID}); err != nil {
 			t.Fatalf("stage-role-add roleB error = %v", err)
 		}
 	})
@@ -3863,16 +3876,16 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("unexpected stage-role-add output:\n%s", addOutput)
 	}
 
-	ordered, err := svc.GetSdlc(context.Background(), wf.ID)
+	ordered, err := svc.GetWorkflow(context.Background(), wf.ID)
 	if err != nil {
-		t.Fatalf("GetSdlc(after add) error = %v", err)
+		t.Fatalf("GetWorkflow(after add) error = %v", err)
 	}
 	if len(ordered.Stages) != 1 || len(ordered.Stages[0].Roles) != 2 {
 		t.Fatalf("stage roles after add = %#v", ordered.Stages)
 	}
 
 	orderOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "stage-role-order", "-sdlc_id", sdlcID, "-stage_id", stageID, "-roles", roleBID + "," + roleAID}); err != nil {
+		if err := run([]string{"workflow", "stage-role-order", "-workflow_id", workflowID, "-stage_id", stageID, "-roles", roleBID + "," + roleAID}); err != nil {
 			t.Fatalf("stage-role-order error = %v", err)
 		}
 	})
@@ -3880,16 +3893,16 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("unexpected stage-role-order output:\n%s", orderOutput)
 	}
 
-	ordered, err = svc.GetSdlc(context.Background(), wf.ID)
+	ordered, err = svc.GetWorkflow(context.Background(), wf.ID)
 	if err != nil {
-		t.Fatalf("GetSdlc(after reorder) error = %v", err)
+		t.Fatalf("GetWorkflow(after reorder) error = %v", err)
 	}
 	if got := []int64{ordered.Stages[0].Roles[0].ID, ordered.Stages[0].Roles[1].ID}; !reflect.DeepEqual(got, []int64{roleB.ID, roleA.ID}) {
 		t.Fatalf("stage role order = %v, want [%d %d]", got, roleB.ID, roleA.ID)
 	}
 
 	removeOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "stage-role-rm", "-sdlc_id", sdlcID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
+		if err := run([]string{"workflow", "stage-role-rm", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
 			t.Fatalf("stage-role-rm error = %v", err)
 		}
 	})
@@ -3897,31 +3910,31 @@ func TestRunSdlcStageRoleCommands(t *testing.T) {
 		t.Fatalf("unexpected stage-role-rm output:\n%s", removeOutput)
 	}
 
-	ordered, err = svc.GetSdlc(context.Background(), wf.ID)
+	ordered, err = svc.GetWorkflow(context.Background(), wf.ID)
 	if err != nil {
-		t.Fatalf("GetSdlc(after remove) error = %v", err)
+		t.Fatalf("GetWorkflow(after remove) error = %v", err)
 	}
 	if got := ordered.Stages[0].Roles; len(got) != 1 || got[0].ID != roleB.ID {
 		t.Fatalf("remaining stage roles = %#v, want only roleB", got)
 	}
 }
 
-func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
+func TestRunWorkflowStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Stage Detail Workflow", Description: "workflow for stage output"})
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{Name: "Stage Detail Workflow", Description: "workflow for stage output"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+	stage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 		StageName:   "triage",
 		Description: "triage work",
 		SortOrder:   1,
 	})
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	stage, err = svc.UpdateSdlcStage(context.Background(), stage.ID, libticket.SdlcStageRequest{
+	stage, err = svc.UpdateWorkflowStage(context.Background(), stage.ID, libticket.WorkflowStageRequest{
 		StageName:          "triage",
 		Description:        "triage work",
 		AcceptanceCriteria: "Classify the issue",
@@ -3929,34 +3942,34 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 		DefinitionOfDone:   "Issue routed with owner and priority",
 	})
 	if err != nil {
-		t.Fatalf("UpdateSdlcStage() error = %v", err)
+		t.Fatalf("UpdateWorkflowStage() error = %v", err)
 	}
 	role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
-		SdlcID:      &wf.ID,
+		WorkflowID:  &wf.ID,
 		Title:       "reviewer",
 		Description: "reviews the work",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := svc.AddSdlcStageRole(context.Background(), wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
 
 	listOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "stage-list", "-id", strconv.FormatInt(wf.ID, 10)}); err != nil {
-			t.Fatalf("sdlc stage-list error = %v", err)
+		if err := run([]string{"workflow", "stage-list", "-id", strconv.FormatInt(wf.ID, 10)}); err != nil {
+			t.Fatalf("workflow stage-list error = %v", err)
 		}
 	})
 	for _, want := range []string{"triage", "reviewer", "triage work"} {
 		if !strings.Contains(listOutput, want) {
-			t.Fatalf("sdlc stage-list missing %q:\n%s", want, listOutput)
+			t.Fatalf("workflow stage-list missing %q:\n%s", want, listOutput)
 		}
 	}
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "stage-get", "-stage-id", strconv.FormatInt(stage.ID, 10)}); err != nil {
-			t.Fatalf("sdlc stage-get error = %v", err)
+		if err := run([]string{"workflow", "stage-get", "-stage-id", strconv.FormatInt(stage.ID, 10)}); err != nil {
+			t.Fatalf("workflow stage-get error = %v", err)
 		}
 	})
 	for _, want := range []string{
@@ -3968,33 +3981,93 @@ func TestRunSdlcStageListAndGetShowRoleAndAcceptanceCriteria(t *testing.T) {
 		"Roles               : reviewer",
 	} {
 		if !strings.Contains(getOutput, want) {
-			t.Fatalf("sdlc stage-get missing %q:\n%s", want, getOutput)
+			t.Fatalf("workflow stage-get missing %q:\n%s", want, getOutput)
 		}
 	}
 }
 
-func TestRunSdlcCreateAndDelete(t *testing.T) {
+func TestRunWorkflowCreateAndDelete(t *testing.T) {
 	setupLocalCLI(t)
 	output := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "create", "-name", "custom"}); err != nil {
-			t.Fatalf("sdlc create error = %v", err)
+		if err := run([]string{"workflow", "create", "-name", "custom"}); err != nil {
+			t.Fatalf("workflow create error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "custom") {
-		t.Fatalf("sdlc create missing name:\n%s", output)
+		t.Fatalf("workflow create missing name:\n%s", output)
 	}
 	// List should show both
 	output = captureStdout(t, func() {
-		if err := run([]string{"sdlc", "list"}); err != nil {
-			t.Fatalf("sdlc list error = %v", err)
+		if err := run([]string{"workflow", "list"}); err != nil {
+			t.Fatalf("workflow list error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "custom") {
-		t.Fatalf("sdlc list missing custom:\n%s", output)
+		t.Fatalf("workflow list missing custom:\n%s", output)
 	}
 }
 
-func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
+func TestRunWorkflowDeleteCheckDetectsProjectReferences(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
+		Name:        "Delete Check Workflow",
+		Description: "workflow delete preflight test",
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	_, err = svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{
+		Title:              project.Title,
+		Description:        project.Description,
+		AcceptanceCriteria: project.AcceptanceCriteria,
+		DORMap:             project.DORMap,
+		DODMap:             project.DODMap,
+		ACMap:              project.ACMap,
+		GitRepository:      project.GitRepository,
+		Notes:              project.Notes,
+		Status:             project.Status,
+		Visibility:         project.Visibility,
+		WorkflowID:         &wf.ID,
+	})
+	if err != nil {
+		t.Fatalf("UpdateProject(workflow) error = %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		err := run([]string{"workflow", "rm", "-id", strconv.FormatInt(wf.ID, 10), "-check"})
+		if err == nil {
+			t.Fatal("expected workflow rm -check to report references")
+		}
+		if !strings.Contains(err.Error(), "still has references") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	if !strings.Contains(out, "projects using workflow: 1") {
+		t.Fatalf("expected project reference output, got:\n%s", out)
+	}
+}
+
+func TestRunRequestExplainNoWork(t *testing.T) {
+	setupLocalCLI(t)
+	out := captureStdout(t, func() {
+		if err := run([]string{"request", "-explain"}); err != nil {
+			t.Fatalf("request -explain error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "NO-WORK") {
+		t.Fatalf("expected NO-WORK status, got:\n%s", out)
+	}
+	if !strings.Contains(out, "explain:") {
+		t.Fatalf("expected explanation line, got:\n%s", out)
+	}
+}
+
+func TestRunStatusShowsProjectWorkflowAndDefaultDraft(t *testing.T) {
 	setupLocalCLI(t)
 	svc := attachWorkflowToDefaultProject(t, "triage", "build", "done")
 	project, err := svc.GetProject(context.Background(), "1")
@@ -4010,7 +4083,7 @@ func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
 			t.Fatalf("status error = %v", err)
 		}
 	})
-	for _, want := range []string{"sdlc", "Custom Workflow", "draft", "true"} {
+	for _, want := range []string{"workflow", "Custom Workflow", "draft", "true"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
 		}
@@ -4025,8 +4098,8 @@ func TestRunStatusShowsProjectSdlcAndDefaultDraft(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOutput), &payload); err != nil {
 		t.Fatalf("json.Unmarshal(status) error = %v\noutput=%s", err, jsonOutput)
 	}
-	if got := payload["project_sdlc"]; got != "Custom Workflow" {
-		t.Fatalf("project_sdlc = %#v, want %q", got, "Custom Workflow")
+	if got := payload["project_workflow"]; got != "Custom Workflow" {
+		t.Fatalf("project_workflow = %#v, want %q", got, "Custom Workflow")
 	}
 	if got, ok := payload["project_default_draft"].(bool); !ok || !got {
 		t.Fatalf("project_default_draft = %#v, want true", payload["project_default_draft"])
@@ -4055,50 +4128,50 @@ func TestRunProjectSetDraftUpdatesCurrentProject(t *testing.T) {
 	}
 }
 
-func TestRunProjectSdlcSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
+func TestRunProjectWorkflowSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{Name: "Project Workflow", Description: "workflow assignment test"})
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{Name: "Project Workflow", Description: "workflow assignment test"})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
 
 	setOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "sdlc", strconv.FormatInt(wf.ID, 10)}); err != nil {
-			t.Fatalf("project sdlc set error = %v", err)
+		if err := run([]string{"project", "workflow", strconv.FormatInt(wf.ID, 10)}); err != nil {
+			t.Fatalf("project workflow set error = %v", err)
 		}
 	})
-	if !strings.Contains(setOutput, "set sdlc") {
-		t.Fatalf("unexpected project sdlc set output:\n%s", setOutput)
+	if !strings.Contains(setOutput, "set workflow") {
+		t.Fatalf("unexpected project workflow set output:\n%s", setOutput)
 	}
 
 	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) after set error = %v", err)
 	}
-	if project.SdlcID == nil || *project.SdlcID != wf.ID {
-		t.Fatalf("project.SdlcID = %#v, want %d", project.SdlcID, wf.ID)
+	if project.WorkflowID == nil || *project.WorkflowID != wf.ID {
+		t.Fatalf("project.WorkflowID = %#v, want %d", project.WorkflowID, wf.ID)
 	}
 
 	clearOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "sdlc", "0"}); err != nil {
-			t.Fatalf("project sdlc clear error = %v", err)
+		if err := run([]string{"project", "workflow", "0"}); err != nil {
+			t.Fatalf("project workflow clear error = %v", err)
 		}
 	})
-	if !strings.Contains(clearOutput, "cleared sdlc") {
-		t.Fatalf("unexpected project sdlc clear output:\n%s", clearOutput)
+	if !strings.Contains(clearOutput, "cleared workflow") {
+		t.Fatalf("unexpected project workflow clear output:\n%s", clearOutput)
 	}
 
 	project, err = svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) after clear error = %v", err)
 	}
-	if project.SdlcID != nil && *project.SdlcID == wf.ID {
-		t.Fatalf("project.SdlcID = %#v, want cleared custom workflow %d", project.SdlcID, wf.ID)
+	if project.WorkflowID != nil && *project.WorkflowID == wf.ID {
+		t.Fatalf("project.WorkflowID = %#v, want cleared custom workflow %d", project.WorkflowID, wf.ID)
 	}
 }
 
-func TestRunProjectUseAndSdlcHelpPaths(t *testing.T) {
+func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 	setupLocalCLI(t)
 
 	cfg, err := config.Load()
@@ -4138,12 +4211,12 @@ func TestRunProjectUseAndSdlcHelpPaths(t *testing.T) {
 	}
 
 	helpOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "sdlc", "help"}); err != nil {
-			t.Fatalf("project sdlc help error = %v", err)
+		if err := run([]string{"project", "workflow", "help"}); err != nil {
+			t.Fatalf("project workflow help error = %v", err)
 		}
 	})
-	if !strings.Contains(helpOutput, "tk project sdlc <sdlc-id>") {
-		t.Fatalf("unexpected project sdlc help output:\n%s", helpOutput)
+	if !strings.Contains(helpOutput, "tk project workflow <workflow-id>") {
+		t.Fatalf("unexpected project workflow help output:\n%s", helpOutput)
 	}
 }
 
@@ -4195,12 +4268,12 @@ func TestRunTicketTreeReturnsRemovalError(t *testing.T) {
 	}
 }
 
-func TestRunSdlcExportImportRoundTrip(t *testing.T) {
+func TestRunWorkflowExportImportRoundTrip(t *testing.T) {
 	setupLocalCLI(t)
-	tmpFile := filepath.Join(t.TempDir(), "sdlc.json")
+	tmpFile := filepath.Join(t.TempDir(), "workflow.json")
 	// Export
-	if err := run([]string{"sdlc", "export", "-id", "1", "-o", tmpFile}); err != nil {
-		t.Fatalf("sdlc export error = %v", err)
+	if err := run([]string{"workflow", "export", "-id", "1", "-o", tmpFile}); err != nil {
+		t.Fatalf("workflow export error = %v", err)
 	}
 	// Modify the file to change the name so we can import
 	data, err := os.ReadFile(tmpFile)
@@ -4213,12 +4286,12 @@ func TestRunSdlcExportImportRoundTrip(t *testing.T) {
 	}
 	// Import
 	output := captureStdout(t, func() {
-		if err := run([]string{"sdlc", "import", "-file", tmpFile}); err != nil {
-			t.Fatalf("sdlc import error = %v", err)
+		if err := run([]string{"workflow", "import", "-file", tmpFile}); err != nil {
+			t.Fatalf("workflow import error = %v", err)
 		}
 	})
 	if !strings.Contains(output, "imported") {
-		t.Fatalf("sdlc import missing name:\n%s", output)
+		t.Fatalf("workflow import missing name:\n%s", output)
 	}
 }
 
@@ -4428,28 +4501,28 @@ func localCLIService(t *testing.T) libticket.Service {
 func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticket.Service {
 	t.Helper()
 	svc := localCLIService(t)
-	wf, err := svc.CreateSdlc(context.Background(), libticket.SdlcRequest{
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
 		Name:        "Custom Workflow",
 		Description: "custom workflow for tests",
 	})
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
 	for i, stageName := range stageNames {
-		if _, err := svc.AddSdlcStage(context.Background(), wf.ID, libticket.SdlcStageRequest{
+		if _, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 			StageName:   stageName,
 			Description: stageName,
 			SortOrder:   i,
 		}); err != nil {
-			t.Fatalf("AddSdlcStage(%q) error = %v", stageName, err)
+			t.Fatalf("AddWorkflowStage(%q) error = %v", stageName, err)
 		}
 	}
 	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) error = %v", err)
 	}
-	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{SdlcID: &wf.ID}); err != nil {
-		t.Fatalf("UpdateProject(sdlc) error = %v", err)
+	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{WorkflowID: &wf.ID}); err != nil {
+		t.Fatalf("UpdateProject(workflow) error = %v", err)
 	}
 	return svc
 }
@@ -4622,17 +4695,17 @@ func TestBuildAgentPrompt(t *testing.T) {
 		AcceptanceCriteria: "Must pass",
 	}
 	role := store.Role{Title: "Developer", Description: "Ship features", AcceptanceCriteria: "Quality code"}
-	wf := store.SdlcWithStages{
-		Sdlc:   store.Sdlc{Name: "Standard"},
-		Stages: []store.SdlcStage{{StageName: "develop"}, {StageName: "develop"}, {StageName: "test"}},
+	wf := store.WorkflowWithStages{
+		Workflow: store.Workflow{Name: "Standard"},
+		Stages:   []store.WorkflowStage{{StageName: "develop"}, {StageName: "develop"}, {StageName: "test"}},
 	}
 	project := store.Project{Prefix: "TK", Title: "Test Project", GitRepository: "github.com/test/repo"}
 	resp := libticket.AgentWorkResponse{
-		Status:  "NEW",
-		Ticket:  &ticket,
-		Project: &project,
-		Sdlc:    &wf,
-		Role:    &role,
+		Status:   "NEW",
+		Ticket:   &ticket,
+		Project:  &project,
+		Workflow: &wf,
+		Role:     &role,
 	}
 	prompt := buildAgentPrompt(resp)
 	for _, want := range []string{"Test Task", "Some description", "Must pass", "Developer", "Ship features", "Standard", "develop", "develop", "Test Project", "github.com/test/repo"} {
@@ -4640,7 +4713,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 			t.Errorf("buildAgentPrompt missing %q:\n%s", want, prompt)
 		}
 	}
-	// Without description/AC/role/sdlc
+	// Without description/AC/role/workflow
 	ticket2 := store.Ticket{Title: "Simple"}
 	prompt2 := buildAgentPrompt(libticket.AgentWorkResponse{Ticket: &ticket2})
 	if strings.Contains(prompt2, "Description:") {
@@ -4653,7 +4726,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 
 func TestAllTopLevelCommandsShowUsageWithNoArgs(t *testing.T) {
 	commands := []string{
-		"project", "sdlc", "team", "story", "user", "label",
+		"project", "workflow", "team", "story", "user", "label",
 		"dep", "decision", "agent", "role", "idea",
 	}
 	for _, cmd := range commands {
@@ -5433,7 +5506,7 @@ func TestRunAcceptAndRejectRequirement(t *testing.T) {
 			t.Fatalf("accept error = %v", err)
 		}
 	})
-	// accept auto-advances through the sdlc: design/success → develop/idle
+	// accept auto-advances through the workflow: design/success → develop/idle
 	if !strings.Contains(acceptOut, "develop") {
 		t.Fatalf("accept output should show ticket moved to develop stage:\n%s", acceptOut)
 	}
@@ -5700,17 +5773,17 @@ func TestRunCreateCommandsSupportForcedIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("sdlc", func(t *testing.T) {
+	t.Run("workflow", func(t *testing.T) {
 		setupLocalCLI(t)
-		if err := run([]string{"sdlc", "create", "-id", "104", "-name", "Explicit SDLC"}); err != nil {
-			t.Fatalf("sdlc create error = %v", err)
+		if err := run([]string{"workflow", "create", "-id", "104", "-name", "Explicit Workflow"}); err != nil {
+			t.Fatalf("workflow create error = %v", err)
 		}
-		wf, err := localCLIService(t).GetSdlc(context.Background(), 104)
+		wf, err := localCLIService(t).GetWorkflow(context.Background(), 104)
 		if err != nil {
-			t.Fatalf("GetSdlc(104) error = %v", err)
+			t.Fatalf("GetWorkflow(104) error = %v", err)
 		}
 		if wf.ID != 104 {
-			t.Fatalf("sdlc id = %d, want 104", wf.ID)
+			t.Fatalf("workflow id = %d, want 104", wf.ID)
 		}
 	})
 
@@ -5805,15 +5878,15 @@ func TestRunCreateCommandsPrintOnlyID(t *testing.T) {
 		}
 	})
 
-	t.Run("sdlc", func(t *testing.T) {
+	t.Run("workflow", func(t *testing.T) {
 		setupLocalCLI(t)
 		out := strings.TrimSpace(captureStdout(t, func() {
-			if err := run([]string{"sdlc", "create", "-id", "304", "-printid", "-name", "Print SDLC"}); err != nil {
-				t.Fatalf("sdlc create error = %v", err)
+			if err := run([]string{"workflow", "create", "-id", "304", "-printid", "-name", "Print Workflow"}); err != nil {
+				t.Fatalf("workflow create error = %v", err)
 			}
 		}))
 		if out != "304" {
-			t.Fatalf("sdlc output = %q, want %q", out, "304")
+			t.Fatalf("workflow output = %q, want %q", out, "304")
 		}
 	})
 
@@ -6716,11 +6789,11 @@ func TestPrintAgentTableNonEmpty(t *testing.T) {
 	tk := "PROJ-1"
 	statuses := []store.AgentStatus{
 		{
-			Agent:       store.Agent{ID: "uuid-1", Username: "bot-a", Enabled: true, Status: "idle", LastSeen: "2025-01-01T00:00:00Z"},
-			TicketKey:   &tk,
-			ProjectName: "MyProject",
-			SdlcName:    "default",
-			RoleTitle:   "developer",
+			Agent:        store.Agent{ID: "uuid-1", Username: "bot-a", Enabled: true, Status: "idle", LastSeen: "2025-01-01T00:00:00Z"},
+			TicketKey:    &tk,
+			ProjectName:  "MyProject",
+			WorkflowName: "default",
+			RoleTitle:    "developer",
 		},
 		{
 			Agent: store.Agent{ID: "uuid-2", Username: "bot-b", Enabled: false, Status: "disabled"},

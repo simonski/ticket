@@ -88,7 +88,7 @@ that assert behavior with CLI exit codes and `tk ls -count` checks.
 Current harness scenarios cover:
 
 1. scriptable count/assertion flows
-2. SDLC progression, regression, and terminal-stage behavior
+2. Workflow progression, regression, and terminal-stage behavior
 3. comment / idea / decision CRUD-adjacent operator flows plus snapshot export/import restore
 4. remote server login, multi-project switching, and agent work request behavior
 5. agent admin controls: config round-trip, password rotation, and project-targeted queue selection
@@ -102,7 +102,7 @@ make testscripts
 ## Todo example scenario verification
 
 `scripts/populate_todo_example.sh` seeds a reproducible todo-app planning
-workspace (project, SDLC, epic/tasks, labels, dependencies, time entries,
+workspace (project, Workflow, epic/tasks, labels, dependencies, time entries,
 story/decision/idea). `scripts/verify_todo_example.sh` runs that seed flow in
 an isolated temp repo/home pair, then asserts key expected outputs for project
 `DEMO`.
@@ -138,7 +138,7 @@ Enforced via `make test-go-cover`:
 ## Playwright browser tests
 
 Located in `tests/playwright/` with 12 spec files covering auth, navigation,
-ticket management, projects, stories, sdlcs, labels, time tracking,
+ticket management, projects, stories, workflows, labels, time tracking,
 dependencies, hierarchy, and chat. Run with:
 
 ```bash

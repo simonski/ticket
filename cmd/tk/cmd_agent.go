@@ -538,12 +538,12 @@ func buildAgentPrompt(resp libticket.AgentWorkResponse) string {
 		b.WriteString("\n")
 	}
 
-	if resp.Sdlc != nil {
-		b.WriteString(fmt.Sprintf("Sdlc: %s\n", resp.Sdlc.Name))
+	if resp.Workflow != nil {
+		b.WriteString(fmt.Sprintf("Workflow: %s\n", resp.Workflow.Name))
 		b.WriteString("Stages:")
-		for _, stage := range resp.Sdlc.Stages {
+		for _, stage := range resp.Workflow.Stages {
 			marker := " "
-			if ticket.SdlcStageID != nil && stage.ID == *ticket.SdlcStageID {
+			if ticket.WorkflowStageID != nil && stage.ID == *ticket.WorkflowStageID {
 				marker = ">"
 			}
 			b.WriteString(fmt.Sprintf(" %s %s", marker, stage.StageName))
@@ -597,8 +597,8 @@ func printAgentTable(statuses []store.AgentStatus) {
 			proj = s.ProjectName
 		}
 		wf := "-"
-		if s.SdlcName != "" {
-			wf = s.SdlcName
+		if s.WorkflowName != "" {
+			wf = s.WorkflowName
 		}
 		role := "-"
 		if s.RoleTitle != "" {
@@ -606,7 +606,7 @@ func printAgentTable(statuses []store.AgentStatus) {
 		}
 		rows = append(rows, fmt.Sprintf("%s\t%t\t%s\t%s\t%s\t%s\t%s\t%s", s.Agent.ID, s.Agent.Enabled, s.Agent.Status, ticket, proj, wf, role, lastSeen))
 	}
-	printBoxTable("UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tSDLC\tROLE\tLAST_SEEN", rows)
+	printBoxTable("UUID\tENABLED\tSTATUS\tTICKET\tPROJECT\tWorkflow\tROLE\tLAST_SEEN", rows)
 }
 
 func printUserTable(users []store.User) {

@@ -81,23 +81,23 @@ type TeamService interface {
 	ListTeamAgents(ctx context.Context, teamID int64) ([]store.TeamAgent, error)
 }
 
-// SdlcService covers sdlc templates, stage management, and stage-role assignments.
-type SdlcService interface {
-	CreateSdlc(ctx context.Context, request SdlcRequest) (store.Sdlc, error)
-	ListSdlcs(ctx context.Context) ([]store.Sdlc, error)
-	GetSdlc(ctx context.Context, id int64) (store.SdlcWithStages, error)
-	DeleteSdlc(ctx context.Context, id int64) error
-	AddSdlcStage(ctx context.Context, sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error)
-	UpdateSdlcStage(ctx context.Context, stageID int64, request SdlcStageRequest) (store.SdlcStage, error)
-	GetSdlcStage(ctx context.Context, stageID int64) (store.SdlcStage, error)
-	ListSdlcStages(ctx context.Context, sdlcID int64) ([]store.SdlcStage, error)
-	RemoveSdlcStage(ctx context.Context, stageID int64) error
-	ReorderSdlcStages(ctx context.Context, sdlcID int64, stageIDs []int64) error
-	ExportSdlc(ctx context.Context, id int64) (store.SdlcExport, error)
-	ImportSdlc(ctx context.Context, export store.SdlcExport) (store.Sdlc, error)
-	AddSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error
-	RemoveSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error
-	ReorderSdlcStageRoles(ctx context.Context, sdlcID, stageID int64, roleIDs []int64) error
+// WorkflowService covers workflow templates, stage management, and stage-role assignments.
+type WorkflowService interface {
+	CreateWorkflow(ctx context.Context, request WorkflowRequest) (store.Workflow, error)
+	ListWorkflows(ctx context.Context) ([]store.Workflow, error)
+	GetWorkflow(ctx context.Context, id int64) (store.WorkflowWithStages, error)
+	DeleteWorkflow(ctx context.Context, id int64) error
+	AddWorkflowStage(ctx context.Context, workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error)
+	UpdateWorkflowStage(ctx context.Context, stageID int64, request WorkflowStageRequest) (store.WorkflowStage, error)
+	GetWorkflowStage(ctx context.Context, stageID int64) (store.WorkflowStage, error)
+	ListWorkflowStages(ctx context.Context, workflowID int64) ([]store.WorkflowStage, error)
+	RemoveWorkflowStage(ctx context.Context, stageID int64) error
+	ReorderWorkflowStages(ctx context.Context, workflowID int64, stageIDs []int64) error
+	ExportWorkflow(ctx context.Context, id int64) (store.WorkflowExport, error)
+	ImportWorkflow(ctx context.Context, export store.WorkflowExport) (store.Workflow, error)
+	AddWorkflowStageRole(ctx context.Context, workflowID, stageID, roleID int64) error
+	RemoveWorkflowStageRole(ctx context.Context, workflowID, stageID, roleID int64) error
+	ReorderWorkflowStageRoles(ctx context.Context, workflowID, stageID int64, roleIDs []int64) error
 }
 
 // TicketService covers ticket CRUD, lifecycle, labels, time, dependencies, and history.
@@ -128,8 +128,8 @@ type TicketService interface {
 	UndraftTicket(ctx context.Context, id string, message string) (store.Ticket, error)
 	NextTicket(ctx context.Context, id string) (store.Ticket, error)
 	PreviousTicket(ctx context.Context, id string) (store.Ticket, error)
-	SetTicketSdlc(ctx context.Context, id string, sdlcID int64) (store.Ticket, error)
-	UnsetTicketSdlc(ctx context.Context, id string) (store.Ticket, error)
+	SetTicketWorkflow(ctx context.Context, id string, workflowID int64) (store.Ticket, error)
+	UnsetTicketWorkflow(ctx context.Context, id string) (store.Ticket, error)
 	DeleteTicket(ctx context.Context, id string) error
 	SetTicketParent(ctx context.Context, id string, parentID string, message string) (store.Ticket, error)
 	UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error)
@@ -164,6 +164,7 @@ type Service interface {
 	AgentService
 	ProjectService
 	TeamService
-	SdlcService
+	WorkflowService
+	WorkflowService
 	TicketService
 }

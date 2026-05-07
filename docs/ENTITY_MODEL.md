@@ -21,14 +21,14 @@ the entity model**.
 This document defines these entities and their relationships:
 
 - **PROJECT**
-- **SDLC**
+- **Workflow**
 - **STAGE**
 - **ROLE**
 - **TICKET**
 
 It also defines:
 
-- SDLC inheritance for tickets
+- Workflow inheritance for tickets
 - the meaning of DOR, DOD, and AC
 - ordering rules for stages and roles
 - the intended distinction between business entities and implementation detail
@@ -87,33 +87,33 @@ The core model is:
 
 ```text
 PROJECT 1 --- * TICKET
-PROJECT 1 --- 1 default SDLC
+PROJECT 1 --- 1 default Workflow
 
-SDLC 1 --- * STAGE           (ordered)
-SDLC 1 --- * ROLE
-STAGE * --- * ROLE           via ordered stage-role assignments within an SDLC
+Workflow 1 --- * STAGE           (ordered)
+Workflow 1 --- * ROLE
+STAGE * --- * ROLE           via ordered stage-role assignments within an Workflow
 
-TICKET 0..1 --- 1 explicit SDLC
+TICKET 0..1 --- 1 explicit Workflow
 TICKET 0..1 --- 1 parent TICKET
 ```
 
-### 3.1 Effective SDLC Resolution
+### 3.1 Effective Workflow Resolution
 
-Every ticket has an **effective SDLC**.
+Every ticket has an **effective Workflow**.
 
-The effective SDLC is resolved in this order:
+The effective Workflow is resolved in this order:
 
-1. If the ticket has its own `sdlc_id`, use it
+1. If the ticket has its own `workflow_id`, use it
 2. Otherwise, walk up the parent ticket chain and use the first ancestor with an
-   explicit `sdlc_id`
-3. Otherwise, use the ticket's project's `default_sdlc`
+   explicit `workflow_id`
+3. Otherwise, use the ticket's project's `default_workflow`
 
 This means:
 
-- a ticket may inherit its SDLC,
-- parent tickets can define SDLC boundaries for their descendants,
+- a ticket may inherit its Workflow,
+- parent tickets can define Workflow boundaries for their descendants,
 - the project always provides a final fallback,
-- the project-level default SDLC is therefore **mandatory**.
+- the project-level default Workflow is therefore **mandatory**.
 
 ### 3.2 Same-Project Rule
 
@@ -153,12 +153,12 @@ It defines:
 | `dod_map` | Project-level DOD map keyed by stage name plus `default` |
 | `ac_map` | Project-level AC map keyed by stage name plus `default` |
 | `default_draft` | Whether new tickets start in draft mode |
-| `default_sdlc` | Required link to the SDLC used when no ticket/ancestor override exists |
+| `default_workflow` | Required link to the Workflow used when no ticket/ancestor override exists |
 
 ## 4.3 Rules
 
-1. A project has exactly one **default SDLC**
-2. `default_sdlc` is **non-null**
+1. A project has exactly one **default Workflow**
+2. `default_workflow` is **non-null**
 3. `default_draft` applies only when creating new tickets
 4. A project's `prefix` defines the human-facing ticket key namespace
 5. `in_scope_goals` and `out_of_scope_goals` define the product boundary for the project
@@ -202,34 +202,34 @@ token**, not just an arbitrary integer.
 
 ---
 
-## 5. SDLC
+## 5. Workflow
 
 ## 5.1 Purpose
 
-An SDLC defines **how work moves**.
+An Workflow defines **how work moves**.
 
 It does not hold tickets directly. Instead, it defines the ordered stages and
-the role sequence available to tickets whose effective SDLC resolves to it.
+the role sequence available to tickets whose effective Workflow resolves to it.
 
 ## 5.2 Core Fields
 
 | Field | Meaning |
 |---|---|
-| `title` | Name of the SDLC |
-| `description` | Free-text explanation of the SDLC |
+| `title` | Name of the Workflow |
+| `description` | Free-text explanation of the Workflow |
 | `stages` | Ordered list of stages |
 | `stage_roles` | Ordered role assignments for each stage |
 
 ## 5.3 Rules
 
-1. An SDLC contains one or more stages
+1. An Workflow contains one or more stages
 2. Stages are ordered
 3. Each stage can contain zero or more roles
 4. Roles within a stage are ordered
 5. The same role may appear in multiple stages
-6. A stage may appear in one SDLC and not another
+6. A stage may appear in one Workflow and not another
 
-The SDLC is the reusable workflow template. The ticket is the runtime work item
+The Workflow is the reusable workflow template. The ticket is the runtime work item
 moving through it.
 
 ---
@@ -238,7 +238,7 @@ moving through it.
 
 ## 6.1 Purpose
 
-A stage is a named phase within an SDLC.
+A stage is a named phase within an Workflow.
 
 Examples:
 
@@ -257,13 +257,13 @@ Examples:
 | `dor` | Stage-specific definition of ready |
 | `dod` | Stage-specific definition of done |
 | `ac` | Stage-specific acceptance criteria |
-| `order` | Position within the SDLC |
+| `order` | Position within the Workflow |
 
 ## 6.3 Rules
 
-1. A stage belongs to exactly one SDLC
+1. A stage belongs to exactly one Workflow
 2. Stage ordering is explicit and meaningful
-3. The first stage is the default entry stage for tickets in that SDLC
+3. The first stage is the default entry stage for tickets in that Workflow
 4. A stage may have zero or more roles assigned to it
 
 ---
@@ -273,7 +273,7 @@ Examples:
 ## 7.1 Purpose
 
 A role represents a job function or persona that can perform work in one or more
-stages of an SDLC.
+stages of an Workflow.
 
 Examples:
 
@@ -305,7 +305,7 @@ Example:
 
 ## 7.3 Rules
 
-1. A role may be assigned to any stage in any SDLC
+1. A role may be assigned to any stage in any Workflow
 2. Role ordering is **per stage assignment**, not global
 3. Role guidance is resolved like this:
    1. use the entry for the current stage name if present
@@ -359,14 +359,14 @@ infer complexity. The parent/child graph is the stronger signal.
 | `dor_map` | Ticket-specific DOR map keyed by stage name plus `default` |
 | `dod_map` | Ticket-specific DOD map keyed by stage name plus `default` |
 | `ac_map` | Ticket-specific AC map keyed by stage name plus `default` |
-| `stage` | Current stage in the effective SDLC |
+| `stage` | Current stage in the effective Workflow |
 | `role` | Current role within the current stage |
 | `state` | Current work state |
 | `deleted` | Soft-delete flag |
 | `draft` | Whether the ticket is still being curated |
 | `archived` | Soft-hidden ticket |
 | `complete` | Whether the ticket is finished |
-| `sdlc` | Optional explicit SDLC override |
+| `workflow` | Optional explicit Workflow override |
 | `parent_ticket_id` | Optional parent ticket |
 | `project` | Required owning project |
 
@@ -374,7 +374,7 @@ infer complexity. The parent/child graph is the stronger signal.
 
 ### `stage`
 
-The ticket's current stage within its effective SDLC.
+The ticket's current stage within its effective Workflow.
 
 ### `role`
 
@@ -426,14 +426,14 @@ The intended semantics are:
 - `deleted` marks work as soft-deleted
 - `purge` permanently removes a deleted ticket
 
-## 8.5 SDLC Inheritance Rules
+## 8.5 Workflow Inheritance Rules
 
-Each ticket may have an explicit `sdlc_id`, but it is optional.
+Each ticket may have an explicit `workflow_id`, but it is optional.
 
 That field means:
 
 - `NULL` = inherit
-- set value = use this SDLC for this ticket and its descendants unless a child
+- set value = use this Workflow for this ticket and its descendants unless a child
   overrides it
 
 This is the key rule that enables an epic or story to branch into a different
@@ -444,7 +444,7 @@ workflow while still remaining in the same project.
 1. A ticket may have a parent ticket
 2. A parent ticket may have many children
 3. Parent/child links must stay within one project
-4. Children inherit the effective SDLC unless they override it explicitly
+4. Children inherit the effective Workflow unless they override it explicitly
 
 ---
 
@@ -501,7 +501,7 @@ That means:
 
 The guidance-map keys are not a separate metadata enum. They are:
 
-- the **stage names** from the effective SDLC, plus
+- the **stage names** from the effective Workflow, plus
 - a reserved `default` key
 
 That means a derived value is always resolved as:
@@ -670,12 +670,12 @@ At minimum, tests should verify:
 These rules are part of the target design:
 
 1. Every ticket belongs to exactly one project
-2. Every project has exactly one default SDLC
-3. A ticket's explicit SDLC is optional
-4. The effective SDLC resolution order is:
-   `ticket -> nearest ancestor with explicit SDLC -> project default`
-5. Stage ordering is defined by the SDLC
-6. Role ordering is defined per stage assignment inside the SDLC
+2. Every project has exactly one default Workflow
+3. A ticket's explicit Workflow is optional
+4. The effective Workflow resolution order is:
+   `ticket -> nearest ancestor with explicit Workflow -> project default`
+5. Stage ordering is defined by the Workflow
+6. Role ordering is defined per stage assignment inside the Workflow
 7. A story is a ticket type, not a separate entity
 8. Archive is soft-hide; deleted is soft-delete; purge is physical removal
 9. Parent/child relationships cannot cross projects
@@ -691,16 +691,16 @@ review.
 
 1. **Project-level default draft exists**
    - `projects.default_draft` exists
-2. **Project-level SDLC exists**
-   - `projects.sdlc_id` exists
-3. **Ticket-level optional SDLC exists**
-   - `tickets.sdlc_id` exists
-4. **Effective SDLC inheritance is already partly implemented**
-   - ticket explicit SDLC
+2. **Project-level Workflow exists**
+   - `projects.workflow_id` exists
+3. **Ticket-level optional Workflow exists**
+   - `tickets.workflow_id` exists
+4. **Effective Workflow inheritance is already partly implemented**
+   - ticket explicit Workflow
    - then parent-chain lookup
-   - then project SDLC fallback
+   - then project Workflow fallback
 5. **Stages already support DOR/DOD/AC**
-   - `sdlc_stages` has acceptance criteria, definition of ready, definition of done
+   - `workflow_stages` has acceptance criteria, definition of ready, definition of done
 
 ## 12.2 Not aligned with this target design
 
@@ -719,7 +719,7 @@ review.
    - current roles have one `acceptance_criteria` field
    - target design requires stage-ID-keyed `dor`, `dod`, and `ac` maps with a
      reserved `default` fallback
-5. **Project default SDLC is still nullable in the schema**
+5. **Project default Workflow is still nullable in the schema**
    - target design requires it to be non-null
 6. **Ticket guidance model is too shallow**
    - current ticket schema is flatter than the target model
@@ -744,7 +744,7 @@ For this V1 effort, **migration compatibility is not required**:
 - treat the target model in this document as the thing to implement
 
 1. collapse `stories` into tickets of type `story`
-2. make project default SDLC mandatory
+2. make project default Workflow mandatory
 3. introduce project `reference_links` as a strongly typed map
 4. replace flatter project guidance with strongly typed `dor_map` / `dod_map` /
    `ac_map`
@@ -762,7 +762,7 @@ For this V1 effort, **migration compatibility is not required**:
 For the next implementation phases, the intended model should be:
 
 - **PROJECT** owns the namespace and the default workflow
-- **SDLC** defines ordered stages
+- **Workflow** defines ordered stages
 - **STAGE** defines the phase-specific requirements
 - **ROLE** defines who works in a stage and what that role expects there
 - **TICKET** is the single work item entity and may override or inherit workflow
@@ -775,7 +775,7 @@ The persistence bias for flexible guidance and links is:
 That gives one coherent rule:
 
 > Tickets inherit workflow from the nearest explicit source, and work progresses
-> through an SDLC-defined sequence of stage/role steps until complete.
+> through an Workflow-defined sequence of stage/role steps until complete.
 
 ---
 
@@ -806,7 +806,7 @@ Goal:
 
 Main work:
 
-1. make project default SDLC mandatory
+1. make project default Workflow mandatory
 2. add project `reference_links` as a strongly typed map
 3. enforce the canonical ticket-type set defined in this document
 4. collapse legacy story storage into the ticket model
@@ -825,8 +825,8 @@ Goal:
 Main work:
 
 1. remove legacy story-as-separate-entity behaviour
-2. expose project default SDLC and default draft cleanly
-3. expose ticket SDLC override and inheritance clearly
+2. expose project default Workflow and default draft cleanly
+3. expose ticket Workflow override and inheritance clearly
 4. expose lineage-first ticket management clearly
 5. add/align `tk prompt <id>` so it assembles one coherent work prompt from the entity graph
 6. align help text, usage, and JSON output with the new model
@@ -840,7 +840,7 @@ Goal:
 Main work:
 
 1. align forms and lists with the ticket-centric model
-2. display effective SDLC, explicit SDLC, and inherited SDLC clearly
+2. display effective Workflow, explicit Workflow, and inherited Workflow clearly
 3. show lineage and child structure as first-class information
 4. show project/stage/role/ticket guidance consistently
 
@@ -885,7 +885,7 @@ The command should assemble context from:
 1. the **ticket itself**
 2. its **parent chain**
 3. its **project**
-4. its **effective SDLC**
+4. its **effective Workflow**
 5. its **current stage**
 6. its **current role**
 7. the available **DOR / DOD / AC** guidance from each layer
@@ -904,13 +904,13 @@ Conceptually, `tk prompt <id>` should resolve and include:
 
 ### Inheritance context
 
-- explicit ticket SDLC, if present
-- otherwise inherited SDLC source (nearest ancestor or project default)
+- explicit ticket Workflow, if present
+- otherwise inherited Workflow source (nearest ancestor or project default)
 - parent ticket chain, from nearest parent upward
 
 ### Workflow context
 
-- effective SDLC title and description
+- effective Workflow title and description
 - current stage title, description, DOR, DOD, AC
 - current role title, description
 - role guidance for the current stage, with `default` fallback when stage-specific values are absent
@@ -966,11 +966,11 @@ brief** built from the entity relationships.
 - Project `ac_map`:
   - `develop`: change stays within the agreed product boundary
 - Default draft: `true`
-- Default SDLC: `Customer Delivery`
+- Default Workflow: `Customer Delivery`
 
-### Example SDLC
+### Example Workflow
 
-**SDLC:** Customer Delivery
+**Workflow:** Customer Delivery
 
 Stages in order:
 
@@ -1022,7 +1022,7 @@ Stages in order:
 
 - Title: Improve account sign-in reliability
 - Description: Break down and deliver reliability improvements across login flows
-- Explicit SDLC: none
+- Explicit Workflow: none
 - Project: Customer Portal
 
 **CUS-114** — type `feature`
@@ -1030,7 +1030,7 @@ Stages in order:
 - Parent: `CUS-100`
 - Title: Add lockout messaging for repeated failed sign-ins
 - Description: Show a clear lockout message after repeated failed login attempts
-- Explicit SDLC: none
+- Explicit Workflow: none
 - Current stage: `develop`
 - Current role: `Engineer`
 - Current state: `idle`
@@ -1039,9 +1039,9 @@ Stages in order:
 
 In this example:
 
-- `CUS-114` has no explicit SDLC
-- its parent `CUS-100` has no explicit SDLC
-- therefore its effective SDLC comes from the project's default SDLC: `Customer Delivery`
+- `CUS-114` has no explicit Workflow
+- its parent `CUS-100` has no explicit Workflow
+- therefore its effective Workflow comes from the project's default Workflow: `Customer Delivery`
 
 ## 15.5 Simulated `tk prompt CUS-114`
 
@@ -1072,8 +1072,8 @@ LINEAGE
   Parent summary: deliver reliability improvements across login flows
 
 WORKFLOW
-  Effective SDLC: Customer Delivery
-  SDLC source: project default
+  Effective Workflow: Customer Delivery
+  Workflow source: project default
   Current stage: develop
   Current role: Engineer
   Current state: idle

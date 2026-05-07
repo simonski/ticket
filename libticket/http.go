@@ -283,12 +283,12 @@ func (s *HTTPService) NotReadyTicket(ctx context.Context, id string, message str
 	return s.client.NotReadyTicket(ctx, id, message)
 }
 
-func (s *HTTPService) SetTicketSdlc(ctx context.Context, id string, sdlcID int64) (store.Ticket, error) {
-	return s.client.SetTicketSdlc(ctx, id, sdlcID)
+func (s *HTTPService) SetTicketWorkflow(ctx context.Context, id string, workflowID int64) (store.Ticket, error) {
+	return s.client.SetTicketWorkflow(ctx, id, workflowID)
 }
 
-func (s *HTTPService) UnsetTicketSdlc(ctx context.Context, id string) (store.Ticket, error) {
-	return s.client.UnsetTicketSdlc(ctx, id)
+func (s *HTTPService) UnsetTicketWorkflow(ctx context.Context, id string) (store.Ticket, error) {
+	return s.client.UnsetTicketWorkflow(ctx, id)
 }
 
 func (s *HTTPService) DeleteTicket(ctx context.Context, id string) error {
@@ -363,64 +363,64 @@ func (s *HTTPService) RequestTicket(ctx context.Context, request TicketRequest) 
 	return TicketRequestResponse(response), nil
 }
 
-func (s *HTTPService) CreateSdlc(ctx context.Context, request SdlcRequest) (store.Sdlc, error) {
-	return s.client.CreateSdlc(ctx, client.SdlcRequest(request))
+func (s *HTTPService) CreateWorkflow(ctx context.Context, request WorkflowRequest) (store.Workflow, error) {
+	return s.client.CreateWorkflow(ctx, client.WorkflowRequest(request))
 }
 
-func (s *HTTPService) ListSdlcs(ctx context.Context) ([]store.Sdlc, error) {
-	return s.client.ListSdlcs(ctx)
+func (s *HTTPService) ListWorkflows(ctx context.Context) ([]store.Workflow, error) {
+	return s.client.ListWorkflows(ctx)
 }
 
-func (s *HTTPService) GetSdlc(ctx context.Context, id int64) (store.SdlcWithStages, error) {
-	return s.client.GetSdlc(ctx, id)
+func (s *HTTPService) GetWorkflow(ctx context.Context, id int64) (store.WorkflowWithStages, error) {
+	return s.client.GetWorkflow(ctx, id)
 }
 
-func (s *HTTPService) DeleteSdlc(ctx context.Context, id int64) error {
-	return s.client.DeleteSdlc(ctx, id)
+func (s *HTTPService) DeleteWorkflow(ctx context.Context, id int64) error {
+	return s.client.DeleteWorkflow(ctx, id)
 }
 
-func (s *HTTPService) AddSdlcStage(ctx context.Context, sdlcID int64, request SdlcStageRequest) (store.SdlcStage, error) {
-	return s.client.AddSdlcStage(ctx, sdlcID, client.SdlcStageRequest(request))
+func (s *HTTPService) AddWorkflowStage(ctx context.Context, workflowID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
+	return s.client.AddWorkflowStage(ctx, workflowID, client.WorkflowStageRequest(request))
 }
 
-func (s *HTTPService) UpdateSdlcStage(ctx context.Context, stageID int64, request SdlcStageRequest) (store.SdlcStage, error) {
-	return s.client.UpdateSdlcStage(ctx, stageID, client.SdlcStageRequest(request))
+func (s *HTTPService) UpdateWorkflowStage(ctx context.Context, stageID int64, request WorkflowStageRequest) (store.WorkflowStage, error) {
+	return s.client.UpdateWorkflowStage(ctx, stageID, client.WorkflowStageRequest(request))
 }
 
-func (s *HTTPService) GetSdlcStage(ctx context.Context, stageID int64) (store.SdlcStage, error) {
-	return s.client.GetSdlcStage(ctx, stageID)
+func (s *HTTPService) GetWorkflowStage(ctx context.Context, stageID int64) (store.WorkflowStage, error) {
+	return s.client.GetWorkflowStage(ctx, stageID)
 }
 
-func (s *HTTPService) ListSdlcStages(ctx context.Context, sdlcID int64) ([]store.SdlcStage, error) {
-	return s.client.ListSdlcStages(ctx, sdlcID)
+func (s *HTTPService) ListWorkflowStages(ctx context.Context, workflowID int64) ([]store.WorkflowStage, error) {
+	return s.client.ListWorkflowStages(ctx, workflowID)
 }
 
-func (s *HTTPService) RemoveSdlcStage(ctx context.Context, stageID int64) error {
-	return s.client.RemoveSdlcStage(ctx, stageID)
+func (s *HTTPService) RemoveWorkflowStage(ctx context.Context, stageID int64) error {
+	return s.client.RemoveWorkflowStage(ctx, stageID)
 }
 
-func (s *HTTPService) ReorderSdlcStages(ctx context.Context, sdlcID int64, stageIDs []int64) error {
-	return s.client.ReorderSdlcStages(ctx, sdlcID, stageIDs)
+func (s *HTTPService) ReorderWorkflowStages(ctx context.Context, workflowID int64, stageIDs []int64) error {
+	return s.client.ReorderWorkflowStages(ctx, workflowID, stageIDs)
 }
 
-func (s *HTTPService) ExportSdlc(ctx context.Context, id int64) (store.SdlcExport, error) {
-	return s.client.ExportSdlc(ctx, id)
+func (s *HTTPService) ExportWorkflow(ctx context.Context, id int64) (store.WorkflowExport, error) {
+	return s.client.ExportWorkflow(ctx, id)
 }
 
-func (s *HTTPService) ImportSdlc(ctx context.Context, export store.SdlcExport) (store.Sdlc, error) {
-	return s.client.ImportSdlc(ctx, export)
+func (s *HTTPService) ImportWorkflow(ctx context.Context, export store.WorkflowExport) (store.Workflow, error) {
+	return s.client.ImportWorkflow(ctx, export)
 }
 
-func (s *HTTPService) AddSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error {
-	return s.client.AddSdlcStageRole(ctx, sdlcID, stageID, roleID)
+func (s *HTTPService) AddWorkflowStageRole(ctx context.Context, workflowID, stageID, roleID int64) error {
+	return s.client.AddWorkflowStageRole(ctx, workflowID, stageID, roleID)
 }
 
-func (s *HTTPService) RemoveSdlcStageRole(ctx context.Context, sdlcID, stageID, roleID int64) error {
-	return s.client.RemoveSdlcStageRole(ctx, sdlcID, stageID, roleID)
+func (s *HTTPService) RemoveWorkflowStageRole(ctx context.Context, workflowID, stageID, roleID int64) error {
+	return s.client.RemoveWorkflowStageRole(ctx, workflowID, stageID, roleID)
 }
 
-func (s *HTTPService) ReorderSdlcStageRoles(ctx context.Context, sdlcID, stageID int64, roleIDs []int64) error {
-	return s.client.ReorderSdlcStageRoles(ctx, sdlcID, stageID, roleIDs)
+func (s *HTTPService) ReorderWorkflowStageRoles(ctx context.Context, workflowID, stageID int64, roleIDs []int64) error {
+	return s.client.ReorderWorkflowStageRoles(ctx, workflowID, stageID, roleIDs)
 }
 
 func (s *HTTPService) CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error) {

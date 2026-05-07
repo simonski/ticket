@@ -40,7 +40,7 @@ func (r *router) registerRoleHandlers() {
 			}
 			role, err := store.CreateRoleWithParams(r.Context(), db, store.RoleCreateParams{
 				ID:                 payload.ID,
-				SdlcID:             payload.SdlcID,
+				WorkflowID:             payload.WorkflowID,
 				Title:              payload.Title,
 				Description:        payload.Description,
 				AcceptanceCriteria: payload.AcceptanceCriteria,

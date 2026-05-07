@@ -62,7 +62,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	}
 
 	updated, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
-		Title:            "Add password reset sdlc",
+		Title:            "Add password reset workflow",
 		Description:      "Support email-based reset",
 		ParentID:         &epic.ID,
 		EstimateEffort:   8,
@@ -71,7 +71,7 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket() error = %v", err)
 	}
-	if updated.Title != "Add password reset sdlc" {
+	if updated.Title != "Add password reset workflow" {
 		t.Fatalf("UpdateTicket().Title = %q", updated.Title)
 	}
 	if updated.EstimateEffort != 8 || updated.EstimateComplete != "2026-04-15T09:00:00Z" {
@@ -807,7 +807,7 @@ func TestClosedTaskCannotBeReopened(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	// Advance through all sdlc stages by setting state=success repeatedly.
+	// Advance through all workflow stages by setting state=success repeatedly.
 	// Each success auto-advances to the next stage with state=idle.
 	// When we reach the final stage, success stays.
 	current := ticket
@@ -1470,71 +1470,71 @@ func TestExplainNoWork(t *testing.T) {
 	}
 }
 
-func TestSetAndUnsetTicketSdlc(t *testing.T) {
+func TestSetAndUnsetTicketWorkflow(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
-	project, err := CreateProject(context.Background(), db, "Sdlc Project", "", "", "")
+	project, err := CreateProject(context.Background(), db, "Workflow Project", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	wfBase, err := CreateSdlc(context.Background(), db, "Custom Flow", "")
+	wfBase, err := CreateWorkflow(context.Background(), db, "Custom Flow", "")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := AddSdlcStage(context.Background(), db, wfBase.ID, "Review", "", "", 1); err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+	if _, err := AddWorkflowStage(context.Background(), db, wfBase.ID, "Review", "", "", 1); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	reviewer, err := CreateRoleWithParams(context.Background(), db, RoleCreateParams{
-		SdlcID:      &wfBase.ID,
+		WorkflowID:      &wfBase.ID,
 		Title:       "reviewer",
 		Description: "reviews work",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	wf, err := GetSdlc(context.Background(), db, wfBase.ID)
+	wf, err := GetWorkflow(context.Background(), db, wfBase.ID)
 	if err != nil {
-		t.Fatalf("GetSdlc() error = %v", err)
+		t.Fatalf("GetWorkflow() error = %v", err)
 	}
 	if len(wf.Stages) == 0 {
 		t.Fatal("expected workflow to have stages")
 	}
-	if err := AddSdlcStageRole(context.Background(), db, wf.ID, wf.Stages[0].ID, reviewer.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := AddWorkflowStageRole(context.Background(), db, wf.ID, wf.Stages[0].ID, reviewer.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
 
 	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
-		Title:     "Sdlc ticket",
+		Title:     "Workflow ticket",
 		CreatedBy: "",
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	// Set sdlc
-	updated, err := SetTicketSdlc(context.Background(), db, ticket.ID, wf.ID)
+	// Set workflow
+	updated, err := SetTicketWorkflow(context.Background(), db, ticket.ID, wf.ID)
 	if err != nil {
-		t.Fatalf("SetTicketSdlc() error = %v", err)
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
-	if updated.SdlcID == nil || *updated.SdlcID != wf.ID {
-		t.Fatalf("SetTicketSdlc().SdlcID = %v, want %d", updated.SdlcID, wf.ID)
+	if updated.WorkflowID == nil || *updated.WorkflowID != wf.ID {
+		t.Fatalf("SetTicketWorkflow().WorkflowID = %v, want %d", updated.WorkflowID, wf.ID)
 	}
 	if updated.RoleID == nil || *updated.RoleID != reviewer.ID {
-		t.Fatalf("SetTicketSdlc().RoleID = %#v, want %d", updated.RoleID, reviewer.ID)
+		t.Fatalf("SetTicketWorkflow().RoleID = %#v, want %d", updated.RoleID, reviewer.ID)
 	}
 
-	// Unset sdlc
-	unset, err := UnsetTicketSdlc(context.Background(), db, ticket.ID)
+	// Unset workflow
+	unset, err := UnsetTicketWorkflow(context.Background(), db, ticket.ID)
 	if err != nil {
-		t.Fatalf("UnsetTicketSdlc() error = %v", err)
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
 	}
-	if unset.SdlcID != nil {
-		t.Fatalf("UnsetTicketSdlc().SdlcID = %v, want nil", unset.SdlcID)
+	if unset.WorkflowID != nil {
+		t.Fatalf("UnsetTicketWorkflow().WorkflowID = %v, want nil", unset.WorkflowID)
 	}
 	if unset.RoleID != nil {
-		t.Fatalf("UnsetTicketSdlc().RoleID = %#v, want nil", unset.RoleID)
+		t.Fatalf("UnsetTicketWorkflow().RoleID = %#v, want nil", unset.RoleID)
 	}
 }
 
@@ -1546,30 +1546,30 @@ func TestCreateTicketUsesFirstRoleFromProjectWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	wf, err := CreateSdlc(context.Background(), db, "Workflow", "")
+	wf, err := CreateWorkflow(context.Background(), db, "Workflow", "")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	stage, err := AddSdlcStage(context.Background(), db, wf.ID, "design", "", "", 0)
+	stage, err := AddWorkflowStage(context.Background(), db, wf.ID, "design", "", "", 0)
 	if err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 	role, err := CreateRoleWithParams(context.Background(), db, RoleCreateParams{
-		SdlcID:      &wf.ID,
+		WorkflowID:      &wf.ID,
 		Title:       "designer",
 		Description: "designs work",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := AddSdlcStageRole(context.Background(), db, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := AddWorkflowStageRole(context.Background(), db, wf.ID, stage.ID, role.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
 	if _, err := UpdateProjectWithParams(context.Background(), db, project.ID, ProjectUpdateParams{
 		Title:              project.Title,
 		Description:        project.Description,
 		AcceptanceCriteria: project.AcceptanceCriteria,
-		SdlcID:             &wf.ID,
+		WorkflowID:             &wf.ID,
 	}); err != nil {
 		t.Fatalf("UpdateProjectWithParams() error = %v", err)
 	}
@@ -1583,8 +1583,8 @@ func TestCreateTicketUsesFirstRoleFromProjectWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if ticket.SdlcStageID == nil || *ticket.SdlcStageID != stage.ID {
-		t.Fatalf("ticket.SdlcStageID = %#v, want %d", ticket.SdlcStageID, stage.ID)
+	if ticket.WorkflowStageID == nil || *ticket.WorkflowStageID != stage.ID {
+		t.Fatalf("ticket.WorkflowStageID = %#v, want %d", ticket.WorkflowStageID, stage.ID)
 	}
 	if ticket.RoleID == nil || *ticket.RoleID != role.ID {
 		t.Fatalf("ticket.RoleID = %#v, want %d", ticket.RoleID, role.ID)
@@ -1600,20 +1600,20 @@ func TestUpdateTicketSuccessAutoAdvancesToNextStageFirstRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	wf, err := CreateSdlc(ctx, db, "Role Workflow", "")
+	wf, err := CreateWorkflow(ctx, db, "Role Workflow", "")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	designStage, err := AddSdlcStage(ctx, db, wf.ID, "design", "", "", 0)
+	designStage, err := AddWorkflowStage(ctx, db, wf.ID, "design", "", "", 0)
 	if err != nil {
-		t.Fatalf("AddSdlcStage(design) error = %v", err)
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
 	}
-	testStage, err := AddSdlcStage(ctx, db, wf.ID, "test", "", "", 1)
+	testStage, err := AddWorkflowStage(ctx, db, wf.ID, "test", "", "", 1)
 	if err != nil {
-		t.Fatalf("AddSdlcStage(test) error = %v", err)
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
 	}
 	designer, err := CreateRoleWithParams(ctx, db, RoleCreateParams{
-		SdlcID:      &wf.ID,
+		WorkflowID:      &wf.ID,
 		Title:       "designer",
 		Description: "designs work",
 	})
@@ -1621,24 +1621,24 @@ func TestUpdateTicketSuccessAutoAdvancesToNextStageFirstRole(t *testing.T) {
 		t.Fatalf("CreateRole(designer) error = %v", err)
 	}
 	tester, err := CreateRoleWithParams(ctx, db, RoleCreateParams{
-		SdlcID:      &wf.ID,
+		WorkflowID:      &wf.ID,
 		Title:       "tester",
 		Description: "tests work",
 	})
 	if err != nil {
 		t.Fatalf("CreateRole(tester) error = %v", err)
 	}
-	if err := AddSdlcStageRole(ctx, db, wf.ID, designStage.ID, designer.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole(design) error = %v", err)
+	if err := AddWorkflowStageRole(ctx, db, wf.ID, designStage.ID, designer.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(design) error = %v", err)
 	}
-	if err := AddSdlcStageRole(ctx, db, wf.ID, testStage.ID, tester.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole(test) error = %v", err)
+	if err := AddWorkflowStageRole(ctx, db, wf.ID, testStage.ID, tester.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(test) error = %v", err)
 	}
 	if _, err := UpdateProjectWithParams(ctx, db, project.ID, ProjectUpdateParams{
 		Title:              project.Title,
 		Description:        project.Description,
 		AcceptanceCriteria: project.AcceptanceCriteria,
-		SdlcID:             &wf.ID,
+		WorkflowID:             &wf.ID,
 	}); err != nil {
 		t.Fatalf("UpdateProjectWithParams() error = %v", err)
 	}
@@ -1664,12 +1664,12 @@ func TestUpdateTicketSuccessAutoAdvancesToNextStageFirstRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTicket(success) error = %v", err)
 	}
-	if updated.Stage != "test" || updated.State != StateIdle || updated.RoleID == nil || *updated.RoleID != tester.ID || updated.SdlcStageID == nil || *updated.SdlcStageID != testStage.ID {
+	if updated.Stage != "test" || updated.State != StateIdle || updated.RoleID == nil || *updated.RoleID != tester.ID || updated.WorkflowStageID == nil || *updated.WorkflowStageID != testStage.ID {
 		t.Fatalf("updated ticket = %#v, want test/idle on tester role", updated)
 	}
 }
 
-func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
+func TestResolveWorkflowIDAndEnrichTicketContext(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
 	project, err := CreateProject(context.Background(), db, "Context Project", "", "", "")
@@ -1677,13 +1677,13 @@ func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 
-	// Create a sdlc and set it on a parent ticket
-	wfBase, err := CreateSdlc(context.Background(), db, "Context WF", "")
+	// Create a workflow and set it on a parent ticket
+	wfBase, err := CreateWorkflow(context.Background(), db, "Context WF", "")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := AddSdlcStage(context.Background(), db, wfBase.ID, "step1", "", "", 0); err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+	if _, err := AddWorkflowStage(context.Background(), db, wfBase.ID, "step1", "", "", 0); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
 
 	epic, err := CreateTicket(context.Background(), db, TicketCreateParams{
@@ -1696,13 +1696,13 @@ func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
 		t.Fatalf("CreateTicket(epic) error = %v", err)
 	}
 
-	// Set sdlc on the epic
-	epic, err = SetTicketSdlc(context.Background(), db, epic.ID, wfBase.ID)
+	// Set workflow on the epic
+	epic, err = SetTicketWorkflow(context.Background(), db, epic.ID, wfBase.ID)
 	if err != nil {
-		t.Fatalf("SetTicketSdlc() error = %v", err)
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
 
-	// Create child ticket under the epic (no sdlc set directly)
+	// Create child ticket under the epic (no workflow set directly)
 	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		ParentID:  &epic.ID,
@@ -1714,13 +1714,13 @@ func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	// ResolveSdlcID should inherit from parent
-	wfID := ResolveSdlcID(context.Background(), db, ticket)
+	// ResolveWorkflowID should inherit from parent
+	wfID := ResolveWorkflowID(context.Background(), db, ticket)
 	if wfID == nil {
-		t.Fatal("ResolveSdlcID() = nil, want inherited from parent")
+		t.Fatal("ResolveWorkflowID() = nil, want inherited from parent")
 	}
 	if *wfID != wfBase.ID {
-		t.Fatalf("ResolveSdlcID() = %d, want %d", *wfID, wfBase.ID)
+		t.Fatalf("ResolveWorkflowID() = %d, want %d", *wfID, wfBase.ID)
 	}
 
 	// EnrichTicketContext
@@ -1731,8 +1731,8 @@ func TestResolveSdlcIDAndEnrichTicketContext(t *testing.T) {
 	if ctx.Project.ID != project.ID {
 		t.Fatalf("EnrichTicketContext().Project.ID = %d, want %d", ctx.Project.ID, project.ID)
 	}
-	if ctx.Sdlc == nil {
-		t.Fatal("EnrichTicketContext().Sdlc = nil, want non-nil")
+	if ctx.Workflow == nil {
+		t.Fatal("EnrichTicketContext().Workflow = nil, want non-nil")
 	}
 	if len(ctx.Parents) == 0 {
 		t.Fatal("EnrichTicketContext().Parents = empty, want non-empty")
@@ -1744,21 +1744,21 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 
-	wf, err := CreateSdlc(ctx, db, "Ticket Flow", "")
+	wf, err := CreateWorkflow(ctx, db, "Ticket Flow", "")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	design, err := AddSdlcStage(ctx, db, wf.ID, "design", "design work", "", 0)
+	design, err := AddWorkflowStage(ctx, db, wf.ID, "design", "design work", "", 0)
 	if err != nil {
-		t.Fatalf("AddSdlcStage(design) error = %v", err)
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
 	}
-	testStage, err := AddSdlcStage(ctx, db, wf.ID, "test", "test work", "", 1)
+	testStage, err := AddWorkflowStage(ctx, db, wf.ID, "test", "test work", "", 1)
 	if err != nil {
-		t.Fatalf("AddSdlcStage(test) error = %v", err)
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
 	}
-	doneStage, err := AddSdlcStage(ctx, db, wf.ID, "done", "done work", "", 2)
+	doneStage, err := AddWorkflowStage(ctx, db, wf.ID, "done", "done work", "", 2)
 	if err != nil {
-		t.Fatalf("AddSdlcStage(done) error = %v", err)
+		t.Fatalf("AddWorkflowStage(done) error = %v", err)
 	}
 	designer, err := CreateRole(ctx, db, &wf.ID, "designer", "designs", "ready for test")
 	if err != nil {
@@ -1768,16 +1768,16 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRole(tester) error = %v", err)
 	}
-	if err := AddSdlcStageRole(ctx, db, wf.ID, design.ID, designer.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole(design) error = %v", err)
+	if err := AddWorkflowStageRole(ctx, db, wf.ID, design.ID, designer.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(design) error = %v", err)
 	}
-	if err := AddSdlcStageRole(ctx, db, wf.ID, testStage.ID, tester.ID); err != nil {
-		t.Fatalf("AddSdlcStageRole(test) error = %v", err)
+	if err := AddWorkflowStageRole(ctx, db, wf.ID, testStage.ID, tester.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(test) error = %v", err)
 	}
 	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix: "WF",
 		Title:  "Workflow Project",
-		SdlcID: &wf.ID,
+		WorkflowID: &wf.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateProjectWithParams() error = %v", err)
@@ -1855,7 +1855,7 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NextTicket(test->done) error = %v", err)
 	}
-	if !completed.Complete || completed.Stage != "done" || completed.State != StateIdle || completed.SdlcStageID == nil || *completed.SdlcStageID != doneStage.ID {
+	if !completed.Complete || completed.Stage != "done" || completed.State != StateIdle || completed.WorkflowStageID == nil || *completed.WorkflowStageID != doneStage.ID {
 		t.Fatalf("completed ticket = %#v, want complete done/idle on done stage", completed)
 	}
 }
@@ -1865,20 +1865,20 @@ func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 
-	wf, err := CreateSdlc(ctx, db, "Stage Validation", "")
+	wf, err := CreateWorkflow(ctx, db, "Stage Validation", "")
 	if err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := AddSdlcStage(ctx, db, wf.ID, "Design", "", "", 0); err != nil {
-		t.Fatalf("AddSdlcStage(design) error = %v", err)
+	if _, err := AddWorkflowStage(ctx, db, wf.ID, "Design", "", "", 0); err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
 	}
-	if _, err := AddSdlcStage(ctx, db, wf.ID, " test ", "", "", 1); err != nil {
-		t.Fatalf("AddSdlcStage(test) error = %v", err)
+	if _, err := AddWorkflowStage(ctx, db, wf.ID, " test ", "", "", 1); err != nil {
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
 	}
 	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix: "REF",
 		Title:  "Ref Project",
-		SdlcID: &wf.ID,
+		WorkflowID: &wf.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateProjectWithParams() error = %v", err)
@@ -1921,7 +1921,7 @@ func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
 		t.Fatalf("validateTicketStage(invalid) error = %v", err)
 	}
 
-	names := normalizeStageNames([]SdlcStage{
+	names := normalizeStageNames([]WorkflowStage{
 		{StageName: "Design"},
 		{StageName: " test "},
 		{StageName: "TEST"},

@@ -1,4 +1,4 @@
-# SDLC Recommendations
+# Workflow Recommendations
 
 | ID | Priority | Domain | Finding | Recommendation | Owner | Dependency | Status | Expected risk reduction | Suggested evidence of completion |
 |----|----------|--------|---------|----------------|-------|------------|--------|-------------------------|----------------------------------|

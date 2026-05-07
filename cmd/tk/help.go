@@ -51,7 +51,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"server": {
 		usage:   "tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-site <name>] [-v]",
-		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database resolved from the current remote/project configuration.", "If `-f` is provided, that exact database file is used directly for this run.", "Use `-site` to choose an embedded frontend bundle; `default` serves the original site and `site2` serves the new replacement frontend.", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
+		details: []string{"Starts the HTTP API server and the embedded web UI.", "If `-f` is omitted, the server uses the database resolved from the current remote/project configuration.", "If `-f` is provided, that exact database file is used directly for this run.", "Use `-site` to choose an embedded frontend bundle; `site2` is the default, and `default` serves the original site.", "Use `-p` as a shorthand port flag (for example `-p 9999`); `-addr` is still supported for explicit host/port binding.", "If `-v` is supplied, requests and responses are printed verbosely to stdout."},
 		example: "tk server -f /path/to/ticket.db -p 9999 -site site2 -v",
 	},
 	"version": {
@@ -86,7 +86,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"status": {
 		usage:   "tk status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration, then performs a connectivity check.", "Both local and remote output include the active project, its current SDLC name, and whether new tickets default to draft mode.", "Local mode also prints `db_path` / `db_exists`; remote mode also prints `username` / `authenticated` and the selected remote when available."},
+		details: []string{"Prints the current effective configuration, then performs a connectivity check.", "Both local and remote output include the active project, its current Workflow name, and whether new tickets default to draft mode.", "Local mode also prints `db_path` / `db_exists`; remote mode also prints `username` / `authenticated` and the selected remote when available."},
 		example: "tk status",
 	},
 	"help": {
@@ -130,7 +130,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk health TK-1",
 	},
 	"project": {
-		usage:   "tk project <create|list|get|use|set-draft|sdlc|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
+		usage:   "tk project <create|list|get|use|set-draft|workflow|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
 		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project."},
 		example: "tk project CUS update -title \"Customer Portal\"",
 	},
@@ -180,7 +180,7 @@ var helpIndex = map[string]commandHelp{
 			"-priority <n>: set numeric priority",
 			"-order <n>: set numeric sort order",
 			"-stage <stage>: set the stage; valid stages come from the ticket's current workflow",
-			"-state <state>: valid values [idle, active, success, fail]; setting success auto-advances to next sdlc stage",
+			"-state <state>: valid values [idle, active, success, fail]; setting success auto-advances to next workflow stage",
 			"-status <stage/state>: set both stage and state from rendered status format",
 			"-parent_id <id>: set parent ticket id",
 			"-estimate_effort <n>: set numeric estimate effort",
@@ -315,8 +315,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk dependency add -id 4 1,2,3",
 	},
 	"request": {
-		usage:   "tk request [-dryrun] [<id>]",
-		details: []string{"Requests work for the current user.", "With an id, the server attempts to assign that specific ticket. Without an id, it resumes the user's oldest assigned `develop/active` ticket, then assigned `develop/idle` work, then assigns the oldest unassigned `develop/idle` ticket in the active project."},
+		usage:   "tk request [-dryrun] [-explain] [<id>]",
+		details: []string{"Requests work for the current user.", "With an id, the server attempts to assign that specific ticket. Without an id, it resumes the user's oldest assigned `develop/active` ticket, then assigned `develop/idle` work, then assigns the oldest unassigned `develop/idle` ticket in the active project.", "Use `-explain` to print why no work was assigned when status is `NO-WORK` or `REJECTED`."},
 		example: "tk request 42",
 	},
 	"request-dryrun": {
@@ -359,10 +359,10 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Admin command for managing roles.", "Run `tk role help` for the full verb list."},
 		example: "tk role ls",
 	},
-	"sdlc": {
-		usage:   "tk sdlc <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|role-list|role-add|role-get|role-update|role-rm|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
-		details: []string{"Admin command for managing sdlcs and their stages.", "Run `tk sdlc help` for the full verb list."},
-		example: "tk sdlc ls",
+	"workflow": {
+		usage:   "tk workflow <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|role-list|role-add|role-get|role-update|role-rm|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
+		details: []string{"Admin command for managing workflows and their stages.", "Use `tk workflow rm -id <id> -check` to preview references before deletion.", "Run `tk workflow help` for the full verb list."},
+		example: "tk workflow ls",
 	},
 	"decision": {
 		usage:   "tk decision <new|ls> [flags]",
@@ -376,7 +376,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"doctor": {
 		usage:   "tk doctor",
-		details: []string{"Interactive health review that checks project configuration, orphan tickets, and sdlc consistency."},
+		details: []string{"Interactive health review that checks project configuration, orphan tickets, and workflow consistency."},
 		example: "tk doctor",
 	},
 	"whoami": {
@@ -425,8 +425,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk ls -t bug -count -expect_equals 2",
 	},
 	"init": {
-		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-sdlc <name>]",
-		details: []string{"Interactive setup for local or remote mode.", "`tk init` requires the current working directory to be inside a git repository.", "In local mode, initializes `.ticket/ticket.db`, sets admin password to `password` (unless overridden by other setup flows), and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-sdlc`).", "In remote mode, configures server URL, login/registration, and active project selection."},
+		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-workflow <name>]",
+		details: []string{"Interactive setup for local or remote mode.", "`tk init` requires the current working directory to be inside a git repository.", "In local mode, initializes `.ticket/ticket.db`, sets admin password to `password` (unless overridden by other setup flows), and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-workflow`).", "In remote mode, configures server URL, login/registration, and active project selection."},
 		example: "tk init",
 	},
 	"curate": {
@@ -484,7 +484,8 @@ func renderRootUsage() string {
 	printCommandUsageRows(&b, commandRows, 10)
 	adminRows := [][2]string{
 		{"role", "Manage roles (ls, new, get, update, rm)"},
-		{"sdlc", "Manage sdlcs (ls, new, get, rm, set, unset)"},
+		{"workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
+		{"workflow", "Alias for workflow management commands"},
 		{"team", "Manage teams (ls, new, update, rm)"},
 		{"agent", "Manage agents (ls, new, update, rm, run)"},
 		{"user", "Manage users (ls, new, rm, enable, disable)"},
@@ -586,7 +587,7 @@ Commands:
   rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
   rename-prefix <new-prefix>          Rename prefix and re-key all tickets
   set-draft [-project_id <id>] <true|false>  Set project default draft mode
-  sdlc     <id>                          Set sdlc on current project (use 0 to clear)
+  workflow     <id>                          Set workflow on current project (use 0 to clear)
   init                                Init project in current directory
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
@@ -604,31 +605,31 @@ Commands:
                                           Update a role
   rm -id <id>                             Delete a role`
 
-const sdlcUsage = `Usage: tk sdlc <command> [flags]
+const workflowUsage = `Usage: tk workflow <command> [flags]
 
 Commands:
-  ls                                  List all sdlcs
-  new      -name <n> [-d desc]        Create a sdlc
-  get      -id <id>                   Show sdlc details
-  rm       -id <id>                   Delete a sdlc
-  set      -ticket <id> -sdlc <id> Set sdlc on a ticket (overrides inherited)
-  unset    -ticket <id>               Clear sdlc from a ticket (inherit from parent/project)
+  ls                                  List all workflows
+  new      -name <n> [-d desc]        Create a workflow
+  get      -id <id>                   Show workflow details
+  rm       -id <id> [-check]          Delete a workflow (or check references only)
+  set      -ticket <id> -workflow <id> Set workflow on a ticket (overrides inherited)
+  unset    -ticket <id>               Clear workflow from a ticket (inherit from parent/project)
   add-stage    -id <wf-id> -name <n> [-wow text] [-dor text] [-dod text]  Add a stage
   stage-update -stage-id <id> -name <n> [-wow text] [-dor text] [-dod text] [-d desc] [-ac criteria]  Update a stage
   stage-get    -stage-id <id>         Show stage details
-  stage-list   -id <sdlc_id>         List stages in a sdlc
+  stage-list   -id <workflow_id>         List stages in a workflow
   remove-stage -stage-id <id>         Remove a stage
   reorder-stages -id <wf-id> <ids>    Reorder stages
-  role-list  -id <sdlc_id>                            List roles scoped to a sdlc
-  role-add   -sdlc_id X -title "Role" [-description "..."] [-ac "..."]  Create a role scoped to a sdlc
-  role-get   -sdlc_id X -role_id Y                    Show one sdlc-scoped role
-  role-update -sdlc_id X -role_id Y -title "Role" [-description "..."] [-ac "..."]  Update a sdlc-scoped role
-  role-rm    -sdlc_id X -role_id Y                    Delete a sdlc-scoped role
-  stage-role-add -sdlc_id X -stage_id Y -role_id Z   Assign a role to a stage
-  stage-role-rm  -sdlc_id X -stage_id Y -role_id Z   Remove a role from a stage
-  stage-role-order -sdlc_id X -stage_id Y -roles 1,2  Reorder roles in a stage
-  export   -id <id> [-o file]         Export a sdlc
-  import   -file <file>               Import a sdlc`
+  role-list  -id <workflow_id>                            List roles scoped to a workflow
+  role-add   -workflow_id X -title "Role" [-description "..."] [-ac "..."]  Create a role scoped to a workflow
+  role-get   -workflow_id X -role_id Y                    Show one workflow-scoped role
+  role-update -workflow_id X -role_id Y -title "Role" [-description "..."] [-ac "..."]  Update a workflow-scoped role
+  role-rm    -workflow_id X -role_id Y                    Delete a workflow-scoped role
+  stage-role-add -workflow_id X -stage_id Y -role_id Z   Assign a role to a stage
+  stage-role-rm  -workflow_id X -stage_id Y -role_id Z   Remove a role from a stage
+  stage-role-order -workflow_id X -stage_id Y -roles 1,2  Reorder roles in a stage
+  export   -id <id> [-o file]         Export a workflow
+  import   -file <file>               Import a workflow`
 
 const decisionUsage = `Usage: tk decision <command> [flags]
 
@@ -797,6 +798,8 @@ func normalizeHelpCommand(command string) string {
 		return "delete"
 	case "stage":
 		return "stage"
+	case "workflow":
+		return "workflow"
 	default:
 		return command
 	}

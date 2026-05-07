@@ -1,13 +1,13 @@
 ---
-name: sdlc
-description: Use this skill when reviewing the overall codebase. Applies when the user asks for an "sdlc review" - or types /sdlc.  Version 0.0.2 adds a detailed role roster and report template, as well as a summary report structure and execution guidance.
+name: workflow
+description: Use this skill when reviewing the overall codebase. Applies when the user asks for an "workflow review" - or types /workflow.  Version 0.0.2 adds a detailed role roster and report template, as well as a summary report structure and execution guidance.
 metadata:
     version: 0.0.2
 ---
 
 ## Core Principle
 
-Perform a full-spectrum, evidence-backed SDLC assessment from **26 distinct professional roles**. The standard is not "good enough"; it is the quality expected from a team that assumes defects will be expensive, public, and hard to reverse. Each role must think like a world-class operator whose job is to prevent avoidable failure, not merely spot nits.
+Perform a full-spectrum, evidence-backed Workflow assessment from **26 distinct professional roles**. The standard is not "good enough"; it is the quality expected from a team that assumes defects will be expensive, public, and hard to reverse. Each role must think like a world-class operator whose job is to prevent avoidable failure, not merely spot nits.
 
 This skill is intentionally adversarial, but not theatrical. The goal is to produce the most useful assessment possible: precise findings, clear ownership, strong handoffs, and actionable next steps that improve the system as a whole.
 

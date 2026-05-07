@@ -1,4 +1,4 @@
-// Package static embeds and parses the built-in role and SDLC seed files
+// Package static embeds and parses the built-in role and Workflow seed files
 // shipped with the tk binary. These are used by `tk init` to populate a
 // new database with sensible defaults.
 package static
@@ -20,8 +20,8 @@ import (
 //go:embed roles/*.md
 var rolesFS embed.FS
 
-//go:embed sdlc/*.md
-var sdlcFS embed.FS
+//go:embed workflow/*.md
+var workflowFS embed.FS
 
 // Role represents a parsed role seed file.
 type Role struct {
@@ -31,27 +31,27 @@ type Role struct {
 	AcceptanceCriteria string
 }
 
-// SdlcStageRole is a role reference within an SDLC stage.
-type SdlcStageRole struct {
+// WorkflowStageRole is a role reference within an Workflow stage.
+type WorkflowStageRole struct {
 	RoleRef string // filename without .md, e.g. "engineer"
 	Order   int
 }
 
-// SdlcStage represents a parsed stage within an SDLC seed file.
-type SdlcStage struct {
+// WorkflowStage represents a parsed stage within an Workflow seed file.
+type WorkflowStage struct {
 	Name        string
 	Description string
 	Order       int
-	Roles       []SdlcStageRole
+	Roles       []WorkflowStageRole
 }
 
-// Sdlc represents a parsed SDLC seed file.
-type Sdlc struct {
+// Workflow represents a parsed Workflow seed file.
+type Workflow struct {
 	Filename    string
 	Name        string
 	Description string
 	Default     bool
-	Stages      []SdlcStage
+	Stages      []WorkflowStage
 }
 
 // LoadRoles reads and parses all role seed files from the embedded filesystem.
@@ -75,8 +75,8 @@ func LoadRoles() ([]Role, error) {
 	return roles, nil
 }
 
-// SeedDatabase populates a database with all built-in roles and SDLCs from the
-// embedded static files. It assigns roles to SDLC stages based on @role
+// SeedDatabase populates a database with all built-in roles and Workflows from the
+// embedded static files. It assigns roles to Workflow stages based on @role
 // references. This is intended to be passed to store.Init as a SeedFunc.
 func SeedDatabase(ctx context.Context, db *sql.DB) error {
 	roles, err := LoadRoles()
@@ -92,24 +92,24 @@ func SeedDatabase(ctx context.Context, db *sql.DB) error {
 		roleIDByRef[r.Filename] = created.ID
 		roleIDByRef[strings.ToLower(r.Title)] = created.ID
 	}
-	sdlcs, err := LoadSdlcs()
+	workflows, err := LoadWorkflows()
 	if err != nil {
 		return err
 	}
-	for _, seed := range sdlcs {
-		wf, createErr := store.CreateSdlc(ctx, db, seed.Name, seed.Description)
+	for _, seed := range workflows {
+		wf, createErr := store.CreateWorkflow(ctx, db, seed.Name, seed.Description)
 		if createErr != nil {
 			continue
 		}
 		for _, s := range seed.Stages {
-			stage, stageErr := store.AddSdlcStage(ctx, db, wf.ID, s.Name, s.Description, "", s.Order)
+			stage, stageErr := store.AddWorkflowStage(ctx, db, wf.ID, s.Name, s.Description, "", s.Order)
 			if stageErr != nil {
 				continue
 			}
 			for _, roleRef := range s.Roles {
 				if rid, ok := roleIDByRef[roleRef.RoleRef]; ok {
-					if err := store.AddSdlcStageRole(ctx, db, wf.ID, stage.ID, rid); err != nil {
-						log.Printf("static: add stage role mapping sdlc=%d stage=%d role=%d: %v", wf.ID, stage.ID, rid, err)
+					if err := store.AddWorkflowStageRole(ctx, db, wf.ID, stage.ID, rid); err != nil {
+						log.Printf("static: add stage role mapping workflow=%d stage=%d role=%d: %v", wf.ID, stage.ID, rid, err)
 					}
 				}
 			}
@@ -118,46 +118,46 @@ func SeedDatabase(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// DefaultSdlcID returns the database ID of the SDLC marked default: true in
+// DefaultWorkflowID returns the database ID of the Workflow marked default: true in
 // the static seed files, by looking up its name in the given database.
-func DefaultSdlcID(ctx context.Context, db *sql.DB) (int64, error) {
-	sdlcs, err := LoadSdlcs()
+func DefaultWorkflowID(ctx context.Context, db *sql.DB) (int64, error) {
+	workflows, err := LoadWorkflows()
 	if err != nil {
 		return 0, err
 	}
-	for _, s := range sdlcs {
+	for _, s := range workflows {
 		if s.Default {
 			var id int64
-			if err := db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs WHERE name = ?`, s.Name).Scan(&id); err == nil {
+			if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows WHERE name = ?`, s.Name).Scan(&id); err == nil {
 				return id, nil
 			}
 		}
 	}
-	// Fallback: return the first SDLC.
+	// Fallback: return the first Workflow.
 	var id int64
-	err = db.QueryRowContext(ctx, `SELECT sdlc_id FROM sdlcs ORDER BY sdlc_id LIMIT 1`).Scan(&id)
+	err = db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows ORDER BY workflow_id LIMIT 1`).Scan(&id)
 	return id, err
 }
 
-// LoadSdlcs reads and parses all SDLC seed files from the embedded filesystem.
-func LoadSdlcs() ([]Sdlc, error) {
-	entries, err := sdlcFS.ReadDir("sdlc")
+// LoadWorkflows reads and parses all Workflow seed files from the embedded filesystem.
+func LoadWorkflows() ([]Workflow, error) {
+	entries, err := workflowFS.ReadDir("workflow")
 	if err != nil {
 		return nil, err
 	}
-	var sdlcs []Sdlc
+	var workflows []Workflow
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
-		data, err := sdlcFS.ReadFile("sdlc/" + e.Name())
+		data, err := workflowFS.ReadFile("workflow/" + e.Name())
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", e.Name(), err)
 		}
-		sdlc := parseSdlc(e.Name(), string(data))
-		sdlcs = append(sdlcs, sdlc)
+		workflow := parseWorkflow(e.Name(), string(data))
+		workflows = append(workflows, workflow)
 	}
-	return sdlcs, nil
+	return workflows, nil
 }
 
 // parseRole extracts frontmatter fields from a role markdown file.
@@ -176,10 +176,10 @@ var orderRe = regexp.MustCompile(`(?m)^order:\s*(\d+)\s*$`)
 var roleRefRe = regexp.MustCompile(`(?m)^\d+\.\s+@(\S+)`)
 var numberedListItemRe = regexp.MustCompile(`^\d+\.`)
 
-// parseSdlc extracts the name, description, and stages from an SDLC markdown file.
-func parseSdlc(filename, content string) Sdlc {
+// parseWorkflow extracts the name, description, and stages from an Workflow markdown file.
+func parseWorkflow(filename, content string) Workflow {
 	fm := parseFrontmatter(content)
-	sdlc := Sdlc{
+	workflow := Workflow{
 		Filename:    strings.TrimSuffix(filename, ".md"),
 		Name:        fm["name"],
 		Description: fm["description"],
@@ -198,7 +198,7 @@ func parseSdlc(filename, content string) Sdlc {
 		}
 		body := content[bodyStart:bodyEnd]
 
-		stage := SdlcStage{Name: name}
+		stage := WorkflowStage{Name: name}
 
 		// Extract order.
 		if m := orderRe.FindStringSubmatch(body); m != nil {
@@ -228,21 +228,21 @@ func parseSdlc(filename, content string) Sdlc {
 		// Extract role references.
 		roleMatches := roleRefRe.FindAllStringSubmatch(body, -1)
 		for j, rm := range roleMatches {
-			stage.Roles = append(stage.Roles, SdlcStageRole{
+			stage.Roles = append(stage.Roles, WorkflowStageRole{
 				RoleRef: rm[1],
 				Order:   j,
 			})
 		}
 
-		sdlc.Stages = append(sdlc.Stages, stage)
+		workflow.Stages = append(workflow.Stages, stage)
 	}
 
 	// Sort stages by order.
-	sort.Slice(sdlc.Stages, func(i, j int) bool {
-		return sdlc.Stages[i].Order < sdlc.Stages[j].Order
+	sort.Slice(workflow.Stages, func(i, j int) bool {
+		return workflow.Stages[i].Order < workflow.Stages[j].Order
 	})
 
-	return sdlc
+	return workflow
 }
 
 // parseFrontmatter extracts key: value pairs from YAML-style frontmatter

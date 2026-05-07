@@ -1,6 +1,6 @@
-# SDLC Assessment Summary
+# Workflow Assessment Summary
 
-**Methodology:** `docs/process/SDLC.md`
+**Methodology:** `docs/process/Workflow.md`
 **Date:** 2026-04-26  
 **Project:** ticket / tk  
 **Assessment scope:** repository documentation, Go services, SQLite store, web UIs, Playwright/Go test setup, CI/CD, deployment config, and release paths  
@@ -58,7 +58,7 @@
 
 | Item | Baseline | Current | Evidence |
 |------|----------|---------|----------|
-| Overall SDLC score | 72 | 74 | `reports/sdlc/history.json` |
+| Overall Workflow score | 72 | 74 | `reports/workflow/history.json` |
 | OpenAPI contract health | malformed header | validates cleanly | `openapi.yaml:1-4`, `Makefile:105-109` |
 | Coverage gate status | failing on `internal/config` | passing across all enforced packages | `Makefile:131-153`, assessment run `TICKET_FAST_HASH=1 make test-go-cover` |
 | Browser-test port strategy | fixed ports in both configs | dynamic/free-port selection with documented overrides | `playwright.config.js:1-20`, `playwright.site2.config.js:1-19`, `TESTING.md:150-153` |

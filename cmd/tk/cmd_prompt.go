@@ -163,8 +163,8 @@ type promptService interface {
 	GetTicket(ctx context.Context, ref string) (store.Ticket, error)
 	GetProject(ctx context.Context, id string) (store.Project, error)
 	ListRoles(ctx context.Context) ([]store.Role, error)
-	GetSdlcStage(ctx context.Context, stageID int64) (store.SdlcStage, error)
-	ListSdlcStages(ctx context.Context, sdlcID int64) ([]store.SdlcStage, error)
+	GetWorkflowStage(ctx context.Context, stageID int64) (store.WorkflowStage, error)
+	ListWorkflowStages(ctx context.Context, workflowID int64) ([]store.WorkflowStage, error)
 }
 
 func listTicketAncestors(ctx context.Context, svc promptService, ticket store.Ticket) ([]store.Ticket, error) {
@@ -196,23 +196,23 @@ func findAncestorByType(ancestors []store.Ticket, ticketType string) (store.Tick
 	return store.Ticket{}, false
 }
 
-func resolveStageForPrompt(ctx context.Context, svc promptService, ticket store.Ticket, project store.Project) (*store.SdlcStage, error) {
-	if ticket.SdlcStageID != nil {
-		stage, err := svc.GetSdlcStage(ctx, *ticket.SdlcStageID)
+func resolveStageForPrompt(ctx context.Context, svc promptService, ticket store.Ticket, project store.Project) (*store.WorkflowStage, error) {
+	if ticket.WorkflowStageID != nil {
+		stage, err := svc.GetWorkflowStage(ctx, *ticket.WorkflowStageID)
 		if err == nil {
 			return &stage, nil
 		}
 	}
 
-	sdlcID := ticket.SdlcID
-	if sdlcID == nil {
-		sdlcID = project.SdlcID
+	workflowID := ticket.WorkflowID
+	if workflowID == nil {
+		workflowID = project.WorkflowID
 	}
-	if sdlcID == nil {
+	if workflowID == nil {
 		return nil, nil
 	}
 
-	stages, err := svc.ListSdlcStages(ctx, *sdlcID)
+	stages, err := svc.ListWorkflowStages(ctx, *workflowID)
 	if err != nil {
 		return nil, err
 	}

@@ -85,7 +85,7 @@ func effectiveConfigPath() string {
 	return cfgPath
 }
 
-func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (projectID, projectTitle, source, sdlcName string, defaultDraft *bool) {
+func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (projectID, projectTitle, source, workflowName string, defaultDraft *bool) {
 	projectID, source = resolveCurrentProject(cfg)
 	if projectID == "" || svc == nil {
 		return projectID, "", source, "", nil
@@ -94,13 +94,13 @@ func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (pro
 	if err != nil {
 		return projectID, "", source, "", nil
 	}
-	if currentProject.SdlcID != nil {
-		if wf, err := svc.GetSdlc(context.Background(), *currentProject.SdlcID); err == nil {
-			sdlcName = wf.Name
+	if currentProject.WorkflowID != nil {
+		if wf, err := svc.GetWorkflow(context.Background(), *currentProject.WorkflowID); err == nil {
+			workflowName = wf.Name
 		}
 	}
 	defaultDraft = &currentProject.DefaultDraft
-	return projectID, currentProject.Title, source, sdlcName, defaultDraft
+	return projectID, currentProject.Title, source, workflowName, defaultDraft
 }
 
 // statusLine is a key/value row for the status box.
@@ -247,7 +247,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	cfgPath := effectiveConfigPath()
 	ticketHome, _ := config.Home()
 	projectID, projectSource := resolveCurrentProject(cfg)
-	projectID, _, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectID, _, projectSource, workflowName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
 		payload := map[string]any{
 			"location":       cfg.Location,
@@ -264,8 +264,8 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
 			payload["server_version"] = serverVersion
 		}
-		if sdlcName != "" {
-			payload["project_sdlc"] = sdlcName
+		if workflowName != "" {
+			payload["project_workflow"] = workflowName
 		}
 		if defaultDraft != nil {
 			payload["project_default_draft"] = *defaultDraft
@@ -299,7 +299,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	if svcErr != nil {
 		svc = nil
 	}
-	projectID, _, projectSource, sdlcName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectID, _, projectSource, workflowName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
 		payload := map[string]any{
@@ -313,8 +313,8 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 			"db_exists":       dbExists,
 			"connection":      map[bool]string{true: "success", false: "failure"}[connErr == nil],
 		}
-		if sdlcName != "" {
-			payload["project_sdlc"] = sdlcName
+		if workflowName != "" {
+			payload["project_workflow"] = workflowName
 		}
 		if defaultDraft != nil {
 			payload["project_default_draft"] = *defaultDraft

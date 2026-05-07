@@ -1,0 +1,48 @@
+{
+  "name": "Classic Scrum Delivery",
+  "description": "Classic Scrum flow with explicit handoffs across Product Owner, BA, SA, engineering, QA, and release ownership.",
+  "stages": [
+    {
+      "stage_name": "plan",
+      "description": "Define objective, value, and acceptance criteria.",
+      "roles": ["Product Owner"],
+      "sort_order": 10
+    },
+    {
+      "stage_name": "analysis",
+      "description": "Refine requirement details, edge cases, and constraints.",
+      "roles": ["Business Analyst"],
+      "sort_order": 20
+    },
+    {
+      "stage_name": "solution",
+      "description": "Shape architecture and technical approach.",
+      "roles": ["Solution Architect"],
+      "sort_order": 30
+    },
+    {
+      "stage_name": "implement",
+      "description": "Build the feature and supporting tests.",
+      "roles": ["Software Engineer"],
+      "sort_order": 40
+    },
+    {
+      "stage_name": "review",
+      "description": "Peer review and quality checks before QA.",
+      "roles": ["Senior Engineer"],
+      "sort_order": 50
+    },
+    {
+      "stage_name": "qa",
+      "description": "Validate behavior, regression, and acceptance checks.",
+      "roles": ["QA Engineer"],
+      "sort_order": 60
+    },
+    {
+      "stage_name": "accept",
+      "description": "Final product acceptance and release readiness.",
+      "roles": ["Product Owner", "Scrum Master"],
+      "sort_order": 70
+    }
+  ]
+}

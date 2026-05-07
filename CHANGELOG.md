@@ -5,7 +5,7 @@ All notable changes to the Ticket project are documented here.
 ## [0.1.861] - 2026-04-28
 
 ### Changed
-- **Documentation structure** — moved detailed quickstarts into `docs/quickstarts/`, the server tutorial into `docs/tutorials/`, SDLC assessment methodology into `docs/process/`, and historical planning notes into `docs/archive/`.
+- **Documentation structure** — moved detailed quickstarts into `docs/quickstarts/`, the server tutorial into `docs/tutorials/`, Workflow assessment methodology into `docs/process/`, and historical planning notes into `docs/archive/`.
 - **Public contract docs** — aligned `SPEC.md`, `openapi.yaml`, and `cmd/tk/VERSION` on version `0.1.861`.
 - **Server coverage gate** — raised the enforced `internal/server` package coverage threshold to 70%.
 - **Named remote docs** — refreshed user and developer docs around `$TICKET_HOME`, named remotes, repo-local `remote`/`project_id`, and compatibility-only `location` values.
@@ -17,7 +17,7 @@ All notable changes to the Ticket project are documented here.
 ## [0.1.697] - 2026-03-28
 
 ### Added
-- **TUI** — full-screen terminal UI (`tk -g`) with Home, Projects, Ideas, Tickets, SDLCs, and Config panels
+- **TUI** — full-screen terminal UI (`tk -g`) with Home, Projects, Ideas, Tickets, Workflows, and Config panels
 - **Ideas panel** — capture lightweight ideas (`tk idea new`, `tk idea ls`) with TUI panel
 - **Hierarchy perspective** — web UI hierarchy view for epic/story/task trees (TK-11)
 - **Epic CLI** — `tk epic use/clear/ls` subcommands (TK-12)
@@ -35,7 +35,7 @@ All notable changes to the Ticket project are documented here.
 - **Homebrew formula** — distribution via `brew install simonski/tap/ticket`
 - **Security hardening** — security headers (CSP, X-Frame-Options, nosniff), Secure cookie flag for HTTPS, rate limiting on login/register, tightened DB directory permissions
 - **SAST in CI** — added `govulncheck` and `gosec` to GitHub Actions pipeline
-- **CLI test coverage** — boosted `cmd/tk` above 55% threshold with tests for timeAgo, orDash, rowColor, formatPayloadKeyValues, generateConfirmToken, prefixWriter/Reader, printAgentTable, printTeamAgentTable, runWhoami, runSummary, runTicketNS, runSetTicketClosed, project user/team commands, clone, request, archive, comment, dependency, team, and requirements/decisions sdlcs
+- **CLI test coverage** — boosted `cmd/tk` above 55% threshold with tests for timeAgo, orDash, rowColor, formatPayloadKeyValues, generateConfirmToken, prefixWriter/Reader, printAgentTable, printTeamAgentTable, runWhoami, runSummary, runTicketNS, runSetTicketClosed, project user/team commands, clone, request, archive, comment, dependency, team, and requirements/decisions workflows
 
 ### Changed
 - **TICKET_CONFIG_DIR → TICKET_HOME** — env var renamed; `.ticket/` auto-located by walking up from CWD
@@ -67,9 +67,9 @@ All notable changes to the Ticket project are documented here.
 ## [0.1.538] - 2026-03-17
 
 ### Added
-- **SDLC entity** — customisable sdlc definitions with ordered stages and role associations (Phases 1-3)
-- **SDLC-driven tickets** — tickets auto-advance through sdlc stages on completion
-- **Board CLI** (`tk board`) — kanban-style view grouped by sdlc stage
+- **Workflow entity** — customisable workflow definitions with ordered stages and role associations (Phases 1-3)
+- **Workflow-driven tickets** — tickets auto-advance through workflow stages on completion
+- **Board CLI** (`tk board`) — kanban-style view grouped by workflow stage
 - **Labels** — project-scoped labels with colour, attach/detach from tickets
 - **Time tracking** — log minutes against tickets, list entries, view totals
 - **Web UI: labels on board cards** — label chips displayed on kanban cards
@@ -80,14 +80,14 @@ All notable changes to the Ticket project are documented here.
 - **Web UI: parent/child hierarchy** — set/view parent ticket with navigation link
 - **Web UI: dependencies display** — view dependency links in ticket modal
 - **Web UI: ticket assignment** — edit assignee directly in ticket modal
-- **Web UI: sdlc management panel** — create/delete sdlcs, add/remove stages (admin)
-- **Contract tests** — expanded coverage for labels, time tracking, sdlc CRUD, roles, teams, ticket lifecycle, and count
+- **Web UI: workflow management panel** — create/delete workflows, add/remove stages (admin)
+- **Contract tests** — expanded coverage for labels, time tracking, workflow CRUD, roles, teams, ticket lifecycle, and count
 - **CLI tests** — boosted cmd/tk coverage above 55% threshold
 
 ### Changed
 - CLI usage output reorganised into admin and client command groups
 - `tk status` output simplified and aligned with named remote configuration
-- `tk get` shows sdlc progress for the ticket's current stage
+- `tk get` shows workflow progress for the ticket's current stage
 - Ticket list shows progress column
 
 ### Fixed

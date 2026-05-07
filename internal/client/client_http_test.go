@@ -734,9 +734,9 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 			_, _ = w.Write([]byte(ticketJSON))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/notready":
 			_, _ = w.Write([]byte(ticketJSON))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/sdlc":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/workflow":
 			_, _ = w.Write([]byte(ticketJSON))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11/sdlc":
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/tickets/11/workflow":
 			_, _ = w.Write([]byte(ticketJSON))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/tickets/11":
 			_, _ = w.Write([]byte(ticketJSON))
@@ -770,11 +770,11 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 	if _, err := api.NotReadyTicket(context.Background(), "11", ""); err != nil {
 		t.Fatalf("NotReadyTicket() error = %v", err)
 	}
-	if _, err := api.SetTicketSdlc(context.Background(), "11", 1); err != nil {
-		t.Fatalf("SetTicketSdlc() error = %v", err)
+	if _, err := api.SetTicketWorkflow(context.Background(), "11", 1); err != nil {
+		t.Fatalf("SetTicketWorkflow() error = %v", err)
 	}
-	if _, err := api.UnsetTicketSdlc(context.Background(), "11"); err != nil {
-		t.Fatalf("UnsetTicketSdlc() error = %v", err)
+	if _, err := api.UnsetTicketWorkflow(context.Background(), "11"); err != nil {
+		t.Fatalf("UnsetTicketWorkflow() error = %v", err)
 	}
 	if _, err := api.GetTicket(context.Background(), "11"); err != nil {
 		t.Fatalf("GetTicket() error = %v", err)
@@ -787,28 +787,28 @@ func TestRemoteClientTicketLifecycle(t *testing.T) {
 	}
 }
 
-func TestRemoteClientSdlcsCRUD(t *testing.T) {
+func TestRemoteClientWorkflowsCRUD(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows":
 			_, _ = w.Write([]byte(`{"id":1,"name":"wf1","description":"d"}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows":
 			_, _ = w.Write([]byte(`[{"id":1,"name":"wf1","description":"d"}]`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/1":
-			_, _ = w.Write([]byte(`{"sdlc":{"id":1,"name":"wf1"},"stages":[]}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/sdlcs/1":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/1":
+			_, _ = w.Write([]byte(`{"workflow":{"id":1,"name":"wf1"},"stages":[]}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/1":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs/1/stages":
-			_, _ = w.Write([]byte(`{"id":1,"sdlc_id":1,"stage_name":"design","sort_order":0}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/sdlcs/stages/1":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/1/stages":
+			_, _ = w.Write([]byte(`{"id":1,"workflow_id":1,"stage_name":"design","sort_order":0}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/stages/1":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPut && r.URL.Path == "/api/sdlcs/1/reorder":
+		case r.Method == http.MethodPut && r.URL.Path == "/api/workflows/1/reorder":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/1/export":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/1/export":
 			_, _ = w.Write([]byte(`{"name":"wf1","description":"d","stages":[]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs/import":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/import":
 			_, _ = w.Write([]byte(`{"id":2,"name":"wf1","description":"d"}`))
 		default:
 			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
@@ -818,36 +818,36 @@ func TestRemoteClientSdlcsCRUD(t *testing.T) {
 
 	api := New(config.Config{Location: server.URL})
 
-	if _, err := api.CreateSdlc(context.Background(), SdlcRequest{Name: "wf1", Description: "d"}); err != nil {
-		t.Fatalf("CreateSdlc() error = %v", err)
+	if _, err := api.CreateWorkflow(context.Background(), WorkflowRequest{Name: "wf1", Description: "d"}); err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := api.ListSdlcs(context.Background()); err != nil {
-		t.Fatalf("ListSdlcs() error = %v", err)
+	if _, err := api.ListWorkflows(context.Background()); err != nil {
+		t.Fatalf("ListWorkflows() error = %v", err)
 	}
-	if _, err := api.GetSdlc(context.Background(), 1); err != nil {
-		t.Fatalf("GetSdlc() error = %v", err)
+	if _, err := api.GetWorkflow(context.Background(), 1); err != nil {
+		t.Fatalf("GetWorkflow() error = %v", err)
 	}
-	if err := api.DeleteSdlc(context.Background(), 1); err != nil {
-		t.Fatalf("DeleteSdlc() error = %v", err)
+	if err := api.DeleteWorkflow(context.Background(), 1); err != nil {
+		t.Fatalf("DeleteWorkflow() error = %v", err)
 	}
-	if _, err := api.AddSdlcStage(context.Background(), 1, SdlcStageRequest{StageName: "design", SortOrder: 0}); err != nil {
-		t.Fatalf("AddSdlcStage() error = %v", err)
+	if _, err := api.AddWorkflowStage(context.Background(), 1, WorkflowStageRequest{StageName: "design", SortOrder: 0}); err != nil {
+		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	if err := api.RemoveSdlcStage(context.Background(), 1); err != nil {
-		t.Fatalf("RemoveSdlcStage() error = %v", err)
+	if err := api.RemoveWorkflowStage(context.Background(), 1); err != nil {
+		t.Fatalf("RemoveWorkflowStage() error = %v", err)
 	}
-	if err := api.ReorderSdlcStages(context.Background(), 1, []int64{1, 2}); err != nil {
-		t.Fatalf("ReorderSdlcStages() error = %v", err)
+	if err := api.ReorderWorkflowStages(context.Background(), 1, []int64{1, 2}); err != nil {
+		t.Fatalf("ReorderWorkflowStages() error = %v", err)
 	}
-	if _, err := api.ExportSdlc(context.Background(), 1); err != nil {
-		t.Fatalf("ExportSdlc() error = %v", err)
+	if _, err := api.ExportWorkflow(context.Background(), 1); err != nil {
+		t.Fatalf("ExportWorkflow() error = %v", err)
 	}
-	if _, err := api.ImportSdlc(context.Background(), store.SdlcExport{Name: "wf1", Description: "d"}); err != nil {
-		t.Fatalf("ImportSdlc() error = %v", err)
+	if _, err := api.ImportWorkflow(context.Background(), store.WorkflowExport{Name: "wf1", Description: "d"}); err != nil {
+		t.Fatalf("ImportWorkflow() error = %v", err)
 	}
 }
 
-func TestRemoteClientSdlcStageRolesAndTicketAliases(t *testing.T) {
+func TestRemoteClientWorkflowStageRolesAndTicketAliases(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -856,17 +856,17 @@ func TestRemoteClientSdlcStageRolesAndTicketAliases(t *testing.T) {
 		switch {
 		case r.Method == http.MethodPut && r.URL.Path == "/api/projects/7/set-draft":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPut && r.URL.Path == "/api/sdlcs/stages/1":
-			_, _ = w.Write([]byte(`{"id":1,"sdlc_id":9,"stage_name":"develop","ways_of_working":"wow","definition_of_ready":"dor","definition_of_done":"dod","sort_order":1}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/stages/1":
-			_, _ = w.Write([]byte(`{"id":1,"sdlc_id":9,"stage_name":"develop","sort_order":1}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/sdlcs/9":
-			_, _ = w.Write([]byte(`{"sdlc":{"id":9,"name":"wf"},"stages":[{"id":1,"sdlc_id":9,"stage_name":"develop","sort_order":1}]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/sdlcs/stages/roles/9/1":
+		case r.Method == http.MethodPut && r.URL.Path == "/api/workflows/stages/1":
+			_, _ = w.Write([]byte(`{"id":1,"workflow_id":9,"stage_name":"develop","ways_of_working":"wow","definition_of_ready":"dor","definition_of_done":"dod","sort_order":1}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/stages/1":
+			_, _ = w.Write([]byte(`{"id":1,"workflow_id":9,"stage_name":"develop","sort_order":1}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/workflows/9":
+			_, _ = w.Write([]byte(`{"workflow":{"id":9,"name":"wf"},"stages":[{"id":1,"workflow_id":9,"stage_name":"develop","sort_order":1}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/workflows/stages/roles/9/1":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodDelete && r.URL.Path == "/api/sdlcs/stages/roles/9/1/5":
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/workflows/stages/roles/9/1/5":
 			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPut && r.URL.Path == "/api/sdlcs/stages/roles/9/1":
+		case r.Method == http.MethodPut && r.URL.Path == "/api/workflows/stages/roles/9/1":
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/tickets/11/ready":
 			_, _ = w.Write([]byte(ticketJSON))
@@ -890,23 +890,23 @@ func TestRemoteClientSdlcStageRolesAndTicketAliases(t *testing.T) {
 	if err := api.SetProjectDefaultDraft(context.Background(), 7, true); err != nil {
 		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
 	}
-	if _, err := api.UpdateSdlcStage(context.Background(), 1, SdlcStageRequest{StageName: "develop", WaysOfWorking: "wow", DefinitionOfReady: "dor", DefinitionOfDone: "dod"}); err != nil {
-		t.Fatalf("UpdateSdlcStage() error = %v", err)
+	if _, err := api.UpdateWorkflowStage(context.Background(), 1, WorkflowStageRequest{StageName: "develop", WaysOfWorking: "wow", DefinitionOfReady: "dor", DefinitionOfDone: "dod"}); err != nil {
+		t.Fatalf("UpdateWorkflowStage() error = %v", err)
 	}
-	if _, err := api.GetSdlcStage(context.Background(), 1); err != nil {
-		t.Fatalf("GetSdlcStage() error = %v", err)
+	if _, err := api.GetWorkflowStage(context.Background(), 1); err != nil {
+		t.Fatalf("GetWorkflowStage() error = %v", err)
 	}
-	if _, err := api.ListSdlcStages(context.Background(), 9); err != nil {
-		t.Fatalf("ListSdlcStages() error = %v", err)
+	if _, err := api.ListWorkflowStages(context.Background(), 9); err != nil {
+		t.Fatalf("ListWorkflowStages() error = %v", err)
 	}
-	if err := api.AddSdlcStageRole(context.Background(), 9, 1, 5); err != nil {
-		t.Fatalf("AddSdlcStageRole() error = %v", err)
+	if err := api.AddWorkflowStageRole(context.Background(), 9, 1, 5); err != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", err)
 	}
-	if err := api.RemoveSdlcStageRole(context.Background(), 9, 1, 5); err != nil {
-		t.Fatalf("RemoveSdlcStageRole() error = %v", err)
+	if err := api.RemoveWorkflowStageRole(context.Background(), 9, 1, 5); err != nil {
+		t.Fatalf("RemoveWorkflowStageRole() error = %v", err)
 	}
-	if err := api.ReorderSdlcStageRoles(context.Background(), 9, 1, []int64{5, 6}); err != nil {
-		t.Fatalf("ReorderSdlcStageRoles() error = %v", err)
+	if err := api.ReorderWorkflowStageRoles(context.Background(), 9, 1, []int64{5, 6}); err != nil {
+		t.Fatalf("ReorderWorkflowStageRoles() error = %v", err)
 	}
 	if _, err := api.CompleteTicket(context.Background(), "11", "done"); err != nil {
 		t.Fatalf("CompleteTicket() error = %v", err)

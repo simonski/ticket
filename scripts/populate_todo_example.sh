@@ -58,21 +58,21 @@ ensure_label() {
 	"$TK_BIN" label create -name "$name" -color "$color" -printid
 }
 
-sdlc_id="$("$TK_BIN" sdlc create -name "demo-flow-$(date +%s)" -d "Reference workflow for a todo app release" -printid)"
-design_stage_id="$(extract_numeric_id "$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name design -order 0)")"
-develop_stage_id="$(extract_numeric_id "$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name develop -order 1)")"
-test_stage_id="$(extract_numeric_id "$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name test -order 2)")"
-done_stage_id="$(extract_numeric_id "$("$TK_BIN" sdlc stage-add -id "$sdlc_id" -name done -order 3)")"
+workflow_id="$("$TK_BIN" workflow create -name "demo-flow-$(date +%s)" -d "Reference workflow for a todo app release" -printid)"
+design_stage_id="$(extract_numeric_id "$("$TK_BIN" workflow stage-add -id "$workflow_id" -name design -order 0)")"
+develop_stage_id="$(extract_numeric_id "$("$TK_BIN" workflow stage-add -id "$workflow_id" -name develop -order 1)")"
+test_stage_id="$(extract_numeric_id "$("$TK_BIN" workflow stage-add -id "$workflow_id" -name test -order 2)")"
+done_stage_id="$(extract_numeric_id "$("$TK_BIN" workflow stage-add -id "$workflow_id" -name done -order 3)")"
 
-product_role_id="$(extract_numeric_id "$("$TK_BIN" sdlc role-add -sdlc_id "$sdlc_id" -title "Product")")"
-engineer_role_id="$(extract_numeric_id "$("$TK_BIN" sdlc role-add -sdlc_id "$sdlc_id" -title "Engineer")")"
-qa_role_id="$(extract_numeric_id "$("$TK_BIN" sdlc role-add -sdlc_id "$sdlc_id" -title "QA")")"
+product_role_id="$(extract_numeric_id "$("$TK_BIN" workflow role-add -workflow_id "$workflow_id" -title "Product")")"
+engineer_role_id="$(extract_numeric_id "$("$TK_BIN" workflow role-add -workflow_id "$workflow_id" -title "Engineer")")"
+qa_role_id="$(extract_numeric_id "$("$TK_BIN" workflow role-add -workflow_id "$workflow_id" -title "QA")")"
 
-"$TK_BIN" sdlc stage-role-add -sdlc_id "$sdlc_id" -stage_id "$design_stage_id" -role_id "$product_role_id" >/dev/null
-"$TK_BIN" sdlc stage-role-add -sdlc_id "$sdlc_id" -stage_id "$develop_stage_id" -role_id "$engineer_role_id" >/dev/null
-"$TK_BIN" sdlc stage-role-add -sdlc_id "$sdlc_id" -stage_id "$test_stage_id" -role_id "$qa_role_id" >/dev/null
-"$TK_BIN" sdlc stage-role-add -sdlc_id "$sdlc_id" -stage_id "$done_stage_id" -role_id "$product_role_id" >/dev/null
-"$TK_BIN" project sdlc "$sdlc_id" >/dev/null
+"$TK_BIN" workflow stage-role-add -workflow_id "$workflow_id" -stage_id "$design_stage_id" -role_id "$product_role_id" >/dev/null
+"$TK_BIN" workflow stage-role-add -workflow_id "$workflow_id" -stage_id "$develop_stage_id" -role_id "$engineer_role_id" >/dev/null
+"$TK_BIN" workflow stage-role-add -workflow_id "$workflow_id" -stage_id "$test_stage_id" -role_id "$qa_role_id" >/dev/null
+"$TK_BIN" workflow stage-role-add -workflow_id "$workflow_id" -stage_id "$done_stage_id" -role_id "$product_role_id" >/dev/null
+"$TK_BIN" project workflow "$workflow_id" >/dev/null
 
 epic_id="$("$TK_BIN" add -type epic -title "Todo app MVP" -printid)"
 task_model_id="$("$TK_BIN" add -title "Design task entity and persistence model" -parent "$epic_id" -printid)"
@@ -110,7 +110,7 @@ CONFIG_DIR=$config_dir
 DB_PATH=$db_path
 PROJECT_ID=$project_id
 PROJECT_PREFIX=DEMO
-SDLC_ID=$sdlc_id
+Workflow_ID=$workflow_id
 EPIC_ID=$epic_id
 TASK_MODEL_ID=$task_model_id
 TASK_API_ID=$task_api_id

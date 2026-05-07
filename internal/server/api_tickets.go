@@ -334,7 +334,7 @@ func (r *router) registerTicketHandlers() {
 			ctx := store.EnrichTicketContext(r.Context(), db, ticket)
 			payload["project"] = ctx.Project
 			payload["parents"] = ctx.Parents
-			payload["sdlc"] = ctx.Sdlc
+			payload["workflow"] = ctx.Workflow
 			payload["role"] = ctx.Role
 			if status == "ASSIGNED" {
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
@@ -815,7 +815,7 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
-			if len(parts) == 2 && parts[1] == "sdlc" {
+			if len(parts) == 2 && parts[1] == "workflow" {
 				if !canWriteProject(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
@@ -823,13 +823,13 @@ func (r *router) registerTicketHandlers() {
 				switch r.Method {
 				case http.MethodPost:
 					var payload struct {
-						SdlcID int64 `json:"sdlc_id"`
+						WorkflowID int64 `json:"workflow_id"`
 					}
-					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.SdlcID == 0 {
-						writeError(w, http.StatusBadRequest, "sdlc_id is required")
+					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.WorkflowID == 0 {
+						writeError(w, http.StatusBadRequest, "workflow_id is required")
 						return
 					}
-					ticket, err := store.SetTicketSdlc(r.Context(), db, id, payload.SdlcID)
+					ticket, err := store.SetTicketWorkflow(r.Context(), db, id, payload.WorkflowID)
 					if err != nil {
 						writeStoreError(w, err)
 						return
@@ -837,7 +837,7 @@ func (r *router) registerTicketHandlers() {
 					notify("ticket_updated", ticket.ProjectID, ticket.ID)
 					writeJSON(w, http.StatusOK, ticket)
 				case http.MethodDelete:
-					ticket, err := store.UnsetTicketSdlc(r.Context(), db, id)
+					ticket, err := store.UnsetTicketWorkflow(r.Context(), db, id)
 					if err != nil {
 						writeStoreError(w, err)
 						return
