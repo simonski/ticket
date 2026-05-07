@@ -108,3 +108,15 @@ If no work is available or a prior ticket was rejected, `tk request -explain` gi
 2. Each phase has at least one explicit role.
 3. A requirement ticket advances by `success` at each phase.
 4. The request loop can pull the next ticket to work on without hardcoding IDs.
+
+## 8. Intervention decision when work fails
+
+When work fails, stop automation and record a human decision:
+
+```bash
+tk fail -id "$TK_ID"
+tk intervene -id "$TK_ID" -outcome split-work -m "Split backend validation into a follow-up ticket"
+tk history "$TK_ID"
+```
+
+Valid outcomes are: `retry-role`, `retry-stage`, `split-work`, `cancel`.

@@ -67,4 +67,30 @@ assert_contains "$deps_output" "$TASK_API_ID" "web task dependency"
 time_output="$("$TK_BIN" time total -id "$TASK_API_ID")"
 assert_contains "$time_output" "45" "api task time total"
 
+count_before_intervene="$("$TK_BIN" ls -count | tr -cd '0-9')"
+"$TK_BIN" fail -id "$BUG_ID" >/dev/null
+intervene_json="$("$TK_BIN" -json intervene -id "$BUG_ID" -outcome split-work -m "Split into follow-up for investigation")"
+if [[ "$intervene_json" != *'"follow_up": {'* ]]; then
+	echo "intervene split-work did not return a follow_up ticket" >&2
+	echo "$intervene_json" >&2
+	exit 1
+fi
+
+count_after_intervene="$("$TK_BIN" ls -count | tr -cd '0-9')"
+if [[ -z "$count_before_intervene" || -z "$count_after_intervene" ]]; then
+	echo "could not parse ticket counts around intervention scenario" >&2
+	echo "before=$count_before_intervene after=$count_after_intervene" >&2
+	exit 1
+fi
+if (( count_after_intervene <= count_before_intervene )); then
+	echo "intervention split-work did not increase open ticket count" >&2
+	echo "before=$count_before_intervene after=$count_after_intervene" >&2
+	echo "$intervene_json" >&2
+	exit 1
+fi
+
+history_json="$("$TK_BIN" -json history "$BUG_ID")"
+assert_contains "$history_json" "ticket_intervention_decided" "intervention history event"
+assert_contains "$history_json" "split-work" "intervention decision payload"
+
 echo "todo example verification passed"

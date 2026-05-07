@@ -24,7 +24,7 @@ tk workflow list
 tk workflow add-stage -id "$WF_ID" -name design
 
 tk add "Build login page"
-TK_ID=$(tk ls -json | jq -r '.[0].id')
+TK_ID=$(tk ls -json | jq -r '.[0].ticket_id')
 tk get "$TK_ID"
 ```
 
@@ -57,10 +57,18 @@ tk agent list
 ```bash
 tk request
 tk request -explain
-TK_ID=$(tk request -json | jq -r '.ticket.id')
+TK_ID=$(tk request -json | jq -r '.ticket.ticket_id')
 tk active "$TK_ID"
 tk prompt "$TK_ID"
 tk success "$TK_ID" -m "completed"
+```
+
+### Intervention loop (human decision on failed work)
+
+```bash
+tk fail -id "$TK_ID"
+tk intervene -id "$TK_ID" -outcome split-work -m "Break this into a smaller follow-up"
+tk history "$TK_ID"
 ```
 
 ## Review focus
