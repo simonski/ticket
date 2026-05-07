@@ -585,7 +585,7 @@ func waitHealthz(serverURL string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 2 * time.Second}
 	for time.Now().Before(deadline) {
-		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", nil)
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", http.NoBody)
 		if reqErr != nil {
 			time.Sleep(200 * time.Millisecond)
 			continue

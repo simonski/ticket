@@ -98,10 +98,10 @@ func promptYN(reader *bufio.Reader, question string, defaultYes bool) bool {
 
 // initFlags holds optional flags passed to tk init that override interactive prompts.
 type initFlags struct {
-	workflow   string
-	prefix string
-	name   string
-	git    string
+	workflow string
+	prefix   string
+	name     string
+	git      string
 }
 
 func runSetup(args []string) error {
@@ -115,10 +115,10 @@ func runSetup(args []string) error {
 		return err
 	}
 	flags := initFlags{
-		workflow:   strings.TrimSpace(*workflowFlag),
-		prefix: strings.ToUpper(strings.TrimSpace(*prefixFlag)),
-		name:   strings.TrimSpace(*nameFlag),
-		git:    strings.TrimSpace(*gitFlag),
+		workflow: strings.TrimSpace(*workflowFlag),
+		prefix:   strings.ToUpper(strings.TrimSpace(*prefixFlag)),
+		name:     strings.TrimSpace(*nameFlag),
+		git:      strings.TrimSpace(*gitFlag),
 	}
 
 	// Validate flags upfront before any setup work.
@@ -173,15 +173,6 @@ func runSetup(args []string) error {
 	return runSetupNew(reader, flags)
 }
 
-func existingSetup() bool {
-	home, err := config.Home()
-	if err != nil {
-		return false
-	}
-	_, err = os.Stat(filepath.Join(home, "config.json"))
-	return err == nil
-}
-
 func detectGitOrigin() string {
 	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
 	if err != nil {
@@ -198,79 +189,6 @@ func matchProjectByGitOrigin(projects []store.Project, gitOrigin string) *store.
 		if projects[i].GitRepository == gitOrigin {
 			return &projects[i]
 		}
-	}
-	return nil
-}
-
-func runSetupExisting(reader *bufio.Reader) error {
-	cfg, _ := config.Load()
-	resolved, _ := config.ResolveURL()
-
-	// Show current state
-	fmt.Println("Current configuration:")
-	fmt.Printf("  location : %s\n", cfg.Location)
-	if resolved.Mode == config.ModeRemote {
-		fmt.Printf("  mode     : remote (%s)\n", resolved.ServerURL)
-	} else {
-		fmt.Printf("  mode     : local\n")
-		fmt.Printf("  database : %s\n", resolved.DBPath)
-	}
-	fmt.Printf("  user     : %s\n", cfg.Username)
-	fmt.Printf("  project  : %s\n", cfg.ProjectID)
-	fmt.Println()
-
-	if resolved.Mode == config.ModeRemote {
-		if promptYN(reader, "verify remote connection?", true) {
-			fmt.Printf("connecting : %s ... ", resolved.ServerURL)
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, resolved.ServerURL+"/api/healthz", nil)
-			if err != nil {
-				fmt.Println("FAILED")
-				fmt.Printf("  error: %v\n", err)
-				fmt.Println()
-				return nil
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				fmt.Println("FAILED")
-				fmt.Printf("  error: %v\n", err)
-			} else {
-				if closeErr := resp.Body.Close(); closeErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: failed to close response body: %v\n", closeErr)
-				}
-				if resp.StatusCode == http.StatusOK {
-					fmt.Println("OK")
-				} else {
-					fmt.Printf("FAILED (status %d)\n", resp.StatusCode)
-				}
-			}
-			fmt.Println()
-		}
-	}
-
-	choice := promptChoice(reader, "What would you like to do?", []string{
-		"Review current setup (no changes)",
-		"Reinitialise local database (deletes all data)",
-		"Connect to a remote server",
-		"Switch to local mode",
-	})
-
-	switch choice {
-	case 0:
-		fmt.Println()
-		return runSetupPostInit(reader)
-	case 1:
-		dbPath, err := defaultDatabasePath()
-		if err != nil {
-			return err
-		}
-		if err := removeDBFiles(dbPath); err != nil {
-			return err
-		}
-		return runSetupLocal(reader)
-	case 2:
-		return runSetupRemote(reader)
-	case 3:
-		return runSetupLocal(reader)
 	}
 	return nil
 }

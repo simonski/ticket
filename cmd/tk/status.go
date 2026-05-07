@@ -110,23 +110,6 @@ type statusLine struct {
 	color string // ANSI color code prefix, e.g. "\x1b[32m"; empty = default
 }
 
-func connectionStatusLine(ok bool) statusLine {
-	if ok {
-		return statusLine{key: "connection", value: "success", color: "\x1b[32m"}
-	}
-	return statusLine{key: "connection", value: "failure", color: "\x1b[31m"}
-}
-
-func projectStatusLine(projectID, projectTitle string) statusLine {
-	if projectID == "" {
-		return statusLine{key: "current project", value: "(none)"}
-	}
-	if strings.TrimSpace(projectTitle) == "" {
-		return statusLine{key: "current project", value: projectID}
-	}
-	return statusLine{key: "current project", value: fmt.Sprintf("%s (%s)", projectTitle, projectID)}
-}
-
 // printStatusBox renders lines inside a rounded Unicode box.
 //
 // Each line is rendered in two passes: first as a plain string to measure
@@ -221,10 +204,6 @@ func printStatusBoxWidth(lines []statusLine, fixedWidth int) {
 	fmt.Println("╰" + strings.Repeat("─", inner) + "╯")
 }
 
-func runRemoteStatus(cfg config.Config) error {
-	return runRemoteStatusWithSummaryStyle(cfg, true)
-}
-
 func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
@@ -281,10 +260,6 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	return err
 }
 
-func runLocalStatus() error {
-	return runLocalStatusWithSummaryStyle(true)
-}
-
 func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
@@ -336,13 +311,6 @@ func valueOrDefault(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func boolString(value *bool) string {
-	if value == nil {
-		return "(unknown)"
-	}
-	return fmt.Sprintf("%t", *value)
 }
 
 func localStatusCheck(dbPath string) error {

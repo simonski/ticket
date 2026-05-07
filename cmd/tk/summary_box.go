@@ -142,22 +142,6 @@ func printProjectSummaryBox(svc libticket.Service, project store.Project, status
 	printStatusBox(buildProjectSummaryLines(svc, project, statusUnicode))
 }
 
-func printCurrentProjectSummaryBox(cfg config.Config, svc libticket.Service) bool {
-	return printCurrentProjectSummaryBoxWithStyle(cfg, svc, true)
-}
-
-func printCurrentProjectSummaryBoxWithStyle(cfg config.Config, svc libticket.Service, statusUnicode bool) bool {
-	if svc == nil || strings.TrimSpace(cfg.ProjectID) == "" {
-		return false
-	}
-	project, err := svc.GetProject(context.Background(), cfg.ProjectID)
-	if err != nil {
-		return false
-	}
-	printProjectSummaryBox(svc, project, statusUnicode)
-	return true
-}
-
 func currentProjectSummaryCoreLines(cfg config.Config, svc libticket.Service, statusUnicode bool) []statusLine {
 	if svc == nil || strings.TrimSpace(cfg.ProjectID) == "" {
 		return nil

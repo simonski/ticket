@@ -761,7 +761,7 @@ func (s *LocalService) UpdateTicket(ctx context.Context, id string, request Tick
 	return ticket, nil
 }
 
-func (s *LocalService) CloseTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) CloseTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -779,7 +779,7 @@ func (s *LocalService) CloseTicket(ctx context.Context, id string, message strin
 	return store.SetTicketComplete(ctx, db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) OpenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) OpenTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -800,7 +800,7 @@ func (s *LocalService) OpenTicket(ctx context.Context, id string, message string
 	return ticket, nil
 }
 
-func (s *LocalService) ArchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) ArchiveTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -818,7 +818,7 @@ func (s *LocalService) ArchiveTicket(ctx context.Context, id string, message str
 	return store.SetTicketArchived(ctx, db, id, true, user.Username, user.ID)
 }
 
-func (s *LocalService) UnarchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) UnarchiveTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -839,7 +839,7 @@ func (s *LocalService) UnarchiveTicket(ctx context.Context, id string, message s
 	return ticket, nil
 }
 
-func (s *LocalService) ReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) ReadyTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -860,7 +860,7 @@ func (s *LocalService) ReadyTicket(ctx context.Context, id string, message strin
 	return ticket, nil
 }
 
-func (s *LocalService) NotReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) NotReadyTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -934,7 +934,7 @@ func (s *LocalService) SetTicketHealth(ctx context.Context, id string, score int
 	return store.SetTicketHealth(ctx, db, id, score)
 }
 
-func (s *LocalService) UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -971,7 +971,7 @@ func (s *LocalService) GetTicket(ctx context.Context, ref string) (store.Ticket,
 	return store.GetTicketByRef(ctx, db, ref)
 }
 
-func (s *LocalService) CloneTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) CloneTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Ticket{}, err
@@ -1396,19 +1396,19 @@ func (s *LocalService) ReorderWorkflowStageRoles(ctx context.Context, workflowID
 	return store.ReorderWorkflowStageRoles(ctx, db, workflowID, stageID, roleIDs)
 }
 
-func (s *LocalService) CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) CompleteTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.CloseTicket(ctx, id, message)
 }
 
-func (s *LocalService) ReopenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) ReopenTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.OpenTicket(ctx, id, message)
 }
 
-func (s *LocalService) DraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) DraftTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.NotReadyTicket(ctx, id, message)
 }
 
-func (s *LocalService) UndraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *LocalService) UndraftTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.ReadyTicket(ctx, id, message)
 }
 

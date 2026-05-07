@@ -439,11 +439,11 @@ func (s *HTTPService) ReopenTicket(ctx context.Context, id, message string) (sto
 	return s.client.ReopenTicket(ctx, id, message)
 }
 
-func (s *HTTPService) DraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) DraftTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.DraftTicket(ctx, id, message)
 }
 
-func (s *HTTPService) UndraftTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) UndraftTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.UndraftTicket(ctx, id, message)
 }
 

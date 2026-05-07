@@ -441,11 +441,6 @@ func timeAgo(ts string, now time.Time) string {
 	}
 }
 
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
 func containsFlag(args []string, flag string) bool {
 	for _, arg := range args {
 		if arg == flag {

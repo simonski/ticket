@@ -4443,11 +4443,6 @@ func TestRunRoleCRUD(t *testing.T) {
 	}
 }
 
-func normalizeTestPath(path string) string {
-	cleaned := filepath.Clean(path)
-	return strings.ReplaceAll(cleaned, "/private/var/", "/var/")
-}
-
 func setupLocalCLI(t *testing.T) {
 	t.Helper()
 	globalHome := t.TempDir()

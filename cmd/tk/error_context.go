@@ -148,20 +148,6 @@ func loadSetupConfig(path string) (config.Config, bool) {
 	return cfg, true
 }
 
-func displayValue(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "UNSET"
-	}
-	return value
-}
-
-func displayPath(path string, ok bool) string {
-	if !ok || strings.TrimSpace(path) == "" {
-		return "(none)"
-	}
-	return path
-}
-
 func remoteConfiguredVia(serverURL, source string) string {
 	if config.HasLocationOverride() {
 		return serverURL

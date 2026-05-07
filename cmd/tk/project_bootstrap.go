@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
@@ -185,7 +184,7 @@ func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverr
 			Notes:              matchedProject.Notes,
 			Status:             matchedProject.Status,
 			Visibility:         matchedProject.Visibility,
-			WorkflowID:             matchedProject.WorkflowID,
+			WorkflowID:         matchedProject.WorkflowID,
 		})
 		if err != nil {
 			return err
@@ -298,8 +297,4 @@ func advisoryNotManagedProject() error {
 		return fmt.Errorf("not a ticket project — run `tk init` in %s or use a mutable command like `tk new` to bootstrap it", gitRoot)
 	}
 	return fmt.Errorf("not a ticket project — run `tk init` here or use a mutable command like `tk new` to bootstrap it")
-}
-
-func formatProjectID(projectID int64) string {
-	return strconv.FormatInt(projectID, 10)
 }
