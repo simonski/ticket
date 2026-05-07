@@ -3461,6 +3461,77 @@ func TestRunGetJSONUsesCommentAuthorDateTextShape(t *testing.T) {
 	}
 }
 
+func TestRunInterveneJSONIncludesTicketIDsForSplitWork(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Intervention payload task"})
+	if err := run([]string{"fail", "-id", taskID}); err != nil {
+		t.Fatalf("fail error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"intervene", "-id", taskID, "-outcome", "split-work", "-json"}); err != nil {
+			t.Fatalf("intervene -json error = %v", err)
+		}
+	})
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\n%s", err, output)
+	}
+
+	ticket, ok := payload["ticket"].(map[string]any)
+	if !ok {
+		t.Fatalf("ticket payload = %#v", payload["ticket"])
+	}
+	if got := strings.TrimSpace(fmt.Sprint(ticket["ticket_id"])); got != taskID {
+		t.Fatalf("ticket.ticket_id = %q, want %q\npayload=%s", got, taskID, output)
+	}
+
+	followUp, ok := payload["follow_up"].(map[string]any)
+	if !ok {
+		t.Fatalf("follow_up payload = %#v", payload["follow_up"])
+	}
+	followUpID := strings.TrimSpace(fmt.Sprint(followUp["ticket_id"]))
+	if followUpID == "" || followUpID == "<nil>" {
+		t.Fatalf("follow_up.ticket_id missing in payload: %s", output)
+	}
+	if followUpID == taskID {
+		t.Fatalf("follow_up.ticket_id should differ from source ticket_id: %s", output)
+	}
+}
+
+func TestRunInterveneJSONIncludesTicketIDWithoutFollowUp(t *testing.T) {
+	setupLocalCLI(t)
+
+	taskID := createLocalTask(t, []string{"add", "Intervention retry task"})
+	if err := run([]string{"fail", "-id", taskID}); err != nil {
+		t.Fatalf("fail error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"intervene", "-id", taskID, "-outcome", "retry-role", "-json"}); err != nil {
+			t.Fatalf("intervene -json error = %v", err)
+		}
+	})
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\n%s", err, output)
+	}
+
+	ticket, ok := payload["ticket"].(map[string]any)
+	if !ok {
+		t.Fatalf("ticket payload = %#v", payload["ticket"])
+	}
+	if got := strings.TrimSpace(fmt.Sprint(ticket["ticket_id"])); got != taskID {
+		t.Fatalf("ticket.ticket_id = %q, want %q\npayload=%s", got, taskID, output)
+	}
+	if _, ok := payload["follow_up"]; ok {
+		t.Fatalf("retry-role should not include follow_up payload: %s", output)
+	}
+}
+
 func TestRunRejectsInvalidCommand(t *testing.T) {
 	setupLocalCLI(t)
 	if err := run([]string{"invalid"}); err == nil || err.Error() != `no such command "invalid"` {

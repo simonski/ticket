@@ -183,10 +183,10 @@ func extractOutputFlags(args []string) ([]string, bool, bool, error) {
 	return out, jsonFlag, nocolor, nil
 }
 
-// jsonKeysToOmit lists internal numeric ID keys that are stripped from all
-// CLI JSON output. The fields remain in the structs for internal use.
+// jsonKeysToOmit lists internal keys that are stripped from all
+// CLI JSON output. Keep this list intentionally minimal so human-facing
+// identifiers (for example, ticket_id) remain stable for scripts.
 var jsonKeysToOmit = map[string]bool{
-	"ticket_id": true,
 }
 
 // stripJSONKeys recursively removes unwanted keys from a decoded JSON value.
