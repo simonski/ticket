@@ -192,7 +192,7 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 		}
 		snapshotPath = workingPath
 	}
-	defer cleanup()
+	defer func() { _ = cleanup() }()
 
 	sourceDB, err := openSQLite(snapshotPath)
 	if err != nil {

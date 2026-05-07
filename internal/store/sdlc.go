@@ -18,7 +18,7 @@ type Workflow struct {
 
 type WorkflowStage struct {
 	ID                 int64  `json:"workflow_stage_id"`
-	WorkflowID             int64  `json:"workflow_id"`
+	WorkflowID         int64  `json:"workflow_id"`
 	StageName          string `json:"stage_name"`
 	Description        string `json:"description"`
 	AcceptanceCriteria string `json:"acceptance_criteria"`
@@ -45,8 +45,8 @@ type WorkflowStageExport struct {
 }
 
 type WorkflowExport struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
 	Stages      []WorkflowStageExport `json:"stages"`
 }
 
@@ -134,7 +134,7 @@ func DeleteWorkflow(ctx context.Context, db *sql.DB, id int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workflow_stage_roles WHERE workflow_id = ?`, id); err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func ReorderWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64, or
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	for i, id := range orderedStageIDs {
 		result, err := tx.ExecContext(ctx, `
 			UPDATE workflow_stages SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
@@ -287,7 +287,7 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 	if err != nil {
 		return Workflow{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Create the Workflow
 	result, err := tx.ExecContext(ctx, `

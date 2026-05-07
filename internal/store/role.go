@@ -10,7 +10,7 @@ import (
 
 type Role struct {
 	ID                 int64       `json:"role_id"`
-	WorkflowID             *int64      `json:"workflow_id,omitempty"`
+	WorkflowID         *int64      `json:"workflow_id,omitempty"`
 	Title              string      `json:"title"`
 	Description        string      `json:"description"`
 	AcceptanceCriteria string      `json:"acceptance_criteria"`
@@ -23,7 +23,7 @@ type Role struct {
 
 type RoleCreateParams struct {
 	ID                 *int64
-	WorkflowID             *int64
+	WorkflowID         *int64
 	Title              string
 	Description        string
 	AcceptanceCriteria string
@@ -47,7 +47,7 @@ func (r Role) ResolveGuidance(stage string) ResolvedGuidance {
 
 func CreateRole(ctx context.Context, db *sql.DB, workflowID *int64, title, description, ac string) (Role, error) {
 	return CreateRoleWithParams(ctx, db, RoleCreateParams{
-		WorkflowID:             workflowID,
+		WorkflowID:         workflowID,
 		Title:              title,
 		Description:        description,
 		AcceptanceCriteria: ac,
@@ -325,7 +325,7 @@ func ReorderWorkflowStageRoles(ctx context.Context, db *sql.DB, workflowID, stag
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	for i, rid := range roleIDs {
 		if _, err := tx.ExecContext(ctx, `UPDATE workflow_stage_roles SET sort_order = ? WHERE workflow_id = ? AND stage_id = ? AND role_id = ?`, i, workflowID, stageID, rid); err != nil {
 			return err

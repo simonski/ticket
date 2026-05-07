@@ -17,42 +17,42 @@ var (
 )
 
 type Ticket struct {
-	ID                  string      `json:"ticket_id"`
-	ProjectID           int64       `json:"project_id"`
-	ParentID            *string     `json:"parent_id,omitempty"`
-	CloneOf             *string     `json:"clone_of,omitempty"`
-	Type                string      `json:"type"`
-	Title               string      `json:"title"`
-	Description         string      `json:"description"`
-	AcceptanceCriteria  string      `json:"acceptance_criteria"`
-	DORMap              GuidanceMap `json:"dor_map,omitempty"`
-	DODMap              GuidanceMap `json:"dod_map,omitempty"`
-	ACMap               GuidanceMap `json:"ac_map,omitempty"`
-	GitRepository       string      `json:"git_repository"`
-	GitBranch           string      `json:"git_branch"`
+	ID                      string      `json:"ticket_id"`
+	ProjectID               int64       `json:"project_id"`
+	ParentID                *string     `json:"parent_id,omitempty"`
+	CloneOf                 *string     `json:"clone_of,omitempty"`
+	Type                    string      `json:"type"`
+	Title                   string      `json:"title"`
+	Description             string      `json:"description"`
+	AcceptanceCriteria      string      `json:"acceptance_criteria"`
+	DORMap                  GuidanceMap `json:"dor_map,omitempty"`
+	DODMap                  GuidanceMap `json:"dod_map,omitempty"`
+	ACMap                   GuidanceMap `json:"ac_map,omitempty"`
+	GitRepository           string      `json:"git_repository"`
+	GitBranch               string      `json:"git_branch"`
 	WorkflowID              *int64      `json:"workflow_id,omitempty"`
 	WorkflowStageID         *int64      `json:"workflow_stage_id,omitempty"`
-	RoleID              *int64      `json:"role_id,omitempty"`
-	Stage               string      `json:"stage"`
-	State               string      `json:"state"`
-	Status              string      `json:"status"`
-	Priority            int         `json:"priority"`
-	Order               int         `json:"order"`
-	EstimateEffort      int         `json:"estimate_effort"`
-	EstimateComplete    string      `json:"estimate_complete,omitempty"`
-	HealthScore         int         `json:"health_score"`
-	Assignee            string      `json:"assignee"`
-	Author              string      `json:"author"`
-	Comments            []Comment   `json:"comments,omitempty"`
-	Draft               bool        `json:"draft"`
-	Complete            bool        `json:"complete"`
-	Archived            bool        `json:"archived"`
-	Deleted             bool        `json:"deleted"`
+	RoleID                  *int64      `json:"role_id,omitempty"`
+	Stage                   string      `json:"stage"`
+	State                   string      `json:"state"`
+	Status                  string      `json:"status"`
+	Priority                int         `json:"priority"`
+	Order                   int         `json:"order"`
+	EstimateEffort          int         `json:"estimate_effort"`
+	EstimateComplete        string      `json:"estimate_complete,omitempty"`
+	HealthScore             int         `json:"health_score"`
+	Assignee                string      `json:"assignee"`
+	Author                  string      `json:"author"`
+	Comments                []Comment   `json:"comments,omitempty"`
+	Draft                   bool        `json:"draft"`
+	Complete                bool        `json:"complete"`
+	Archived                bool        `json:"archived"`
+	Deleted                 bool        `json:"deleted"`
 	PreviousWorkflowStageID *int64      `json:"previous_workflow_stage_id,omitempty"`
-	PreviousRoleID      *int64      `json:"previous_role_id,omitempty"`
-	CreatedBy           string      `json:"created_by"`
-	CreatedAt           string      `json:"created_at"`
-	UpdatedAt           string      `json:"updated_at"`
+	PreviousRoleID          *int64      `json:"previous_role_id,omitempty"`
+	CreatedBy               string      `json:"created_by"`
+	CreatedAt               string      `json:"created_at"`
+	UpdatedAt               string      `json:"updated_at"`
 }
 
 func (t Ticket) ResolveGuidance(stage string) ResolvedGuidance {
@@ -63,7 +63,7 @@ type TicketCreateParams struct {
 	ProjectID          int64
 	ParentID           *string
 	CloneOf            *string
-	WorkflowID             *int64
+	WorkflowID         *int64
 	Type               string
 	Title              string
 	Description        string
@@ -214,7 +214,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if err != nil {
 		return Ticket{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var projectPrefix string
 	var nextSequence int64
 	var projectWorkflowID sql.NullInt64
@@ -2019,7 +2019,7 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
@@ -2046,10 +2046,10 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 
 // TicketContext holds a ticket and all surrounding context needed to work on it.
 type TicketContext struct {
-	Project *Project        `json:"project,omitempty"`
-	Parents []Ticket        `json:"parents,omitempty"`
-	Workflow    *WorkflowWithStages `json:"workflow,omitempty"`
-	Role    *Role           `json:"role,omitempty"`
+	Project  *Project            `json:"project,omitempty"`
+	Parents  []Ticket            `json:"parents,omitempty"`
+	Workflow *WorkflowWithStages `json:"workflow,omitempty"`
+	Role     *Role               `json:"role,omitempty"`
 }
 
 // ResolveWorkflowID returns the effective workflow ID for a ticket by walking:

@@ -33,7 +33,7 @@ type Project struct {
 	CreatedBy          string      `json:"created_by"`
 	CreatedAt          string      `json:"created_at"`
 	UpdatedAt          string      `json:"updated_at"`
-	WorkflowID             *int64      `json:"workflow_id,omitempty"`
+	WorkflowID         *int64      `json:"workflow_id,omitempty"`
 }
 
 func (p Project) ResolveGuidance(stage string) ResolvedGuidance {
@@ -53,7 +53,7 @@ type ProjectCreateParams struct {
 	Notes              string
 	Visibility         string
 	CreatedBy          string
-	WorkflowID             *int64
+	WorkflowID         *int64
 }
 
 type ProjectUpdateParams struct {
@@ -67,7 +67,7 @@ type ProjectUpdateParams struct {
 	Notes              string
 	Status             string
 	Visibility         string
-	WorkflowID             *int64
+	WorkflowID         *int64
 }
 
 func CreateProject(ctx context.Context, db *sql.DB, title, description, acceptanceCriteria string, createdBy string) (Project, error) {
@@ -445,7 +445,7 @@ func DeleteProject(ctx context.Context, db *sql.DB, id int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Delete child data that references tickets in this project
 	if _, err := tx.ExecContext(ctx, `DELETE FROM comments WHERE item_id IN (SELECT ticket_id FROM tickets WHERE project_id = ?)`, id); err != nil {
@@ -556,7 +556,7 @@ func RenameProjectPrefix(ctx context.Context, db *sql.DB, projectID int64, newPr
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Update each ticket key and all references.
 	for _, m := range mappings {
