@@ -233,8 +233,9 @@ func Save(cfg Config) error {
 		projectCfg.DeleteConfirmToken = cfg.DeleteConfirmToken
 		projectCfg.DeleteConfirmProject = cfg.DeleteConfirmProject
 		projectCfg.DeleteConfirmTicket = cfg.DeleteConfirmTicket
-		if err := saveProjectConfig(projectPath, projectCfg); err != nil {
-			return err
+		saveErr := saveProjectConfig(projectPath, projectCfg)
+		if saveErr != nil {
+			return saveErr
 		}
 	}
 
@@ -414,7 +415,7 @@ func Home() (string, error) {
 }
 
 // ProjectPath returns the nearest project-local .ticket/config.json path.
-func ProjectPath() (string, bool, error) {
+func ProjectPath() (path string, ok bool, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", false, err
@@ -422,7 +423,7 @@ func ProjectPath() (string, bool, error) {
 	return ProjectPathFrom(cwd)
 }
 
-func ProjectPathFrom(startDir string) (string, bool, error) {
+func ProjectPathFrom(startDir string) (path string, ok bool, err error) {
 	root, ok := FindTicketRoot(startDir)
 	if !ok {
 		return "", false, nil
@@ -724,8 +725,7 @@ func saveProjectConfig(path string, cfg Config) error {
 // removeInvalidFields tries removing fields from raw one at a time until the
 // map can be unmarshalled into Config without error. Returns the cleaned map
 // and the names of fields that were removed.
-func removeInvalidFields(raw map[string]json.RawMessage) (map[string]json.RawMessage, []string) {
-	var removed []string
+func removeInvalidFields(raw map[string]json.RawMessage) (cleaned map[string]json.RawMessage, removed []string) {
 	for key := range raw {
 		candidate := make(map[string]json.RawMessage, len(raw))
 		for k, v := range raw {

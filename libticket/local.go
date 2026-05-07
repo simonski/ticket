@@ -28,7 +28,7 @@ type LocalService struct {
 // resolveRequestLifecycle derives the canonical stage+state pair from the three
 // possible ways a caller may express lifecycle: explicit stage/state flags, a
 // rendered status string (e.g. "design/active"), or nothing (no-op).
-func resolveRequestLifecycle(status, stage, state string) (string, string, error) {
+func resolveRequestLifecycle(status, stage, state string) (resolvedStage, resolvedState string, err error) {
 	if stage != "" || state != "" {
 		return stage, state, nil
 	}
@@ -56,8 +56,9 @@ func (s *LocalService) Status(ctx context.Context) (StatusResponse, error) {
 		return StatusResponse{}, err
 	}
 	path := resolved.DBPath
-	if _, err := os.Stat(path); err != nil {
-		return StatusResponse{}, err
+	_, statErr := os.Stat(path)
+	if statErr != nil {
+		return StatusResponse{}, statErr
 	}
 	db, err := s.openDB()
 	if err != nil {
@@ -208,7 +209,7 @@ func (s *LocalService) DeleteRole(ctx context.Context, id int64) error {
 	return store.DeleteRole(ctx, db, id)
 }
 
-func (s *LocalService) CreateAgent(ctx context.Context, request AgentCreateRequest) (store.Agent, string, error) {
+func (s *LocalService) CreateAgent(ctx context.Context, request AgentCreateRequest) (agent store.Agent, password string, err error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Agent{}, "", err
@@ -258,7 +259,7 @@ func (s *LocalService) DeleteAgent(ctx context.Context, id string) error {
 	return store.DeleteAgent(ctx, db, id)
 }
 
-func (s *LocalService) SetAgentConfig(ctx context.Context, agentID string, key, value string) error {
+func (s *LocalService) SetAgentConfig(ctx context.Context, agentID, key, value string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -274,7 +275,7 @@ func (s *LocalService) ListAgentConfig(ctx context.Context, agentID string) ([]s
 	return store.ListAgentConfig(ctx, db, agentID)
 }
 
-func (s *LocalService) DeleteAgentConfig(ctx context.Context, agentID string, key string) error {
+func (s *LocalService) DeleteAgentConfig(ctx context.Context, agentID, key string) error {
 	db, err := s.openDB()
 	if err != nil {
 		return err
@@ -321,9 +322,9 @@ func (s *LocalService) RequestAgentWork(ctx context.Context, request AgentReques
 		projectID = 0
 	}
 	if request.TicketID == nil && projectID == 0 {
-		projects, err := store.ListProjects(ctx, db, 0)
-		if err != nil {
-			return AgentWorkResponse{}, err
+		projects, listErr := store.ListProjects(ctx, db, 0)
+		if listErr != nil {
+			return AgentWorkResponse{}, listErr
 		}
 		for _, p := range projects {
 			if p.Status == "open" {
@@ -346,7 +347,7 @@ func (s *LocalService) RequestAgentWork(ctx context.Context, request AgentReques
 	if err != nil {
 		return AgentWorkResponse{}, err
 	}
-	agentStatus := "NONE"
+	var agentStatus string
 	switch status {
 	case "NO-WORK", "REJECTED":
 		agentStatus = "NONE"
@@ -904,7 +905,7 @@ func (s *LocalService) DeleteTicket(ctx context.Context, id string) error {
 	return store.DeleteTicket(ctx, db, id)
 }
 
-func (s *LocalService) SetTicketParent(ctx context.Context, id string, parentID string, message string) (store.Ticket, error) {
+func (s *LocalService) SetTicketParent(ctx context.Context, id, parentID, message string) (store.Ticket, error) {
 	current, err := s.GetTicketByID(ctx, id)
 	if err != nil {
 		return store.Ticket{}, err
@@ -1015,7 +1016,7 @@ func (s *LocalService) ListProjectHistoryFiltered(ctx context.Context, projectID
 	return store.ListProjectHistoryFiltered(ctx, db, projectID, limit, filter)
 }
 
-func (s *LocalService) AddComment(ctx context.Context, id string, comment string) (store.Comment, error) {
+func (s *LocalService) AddComment(ctx context.Context, id, comment string) (store.Comment, error) {
 	db, err := s.openDB()
 	if err != nil {
 		return store.Comment{}, err
@@ -1245,8 +1246,8 @@ func (s *LocalService) localUser(ctx context.Context, db *sql.DB) (store.User, e
 		if user.Enabled {
 			return user, nil
 		}
-		if err := store.SetUserEnabled(ctx, db, username, true); err != nil {
-			return store.User{}, err
+		if setErr := store.SetUserEnabled(ctx, db, username, true); setErr != nil {
+			return store.User{}, setErr
 		}
 		return store.GetUserByUsername(ctx, db, username)
 	} else if !errors.Is(err, sql.ErrNoRows) {

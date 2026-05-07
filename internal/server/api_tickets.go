@@ -28,7 +28,8 @@ func (r *router) registerTicketHandlers() {
 			return
 		}
 		var ticketPayload ticketRequest
-		if err := json.NewDecoder(r.Body).Decode(&ticketPayload); err != nil {
+		err = json.NewDecoder(r.Body).Decode(&ticketPayload)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
@@ -71,7 +72,9 @@ func (r *router) registerTicketHandlers() {
 			return
 		}
 		if ticketPayload.Message != "" {
-			store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+			if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message); commentErr != nil {
+				log.Printf("warning: add comment on ticket create %s: %v", ticket.ID, commentErr)
+			}
 		}
 		notify("ticket_created", ticket.ProjectID, ticket.ID)
 		writeJSON(w, http.StatusCreated, ticket)
@@ -87,7 +90,8 @@ func (r *router) registerTicketHandlers() {
 				return
 			}
 			var payload storyRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			err = json.NewDecoder(r.Body).Decode(&payload)
+			if err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
@@ -126,7 +130,7 @@ func (r *router) registerTicketHandlers() {
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/stories/")
 		parts := strings.Split(trimmed, "/")
 		var storyID int64
-		if _, err := fmt.Sscan(parts[0], &storyID); err != nil {
+		if _, scanErr := fmt.Sscan(parts[0], &storyID); scanErr != nil {
 			writeError(w, http.StatusBadRequest, "invalid story id")
 			return
 		}
@@ -153,7 +157,8 @@ func (r *router) registerTicketHandlers() {
 			return
 		}
 		if len(parts) == 1 && r.Method == http.MethodDelete {
-			if err := store.DeleteStory(r.Context(), db, story.ID); err != nil {
+			err = store.DeleteStory(r.Context(), db, story.ID)
+			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
@@ -162,17 +167,18 @@ func (r *router) registerTicketHandlers() {
 		}
 		if len(parts) == 1 && r.Method == http.MethodPut {
 			var payload storyRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			err = json.NewDecoder(r.Body).Decode(&payload)
+			if err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			updated, err := store.UpdateStory(r.Context(), db, story.ID, payload.Title, payload.Description)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
+			updated, updateErr := store.UpdateStory(r.Context(), db, story.ID, payload.Title, payload.Description)
+			if updateErr != nil {
+				if errors.Is(updateErr, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "story not found")
 					return
 				}
-				writeStoreError(w, err)
+				writeStoreError(w, updateErr)
 				return
 			}
 			writeJSON(w, http.StatusOK, updated)
@@ -198,14 +204,14 @@ func (r *router) registerTicketHandlers() {
 			beforeIDs[ticket.ID] = struct{}{}
 		}
 
-		if err := runStoryBreakdownViaTicketCLI(db, project, story); err != nil {
+		if err = runStoryBreakdownViaTicketCLI(db, project, story); err != nil {
 			var analysis storyAnalysisResult
 			prompt := fmt.Sprintf(
 				"Story title: %s\nStory description: %s\nGenerate JSON shape {\"epics\":[{\"title\":\"...\",\"description\":\"...\",\"tasks\":[{\"title\":\"...\",\"description\":\"...\"}]}]} with 1-4 epics and 2-5 tasks per epic.",
 				story.Title,
 				story.Description,
 			)
-			if err := runRoleJSONAnalysis(db, "StoryReview", prompt, &analysis); err != nil || len(analysis.Epics) == 0 {
+			if err = runRoleJSONAnalysis(db, "StoryReview", prompt, &analysis); err != nil || len(analysis.Epics) == 0 {
 				analysis = fallbackStoryAnalysis(story)
 			}
 			for _, epicSpec := range analysis.Epics {
@@ -261,8 +267,8 @@ func (r *router) registerTicketHandlers() {
 			if _, existed := beforeIDs[ticket.ID]; existed {
 				continue
 			}
-			if err := store.LinkStoryToTicket(r.Context(), db, story.ID, ticket.ID); err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
+			if linkErr := store.LinkStoryToTicket(r.Context(), db, story.ID, ticket.ID); linkErr != nil {
+				writeError(w, http.StatusInternalServerError, linkErr.Error())
 				return
 			}
 			notify("ticket_created", ticket.ProjectID, ticket.ID)
@@ -295,16 +301,17 @@ func (r *router) registerTicketHandlers() {
 			return
 		}
 		var claimRequest ticketClaimRequest
-		if err := json.NewDecoder(r.Body).Decode(&claimRequest); err != nil {
+		err = json.NewDecoder(r.Body).Decode(&claimRequest)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
 		ticketID := claimRequest.TicketID
 		ticketRef := strings.TrimSpace(claimRequest.TicketRef)
 		if claimRequest.ProjectID != 0 {
-			role, err := projectRoleForUser(r.Context(), db, claimRequest.ProjectID, user)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
+			role, roleErr := projectRoleForUser(r.Context(), db, claimRequest.ProjectID, user)
+			if roleErr != nil {
+				writeError(w, http.StatusInternalServerError, roleErr.Error())
 				return
 			}
 			if !canWriteProject(role) {
@@ -588,7 +595,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode clone message for ticket %s: %v", id, decodeErr)
+				}
 				cloned, err := store.CloneTicket(r.Context(), db, id, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -599,7 +608,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, cloned.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, cloned.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after clone ticket %s: %v", cloned.ID, commentErr)
+					}
 				}
 				notify("ticket_created", cloned.ProjectID, cloned.ID)
 				writeJSON(w, http.StatusCreated, cloned)
@@ -611,10 +622,14 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode close message for ticket %s: %v", id, decodeErr)
+				}
 				// Add comment before close — AddComment rejects closed tickets.
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, id, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, id, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment before close ticket %s: %v", id, commentErr)
+					}
 				}
 				ticket, err := store.SetTicketComplete(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
@@ -635,7 +650,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode open message for ticket %s: %v", id, decodeErr)
+				}
 				ticket, err := store.SetTicketComplete(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -646,7 +663,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after open ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -658,10 +677,14 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode archive message for ticket %s: %v", id, decodeErr)
+				}
 				// Add comment before archive — AddComment rejects archived tickets.
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, id, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, id, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment before archive ticket %s: %v", id, commentErr)
+					}
 				}
 				ticket, err := store.SetTicketArchived(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
@@ -682,7 +705,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode unarchive message for ticket %s: %v", id, decodeErr)
+				}
 				ticket, err := store.SetTicketArchived(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -693,7 +718,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after unarchive ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -705,7 +732,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode ready message for ticket %s: %v", id, decodeErr)
+				}
 				ticket, err := store.SetTicketDraft(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -716,7 +745,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after ready ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -728,7 +759,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg) // #nosec G104 -- best-effort decode; missing fields handled by zero values
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode notready message for ticket %s: %v", id, decodeErr)
+				}
 				ticket, err := store.SetTicketDraft(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
 					if errors.Is(err, store.ErrTicketNotFound) {
@@ -739,7 +772,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after notready ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -747,14 +782,18 @@ func (r *router) registerTicketHandlers() {
 			}
 			if len(parts) == 2 && parts[1] == "complete" && r.Method == http.MethodPost {
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode complete message for ticket %s: %v", id, decodeErr)
+				}
 				ticket, err := store.SetTicketComplete(r.Context(), db, id, true, user.Username, user.ID)
 				if err != nil {
 					writeStoreError(w, err)
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after complete ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -762,14 +801,18 @@ func (r *router) registerTicketHandlers() {
 			}
 			if len(parts) == 2 && parts[1] == "reopen" && r.Method == http.MethodPost {
 				var msg messageRequest
-				json.NewDecoder(r.Body).Decode(&msg)
+				if decodeErr := json.NewDecoder(r.Body).Decode(&msg); decodeErr != nil {
+					log.Printf("warning: decode reopen message for ticket %s: %v", id, decodeErr)
+				}
 				ticket, err := store.SetTicketComplete(r.Context(), db, id, false, user.Username, user.ID)
 				if err != nil {
 					writeStoreError(w, err)
 					return
 				}
 				if msg.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message)
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, msg.Message); commentErr != nil {
+						log.Printf("warning: add comment after reopen ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)
@@ -926,7 +969,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if payload.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, payload.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, payload.Message); commentErr != nil {
+						log.Printf("warning: add comment after intervene ticket %s: %v", ticket.ID, commentErr)
+					}
 				}
 				historyPayload := map[string]any{
 					"outcome": outcome,
@@ -1138,7 +1183,9 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				if ticketPayload.Message != "" {
-					store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message) // #nosec G104 -- best-effort comment; main operation already succeeded
+					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message); commentErr != nil {
+						log.Printf("warning: add comment after ticket update %s: %v", ticket.ID, commentErr)
+					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 				writeJSON(w, http.StatusOK, ticket)

@@ -91,7 +91,7 @@ func (s *HTTPService) DeleteRole(ctx context.Context, id int64) error {
 	return s.client.DeleteRole(ctx, id)
 }
 
-func (s *HTTPService) CreateAgent(ctx context.Context, request AgentCreateRequest) (store.Agent, string, error) {
+func (s *HTTPService) CreateAgent(ctx context.Context, request AgentCreateRequest) (agent store.Agent, password string, err error) {
 	return s.client.CreateAgent(ctx, client.AgentCreateRequest(request))
 }
 
@@ -115,7 +115,7 @@ func (s *HTTPService) DeleteAgent(ctx context.Context, id string) error {
 	return s.client.DeleteAgent(ctx, id)
 }
 
-func (s *HTTPService) SetAgentConfig(ctx context.Context, agentID string, key, value string) error {
+func (s *HTTPService) SetAgentConfig(ctx context.Context, agentID, key, value string) error {
 	return s.client.SetAgentConfig(ctx, agentID, key, value)
 }
 
@@ -123,7 +123,7 @@ func (s *HTTPService) ListAgentConfig(ctx context.Context, agentID string) ([]st
 	return s.client.ListAgentConfig(ctx, agentID)
 }
 
-func (s *HTTPService) DeleteAgentConfig(ctx context.Context, agentID string, key string) error {
+func (s *HTTPService) DeleteAgentConfig(ctx context.Context, agentID, key string) error {
 	return s.client.DeleteAgentConfig(ctx, agentID, key)
 }
 
@@ -259,27 +259,27 @@ func (s *HTTPService) UpdateTicket(ctx context.Context, id string, request Ticke
 	return s.client.UpdateTicket(ctx, id, client.TicketUpdateRequest(request))
 }
 
-func (s *HTTPService) CloseTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) CloseTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.CloseTicket(ctx, id, message)
 }
 
-func (s *HTTPService) OpenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) OpenTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.OpenTicket(ctx, id, message)
 }
 
-func (s *HTTPService) ArchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) ArchiveTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.ArchiveTicket(ctx, id, message)
 }
 
-func (s *HTTPService) UnarchiveTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) UnarchiveTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.UnarchiveTicket(ctx, id, message)
 }
 
-func (s *HTTPService) ReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) ReadyTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.ReadyTicket(ctx, id, message)
 }
 
-func (s *HTTPService) NotReadyTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) NotReadyTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.NotReadyTicket(ctx, id, message)
 }
 
@@ -295,11 +295,11 @@ func (s *HTTPService) DeleteTicket(ctx context.Context, id string) error {
 	return s.client.DeleteTicket(ctx, id)
 }
 
-func (s *HTTPService) SetTicketParent(ctx context.Context, id string, parentID string, message string) (store.Ticket, error) {
+func (s *HTTPService) SetTicketParent(ctx context.Context, id, parentID, message string) (store.Ticket, error) {
 	return s.client.SetTicketParent(ctx, id, parentID, message)
 }
 
-func (s *HTTPService) UnsetTicketParent(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) UnsetTicketParent(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.UnsetTicketParent(ctx, id, message)
 }
 
@@ -311,7 +311,7 @@ func (s *HTTPService) GetTicket(ctx context.Context, ref string) (store.Ticket, 
 	return s.client.GetTicket(ctx, ref)
 }
 
-func (s *HTTPService) CloneTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) CloneTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.CloneTicket(ctx, id, message)
 }
 
@@ -331,7 +331,7 @@ func (s *HTTPService) ListProjectHistoryFiltered(ctx context.Context, projectID 
 	return s.client.ListProjectHistoryFiltered(ctx, projectID, limit, filter)
 }
 
-func (s *HTTPService) AddComment(ctx context.Context, id string, comment string) (store.Comment, error) {
+func (s *HTTPService) AddComment(ctx context.Context, id, comment string) (store.Comment, error) {
 	return s.client.AddComment(ctx, id, comment)
 }
 
@@ -431,11 +431,11 @@ func (s *HTTPService) ReorderWorkflowStageRoles(ctx context.Context, workflowID,
 	return s.client.ReorderWorkflowStageRoles(ctx, workflowID, stageID, roleIDs)
 }
 
-func (s *HTTPService) CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) CompleteTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.CompleteTicket(ctx, id, message)
 }
 
-func (s *HTTPService) ReopenTicket(ctx context.Context, id string, message string) (store.Ticket, error) {
+func (s *HTTPService) ReopenTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.ReopenTicket(ctx, id, message)
 }
 
