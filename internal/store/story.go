@@ -37,7 +37,7 @@ func normalizeStoryStatus(status string) string {
 	}
 }
 
-func CreateStory(ctx context.Context, db *sql.DB, projectID int64, title, description string, createdBy string) (Story, error) {
+func CreateStory(ctx context.Context, db *sql.DB, projectID int64, title, description, createdBy string) (Story, error) {
 	return CreateStoryWithParams(ctx, db, StoryCreateParams{
 		ProjectID:   projectID,
 		Title:       title,
@@ -192,9 +192,8 @@ func DeleteStory(ctx context.Context, db *sql.DB, storyID int64) error {
 	return nil
 }
 
-func StoryIDForTicket(ctx context.Context, db *sql.DB, ticketID string) (int64, bool, error) {
-	var storyID int64
-	err := db.QueryRowContext(ctx, `SELECT story_id FROM story_ticket_links WHERE ticket_id = ? ORDER BY story_id LIMIT 1`, ticketID).Scan(&storyID)
+func StoryIDForTicket(ctx context.Context, db *sql.DB, ticketID string) (storyID int64, found bool, err error) {
+	err = db.QueryRowContext(ctx, `SELECT story_id FROM story_ticket_links WHERE ticket_id = ? ORDER BY story_id LIMIT 1`, ticketID).Scan(&storyID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, false, nil

@@ -35,7 +35,7 @@ func parseGuidanceMapFlag(raw string) (store.GuidanceMap, error) {
 	return out, nil
 }
 
-func mergeGuidanceMap(current store.GuidanceMap, defaultValue string, mapValue string, setDefault bool, setMap bool) (store.GuidanceMap, error) {
+func mergeGuidanceMap(current store.GuidanceMap, defaultValue, mapValue string, setDefault, setMap bool) (store.GuidanceMap, error) {
 	if !setDefault && !setMap {
 		return nil, nil
 	}

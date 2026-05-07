@@ -74,9 +74,9 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	}
 }
 
-func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (string, string, error) {
-	username := strings.TrimSpace(usernameFlag)
-	password := strings.TrimSpace(passwordFlag)
+func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (username, password string, err error) {
+	username = strings.TrimSpace(usernameFlag)
+	password = strings.TrimSpace(passwordFlag)
 	resolved, err := config.ResolveURL()
 	if err == nil && resolved.Mode == config.ModeLocal {
 		if username == "" {
@@ -124,12 +124,10 @@ func fallbackCommandUsername() string {
 	return currentOSUser()
 }
 
-func extractDBOverride(args []string) ([]string, string, error) {
+func extractDBOverride(args []string) (out []string, override string, err error) {
 	if len(args) == 0 {
 		return args, "", nil
 	}
-	var out []string
-	var override string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-f" {
 			if i+1 >= len(args) {
@@ -146,9 +144,7 @@ func extractDBOverride(args []string) ([]string, string, error) {
 
 // extractGUIFlag removes -g/--gui and optional -theme=<id> from args.
 // Returns trimmed args and the theme ID (empty string = use default).
-func extractGUIFlag(args []string) ([]string, string) {
-	var out []string
-	var theme string
+func extractGUIFlag(args []string) (out []string, theme string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
@@ -166,10 +162,7 @@ func extractGUIFlag(args []string) ([]string, string) {
 	return out, theme
 }
 
-func extractOutputFlags(args []string) ([]string, bool, bool, error) {
-	var out []string
-	var jsonFlag bool
-	var nocolor bool
+func extractOutputFlags(args []string) (out []string, jsonFlag, nocolor bool, err error) {
 	for _, arg := range args {
 		switch arg {
 		case "-json":

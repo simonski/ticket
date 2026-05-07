@@ -224,10 +224,11 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	// Resolve effective workflow: ticket param → parent chain → project
 	var effectiveWorkflowID sql.NullInt64
 	var ticketWorkflowID *int64 // stored on the ticket itself (NULL = inherit)
-	if params.WorkflowID != nil {
+	switch {
+	case params.WorkflowID != nil:
 		effectiveWorkflowID = sql.NullInt64{Int64: *params.WorkflowID, Valid: true}
 		ticketWorkflowID = params.WorkflowID
-	} else if params.ParentID != nil {
+	case params.ParentID != nil:
 		// Walk parent chain for explicit workflow
 		pid := params.ParentID
 		for pid != nil {
@@ -249,7 +250,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		if !effectiveWorkflowID.Valid {
 			effectiveWorkflowID = projectWorkflowID
 		}
-	} else {
+	default:
 		effectiveWorkflowID = projectWorkflowID
 	}
 	// Resolve initial workflow stage (first stage by sort_order)
@@ -560,7 +561,7 @@ writeTicket:
 	return GetTicket(ctx, db, id)
 }
 
-func SetTicketComplete(ctx context.Context, db *sql.DB, id string, complete bool, actorUsername string, actorID string) (Ticket, error) {
+func SetTicketComplete(ctx context.Context, db *sql.DB, id string, complete bool, actorUsername, actorID string) (Ticket, error) {
 	current, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
@@ -612,7 +613,7 @@ func SetTicketComplete(ctx context.Context, db *sql.DB, id string, complete bool
 	return GetTicket(ctx, db, id)
 }
 
-func SetTicketArchived(ctx context.Context, db *sql.DB, id string, archived bool, actorUsername string, actorID string) (Ticket, error) {
+func SetTicketArchived(ctx context.Context, db *sql.DB, id string, archived bool, actorUsername, actorID string) (Ticket, error) {
 	current, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
@@ -641,7 +642,7 @@ func SetTicketArchived(ctx context.Context, db *sql.DB, id string, archived bool
 	return GetTicket(ctx, db, id)
 }
 
-func SetTicketDraft(ctx context.Context, db *sql.DB, id string, draft bool, actorUsername string, actorID string) (Ticket, error) {
+func SetTicketDraft(ctx context.Context, db *sql.DB, id string, draft bool, actorUsername, actorID string) (Ticket, error) {
 	current, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
@@ -678,7 +679,7 @@ func SetTicketDraft(ctx context.Context, db *sql.DB, id string, draft bool, acto
 	return GetTicket(ctx, db, id)
 }
 
-func addTicketCompleteHistoryEvent(ctx context.Context, db *sql.DB, current Ticket, from bool, to bool, actorUsername string, actorID string) error {
+func addTicketCompleteHistoryEvent(ctx context.Context, db *sql.DB, current Ticket, from, to bool, actorUsername, actorID string) error {
 	if from == to {
 		return nil
 	}
@@ -696,7 +697,7 @@ func addTicketCompleteHistoryEvent(ctx context.Context, db *sql.DB, current Tick
 	return nil
 }
 
-func addTicketArchiveHistoryEvent(ctx context.Context, db *sql.DB, current Ticket, from bool, to bool, actorUsername string, actorID string) error {
+func addTicketArchiveHistoryEvent(ctx context.Context, db *sql.DB, current Ticket, from, to bool, actorUsername, actorID string) error {
 	if from == to {
 		return nil
 	}
@@ -714,7 +715,7 @@ func addTicketArchiveHistoryEvent(ctx context.Context, db *sql.DB, current Ticke
 	return nil
 }
 
-func addTicketLifecycleHistoryEvent(ctx context.Context, db *sql.DB, current Ticket, nextStage, nextState, reason, actorUsername string, actorID string) error {
+func addTicketLifecycleHistoryEvent(ctx context.Context, db *sql.DB, current Ticket, nextStage, nextState, reason, actorUsername, actorID string) error {
 	fromStatus := RenderLifecycleStatus(current.Stage, current.State)
 	toStatus := RenderLifecycleStatus(nextStage, nextState)
 	if fromStatus == toStatus {
@@ -738,7 +739,7 @@ func addTicketLifecycleHistoryEvent(ctx context.Context, db *sql.DB, current Tic
 
 // NextTicket advances a ticket to the next role within its stage, or to the first
 // role of the next stage if it's at the last role. Requires state=success.
-func NextTicket(ctx context.Context, db *sql.DB, id string, actorUsername, actorID string) (Ticket, error) {
+func NextTicket(ctx context.Context, db *sql.DB, id, actorUsername, actorID string) (Ticket, error) {
 	ticket, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
@@ -778,7 +779,7 @@ func NextTicket(ctx context.Context, db *sql.DB, id string, actorUsername, actor
 }
 
 // PreviousTicket moves a ticket back to the previous role or stage. Requires state=fail.
-func PreviousTicket(ctx context.Context, db *sql.DB, id string, actorUsername, actorID string) (Ticket, error) {
+func PreviousTicket(ctx context.Context, db *sql.DB, id, actorUsername, actorID string) (Ticket, error) {
 	ticket, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
@@ -808,7 +809,7 @@ func PreviousTicket(ctx context.Context, db *sql.DB, id string, actorUsername, a
 
 // findNextStep finds the next role in the current stage, or the first role of the next stage.
 // Returns (stageID, roleID, stageName, done, error). done=true means the ticket has completed all steps.
-func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, currentRoleID *int64) (int64, *int64, string, bool, error) {
+func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, currentRoleID *int64) (nextStageID int64, nextRoleID *int64, nextStageName string, done bool, err error) {
 	// Get the current stage's Workflow ID and stage info
 	var workflowID int64
 	var currentOrder int
@@ -841,8 +842,6 @@ func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 	}
 
 	// Otherwise, move to the next stage
-	var nextStageID int64
-	var nextStageName string
 	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextStageID, &nextStageName)
 	if errors.Is(err, sql.ErrNoRows) {
 		// No next stage — done
@@ -869,7 +868,7 @@ func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 }
 
 // findPrevStep finds the previous role in the current stage, or the last role of the previous stage.
-func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, currentRoleID *int64) (int64, *int64, string, bool, error) {
+func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, currentRoleID *int64) (prevStageID int64, prevRoleID *int64, prevStageName string, atStart bool, err error) {
 	var workflowID int64
 	var currentOrder int
 	var currentStageName string
@@ -899,8 +898,6 @@ func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 	}
 
 	// Otherwise, move to the previous stage
-	var prevStageID int64
-	var prevStageName string
 	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1`, workflowID, currentOrder).Scan(&prevStageID, &prevStageName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil, "", true, nil // at the very start
@@ -1449,7 +1446,7 @@ func syncAncestorLifecycle(ctx context.Context, db *sql.DB, parentID *string, ac
 	return syncTicketAndAncestors(ctx, db, *parentID, actorID)
 }
 
-func syncTicketAndAncestors(ctx context.Context, db *sql.DB, id string, actorID string) error {
+func syncTicketAndAncestors(ctx context.Context, db *sql.DB, id, actorID string) error {
 	currentID := &id
 	for currentID != nil {
 		parentID, err := recalculateParentLifecycle(ctx, db, *currentID, actorID)
@@ -1461,7 +1458,7 @@ func syncTicketAndAncestors(ctx context.Context, db *sql.DB, id string, actorID 
 	return nil
 }
 
-func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id string, actorID string) (*string, error) {
+func recalculateParentLifecycle(ctx context.Context, db *sql.DB, id, actorID string) (*string, error) {
 	ticket, err := getStoredTicket(ctx, db, id)
 	if err != nil {
 		return nil, err
@@ -1590,12 +1587,12 @@ func normalizeTicketType(ticketType string) string {
 	return ticketType
 }
 
-func parseRenderedLifecycle(status string) (string, string, error) {
+func parseRenderedLifecycle(status string) (stage, state string, err error) {
 	parts := strings.SplitN(normalizeOptional(status), "/", 2)
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("invalid status %q", status)
 	}
-	state := normalizeState(parts[1])
+	state = normalizeState(parts[1])
 	if !ValidLifecycle(parts[0], state) {
 		return "", "", fmt.Errorf("invalid status %q", status)
 	}
@@ -1950,7 +1947,7 @@ func ExplainNoWork(ctx context.Context, db *sql.DB, projectID int64, username st
 	return reasons, nil
 }
 
-func CloneTicket(ctx context.Context, db *sql.DB, id string, author string, createdBy string) (Ticket, error) {
+func CloneTicket(ctx context.Context, db *sql.DB, id, author, createdBy string) (Ticket, error) {
 	original, err := GetTicket(ctx, db, id)
 	if err != nil {
 		return Ticket{}, err
@@ -1962,7 +1959,7 @@ func CloneTicket(ctx context.Context, db *sql.DB, id string, author string, crea
 	return cloned, nil
 }
 
-func cloneTicketRecursive(ctx context.Context, db *sql.DB, original Ticket, parentID *string, author string, createdBy string) (Ticket, error) {
+func cloneTicketRecursive(ctx context.Context, db *sql.DB, original Ticket, parentID *string, author, createdBy string) (Ticket, error) {
 	cloned, err := CreateTicket(ctx, db, TicketCreateParams{
 		ProjectID:          original.ProjectID,
 		ParentID:           parentID,

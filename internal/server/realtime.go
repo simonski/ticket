@@ -231,12 +231,12 @@ func headerContainsToken(header http.Header, key, token string) bool {
 	return false
 }
 
-func readWebSocketFrame(conn net.Conn) (byte, []byte, error) {
+func readWebSocketFrame(conn net.Conn) (opcode byte, payload []byte, err error) {
 	var header [2]byte
 	if _, err := io.ReadFull(conn, header[:]); err != nil {
 		return 0, nil, err
 	}
-	opcode := header[0] & 0x0F
+	opcode = header[0] & 0x0F
 	masked := header[1]&0x80 != 0
 	payloadLen := int(header[1] & 0x7F)
 	switch payloadLen {
@@ -263,7 +263,7 @@ func readWebSocketFrame(conn net.Conn) (byte, []byte, error) {
 			return 0, nil, err
 		}
 	}
-	payload := make([]byte, payloadLen)
+	payload = make([]byte, payloadLen)
 	if payloadLen > 0 {
 		if _, err := io.ReadFull(conn, payload); err != nil {
 			return 0, nil, err

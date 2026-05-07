@@ -73,13 +73,13 @@ func RenderLifecycleStatus(stage, state string) string {
 	return stage + "/" + state
 }
 
-func ParseLifecycleStatus(raw string) (string, string, error) {
+func ParseLifecycleStatus(raw string) (stage, state string, err error) {
 	trimmed := strings.TrimSpace(strings.ToLower(raw))
 	if trimmed == "" || !strings.Contains(trimmed, "/") {
 		return "", "", fmt.Errorf("invalid status %q", raw)
 	}
 	parts := strings.SplitN(trimmed, "/", 2)
-	state := normalizeState(parts[1])
+	state = normalizeState(parts[1])
 	if len(parts) == 2 && ValidLifecycle(parts[0], state) {
 		return parts[0], state, nil
 	}
@@ -88,22 +88,21 @@ func ParseLifecycleStatus(raw string) (string, string, error) {
 
 // getNextWorkflowStage returns the next workflow stage after the given stage ID.
 // Returns (nil, "", nil) if the given stage is the final stage.
-func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64) (*int64, string, error) {
+func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64) (nextID *int64, nextName string, err error) {
 	var workflowID int64
 	var currentOrder int
 	if err := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder); err != nil {
 		return nil, "", err
 	}
-	var nextID int64
-	var nextName string
-	err := db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextID, &nextName)
+	var nextStageID int64
+	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextStageID, &nextName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", nil // final stage
 	}
 	if err != nil {
 		return nil, "", err
 	}
-	return &nextID, nextName, nil
+	return &nextStageID, nextName, nil
 }
 
 // GetWorkflowStageOrder returns the sort_order for a workflow stage by ID.

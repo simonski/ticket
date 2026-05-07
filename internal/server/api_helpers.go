@@ -22,7 +22,7 @@ const (
 	hostCSRFCookieName      = "__Host-_csrf"
 )
 
-func resolveLifecycleRequest(status, stage, state string) (string, string, error) {
+func resolveLifecycleRequest(status, stage, state string) (resolvedStage, resolvedState string, err error) {
 	stage = strings.TrimSpace(strings.ToLower(stage))
 	state = strings.TrimSpace(strings.ToLower(state))
 	if stage != "" || state != "" {

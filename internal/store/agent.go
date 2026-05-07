@@ -20,7 +20,7 @@ type AgentUpdateParams struct {
 	Password *string
 }
 
-func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (Agent, string, error) {
+func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (agent Agent, generatedPassword string, err error) {
 	uuid := generateAgentUUID()
 
 	passwordToSet := strings.TrimSpace(plainPassword)
@@ -43,7 +43,7 @@ func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (Agent, 
 	if err != nil {
 		return Agent{}, "", err
 	}
-	agent, err := GetAgentByID(ctx, db, uuid)
+	agent, err = GetAgentByID(ctx, db, uuid)
 	if err != nil {
 		return Agent{}, "", err
 	}
@@ -204,7 +204,7 @@ func AuthenticateAgent(ctx context.Context, db *sql.DB, agentID, plainPassword s
 	return a, nil
 }
 
-func TouchAgent(ctx context.Context, db *sql.DB, id string, status string) (Agent, error) {
+func TouchAgent(ctx context.Context, db *sql.DB, id, status string) (Agent, error) {
 	status = strings.TrimSpace(status)
 	if status == "" {
 		status = "idle"
@@ -261,11 +261,11 @@ func ReapStaleAgents(ctx context.Context, db *sql.DB, thresholdMinutes int) (int
 
 // AgentStatus holds an agent and its currently assigned ticket (if any).
 type AgentStatus struct {
-	Agent       Agent   `json:"agent"`
-	TicketKey   *string `json:"ticket_key,omitempty"`
-	ProjectName string  `json:"project_name,omitempty"`
-	WorkflowName    string  `json:"workflow_name,omitempty"`
-	RoleTitle   string  `json:"role_title,omitempty"`
+	Agent        Agent   `json:"agent"`
+	TicketKey    *string `json:"ticket_key,omitempty"`
+	ProjectName  string  `json:"project_name,omitempty"`
+	WorkflowName string  `json:"workflow_name,omitempty"`
+	RoleTitle    string  `json:"role_title,omitempty"`
 }
 
 // ListAgentStatuses returns all agents with their currently assigned active ticket.
@@ -320,7 +320,7 @@ type AgentConfigEntry struct {
 	Value  string `json:"value"`
 }
 
-func SetAgentConfig(ctx context.Context, db *sql.DB, agentID string, key, value string) error {
+func SetAgentConfig(ctx context.Context, db *sql.DB, agentID, key, value string) error {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return errors.New("config key is required")
@@ -350,7 +350,7 @@ func ListAgentConfig(ctx context.Context, db *sql.DB, agentID string) ([]AgentCo
 	return entries, rows.Err()
 }
 
-func DeleteAgentConfig(ctx context.Context, db *sql.DB, agentID string, key string) error {
+func DeleteAgentConfig(ctx context.Context, db *sql.DB, agentID, key string) error {
 	result, err := db.ExecContext(ctx, `DELETE FROM agent_config WHERE user_id = ? AND key = ?`, agentID, strings.TrimSpace(key))
 	if err != nil {
 		return err

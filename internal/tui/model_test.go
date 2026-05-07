@@ -83,13 +83,13 @@ func TestViewDetailShowsExtendedTicketContext(t *testing.T) {
 	m.width = 100
 	m.height = 30
 	m.project = store.Project{
-		ID:     1,
-		Prefix: "PRJ",
-		Title:  "Project Alpha",
+		ID:         1,
+		Prefix:     "PRJ",
+		Title:      "Project Alpha",
 		WorkflowID: &projectWorkflowID,
-		DODMap: store.GuidanceMap{store.DefaultGuidanceStageKey: "Project DoD"},
-		ACMap:  store.GuidanceMap{store.DefaultGuidanceStageKey: "Project AC"},
-		Status: "open",
+		DODMap:     store.GuidanceMap{store.DefaultGuidanceStageKey: "Project DoD"},
+		ACMap:      store.GuidanceMap{store.DefaultGuidanceStageKey: "Project AC"},
+		Status:     "open",
 	}
 	m.selected = &selected
 	m.roles = []store.Role{{
@@ -135,7 +135,7 @@ func TestProjectEditAndNewTicketViewsShowLifecycleFields(t *testing.T) {
 		Prefix:        "PRJ",
 		Visibility:    store.ProjectVisibilityPublic,
 		DefaultDraft:  true,
-		WorkflowID:        &projectWorkflowID,
+		WorkflowID:    &projectWorkflowID,
 		GitRepository: "github.com/example/project",
 	})
 	m.newForm = makeNewTicketForm()

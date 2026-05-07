@@ -11,14 +11,14 @@ import (
 	"golang.org/x/term"
 )
 
-func promptForCredentials(in io.Reader, out io.Writer, defaultUsername, defaultPassword string) (string, string, error) {
+func promptForCredentials(in io.Reader, out io.Writer, defaultUsername, defaultPassword string) (username, password string, err error) {
 	reader := bufio.NewReader(in)
 	if defaultUsername != "" {
 		fmt.Fprintf(out, "username [%s]: ", defaultUsername)
 	} else {
 		fmt.Fprint(out, "username: ")
 	}
-	username, err := reader.ReadString('\n')
+	username, err = reader.ReadString('\n')
 	if err != nil {
 		return "", "", err
 	}
@@ -31,7 +31,7 @@ func promptForCredentials(in io.Reader, out io.Writer, defaultUsername, defaultP
 	} else {
 		fmt.Fprint(out, "password: ")
 	}
-	password, err := readPasswordPrompt(reader, in, out)
+	password, err = readPasswordPrompt(reader, in, out)
 	if err != nil {
 		return "", "", err
 	}

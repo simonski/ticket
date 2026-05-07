@@ -291,7 +291,7 @@ func (r *router) registerAgentHandlers() {
 				"project":           nil,
 				"ticket":            nil,
 				"parents":           []store.Ticket{},
-				"workflow":              nil,
+				"workflow":          nil,
 				"role":              nil,
 				"config":            configMap,
 				"config_updated_at": configUpdatedAt,

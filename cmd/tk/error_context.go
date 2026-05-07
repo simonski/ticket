@@ -46,7 +46,7 @@ func conciseRuntimeError(err error) error {
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	if strings.Contains(msg, "cannot connect to ") {
-		return errors.New(fmt.Sprintf("%s is configured for %s, but that server could not be reached.\nCheck that the server, port, and any proxy or tunnel are running.", subject, resolved.ServerURL))
+		return fmt.Errorf("%s is configured for %s, but that server could not be reached.\nCheck that the server, port, and any proxy or tunnel are running.", subject, resolved.ServerURL)
 	}
 	return nil
 }

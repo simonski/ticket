@@ -106,7 +106,7 @@ func runProject(args []string) error {
 			ACMap:              projectACMap,
 			Notes:              strings.TrimSpace(*dod),
 			GitRepository:      strings.TrimSpace(*gitRepository),
-			WorkflowID:             wfID,
+			WorkflowID:         wfID,
 		})
 		if err != nil {
 			return err
@@ -478,7 +478,7 @@ func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string)
 		AcceptanceCriteria: current.AcceptanceCriteria,
 		GitRepository:      current.GitRepository,
 		Status:             current.Status,
-		WorkflowID:             nextWorkflowID,
+		WorkflowID:         nextWorkflowID,
 	})
 	if err != nil {
 		return err
@@ -698,7 +698,7 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			Notes:              nextNotes,
 			GitRepository:      nextRepo,
 			Status:             nextStatus,
-			WorkflowID:             nextWorkflowID,
+			WorkflowID:         nextWorkflowID,
 		})
 		if err != nil {
 			return err

@@ -52,7 +52,7 @@ type chatProcessBridge struct {
 	lastError    string
 }
 
-var ansiControlRE = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\a]*(?:\a|\x1b\\)|[@-Z\\-_])`)
+var ansiControlRE = regexp.MustCompile(`\x1b(?:\[[0-?]*[\x20-\x2f]*[\x40-\x7e]|\][^\a]*(?:\a|\x1b\\)|[\x40-\x5a\\_\-])`)
 var sharedChatRuntime = newChatRuntime()
 
 type chatRuntime struct {

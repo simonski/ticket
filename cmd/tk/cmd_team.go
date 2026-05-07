@@ -336,21 +336,22 @@ func runRole(args []string) error {
 			return err
 		}
 		for _, role := range roles {
-			if role.ID == *id {
-				if outputJSON {
-					return printJSON(role)
-				}
-				fmt.Printf("ID:         %d\n", role.ID)
-				fmt.Printf("Title:      %s\n", role.Title)
-				fmt.Printf("Description: %s\n", role.Description)
-				fmt.Printf("AcceptanceCriteria:      %s\n", role.AcceptanceCriteria)
-				printGuidanceMap("dor_map", role.DORMap)
-				printGuidanceMap("dod_map", role.DODMap)
-				printGuidanceMap("ac_map", role.ACMap)
-				fmt.Printf("Created:    %s\n", role.CreatedAt)
-				fmt.Printf("Updated:    %s\n", role.UpdatedAt)
-				return nil
+			if role.ID != *id {
+				continue
 			}
+			if outputJSON {
+				return printJSON(role)
+			}
+			fmt.Printf("ID:         %d\n", role.ID)
+			fmt.Printf("Title:      %s\n", role.Title)
+			fmt.Printf("Description: %s\n", role.Description)
+			fmt.Printf("AcceptanceCriteria:      %s\n", role.AcceptanceCriteria)
+			printGuidanceMap("dor_map", role.DORMap)
+			printGuidanceMap("dod_map", role.DODMap)
+			printGuidanceMap("ac_map", role.ACMap)
+			fmt.Printf("Created:    %s\n", role.CreatedAt)
+			fmt.Printf("Updated:    %s\n", role.UpdatedAt)
+			return nil
 		}
 		return fmt.Errorf("role %d not found", *id)
 	case "create", "add", "new":

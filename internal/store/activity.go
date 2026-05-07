@@ -31,7 +31,7 @@ type Comment struct {
 	CreatedAt string `json:"date"`
 }
 
-func AddHistoryEvent(ctx context.Context, db *sql.DB, projectID int64, ticketID string, eventType string, payload any, createdBy string) error {
+func AddHistoryEvent(ctx context.Context, db *sql.DB, projectID int64, ticketID, eventType string, payload any, createdBy string) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func ListProjectHistoryFiltered(ctx context.Context, db *sql.DB, projectID int64
 	return events, rows.Err()
 }
 
-func AddComment(ctx context.Context, db *sql.DB, ticketID string, userID string, comment string) (Comment, error) {
+func AddComment(ctx context.Context, db *sql.DB, ticketID, userID, comment string) (Comment, error) {
 	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
 		return Comment{}, err

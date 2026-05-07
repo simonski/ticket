@@ -205,7 +205,7 @@ func DeleteTeam(ctx context.Context, db *sql.DB, id int64) error {
 	return nil
 }
 
-func AddTeamMember(ctx context.Context, db *sql.DB, teamID int64, userID string, role, jobTitle string) (TeamMember, error) {
+func AddTeamMember(ctx context.Context, db *sql.DB, teamID int64, userID, role, jobTitle string) (TeamMember, error) {
 	role = normalizeTeamRole(role)
 	if !validTeamRole(role) {
 		return TeamMember{}, fmt.Errorf("invalid team role %q", role)
@@ -281,10 +281,9 @@ func ListTeamMembers(ctx context.Context, db *sql.DB, teamID int64) ([]TeamMembe
 	return members, rows.Err()
 }
 
-func TeamRoleForUser(ctx context.Context, db *sql.DB, teamID int64, userID string) (string, bool, error) {
+func TeamRoleForUser(ctx context.Context, db *sql.DB, teamID int64, userID string) (role string, found bool, err error) {
 	row := db.QueryRowContext(ctx, `SELECT role FROM team_members WHERE team_id = ? AND user_id = ?`, teamID, userID)
-	var role string
-	if err := row.Scan(&role); err != nil {
+	if err = row.Scan(&role); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}
@@ -481,7 +480,7 @@ func TeamDescendantIDs(ctx context.Context, db *sql.DB, teamID int64) ([]int64, 
 	return out, rows.Err()
 }
 
-func HighestProjectRoleForTeams(ctx context.Context, db *sql.DB, projectID int64, teamIDs []int64) (string, bool, error) {
+func HighestProjectRoleForTeams(ctx context.Context, db *sql.DB, projectID int64, teamIDs []int64) (role string, found bool, err error) {
 	if len(teamIDs) == 0 {
 		return "", false, nil
 	}
@@ -504,7 +503,6 @@ func HighestProjectRoleForTeams(ctx context.Context, db *sql.DB, projectID int64
 	defer rows.Close()
 	best := ""
 	for rows.Next() {
-		var role string
 		if err := rows.Scan(&role); err != nil {
 			return "", false, err
 		}

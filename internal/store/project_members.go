@@ -36,7 +36,7 @@ func validProjectRole(role string) bool {
 	}
 }
 
-func AddProjectMember(ctx context.Context, db *sql.DB, projectID int64, userID string, role string) (ProjectMember, error) {
+func AddProjectMember(ctx context.Context, db *sql.DB, projectID int64, userID, role string) (ProjectMember, error) {
 	role = normalizeProjectRole(role)
 	if !validProjectRole(role) {
 		return ProjectMember{}, fmt.Errorf("invalid role %q", role)
@@ -111,10 +111,9 @@ func ListProjectMembers(ctx context.Context, db *sql.DB, projectID int64) ([]Pro
 	return members, rows.Err()
 }
 
-func ProjectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, userID string) (string, bool, error) {
+func ProjectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, userID string) (role string, found bool, err error) {
 	row := db.QueryRowContext(ctx, `SELECT role FROM project_members WHERE project_id = ? AND user_id = ?`, projectID, userID)
-	var role string
-	if err := row.Scan(&role); err != nil {
+	if err = row.Scan(&role); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}

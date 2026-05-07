@@ -70,7 +70,7 @@ type ProjectUpdateParams struct {
 	WorkflowID         *int64
 }
 
-func CreateProject(ctx context.Context, db *sql.DB, title, description, acceptanceCriteria string, createdBy string) (Project, error) {
+func CreateProject(ctx context.Context, db *sql.DB, title, description, acceptanceCriteria, createdBy string) (Project, error) {
 	return CreateProjectWithParams(ctx, db, ProjectCreateParams{
 		Prefix:             deriveProjectPrefix(title),
 		Title:              title,
@@ -550,7 +550,7 @@ func RenameProjectPrefix(ctx context.Context, db *sql.DB, projectID int64, newPr
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return 0, err
 	}
-	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
+	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck // best-effort restore of FK enforcement
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

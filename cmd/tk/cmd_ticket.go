@@ -302,7 +302,7 @@ func buildTicketPrompt(files []string, outputFile string) (string, error) {
 // resolveIDFlag extracts a ticket ID from either an -id flag value or a
 // positional argument. It returns the resolved ID and remaining positional
 // args, or an error if neither form provides an ID.
-func resolveIDFlag(flagVal string, positional []string) (string, []string, error) {
+func resolveIDFlag(flagVal string, positional []string) (id string, remaining []string, err error) {
 	idVal := strings.TrimSpace(flagVal)
 	if idVal != "" {
 		return idVal, positional, nil
@@ -343,7 +343,7 @@ func isBareTicketSequence(ref string) bool {
 	return true
 }
 
-func resolveLifecycleInput(status, stage, state string) (string, string, error) {
+func resolveLifecycleInput(status, stage, state string) (resolvedStage, resolvedState string, err error) {
 	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
 		return stage, state, nil
 	}

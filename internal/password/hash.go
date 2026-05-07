@@ -73,9 +73,9 @@ func parse(encoded string) (params argonParams, salt, hash []byte, err error) {
 		if len(kv) != 2 {
 			return argonParams{}, nil, nil, errors.New("invalid argon2id params")
 		}
-		value, err := strconv.ParseUint(kv[1], 10, 32)
-		if err != nil {
-			return argonParams{}, nil, nil, fmt.Errorf("parse argon2id param %s: %w", kv[0], err)
+		value, parseErr := strconv.ParseUint(kv[1], 10, 32)
+		if parseErr != nil {
+			return argonParams{}, nil, nil, fmt.Errorf("parse argon2id param %s: %w", kv[0], parseErr)
 		}
 		switch kv[0] {
 		case "m":

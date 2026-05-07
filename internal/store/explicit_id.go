@@ -2,7 +2,7 @@ package store
 
 import "fmt"
 
-func normalizeExplicitID(id *int64) (int64, bool, error) {
+func normalizeExplicitID(id *int64) (explicitID int64, hasExplicitID bool, err error) {
 	if id == nil {
 		return 0, false, nil
 	}

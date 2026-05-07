@@ -17,7 +17,7 @@ type TimeEntry struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func LogTime(ctx context.Context, db *sql.DB, ticketID string, userID string, minutes int, note string) (TimeEntry, error) {
+func LogTime(ctx context.Context, db *sql.DB, ticketID, userID string, minutes int, note string) (TimeEntry, error) {
 	if minutes <= 0 {
 		return TimeEntry{}, errors.New("minutes must be positive")
 	}

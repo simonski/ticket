@@ -16,15 +16,15 @@ import (
 // ─── edit form ───────────────────────────────────────────────────────────────
 
 const (
-	efTitle  = 0
-	efDesc   = 1
-	efAC     = 2
-	efType   = 3
-	efStatus = 4
-	efDraft  = 5
-	efWorkflow   = 6
-	efSave   = 7
-	efCount  = 8
+	efTitle    = 0
+	efDesc     = 1
+	efAC       = 2
+	efType     = 3
+	efStatus   = 4
+	efDraft    = 5
+	efWorkflow = 6
+	efSave     = 7
+	efCount    = 8
 )
 
 type editForm struct {
@@ -34,7 +34,7 @@ type editForm struct {
 	ticketType string
 	status     string
 	draft      bool
-	workflowID     *int64
+	workflowID *int64
 	focus      int
 	picker     *pickerPopup
 }
@@ -66,7 +66,7 @@ func newEditForm(t store.Ticket) editForm {
 		ticketType: t.Type,
 		status:     t.Status,
 		draft:      t.Draft,
-		workflowID:     t.WorkflowID,
+		workflowID: t.WorkflowID,
 		focus:      efTitle,
 	}
 }
@@ -114,7 +114,7 @@ const (
 	pfTitle        = 0
 	pfVisibility   = 1
 	pfDefaultDraft = 2
-	pfWorkflow         = 3
+	pfWorkflow     = 3
 	pfRepo         = 4
 	pfDesc         = 5
 	pfDoR          = 6
@@ -129,7 +129,7 @@ type projectEditForm struct {
 	title        textinput.Model
 	visibility   string
 	defaultDraft bool
-	workflowID       *int64
+	workflowID   *int64
 	gitRepo      textinput.Model
 	desc         textarea.Model
 	dor          textarea.Model
@@ -183,7 +183,7 @@ func newProjectEditForm(p store.Project) *projectEditForm {
 		title:        ti,
 		visibility:   p.Visibility,
 		defaultDraft: p.DefaultDraft,
-		workflowID:       p.WorkflowID,
+		workflowID:   p.WorkflowID,
 		gitRepo:      repo,
 		desc:         desc,
 		dor:          dor,
@@ -250,16 +250,16 @@ func (f *projectEditForm) prevField() {
 // ─── new ticket form ─────────────────────────────────────────────────────────
 
 const (
-	nfTitle = 0
-	nfType  = 1
-	nfDesc  = 2
-	nfAC    = 3
-	nfState = 4
-	nfStage = 5
-	nfDraft = 6
-	nfWorkflow  = 7
-	nfSave  = 8
-	nfCount = 9
+	nfTitle    = 0
+	nfType     = 1
+	nfDesc     = 2
+	nfAC       = 3
+	nfState    = 4
+	nfStage    = 5
+	nfDraft    = 6
+	nfWorkflow = 7
+	nfSave     = 8
+	nfCount    = 9
 )
 
 var ticketTypes = []string{"task", "epic", "bug", "spike", "chore", "note", "question", "requirement", "decision"}
@@ -282,7 +282,7 @@ type newTicketForm struct {
 	state      string
 	stage      string
 	draft      bool
-	workflowID     *int64
+	workflowID *int64
 	focus      int
 	picker     *pickerPopup
 }

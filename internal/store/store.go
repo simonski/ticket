@@ -157,7 +157,7 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
 		CreatedBy:          adminID,
-		WorkflowID:             workflowID,
+		WorkflowID:         workflowID,
 	}); err != nil {
 		return err
 	}
@@ -580,7 +580,7 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return err
 	}
-	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
+	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck // best-effort restore of FK enforcement
 
 	// Rename task_id columns to use ticket terminology.
 	if columnExists(ctx, db, "tickets", "task_id") {
@@ -1255,36 +1255,6 @@ func migrateTicketIDToText(ctx context.Context, db *sql.DB) error {
 	}
 
 	// Build a mapping of old integer ticket_id → key string.
-	// Also update all FK references in dependent tables.
-	rows, err := db.QueryContext(ctx, `SELECT ticket_id, key FROM tickets WHERE key != ''`)
-	if err != nil {
-		return fmt.Errorf("migrateTicketIDToText: read mapping: %w", err)
-	}
-	type idMapping struct {
-		oldID int64
-		key   string
-	}
-	var mappings []idMapping
-	for rows.Next() {
-		var m idMapping
-		if err := rows.Scan(&m.oldID, &m.key); err != nil {
-			if closeErr := rows.Close(); closeErr != nil {
-				log.Printf("store: close ticket mapping rows after scan failure: %v", closeErr)
-			}
-			return err
-		}
-		mappings = append(mappings, m)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		if closeErr := rows.Close(); closeErr != nil {
-			log.Printf("store: close ticket mapping rows after iteration failure: %v", closeErr)
-		}
-		return rowsErr
-	}
-	if closeErr := rows.Close(); closeErr != nil {
-		log.Printf("store: close ticket mapping rows: %v", closeErr)
-	}
-
 	// Recreate tickets table with TEXT PRIMARY KEY, without key column.
 	if _, err := db.ExecContext(ctx, `ALTER TABLE tickets RENAME TO tickets_old_int`); err != nil {
 		return fmt.Errorf("migrateTicketIDToText: rename tickets: %w", err)
@@ -1557,7 +1527,7 @@ func fixStaleForeignKeys(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return err
 	}
-	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck
+	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck // best-effort restore of FK enforcement
 
 	type tableMigration struct {
 		name   string

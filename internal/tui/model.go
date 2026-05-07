@@ -34,9 +34,9 @@ const (
 	modeProjectPicker
 	modeProjects // new: inline projects panel (replaces the modal modeProjectPicker)
 	modeProjectEdit
-	modeIdeas // new: list of top-level non-epic tickets (m.toplevel)
+	modeIdeas     // new: list of top-level non-epic tickets (m.toplevel)
 	modeWorkflows // workflow list with expandable stages
-	modeBoard // kanban board: tickets by stage columns
+	modeBoard     // kanban board: tickets by stage columns
 )
 
 // tabModes are the top-level panels cycled by tab: Home > Projects > Ideas > Epics > Workflows > Config.
@@ -120,7 +120,7 @@ type Model struct {
 	ideasOffset int
 
 	// workflows panel
-	workflows         []store.WorkflowWithStages
+	workflows     []store.WorkflowWithStages
 	roles         []store.Role
 	wfCursor      int
 	wfExpanded    map[int64]bool // expanded workflow IDs
@@ -760,7 +760,7 @@ func (m Model) saveProject() tea.Cmd {
 		GitRepository:      f.gitRepo.Value(),
 		Notes:              f.dod.Value(),
 		Visibility:         f.visibility,
-		WorkflowID:             f.workflowID,
+		WorkflowID:         f.workflowID,
 	}
 	svc := m.svc
 	defaultDraft := f.defaultDraft
@@ -1107,7 +1107,7 @@ func (m Model) statusBar(w int) string {
 			modeProjects:      "↑↓ nav · space switch · enter/e edit · esc back",
 			modeProjectEdit:   "tab next · enter save · ctrl+s save · esc cancel",
 			modeIdeas:         "↑↓/wasd · enter · e edit · n new · esc back",
-			modeWorkflows:         "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
+			modeWorkflows:     "↑↓ nav · enter expand · n add stage · x delete · K/J reorder · esc back",
 		}
 		hint := hints[m.mode]
 		text = " " + moon + "  " + hint

@@ -7,7 +7,7 @@ const (
 	DefaultHistoryLimit = 50
 )
 
-func normalizePage(limit, offset, defaultLimit int) (int, int, error) {
+func normalizePage(limit, offset, defaultLimit int) (normalizedLimit, normalizedOffset int, err error) {
 	if limit < 0 {
 		return 0, 0, fmt.Errorf("limit must be zero or greater")
 	}

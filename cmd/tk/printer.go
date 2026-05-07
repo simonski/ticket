@@ -477,11 +477,12 @@ func buildTreeDisplay(tickets []store.Ticket) (ordered []store.Ticket, treePrefi
 	// isLast indicates this is the last child among its siblings.
 	var visit func(t store.Ticket, ancestorBars string, isRoot, isLast bool)
 	visit = func(t store.Ticket, ancestorBars string, isRoot, isLast bool) {
-		if isRoot {
+		switch {
+		case isRoot:
 			treePrefix[t.ID] = ""
-		} else if isLast {
+		case isLast:
 			treePrefix[t.ID] = ancestorBars + "└─ "
-		} else {
+		default:
 			treePrefix[t.ID] = ancestorBars + "├─ "
 		}
 		ordered = append(ordered, t)
@@ -489,11 +490,12 @@ func buildTreeDisplay(tickets []store.Ticket) (ordered []store.Ticket, treePrefi
 		// Compute the ancestor bar prefix that children of t will inherit.
 		// Root nodes contribute no bar; non-last nodes contribute "│  "; last nodes contribute "   ".
 		var childAncestorBars string
-		if isRoot {
+		switch {
+		case isRoot:
 			childAncestorBars = ancestorBars
-		} else if isLast {
+		case isLast:
 			childAncestorBars = ancestorBars + "   "
-		} else {
+		default:
 			childAncestorBars = ancestorBars + "│  "
 		}
 		kids := children[t.ID]
@@ -508,7 +510,7 @@ func buildTreeDisplay(tickets []store.Ticket) (ordered []store.Ticket, treePrefi
 	return ordered, treePrefix
 }
 
-func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode bool, includeArchived bool) {
+func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agentUsernames map[string]bool, statusUnicode, includeArchived bool) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
 		return
@@ -1015,7 +1017,7 @@ func formatHistoryEvent(event store.HistoryEvent) string {
 		title, _ := data["title"].(string)
 		typ, _ := data["type"].(string)
 		status, _ := data["status"].(string)
-		return fmt.Sprintf("created %s \"%s\" [%s]", typ, title, status)
+		return fmt.Sprintf("created %s %q [%s]", typ, title, status)
 
 	case "ticket_lifecycle_changed":
 		fromStatus, _ := data["from_status"].(string)

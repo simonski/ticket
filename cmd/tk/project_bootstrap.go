@@ -13,7 +13,7 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
-func currentOrAncestorProjectRoot() (string, bool, error) {
+func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", false, err
@@ -111,7 +111,7 @@ func ensureLocalDatabase() (config.Config, error) {
 	return ensureDefaultLocalRemote(dbPath)
 }
 
-func bindRootToLocalProject(root string, titleOverride, prefixOverride, gitOverride string) error {
+func bindRootToLocalProject(root, titleOverride, prefixOverride, gitOverride string) error {
 	cfg, err := ensureLocalDatabase()
 	if err != nil {
 		return err

@@ -322,7 +322,7 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() //nolint:errcheck
+	defer tx.Rollback() //nolint:errcheck // best-effort rollback; tx may already be committed
 
 	// Anonymise audit trail records so history is preserved without PII.
 	// history_events.created_by and ticket_history.created_by are nullable.

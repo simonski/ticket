@@ -32,13 +32,13 @@ type Server struct {
 	stopReaper chan struct{}
 }
 
-func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath string, siteName string) (*Server, error) {
+func New(addr string, db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string) (*Server, error) {
 	handler, err := Handler(db, version, verbose, output, staticPath, siteName)
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{
-		httpServer: &http.Server{ //nolint:gosec
+		httpServer: &http.Server{ //nolint:gosec // bind address is caller-controlled configuration, not untrusted input
 			Addr:              addr,
 			Handler:           handler,
 			ReadHeaderTimeout: 30 * time.Second,
@@ -122,7 +122,7 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 	}
 }
 
-func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath string, siteName string) (http.Handler, error) {
+func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string) (http.Handler, error) {
 	var staticFS fs.FS
 	if staticPath != "" {
 		staticFS = os.DirFS(staticPath)
@@ -433,8 +433,8 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 			nonce := cspNonceFromContext(r.Context())
 			indexHTML := string(data)
 			if nonce != "" {
-				indexHTML = strings.Replace(indexHTML, "<style>", fmt.Sprintf(`<style nonce="%s">`, nonce), 1)
-				indexHTML = strings.Replace(indexHTML, "<script>", fmt.Sprintf(`<script nonce="%s">`, nonce), 1)
+				indexHTML = strings.Replace(indexHTML, "<style>", fmt.Sprintf(`<style nonce=%q>`, nonce), 1)
+				indexHTML = strings.Replace(indexHTML, "<script>", fmt.Sprintf(`<script nonce=%q>`, nonce), 1)
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if _, err := io.WriteString(w, indexHTML); err != nil {

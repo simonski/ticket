@@ -15,7 +15,7 @@ type Dependency struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func AddDependency(ctx context.Context, db *sql.DB, projectID int64, ticketID, dependsOn string, createdBy string) (Dependency, error) {
+func AddDependency(ctx context.Context, db *sql.DB, projectID int64, ticketID, dependsOn, createdBy string) (Dependency, error) {
 	ticket, err := GetTicket(ctx, db, ticketID)
 	if err != nil {
 		return Dependency{}, err

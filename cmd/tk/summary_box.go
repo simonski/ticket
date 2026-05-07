@@ -19,7 +19,7 @@ func projectGitRepoValue(project store.Project) string {
 	return strings.TrimSpace(project.GitRepository)
 }
 
-func buildProjectSummaryCoreLines(svc libticket.Service, project store.Project, statusUnicode bool, includeOpenTickets bool) []statusLine {
+func buildProjectSummaryCoreLines(svc libticket.Service, project store.Project, statusUnicode, includeOpenTickets bool) []statusLine {
 	all, _ := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, false)
 	var allTickets []store.Ticket
 	var activeTickets []store.Ticket

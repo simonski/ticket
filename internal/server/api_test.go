@@ -1082,7 +1082,7 @@ func TestWorkflowStageRoleAPI(t *testing.T) {
 		t.Fatalf("add roleB status = %d, want %d body=%s", added.Code, http.StatusCreated, added.Body.String())
 	}
 
-	reordered := doJSONRequest(t, handler, http.MethodPut, stagePath, map[string][]int64{"role_ids": []int64{roleB.ID, roleA.ID}}, adminToken)
+	reordered := doJSONRequest(t, handler, http.MethodPut, stagePath, map[string][]int64{"role_ids": {roleB.ID, roleA.ID}}, adminToken)
 	if reordered.Code != http.StatusOK {
 		t.Fatalf("reorder status = %d, want %d body=%s", reordered.Code, http.StatusOK, reordered.Body.String())
 	}
