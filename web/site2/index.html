@@ -673,6 +673,10 @@
             display: none !important;
         }
 
+        .site2-session-restore #login-screen {
+            visibility: hidden;
+        }
+
         @media (max-width: 1180px) {
             .shell,
             .split,
@@ -707,6 +711,15 @@
             }
         }
     </style>
+    <script>
+        try {
+            if (sessionStorage.getItem("site2.auth")) {
+                document.documentElement.classList.add("site2-session-restore");
+            }
+        } catch (error) {
+            // Ignore storage-access edge cases and keep default rendering.
+        }
+    </script>
 </head>
 <body>
     <div id="login-screen" class="screen login-screen">
@@ -1959,6 +1972,7 @@
         }
 
         function showAuthenticatedShell() {
+            document.documentElement.classList.remove("site2-session-restore");
             els.loginScreen.classList.add("hidden");
             els.appShell.classList.remove("hidden");
             els.loginError.textContent = "";
@@ -1967,6 +1981,7 @@
         }
 
         function showLoginScreen() {
+            document.documentElement.classList.remove("site2-session-restore");
             state.scrollPersistenceReady = false;
             els.appShell.classList.add("hidden");
             els.loginScreen.classList.remove("hidden");
