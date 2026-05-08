@@ -2129,6 +2129,92 @@ func TestInterventionAndWorkItemAccessRequiresEditorOrOwner(t *testing.T) {
 	}
 }
 
+func TestTicketWorkItemsAPIQueryFilters(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Work Item Filters API",
+		"visibility": "private",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Work item filtering",
+		"assignee":   "admin",
+	}, adminToken)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	setActiveResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
+		"assignee":    "admin",
+		"priority":    ticket.Priority,
+		"order":       ticket.Order,
+		"state":       "active",
+	}, adminToken)
+	if setActiveResp.Code != http.StatusOK {
+		t.Fatalf("set active status = %d body=%s", setActiveResp.Code, setActiveResp.Body.String())
+	}
+	var activeTicket store.Ticket
+	decodeResponse(t, setActiveResp, &activeTicket)
+
+	setSuccessResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":       activeTicket.Title,
+		"description": activeTicket.Description,
+		"assignee":    activeTicket.Assignee,
+		"priority":    activeTicket.Priority,
+		"order":       activeTicket.Order,
+		"state":       "success",
+	}, adminToken)
+	if setSuccessResp.Code != http.StatusOK {
+		t.Fatalf("set success status = %d body=%s", setSuccessResp.Code, setSuccessResp.Body.String())
+	}
+
+	successItemsResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items?status=success", nil, adminToken)
+	if successItemsResp.Code != http.StatusOK {
+		t.Fatalf("list success work-items status = %d body=%s", successItemsResp.Code, successItemsResp.Body.String())
+	}
+	var successItems []store.WorkItem
+	decodeResponse(t, successItemsResp, &successItems)
+	if len(successItems) != 1 || successItems[0].Status != store.WorkItemStatusSuccess {
+		t.Fatalf("success work-items = %#v", successItems)
+	}
+
+	humanItemsResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items?assignee_type=human", nil, adminToken)
+	if humanItemsResp.Code != http.StatusOK {
+		t.Fatalf("list human work-items status = %d body=%s", humanItemsResp.Code, humanItemsResp.Body.String())
+	}
+	var humanItems []store.WorkItem
+	decodeResponse(t, humanItemsResp, &humanItems)
+	if len(humanItems) != 1 {
+		t.Fatalf("human work-items len = %d, want 1", len(humanItems))
+	}
+
+	invalidStatusResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items?status=unknown", nil, adminToken)
+	if invalidStatusResp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid status filter code = %d body=%s", invalidStatusResp.Code, invalidStatusResp.Body.String())
+	}
+
+	invalidAssigneeResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items?assignee_type=robot", nil, adminToken)
+	if invalidAssigneeResp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid assignee filter code = %d body=%s", invalidAssigneeResp.Code, invalidAssigneeResp.Body.String())
+	}
+}
+
 func TestCountAPIAndAssignmentRules(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

@@ -36,20 +36,55 @@ type WorkItem struct {
 	UpdatedAt         string `json:"updated_at"`
 }
 
+type WorkItemListParams struct {
+	Status       string
+	AssigneeType string
+	Limit        int
+	Offset       int
+}
+
 func ListWorkItemsByTicket(ctx context.Context, db *sql.DB, ticketID string, limit, offset int) ([]WorkItem, error) {
-	limit, offset, err := normalizePage(limit, offset, DefaultHistoryLimit)
+	return ListWorkItemsByTicketWithParams(ctx, db, ticketID, WorkItemListParams{
+		Limit:  limit,
+		Offset: offset,
+	})
+}
+
+func ListWorkItemsByTicketWithParams(ctx context.Context, db *sql.DB, ticketID string, params WorkItemListParams) ([]WorkItem, error) {
+	limit, offset, err := normalizePage(params.Limit, params.Offset, DefaultHistoryLimit)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx, `
+	status, err := normalizeWorkItemStatus(params.Status)
+	if err != nil {
+		return nil, err
+	}
+	assigneeType, err := normalizeWorkItemAssigneeType(params.AssigneeType)
+	if err != nil {
+		return nil, err
+	}
+	query := `
 		SELECT work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
 		       assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback,
 		       started_at, completed_at, created_at, updated_at
 		FROM work_items
 		WHERE ticket_id = ?
+	`
+	args := []any{ticketID}
+	if status != "" {
+		query += " AND status = ?"
+		args = append(args, status)
+	}
+	if assigneeType != "" {
+		query += " AND assignee_type = ?"
+		args = append(args, assigneeType)
+	}
+	query += `
 		ORDER BY created_at DESC, work_item_id DESC
 		LIMIT ? OFFSET ?
-	`, ticketID, limit, offset)
+	`
+	args = append(args, limit, offset)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +99,32 @@ func ListWorkItemsByTicket(ctx context.Context, db *sql.DB, ticketID string, lim
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func normalizeWorkItemStatus(raw string) (string, error) {
+	status := strings.TrimSpace(strings.ToLower(raw))
+	if status == "" {
+		return "", nil
+	}
+	switch status {
+	case WorkItemStatusActive, WorkItemStatusSuccess, WorkItemStatusFail, WorkItemStatusStopped:
+		return status, nil
+	default:
+		return "", fmt.Errorf("invalid work item status %q", raw)
+	}
+}
+
+func normalizeWorkItemAssigneeType(raw string) (string, error) {
+	assigneeType := strings.TrimSpace(strings.ToLower(raw))
+	if assigneeType == "" {
+		return "", nil
+	}
+	switch assigneeType {
+	case "human", "agent":
+		return assigneeType, nil
+	default:
+		return "", fmt.Errorf("invalid work item assignee_type %q", raw)
+	}
 }
 
 func syncTicketWorkItems(ctx context.Context, db *sql.DB, before, after Ticket, requestedState, actorUsername, actorID string) error {

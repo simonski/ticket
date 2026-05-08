@@ -411,7 +411,12 @@ func (r *router) registerTicketHandlers() {
 					writeStoreError(w, err)
 					return
 				}
-				items, err := store.ListWorkItemsByTicket(r.Context(), db, id, limit, offset)
+				items, err := store.ListWorkItemsByTicketWithParams(r.Context(), db, id, store.WorkItemListParams{
+					Status:       r.URL.Query().Get("status"),
+					AssigneeType: r.URL.Query().Get("assignee_type"),
+					Limit:        limit,
+					Offset:       offset,
+				})
 				if err != nil {
 					writeStoreError(w, err)
 					return

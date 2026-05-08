@@ -4098,6 +4098,18 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - name: status
+          in: query
+          description: Filter by work-item status.
+          schema:
+            type: string
+            enum: [active, success, fail, stopped]
+        - name: assignee_type
+          in: query
+          description: Filter by assignee type.
+          schema:
+            type: string
+            enum: [human, agent]
       responses:
         '200':
           description: Work-item list

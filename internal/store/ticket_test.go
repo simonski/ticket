@@ -247,6 +247,103 @@ func TestSetTicketHealth(t *testing.T) {
 	}
 }
 
+func TestListWorkItemsByTicketWithParamsFilters(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Work Item Filters", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	alice, err := CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Filter work items",
+		Assignee:  "alice",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	active, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
+		Title:         ticket.Title,
+		Description:   ticket.Description,
+		Assignee:      ticket.Assignee,
+		Priority:      ticket.Priority,
+		Order:         ticket.Order,
+		State:         StateActive,
+		UpdatedBy:     alice.ID,
+		ActorUsername: alice.Username,
+		ActorRole:     alice.Role,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket(active) error = %v", err)
+	}
+	if active.State != StateActive {
+		t.Fatalf("active ticket state = %q, want %q", active.State, StateActive)
+	}
+	success, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
+		Title:         active.Title,
+		Description:   active.Description,
+		Assignee:      active.Assignee,
+		Priority:      active.Priority,
+		Order:         active.Order,
+		State:         StateSuccess,
+		UpdatedBy:     alice.ID,
+		ActorUsername: alice.Username,
+		ActorRole:     alice.Role,
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket(success) error = %v", err)
+	}
+	if success.State != StateIdle {
+		t.Fatalf("success transition state = %q, want %q", success.State, StateIdle)
+	}
+
+	filteredSuccess, err := ListWorkItemsByTicketWithParams(context.Background(), db, ticket.ID, WorkItemListParams{
+		Status: WorkItemStatusSuccess,
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("ListWorkItemsByTicketWithParams(success) error = %v", err)
+	}
+	if len(filteredSuccess) != 1 || filteredSuccess[0].Status != WorkItemStatusSuccess {
+		t.Fatalf("filtered success = %#v", filteredSuccess)
+	}
+
+	filteredHuman, err := ListWorkItemsByTicketWithParams(context.Background(), db, ticket.ID, WorkItemListParams{
+		AssigneeType: "human",
+		Limit:        10,
+	})
+	if err != nil {
+		t.Fatalf("ListWorkItemsByTicketWithParams(human) error = %v", err)
+	}
+	if len(filteredHuman) != 1 {
+		t.Fatalf("filtered human len = %d, want 1", len(filteredHuman))
+	}
+
+	filteredActive, err := ListWorkItemsByTicketWithParams(context.Background(), db, ticket.ID, WorkItemListParams{
+		Status: WorkItemStatusActive,
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("ListWorkItemsByTicketWithParams(active) error = %v", err)
+	}
+	if len(filteredActive) != 0 {
+		t.Fatalf("filtered active len = %d, want 0", len(filteredActive))
+	}
+
+	if _, err := ListWorkItemsByTicketWithParams(context.Background(), db, ticket.ID, WorkItemListParams{Status: "bogus"}); err == nil {
+		t.Fatalf("ListWorkItemsByTicketWithParams(invalid status) = nil, want error")
+	}
+	if _, err := ListWorkItemsByTicketWithParams(context.Background(), db, ticket.ID, WorkItemListParams{AssigneeType: "robot"}); err == nil {
+		t.Fatalf("ListWorkItemsByTicketWithParams(invalid assignee type) = nil, want error")
+	}
+}
+
 func TestTicketGuidanceMapsPersistAndResolve(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
