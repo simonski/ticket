@@ -298,6 +298,10 @@ func canManageProjectUsers(role string) bool {
 	return role == store.ProjectRoleOwner
 }
 
+func canManageInterventions(role string) bool {
+	return role == store.ProjectRoleOwner
+}
+
 func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

@@ -107,6 +107,16 @@ func TestCreateUpdateAndListTickets(t *testing.T) {
 	if statusUpdated.Stage != StageDevelop || statusUpdated.State != StateActive {
 		t.Fatalf("UpdateTicket().Lifecycle = %s/%s, want develop/active", statusUpdated.Stage, statusUpdated.State)
 	}
+	workItems, err := ListWorkItemsByTicket(context.Background(), db, ticket.ID, 0, 0)
+	if err != nil {
+		t.Fatalf("ListWorkItemsByTicket(active) error = %v", err)
+	}
+	if len(workItems) != 1 {
+		t.Fatalf("ListWorkItemsByTicket(active) len = %d, want 1", len(workItems))
+	}
+	if workItems[0].Status != WorkItemStatusActive {
+		t.Fatalf("active work item status = %q, want %q", workItems[0].Status, WorkItemStatusActive)
+	}
 
 	history, err = ListHistoryEvents(context.Background(), db, ticket.ID, 0, 0)
 	if err != nil {

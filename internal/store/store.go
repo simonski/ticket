@@ -359,6 +359,30 @@ CREATE TABLE IF NOT EXISTS ticket_history (
 	FOREIGN KEY(created_by) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS work_items (
+	work_item_id TEXT PRIMARY KEY,
+	ticket_id TEXT NOT NULL,
+	project_id INTEGER NOT NULL,
+	workflow_id INTEGER,
+	workflow_stage_id INTEGER,
+	role_id INTEGER,
+	status TEXT NOT NULL DEFAULT 'active',
+	assignee_type TEXT NOT NULL DEFAULT 'human',
+	assignee_id TEXT NOT NULL DEFAULT '',
+	objective_snapshot TEXT NOT NULL DEFAULT '',
+	prompt_snapshot TEXT NOT NULL DEFAULT '',
+	feedback TEXT NOT NULL DEFAULT '',
+	started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	completed_at TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id),
+	FOREIGN KEY(workflow_stage_id) REFERENCES workflow_stages(workflow_stage_id),
+	FOREIGN KEY(role_id) REFERENCES roles(role_id)
+);
+
 CREATE TABLE IF NOT EXISTS comments (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	item_id TEXT NOT NULL,
@@ -441,6 +465,8 @@ CREATE TABLE IF NOT EXISTS workflows (
 	workflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL UNIQUE,
 	description TEXT NOT NULL DEFAULT '',
+	approval_policy TEXT NOT NULL DEFAULT 'all_roles',
+	progression_mode TEXT NOT NULL DEFAULT 'linear',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -539,6 +565,9 @@ CREATE INDEX IF NOT EXISTS idx_history_events_ticket_id ON history_events(ticket
 
 CREATE INDEX IF NOT EXISTS idx_ticket_history_project_id ON ticket_history(project_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_history_ticket_id ON ticket_history(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_ticket_id ON work_items(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_project_id ON work_items(project_id);
+CREATE INDEX IF NOT EXISTS idx_work_items_status ON work_items(status);
 
 CREATE INDEX IF NOT EXISTS idx_comments_item_id ON comments(item_id);
 CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
@@ -667,6 +696,16 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_projects_workflow_id ON projects(workflow_id)`); err != nil {
 		return err
+	}
+	if !columnExists(ctx, db, "workflows", "approval_policy") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflows ADD COLUMN approval_policy TEXT NOT NULL DEFAULT 'all_roles'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "workflows", "progression_mode") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflows ADD COLUMN progression_mode TEXT NOT NULL DEFAULT 'linear'`); err != nil {
+			return err
+		}
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE projects SET status = 'open' WHERE status = 'active'`); err != nil {
 		return err

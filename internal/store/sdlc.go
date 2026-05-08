@@ -9,12 +9,19 @@ import (
 )
 
 type Workflow struct {
-	ID          int64  `json:"workflow_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID              int64  `json:"workflow_id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	ApprovalPolicy  string `json:"approval_policy"`
+	ProgressionMode string `json:"progression_mode"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
 }
+
+const (
+	WorkflowApprovalPolicyAllRoles = "all_roles"
+	WorkflowProgressionModeLinear  = "linear"
+)
 
 type WorkflowStage struct {
 	ID                 int64  `json:"workflow_stage_id"`
@@ -66,14 +73,14 @@ func CreateWorkflowWithParams(ctx context.Context, db *sql.DB, id *int64, name, 
 		return Workflow{}, err
 	}
 	query := `
-		INSERT INTO workflows (name, description, updated_at)
-		VALUES (?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO workflows (name, description, approval_policy, progression_mode, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`
-	args := []any{name, strings.TrimSpace(description)}
+	args := []any{name, strings.TrimSpace(description), WorkflowApprovalPolicyAllRoles, WorkflowProgressionModeLinear}
 	if hasExplicitID {
 		query = `
-			INSERT INTO workflows (workflow_id, name, description, updated_at)
-			VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+			INSERT INTO workflows (workflow_id, name, description, approval_policy, progression_mode, updated_at)
+			VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		`
 		args = append([]any{explicitID}, args...)
 	}
@@ -97,7 +104,7 @@ func ListWorkflows(ctx context.Context, db *sql.DB, limit, offset int) ([]Workfl
 		return nil, err
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT workflow_id, name, description, created_at, updated_at
+		SELECT workflow_id, name, description, approval_policy, progression_mode, created_at, updated_at
 		FROM workflows
 		ORDER BY name
 		LIMIT ? OFFSET ?
@@ -109,7 +116,7 @@ func ListWorkflows(ctx context.Context, db *sql.DB, limit, offset int) ([]Workfl
 	workflows := make([]Workflow, 0)
 	for rows.Next() {
 		var w Workflow
-		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.ApprovalPolicy, &w.ProgressionMode, &w.CreatedAt, &w.UpdatedAt); err != nil {
 			return nil, err
 		}
 		workflows = append(workflows, w)
@@ -291,9 +298,9 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 
 	// Create the Workflow
 	result, err := tx.ExecContext(ctx, `
-		INSERT INTO workflows (name, description, updated_at)
-		VALUES (?, ?, CURRENT_TIMESTAMP)
-	`, name, strings.TrimSpace(export.Description))
+		INSERT INTO workflows (name, description, approval_policy, progression_mode, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, name, strings.TrimSpace(export.Description), WorkflowApprovalPolicyAllRoles, WorkflowProgressionModeLinear)
 	if err != nil {
 		return Workflow{}, err
 	}
@@ -339,12 +346,12 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 
 func getWorkflowRow(ctx context.Context, db *sql.DB, id int64) (Workflow, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT workflow_id, name, description, created_at, updated_at
+		SELECT workflow_id, name, description, approval_policy, progression_mode, created_at, updated_at
 		FROM workflows
 		WHERE workflow_id = ?
 	`, id)
 	var w Workflow
-	if err := row.Scan(&w.ID, &w.Name, &w.Description, &w.CreatedAt, &w.UpdatedAt); err != nil {
+	if err := row.Scan(&w.ID, &w.Name, &w.Description, &w.ApprovalPolicy, &w.ProgressionMode, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		return Workflow{}, err
 	}
 	return w, nil

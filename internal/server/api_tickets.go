@@ -396,6 +396,29 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, events)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "work-items" && r.Method == http.MethodGet {
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				limit, err := queryInt(r, "limit", 0)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				offset, err := queryInt(r, "offset", 0)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				items, err := store.ListWorkItemsByTicket(r.Context(), db, id, limit, offset)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+				return
+			}
 
 			if len(parts) == 2 && parts[1] == "health" && r.Method == http.MethodPost {
 				if !canWriteProject(role) {
@@ -859,7 +882,7 @@ func (r *router) registerTicketHandlers() {
 				return
 			}
 			if len(parts) == 2 && parts[1] == "intervene" && r.Method == http.MethodPost {
-				if !canWriteProject(role) {
+				if !canManageInterventions(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}

@@ -48,6 +48,7 @@ var snapshotTableOrder = []string{
 	"story_ticket_links",
 	"history_events",
 	"ticket_history",
+	"work_items",
 	"comments",
 	"labels",
 	"ticket_labels",

@@ -303,6 +303,9 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	}, params.CreatedBy); err != nil {
 		return Ticket{}, err
 	}
+	if err := syncTicketWorkItems(ctx, db, Ticket{ID: ticket.ID, State: StateIdle, Stage: ticket.Stage}, ticket, state, params.Author, params.CreatedBy); err != nil {
+		return Ticket{}, err
+	}
 	if err := syncAncestorLifecycle(ctx, db, params.ParentID, params.CreatedBy); err != nil {
 		return Ticket{}, err
 	}
@@ -529,6 +532,9 @@ writeTicket:
 	}
 	ticket, err := GetTicket(ctx, db, id)
 	if err != nil {
+		return Ticket{}, err
+	}
+	if err := syncTicketWorkItems(ctx, db, current, ticket, params.State, params.ActorUsername, params.UpdatedBy); err != nil {
 		return Ticket{}, err
 	}
 	if current.Stage != ticket.Stage || current.State != ticket.State {

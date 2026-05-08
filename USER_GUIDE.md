@@ -681,6 +681,13 @@ tk history CUS-42
 
 `ticket history` prints the stored history events for that item.
 
+Each ticket now also tracks first-class execution work items in the API. Use
+`GET /api/tickets/{ticket_ref}/work-items` to inspect active/completed work-item
+records linked to lifecycle transitions.
+
+Intervention decisions (`POST /api/tickets/{ticket_ref}/intervene`) are restricted
+to project owners.
+
 In the web app, the item detail pane shows:
 
 1. the current item
