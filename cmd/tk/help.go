@@ -620,7 +620,7 @@ const workflowUsage = `Usage: tk workflow <command> [flags]
 Commands:
   ls                                  List all workflows
   new      -name <n> [-d desc]        Create a workflow
-  get      -id <id>                   Show workflow details
+  get      -id <id> [-tree]           Show workflow details (tree: workflow -> phase -> role)
   rm       -id <id> [-check]          Delete a workflow (or check references only)
   set      -ticket <id> -workflow <id> Set workflow on a ticket (overrides inherited)
   unset    -ticket <id>               Clear workflow from a ticket (inherit from parent/project)

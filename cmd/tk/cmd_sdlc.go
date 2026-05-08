@@ -72,11 +72,12 @@ func runWorkflow(args []string) error {
 		fs := flag.NewFlagSet("workflow get", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.Int64("id", 0, "workflow id")
+		tree := fs.Bool("tree", false, "render workflow as tree (workflow -> phase -> role)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if *id == 0 {
-			return errors.New("usage: tk workflow get -id <id>")
+			return errors.New("usage: tk workflow get -id <id> [-tree]")
 		}
 		wf, err := svc.GetWorkflow(context.Background(), *id)
 		if err != nil {
@@ -84,6 +85,10 @@ func runWorkflow(args []string) error {
 		}
 		if outputJSON {
 			return printJSON(wf)
+		}
+		if *tree {
+			printWorkflowTree(wf)
+			return nil
 		}
 		printWorkflowDetail(wf)
 		return nil
@@ -640,6 +645,30 @@ func printWorkflowDetail(wf store.WorkflowWithStages) {
 	}
 	if err := w.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not flush Workflow stage table: %v\n", err)
+	}
+}
+
+func printWorkflowTree(wf store.WorkflowWithStages) {
+	fmt.Printf("workflow: %s (%d)\n", wf.Name, wf.ID)
+	for stageIndex, stage := range wf.Stages {
+		stagePrefix := "├─"
+		roleIndent := "│ "
+		if stageIndex == len(wf.Stages)-1 {
+			stagePrefix = "└─"
+			roleIndent = "  "
+		}
+		fmt.Printf("%s phase: %s (%d)\n", stagePrefix, stage.StageName, stage.ID)
+		if len(stage.Roles) == 0 {
+			fmt.Printf("%s└─ role: (none)\n", roleIndent)
+			continue
+		}
+		for roleIndex, role := range stage.Roles {
+			rolePrefix := "├─"
+			if roleIndex == len(stage.Roles)-1 {
+				rolePrefix = "└─"
+			}
+			fmt.Printf("%s%s role: %s (%d)\n", roleIndent, rolePrefix, role.Title, role.ID)
+		}
 	}
 }
 

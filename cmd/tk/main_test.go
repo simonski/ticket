@@ -3790,6 +3790,69 @@ func TestRunWorkflowGetShowsStages(t *testing.T) {
 	}
 }
 
+func TestRunWorkflowGetTreeShowsWorkflowPhaseRoleHierarchy(t *testing.T) {
+	setupLocalCLI(t)
+	svc := localCLIService(t)
+	wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
+		Name:        "Tree Workflow",
+		Description: "workflow tree test",
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	designStage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
+		StageName: "design",
+		SortOrder: 1,
+	})
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
+	}
+	buildStage, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
+		StageName: "build",
+		SortOrder: 2,
+	})
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(build) error = %v", err)
+	}
+	architectRole, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
+		WorkflowID: &wf.ID,
+		Title:      "Architect",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole(Architect) error = %v", err)
+	}
+	engineerRole, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
+		WorkflowID: &wf.ID,
+		Title:      "Engineer",
+	})
+	if err != nil {
+		t.Fatalf("CreateRole(Engineer) error = %v", err)
+	}
+	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, designStage.ID, architectRole.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(design) error = %v", err)
+	}
+	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, buildStage.ID, engineerRole.ID); err != nil {
+		t.Fatalf("AddWorkflowStageRole(build) error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"workflow", "get", "-id", strconv.FormatInt(wf.ID, 10), "-tree"}); err != nil {
+			t.Fatalf("workflow get -tree error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"workflow: Tree Workflow",
+		"phase: design",
+		"role: Architect",
+		"phase: build",
+		"role: Engineer",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("workflow get -tree missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestRunWorkflowGetShowsStageAcceptanceCriteria(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
