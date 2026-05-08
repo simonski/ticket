@@ -790,7 +790,7 @@
                         <div class="panel panel-padded" style="margin-top: 16px;">
                             <h3>Predicted next work</h3>
                             <p class="meta">Projected next phase/role transitions from the current workflow graph.</p>
-                            <div id="predicted-work-list" class="history-list"></div>
+                            <div id="predicted-work-list" class="history-list" role="status" aria-live="polite"></div>
                         </div>
                     </div>
                 </section>
@@ -2004,7 +2004,20 @@
                     if (stageIndex < 0) {
                         return null;
                     }
+                    const approvalPolicy = String(workflow.approval_policy || "single_role").toLowerCase();
+                    const progressionMode = String(workflow.progression_mode || "linear").toLowerCase();
+                    const roleByRole = approvalPolicy === "all_roles" && progressionMode !== "stage_only";
+                    const currentStage = workflow.stages[stageIndex];
+                    const currentRoles = currentStage.roles || [];
+                    const currentRoleIndex = currentRoles.findIndex((role) => Number(role.id) === Number(ticket.role_id));
                     if (String(ticket.state || "").toLowerCase() === "success") {
+                        if (roleByRole && currentRoles.length && currentRoleIndex >= 0 && currentRoleIndex + 1 < currentRoles.length) {
+                            const nextRoleInStage = currentRoles[currentRoleIndex + 1];
+                            return {
+                                key: ticket.key || ticket.id,
+                                detail: "next: " + String(currentStage.name || "unknown") + " / " + String(nextRoleInStage.title || ("role " + nextRoleInStage.id)),
+                            };
+                        }
                         if (stageIndex + 1 < workflow.stages.length) {
                             const nextStage = workflow.stages[stageIndex + 1];
                             const nextRole = (nextStage.roles || [])[0] || null;
@@ -2015,7 +2028,6 @@
                         }
                         return { key: ticket.key || ticket.id, detail: "next: completion/close decision" };
                     }
-                    const currentStage = workflow.stages[stageIndex];
                     const currentRole = (currentStage.roles || []).find((role) => Number(role.id) === Number(ticket.role_id)) || (currentStage.roles || [])[0] || null;
                     return {
                         key: ticket.key || ticket.id,

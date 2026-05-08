@@ -445,6 +445,10 @@ test("moves a ticket across the board with drag and drop", async ({ page }) => {
   expect(requests.some((request) => request.body.stage === "done")).toBeTruthy();
 });
 
+test("shows predicted next work entries on the board", async ({ page }) => {
+  await expect(page.locator("#predicted-work-list")).toContainText("No forecastable tickets.");
+});
+
 test("reorders board stages through the Workflow reorder endpoint", async ({ page }) => {
   await page.dragAndDrop('[data-workflow-stage-id="11"]', '[data-workflow-stage-id="14"]');
 
