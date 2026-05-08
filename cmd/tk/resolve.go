@@ -56,9 +56,31 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 }
 
 func resolveService(cfg config.Config) (libticket.Service, error) {
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return nil, err
+	var (
+		resolved config.Resolved
+		err      error
+	)
+	if config.HasLocationOverride() {
+		resolved, err = config.ResolveURL()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		location := strings.TrimSpace(cfg.Location)
+		if location == "" {
+			if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.Remote)); ok {
+				location = strings.TrimSpace(remote.URL)
+			}
+		}
+		if location == "" {
+			if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.DefaultRemote)); ok {
+				location = strings.TrimSpace(remote.URL)
+			}
+		}
+		resolved, err = config.ResolveLocation(location)
+		if err != nil {
+			return nil, err
+		}
 	}
 	effectiveCfg := cfg
 	switch resolved.Mode {

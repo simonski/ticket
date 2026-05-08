@@ -4564,6 +4564,26 @@ func localCLIService(t *testing.T) libticket.Service {
 	return svc
 }
 
+func TestResolveServiceUsesProvidedRemoteConfig(t *testing.T) {
+	setupLocalCLI(t)
+
+	cfg := config.Config{
+		Location: "http://127.0.0.1:1",
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+
+	_, _, loginErr := svc.Login(context.Background(), "admin", "password")
+	if loginErr == nil {
+		t.Fatal("expected login error against test endpoint")
+	}
+	if strings.Contains(loginErr.Error(), "requires remote mode") {
+		t.Fatalf("expected remote HTTP login attempt, got local-mode error: %v", loginErr)
+	}
+}
+
 func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticket.Service {
 	t.Helper()
 	svc := localCLIService(t)
