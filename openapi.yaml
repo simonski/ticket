@@ -3297,6 +3297,55 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/interventions:
+    get:
+      tags: [Projects]
+      summary: List failed tickets needing intervention
+      description: Restricted to project editors and owners.
+      operationId: listProjectInterventions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: include_archived
+          in: query
+          description: Include archived tickets (1/true/yes)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Intervention queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/projects/{project_id}/stories:
     get:
       tags: [Projects]
@@ -4029,6 +4078,7 @@ paths:
     get:
       tags: [Tickets]
       summary: Get ticket work-item executions
+      description: Restricted to project editors and owners.
       operationId: listTicketWorkItems
       security:
         - BearerAuth: []

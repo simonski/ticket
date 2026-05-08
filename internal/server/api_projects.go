@@ -156,7 +156,7 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			if !canReadProject(role) {
+			if !canViewInterventions(role) {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}

@@ -2038,6 +2038,97 @@ func TestTicketInterventionDecisionAPI(t *testing.T) {
 	}
 }
 
+func TestInterventionAndWorkItemAccessRequiresEditorOrOwner(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Public Access Controls",
+		"visibility": "public",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Requires intervention visibility controls",
+	}, adminToken)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	setFailResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
+		"assignee":    ticket.Assignee,
+		"priority":    ticket.Priority,
+		"order":       ticket.Order,
+		"state":       "fail",
+	}, adminToken)
+	if setFailResp.Code != http.StatusOK {
+		t.Fatalf("set fail status = %d body=%s", setFailResp.Code, setFailResp.Body.String())
+	}
+
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "vieweruser",
+		"password": "password123",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create viewer status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	var viewer store.User
+	decodeResponse(t, createUserResp, &viewer)
+
+	viewerLogin := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "vieweruser",
+		"password": "password123",
+	}, "")
+	if viewerLogin.Code != http.StatusOK {
+		t.Fatalf("viewer login status = %d body=%s", viewerLogin.Code, viewerLogin.Body.String())
+	}
+	var viewerAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, viewerLogin, &viewerAuth)
+
+	interventionsAsViewer := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions", nil, viewerAuth.Token)
+	if interventionsAsViewer.Code != http.StatusForbidden {
+		t.Fatalf("viewer interventions status = %d body=%s", interventionsAsViewer.Code, interventionsAsViewer.Body.String())
+	}
+
+	workItemsAsViewer := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items", nil, viewerAuth.Token)
+	if workItemsAsViewer.Code != http.StatusForbidden {
+		t.Fatalf("viewer work-items status = %d body=%s", workItemsAsViewer.Code, workItemsAsViewer.Body.String())
+	}
+
+	addEditorResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/users", map[string]any{
+		"user_id": viewer.ID,
+		"role":    store.ProjectRoleEditor,
+	}, adminToken)
+	if addEditorResp.Code != http.StatusOK {
+		t.Fatalf("add editor membership status = %d body=%s", addEditorResp.Code, addEditorResp.Body.String())
+	}
+
+	interventionsAsEditor := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions", nil, viewerAuth.Token)
+	if interventionsAsEditor.Code != http.StatusOK {
+		t.Fatalf("editor interventions status = %d body=%s", interventionsAsEditor.Code, interventionsAsEditor.Body.String())
+	}
+
+	workItemsAsEditor := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items", nil, viewerAuth.Token)
+	if workItemsAsEditor.Code != http.StatusOK {
+		t.Fatalf("editor work-items status = %d body=%s", workItemsAsEditor.Code, workItemsAsEditor.Body.String())
+	}
+}
+
 func TestCountAPIAndAssignmentRules(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

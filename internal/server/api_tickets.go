@@ -397,7 +397,7 @@ func (r *router) registerTicketHandlers() {
 				return
 			}
 			if len(parts) == 2 && parts[1] == "work-items" && r.Method == http.MethodGet {
-				if !canReadProject(role) {
+				if !canViewWorkItems(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}

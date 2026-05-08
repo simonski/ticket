@@ -298,6 +298,24 @@ func canManageProjectUsers(role string) bool {
 	return role == store.ProjectRoleOwner
 }
 
+func canViewInterventions(role string) bool {
+	switch role {
+	case store.ProjectRoleEditor, store.ProjectRoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
+func canViewWorkItems(role string) bool {
+	switch role {
+	case store.ProjectRoleEditor, store.ProjectRoleOwner:
+		return true
+	default:
+		return false
+	}
+}
+
 func canManageInterventions(role string) bool {
 	return role == store.ProjectRoleOwner
 }

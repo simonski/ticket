@@ -683,10 +683,14 @@ tk history CUS-42
 
 Each ticket now also tracks first-class execution work items in the API. Use
 `GET /api/tickets/{ticket_ref}/work-items` to inspect active/completed work-item
-records linked to lifecycle transitions.
+records linked to lifecycle transitions. Access is restricted to project
+editors and owners.
 
 Intervention decisions (`POST /api/tickets/{ticket_ref}/intervene`) are restricted
 to project owners.
+
+The intervention queue endpoint (`GET /api/projects/{project_ref}/interventions`)
+is restricted to project editors and owners.
 
 In the web app, the item detail pane shows:
 
