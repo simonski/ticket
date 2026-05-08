@@ -245,11 +245,12 @@ func (m Model) viewBoard() []string {
 		if len(label) > colWidth-1 {
 			label = label[:colWidth-1]
 		}
-		if i == m.boardCol && m.boardInHeader {
+		switch {
+		case i == m.boardCol && m.boardInHeader:
 			header.WriteString(selStyle.Render(padRight(label, colWidth)))
-		} else if i == m.boardCol {
+		case i == m.boardCol:
 			header.WriteString(accent.Render(padRight(label, colWidth)))
-		} else {
+		default:
 			header.WriteString(muted.Render(padRight(label, colWidth)))
 		}
 	}

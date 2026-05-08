@@ -135,11 +135,11 @@ func DeleteWorkflow(ctx context.Context, db *sql.DB, id int64) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workflow_stage_roles WHERE workflow_id = ?`, id); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `DELETE FROM workflow_stage_roles WHERE workflow_id = ?`, id); execErr != nil {
+		return execErr
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM workflow_stages WHERE workflow_id = ?`, id); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `DELETE FROM workflow_stages WHERE workflow_id = ?`, id); execErr != nil {
+		return execErr
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM workflows WHERE workflow_id = ?`, id)
 	if err != nil {
@@ -383,14 +383,14 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 	stages := make([]WorkflowStage, 0)
 	for rows.Next() {
 		var s WorkflowStage
-		if err := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
-			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); err != nil {
-			return nil, err
+		if scanErr := rows.Scan(&s.ID, &s.WorkflowID, &s.StageName, &s.Description,
+			&s.AcceptanceCriteria, &s.DefinitionOfReady, &s.DefinitionOfDone, &s.SortOrder, &s.CreatedAt, &s.UpdatedAt); scanErr != nil {
+			return nil, scanErr
 		}
 		stages = append(stages, s)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
 	}
 	// Batch-load all roles for all stages in one query to avoid N+1.
 	rolesByStage, err := listWorkflowStageRolesBatch(ctx, db, workflowID)

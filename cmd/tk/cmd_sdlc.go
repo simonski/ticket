@@ -298,8 +298,8 @@ func runWorkflow(args []string) error {
 			return err
 		}
 		var export store.WorkflowExport
-		if err := json.Unmarshal(data, &export); err != nil {
-			return err
+		if unmarshalErr := json.Unmarshal(data, &export); unmarshalErr != nil {
+			return unmarshalErr
 		}
 		wf, err := svc.ImportWorkflow(context.Background(), export)
 		if err != nil {

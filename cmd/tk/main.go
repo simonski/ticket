@@ -91,9 +91,6 @@ func run(args []string) error {
 	}
 	// -g launches the TUI (may appear before or after other args)
 	if guiTheme != "" || (len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui")) {
-		if len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui") {
-			trimmedArgs = trimmedArgs[1:]
-		}
 		return runGUI(guiTheme)
 	}
 

@@ -140,8 +140,8 @@ func (r *router) registerAgentHandlers() {
 			var payload struct {
 				Status string `json:"status"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
-				log.Printf("server: decode agent heartbeat payload: %v", err)
+			if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil && !errors.Is(decodeErr, io.EOF) {
+				log.Printf("server: decode agent heartbeat payload: %v", decodeErr)
 			}
 			status := strings.TrimSpace(payload.Status)
 			if status == "" {
@@ -194,9 +194,9 @@ func (r *router) registerAgentHandlers() {
 			vlog("agent=%q authenticated (id=%s)", agent.Username, agent.ID)
 			projectID := payload.ProjectID
 			if payload.TicketID == nil && projectID == 0 {
-				projects, err := store.ListProjects(r.Context(), db, 0)
-				if err != nil {
-					writeError(w, http.StatusInternalServerError, err.Error())
+				projects, listErr := store.ListProjects(r.Context(), db, 0)
+				if listErr != nil {
+					writeError(w, http.StatusInternalServerError, listErr.Error())
 					return
 				}
 				for _, p := range projects {
@@ -236,13 +236,13 @@ func (r *router) registerAgentHandlers() {
 			if status == "NO-WORK" {
 				// Explain why no work was found.
 				vlog("explaining NO-WORK decision for project=%d:", projectID)
-				if reasons, err := store.ExplainNoWork(r.Context(), db, projectID, agent.Username); err == nil {
+				if reasons, explainErr := store.ExplainNoWork(r.Context(), db, projectID, agent.Username); explainErr == nil {
 					for _, reason := range reasons {
 						vlog("  %s", reason)
 					}
 				}
 			}
-			agentStatus := "NONE"
+			var agentStatus string
 			switch status {
 			case "NO-WORK", "REJECTED":
 				agentStatus = "NONE"
@@ -261,13 +261,13 @@ func (r *router) registerAgentHandlers() {
 				agentStatus = status
 			}
 			if status == "ASSIGNED" && agentStatus == "NEW" {
-				if _, err := store.TouchAgent(r.Context(), db, agent.ID, "working"); err != nil {
-					log.Printf("server: touch agent %s status=working: %v", agent.ID, err)
+				if _, touchErr := store.TouchAgent(r.Context(), db, agent.ID, "working"); touchErr != nil {
+					log.Printf("server: touch agent %s status=working: %v", agent.ID, touchErr)
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)
 			} else {
-				if _, err := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); err != nil {
-					log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, err)
+				if _, touchErr := store.TouchAgent(r.Context(), db, agent.ID, "soliciting"); touchErr != nil {
+					log.Printf("server: touch agent %s status=soliciting: %v", agent.ID, touchErr)
 				}
 			}
 			// Check if config should be included in response.

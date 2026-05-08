@@ -39,7 +39,7 @@ func (r *router) registerTeamHandlers() {
 				return
 			}
 			var payload teamRequest
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
@@ -76,7 +76,7 @@ func (r *router) registerTeamHandlers() {
 			return
 		}
 		var teamID int64
-		if _, err := fmt.Sscan(parts[0], &teamID); err != nil {
+		if _, scanErr := fmt.Sscan(parts[0], &teamID); scanErr != nil {
 			writeError(w, http.StatusBadRequest, "invalid team id")
 			return
 		}

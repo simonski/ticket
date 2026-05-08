@@ -108,8 +108,8 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	}
 	defer db.Close()
 
-	if err := createSchema(ctx, db); err != nil {
-		return err
+	if schemaErr := createSchema(ctx, db); schemaErr != nil {
+		return schemaErr
 	}
 
 	hash, err := password.Hash(adminPassword)
@@ -1206,12 +1206,12 @@ func backfillProjectPrefixes(ctx context.Context, db *sql.DB) error {
 				if ticketCount == 0 {
 					prefix := defaultProjectPrefix
 					if prefix != strings.TrimSpace(project.prefix) {
-						prefix, err := nextUniqueProjectPrefix(ctx, db, prefix)
-						if err != nil {
-							return err
+						nextPrefix, prefixErr := nextUniqueProjectPrefix(ctx, db, prefix)
+						if prefixErr != nil {
+							return prefixErr
 						}
-						if _, err := db.ExecContext(ctx, `UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, prefix, project.id); err != nil {
-							return err
+						if _, execErr := db.ExecContext(ctx, `UPDATE projects SET prefix = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, nextPrefix, project.id); execErr != nil {
+							return execErr
 						}
 					}
 				}

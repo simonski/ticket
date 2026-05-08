@@ -225,7 +225,6 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	}
 	cfgPath := effectiveConfigPath()
 	ticketHome, _ := config.Home()
-	projectID, projectSource := resolveCurrentProject(cfg)
 	projectID, _, projectSource, workflowName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
 	if outputJSON {
 		payload := map[string]any{

@@ -144,8 +144,8 @@ func ImportSnapshot(ctx context.Context, db *sql.DB, snapshot Snapshot) error {
 		return err
 	}
 	defer conn.Close()
-	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return err
+	if _, pragmaErr := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); pragmaErr != nil {
+		return pragmaErr
 	}
 	restoreForeignKeys := func() {
 		_, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`)

@@ -603,7 +603,7 @@ func csrfMiddleware(next http.Handler) http.Handler {
 			cookieName := csrfCookieName(r)
 			// Set CSRF cookie if not present.
 			if _, err := r.Cookie(cookieName); err != nil {
-				http.SetCookie(w, &http.Cookie{
+				http.SetCookie(w, &http.Cookie{ // #nosec G124 -- CSRF double-submit requires JS-readable cookie (HttpOnly=false)
 					Name:     cookieName,
 					Value:    generateToken(),
 					Path:     "/",

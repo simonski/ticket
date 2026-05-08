@@ -58,7 +58,7 @@ func runLogin(args []string) error {
 		return err
 	}
 
-	username, password, err := resolveCredentials(*usernameFlag, *passwordFlag, true)
+	_, resolvedPassword, err := resolveCredentials(*usernameFlag, *passwordFlag, true)
 	if err != nil {
 		return err
 	}
@@ -73,11 +73,11 @@ func runLogin(args []string) error {
 	}
 
 	if cfg.Token != "" {
-		status, err := svc.Status(context.Background())
-		if err == nil && status.Authenticated && status.User != nil {
+		status, statusErr := svc.Status(context.Background())
+		if statusErr == nil && status.Authenticated && status.User != nil {
 			cfg.Username = status.User.Username
-			if err := config.Save(cfg); err != nil {
-				return err
+			if saveErr := config.Save(cfg); saveErr != nil {
+				return saveErr
 			}
 			if outputJSON {
 				return printJSON(status)
@@ -87,16 +87,19 @@ func runLogin(args []string) error {
 		}
 	}
 
-	username = resolveLoginUsername(cfg.Username, *usernameFlag)
-	password = resolveLoginPassword(*passwordFlag)
+	username := resolveLoginUsername(cfg.Username, *usernameFlag)
+	password := resolveLoginPassword(*passwordFlag)
+	if password == "" {
+		password = resolvedPassword
+	}
 
 	if username != "" && password != "" {
-		user, token, err := svc.Login(context.Background(), username, password)
-		if err == nil {
+		user, token, loginErr := svc.Login(context.Background(), username, password)
+		if loginErr == nil {
 			return finishLogin(cfg, user, token)
 		}
-		if err.Error() != "invalid credentials" {
-			return err
+		if loginErr.Error() != "invalid credentials" {
+			return loginErr
 		}
 		fmt.Println("invalid credentials")
 	}
@@ -217,8 +220,8 @@ func runCount(args []string) error {
 	var projectFilter *int64
 	if *projectID != 0 {
 		projectFilter = projectID
-		if _, err := svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectID)); err != nil {
-			return err
+		if _, getErr := svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectID)); getErr != nil {
+			return getErr
 		}
 	}
 	hasTicketFilters := strings.TrimSpace(*taskType) != "" ||
@@ -243,20 +246,20 @@ func runCount(args []string) error {
 				return err
 			}
 		} else {
-			_, resolvedSvc, currentProject, err := resolveCurrentProjectClient()
-			if err != nil {
-				return err
+			_, resolvedSvc, currentProject, resolveErr := resolveCurrentProjectClient()
+			if resolveErr != nil {
+				return resolveErr
 			}
 			svc = resolvedSvc
 			project = currentProject
 		}
-		resolvedStage, resolvedState, err := resolveLifecycleInput(*status, *stage, *state)
-		if err != nil {
-			return err
+		resolvedStage, resolvedState, lifecycleErr := resolveLifecycleInput(*status, *stage, *state)
+		if lifecycleErr != nil {
+			return lifecycleErr
 		}
-		tickets, err := svc.ListTicketsFiltered(context.Background(), project.ID, *taskType, resolvedStage, resolvedState, "", *search, *assignee, 0, *includeAll)
-		if err != nil {
-			return err
+		tickets, listErr := svc.ListTicketsFiltered(context.Background(), project.ID, *taskType, resolvedStage, resolvedState, "", *search, *assignee, 0, *includeAll)
+		if listErr != nil {
+			return listErr
 		}
 		if !*includeAll {
 			open := tickets[:0]
@@ -277,18 +280,18 @@ func runCount(args []string) error {
 		}
 		count := len(tickets)
 		if hasExpectEquals {
-			expected, err := parseExpectedCount("expect_equals", *expectEquals)
-			if err != nil {
-				return err
+			expected, parseErr := parseExpectedCount("expect_equals", *expectEquals)
+			if parseErr != nil {
+				return parseErr
 			}
 			if count != expected {
 				return fmt.Errorf("expected count to equal %d, got %d", expected, count)
 			}
 		}
 		if hasExpectNotEquals {
-			expected, err := parseExpectedCount("expect_notequals", *expectNotEquals)
-			if err != nil {
-				return err
+			expected, parseErr := parseExpectedCount("expect_notequals", *expectNotEquals)
+			if parseErr != nil {
+				return parseErr
 			}
 			if count == expected {
 				return fmt.Errorf("expected count to not equal %d, got %d", expected, count)

@@ -107,7 +107,7 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 	workflowID := params.WorkflowID
 	if workflowID == nil {
 		var wfID int64
-		if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows ORDER BY workflow_id LIMIT 1`).Scan(&wfID); err == nil {
+		if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows ORDER BY workflow_id LIMIT 1`).Scan(&wfID); queryErr == nil {
 			workflowID = &wfID
 		}
 	}
@@ -528,27 +528,27 @@ func RenameProjectPrefix(ctx context.Context, db *sql.DB, projectID int64, newPr
 	var mappings []keyMapping
 	for rows.Next() {
 		var oldKey, ticketType string
-		if err := rows.Scan(&oldKey, &ticketType); err != nil {
-			return 0, err
+		if scanErr := rows.Scan(&oldKey, &ticketType); scanErr != nil {
+			return 0, scanErr
 		}
 		// Extract the sequence number from the old key.
 		seq := extractSequence(oldKey)
 		if seq <= 0 {
 			return 0, fmt.Errorf("could not extract sequence from key %q", oldKey)
 		}
-		newKey, err := generateTicketKey(newPrefix, ticketType, seq)
-		if err != nil {
-			return 0, fmt.Errorf("generating new key for %q: %w", oldKey, err)
+		newKey, keyErr := generateTicketKey(newPrefix, ticketType, seq)
+		if keyErr != nil {
+			return 0, fmt.Errorf("generating new key for %q: %w", oldKey, keyErr)
 		}
 		mappings = append(mappings, keyMapping{oldKey: oldKey, newKey: newKey, ticketType: ticketType})
 	}
-	if err := rows.Err(); err != nil {
-		return 0, err
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return 0, rowsErr
 	}
 
 	// PRAGMA foreign_keys must be set outside a transaction in SQLite.
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
-		return 0, err
+	if _, pragmaErr := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); pragmaErr != nil {
+		return 0, pragmaErr
 	}
 	defer db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) //nolint:errcheck // best-effort restore of FK enforcement
 

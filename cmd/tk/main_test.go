@@ -559,8 +559,8 @@ func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
 	}
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", err)
+	if chdirErr := os.Chdir(tempDir); chdirErr != nil {
+		t.Fatalf("Chdir(tempDir) error = %v", chdirErr)
 	}
 	defer func() {
 		_ = os.Chdir(originalWD)
@@ -585,8 +585,8 @@ func TestRunSkillPrintsEmbeddedSkillTemplateToStdout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
 	}
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", err)
+	if chdirErr := os.Chdir(tempDir); chdirErr != nil {
+		t.Fatalf("Chdir(tempDir) error = %v", chdirErr)
 	}
 	defer func() {
 		_ = os.Chdir(originalWD)
@@ -1877,18 +1877,18 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRole(tester) error = %v", err)
 	}
-	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, designStage.ID, designer.ID); err != nil {
-		t.Fatalf("AddWorkflowStageRole(design) error = %v", err)
+	if roleErr := svc.AddWorkflowStageRole(context.Background(), wf.ID, designStage.ID, designer.ID); roleErr != nil {
+		t.Fatalf("AddWorkflowStageRole(design) error = %v", roleErr)
 	}
-	if err := svc.AddWorkflowStageRole(context.Background(), wf.ID, testStage.ID, tester.ID); err != nil {
-		t.Fatalf("AddWorkflowStageRole(test) error = %v", err)
+	if roleErr := svc.AddWorkflowStageRole(context.Background(), wf.ID, testStage.ID, tester.ID); roleErr != nil {
+		t.Fatalf("AddWorkflowStageRole(test) error = %v", roleErr)
 	}
 	project, err := svc.GetProject(context.Background(), "1")
 	if err != nil {
 		t.Fatalf("GetProject(1) error = %v", err)
 	}
-	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{WorkflowID: &wf.ID}); err != nil {
-		t.Fatalf("UpdateProject(workflow) error = %v", err)
+	if _, updateErr := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{WorkflowID: &wf.ID}); updateErr != nil {
+		t.Fatalf("UpdateProject(workflow) error = %v", updateErr)
 	}
 
 	taskID := createLocalTask(t, []string{"add", "Workflow Ticket"})
@@ -1900,8 +1900,8 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 		t.Fatalf("initial ticket = %#v, want design stage with designer role", initial)
 	}
 
-	if err := run([]string{"update", "-id", taskID, "-status", "design/success"}); err != nil {
-		t.Fatalf("update design/success error = %v", err)
+	if runErr := run([]string{"update", "-id", taskID, "-status", "design/success"}); runErr != nil {
+		t.Fatalf("update design/success error = %v", runErr)
 	}
 	advanced, err := svc.GetTicket(context.Background(), taskID)
 	if err != nil {
@@ -1911,12 +1911,12 @@ func TestRunWorkflowAssignsFirstStageRoleAndSupportsPrevious(t *testing.T) {
 		t.Fatalf("advanced ticket = %#v, want test stage with tester role idle", advanced)
 	}
 
-	if err := run([]string{"update", "-id", taskID, "-status", "test/fail"}); err != nil {
-		t.Fatalf("update test/fail error = %v", err)
+	if runErr := run([]string{"update", "-id", taskID, "-status", "test/fail"}); runErr != nil {
+		t.Fatalf("update test/fail error = %v", runErr)
 	}
 	previousOutput := captureStdout(t, func() {
-		if err := run([]string{"previous", "-id", taskID}); err != nil {
-			t.Fatalf("previous error = %v", err)
+		if runErr := run([]string{"previous", "-id", taskID}); runErr != nil {
+			t.Fatalf("previous error = %v", runErr)
 		}
 	})
 	if !strings.Contains(previousOutput, "regressed: test/fail -> design/idle") {
@@ -2197,25 +2197,25 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 		t.Fatalf("GetProject() error = %v", err)
 	}
 	if project.WorkflowID != nil {
-		stages, err := svc.ListWorkflowStages(context.Background(), *project.WorkflowID)
-		if err != nil {
-			t.Fatalf("ListWorkflowStages() error = %v", err)
+		stages, listErr := svc.ListWorkflowStages(context.Background(), *project.WorkflowID)
+		if listErr != nil {
+			t.Fatalf("ListWorkflowStages() error = %v", listErr)
 		}
 		for _, stage := range stages {
-			if _, err := svc.UpdateWorkflowStage(context.Background(), stage.ID, libticket.WorkflowStageRequest{
+			if _, updateErr := svc.UpdateWorkflowStage(context.Background(), stage.ID, libticket.WorkflowStageRequest{
 				StageName:          stage.StageName,
 				Description:        stage.Description,
 				AcceptanceCriteria: "Stage acceptance criteria",
 				DefinitionOfReady:  "Stage acceptance criteria",
-			}); err != nil {
-				t.Fatalf("UpdateWorkflowStage() error = %v", err)
+			}); updateErr != nil {
+				t.Fatalf("UpdateWorkflowStage() error = %v", updateErr)
 			}
 		}
 	}
 
 	epicID := createLocalTask(t, []string{"epic", "-d", "Epic description", "Prompt Epic"})
 	taskID := createLocalTask(t, []string{"add", "-parent", epicID, "-d", "Task description", "-ac", "Task acceptance", "Prompt Task"})
-	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{
+	if _, updateErr := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{
 		Title:              project.Title,
 		Description:        project.Description,
 		AcceptanceCriteria: project.AcceptanceCriteria,
@@ -2223,8 +2223,8 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 		DODMap:             store.GuidanceMap{"default": "Project default DOD"},
 		ACMap:              store.GuidanceMap{"default": "Project default AC"},
 		WorkflowID:         project.WorkflowID,
-	}); err != nil {
-		t.Fatalf("UpdateProject() error = %v", err)
+	}); updateErr != nil {
+		t.Fatalf("UpdateProject() error = %v", updateErr)
 	}
 	task, err := svc.GetTicket(context.Background(), taskID)
 	if err != nil {
@@ -2289,20 +2289,20 @@ func TestRunProjectInit(t *testing.T) {
 		t.Fatalf("config.Load() error = %v", err)
 	}
 	cfg.ProjectID = ""
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
+	if saveErr := config.Save(cfg); saveErr != nil {
+		t.Fatalf("config.Save() error = %v", saveErr)
 	}
 
 	projDir := t.TempDir()
 	origDir, _ := os.Getwd()
-	if err := os.Chdir(projDir); err != nil {
-		t.Fatal(err)
+	if chdirErr := os.Chdir(projDir); chdirErr != nil {
+		t.Fatal(chdirErr)
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
 
 	initOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "init", "-prefix", "INI", "-title", "Init Test"}); err != nil {
-			t.Fatalf("project init error = %v", err)
+		if runErr := run([]string{"project", "init", "-prefix", "INI", "-title", "Init Test"}); runErr != nil {
+			t.Fatalf("project init error = %v", runErr)
 		}
 	})
 	if !strings.Contains(initOutput, "created project INI") {
@@ -2338,8 +2338,8 @@ func TestBindRootToLocalProjectBackfillsGitRepositoryOnExistingProject(t *testin
 
 	root := t.TempDir()
 	gitRepo := "https://github.com/example/repo.git"
-	if err := bindRootToLocalProject(root, "Init Test", "INI", gitRepo); err != nil {
-		t.Fatalf("bindRootToLocalProject() error = %v", err)
+	if bindErr := bindRootToLocalProject(root, "Init Test", "INI", gitRepo); bindErr != nil {
+		t.Fatalf("bindRootToLocalProject() error = %v", bindErr)
 	}
 
 	updated, err := svc.GetProject(context.Background(), project.Prefix)
@@ -3164,8 +3164,8 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	if err := run([]string{"update", "-id", ticket.ID, "-stage", "build"}); err != nil {
-		t.Fatalf("update stage error = %v", err)
+	if runErr := run([]string{"update", "-id", ticket.ID, "-stage", "build"}); runErr != nil {
+		t.Fatalf("update stage error = %v", runErr)
 	}
 
 	updated, err := svc.GetTicket(context.Background(), ticket.ID)
@@ -3221,8 +3221,8 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 		t.Fatalf("advanced stage = %q, want build", advanced.Stage)
 	}
 
-	if err := run([]string{"reject", "-id", ticket.ID}); err != nil {
-		t.Fatalf("reject error = %v", err)
+	if runErr := run([]string{"reject", "-id", ticket.ID}); runErr != nil {
+		t.Fatalf("reject error = %v", runErr)
 	}
 
 	rejected, err := svc.GetTicket(context.Background(), ticket.ID)
@@ -3290,14 +3290,14 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 		t.Fatalf("config.Load() error = %v", err)
 	}
 	cfg.ProjectID = ""
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
+	if saveErr := config.Save(cfg); saveErr != nil {
+		t.Fatalf("config.Save() error = %v", saveErr)
 	}
 
 	taskID := createLocalTask(t, []string{"create", "-t", "epic", "-title", "foo"})
 	output := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", taskID}); err != nil {
-			t.Fatalf("get error = %v", err)
+		if runErr := run([]string{"get", "-id", taskID}); runErr != nil {
+			t.Fatalf("get error = %v", runErr)
 		}
 	})
 	if !hasDetailField(output, "Title", "foo") || !hasDetailField(output, "Type", "epic") || !hasDetailLabel(output, "Key") {
@@ -3835,8 +3835,8 @@ func TestRunWorkflowRoleCRUD(t *testing.T) {
 	workflowID := strconv.FormatInt(wf.ID, 10)
 
 	createOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "role-add", "-workflow_id", workflowID, "-title", "reviewer", "-description", "Reviews work", "-ac", "Approves the release"}); err != nil {
-			t.Fatalf("workflow role-add error = %v", err)
+		if runErr := run([]string{"workflow", "role-add", "-workflow_id", workflowID, "-title", "reviewer", "-description", "Reviews work", "-ac", "Approves the release"}); runErr != nil {
+			t.Fatalf("workflow role-add error = %v", runErr)
 		}
 	})
 	if !strings.Contains(createOutput, "created workflow role") || !strings.Contains(createOutput, "reviewer") {
@@ -3860,8 +3860,8 @@ func TestRunWorkflowRoleCRUD(t *testing.T) {
 	roleID := strconv.FormatInt(created.ID, 10)
 
 	getOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "role-get", "-workflow_id", workflowID, "-role_id", roleID}); err != nil {
-			t.Fatalf("workflow role-get error = %v", err)
+		if runErr := run([]string{"workflow", "role-get", "-workflow_id", workflowID, "-role_id", roleID}); runErr != nil {
+			t.Fatalf("workflow role-get error = %v", runErr)
 		}
 	})
 	for _, want := range []string{"Title:               reviewer", "Acceptance Criteria: Approves the release"} {
@@ -3871,8 +3871,8 @@ func TestRunWorkflowRoleCRUD(t *testing.T) {
 	}
 
 	updateOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "role-update", "-workflow_id", workflowID, "-role_id", roleID, "-title", "qa-reviewer", "-description", "Reviews work", "-ac", "Ships the release"}); err != nil {
-			t.Fatalf("workflow role-update error = %v", err)
+		if runErr := run([]string{"workflow", "role-update", "-workflow_id", workflowID, "-role_id", roleID, "-title", "qa-reviewer", "-description", "Reviews work", "-ac", "Ships the release"}); runErr != nil {
+			t.Fatalf("workflow role-update error = %v", runErr)
 		}
 	})
 	if !strings.Contains(updateOutput, "updated workflow role") || !strings.Contains(updateOutput, "qa-reviewer") {
@@ -3880,8 +3880,8 @@ func TestRunWorkflowRoleCRUD(t *testing.T) {
 	}
 
 	deleteOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "role-rm", "-workflow_id", workflowID, "-role_id", roleID}); err != nil {
-			t.Fatalf("workflow role-rm error = %v", err)
+		if runErr := run([]string{"workflow", "role-rm", "-workflow_id", workflowID, "-role_id", roleID}); runErr != nil {
+			t.Fatalf("workflow role-rm error = %v", runErr)
 		}
 	})
 	if !strings.Contains(deleteOutput, "deleted workflow role") {
@@ -3936,11 +3936,11 @@ func TestRunWorkflowStageRoleCommands(t *testing.T) {
 	roleBID := strconv.FormatInt(roleB.ID, 10)
 
 	addOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "stage-role-add", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
-			t.Fatalf("stage-role-add roleA error = %v", err)
+		if runErr := run([]string{"workflow", "stage-role-add", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleAID}); runErr != nil {
+			t.Fatalf("stage-role-add roleA error = %v", runErr)
 		}
-		if err := run([]string{"workflow", "stage-role-add", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleBID}); err != nil {
-			t.Fatalf("stage-role-add roleB error = %v", err)
+		if runErr := run([]string{"workflow", "stage-role-add", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleBID}); runErr != nil {
+			t.Fatalf("stage-role-add roleB error = %v", runErr)
 		}
 	})
 	if !strings.Contains(addOutput, "assigned role") {
@@ -3956,8 +3956,8 @@ func TestRunWorkflowStageRoleCommands(t *testing.T) {
 	}
 
 	orderOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "stage-role-order", "-workflow_id", workflowID, "-stage_id", stageID, "-roles", roleBID + "," + roleAID}); err != nil {
-			t.Fatalf("stage-role-order error = %v", err)
+		if runErr := run([]string{"workflow", "stage-role-order", "-workflow_id", workflowID, "-stage_id", stageID, "-roles", roleBID + "," + roleAID}); runErr != nil {
+			t.Fatalf("stage-role-order error = %v", runErr)
 		}
 	})
 	if !strings.Contains(orderOutput, "reordered roles") {
@@ -3973,8 +3973,8 @@ func TestRunWorkflowStageRoleCommands(t *testing.T) {
 	}
 
 	removeOutput := captureStdout(t, func() {
-		if err := run([]string{"workflow", "stage-role-rm", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleAID}); err != nil {
-			t.Fatalf("stage-role-rm error = %v", err)
+		if runErr := run([]string{"workflow", "stage-role-rm", "-workflow_id", workflowID, "-stage_id", stageID, "-role_id", roleAID}); runErr != nil {
+			t.Fatalf("stage-role-rm error = %v", runErr)
 		}
 	})
 	if !strings.Contains(removeOutput, "removed role") {
@@ -4208,8 +4208,8 @@ func TestRunProjectWorkflowSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 	}
 
 	setOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "workflow", strconv.FormatInt(wf.ID, 10)}); err != nil {
-			t.Fatalf("project workflow set error = %v", err)
+		if runErr := run([]string{"project", "workflow", strconv.FormatInt(wf.ID, 10)}); runErr != nil {
+			t.Fatalf("project workflow set error = %v", runErr)
 		}
 	})
 	if !strings.Contains(setOutput, "set workflow") {
@@ -4225,8 +4225,8 @@ func TestRunProjectWorkflowSetsAndClearsCurrentProjectWorkflow(t *testing.T) {
 	}
 
 	clearOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "workflow", "0"}); err != nil {
-			t.Fatalf("project workflow clear error = %v", err)
+		if runErr := run([]string{"project", "workflow", "0"}); runErr != nil {
+			t.Fatalf("project workflow clear error = %v", runErr)
 		}
 	})
 	if !strings.Contains(clearOutput, "cleared workflow") {
@@ -4303,8 +4303,8 @@ func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	if err := run([]string{"notready", ticket.ID}); err != nil {
-		t.Fatalf("notready error = %v", err)
+	if runErr := run([]string{"notready", ticket.ID}); runErr != nil {
+		t.Fatalf("notready error = %v", runErr)
 	}
 	updated, err := svc.GetTicket(context.Background(), ticket.ID)
 	if err != nil {
@@ -4314,8 +4314,8 @@ func TestRunReadyAndNotReadyToggleDraft(t *testing.T) {
 		t.Fatalf("Draft after notready = %v, want true", updated.Draft)
 	}
 
-	if err := run([]string{"ready", ticket.ID}); err != nil {
-		t.Fatalf("ready error = %v", err)
+	if runErr := run([]string{"ready", ticket.ID}); runErr != nil {
+		t.Fatalf("ready error = %v", runErr)
 	}
 	updated, err = svc.GetTicket(context.Background(), ticket.ID)
 	if err != nil {
@@ -4575,12 +4575,12 @@ func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticke
 		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
 	for i, stageName := range stageNames {
-		if _, err := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
+		if _, addStageErr := svc.AddWorkflowStage(context.Background(), wf.ID, libticket.WorkflowStageRequest{
 			StageName:   stageName,
 			Description: stageName,
 			SortOrder:   i,
-		}); err != nil {
-			t.Fatalf("AddWorkflowStage(%q) error = %v", stageName, err)
+		}); addStageErr != nil {
+			t.Fatalf("AddWorkflowStage(%q) error = %v", stageName, addStageErr)
 		}
 	}
 	project, err := svc.GetProject(context.Background(), "1")
@@ -5041,8 +5041,8 @@ func TestRunEpicGetReturnsExistingEpicAndDoesNotCreateTicket(t *testing.T) {
 	_ = cfg
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"epic", "get", epicID}); err != nil {
-			t.Fatalf("epic get error = %v", err)
+		if runErr := run([]string{"epic", "get", epicID}); runErr != nil {
+			t.Fatalf("epic get error = %v", runErr)
 		}
 	})
 	if !hasDetailField(output, "Title", "Lookup Epic") {
@@ -5085,8 +5085,8 @@ func TestRunBugGetReturnsExistingBugAndDoesNotCreateTicket(t *testing.T) {
 	}
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"bug", "get", bugID}); err != nil {
-			t.Fatalf("bug get error = %v", err)
+		if runErr := run([]string{"bug", "get", bugID}); runErr != nil {
+			t.Fatalf("bug get error = %v", runErr)
 		}
 	})
 	if !hasDetailField(output, "Title", "Lookup Bug") {
@@ -7423,21 +7423,21 @@ func TestQuickstartServer(t *testing.T) {
 	setTestLocation(t, ts.URL)
 
 	// Enable registration
-	if err := store.SetRegistrationEnabled(context.Background(), db, true); err != nil {
-		t.Fatalf("SetRegistrationEnabled() error = %v", err)
+	if setRegistrationErr := store.SetRegistrationEnabled(context.Background(), db, true); setRegistrationErr != nil {
+		t.Fatalf("SetRegistrationEnabled() error = %v", setRegistrationErr)
 	}
 
 	// Step 1: Register a user
 	captureStdout(t, func() {
-		if err := run([]string{"register", "-username", "alice", "-password", "secret12"}); err != nil {
-			t.Fatalf("register error = %v", err)
+		if runErr := run([]string{"register", "-username", "alice", "-password", "secret12"}); runErr != nil {
+			t.Fatalf("register error = %v", runErr)
 		}
 	})
 
 	// Step 2: Login as alice, verify it works
 	loginOut := captureStdout(t, func() {
-		if err := run([]string{"login", "-username", "alice", "-password", "secret12"}); err != nil {
-			t.Fatalf("login alice error = %v", err)
+		if runErr := run([]string{"login", "-username", "alice", "-password", "secret12"}); runErr != nil {
+			t.Fatalf("login alice error = %v", runErr)
 		}
 	})
 	if !strings.Contains(loginOut, "alice") {
@@ -7445,8 +7445,8 @@ func TestQuickstartServer(t *testing.T) {
 	}
 
 	// Clear credentials and saved username, then login as admin
-	if err := config.ClearCredentials(); err != nil {
-		t.Fatalf("ClearCredentials() error = %v", err)
+	if clearErr := config.ClearCredentials(); clearErr != nil {
+		t.Fatalf("ClearCredentials() error = %v", clearErr)
 	}
 	cfg, err := config.Load()
 	if err != nil {

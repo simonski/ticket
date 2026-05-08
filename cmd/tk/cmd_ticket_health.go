@@ -40,24 +40,24 @@ func runHealth(args []string) error {
 		if resolveErr != nil {
 			return resolveErr
 		}
-		projectTickets, err := api.ListTickets(context.Background(), project.ID)
-		if err != nil {
-			return err
+		projectTickets, listErr := api.ListTickets(context.Background(), project.ID)
+		if listErr != nil {
+			return listErr
 		}
 
 		results := make([]map[string]any, 0, len(projectTickets))
 		for _, ticket := range projectTickets {
-			comments, err := svc.ListComments(context.Background(), ticket.ID)
-			if err != nil {
-				return err
+			comments, commentsErr := svc.ListComments(context.Background(), ticket.ID)
+			if commentsErr != nil {
+				return commentsErr
 			}
-			checks, err := ticketHealthCheck(context.Background(), svc, ticket, comments)
-			if err != nil {
-				return err
+			checks, checksErr := ticketHealthCheck(context.Background(), svc, ticket, comments)
+			if checksErr != nil {
+				return checksErr
 			}
-			updated, err := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score)
-			if err != nil {
-				return err
+			updated, updateErr := svc.SetTicketHealth(context.Background(), ticket.ID, checks.score)
+			if updateErr != nil {
+				return updateErr
 			}
 			result := map[string]any{
 				"ticket_id":                    ticket.ID,

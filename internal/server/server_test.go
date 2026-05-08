@@ -266,7 +266,8 @@ func TestSecurityHeadersInjectsNonceIntoContext(t *testing.T) {
 func TestCSPNonceFromContextNilAndMissing(t *testing.T) {
 	t.Parallel()
 
-	if got := cspNonceFromContext(nil); got != "" {
+	var nilCtx context.Context
+	if got := cspNonceFromContext(nilCtx); got != "" {
 		t.Fatalf("cspNonceFromContext(nil) = %q, want empty", got)
 	}
 	if got := cspNonceFromContext(context.Background()); got != "" {
@@ -344,7 +345,11 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 	ts := httptest.NewServer(srv.httpServer.Handler)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/healthz")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/healthz", http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(/api/healthz) error = %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /api/healthz error = %v", err)
 	}
@@ -361,7 +366,11 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 		t.Fatalf("health payload version = %#v, want 1.2.3", payload)
 	}
 
-	rootResp, err := http.Get(ts.URL + "/")
+	rootReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/", http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(/) error = %v", err)
+	}
+	rootResp, err := http.DefaultClient.Do(rootReq)
 	if err != nil {
 		t.Fatalf("GET / error = %v", err)
 	}
@@ -404,7 +413,11 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	ts := httptest.NewServer(srv.httpServer.Handler)
 	defer ts.Close()
 
-	rootResp, err := http.Get(ts.URL + "/")
+	rootReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/", http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(/) error = %v", err)
+	}
+	rootResp, err := http.DefaultClient.Do(rootReq)
 	if err != nil {
 		t.Fatalf("GET / error = %v", err)
 	}
@@ -459,7 +472,11 @@ func TestServerVerboseLogging(t *testing.T) {
 	ts := httptest.NewServer(srv.httpServer.Handler)
 	defer ts.Close()
 
-	resp, err := http.Get(ts.URL + "/api/healthz")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/api/healthz", http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(/api/healthz) error = %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /api/healthz error = %v", err)
 	}

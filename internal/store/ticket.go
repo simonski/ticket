@@ -218,8 +218,8 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	var projectPrefix string
 	var nextSequence int64
 	var projectWorkflowID sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT prefix, ticket_sequence + 1, workflow_id FROM projects WHERE project_id = ?`, params.ProjectID).Scan(&projectPrefix, &nextSequence, &projectWorkflowID); err != nil {
-		return Ticket{}, err
+	if scanErr := tx.QueryRowContext(ctx, `SELECT prefix, ticket_sequence + 1, workflow_id FROM projects WHERE project_id = ?`, params.ProjectID).Scan(&projectPrefix, &nextSequence, &projectWorkflowID); scanErr != nil {
+		return Ticket{}, scanErr
 	}
 	// Resolve effective workflow: ticket param → parent chain → project
 	var effectiveWorkflowID sql.NullInt64
@@ -234,7 +234,7 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 		for pid != nil {
 			var pwf sql.NullInt64
 			var ppid sql.NullString
-			if err := tx.QueryRowContext(ctx, `SELECT workflow_id, parent_id FROM tickets WHERE ticket_id = ?`, *pid).Scan(&pwf, &ppid); err != nil {
+			if scanErr := tx.QueryRowContext(ctx, `SELECT workflow_id, parent_id FROM tickets WHERE ticket_id = ?`, *pid).Scan(&pwf, &ppid); scanErr != nil {
 				break
 			}
 			if pwf.Valid {
@@ -260,8 +260,8 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if effectiveWorkflowID.Valid {
 		var wsID int64
 		var stageName string
-		err := tx.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? ORDER BY sort_order LIMIT 1`, effectiveWorkflowID.Int64).Scan(&wsID, &stageName)
-		if err == nil {
+		stageLookupErr := tx.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? ORDER BY sort_order LIMIT 1`, effectiveWorkflowID.Int64).Scan(&wsID, &stageName)
+		if stageLookupErr == nil {
 			workflowStageID = &wsID
 			stage = stageName
 			roleID, err = firstStageRoleID(ctx, tx, effectiveWorkflowID.Int64, wsID)
@@ -281,11 +281,11 @@ func CreateTicket(ctx context.Context, db *sql.DB, params TicketCreateParams) (T
 	if err != nil {
 		return Ticket{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE projects SET ticket_sequence = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, nextSequence, params.ProjectID); err != nil {
-		return Ticket{}, err
+	if _, execErr := tx.ExecContext(ctx, `UPDATE projects SET ticket_sequence = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?`, nextSequence, params.ProjectID); execErr != nil {
+		return Ticket{}, execErr
 	}
-	if err := tx.Commit(); err != nil {
-		return Ticket{}, err
+	if commitErr := tx.Commit(); commitErr != nil {
+		return Ticket{}, commitErr
 	}
 	ticket, err := GetTicket(ctx, db, key)
 	if err != nil {
@@ -334,9 +334,9 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		return Ticket{}, err
 	}
 	if params.ParentID != nil {
-		parent, err := GetTicket(ctx, db, *params.ParentID)
-		if err != nil {
-			return Ticket{}, err
+		parent, parentErr := GetTicket(ctx, db, *params.ParentID)
+		if parentErr != nil {
+			return Ticket{}, parentErr
 		}
 		if parent.ID == current.ID {
 			return Ticket{}, errors.New("cannot set ticket as its own parent")
@@ -344,8 +344,8 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		if parent.ProjectID != current.ProjectID {
 			return Ticket{}, errors.New("parent ticket must be in the same project")
 		}
-		if err := validateTicketParenting(parent.Type, current.Type); err != nil {
-			return Ticket{}, err
+		if parentingErr := validateTicketParenting(parent.Type, current.Type); parentingErr != nil {
+			return Ticket{}, parentingErr
 		}
 	}
 	// An explicit stage override (e.g. board drag-and-drop) is allowed to reopen a
@@ -399,16 +399,16 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	if err != nil {
 		return Ticket{}, err
 	}
-	if err := validateTicketAssignmentChange(current.Assignee, assignee, params.ActorUsername, params.ActorRole); err != nil {
-		return Ticket{}, err
+	if assignmentErr := validateTicketAssignmentChange(current.Assignee, assignee, params.ActorUsername, params.ActorRole); assignmentErr != nil {
+		return Ticket{}, assignmentErr
 	}
 	if assignee != "" {
-		target, err := GetUserByUsername(ctx, db, assignee)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+		target, targetErr := GetUserByUsername(ctx, db, assignee)
+		if targetErr != nil {
+			if errors.Is(targetErr, sql.ErrNoRows) {
 				return Ticket{}, errors.New("user not found")
 			}
-			return Ticket{}, err
+			return Ticket{}, targetErr
 		}
 		if !target.Enabled {
 			return Ticket{}, errors.New("user is disabled")
@@ -426,9 +426,9 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 	roleID := current.RoleID
 	// Direct stage override (e.g. drag-and-drop on the board)
 	if explicitStage {
-		nextStage, err := validateTicketStage(ctx, db, current, params.Stage)
-		if err != nil {
-			return Ticket{}, err
+		nextStage, stageErr := validateTicketStage(ctx, db, current, params.Stage)
+		if stageErr != nil {
+			return Ticket{}, stageErr
 		}
 		if nextStage != current.Stage {
 			stage = nextStage
@@ -445,9 +445,9 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 			// Update workflow_stage_id to match the new stage (if a workflow is attached)
 			if current.WorkflowStageID != nil {
 				var workflowID int64
-				if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *current.WorkflowStageID).Scan(&workflowID); err == nil {
+				if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *current.WorkflowStageID).Scan(&workflowID); queryErr == nil {
 					var wsID int64
-					if err := db.QueryRowContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND stage_name = ? LIMIT 1`, workflowID, stage).Scan(&wsID); err == nil {
+					if stageIDErr := db.QueryRowContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ? AND stage_name = ? LIMIT 1`, workflowID, stage).Scan(&wsID); stageIDErr == nil {
 						workflowStageID = &wsID
 						roleID, err = firstStageRoleID(ctx, db, workflowID, wsID)
 						if err != nil {
@@ -474,8 +474,8 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		}
 		// Check if ticket is at final workflow stage with success — can't reopen
 		if current.State == StateSuccess && current.WorkflowStageID != nil {
-			nextID, _, err := getNextWorkflowStage(ctx, db, *current.WorkflowStageID)
-			if err == nil && nextID == nil {
+			nextID, _, nextStageErr := getNextWorkflowStage(ctx, db, *current.WorkflowStageID)
+			if nextStageErr == nil && nextID == nil {
 				// Final stage with success: ticket is "done"
 				return Ticket{}, errors.New("done ticket cannot be reopened")
 			}
@@ -488,15 +488,15 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		state = nextState
 		// Auto-advance: when state becomes success on a non-final stage, advance to next stage
 		if state == StateSuccess && workflowStageID != nil {
-			nextStageID, nextStageName, err := getNextWorkflowStage(ctx, db, *workflowStageID)
-			if err == nil && nextStageID != nil {
+			nextStageID, nextStageName, nextStageErr := getNextWorkflowStage(ctx, db, *workflowStageID)
+			if nextStageErr == nil && nextStageID != nil {
 				var workflowID int64
-				if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *nextStageID).Scan(&workflowID); err != nil {
-					return Ticket{}, err
+				if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *nextStageID).Scan(&workflowID); queryErr != nil {
+					return Ticket{}, queryErr
 				}
-				nextRoleID, err := firstStageRoleID(ctx, db, workflowID, *nextStageID)
-				if err != nil {
-					return Ticket{}, err
+				nextRoleID, roleErr := firstStageRoleID(ctx, db, workflowID, *nextStageID)
+				if roleErr != nil {
+					return Ticket{}, roleErr
 				}
 				workflowStageID = nextStageID
 				roleID = nextRoleID
@@ -814,8 +814,8 @@ func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 	var workflowID int64
 	var currentOrder int
 	var currentStageName string
-	if err := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order, stage_name FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder, &currentStageName); err != nil {
-		return 0, nil, "", false, err
+	if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order, stage_name FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder, &currentStageName); queryErr != nil {
+		return 0, nil, "", false, queryErr
 	}
 
 	// Get roles for the current stage
@@ -872,8 +872,8 @@ func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 	var workflowID int64
 	var currentOrder int
 	var currentStageName string
-	if err := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order, stage_name FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder, &currentStageName); err != nil {
-		return 0, nil, "", false, err
+	if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order, stage_name FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder, &currentStageName); queryErr != nil {
+		return 0, nil, "", false, queryErr
 	}
 
 	roles, err := ListWorkflowStageRoles(ctx, db, workflowID, currentStageID)
@@ -2018,11 +2018,11 @@ func DeleteTicket(ctx context.Context, db *sql.DB, id string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, historyErr := tx.ExecContext(ctx, `
 		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
 		VALUES (?, ?, 'ticket_deleted', ?, ?)
-	`, ticket.ProjectID, ticket.ID, fmt.Sprintf(`{"key":%q,"title":%q,"deleted":true}`, ticket.ID, ticket.Title), nil); err != nil {
-		return err
+	`, ticket.ProjectID, ticket.ID, fmt.Sprintf(`{"key":%q,"title":%q,"deleted":true}`, ticket.ID, ticket.Title), nil); historyErr != nil {
+		return historyErr
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE tickets SET deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? AND deleted = 0`, id)
 	if err != nil {
@@ -2149,7 +2149,7 @@ func UnsetTicketWorkflow(ctx context.Context, db *sql.DB, ticketID string) (Tick
 	var roleID *int64
 	stage := StageDesign
 	if wfID != nil {
-		if wf, err := GetWorkflow(ctx, db, *wfID); err == nil && len(wf.Stages) > 0 {
+		if wf, workflowErr := GetWorkflow(ctx, db, *wfID); workflowErr == nil && len(wf.Stages) > 0 {
 			wsID = &wf.Stages[0].ID
 			stage = wf.Stages[0].StageName
 			roleID, err = firstStageRoleID(ctx, db, *wfID, wf.Stages[0].ID)

@@ -146,13 +146,13 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 	if absSource == absTarget {
 		return errors.New("target database path must be different from the source database path")
 	}
-	if _, err := os.Stat(absSource); err != nil {
-		return err
+	if _, statErr := os.Stat(absSource); statErr != nil {
+		return statErr
 	}
-	if _, err := os.Stat(absTarget); err == nil {
+	if _, statErr := os.Stat(absTarget); statErr == nil {
 		return fmt.Errorf("target database already exists at %s", absTarget)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return statErr
 	}
 	sourceVersion, err := DetectSchemaVersion(absSource)
 	if err != nil {
@@ -170,25 +170,25 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 	snapshotPath := absSource
 	cleanup := func() error { return nil }
 	if sourceVersion < CurrentSchemaVersion {
-		tempDir, err := os.MkdirTemp("", "ticket-db-upgrade-*")
-		if err != nil {
-			return err
+		tempDir, tempErr := os.MkdirTemp("", "ticket-db-upgrade-*")
+		if tempErr != nil {
+			return tempErr
 		}
 		defer os.RemoveAll(tempDir)
 		workingPath := filepath.Join(tempDir, "ticket.db")
-		if err := copySQLiteDatabase(absSource, workingPath); err != nil {
-			return err
+		if copyErr := copySQLiteDatabase(absSource, workingPath); copyErr != nil {
+			return copyErr
 		}
-		workingDB, err := openSQLite(workingPath)
-		if err != nil {
-			return err
+		workingDB, openErr := openSQLite(workingPath)
+		if openErr != nil {
+			return openErr
 		}
-		if err := createSchema(ctx, workingDB); err != nil {
+		if schemaErr := createSchema(ctx, workingDB); schemaErr != nil {
 			_ = workingDB.Close()
-			return err
+			return schemaErr
 		}
-		if err := workingDB.Close(); err != nil {
-			return err
+		if closeErr := workingDB.Close(); closeErr != nil {
+			return closeErr
 		}
 		snapshotPath = workingPath
 	}
@@ -206,11 +206,11 @@ func UpgradeDatabase(ctx context.Context, sourcePath, targetPath string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(absTarget), 0o700); err != nil && filepath.Dir(absTarget) != "." {
-		return err
+	if mkdirErr := os.MkdirAll(filepath.Dir(absTarget), 0o700); mkdirErr != nil && filepath.Dir(absTarget) != "." {
+		return mkdirErr
 	}
-	if err := Init(absTarget, "admin", "upgrade-temp-password"); err != nil {
-		return err
+	if initErr := Init(absTarget, "admin", "upgrade-temp-password"); initErr != nil {
+		return initErr
 	}
 	targetDB, err := Open(absTarget)
 	if err != nil {
@@ -243,7 +243,7 @@ func copyFileIfExists(source, target string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- target path is application-controlled during migration
 	if err != nil {
 		return err
 	}

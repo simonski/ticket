@@ -37,7 +37,7 @@ func (r *router) registerProjectHandlers() {
 				return
 			}
 			var projectPayload projectRequest
-			if err := json.NewDecoder(r.Body).Decode(&projectPayload); err != nil {
+			if decodeErr := json.NewDecoder(r.Body).Decode(&projectPayload); decodeErr != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
@@ -101,14 +101,14 @@ func (r *router) registerProjectHandlers() {
 			}
 			limit := 0
 			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-				if _, err := fmt.Sscan(raw, &limit); err != nil {
+				if _, scanErr := fmt.Sscan(raw, &limit); scanErr != nil {
 					writeError(w, http.StatusBadRequest, "limit must be numeric")
 					return
 				}
 			}
 			offset := 0
 			if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
-				if _, err := fmt.Sscan(raw, &offset); err != nil {
+				if _, scanErr := fmt.Sscan(raw, &offset); scanErr != nil {
 					writeError(w, http.StatusBadRequest, "offset must be numeric")
 					return
 				}
@@ -162,14 +162,14 @@ func (r *router) registerProjectHandlers() {
 			}
 			limit := 0
 			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-				if _, err := fmt.Sscan(raw, &limit); err != nil {
+				if _, scanErr := fmt.Sscan(raw, &limit); scanErr != nil {
 					writeError(w, http.StatusBadRequest, "limit must be numeric")
 					return
 				}
 			}
 			offset := 0
 			if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
-				if _, err := fmt.Sscan(raw, &offset); err != nil {
+				if _, scanErr := fmt.Sscan(raw, &offset); scanErr != nil {
 					writeError(w, http.StatusBadRequest, "offset must be numeric")
 					return
 				}
@@ -218,7 +218,7 @@ func (r *router) registerProjectHandlers() {
 			}
 			limit := 10
 			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-				if _, err := fmt.Sscan(raw, &limit); err != nil {
+				if _, scanErr := fmt.Sscan(raw, &limit); scanErr != nil {
 					writeError(w, http.StatusBadRequest, "limit must be numeric")
 					return
 				}
@@ -227,7 +227,7 @@ func (r *router) registerProjectHandlers() {
 			filter.UserID = r.URL.Query().Get("user_id")
 			filter.AgentID = r.URL.Query().Get("agent_id")
 			if raw := strings.TrimSpace(r.URL.Query().Get("team_id")); raw != "" {
-				if _, err := fmt.Sscan(raw, &filter.TeamID); err != nil {
+				if _, scanErr := fmt.Sscan(raw, &filter.TeamID); scanErr != nil {
 					writeError(w, http.StatusBadRequest, "team_id must be numeric")
 					return
 				}
@@ -636,7 +636,7 @@ func (r *router) registerProjectHandlers() {
 				return
 			}
 			var projectPayload projectRequest
-			if err := json.NewDecoder(r.Body).Decode(&projectPayload); err != nil {
+			if decodeErr := json.NewDecoder(r.Body).Decode(&projectPayload); decodeErr != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}

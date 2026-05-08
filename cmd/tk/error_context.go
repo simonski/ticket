@@ -137,7 +137,7 @@ func loadSetupConfig(path string) (config.Config, bool) {
 	if strings.TrimSpace(path) == "" {
 		return config.Config{}, false
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is from trusted CLI/config locations
 	if err != nil {
 		return config.Config{}, false
 	}

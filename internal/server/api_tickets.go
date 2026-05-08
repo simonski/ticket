@@ -219,7 +219,7 @@ func (r *router) registerTicketHandlers() {
 				if epicTitle == "" {
 					continue
 				}
-				epic, err := store.CreateTicket(r.Context(), db, store.TicketCreateParams{
+				epic, createErr := store.CreateTicket(r.Context(), db, store.TicketCreateParams{
 					ProjectID:   story.ProjectID,
 					Type:        "epic",
 					Title:       epicTitle,
@@ -228,8 +228,8 @@ func (r *router) registerTicketHandlers() {
 					CreatedBy:   user.ID,
 					State:       store.StateIdle,
 				})
-				if err != nil {
-					writeStoreError(w, err)
+				if createErr != nil {
+					writeStoreError(w, createErr)
 					return
 				}
 				for _, taskSpec := range epicSpec.Tasks {
@@ -238,7 +238,7 @@ func (r *router) registerTicketHandlers() {
 						continue
 					}
 					parentID := epic.ID
-					_, err := store.CreateTicket(r.Context(), db, store.TicketCreateParams{
+					_, createErr := store.CreateTicket(r.Context(), db, store.TicketCreateParams{
 						ProjectID:   story.ProjectID,
 						ParentID:    &parentID,
 						Type:        "task",
@@ -248,8 +248,8 @@ func (r *router) registerTicketHandlers() {
 						CreatedBy:   user.ID,
 						State:       store.StateIdle,
 					})
-					if err != nil {
-						writeStoreError(w, err)
+					if createErr != nil {
+						writeStoreError(w, createErr)
 						return
 					}
 				}

@@ -26,7 +26,7 @@ func (m Model) wfRowCount() int {
 
 // wfRowAt returns the workflow index and stage index at the given flat row.
 // stageIdx == -1 means the row is a workflow header.
-func (m Model) wfRowAt(row int) (wfIdx int, stageIdx int) {
+func (m Model) wfRowAt(row int) (wfIdx, stageIdx int) {
 	cur := 0
 	for i, wf := range m.workflows {
 		if cur == row {

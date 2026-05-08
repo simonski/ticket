@@ -92,7 +92,7 @@ func (r *router) registerAuthHandlers() {
 			return
 		}
 		var credentials credentialsRequest
-		if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
+		if decodeErr := json.NewDecoder(r.Body).Decode(&credentials); decodeErr != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}

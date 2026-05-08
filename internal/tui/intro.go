@@ -174,7 +174,7 @@ func (s *introState) currentCard() (cardIdx int, localT float64) {
 
 // stableDrift returns a card's lateral drift, computed from a fixed time so it
 // doesn't wobble during the card's lifetime.
-func stableDrift(cardIdx int, w int) float64 {
+func stableDrift(cardIdx, w int) float64 {
 	t := starfieldLeadIn + float64(cardIdx)*cardDuration
 	return perlin2D(t*0.32, float64(cardIdx)*3.1) * float64(w) * 0.011
 }
@@ -313,7 +313,7 @@ func tiltAmount(cardZ float64, h int) float64 {
 // cardPositions fills (x, y) for each character in text at the given depth/drift.
 // Tilt is computed relative to the word's own centre so it's always visible
 // regardless of word length.
-func cardPositions(text string, cardZ, drift float64, w, h int) ([]int, []int) {
+func cardPositions(text string, cardZ, drift float64, w, h int) (xs, ys []int) {
 	chars := []rune(strings.ToUpper(text))
 	n := len(chars)
 	if n == 0 {
@@ -331,8 +331,8 @@ func cardPositions(text string, cardZ, drift float64, w, h int) ([]int, []int) {
 	baseY := cy - vy
 	tilt := tiltAmount(cardZ, h)
 
-	xs := make([]int, n)
-	ys := make([]int, n)
+	xs = make([]int, n)
+	ys = make([]int, n)
 	for i := range chars {
 		x := startX + i*(sp+1)
 		xs[i] = x

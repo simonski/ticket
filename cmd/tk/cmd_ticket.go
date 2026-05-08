@@ -750,13 +750,13 @@ func runGet(args []string) error {
 	}
 	ticketRef := strings.TrimSpace(*id)
 	if ticketRef == "" {
-		project, err := requireCurrentProject(cfg, svc)
-		if err != nil {
-			return err
+		project, projectErr := requireCurrentProject(cfg, svc)
+		if projectErr != nil {
+			return projectErr
 		}
-		latest, err := mostRecentTicket(svc, project.ID, "")
-		if err != nil {
-			return err
+		latest, latestErr := mostRecentTicket(svc, project.ID, "")
+		if latestErr != nil {
+			return latestErr
 		}
 		ticketRef = latest.ID
 	} else {
@@ -1236,23 +1236,23 @@ func runUpdate(args []string) error {
 		next.AcceptanceCriteria = *acceptanceCriteria
 	}
 	if hasDOR || hasDORMap {
-		nextMap, err := mergeGuidanceMap(current.DORMap, *dor, *dorMapRaw, hasDOR, hasDORMap)
-		if err != nil {
-			return err
+		nextMap, mergeErr := mergeGuidanceMap(current.DORMap, *dor, *dorMapRaw, hasDOR, hasDORMap)
+		if mergeErr != nil {
+			return mergeErr
 		}
 		next.DORMap = nextMap
 	}
 	if hasDOD || hasDODMap {
-		nextMap, err := mergeGuidanceMap(current.DODMap, *dod, *dodMapRaw, hasDOD, hasDODMap)
-		if err != nil {
-			return err
+		nextMap, mergeErr := mergeGuidanceMap(current.DODMap, *dod, *dodMapRaw, hasDOD, hasDODMap)
+		if mergeErr != nil {
+			return mergeErr
 		}
 		next.DODMap = nextMap
 	}
 	if hasAC || hasACMap {
-		nextMap, err := mergeGuidanceMap(current.ACMap, *acceptanceCriteria, *acMapRaw, hasAC, hasACMap)
-		if err != nil {
-			return err
+		nextMap, mergeErr := mergeGuidanceMap(current.ACMap, *acceptanceCriteria, *acMapRaw, hasAC, hasACMap)
+		if mergeErr != nil {
+			return mergeErr
 		}
 		next.ACMap = nextMap
 	}
@@ -1275,17 +1275,17 @@ func runUpdate(args []string) error {
 		next.EstimateComplete = *estimateComplete
 	}
 	if hasStatus {
-		resolvedStage, resolvedState, err := resolveLifecycleInput(*status, "", "")
-		if err != nil {
-			return err
+		resolvedStage, resolvedState, lifecycleErr := resolveLifecycleInput(*status, "", "")
+		if lifecycleErr != nil {
+			return lifecycleErr
 		}
 		next.Stage = resolvedStage
 		next.State = resolvedState
 	}
 	if hasStage {
-		resolvedStage, err := validateTicketStageInput(svc, current, *stage)
-		if err != nil {
-			return err
+		resolvedStage, stageErr := validateTicketStageInput(svc, current, *stage)
+		if stageErr != nil {
+			return stageErr
 		}
 		next.Stage = resolvedStage
 	}
@@ -1293,18 +1293,18 @@ func runUpdate(args []string) error {
 		next.State = *state
 	}
 	if strings.TrimSpace(next.State) == store.StateActive && strings.TrimSpace(next.Assignee) == "" {
-		status, err := svc.Status(context.Background())
-		if err == nil && status.User != nil && strings.TrimSpace(status.User.Username) != "" {
-			next.Assignee = status.User.Username
+		statusInfo, statusErr := svc.Status(context.Background())
+		if statusErr == nil && statusInfo.User != nil && strings.TrimSpace(statusInfo.User.Username) != "" {
+			next.Assignee = statusInfo.User.Username
 		} else {
 			next.Assignee = fallbackCommandUsername()
 		}
 	}
 	if hasParentID {
 		parentRef := normalizeBareTicketRef(cfg, svc, strings.TrimSpace(*parentIDRaw))
-		parent, err := svc.GetTicket(context.Background(), parentRef)
-		if err != nil {
-			return err
+		parent, parentErr := svc.GetTicket(context.Background(), parentRef)
+		if parentErr != nil {
+			return parentErr
 		}
 		next.ParentID = &parent.ID
 	}
@@ -1536,9 +1536,9 @@ func unassignTicket(idArg, expectedAssignee string, requireAdmin bool, message .
 		return errors.New("user is not an admin")
 	}
 	if requireAdmin {
-		users, err := svc.ListUsers(context.Background())
-		if err != nil {
-			return err
+		users, usersErr := svc.ListUsers(context.Background())
+		if usersErr != nil {
+			return usersErr
 		}
 		var found bool
 		for _, user := range users {
@@ -2200,8 +2200,8 @@ func runTicketCreate(args []string) error {
 	project := fs.String("project", "", "project id")
 	message := fs.String("m", "", "comment to attach")
 	printID := fs.Bool("printid", false, "print only the created ticket id")
-	if err := fs.Parse(normalizedArgs); err != nil {
-		return err
+	if parseErr := fs.Parse(normalizedArgs); parseErr != nil {
+		return parseErr
 	}
 	title := strings.TrimSpace(*titleFlag)
 	if title == "" {
@@ -2211,9 +2211,9 @@ func runTicketCreate(args []string) error {
 	// Support @filename: read markdown file, parse key-value headers and body as description.
 	if strings.HasPrefix(title, "@") {
 		filePath := title[1:]
-		data, err := os.ReadFile(filePath) // #nosec G304 -- user-specified file path for ticket creation
-		if err != nil {
-			return fmt.Errorf("cannot read %s: %w", filePath, err)
+		data, readErr := os.ReadFile(filePath) // #nosec G304 -- user-specified file path for ticket creation
+		if readErr != nil {
+			return fmt.Errorf("cannot read %s: %w", filePath, readErr)
 		}
 		fileTitle, fileFields, fileBody := parseTicketFile(string(data))
 		if fileTitle != "" && *titleFlag == "" {
@@ -2223,7 +2223,7 @@ func runTicketCreate(args []string) error {
 			*taskType = v
 		}
 		if v, ok := fileFields["priority"]; ok {
-			if n, err := strconv.Atoi(v); err == nil {
+			if n, parseErr := strconv.Atoi(v); parseErr == nil {
 				*priority = n
 			}
 		}
@@ -2359,9 +2359,9 @@ func createTicket(opts ticketCreateOptions) error {
 	parentID := opts.ParentID
 	ticketType := strings.TrimSpace(strings.ToLower(opts.TicketType))
 	if parentID == nil && cfg.CurrentEpicID != "" && (ticketType == "task" || ticketType == "bug" || ticketType == "chore") {
-		epic, err := api.GetTicket(context.Background(), cfg.CurrentEpicID)
-		if err != nil {
-			return fmt.Errorf("current epic id %s is invalid: %w", cfg.CurrentEpicID, err)
+		epic, epicErr := api.GetTicket(context.Background(), cfg.CurrentEpicID)
+		if epicErr != nil {
+			return fmt.Errorf("current epic id %s is invalid: %w", cfg.CurrentEpicID, epicErr)
 		}
 		if strings.TrimSpace(strings.ToLower(epic.Type)) != "epic" {
 			return fmt.Errorf("current epic id %s is not an epic", cfg.CurrentEpicID)

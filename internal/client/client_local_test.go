@@ -47,19 +47,19 @@ func TestLocalModeClientUsesSQLiteDirectly(t *testing.T) {
 		t.Fatalf("CreateTicket() = %#v", ticket)
 	}
 
-	if _, err := api.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("ReadyTicket() error = %v", err)
+	if _, readyErr := api.ReadyTicket(context.Background(), ticket.ID, ""); readyErr != nil {
+		t.Fatalf("ReadyTicket() error = %v", readyErr)
 	}
 
 	// Advance design -> develop so ticket is claimable
-	if _, err := api.UpdateTicket(context.Background(), ticket.ID, TicketUpdateRequest{
+	if _, updateErr := api.UpdateTicket(context.Background(), ticket.ID, TicketUpdateRequest{
 		Title:       ticket.Title,
 		Description: ticket.Description,
 		ParentID:    ticket.ParentID,
 		Assignee:    ticket.Assignee,
 		State:       "success",
-	}); err != nil {
-		t.Fatalf("UpdateTicket(design->develop) error = %v", err)
+	}); updateErr != nil {
+		t.Fatalf("UpdateTicket(design->develop) error = %v", updateErr)
 	}
 
 	requested, err := api.RequestTicket(context.Background(), TicketRequest{ProjectID: 1})
@@ -319,8 +319,8 @@ func TestLocalModeClientUserOps(t *testing.T) {
 	if len(users) < 2 {
 		t.Fatal("ListUsers() too few")
 	}
-	if err := api.SetUserEnabled(context.Background(), "bob", false); err != nil {
-		t.Fatalf("SetUserEnabled() error = %v", err)
+	if setErr := api.SetUserEnabled(context.Background(), "bob", false); setErr != nil {
+		t.Fatalf("SetUserEnabled() error = %v", setErr)
 	}
 	reset, err := api.ResetUserPassword(context.Background(), "bob", "newpassword1")
 	if err != nil {
@@ -416,23 +416,23 @@ func TestLocalModeClientTicketLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.CloseTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("CloseTicket() error = %v", err)
+	if _, closeErr := api.CloseTicket(context.Background(), ticket.ID, ""); closeErr != nil {
+		t.Fatalf("CloseTicket() error = %v", closeErr)
 	}
-	if _, err := api.OpenTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("OpenTicket() error = %v", err)
+	if _, openErr := api.OpenTicket(context.Background(), ticket.ID, ""); openErr != nil {
+		t.Fatalf("OpenTicket() error = %v", openErr)
 	}
-	if _, err := api.ArchiveTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("ArchiveTicket() error = %v", err)
+	if _, archiveErr := api.ArchiveTicket(context.Background(), ticket.ID, ""); archiveErr != nil {
+		t.Fatalf("ArchiveTicket() error = %v", archiveErr)
 	}
-	if _, err := api.UnarchiveTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("UnarchiveTicket() error = %v", err)
+	if _, unarchiveErr := api.UnarchiveTicket(context.Background(), ticket.ID, ""); unarchiveErr != nil {
+		t.Fatalf("UnarchiveTicket() error = %v", unarchiveErr)
 	}
-	if _, err := api.NotReadyTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("NotReadyTicket() error = %v", err)
+	if _, notReadyErr := api.NotReadyTicket(context.Background(), ticket.ID, ""); notReadyErr != nil {
+		t.Fatalf("NotReadyTicket() error = %v", notReadyErr)
 	}
-	if _, err := api.GetTicket(context.Background(), ticket.ID); err != nil {
-		t.Fatalf("GetTicket() error = %v", err)
+	if _, getErr := api.GetTicket(context.Background(), ticket.ID); getErr != nil {
+		t.Fatalf("GetTicket() error = %v", getErr)
 	}
 	clone, err := api.CloneTicket(context.Background(), ticket.ID, "")
 	if err != nil {
@@ -475,8 +475,8 @@ func TestLocalModeClientDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(B) error = %v", err)
 	}
-	if _, err := api.AddDependency(context.Background(), DependencyRequest{ProjectID: 1, TicketID: t1.ID, DependsOn: t2.ID}); err != nil {
-		t.Fatalf("AddDependency() error = %v", err)
+	if _, addErr := api.AddDependency(context.Background(), DependencyRequest{ProjectID: 1, TicketID: t1.ID, DependsOn: t2.ID}); addErr != nil {
+		t.Fatalf("AddDependency() error = %v", addErr)
 	}
 	deps, err := api.ListDependencies(context.Background(), t1.ID)
 	if err != nil {
@@ -503,29 +503,29 @@ func TestLocalModeClientWorkflows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorkflow() error = %v", err)
 	}
-	if _, err := api.ListWorkflows(context.Background()); err != nil {
-		t.Fatalf("ListWorkflows() error = %v", err)
+	if _, listErr := api.ListWorkflows(context.Background()); listErr != nil {
+		t.Fatalf("ListWorkflows() error = %v", listErr)
 	}
-	if _, err := api.GetWorkflow(context.Background(), wf.ID); err != nil {
-		t.Fatalf("GetWorkflow() error = %v", err)
+	if _, getErr := api.GetWorkflow(context.Background(), wf.ID); getErr != nil {
+		t.Fatalf("GetWorkflow() error = %v", getErr)
 	}
 	stage, err := api.AddWorkflowStage(context.Background(), wf.ID, WorkflowStageRequest{StageName: "design", SortOrder: 0})
 	if err != nil {
 		t.Fatalf("AddWorkflowStage() error = %v", err)
 	}
-	if err := api.ReorderWorkflowStages(context.Background(), wf.ID, []int64{stage.ID}); err != nil {
-		t.Fatalf("ReorderWorkflowStages() error = %v", err)
+	if reorderErr := api.ReorderWorkflowStages(context.Background(), wf.ID, []int64{stage.ID}); reorderErr != nil {
+		t.Fatalf("ReorderWorkflowStages() error = %v", reorderErr)
 	}
-	if err := api.RemoveWorkflowStage(context.Background(), stage.ID); err != nil {
-		t.Fatalf("RemoveWorkflowStage() error = %v", err)
+	if removeErr := api.RemoveWorkflowStage(context.Background(), stage.ID); removeErr != nil {
+		t.Fatalf("RemoveWorkflowStage() error = %v", removeErr)
 	}
 	export, err := api.ExportWorkflow(context.Background(), wf.ID)
 	if err != nil {
 		t.Fatalf("ExportWorkflow() error = %v", err)
 	}
 	export.Name = "imported-wf"
-	if _, err := api.ImportWorkflow(context.Background(), export); err != nil {
-		t.Fatalf("ImportWorkflow() error = %v", err)
+	if _, importErr := api.ImportWorkflow(context.Background(), export); importErr != nil {
+		t.Fatalf("ImportWorkflow() error = %v", importErr)
 	}
 
 	// Test SetTicketWorkflow/UnsetTicketWorkflow
@@ -603,22 +603,22 @@ func TestLocalModeClientWorkflowStagesProjectDraftAndTicketAliases(t *testing.T)
 	if err != nil {
 		t.Fatalf("CreateRole() error = %v", err)
 	}
-	if err := api.AddWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("AddWorkflowStageRole() error = %v", err)
+	if addRoleErr := api.AddWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); addRoleErr != nil {
+		t.Fatalf("AddWorkflowStageRole() error = %v", addRoleErr)
 	}
-	if err := api.ReorderWorkflowStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); err != nil {
-		t.Fatalf("ReorderWorkflowStageRoles() error = %v", err)
+	if reorderRoleErr := api.ReorderWorkflowStageRoles(ctx, wf.ID, stage.ID, []int64{role.ID}); reorderRoleErr != nil {
+		t.Fatalf("ReorderWorkflowStageRoles() error = %v", reorderRoleErr)
 	}
-	if err := api.RemoveWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); err != nil {
-		t.Fatalf("RemoveWorkflowStageRole() error = %v", err)
+	if removeRoleErr := api.RemoveWorkflowStageRole(ctx, wf.ID, stage.ID, role.ID); removeRoleErr != nil {
+		t.Fatalf("RemoveWorkflowStageRole() error = %v", removeRoleErr)
 	}
 
 	projectBefore, err := api.GetProject(ctx, "1")
 	if err != nil {
 		t.Fatalf("GetProject(before) error = %v", err)
 	}
-	if err := api.SetProjectDefaultDraft(ctx, 1, !projectBefore.DefaultDraft); err != nil {
-		t.Fatalf("SetProjectDefaultDraft() error = %v", err)
+	if setDraftErr := api.SetProjectDefaultDraft(ctx, 1, !projectBefore.DefaultDraft); setDraftErr != nil {
+		t.Fatalf("SetProjectDefaultDraft() error = %v", setDraftErr)
 	}
 	projectAfter, err := api.GetProject(ctx, "1")
 	if err != nil {
@@ -632,15 +632,15 @@ func TestLocalModeClientWorkflowStagesProjectDraftAndTicketAliases(t *testing.T)
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.ReadyTicket(ctx, ticket.ID, "ready"); err != nil {
-		t.Fatalf("ReadyTicket() error = %v", err)
+	if _, readyErr := api.ReadyTicket(ctx, ticket.ID, "ready"); readyErr != nil {
+		t.Fatalf("ReadyTicket() error = %v", readyErr)
 	}
 	db, err := api.openLocalDB()
 	if err != nil {
 		t.Fatalf("openLocalDB() error = %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, store.StateSuccess, store.RenderLifecycleStatus(ticket.Stage, store.StateSuccess), ticket.ID); err != nil {
-		t.Fatalf("set success state error = %v", err)
+	if _, setSuccessErr := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, store.StateSuccess, store.RenderLifecycleStatus(ticket.Stage, store.StateSuccess), ticket.ID); setSuccessErr != nil {
+		t.Fatalf("set success state error = %v", setSuccessErr)
 	}
 	advanced, err := api.NextTicket(ctx, ticket.ID)
 	if err != nil {
@@ -707,8 +707,8 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 	if total != 30 {
 		t.Fatalf("TotalTimeForTicket() = %d, want 30", total)
 	}
-	if err := api.DeleteTimeEntry(context.Background(), entry.ID); err != nil {
-		t.Fatalf("DeleteTimeEntry() error = %v", err)
+	if deleteErr := api.DeleteTimeEntry(context.Background(), entry.ID); deleteErr != nil {
+		t.Fatalf("DeleteTimeEntry() error = %v", deleteErr)
 	}
 
 	label, err := api.CreateLabel(context.Background(), 1, LabelRequest{Name: "bug", Color: "red"})
@@ -722,8 +722,8 @@ func TestLocalModeClientTimeAndLabels(t *testing.T) {
 	if len(labels) == 0 {
 		t.Fatal("ListLabels() returned empty")
 	}
-	if err := api.AddTicketLabel(context.Background(), ticket.ID, label.ID); err != nil {
-		t.Fatalf("AddTicketLabel() error = %v", err)
+	if addLabelErr := api.AddTicketLabel(context.Background(), ticket.ID, label.ID); addLabelErr != nil {
+		t.Fatalf("AddTicketLabel() error = %v", addLabelErr)
 	}
 	ticketLabels, err := api.ListTicketLabels(context.Background(), ticket.ID)
 	if err != nil {
@@ -826,8 +826,8 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	if len(members) == 0 {
 		t.Fatal("ListTeamMembers() returned empty")
 	}
-	if err := api.RemoveTeamMember(context.Background(), team.ID, userID); err != nil {
-		t.Fatalf("RemoveTeamMember() error = %v", err)
+	if removeMemberErr := api.RemoveTeamMember(context.Background(), team.ID, userID); removeMemberErr != nil {
+		t.Fatalf("RemoveTeamMember() error = %v", removeMemberErr)
 	}
 
 	// Project members
@@ -843,8 +843,8 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	if len(pms) == 0 {
 		t.Fatal("ListProjectMembers() returned empty")
 	}
-	if err := api.RemoveProjectMember(context.Background(), 1, userID); err != nil {
-		t.Fatalf("RemoveProjectMember() error = %v", err)
+	if removeProjectMemberErr := api.RemoveProjectMember(context.Background(), 1, userID); removeProjectMemberErr != nil {
+		t.Fatalf("RemoveProjectMember() error = %v", removeProjectMemberErr)
 	}
 
 	// Project team members
@@ -898,20 +898,20 @@ func TestLocalModeClientAgents(t *testing.T) {
 	}
 	_ = statuses
 
-	if _, err := api.SetAgentEnabled(context.Background(), agent.ID, false); err != nil {
-		t.Fatalf("SetAgentEnabled(false) error = %v", err)
+	if _, disableErr := api.SetAgentEnabled(context.Background(), agent.ID, false); disableErr != nil {
+		t.Fatalf("SetAgentEnabled(false) error = %v", disableErr)
 	}
-	if _, err := api.SetAgentEnabled(context.Background(), agent.ID, true); err != nil {
-		t.Fatalf("SetAgentEnabled(true) error = %v", err)
+	if _, enableErr := api.SetAgentEnabled(context.Background(), agent.ID, true); enableErr != nil {
+		t.Fatalf("SetAgentEnabled(true) error = %v", enableErr)
 	}
 
 	newpw := "newpw"
-	if _, err := api.UpdateAgent(context.Background(), agent.ID, AgentUpdateRequest{Password: &newpw}); err != nil {
-		t.Fatalf("UpdateAgent() error = %v", err)
+	if _, updateErr := api.UpdateAgent(context.Background(), agent.ID, AgentUpdateRequest{Password: &newpw}); updateErr != nil {
+		t.Fatalf("UpdateAgent() error = %v", updateErr)
 	}
 
-	if err := api.SetAgentConfig(context.Background(), agent.ID, "k", "v"); err != nil {
-		t.Fatalf("SetAgentConfig() error = %v", err)
+	if setConfigErr := api.SetAgentConfig(context.Background(), agent.ID, "k", "v"); setConfigErr != nil {
+		t.Fatalf("SetAgentConfig() error = %v", setConfigErr)
 	}
 	entries, err := api.ListAgentConfig(context.Background(), agent.ID)
 	if err != nil {
@@ -920,8 +920,8 @@ func TestLocalModeClientAgents(t *testing.T) {
 	if len(entries) == 0 {
 		t.Fatal("ListAgentConfig() returned empty")
 	}
-	if err := api.DeleteAgentConfig(context.Background(), agent.ID, "k"); err != nil {
-		t.Fatalf("DeleteAgentConfig() error = %v", err)
+	if deleteConfigErr := api.DeleteAgentConfig(context.Background(), agent.ID, "k"); deleteConfigErr != nil {
+		t.Fatalf("DeleteAgentConfig() error = %v", deleteConfigErr)
 	}
 
 	// Team agents
@@ -941,8 +941,8 @@ func TestLocalModeClientAgents(t *testing.T) {
 	if len(tas) == 0 {
 		t.Fatal("ListTeamAgents() returned empty")
 	}
-	if err := api.RemoveTeamAgent(context.Background(), team.ID, agent.ID); err != nil {
-		t.Fatalf("RemoveTeamAgent() error = %v", err)
+	if removeTeamAgentErr := api.RemoveTeamAgent(context.Background(), team.ID, agent.ID); removeTeamAgentErr != nil {
+		t.Fatalf("RemoveTeamAgent() error = %v", removeTeamAgentErr)
 	}
 
 	// RegisterAgent, HeartbeatAgent, RequestAgentWork
@@ -953,8 +953,8 @@ func TestLocalModeClientAgents(t *testing.T) {
 	if registered.ID != agent.ID {
 		t.Fatalf("RegisterAgent().ID = %q", registered.ID)
 	}
-	if err := api.HeartbeatAgent(context.Background(), agent.ID, newpw, "online"); err != nil {
-		t.Fatalf("HeartbeatAgent() error = %v", err)
+	if heartbeatErr := api.HeartbeatAgent(context.Background(), agent.ID, newpw, "online"); heartbeatErr != nil {
+		t.Fatalf("HeartbeatAgent() error = %v", heartbeatErr)
 	}
 
 	// Create a ready ticket for RequestAgentWork
@@ -962,8 +962,8 @@ func TestLocalModeClientAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("ReadyTicket() error = %v", err)
+	if _, readyErr := api.ReadyTicket(context.Background(), ticket.ID, ""); readyErr != nil {
+		t.Fatalf("ReadyTicket() error = %v", readyErr)
 	}
 	resp, err := api.RequestAgentWork(context.Background(), AgentRequest{ID: agent.ID, Password: newpw, ProjectID: 1})
 	if err != nil {
@@ -1021,8 +1021,8 @@ func TestEnsureLocalUserCreatesAndReenablesUser(t *testing.T) {
 	if created.Username != "builder" || !created.Enabled {
 		t.Fatalf("ensureLocalUser(create) = %#v", created)
 	}
-	if err := store.SetUserEnabled(ctx, db, "builder", false); err != nil {
-		t.Fatalf("SetUserEnabled(false) error = %v", err)
+	if setEnabledErr := store.SetUserEnabled(ctx, db, "builder", false); setEnabledErr != nil {
+		t.Fatalf("SetUserEnabled(false) error = %v", setEnabledErr)
 	}
 	reenabled, err := ensureLocalUser(ctx, db, "builder")
 	if err != nil {
@@ -1065,8 +1065,8 @@ func TestLocalModeClientRequestTicketByRefDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	if _, err := api.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
-		t.Fatalf("ReadyTicket() error = %v", err)
+	if _, readyErr := api.ReadyTicket(context.Background(), ticket.ID, ""); readyErr != nil {
+		t.Fatalf("ReadyTicket() error = %v", readyErr)
 	}
 	resp, err := api.RequestTicket(context.Background(), TicketRequest{TicketRef: ticket.ID, DryRun: true})
 	if err != nil {

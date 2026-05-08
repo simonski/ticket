@@ -61,8 +61,8 @@ func runProject(args []string) error {
 		id := fs.Int64("id", 0, "force project id")
 		printID := fs.Bool("printid", false, "print only the created project id")
 		workflowID := fs.Int64("workflow", 0, "workflow id to associate")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
+		if parseErr := fs.Parse(args[1:]); parseErr != nil {
+			return parseErr
 		}
 		if strings.TrimSpace(*title) == "" && fs.NArg() > 0 {
 			*title = strings.Join(fs.Args(), " ")
@@ -83,19 +83,19 @@ func runProject(args []string) error {
 		if projectWoW == "" {
 			projectWoW = *description
 		}
-		projectDORMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
-		if err != nil {
-			return err
+		projectDORMap, mergeErr := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args[1:], "-dor"), containsFlag(args[1:], "-dor-map"))
+		if mergeErr != nil {
+			return mergeErr
 		}
-		projectDODMap, err := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args[1:], "-dod"), containsFlag(args[1:], "-dod-map"))
-		if err != nil {
-			return err
+		projectDODMap, mergeErr := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args[1:], "-dod"), containsFlag(args[1:], "-dod-map"))
+		if mergeErr != nil {
+			return mergeErr
 		}
-		projectACMap, err := mergeGuidanceMap(nil, *acceptanceCriteria, *acMapRaw, containsFlag(args[1:], "-ac"), containsFlag(args[1:], "-ac-map"))
-		if err != nil {
-			return err
+		projectACMap, mergeErr := mergeGuidanceMap(nil, *acceptanceCriteria, *acMapRaw, containsFlag(args[1:], "-ac"), containsFlag(args[1:], "-ac-map"))
+		if mergeErr != nil {
+			return mergeErr
 		}
-		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		project, createErr := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			ID:                 optionalInt64Flag(*id),
 			Prefix:             *prefix,
 			Title:              *title,
@@ -108,13 +108,13 @@ func runProject(args []string) error {
 			GitRepository:      strings.TrimSpace(*gitRepository),
 			WorkflowID:         wfID,
 		})
-		if err != nil {
-			return err
+		if createErr != nil {
+			return createErr
 		}
 		cfg.ProjectID = project.Prefix
 		cfg.CurrentEpicID = ""
-		if err := config.Save(cfg); err != nil {
-			return err
+		if saveErr := config.Save(cfg); saveErr != nil {
+			return saveErr
 		}
 		if outputJSON {
 			return printJSON(project)
@@ -125,15 +125,15 @@ func runProject(args []string) error {
 		printProject(project)
 		return nil
 	case "list", "ls":
-		projects, err := svc.ListProjects(context.Background())
-		if err != nil {
-			return err
+		projects, listErr := svc.ListProjects(context.Background())
+		if listErr != nil {
+			return listErr
 		}
 		if outputJSON {
 			return printJSON(projects)
 		}
 		workflowNames := map[int64]string{}
-		if wfs, err := svc.ListWorkflows(context.Background()); err == nil {
+		if wfs, listWorkflowsErr := svc.ListWorkflows(context.Background()); listWorkflowsErr == nil {
 			for _, wf := range wfs {
 				workflowNames[wf.ID] = wf.Name
 			}
@@ -365,8 +365,8 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
 	dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
 	acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
-	if err := fs.Parse(args); err != nil {
-		return err
+	if parseErr := fs.Parse(args); parseErr != nil {
+		return parseErr
 	}
 
 	// Check if a project is already initialised
@@ -378,17 +378,17 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 	// Try to find existing project by prefix
 	project, err := svc.GetProject(context.Background(), *prefix)
 	if err != nil {
-		dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args, "-dor"), containsFlag(args, "-dor-map"))
-		if err != nil {
-			return err
+		dorMap, mergeErr := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args, "-dor"), containsFlag(args, "-dor-map"))
+		if mergeErr != nil {
+			return mergeErr
 		}
-		dodMap, err := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args, "-dod"), containsFlag(args, "-dod-map"))
-		if err != nil {
-			return err
+		dodMap, mergeErr := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args, "-dod"), containsFlag(args, "-dod-map"))
+		if mergeErr != nil {
+			return mergeErr
 		}
-		acMap, err := mergeGuidanceMap(nil, *ac, *acMapRaw, containsFlag(args, "-ac"), containsFlag(args, "-ac-map"))
-		if err != nil {
-			return err
+		acMap, mergeErr := mergeGuidanceMap(nil, *ac, *acMapRaw, containsFlag(args, "-ac"), containsFlag(args, "-ac-map"))
+		if mergeErr != nil {
+			return mergeErr
 		}
 		// Project doesn't exist — create it
 		project, err = svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
@@ -664,8 +664,8 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 			nextStatus = strings.TrimSpace(*status)
 		}
 		if nextStatus == "closed" {
-			if err := guardProjectClose(svc, projectID); err != nil {
-				return err
+			if guardErr := guardProjectClose(svc, projectID); guardErr != nil {
+				return guardErr
 			}
 		}
 		var nextWorkflowID *int64

@@ -94,8 +94,8 @@ func TestRunStoryBreakdownViaTicketCLIUsesConfiguredCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject() error = %v", err)
 	}
-	if _, err := store.CreateRole(context.Background(), db, nil, "StoryReview", "Break stories down.", "Create useful tickets."); err != nil {
-		t.Fatalf("CreateRole(StoryReview) error = %v", err)
+	if _, createRoleErr := store.CreateRole(context.Background(), db, nil, "StoryReview", "Break stories down.", "Create useful tickets."); createRoleErr != nil {
+		t.Fatalf("CreateRole(StoryReview) error = %v", createRoleErr)
 	}
 	story, err := store.CreateStory(context.Background(), db, project.ID, "Checkout", "Improve checkout", "")
 	if err != nil {

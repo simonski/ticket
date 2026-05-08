@@ -303,9 +303,9 @@ func (c *Client) DeleteRole(ctx context.Context, id int64) error {
 
 func (c *Client) CreateAgent(ctx context.Context, request AgentCreateRequest) (agent store.Agent, password string, err error) {
 	if c.mode == config.ModeLocal {
-		db, err := c.openLocalDB()
-		if err != nil {
-			return store.Agent{}, "", err
+		db, openErr := c.openLocalDB()
+		if openErr != nil {
+			return store.Agent{}, "", openErr
 		}
 		return store.CreateAgent(ctx, db, request.Password)
 	}

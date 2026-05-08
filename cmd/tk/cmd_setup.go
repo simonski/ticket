@@ -245,11 +245,11 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 		}
 	}
 
-	if _, err := ensureLocalDatabase(); err != nil {
+	if _, err = ensureLocalDatabase(); err != nil {
 		return err
 	}
-	if err := bindRootToLocalProject(root, projectName, projectPrefix, gitRepo); err != nil {
-		return err
+	if bindErr := bindRootToLocalProject(root, projectName, projectPrefix, gitRepo); bindErr != nil {
+		return bindErr
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -341,8 +341,8 @@ func runSetupRemote(reader *bufio.Reader) error {
 	}
 
 	if !hasAccount {
-		if _, err := svc.Register(context.Background(), username, password); err != nil {
-			return fmt.Errorf("registration failed: %w", err)
+		if _, registerErr := svc.Register(context.Background(), username, password); registerErr != nil {
+			return fmt.Errorf("registration failed: %w", registerErr)
 		}
 		fmt.Printf("  registered user: %s\n", username)
 	}
@@ -354,16 +354,16 @@ func runSetupRemote(reader *bufio.Reader) error {
 	cfg.Token = token
 
 	// Save credentials
-	if err := config.SaveRemoteCredentials(serverURL, cfg.Username, cfg.Token); err != nil {
-		return err
+	if saveCredsErr := config.SaveRemoteCredentials(serverURL, cfg.Username, cfg.Token); saveCredsErr != nil {
+		return saveCredsErr
 	}
 	fmt.Printf("  user     : %s\n", cfg.Username)
 	fmt.Println()
 
 	// 5. Project selection
 	// Reload service with token
-	if err := config.Save(cfg); err != nil {
-		return err
+	if saveCfgErr := config.Save(cfg); saveCfgErr != nil {
+		return saveCfgErr
 	}
 	cfg, err = config.Load()
 	if err != nil {
@@ -1029,8 +1029,8 @@ func runImportSnapshot(args []string) error {
 	var snapshot store.Snapshot
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	if err := decoder.Decode(&snapshot); err != nil {
-		return err
+	if decodeErr := decoder.Decode(&snapshot); decodeErr != nil {
+		return decodeErr
 	}
 	resolved, err := config.ResolveURL()
 	if err != nil {

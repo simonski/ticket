@@ -28,7 +28,7 @@ func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
 }
 
 func detectGitOriginAt(root string) string {
-	out, err := exec.Command("git", "-C", root, "remote", "get-url", "origin").Output()
+	out, err := exec.Command("git", "-C", root, "remote", "get-url", "origin").Output() // #nosec G204 -- command and arguments are fixed; root is a trusted local path
 	if err != nil {
 		return ""
 	}

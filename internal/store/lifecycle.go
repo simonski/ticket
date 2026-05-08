@@ -91,8 +91,8 @@ func ParseLifecycleStatus(raw string) (stage, state string, err error) {
 func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64) (nextID *int64, nextName string, err error) {
 	var workflowID int64
 	var currentOrder int
-	if err := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder); err != nil {
-		return nil, "", err
+	if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id, sort_order FROM workflow_stages WHERE workflow_stage_id = ?`, currentStageID).Scan(&workflowID, &currentOrder); queryErr != nil {
+		return nil, "", queryErr
 	}
 	var nextStageID int64
 	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextStageID, &nextName)
@@ -133,7 +133,7 @@ func batchGetWorkflowStageOrders(ctx context.Context, db *sql.DB, tickets []Tick
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	query := fmt.Sprintf(`SELECT workflow_stage_id, sort_order FROM workflow_stages WHERE workflow_stage_id IN (%s)`, strings.Join(placeholders, ","))
+	query := fmt.Sprintf(`SELECT workflow_stage_id, sort_order FROM workflow_stages WHERE workflow_stage_id IN (%s)`, strings.Join(placeholders, ",")) // #nosec G201 -- query shape is static; only placeholder count is generated
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

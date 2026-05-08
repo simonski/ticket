@@ -190,7 +190,7 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		svc, err := resolveService(cfg)
+		svc, err = resolveService(cfg)
 		if err != nil {
 			return err
 		}
@@ -244,7 +244,7 @@ func runAgent(args []string) error {
 				}
 				if *projectID == 0 {
 					if projVal, ok := response.Config["project_id"]; ok && projVal != "" {
-						if parsed, err := strconv.ParseInt(projVal, 10, 64); err == nil {
+						if parsed, parseErr := strconv.ParseInt(projVal, 10, 64); parseErr == nil {
 							*projectID = parsed
 							if agentVerbose {
 								fmt.Printf("[agent] config: project_id=%d\n", *projectID)
@@ -254,7 +254,7 @@ func runAgent(args []string) error {
 				}
 				if *pollSeconds == 5 {
 					if pollVal, ok := response.Config["poll_seconds"]; ok && pollVal != "" {
-						if parsed, err := strconv.Atoi(pollVal); err == nil && parsed >= 1 {
+						if parsed, parseErr := strconv.Atoi(pollVal); parseErr == nil && parsed >= 1 {
 							*pollSeconds = parsed
 							idleDelay = time.Duration(*pollSeconds) * time.Second
 							if agentVerbose {
@@ -300,9 +300,9 @@ func runAgent(args []string) error {
 				for {
 					select {
 					case <-ticker.C:
-						if err := svc.HeartbeatAgent(context.Background(), agentIDVal, agentPassword, "working"); err != nil {
+						if heartbeatErr := svc.HeartbeatAgent(context.Background(), agentIDVal, agentPassword, "working"); heartbeatErr != nil {
 							if agentVerbose {
-								fmt.Printf("[agent] heartbeat error: %v\n", err)
+								fmt.Printf("[agent] heartbeat error: %v\n", heartbeatErr)
 							}
 						} else if agentVerbose {
 							fmt.Printf("[agent] heartbeat sent (working)\n")
@@ -383,7 +383,7 @@ func runAgent(args []string) error {
 		if err != nil {
 			return err
 		}
-		svc, err := resolveService(cfg)
+		svc, err = resolveService(cfg)
 		if err != nil {
 			return err
 		}
@@ -424,9 +424,9 @@ func runAgent(args []string) error {
 		}
 		pw := strings.TrimSpace(*newPassword)
 		if pw == "" {
-			generated, err := generatePassword(24)
-			if err != nil {
-				return err
+			generated, genErr := generatePassword(24)
+			if genErr != nil {
+				return genErr
 			}
 			pw = generated
 		}
@@ -699,10 +699,10 @@ func defaultRunTicketAgentCommand(agent, prompt string, stream bool, ticketKey s
 	switch agent {
 	case "claude":
 		llmCmd = fmt.Sprintf("cat %s | claude -p --model claude-sonnet-4-5", promptFile)
-		cmd = exec.Command("sh", "-c", llmCmd) //nolint:gosec // hardcoded trusted command
+		cmd = exec.Command("sh", "-c", llmCmd) // #nosec G204 -- hardcoded trusted command for known agent preset
 	case "codex":
 		llmCmd = fmt.Sprintf("codex exec < %s", promptFile)
-		cmd = exec.Command("sh", "-c", llmCmd) //nolint:gosec // hardcoded trusted command
+		cmd = exec.Command("sh", "-c", llmCmd) // #nosec G204 -- hardcoded trusted command for known agent preset
 	default:
 		if err := validateLLMBinary(agent); err != nil {
 			return "", err

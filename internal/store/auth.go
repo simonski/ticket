@@ -326,18 +326,18 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 
 	// Anonymise audit trail records so history is preserved without PII.
 	// history_events.created_by and ticket_history.created_by are nullable.
-	if _, err := tx.ExecContext(ctx, `UPDATE history_events SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `UPDATE history_events SET created_by = NULL WHERE created_by = ?`, userID); execErr != nil {
+		return execErr
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE ticket_history SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `UPDATE ticket_history SET created_by = NULL WHERE created_by = ?`, userID); execErr != nil {
+		return execErr
 	} // Nullify ticket creator reference (nullable FK).
-	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); execErr != nil {
+		return execErr
 	}
 	// Clear free-text assignee field that stores the username.
-	if _, err := tx.ExecContext(ctx, `UPDATE tickets SET assignee = '' WHERE assignee = (SELECT username FROM users WHERE user_id = ?)`, userID); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `UPDATE tickets SET assignee = '' WHERE assignee = (SELECT username FROM users WHERE user_id = ?)`, userID); execErr != nil {
+		return execErr
 	}
 	// Remove personal data: sessions, memberships, time entries, messages, agent config.
 	tables := []struct {
@@ -352,18 +352,18 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 		{"agent_config", "user_id"},
 	}
 	for _, t := range tables {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); err != nil { // #nosec G202 -- table/column names come from a hardcoded internal list
-			return err
+		if _, execErr := tx.ExecContext(ctx, `DELETE FROM `+t.table+` WHERE `+t.column+` = ?`, userID); execErr != nil { // #nosec G202 -- table/column names come from a hardcoded internal list
+			return execErr
 		}
 	}
 	// Delete messages to/from the user.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `DELETE FROM messages WHERE from_user_id = ? OR to_user_id = ?`, userID, userID); execErr != nil {
+		return execErr
 	}
 	// Delete comments authored by the user (personal content, not anonymisable
 	// because user_id is NOT NULL and the FK references users).
-	if _, err := tx.ExecContext(ctx, `DELETE FROM comments WHERE user_id = ?`, userID); err != nil {
-		return err
+	if _, execErr := tx.ExecContext(ctx, `DELETE FROM comments WHERE user_id = ?`, userID); execErr != nil {
+		return execErr
 	}
 	// Finally remove the user record.
 	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE user_id = ?`, userID)

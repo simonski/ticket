@@ -1087,15 +1087,16 @@ func (m Model) statusBar(w int) string {
 	moon := moonPhases[m.moonPhase]
 
 	var text string
-	if m.showCmd {
+	switch {
+	case m.showCmd:
 		text = " " + moon + "  / " + m.cmdInput.View()
-	} else if m.statusMsg != "" {
+	case m.statusMsg != "":
 		text = " " + moon + "  " + m.statusMsg
-	} else if m.err != nil {
+	case m.err != nil:
 		text = " " + moon + "  ✗ " + m.err.Error()
-	} else if m.updateMsg != "" {
+	case m.updateMsg != "":
 		text = " " + moon + "  ↑ " + m.updateMsg
-	} else {
+	default:
 		hints := map[viewMode]string{
 			modeSummary:       "tab cycle · e edit · n new · p project · t theme · ? settings · qq quit",
 			modeList:          "↑↓/wasd · enter · e edit · n new · p project · / cmd · t theme · ? settings · qq quit",
@@ -1308,7 +1309,7 @@ func (m Model) ticketFlags(ticket store.Ticket) string {
 	return strings.Join(flags, ", ")
 }
 
-func (m Model) effectiveTicketWorkflow(ticket store.Ticket) (*store.WorkflowWithStages, string) {
+func (m Model) effectiveTicketWorkflow(ticket store.Ticket) (workflow *store.WorkflowWithStages, source string) {
 	if ticket.WorkflowID != nil {
 		return m.findWorkflow(*ticket.WorkflowID), "ticket override"
 	}
@@ -1980,18 +1981,18 @@ func padRight(s string, width int) string {
 	return s + strings.Repeat(" ", width-vis)
 }
 
-func truncate(s string, max int) string {
-	if max <= 0 {
+func truncate(s string, maxLen int) string {
+	if maxLen <= 0 {
 		return ""
 	}
 	runes := []rune(s)
-	if len(runes) <= max {
+	if len(runes) <= maxLen {
 		return s
 	}
-	if max <= 3 {
-		return string(runes[:max])
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
 	}
-	return string(runes[:max-3]) + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 func wordWrap(s string, width int) []string {
@@ -2070,7 +2071,6 @@ func (m Model) panelEntryCmd() tea.Cmd {
 	if !m.cfg.TUIDisablePersist {
 		cfg := m.cfg
 		cfg.TUIMode = modeToString(m.mode)
-		m.cfg = cfg
 		cmds = append(cmds, func() tea.Msg {
 			if err := config.Save(cfg); err != nil {
 				log.Printf("tui: save mode: %v", err)

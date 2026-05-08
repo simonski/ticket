@@ -25,11 +25,11 @@ func CreateAgent(ctx context.Context, db *sql.DB, plainPassword string) (agent A
 
 	passwordToSet := strings.TrimSpace(plainPassword)
 	if passwordToSet == "" {
-		var err error
-		passwordToSet, err = randomSecret(24)
-		if err != nil {
-			return Agent{}, "", err
+		generatedSecret, secretErr := randomSecret(24)
+		if secretErr != nil {
+			return Agent{}, "", secretErr
 		}
+		passwordToSet = generatedSecret
 	}
 	hash, err := password.Hash(passwordToSet)
 	if err != nil {

@@ -100,15 +100,15 @@ func runFile(file, ticketBin string, verbose bool) (pass, fail, skip int, err er
 	repoDir := filepath.Join(tmpDir, "repo")
 	homeDir := filepath.Join(tmpDir, "home")
 	ticketHome := filepath.Join(homeDir, ".ticket")
-	err = os.MkdirAll(repoDir, 0o755)
+	err = os.MkdirAll(repoDir, 0o750)
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	err = os.MkdirAll(homeDir, 0o755)
+	err = os.MkdirAll(homeDir, 0o750)
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	err = os.MkdirAll(ticketHome, 0o755)
+	err = os.MkdirAll(ticketHome, 0o750)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -566,7 +566,7 @@ func startServerOnPort(ticketBin, workDir string, env map[string]string, port in
 	cmd.Dir = workDir
 	cmd.Env = buildEnv(env)
 	logPath := filepath.Join(workDir, fmt.Sprintf("tk-test-server-%d.log", port))
-	logFile, err := os.Create(logPath)
+	logFile, err := os.Create(logPath) // #nosec G304 -- log path is constructed from controlled workDir + fixed filename pattern
 	if err != nil {
 		return nil, "", err
 	}
