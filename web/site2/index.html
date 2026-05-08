@@ -1309,6 +1309,7 @@
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
         const FALLBACK_STAGES = ["backlog", "todo", "doing", "done"];
         const AUTH_STORAGE_KEY = "site2.auth";
+        const SELECTED_PROJECT_STORAGE_KEY = "site2.selectedProjectID";
 
         const els = {
             loginScreen: document.getElementById("login-screen"),
@@ -1491,6 +1492,28 @@
             sessionStorage.removeItem(AUTH_STORAGE_KEY);
         }
 
+        function storeSelectedProjectID(projectID) {
+            const parsed = Number(projectID);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                localStorage.removeItem(SELECTED_PROJECT_STORAGE_KEY);
+                return;
+            }
+            localStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, String(parsed));
+        }
+
+        function loadStoredSelectedProjectID() {
+            const raw = localStorage.getItem(SELECTED_PROJECT_STORAGE_KEY);
+            if (!raw) {
+                return null;
+            }
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                localStorage.removeItem(SELECTED_PROJECT_STORAGE_KEY);
+                return null;
+            }
+            return parsed;
+        }
+
         function loadStoredAuth() {
             const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
             if (!raw) {
@@ -1643,6 +1666,7 @@
 
         async function selectProject(projectID) {
             state.selectedProjectID = Number(projectID);
+            storeSelectedProjectID(state.selectedProjectID);
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
             await loadTickets();
@@ -1680,12 +1704,16 @@
 
         async function loadProjects() {
             state.projects = (await api("/api/projects")).map(normalizeProject);
+            if (!state.selectedProjectID) {
+                state.selectedProjectID = loadStoredSelectedProjectID();
+            }
             if (!state.selectedProjectID && state.projects.length) {
                 state.selectedProjectID = state.projects[0].id;
             }
             if (state.selectedProjectID && !state.projects.some((project) => project.id === state.selectedProjectID)) {
                 state.selectedProjectID = state.projects.length ? state.projects[0].id : null;
             }
+            storeSelectedProjectID(state.selectedProjectID);
             const project = getCurrentProject();
             state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
         }
@@ -2334,6 +2362,7 @@
                     return;
                 }
                 state.selectedProjectID = Number(card.dataset.projectId);
+                storeSelectedProjectID(state.selectedProjectID);
                 const project = getCurrentProject();
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
@@ -2343,6 +2372,7 @@
 
             document.getElementById("new-project-button").addEventListener("click", () => {
                 state.selectedProjectID = null;
+                storeSelectedProjectID(state.selectedProjectID);
                 state.selectedProjectDraft = emptyProject();
                 renderEditors();
             });
@@ -2380,6 +2410,7 @@
                         body: JSON.stringify({ draft: normalizeBool(document.getElementById("project-default-draft").value) }),
                     });
                     state.selectedProjectID = project.id;
+                    storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
                     await loadTickets();
                     renderAll();
@@ -2397,6 +2428,7 @@
                 try {
                     await api("/api/projects/" + draft.id, { method: "DELETE" });
                     state.selectedProjectID = null;
+                    storeSelectedProjectID(state.selectedProjectID);
                     state.selectedProjectDraft = emptyProject();
                     await loadProjects();
                     await loadTickets();
@@ -2873,6 +2905,7 @@
                     els.projectMenuDropdown.classList.remove("open");
                     els.projectMenuButton.setAttribute("aria-expanded", "false");
                     state.selectedProjectID = null;
+                    storeSelectedProjectID(state.selectedProjectID);
                     state.selectedProjectDraft = emptyProject();
                     switchView("projects");
                     renderAll();

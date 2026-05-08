@@ -1,23 +1,24 @@
 const { test, expect } = require("@playwright/test");
 
-function installSite2Mock(page) {
-  return page.addInitScript(() => {
+function installSite2Mock(page, seed = {}) {
+  return page.addInitScript((mockSeed) => {
+    const defaultProjects = [
+      {
+        project_id: 1,
+        prefix: "OPS",
+        title: "Operations",
+        description: "Keep things running",
+        acceptance_criteria: "",
+        git_repository: "acme/ops",
+        visibility: "public",
+        workflow_id: 1,
+        default_draft: false,
+      },
+    ];
     const db = {
       status: { username: "admin", mode: "local", version: "dev" },
-      nextProjectID: 2,
-      projects: [
-        {
-          project_id: 1,
-          prefix: "OPS",
-          title: "Operations",
-          description: "Keep things running",
-          acceptance_criteria: "",
-          git_repository: "acme/ops",
-          visibility: "public",
-          workflow_id: 1,
-          default_draft: false,
-        },
-      ],
+      nextProjectID: Number(mockSeed.nextProjectID || 2),
+      projects: Array.isArray(mockSeed.projects) && mockSeed.projects.length ? mockSeed.projects : defaultProjects,
       tickets: [
         {
           ticket_id: "OPS-101",
@@ -354,7 +355,7 @@ function installSite2Mock(page) {
 
       return json({ error: `Unhandled ${method} ${path}` }, 500);
     };
-  });
+  }, seed);
 }
 
 test("focuses the username field on first load", async ({ page }) => {
@@ -362,6 +363,7 @@ test("focuses the username field on first load", async ({ page }) => {
   await page.goto("/site2/");
   await page.evaluate(() => {
     sessionStorage.clear();
+    localStorage.clear();
     window.location.reload();
   });
   await expect(page.locator("#login-username")).toBeVisible();
@@ -376,6 +378,7 @@ test("does not emit CSP inline-style violations after login", async ({ page }) =
   await page.goto("/site2/");
   await page.evaluate(() => {
     sessionStorage.clear();
+    localStorage.clear();
     window.location.reload();
   });
   await page.locator("#login-username").fill("admin");
@@ -392,6 +395,7 @@ test("keeps the session and visible tickets across refresh", async ({ page }) =>
   await page.goto("/site2/");
   await page.evaluate(() => {
     sessionStorage.clear();
+    localStorage.clear();
     window.location.reload();
   });
   await page.locator("#login-username").fill("admin");
@@ -406,9 +410,61 @@ test("keeps the session and visible tickets across refresh", async ({ page }) =>
   await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
 });
 
+test("remembers the selected project from localStorage after reload", async ({ page }) => {
+  await installSite2Mock(page, {
+    nextProjectID: 3,
+    projects: [
+      {
+        project_id: 1,
+        prefix: "OPS",
+        title: "Operations",
+        description: "Keep things running",
+        acceptance_criteria: "",
+        git_repository: "acme/ops",
+        visibility: "public",
+        workflow_id: 1,
+        default_draft: false,
+      },
+      {
+        project_id: 2,
+        prefix: "WEB",
+        title: "Website",
+        description: "Customer web experience",
+        acceptance_criteria: "",
+        git_repository: "acme/web",
+        visibility: "public",
+        workflow_id: 1,
+        default_draft: false,
+      },
+    ],
+  });
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+
+  await page.locator("#project-menu-button").click();
+  await page.locator('[data-project-switch="2"]').click();
+  await expect(page.locator("#project-menu-button")).toHaveText("Website (WEB)");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("site2.selectedProjectID"))).toBe("2");
+
+  await page.reload();
+
+  await expect(page.locator("#project-menu-button")).toHaveText("Website (WEB)");
+});
+
 test.beforeEach(async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");
+  await page.evaluate(() => {
+    localStorage.clear();
+  });
   await page.locator("#login-username").fill("admin");
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
