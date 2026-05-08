@@ -38,9 +38,11 @@ type roleRequest struct {
 }
 
 type workflowRequest struct {
-	ID          *int64 `json:"id,omitempty"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID              *int64 `json:"id,omitempty"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	ApprovalPolicy  string `json:"approval_policy,omitempty"`
+	ProgressionMode string `json:"progression_mode,omitempty"`
 }
 
 type workflowStageRequest struct {

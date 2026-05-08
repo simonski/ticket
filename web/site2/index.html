@@ -798,6 +798,25 @@
                                 <p class="meta">Tickets in <code>fail</code> state that require accountable human action.</p>
                             </div>
                         </div>
+                        <div class="row">
+                            <div class="field">
+                                <label for="intervention-filter">Filter</label>
+                                <select id="intervention-filter">
+                                    <option value="all">all</option>
+                                    <option value="unassigned">unassigned work-item</option>
+                                    <option value="agent">agent assigned</option>
+                                    <option value="human">human assigned</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="intervention-sort">Sort</label>
+                                <select id="intervention-sort">
+                                    <option value="priority">priority</option>
+                                    <option value="order">order</option>
+                                    <option value="recent">most recent update</option>
+                                </select>
+                            </div>
+                        </div>
                         <div id="intervention-list" class="entity-list"></div>
                     </div>
                 </section>
@@ -892,6 +911,22 @@
                             <div class="field">
                                 <label for="workflow-description">Description</label>
                                 <textarea id="workflow-description"></textarea>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="workflow-approval-policy">Approval policy</label>
+                                    <select id="workflow-approval-policy">
+                                        <option value="single_role">single_role</option>
+                                        <option value="all_roles">all_roles</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="workflow-progression-mode">Progression mode</label>
+                                    <select id="workflow-progression-mode">
+                                        <option value="linear">linear</option>
+                                        <option value="stage_only">stage_only</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="editor-actions">
                                 <button id="save-workflow-button" type="submit" class="btn-primary">Save Workflow</button>
@@ -1270,6 +1305,8 @@
             teamList: document.getElementById("team-list"),
             ticketBoard: document.getElementById("ticket-board"),
             interventionList: document.getElementById("intervention-list"),
+            interventionFilter: document.getElementById("intervention-filter"),
+            interventionSort: document.getElementById("intervention-sort"),
             stageGrid: document.getElementById("stage-grid"),
             workflowRoleBank: document.getElementById("workflow-role-bank"),
             ticketModal: document.getElementById("ticket-modal"),
@@ -1305,7 +1342,7 @@
         }
 
         function emptyWorkflow() {
-            return { id: null, name: "", description: "" };
+            return { id: null, name: "", description: "", approval_policy: "single_role", progression_mode: "linear" };
         }
 
         function emptyRole() {
@@ -1375,6 +1412,8 @@
         function normalizeWorkflow(workflow) {
             return Object.assign({}, workflow, {
                 id: workflow.id !== undefined ? workflow.id : workflow.workflow_id,
+                approval_policy: workflow.approval_policy || "single_role",
+                progression_mode: workflow.progression_mode || "linear",
                 stages: Array.isArray(workflow.stages) ? workflow.stages.map(normalizeStage) : [],
             });
         }
@@ -1821,6 +1860,7 @@
                 return "<div class=\"entity-card" + active + "\" data-workflow-id=\"" + workflow.id + "\">" +
                     "<h4>" + escapeHTML(workflow.name) + "</h4>" +
                     "<p>" + escapeHTML(workflow.description || "No description") + "</p>" +
+                    "<p class=\"meta\">policy: " + escapeHTML(workflow.approval_policy || "single_role") + " · mode: " + escapeHTML(workflow.progression_mode || "linear") + "</p>" +
                     "<p class=\"meta meta-top\">" + (workflow.stages ? workflow.stages.length : 0) + " stages</p>" +
                     "</div>";
             }).join("");
@@ -1926,7 +1966,35 @@
 
         function renderInterventions() {
             const failed = state.interventions
-                .sort((a, b) => (a.order || 0) - (b.order || 0));
+                .filter((ticket) => {
+                    const mode = (els.interventionFilter && els.interventionFilter.value) || "all";
+                    if (mode === "all") {
+                        return true;
+                    }
+                    const latestWorkItem = (state.interventionWorkItems[String(ticket.id)] || [])[0] || null;
+                    if (mode === "unassigned") {
+                        return !latestWorkItem || !String(latestWorkItem.assignee_id || "").trim();
+                    }
+                    if (mode === "agent") {
+                        return latestWorkItem && String(latestWorkItem.assignee_type || "").toLowerCase() === "agent";
+                    }
+                    if (mode === "human") {
+                        return latestWorkItem && String(latestWorkItem.assignee_type || "").toLowerCase() === "human";
+                    }
+                    return true;
+                })
+                .sort((a, b) => {
+                    const mode = (els.interventionSort && els.interventionSort.value) || "priority";
+                    if (mode === "order") {
+                        return (a.order || 0) - (b.order || 0);
+                    }
+                    if (mode === "recent") {
+                        const aDate = Date.parse(a.updated_at || a.created_at || "") || 0;
+                        const bDate = Date.parse(b.updated_at || b.created_at || "") || 0;
+                        return bDate - aDate;
+                    }
+                    return (a.priority || 0) - (b.priority || 0);
+                });
             if (!failed.length) {
                 els.interventionList.innerHTML = "<div class=\"empty\">No intervention items.</div>";
                 return;
@@ -1954,6 +2022,8 @@
                     "<div class=\"field\"><label>Message</label><textarea data-intervention-message=\"" + ticket.id + "\" placeholder=\"Why this decision?\"></textarea></div>" +
                     "<div class=\"entity-actions\">" +
                     "<button type=\"button\" class=\"btn-primary\" data-open-intervention-ticket=\"" + ticket.id + "\">Open ticket</button>" +
+                    "<button type=\"button\" data-retry-intervention-ticket=\"" + ticket.id + "\">Quick retry</button>" +
+                    "<button type=\"button\" data-cancel-intervention-ticket=\"" + ticket.id + "\">Quick cancel</button>" +
                     "<button type=\"button\" data-apply-intervention-ticket=\"" + ticket.id + "\">Apply decision</button>" +
                     "</div>" +
                     "</div>";
@@ -1998,6 +2068,8 @@
             document.getElementById("workflow-editor-title").textContent = workflow.id ? "Workflow: " + workflow.name : "Workflow editor";
             document.getElementById("workflow-name").value = workflow.name || "";
             document.getElementById("workflow-description").value = workflow.description || "";
+            document.getElementById("workflow-approval-policy").value = workflow.approval_policy || "single_role";
+            document.getElementById("workflow-progression-mode").value = workflow.progression_mode || "linear";
             document.getElementById("delete-workflow-button").disabled = !workflow.id;
         }
 
@@ -2172,6 +2244,8 @@
                 const payload = {
                     name: document.getElementById("workflow-name").value.trim(),
                     description: document.getElementById("workflow-description").value.trim(),
+                    approval_policy: document.getElementById("workflow-approval-policy").value,
+                    progression_mode: document.getElementById("workflow-progression-mode").value,
                 };
                 try {
                     const workflow = normalizeWorkflow(draft.id
@@ -2552,6 +2626,18 @@
                     }
                     return;
                 }
+                const retryButton = event.target.closest("[data-retry-intervention-ticket]");
+                if (retryButton) {
+                    const ticketID = retryButton.dataset.retryInterventionTicket;
+                    interveneTicket(ticketID, "retry-role", "Quick retry from interventions board.").catch((error) => setNotice(error.message, true));
+                    return;
+                }
+                const cancelButton = event.target.closest("[data-cancel-intervention-ticket]");
+                if (cancelButton) {
+                    const ticketID = cancelButton.dataset.cancelInterventionTicket;
+                    interveneTicket(ticketID, "cancel", "Quick cancel from interventions board.").catch((error) => setNotice(error.message, true));
+                    return;
+                }
                 const applyButton = event.target.closest("[data-apply-intervention-ticket]");
                 if (!applyButton) {
                     return;
@@ -2563,6 +2649,12 @@
                 const message = messageInput ? messageInput.value : "";
                 interveneTicket(ticketID, outcome, message).catch((error) => setNotice(error.message, true));
             });
+            if (els.interventionFilter) {
+                els.interventionFilter.addEventListener("change", () => renderInterventions());
+            }
+            if (els.interventionSort) {
+                els.interventionSort.addEventListener("change", () => renderInterventions());
+            }
 
             document.getElementById("ticket-form").addEventListener("submit", async (event) => {
                 event.preventDefault();

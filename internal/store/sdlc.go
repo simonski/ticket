@@ -22,6 +22,7 @@ const (
 	WorkflowApprovalPolicySingleRole = "single_role"
 	WorkflowApprovalPolicyAllRoles   = "all_roles"
 	WorkflowProgressionModeLinear    = "linear"
+	WorkflowProgressionModeStageOnly = "stage_only"
 )
 
 type WorkflowStage struct {
@@ -53,9 +54,11 @@ type WorkflowStageExport struct {
 }
 
 type WorkflowExport struct {
-	Name        string                `json:"name"`
-	Description string                `json:"description"`
-	Stages      []WorkflowStageExport `json:"stages"`
+	Name            string                `json:"name"`
+	Description     string                `json:"description"`
+	ApprovalPolicy  string                `json:"approval_policy,omitempty"`
+	ProgressionMode string                `json:"progression_mode,omitempty"`
+	Stages          []WorkflowStageExport `json:"stages"`
 }
 
 var ErrWorkflowStageNotFound = errors.New("workflow stage not found in workflow")
@@ -65,9 +68,25 @@ func CreateWorkflow(ctx context.Context, db *sql.DB, name, description string) (
 }
 
 func CreateWorkflowWithParams(ctx context.Context, db *sql.DB, id *int64, name, description string) (Workflow, error) {
+	return createWorkflowWithOptions(ctx, db, id, name, description, WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear)
+}
+
+func CreateWorkflowWithOptions(ctx context.Context, db *sql.DB, id *int64, name, description, approvalPolicy, progressionMode string) (Workflow, error) {
+	return createWorkflowWithOptions(ctx, db, id, name, description, approvalPolicy, progressionMode)
+}
+
+func createWorkflowWithOptions(ctx context.Context, db *sql.DB, id *int64, name, description, approvalPolicy, progressionMode string) (Workflow, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Workflow{}, errors.New("workflow name is required")
+	}
+	approvalPolicy, err := normalizeWorkflowApprovalPolicy(approvalPolicy)
+	if err != nil {
+		return Workflow{}, err
+	}
+	progressionMode, err = normalizeWorkflowProgressionMode(progressionMode)
+	if err != nil {
+		return Workflow{}, err
 	}
 	explicitID, hasExplicitID, err := normalizeExplicitID(id)
 	if err != nil {
@@ -77,7 +96,7 @@ func CreateWorkflowWithParams(ctx context.Context, db *sql.DB, id *int64, name, 
 		INSERT INTO workflows (name, description, approval_policy, progression_mode, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`
-	args := []any{name, strings.TrimSpace(description), WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear}
+	args := []any{name, strings.TrimSpace(description), approvalPolicy, progressionMode}
 	if hasExplicitID {
 		query = `
 			INSERT INTO workflows (workflow_id, name, description, approval_policy, progression_mode, updated_at)
@@ -97,6 +116,37 @@ func CreateWorkflowWithParams(ctx context.Context, db *sql.DB, id *int64, name, 
 		}
 	}
 	return getWorkflowRow(ctx, db, createdID)
+}
+
+func UpdateWorkflow(ctx context.Context, db *sql.DB, id int64, name, description, approvalPolicy, progressionMode string) (Workflow, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Workflow{}, errors.New("workflow name is required")
+	}
+	approvalPolicy, err := normalizeWorkflowApprovalPolicy(approvalPolicy)
+	if err != nil {
+		return Workflow{}, err
+	}
+	progressionMode, err = normalizeWorkflowProgressionMode(progressionMode)
+	if err != nil {
+		return Workflow{}, err
+	}
+	result, err := db.ExecContext(ctx, `
+		UPDATE workflows
+		SET name = ?, description = ?, approval_policy = ?, progression_mode = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE workflow_id = ?
+	`, name, strings.TrimSpace(description), approvalPolicy, progressionMode, id)
+	if err != nil {
+		return Workflow{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return Workflow{}, err
+	}
+	if affected == 0 {
+		return Workflow{}, sql.ErrNoRows
+	}
+	return getWorkflowRow(ctx, db, id)
 }
 
 func ListWorkflows(ctx context.Context, db *sql.DB, limit, offset int) ([]Workflow, error) {
@@ -267,9 +317,11 @@ func ExportWorkflow(ctx context.Context, db *sql.DB, id int64) (WorkflowExport, 
 		return WorkflowExport{}, err
 	}
 	export := WorkflowExport{
-		Name:        wf.Name,
-		Description: wf.Description,
-		Stages:      make([]WorkflowStageExport, len(wf.Stages)),
+		Name:            wf.Name,
+		Description:     wf.Description,
+		ApprovalPolicy:  wf.ApprovalPolicy,
+		ProgressionMode: wf.ProgressionMode,
+		Stages:          make([]WorkflowStageExport, len(wf.Stages)),
 	}
 	for i, s := range wf.Stages {
 		var roleNames []string
@@ -298,10 +350,18 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 	defer func() { _ = tx.Rollback() }()
 
 	// Create the Workflow
+	approvalPolicy, err := normalizeWorkflowApprovalPolicy(export.ApprovalPolicy)
+	if err != nil {
+		return Workflow{}, err
+	}
+	progressionMode, err := normalizeWorkflowProgressionMode(export.ProgressionMode)
+	if err != nil {
+		return Workflow{}, err
+	}
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO workflows (name, description, approval_policy, progression_mode, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, name, strings.TrimSpace(export.Description), WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear)
+	`, name, strings.TrimSpace(export.Description), approvalPolicy, progressionMode)
 	if err != nil {
 		return Workflow{}, err
 	}
@@ -341,6 +401,32 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 		return Workflow{}, err
 	}
 	return getWorkflowRow(ctx, db, workflowID)
+}
+
+func normalizeWorkflowApprovalPolicy(raw string) (string, error) {
+	policy := strings.TrimSpace(strings.ToLower(raw))
+	if policy == "" {
+		return WorkflowApprovalPolicySingleRole, nil
+	}
+	switch policy {
+	case WorkflowApprovalPolicySingleRole, WorkflowApprovalPolicyAllRoles:
+		return policy, nil
+	default:
+		return "", fmt.Errorf("invalid approval policy %q", raw)
+	}
+}
+
+func normalizeWorkflowProgressionMode(raw string) (string, error) {
+	mode := strings.TrimSpace(strings.ToLower(raw))
+	if mode == "" {
+		return WorkflowProgressionModeLinear, nil
+	}
+	switch mode {
+	case WorkflowProgressionModeLinear, WorkflowProgressionModeStageOnly:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("invalid progression mode %q", raw)
+	}
 }
 
 // internal helpers

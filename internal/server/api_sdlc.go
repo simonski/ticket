@@ -215,7 +215,15 @@ func (r *router) registerWorkflowHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			wf, err := store.CreateWorkflowWithParams(r.Context(), db, payload.ID, payload.Name, payload.Description)
+			wf, err := store.CreateWorkflowWithOptions(
+				r.Context(),
+				db,
+				payload.ID,
+				payload.Name,
+				payload.Description,
+				payload.ApprovalPolicy,
+				payload.ProgressionMode,
+			)
 			if err != nil {
 				writeStoreError(w, err)
 				return
@@ -324,6 +332,34 @@ func (r *router) registerWorkflowHandlers() {
 		switch r.Method {
 		case http.MethodGet:
 			wf, err := store.GetWorkflow(r.Context(), db, wfID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "workflow not found")
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, wf)
+		case http.MethodPut:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload workflowRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			wf, err := store.UpdateWorkflow(
+				r.Context(),
+				db,
+				wfID,
+				payload.Name,
+				payload.Description,
+				payload.ApprovalPolicy,
+				payload.ProgressionMode,
+			)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "workflow not found")

@@ -125,6 +125,41 @@ func TestWorkflowCRUD(t *testing.T) {
 	}
 }
 
+func TestWorkflowPolicyAndProgressionCRUD(t *testing.T) {
+	t.Parallel()
+	db := setupWorkflowTestDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateWorkflowWithOptions(ctx, db, nil, "policy-flow", "policy coverage", WorkflowApprovalPolicyAllRoles, WorkflowProgressionModeStageOnly)
+	if err != nil {
+		t.Fatalf("CreateWorkflowWithOptions() error = %v", err)
+	}
+	if wf.ApprovalPolicy != WorkflowApprovalPolicyAllRoles {
+		t.Fatalf("ApprovalPolicy = %q, want %q", wf.ApprovalPolicy, WorkflowApprovalPolicyAllRoles)
+	}
+	if wf.ProgressionMode != WorkflowProgressionModeStageOnly {
+		t.Fatalf("ProgressionMode = %q, want %q", wf.ProgressionMode, WorkflowProgressionModeStageOnly)
+	}
+
+	updated, err := UpdateWorkflow(ctx, db, wf.ID, "policy-flow-updated", "updated", WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear)
+	if err != nil {
+		t.Fatalf("UpdateWorkflow() error = %v", err)
+	}
+	if updated.ApprovalPolicy != WorkflowApprovalPolicySingleRole {
+		t.Fatalf("updated ApprovalPolicy = %q, want %q", updated.ApprovalPolicy, WorkflowApprovalPolicySingleRole)
+	}
+	if updated.ProgressionMode != WorkflowProgressionModeLinear {
+		t.Fatalf("updated ProgressionMode = %q, want %q", updated.ProgressionMode, WorkflowProgressionModeLinear)
+	}
+
+	if _, err := CreateWorkflowWithOptions(ctx, db, nil, "bad-policy", "", "invalid", WorkflowProgressionModeLinear); err == nil {
+		t.Fatal("CreateWorkflowWithOptions(invalid policy) error = nil, want error")
+	}
+	if _, err := UpdateWorkflow(ctx, db, wf.ID, "bad-progression", "", WorkflowApprovalPolicySingleRole, "invalid"); err == nil {
+		t.Fatal("UpdateWorkflow(invalid progression) error = nil, want error")
+	}
+}
+
 func TestReorderWorkflowStages(t *testing.T) {
 	t.Parallel()
 	db := setupWorkflowTestDB(t)

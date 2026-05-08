@@ -873,6 +873,13 @@ Keyboard shortcuts in the board view:
   - `Delete` / `Backspace` removes the selected role or stage after confirmation
   - `Left` / `Right` moves between stages
   - `Up` / `Down` moves between roles in the selected stage
+- workflow create/edit now exposes `approval_policy` (`single_role` / `all_roles`)
+  and `progression_mode` (`linear` / `stage_only`) so lifecycle progression can be
+  managed from Site2 without CLI-only configuration
+- the Interventions board includes built-in filter (`all`, `unassigned`, `agent`,
+  `human`) and sort (`priority`, `order`, `most recent update`) controls for triage
+- intervention cards expose quick actions for `retry-role` and `cancel` in addition
+  to the existing decision dropdown submit path
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command

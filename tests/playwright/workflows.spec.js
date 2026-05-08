@@ -109,7 +109,7 @@ test.describe("workflow management", () => {
     await page.fill("#workflow-name", "custom");
     await page.fill("#workflow-description", "Custom workflow");
     await page.click("#workflow-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
     expect(postBody.name).toBe("custom");
@@ -151,7 +151,7 @@ test.describe("workflow management", () => {
     const deleteBtn = page.locator("#workflow-delete");
     if (await deleteBtn.count() > 0) {
       await deleteBtn.click();
-      await page.waitForTimeout(300);
+      await expect.poll(() => deleteCalled).toBe(true);
       expect(deleteCalled).toBe(true);
     }
     await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
@@ -196,7 +196,7 @@ test.describe("workflow management", () => {
     if (await stageNameInput.count() > 0 && await stageAddBtn.count() > 0) {
       await stageNameInput.fill("review");
       await stageAddBtn.click();
-      await page.waitForTimeout(300);
+      await expect.poll(() => stageBody).not.toBeNull();
       expect(stageBody).not.toBeNull();
       expect(stageBody.stage_name).toBe("review");
     }
@@ -223,15 +223,9 @@ test.describe("workflow management", () => {
       openWorkflowEditor(workflows[0]);
     }, SAMPLE_WORKFLOWS);
 
-    await page.waitForTimeout(500);
-
-    const stagesContent = await page.evaluate(() => {
-      const stagesList = document.getElementById("workflow-stages-list") || document.getElementById("workflow-stages");
-      return stagesList?.textContent || "";
-    });
-
-    expect(stagesContent).toContain("design");
-    expect(stagesContent).toContain("develop");
+    const stagesList = page.locator("#workflow-stages-list, #workflow-stages").first();
+    await expect(stagesList).toContainText("design");
+    await expect(stagesList).toContainText("develop");
   });
 
   test("close workflow modal hides overlay", async ({ page }) => {

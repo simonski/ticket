@@ -4057,9 +4057,11 @@ func TestWorkflowAPI(t *testing.T) {
 	}
 
 	// Create workflow
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]string{
-		"name":        "CI Pipeline",
-		"description": "build, test, deploy",
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]any{
+		"name":             "CI Pipeline",
+		"description":      "build, test, deploy",
+		"approval_policy":  "all_roles",
+		"progression_mode": "stage_only",
 	}, token)
 	if createResp.Code != http.StatusCreated {
 		t.Fatalf("create workflow status = %d, body=%s", createResp.Code, createResp.Body.String())
@@ -4068,6 +4070,45 @@ func TestWorkflowAPI(t *testing.T) {
 	decodeResponse(t, createResp, &created)
 	if created.Name != "CI Pipeline" {
 		t.Fatalf("created workflow name = %q", created.Name)
+	}
+	if created.ApprovalPolicy != "all_roles" {
+		t.Fatalf("created workflow approval_policy = %q, want all_roles", created.ApprovalPolicy)
+	}
+	if created.ProgressionMode != "stage_only" {
+		t.Fatalf("created workflow progression_mode = %q, want stage_only", created.ProgressionMode)
+	}
+
+	// Update workflow policy fields.
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/"+strconv.FormatInt(created.ID, 10), map[string]any{
+		"name":             "CI Pipeline Updated",
+		"description":      "updated description",
+		"approval_policy":  "single_role",
+		"progression_mode": "linear",
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update workflow status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var updated store.Workflow
+	decodeResponse(t, updateResp, &updated)
+	if updated.Name != "CI Pipeline Updated" {
+		t.Fatalf("updated workflow name = %q", updated.Name)
+	}
+	if updated.ApprovalPolicy != "single_role" {
+		t.Fatalf("updated workflow approval_policy = %q, want single_role", updated.ApprovalPolicy)
+	}
+	if updated.ProgressionMode != "linear" {
+		t.Fatalf("updated workflow progression_mode = %q, want linear", updated.ProgressionMode)
+	}
+
+	// Reject invalid workflow progression mode.
+	badUpdateResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/"+strconv.FormatInt(created.ID, 10), map[string]any{
+		"name":             "CI Pipeline Updated",
+		"description":      "updated description",
+		"approval_policy":  "single_role",
+		"progression_mode": "invalid",
+	}, token)
+	if badUpdateResp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid workflow update status = %d body=%s", badUpdateResp.Code, badUpdateResp.Body.String())
 	}
 
 	// Get workflow with stages

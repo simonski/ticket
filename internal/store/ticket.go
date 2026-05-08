@@ -492,15 +492,19 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 		// Auto-advance according to workflow approval policy.
 		if state == StateSuccess && workflowStageID != nil {
 			approvalPolicy := WorkflowApprovalPolicySingleRole
+			progressionMode := WorkflowProgressionModeLinear
 			if queryErr := db.QueryRowContext(ctx, `
-				SELECT COALESCE(NULLIF(TRIM(w.approval_policy), ''), ?)
+				SELECT
+					COALESCE(NULLIF(TRIM(w.approval_policy), ''), ?),
+					COALESCE(NULLIF(TRIM(w.progression_mode), ''), ?)
 				FROM workflow_stages ws
 				JOIN workflows w ON w.workflow_id = ws.workflow_id
 				WHERE ws.workflow_stage_id = ?
-			`, WorkflowApprovalPolicySingleRole, *workflowStageID).Scan(&approvalPolicy); queryErr != nil {
+			`, WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear, *workflowStageID).Scan(&approvalPolicy, &progressionMode); queryErr != nil {
 				approvalPolicy = WorkflowApprovalPolicySingleRole
+				progressionMode = WorkflowProgressionModeLinear
 			}
-			if approvalPolicy == WorkflowApprovalPolicyAllRoles {
+			if approvalPolicy == WorkflowApprovalPolicyAllRoles && progressionMode != WorkflowProgressionModeStageOnly {
 				nextStageID, nextRoleID, nextStageName, done, nextStepErr := findNextStep(ctx, db, *workflowStageID, roleID)
 				if nextStepErr != nil {
 					return Ticket{}, nextStepErr
@@ -786,26 +790,65 @@ func NextTicket(ctx context.Context, db *sql.DB, id, actorUsername, actorID stri
 	if ticket.WorkflowStageID == nil {
 		return Ticket{}, fmt.Errorf("cannot advance %s — no Workflow stage assigned", id)
 	}
-
-	// Find the next role in the current stage, or the first role in the next stage.
-	nextStageID, nextRoleID, nextStageName, done, err := findNextStep(ctx, db, *ticket.WorkflowStageID, ticket.RoleID)
-	if err != nil {
-		return Ticket{}, err
-	}
-	if done {
-		// Last step — mark complete
-		if _, err := db.ExecContext(ctx, `
-			UPDATE tickets SET complete = 1, stage = 'done', state = 'idle', status = 'done/idle',
-				workflow_stage_id = ?, role_id = NULL, updated_at = CURRENT_TIMESTAMP
-			WHERE ticket_id = ?`, nextStageID, id); err != nil {
+	approvalPolicy, progressionMode := workflowPolicyForStage(ctx, db, *ticket.WorkflowStageID)
+	if approvalPolicy == WorkflowApprovalPolicyAllRoles && progressionMode != WorkflowProgressionModeStageOnly {
+		// Find the next role in the current stage, or the first role in the next stage.
+		nextStageID, nextRoleID, nextStageName, done, err := findNextStep(ctx, db, *ticket.WorkflowStageID, ticket.RoleID)
+		if err != nil {
 			return Ticket{}, err
 		}
+		if done {
+			// Last step — mark complete
+			if _, err := db.ExecContext(ctx, `
+				UPDATE tickets SET complete = 1, stage = 'done', state = 'idle', status = 'done/idle',
+					workflow_stage_id = ?, role_id = NULL, updated_at = CURRENT_TIMESTAMP
+				WHERE ticket_id = ?`, nextStageID, id); err != nil {
+				return Ticket{}, err
+			}
+		} else {
+			if _, err := db.ExecContext(ctx, `
+				UPDATE tickets SET workflow_stage_id = ?, role_id = ?, stage = ?, state = 'idle',
+					status = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE ticket_id = ?`, nextStageID, nextRoleID, nextStageName, RenderLifecycleStatus(nextStageName, StateIdle), id); err != nil {
+				return Ticket{}, err
+			}
+		}
 	} else {
-		if _, err := db.ExecContext(ctx, `
-			UPDATE tickets SET workflow_stage_id = ?, role_id = ?, stage = ?, state = 'idle',
+		nextStageID, nextStageName, nextStageErr := getNextWorkflowStage(ctx, db, *ticket.WorkflowStageID)
+		if nextStageErr != nil {
+			return Ticket{}, nextStageErr
+		}
+		if nextStageID == nil {
+			if strings.EqualFold(ticket.Stage, StageDone) {
+				if _, err := db.ExecContext(ctx, `
+					UPDATE tickets
+					SET complete = 1, role_id = NULL, state = 'idle', status = 'done/idle', updated_at = CURRENT_TIMESTAMP
+					WHERE ticket_id = ?`, id); err != nil {
+					return Ticket{}, err
+				}
+			} else {
+				return Ticket{}, fmt.Errorf("cannot advance %s — already at final stage", id)
+			}
+		} else {
+			var workflowID int64
+			if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *nextStageID).Scan(&workflowID); queryErr != nil {
+				return Ticket{}, queryErr
+			}
+			nextRoleID, roleErr := firstStageRoleID(ctx, db, workflowID, *nextStageID)
+			if roleErr != nil {
+				return Ticket{}, roleErr
+			}
+			complete := 0
+			if nextStageName == StageDone {
+				complete = 1
+				nextRoleID = nil
+			}
+			if _, err := db.ExecContext(ctx, `
+			UPDATE tickets SET complete = ?, workflow_stage_id = ?, role_id = ?, stage = ?, state = 'idle',
 				status = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE ticket_id = ?`, nextStageID, nextRoleID, nextStageName, RenderLifecycleStatus(nextStageName, StateIdle), id); err != nil {
-			return Ticket{}, err
+			WHERE ticket_id = ?`, complete, *nextStageID, nullableInt64(nextRoleID), nextStageName, RenderLifecycleStatus(nextStageName, StateIdle), id); err != nil {
+				return Ticket{}, err
+			}
 		}
 	}
 	return GetTicket(ctx, db, id)
@@ -898,6 +941,22 @@ func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 		return nextStageID, &nextRoles[0].ID, nextStageName, false, nil
 	}
 	return nextStageID, nil, nextStageName, false, nil
+}
+
+func workflowPolicyForStage(ctx context.Context, db *sql.DB, workflowStageID int64) (approvalPolicy, progressionMode string) {
+	approvalPolicy = WorkflowApprovalPolicySingleRole
+	progressionMode = WorkflowProgressionModeLinear
+	if queryErr := db.QueryRowContext(ctx, `
+		SELECT
+			COALESCE(NULLIF(TRIM(w.approval_policy), ''), ?),
+			COALESCE(NULLIF(TRIM(w.progression_mode), ''), ?)
+		FROM workflow_stages ws
+		JOIN workflows w ON w.workflow_id = ws.workflow_id
+		WHERE ws.workflow_stage_id = ?
+	`, WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear, workflowStageID).Scan(&approvalPolicy, &progressionMode); queryErr != nil {
+		return WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear
+	}
+	return approvalPolicy, progressionMode
 }
 
 // findPrevStep finds the previous role in the current stage, or the last role of the previous stage.

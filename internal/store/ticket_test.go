@@ -2042,6 +2042,120 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 	}
 }
 
+func TestWorkflowProgressionModeAffectsSuccessAdvance(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+	adminID := testAdminID(t, db)
+
+	createTicketWithPolicy := func(prefix, title, progressionMode string) (Ticket, int64) {
+		wf, err := CreateWorkflowWithOptions(ctx, db, nil, prefix+" flow", "", WorkflowApprovalPolicyAllRoles, progressionMode)
+		if err != nil {
+			t.Fatalf("CreateWorkflowWithOptions(%s) error = %v", progressionMode, err)
+		}
+		reviewStage, err := AddWorkflowStage(ctx, db, wf.ID, "review", "", "", 0)
+		if err != nil {
+			t.Fatalf("AddWorkflowStage(review) error = %v", err)
+		}
+		doneStage, err := AddWorkflowStage(ctx, db, wf.ID, "done", "", "", 1)
+		if err != nil {
+			t.Fatalf("AddWorkflowStage(done) error = %v", err)
+		}
+		roleA, err := CreateRole(ctx, db, &wf.ID, prefix+"-a", "", "")
+		if err != nil {
+			t.Fatalf("CreateRole(a) error = %v", err)
+		}
+		roleB, err := CreateRole(ctx, db, &wf.ID, prefix+"-b", "", "")
+		if err != nil {
+			t.Fatalf("CreateRole(b) error = %v", err)
+		}
+		if err := AddWorkflowStageRole(ctx, db, wf.ID, reviewStage.ID, roleA.ID); err != nil {
+			t.Fatalf("AddWorkflowStageRole(a) error = %v", err)
+		}
+		if err := AddWorkflowStageRole(ctx, db, wf.ID, reviewStage.ID, roleB.ID); err != nil {
+			t.Fatalf("AddWorkflowStageRole(b) error = %v", err)
+		}
+		project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
+			Prefix:     prefix,
+			Title:      prefix + " project",
+			WorkflowID: &wf.ID,
+		})
+		if err != nil {
+			t.Fatalf("CreateProjectWithParams() error = %v", err)
+		}
+		ticket, err := CreateTicket(ctx, db, TicketCreateParams{
+			ProjectID: project.ID,
+			Type:      "task",
+			Title:     title,
+			CreatedBy: "",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+		return ticket, doneStage.ID
+	}
+
+	linearTicket, _ := createTicketWithPolicy("LIN", "linear all roles ticket", WorkflowProgressionModeLinear)
+	linearAdvanced, err := UpdateTicket(ctx, db, linearTicket.ID, TicketUpdateParams{
+		Title:         linearTicket.Title,
+		Description:   linearTicket.Description,
+		ParentID:      linearTicket.ParentID,
+		State:         StateSuccess,
+		ActorUsername: "admin",
+		ActorRole:     "admin",
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket(linear success) error = %v", err)
+	}
+	if linearAdvanced.Stage != "review" || linearAdvanced.State != StateIdle || linearAdvanced.Complete {
+		t.Fatalf("linear success advance = %#v, want review/idle and incomplete", linearAdvanced)
+	}
+
+	stageOnlyTicket, doneStageID := createTicketWithPolicy("STG", "stage-only all roles ticket", WorkflowProgressionModeStageOnly)
+	stageOnlyAdvanced, err := UpdateTicket(ctx, db, stageOnlyTicket.ID, TicketUpdateParams{
+		Title:         stageOnlyTicket.Title,
+		Description:   stageOnlyTicket.Description,
+		ParentID:      stageOnlyTicket.ParentID,
+		State:         StateSuccess,
+		ActorUsername: "admin",
+		ActorRole:     "admin",
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket(stage_only success) error = %v", err)
+	}
+	if stageOnlyAdvanced.Stage != StageDone || stageOnlyAdvanced.State != StateIdle {
+		t.Fatalf("stage_only success advance = %#v, want done/idle", stageOnlyAdvanced)
+	}
+	if stageOnlyAdvanced.WorkflowStageID == nil || *stageOnlyAdvanced.WorkflowStageID != doneStageID {
+		t.Fatalf("stage_only workflow_stage_id = %#v, want %d", stageOnlyAdvanced.WorkflowStageID, doneStageID)
+	}
+	if stageOnlyAdvanced.Complete {
+		t.Fatalf("stage_only complete = %v, want false; completion is set by NextTicket at terminal step", stageOnlyAdvanced.Complete)
+	}
+
+	stageOnlySuccess, err := UpdateTicket(ctx, db, stageOnlyTicket.ID, TicketUpdateParams{
+		Title:         stageOnlyAdvanced.Title,
+		Description:   stageOnlyAdvanced.Description,
+		ParentID:      stageOnlyAdvanced.ParentID,
+		State:         StateSuccess,
+		ActorUsername: "admin",
+		ActorRole:     "admin",
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket(done success) error = %v", err)
+	}
+	if stageOnlySuccess.State != StateSuccess {
+		t.Fatalf("state after done success = %q, want %q", stageOnlySuccess.State, StateSuccess)
+	}
+	completed, err := NextTicket(ctx, db, stageOnlyTicket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("NextTicket(done success) error = %v", err)
+	}
+	if !completed.Complete || completed.Stage != StageDone || completed.State != StateIdle {
+		t.Fatalf("NextTicket(done success) = %#v, want done/idle complete", completed)
+	}
+}
+
 func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

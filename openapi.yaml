@@ -261,6 +261,12 @@ components:
           type: string
         description:
           type: string
+        approval_policy:
+          type: string
+          enum: [single_role, all_roles]
+        progression_mode:
+          type: string
+          enum: [linear, stage_only]
         stages:
           type: array
           items:
@@ -280,6 +286,12 @@ components:
           type: string
         description:
           type: string
+        approval_policy:
+          type: string
+          enum: [single_role, all_roles]
+        progression_mode:
+          type: string
+          enum: [linear, stage_only]
         stages:
           type: array
           items:
@@ -2036,6 +2048,12 @@ paths:
                   type: string
                 description:
                   type: string
+                approval_policy:
+                  type: string
+                  enum: [single_role, all_roles]
+                progression_mode:
+                  type: string
+                  enum: [linear, stage_only]
       responses:
         '201':
           description: Workflow created
@@ -2102,6 +2120,53 @@ paths:
       responses:
         '200':
           description: Workflow details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Workflows]
+      summary: Update a workflow
+      operationId: updateWorkflow
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                approval_policy:
+                  type: string
+                  enum: [single_role, all_roles]
+                progression_mode:
+                  type: string
+                  enum: [linear, stage_only]
+      responses:
+        '200':
+          description: Workflow updated
           content:
             application/json:
               schema:
