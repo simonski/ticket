@@ -139,4 +139,14 @@ func TestBuildProjectForecast(t *testing.T) {
 	if len(calibration.Buckets) != 3 {
 		t.Fatalf("unexpected calibration payload: %#v", calibration)
 	}
+	backtest, err := BuildProjectForecastBacktest(ctx, db, project.ID, 24)
+	if err != nil {
+		t.Fatalf("BuildProjectForecastBacktest() error = %v", err)
+	}
+	if backtest.ProjectID != int(project.ID) {
+		t.Fatalf("backtest project id = %d, want %d", backtest.ProjectID, project.ID)
+	}
+	if backtest.SampleCount == 0 || len(backtest.Points) == 0 {
+		t.Fatalf("expected non-empty backtest payload, got %#v", backtest)
+	}
 }

@@ -30,6 +30,24 @@ type ProjectForecastCalibration struct {
 	Buckets      []ForecastCalibrationBucket `json:"buckets"`
 }
 
+type ForecastBacktestPoint struct {
+	Category      string  `json:"category"`
+	SampleCount   int     `json:"sample_count"`
+	HitCount      int     `json:"hit_count"`
+	AccuracyRate  float64 `json:"accuracy_rate"`
+	AvgConfidence float64 `json:"avg_confidence"`
+}
+
+type ProjectForecastBacktest struct {
+	ProjectID     int                     `json:"project_id"`
+	WindowHours   int                     `json:"window_hours"`
+	SampleCount   int                     `json:"sample_count"`
+	HitCount      int                     `json:"hit_count"`
+	AccuracyRate  float64                 `json:"accuracy_rate"`
+	AvgConfidence float64                 `json:"avg_confidence"`
+	Points        []ForecastBacktestPoint `json:"points"`
+}
+
 type WorkItemQueueCandidate struct {
 	TicketID  string `json:"ticket_id"`
 	Title     string `json:"title"`
@@ -411,4 +429,118 @@ func evaluateForecastHit(detail string, ticket Ticket) bool {
 	default:
 		return false
 	}
+}
+
+func forecastCategory(detail string) string {
+	label := strings.ToLower(strings.TrimSpace(detail))
+	switch {
+	case strings.Contains(label, "blocked by:"):
+		return "blocked"
+	case strings.Contains(label, "requires intervention"):
+		return "intervention"
+	case strings.Contains(label, "completion/close decision"):
+		return "completion"
+	case strings.Contains(label, "in progress:"):
+		return "in_progress"
+	case strings.Contains(label, "next:"):
+		return "next"
+	default:
+		return "other"
+	}
+}
+
+func BuildProjectForecastBacktest(ctx context.Context, db *sql.DB, projectID int64, windowHours int) (ProjectForecastBacktest, error) {
+	if err := ensureForecastSnapshotTable(ctx, db); err != nil {
+		return ProjectForecastBacktest{}, err
+	}
+	if windowHours <= 0 {
+		windowHours = 24
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT ticket_id, detail, confidence_percent
+		FROM forecast_snapshots
+		WHERE project_id = ? AND created_at >= datetime('now', ?)
+	`, projectID, fmt.Sprintf("-%d hours", windowHours))
+	if err != nil {
+		return ProjectForecastBacktest{}, err
+	}
+	defer rows.Close()
+	report := ProjectForecastBacktest{
+		ProjectID:   int(projectID),
+		WindowHours: windowHours,
+		Points:      make([]ForecastBacktestPoint, 0),
+	}
+	type agg struct {
+		samples         int
+		hits            int
+		confidenceTotal int
+	}
+	byCategory := map[string]*agg{}
+	type backtestSample struct {
+		TicketID   string
+		Detail     string
+		Confidence int
+	}
+	samples := make([]backtestSample, 0)
+	for rows.Next() {
+		var sample backtestSample
+		if scanErr := rows.Scan(&sample.TicketID, &sample.Detail, &sample.Confidence); scanErr != nil {
+			return ProjectForecastBacktest{}, scanErr
+		}
+		samples = append(samples, sample)
+	}
+	if err := rows.Err(); err != nil {
+		return ProjectForecastBacktest{}, err
+	}
+	ticketCache := map[string]Ticket{}
+	for _, sample := range samples {
+		ticketID := sample.TicketID
+		detail := sample.Detail
+		confidence := sample.Confidence
+		ticket, ok := ticketCache[ticketID]
+		if !ok {
+			loaded, ticketErr := GetTicket(ctx, db, ticketID)
+			if ticketErr != nil {
+				return ProjectForecastBacktest{}, ticketErr
+			}
+			ticket = loaded
+			ticketCache[ticketID] = loaded
+		}
+		category := forecastCategory(detail)
+		if _, ok := byCategory[category]; !ok {
+			byCategory[category] = &agg{}
+		}
+		item := byCategory[category]
+		item.samples++
+		item.confidenceTotal += confidence
+		report.SampleCount++
+		report.AvgConfidence += float64(confidence)
+		if evaluateForecastHit(detail, ticket) {
+			item.hits++
+			report.HitCount++
+		}
+	}
+	for category, values := range byCategory {
+		point := ForecastBacktestPoint{
+			Category:    category,
+			SampleCount: values.samples,
+			HitCount:    values.hits,
+		}
+		if values.samples > 0 {
+			point.AccuracyRate = float64(values.hits) / float64(values.samples)
+			point.AvgConfidence = float64(values.confidenceTotal) / float64(values.samples)
+		}
+		report.Points = append(report.Points, point)
+	}
+	sort.SliceStable(report.Points, func(i, j int) bool {
+		if report.Points[i].SampleCount != report.Points[j].SampleCount {
+			return report.Points[i].SampleCount > report.Points[j].SampleCount
+		}
+		return report.Points[i].Category < report.Points[j].Category
+	})
+	if report.SampleCount > 0 {
+		report.AccuracyRate = float64(report.HitCount) / float64(report.SampleCount)
+		report.AvgConfidence /= float64(report.SampleCount)
+	}
+	return report, nil
 }

@@ -61,6 +61,19 @@ type InterventionReportItem struct {
 	UpdatedAt   string `json:"updated_at"`
 }
 
+type InterventionDrilldownBucket struct {
+	Key   string `json:"key"`
+	Count int    `json:"count"`
+}
+
+type InterventionDrilldown struct {
+	ProjectID      int64                         `json:"project_id"`
+	EscalationH    int                           `json:"escalation_hours"`
+	EscalatedCount int                           `json:"escalated_count"`
+	ByState        []InterventionDrilldownBucket `json:"by_state"`
+	ByOwner        []InterventionDrilldownBucket `json:"by_owner"`
+}
+
 func normalizeInterventionState(raw string) (string, error) {
 	state := strings.TrimSpace(strings.ToLower(raw))
 	if state == "" {
@@ -313,4 +326,53 @@ func BuildInterventionTrends(ctx context.Context, db *sql.DB, projectID int64, d
 		points = append(points, *pointsByDay[day])
 	}
 	return points, nil
+}
+
+func BuildInterventionDrilldown(ctx context.Context, db *sql.DB, projectID int64, escalationHours int) (InterventionDrilldown, error) {
+	report, err := BuildInterventionReport(ctx, db, projectID, escalationHours)
+	if err != nil {
+		return InterventionDrilldown{}, err
+	}
+	result := InterventionDrilldown{
+		ProjectID:   projectID,
+		EscalationH: escalationHours,
+		ByState:     make([]InterventionDrilldownBucket, 0),
+		ByOwner:     make([]InterventionDrilldownBucket, 0),
+	}
+	stateCounts := map[string]int{}
+	ownerCounts := map[string]int{}
+	for _, item := range report.Items {
+		key := strings.TrimSpace(item.State)
+		if key == "" {
+			key = InterventionStateOpen
+		}
+		stateCounts[key]++
+		owner := strings.TrimSpace(item.OwnerName)
+		if owner == "" {
+			owner = "unassigned"
+		}
+		ownerCounts[owner]++
+		if item.Escalated {
+			result.EscalatedCount++
+		}
+	}
+	for key, count := range stateCounts {
+		result.ByState = append(result.ByState, InterventionDrilldownBucket{Key: key, Count: count})
+	}
+	for key, count := range ownerCounts {
+		result.ByOwner = append(result.ByOwner, InterventionDrilldownBucket{Key: key, Count: count})
+	}
+	sort.SliceStable(result.ByState, func(i, j int) bool {
+		if result.ByState[i].Count != result.ByState[j].Count {
+			return result.ByState[i].Count > result.ByState[j].Count
+		}
+		return result.ByState[i].Key < result.ByState[j].Key
+	})
+	sort.SliceStable(result.ByOwner, func(i, j int) bool {
+		if result.ByOwner[i].Count != result.ByOwner[j].Count {
+			return result.ByOwner[i].Count > result.ByOwner[j].Count
+		}
+		return result.ByOwner[i].Key < result.ByOwner[j].Key
+	})
+	return result, nil
 }

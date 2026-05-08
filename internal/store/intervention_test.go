@@ -108,4 +108,14 @@ func TestBuildInterventionReport(t *testing.T) {
 	if len(trends) != 7 {
 		t.Fatalf("trends len = %d, want 7", len(trends))
 	}
+	drilldown, err := BuildInterventionDrilldown(ctx, db, project.ID, 24)
+	if err != nil {
+		t.Fatalf("BuildInterventionDrilldown() error = %v", err)
+	}
+	if len(drilldown.ByState) == 0 || drilldown.ByState[0].Key != InterventionStateOpen {
+		t.Fatalf("unexpected intervention drilldown state buckets: %#v", drilldown)
+	}
+	if drilldown.EscalatedCount == 0 {
+		t.Fatalf("expected escalated count in drilldown, got %#v", drilldown)
+	}
 }

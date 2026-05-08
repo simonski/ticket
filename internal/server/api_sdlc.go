@@ -392,6 +392,104 @@ func (r *router) registerWorkflowHandlers() {
 				}
 				writeJSON(w, http.StatusOK, report)
 				return
+			case "versions":
+				if len(parts) == 2 {
+					switch r.Method {
+					case http.MethodGet:
+						if _, err := requireUser(db, r); err != nil {
+							writeAuthError(w, err)
+							return
+						}
+						limit, err := queryInt(r, "limit", 20)
+						if err != nil {
+							writeStoreError(w, err)
+							return
+						}
+						versions, err := store.ListWorkflowVersions(r.Context(), db, wfID, limit)
+						if err != nil {
+							writeStoreError(w, err)
+							return
+						}
+						writeJSON(w, http.StatusOK, versions)
+						return
+					case http.MethodPost:
+						user, err := requireAdmin(db, r)
+						if err != nil {
+							writeAuthError(w, err)
+							return
+						}
+						var payload struct {
+							ChangeSummary string `json:"change_summary"`
+						}
+						if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+							writeError(w, http.StatusBadRequest, "invalid json body")
+							return
+						}
+						version, err := store.SaveWorkflowVersion(r.Context(), db, wfID, strings.TrimSpace(payload.ChangeSummary), user.ID)
+						if err != nil {
+							writeStoreError(w, err)
+							return
+						}
+						writeJSON(w, http.StatusCreated, version)
+						return
+					default:
+						writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+						return
+					}
+				}
+				if len(parts) == 4 && parts[3] == "approve" {
+					user, err := requireAdmin(db, r)
+					if err != nil {
+						writeAuthError(w, err)
+						return
+					}
+					if r.Method != http.MethodPost {
+						writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+						return
+					}
+					var versionID int64
+					if _, parseErr := fmt.Sscan(parts[2], &versionID); parseErr != nil {
+						writeError(w, http.StatusBadRequest, "invalid workflow version id")
+						return
+					}
+					version, err := store.ApproveWorkflowVersion(r.Context(), db, wfID, versionID, user.ID)
+					if err != nil {
+						if errors.Is(err, sql.ErrNoRows) {
+							writeError(w, http.StatusNotFound, "workflow version not found")
+							return
+						}
+						writeStoreError(w, err)
+						return
+					}
+					writeJSON(w, http.StatusOK, version)
+					return
+				}
+				if len(parts) == 4 && parts[3] == "activate" {
+					if _, err := requireAdmin(db, r); err != nil {
+						writeAuthError(w, err)
+						return
+					}
+					if r.Method != http.MethodPost {
+						writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+						return
+					}
+					var versionID int64
+					if _, err := fmt.Sscan(parts[2], &versionID); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid workflow version id")
+						return
+					}
+					version, err := store.ActivateWorkflowVersion(r.Context(), db, wfID, versionID)
+					if err != nil {
+						if errors.Is(err, sql.ErrNoRows) {
+							writeError(w, http.StatusNotFound, "workflow version not found")
+							return
+						}
+						writeStoreError(w, err)
+						return
+					}
+					writeJSON(w, http.StatusOK, version)
+					return
+				}
 			}
 		}
 		// Direct workflow resource — auth check moved here for non-sub-resource paths

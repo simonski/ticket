@@ -431,6 +431,135 @@ func TestWorkflowValidateEndpoint(t *testing.T) {
 	}
 }
 
+func TestWorkflowVersionGovernanceAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	workflowResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]any{
+		"name":        "Versioned Workflow",
+		"description": "workflow governance",
+	}, adminToken)
+	if workflowResp.Code != http.StatusCreated {
+		t.Fatalf("create workflow status=%d body=%s", workflowResp.Code, workflowResp.Body.String())
+	}
+	var workflow store.Workflow
+	decodeResponse(t, workflowResp, &workflow)
+	stageAResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/stages", map[string]any{
+		"stage_name": "design",
+		"sort_order": 0,
+	}, adminToken)
+	if stageAResp.Code != http.StatusCreated {
+		t.Fatalf("create stage A status=%d body=%s", stageAResp.Code, stageAResp.Body.String())
+	}
+
+	version1Resp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/versions", map[string]any{
+		"change_summary": "initial",
+	}, adminToken)
+	if version1Resp.Code != http.StatusCreated {
+		t.Fatalf("create version1 status=%d body=%s", version1Resp.Code, version1Resp.Body.String())
+	}
+	var version1 store.WorkflowVersion
+	decodeResponse(t, version1Resp, &version1)
+
+	stageBResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/stages", map[string]any{
+		"stage_name": "done",
+		"sort_order": 1,
+	}, adminToken)
+	if stageBResp.Code != http.StatusCreated {
+		t.Fatalf("create stage B status=%d body=%s", stageBResp.Code, stageBResp.Body.String())
+	}
+
+	version2Resp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/versions", map[string]any{
+		"change_summary": "added done",
+	}, adminToken)
+	if version2Resp.Code != http.StatusCreated {
+		t.Fatalf("create version2 status=%d body=%s", version2Resp.Code, version2Resp.Body.String())
+	}
+	var version2 store.WorkflowVersion
+	decodeResponse(t, version2Resp, &version2)
+
+	activateBeforeApproveResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/versions/"+strconv.FormatInt(version2.VersionID, 10)+"/activate", nil, adminToken)
+	if activateBeforeApproveResp.Code != http.StatusBadRequest {
+		t.Fatalf("activate before approve status=%d body=%s", activateBeforeApproveResp.Code, activateBeforeApproveResp.Body.String())
+	}
+
+	approveResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/versions/"+strconv.FormatInt(version2.VersionID, 10)+"/approve", nil, adminToken)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("approve status=%d body=%s", approveResp.Code, approveResp.Body.String())
+	}
+
+	activateResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/versions/"+strconv.FormatInt(version2.VersionID, 10)+"/activate", nil, adminToken)
+	if activateResp.Code != http.StatusOK {
+		t.Fatalf("activate status=%d body=%s", activateResp.Code, activateResp.Body.String())
+	}
+
+	versionsResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/versions?limit=5", nil, adminToken)
+	if versionsResp.Code != http.StatusOK {
+		t.Fatalf("list versions status=%d body=%s", versionsResp.Code, versionsResp.Body.String())
+	}
+	var versions []store.WorkflowVersion
+	decodeResponse(t, versionsResp, &versions)
+	if len(versions) < 2 {
+		t.Fatalf("expected at least two versions, got %#v", versions)
+	}
+	if versions[0].VersionID != version2.VersionID || !versions[0].Active {
+		t.Fatalf("expected version2 active at head, got %#v", versions[0])
+	}
+	if versions[1].VersionID != version1.VersionID {
+		t.Fatalf("expected version1 second, got %#v", versions[1])
+	}
+}
+
+func TestAutomationPolicyAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "policy diagnostics",
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+
+	getDefaultResp := doJSONRequest(t, handler, http.MethodGet, "/api/config/automation_policy", nil, adminToken)
+	if getDefaultResp.Code != http.StatusOK {
+		t.Fatalf("default policy status=%d body=%s", getDefaultResp.Code, getDefaultResp.Body.String())
+	}
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/config/automation_policy", map[string]any{
+		"queue_strategy":                "aging",
+		"forecast_lookback_hours":       48,
+		"intervention_escalation_hours": 12,
+		"forecast_min_accuracy_pct":     80,
+	}, adminToken)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update policy status=%d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var policy store.AutomationPolicy
+	decodeResponse(t, updateResp, &policy)
+	if policy.QueueStrategy != "aging" || policy.ForecastLookbackHours != 48 || policy.ForecastMinAccuracyPct != 80 {
+		t.Fatalf("unexpected updated policy: %#v", policy)
+	}
+
+	diagResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/policy/"+ticket.ID, nil, adminToken)
+	if diagResp.Code != http.StatusOK {
+		t.Fatalf("policy diagnostics status=%d body=%s", diagResp.Code, diagResp.Body.String())
+	}
+	var diag store.TicketPolicyDiagnostics
+	decodeResponse(t, diagResp, &diag)
+	if !diag.Eligible || diag.QueueStrategy != "aging" {
+		t.Fatalf("unexpected diagnostics: %#v", diag)
+	}
+}
+
 func TestTicketInterventionStateEndpoint(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
@@ -2139,6 +2268,15 @@ func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
 	if len(trends) == 0 {
 		t.Fatalf("expected intervention trends payload, got %#v", trends)
 	}
+	drilldownResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/drilldown?escalation_hours=1", nil, adminToken)
+	if drilldownResp.Code != http.StatusOK {
+		t.Fatalf("intervention drilldown status = %d body=%s", drilldownResp.Code, drilldownResp.Body.String())
+	}
+	var drilldown store.InterventionDrilldown
+	decodeResponse(t, drilldownResp, &drilldown)
+	if len(drilldown.ByState) == 0 || len(drilldown.ByOwner) == 0 {
+		t.Fatalf("expected intervention drilldown payload, got %#v", drilldown)
+	}
 	reportCSVReq := httptest.NewRequest(http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/report?format=csv", nil)
 	reportCSVReq.Header.Set("Authorization", "Bearer "+adminToken)
 	reportCSVResp := httptest.NewRecorder()
@@ -2174,6 +2312,15 @@ func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
 	decodeResponse(t, calibrationResp, &calibration)
 	if len(calibration.Buckets) != 3 {
 		t.Fatalf("unexpected calibration payload: %#v", calibration)
+	}
+	backtestResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/forecast/backtest?window_hours=24", nil, adminToken)
+	if backtestResp.Code != http.StatusOK {
+		t.Fatalf("forecast backtest status = %d body=%s", backtestResp.Code, backtestResp.Body.String())
+	}
+	var backtest store.ProjectForecastBacktest
+	decodeResponse(t, backtestResp, &backtest)
+	if backtest.SampleCount == 0 || len(backtest.Points) == 0 {
+		t.Fatalf("unexpected backtest payload: %#v", backtest)
 	}
 	queueResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/work-items/queue?strategy=priority&limit=10", nil, adminToken)
 	if queueResp.Code != http.StatusOK {

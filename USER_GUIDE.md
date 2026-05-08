@@ -713,6 +713,9 @@ ticket-level escalation markers. Add `?format=csv` to export a CSV view.
 Intervention trend points are available at
 `GET /api/projects/{project_ref}/interventions/trends?days=7`.
 
+Intervention drilldown slices for command-center triage are available at
+`GET /api/projects/{project_ref}/interventions/drilldown?escalation_hours=24`.
+
 Server-backed next-work forecasting is available at
 `GET /api/projects/{project_ref}/forecast` (optional `?limit=<n>`). Site2 uses
 this endpoint for the `Predicted next work` panel and shows confidence scores.
@@ -720,8 +723,21 @@ this endpoint for the `Predicted next work` panel and shows confidence scores.
 Forecast calibration metrics are available at
 `GET /api/projects/{project_ref}/forecast/calibration?lookback_hours=1`.
 
+Forecast backtesting metrics are available at
+`GET /api/projects/{project_ref}/forecast/backtest?window_hours=24`.
+
 Policy-ranked queue candidates are available at
 `GET /api/projects/{project_ref}/work-items/queue?strategy=priority|order|aging`.
+
+Global automation policy controls are available at
+`GET|PUT /api/config/automation_policy`, and ticket-level diagnostics are
+available at `GET /api/tickets/policy/{ticket_ref}`.
+
+Workflow governance versioning is available at:
+
+- `POST|GET /api/workflows/{id}/versions`
+- `POST /api/workflows/{id}/versions/{version_id}/approve`
+- `POST /api/workflows/{id}/versions/{version_id}/activate`
 
 In the web app, the item detail pane shows:
 
@@ -920,6 +936,10 @@ Keyboard shortcuts in the board view:
   `resolved`, `wont_fix`) with owner visibility for triage governance
 - interventions view now includes an SLA summary bar from
   `/api/projects/{id}/interventions/report` (state counts + oldest active age)
+- interventions view now shows drilldown highlights from
+  `/api/projects/{id}/interventions/drilldown` (escalated count + top owner)
+- predicted work summary now includes forecast backtesting signals from
+  `/api/projects/{id}/forecast/backtest` alongside calibration data
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command

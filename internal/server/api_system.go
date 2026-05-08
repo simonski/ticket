@@ -27,7 +27,33 @@ func (r *router) registerSystemHandlers() {
 			writeError(w, http.StatusInternalServerError, "database unavailable")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": version})
+		policy, policyErr := store.GetAutomationPolicy(r.Context(), db)
+		if policyErr != nil {
+			writeStoreError(w, policyErr)
+			return
+		}
+		var queueReady int
+		_ = db.QueryRow(`
+			SELECT COUNT(*)
+			FROM tickets
+			WHERE deleted = 0 AND archived = 0 AND complete = 0 AND draft = 0
+			  AND (assignee IS NULL OR TRIM(assignee) = '')
+			  AND LOWER(COALESCE(state, '')) <> 'fail'
+		`).Scan(&queueReady)
+		var interventionOpen int
+		_ = db.QueryRow(`
+			SELECT COUNT(*)
+			FROM tickets
+			WHERE deleted = 0 AND archived = 0 AND complete = 0
+			  AND LOWER(COALESCE(state, '')) = 'fail'
+		`).Scan(&interventionOpen)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status":              "ok",
+			"version":             version,
+			"queue_strategy":      policy.QueueStrategy,
+			"queue_ready_total":   fmt.Sprintf("%d", queueReady),
+			"interventions_total": fmt.Sprintf("%d", interventionOpen),
+		})
 	})
 
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +70,7 @@ func (r *router) registerSystemHandlers() {
 		runtime.ReadMemStats(&ms)
 
 		var ticketCount, projectCount, userCount int
+		var queueReadyCount, interventionOpenCount, forecastSnapshotCount int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE open = 1`).Scan(&ticketCount); err != nil {
 			log.Printf("server: load ticket count metric: %v", err)
 		}
@@ -52,6 +79,28 @@ func (r *router) registerSystemHandlers() {
 		}
 		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL`).Scan(&userCount); err != nil {
 			log.Printf("server: load user count metric: %v", err)
+		}
+		if err := db.QueryRow(`
+			SELECT COUNT(*)
+			FROM tickets
+			WHERE deleted = 0 AND archived = 0 AND complete = 0 AND draft = 0
+			  AND (assignee IS NULL OR TRIM(assignee) = '')
+			  AND LOWER(COALESCE(state, '')) <> 'fail'
+		`).Scan(&queueReadyCount); err != nil {
+			log.Printf("server: load queue ready metric: %v", err)
+		}
+		if err := db.QueryRow(`
+			SELECT COUNT(*)
+			FROM tickets
+			WHERE deleted = 0 AND archived = 0 AND complete = 0
+			  AND LOWER(COALESCE(state, '')) = 'fail'
+		`).Scan(&interventionOpenCount); err != nil {
+			log.Printf("server: load intervention metric: %v", err)
+		}
+		if err := db.QueryRow(`SELECT COUNT(*) FROM forecast_snapshots`).Scan(&forecastSnapshotCount); err != nil {
+			if !strings.Contains(strings.ToLower(err.Error()), "no such table") {
+				log.Printf("server: load forecast snapshot metric: %v", err)
+			}
 		}
 
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
@@ -70,6 +119,18 @@ func (r *router) registerSystemHandlers() {
 		fmt.Fprintf(w, "# HELP ticket_users_total Number of users\n")
 		fmt.Fprintf(w, "# TYPE ticket_users_total gauge\n")
 		fmt.Fprintf(w, "ticket_users_total %d\n", userCount)
+
+		fmt.Fprintf(w, "# HELP ticket_work_item_queue_ready_total Number of queue-ready work items\n")
+		fmt.Fprintf(w, "# TYPE ticket_work_item_queue_ready_total gauge\n")
+		fmt.Fprintf(w, "ticket_work_item_queue_ready_total %d\n", queueReadyCount)
+
+		fmt.Fprintf(w, "# HELP ticket_interventions_open_total Number of open interventions\n")
+		fmt.Fprintf(w, "# TYPE ticket_interventions_open_total gauge\n")
+		fmt.Fprintf(w, "ticket_interventions_open_total %d\n", interventionOpenCount)
+
+		fmt.Fprintf(w, "# HELP ticket_forecast_snapshots_total Number of persisted forecast snapshots\n")
+		fmt.Fprintf(w, "# TYPE ticket_forecast_snapshots_total gauge\n")
+		fmt.Fprintf(w, "ticket_forecast_snapshots_total %d\n", forecastSnapshotCount)
 
 		fmt.Fprintf(w, "# HELP go_goroutines Number of goroutines\n")
 		fmt.Fprintf(w, "# TYPE go_goroutines gauge\n")
@@ -163,6 +224,60 @@ func (r *router) registerSystemHandlers() {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"chat_enabled": payload.Enabled,
 		})
+	})
+	mux.HandleFunc("/api/config/automation_policy", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			policy, err := store.GetAutomationPolicy(r.Context(), db)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, policy)
+		case http.MethodPut:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload store.AutomationPolicy
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			policy, err := store.SetAutomationPolicy(r.Context(), db, payload)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, policy)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+	mux.HandleFunc("/api/tickets/policy/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireUser(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		ticketID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/tickets/policy/"))
+		if ticketID == "" {
+			writeError(w, http.StatusBadRequest, "ticket id is required")
+			return
+		}
+		diag, err := store.DiagnoseTicketPolicy(r.Context(), db, ticketID)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, diag)
 	})
 
 	mux.HandleFunc("/api/count", func(w http.ResponseWriter, r *http.Request) {

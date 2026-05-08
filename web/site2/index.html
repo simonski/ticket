@@ -1270,8 +1270,10 @@
             interventions: [],
             interventionReport: null,
             interventionTrends: [],
+            interventionDrilldown: null,
             projectForecast: [],
             forecastCalibration: null,
+            forecastBacktest: null,
             workflowValidation: {},
             workflows: [],
             roles: [],
@@ -1694,24 +1696,30 @@
                 state.interventions = [];
                 state.interventionReport = null;
                 state.interventionTrends = [];
+                state.interventionDrilldown = null;
                 state.projectForecast = [];
                 state.forecastCalibration = null;
+                state.forecastBacktest = null;
                 return;
             }
-            const [tickets, interventions, interventionReport, interventionTrends, projectForecast, forecastCalibration] = await Promise.all([
+            const [tickets, interventions, interventionReport, interventionTrends, interventionDrilldown, projectForecast, forecastCalibration, forecastBacktest] = await Promise.all([
                 api("/api/projects/" + state.selectedProjectID + "/tickets"),
                 api("/api/projects/" + state.selectedProjectID + "/interventions"),
                 api("/api/projects/" + state.selectedProjectID + "/interventions/report").catch(() => null),
                 api("/api/projects/" + state.selectedProjectID + "/interventions/trends?days=7").catch(() => []),
+                api("/api/projects/" + state.selectedProjectID + "/interventions/drilldown?escalation_hours=24").catch(() => null),
                 api("/api/projects/" + state.selectedProjectID + "/forecast?limit=100").catch(() => []),
                 api("/api/projects/" + state.selectedProjectID + "/forecast/calibration?lookback_hours=1").catch(() => null),
+                api("/api/projects/" + state.selectedProjectID + "/forecast/backtest?window_hours=24").catch(() => null),
             ]);
             state.tickets = tickets.map(normalizeTicket);
             state.interventions = interventions.map(normalizeTicket);
             state.interventionReport = interventionReport;
             state.interventionTrends = Array.isArray(interventionTrends) ? interventionTrends : [];
+            state.interventionDrilldown = interventionDrilldown;
             state.projectForecast = Array.isArray(projectForecast) ? projectForecast : [];
             state.forecastCalibration = forecastCalibration;
+            state.forecastBacktest = forecastBacktest;
             const dependencyEntries = await Promise.all(state.tickets.map(async (ticket) => {
                 try {
                     const dependencies = await api("/api/tickets/" + ticket.id + "/dependencies");
@@ -2060,11 +2068,17 @@
             }
             if (els.forecastCalibrationSummary) {
                 const calibration = state.forecastCalibration;
+                const backtest = state.forecastBacktest;
                 if (calibration && Number(calibration.sample_count || 0) > 0) {
                     els.forecastCalibrationSummary.textContent = "Calibration: " + String(Math.round((calibration.accuracy_rate || 0) * 100)) +
-                        "% accuracy across " + String(calibration.sample_count || 0) + " samples";
+                        "% accuracy across " + String(calibration.sample_count || 0) + " samples" +
+                        (backtest && Number(backtest.sample_count || 0) > 0
+                            ? " · backtest " + String(Math.round((backtest.accuracy_rate || 0) * 100)) + "% / " + String(backtest.sample_count || 0) + " samples"
+                            : "");
                 } else {
-                    els.forecastCalibrationSummary.textContent = "Calibration: building sample history";
+                    els.forecastCalibrationSummary.textContent = backtest && Number(backtest.sample_count || 0) > 0
+                        ? "Backtest: " + String(Math.round((backtest.accuracy_rate || 0) * 100)) + "% over last " + String(backtest.window_hours || 24) + "h"
+                        : "Calibration: building sample history";
                 }
             }
             const project = getCurrentProject();
@@ -2087,11 +2101,15 @@
             if (els.interventionReportSummary) {
                 if (state.interventionReport) {
                     const report = state.interventionReport;
+                    const drilldown = state.interventionDrilldown;
+                    const ownerTop = drilldown && Array.isArray(drilldown.by_owner) && drilldown.by_owner.length ? drilldown.by_owner[0] : null;
                     els.interventionReportSummary.textContent = "open " + String(report.open_count || 0) +
                         " · triaged " + String(report.triaged_count || 0) +
                         " · in progress " + String(report.in_progress_count || 0) +
                         " · resolved " + String(report.resolved_count || 0) +
-                        " · oldest active age " + String(report.oldest_open_age_h || 0) + "h";
+                        " · oldest active age " + String(report.oldest_open_age_h || 0) + "h" +
+                        (drilldown ? " · escalated " + String(drilldown.escalated_count || 0) : "") +
+                        (ownerTop ? " · top owner " + String(ownerTop.key || "") + " (" + String(ownerTop.count || 0) + ")" : "");
                 } else {
                     els.interventionReportSummary.textContent = "";
                 }
