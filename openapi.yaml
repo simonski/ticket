@@ -4129,6 +4129,144 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/work-items/{work_item_id}/reassign:
+    post:
+      tags: [Tickets]
+      summary: Reassign an active work-item
+      description: Restricted to project editors and owners.
+      operationId: reassignTicketWorkItem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: work_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignee]
+              properties:
+                assignee:
+                  type: string
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Updated work-item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/work-items/{work_item_id}/cancel:
+    post:
+      tags: [Tickets]
+      summary: Cancel an active work-item
+      description: Restricted to project editors and owners.
+      operationId: cancelTicketWorkItem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: work_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Updated work-item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/work-items/{work_item_id}/retry:
+    post:
+      tags: [Tickets]
+      summary: Retry a non-active work-item
+      description: Restricted to project editors and owners.
+      operationId: retryTicketWorkItem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: work_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assignee:
+                  type: string
+      responses:
+        '200':
+          description: Newly created active retry work-item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/intervene:
     post:
       tags: [Tickets]

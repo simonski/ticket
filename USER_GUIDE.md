@@ -687,6 +687,12 @@ records linked to lifecycle transitions. Access is restricted to project
 editors and owners. Optional query filters: `status=active|success|fail|stopped`
 and `assignee_type=human|agent`.
 
+Work-item lifecycle operations are also available for editors/owners:
+
+- `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/reassign` (body: `assignee`, optional `message`)
+- `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/cancel` (optional `message`)
+- `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/retry` (optional `assignee`)
+
 Intervention decisions (`POST /api/tickets/{ticket_ref}/intervene`) are restricted
 to project owners.
 

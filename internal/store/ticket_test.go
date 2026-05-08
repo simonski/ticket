@@ -344,6 +344,82 @@ func TestListWorkItemsByTicketWithParamsFilters(t *testing.T) {
 	}
 }
 
+func TestWorkItemLifecycleActions(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	project, err := CreateProject(context.Background(), db, "Work Item Actions", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	alice, err := CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	bob, err := CreateUser(context.Background(), db, "bob", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(bob) error = %v", err)
+	}
+	ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Exercise work-item actions",
+		Assignee:  alice.Username,
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := UpdateTicket(context.Background(), db, ticket.ID, TicketUpdateParams{
+		Title:         ticket.Title,
+		Description:   ticket.Description,
+		Assignee:      ticket.Assignee,
+		Priority:      ticket.Priority,
+		Order:         ticket.Order,
+		State:         StateActive,
+		UpdatedBy:     alice.ID,
+		ActorUsername: alice.Username,
+		ActorRole:     alice.Role,
+	}); err != nil {
+		t.Fatalf("UpdateTicket(active) error = %v", err)
+	}
+	items, err := ListWorkItemsByTicket(context.Background(), db, ticket.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListWorkItemsByTicket(active) error = %v", err)
+	}
+	if len(items) != 1 || items[0].Status != WorkItemStatusActive {
+		t.Fatalf("active work items = %#v", items)
+	}
+	active := items[0]
+
+	reassigned, err := ReassignWorkItem(context.Background(), db, ticket.ID, active.ID, bob.Username, "admin", "admin")
+	if err != nil {
+		t.Fatalf("ReassignWorkItem() error = %v", err)
+	}
+	if reassigned.AssigneeID != bob.ID {
+		t.Fatalf("ReassignWorkItem().AssigneeID = %q, want %q", reassigned.AssigneeID, bob.ID)
+	}
+	cancelled, err := CancelWorkItem(context.Background(), db, ticket.ID, active.ID, "stopping work", "admin", "admin")
+	if err != nil {
+		t.Fatalf("CancelWorkItem() error = %v", err)
+	}
+	if cancelled.Status != WorkItemStatusStopped {
+		t.Fatalf("CancelWorkItem().Status = %q, want %q", cancelled.Status, WorkItemStatusStopped)
+	}
+	retried, err := RetryWorkItem(context.Background(), db, ticket.ID, active.ID, bob.Username, "admin", "admin")
+	if err != nil {
+		t.Fatalf("RetryWorkItem() error = %v", err)
+	}
+	if retried.Status != WorkItemStatusActive || retried.ID == active.ID {
+		t.Fatalf("RetryWorkItem() = %#v, want new active work item", retried)
+	}
+	if retried.AssigneeID != bob.ID {
+		t.Fatalf("RetryWorkItem().AssigneeID = %q, want %q", retried.AssigneeID, bob.ID)
+	}
+	if _, err := RetryWorkItem(context.Background(), db, ticket.ID, active.ID, "", "admin", "admin"); err == nil {
+		t.Fatalf("RetryWorkItem(with existing active) = nil, want error")
+	}
+}
+
 func TestTicketGuidanceMapsPersistAndResolve(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

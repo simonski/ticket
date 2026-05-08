@@ -43,6 +43,8 @@ type WorkItemListParams struct {
 	Offset       int
 }
 
+var ErrWorkItemNotFound = errors.New("work item not found")
+
 func ListWorkItemsByTicket(ctx context.Context, db *sql.DB, ticketID string, limit, offset int) ([]WorkItem, error) {
 	return ListWorkItemsByTicketWithParams(ctx, db, ticketID, WorkItemListParams{
 		Limit:  limit,
@@ -178,14 +180,7 @@ func ensureActiveWorkItem(ctx context.Context, db *sql.DB, ticket Ticket, assign
 		return err
 	}
 
-	assigneeID := assigneeUsername
-	assigneeType := "human"
-	if user, userErr := GetUserByUsername(ctx, db, assigneeUsername); userErr == nil {
-		assigneeID = user.ID
-		if strings.EqualFold(strings.TrimSpace(user.UserType), "agent") {
-			assigneeType = "agent"
-		}
-	}
+	assigneeType, assigneeID := resolveWorkItemAssignee(ctx, db, assigneeUsername)
 
 	workflowID := ResolveWorkflowID(ctx, db, ticket)
 	objectiveSnapshot, promptSnapshot := buildWorkItemSnapshots(ctx, db, ticket, workflowID)
@@ -216,6 +211,143 @@ func closeActiveWorkItems(ctx context.Context, db *sql.DB, ticketID, finalStatus
 		WHERE ticket_id = ? AND status = ?
 	`, finalStatus, strings.TrimSpace(feedback), ticketID, WorkItemStatusActive)
 	return err
+}
+
+func GetWorkItemByTicket(ctx context.Context, db *sql.DB, ticketID, workItemID string) (WorkItem, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
+		       assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback,
+		       started_at, completed_at, created_at, updated_at
+		FROM work_items
+		WHERE ticket_id = ? AND work_item_id = ?
+	`, ticketID, workItemID)
+	item, err := scanWorkItem(row.Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return WorkItem{}, ErrWorkItemNotFound
+		}
+		return WorkItem{}, err
+	}
+	return item, nil
+}
+
+func ReassignWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, assigneeUsername, actorUsername, actorID string) (WorkItem, error) {
+	item, err := GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	if item.Status != WorkItemStatusActive {
+		return WorkItem{}, errors.New("only active work items can be reassigned")
+	}
+	assigneeUsername = strings.TrimSpace(assigneeUsername)
+	if assigneeUsername == "" {
+		return WorkItem{}, errors.New("assignee is required")
+	}
+	assigneeType, assigneeID := resolveWorkItemAssignee(ctx, db, assigneeUsername)
+	note := fmt.Sprintf("reassigned by %s (%s) to %s", strings.TrimSpace(actorUsername), strings.TrimSpace(actorID), assigneeUsername)
+	_, err = db.ExecContext(ctx, `
+		UPDATE work_items
+		SET assignee_type = ?, assignee_id = ?, feedback = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE work_item_id = ? AND ticket_id = ?
+	`, assigneeType, assigneeID, appendWorkItemFeedback(item.Feedback, note), workItemID, ticketID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	return GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+}
+
+func CancelWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, reason, actorUsername, actorID string) (WorkItem, error) {
+	item, err := GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	if item.Status != WorkItemStatusActive {
+		return WorkItem{}, errors.New("only active work items can be cancelled")
+	}
+	note := fmt.Sprintf("cancelled by %s (%s)", strings.TrimSpace(actorUsername), strings.TrimSpace(actorID))
+	if trimmedReason := strings.TrimSpace(reason); trimmedReason != "" {
+		note += ": " + trimmedReason
+	}
+	_, err = db.ExecContext(ctx, `
+		UPDATE work_items
+		SET status = ?, completed_at = CURRENT_TIMESTAMP, feedback = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE work_item_id = ? AND ticket_id = ?
+	`, WorkItemStatusStopped, appendWorkItemFeedback(item.Feedback, note), workItemID, ticketID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	return GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+}
+
+func RetryWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, assigneeUsername, actorUsername, actorID string) (WorkItem, error) {
+	item, err := GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	if item.Status == WorkItemStatusActive {
+		return WorkItem{}, errors.New("active work item cannot be retried")
+	}
+	var activeID string
+	activeErr := db.QueryRowContext(ctx, `
+		SELECT work_item_id FROM work_items
+		WHERE ticket_id = ? AND status = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, ticketID, WorkItemStatusActive).Scan(&activeID)
+	if activeErr == nil {
+		return WorkItem{}, errors.New("ticket already has an active work item")
+	}
+	if activeErr != nil && !errors.Is(activeErr, sql.ErrNoRows) {
+		return WorkItem{}, activeErr
+	}
+
+	nextAssigneeType := item.AssigneeType
+	nextAssigneeID := item.AssigneeID
+	if assignee := strings.TrimSpace(assigneeUsername); assignee != "" {
+		nextAssigneeType, nextAssigneeID = resolveWorkItemAssignee(ctx, db, assignee)
+	}
+	nextID := uuid.NewString()
+	note := fmt.Sprintf("retry of %s by %s (%s)", item.ID, strings.TrimSpace(actorUsername), strings.TrimSpace(actorID))
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO work_items (
+			work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
+			assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, started_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	`, nextID, item.TicketID, item.ProjectID, nullableInt64(item.WorkflowID), nullableInt64(item.WorkflowStageID), nullableInt64(item.RoleID),
+		WorkItemStatusActive, nextAssigneeType, nextAssigneeID, item.ObjectiveSnapshot, item.PromptSnapshot, note)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	return GetWorkItemByTicket(ctx, db, ticketID, nextID)
+}
+
+func resolveWorkItemAssignee(ctx context.Context, db *sql.DB, assigneeUsername string) (assigneeType, assigneeID string) {
+	assigneeUsername = strings.TrimSpace(assigneeUsername)
+	if assigneeUsername == "" {
+		return "human", ""
+	}
+	assigneeID = assigneeUsername
+	assigneeType = "human"
+	if user, userErr := GetUserByUsername(ctx, db, assigneeUsername); userErr == nil {
+		assigneeID = user.ID
+		if strings.EqualFold(strings.TrimSpace(user.UserType), "agent") {
+			assigneeType = "agent"
+		}
+	}
+	return assigneeType, assigneeID
+}
+
+func appendWorkItemFeedback(existing, note string) string {
+	existing = strings.TrimSpace(existing)
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return existing
+	}
+	if existing == "" {
+		return note
+	}
+	return existing + "\n" + note
 }
 
 func scanWorkItem(scan func(dest ...any) error) (WorkItem, error) {

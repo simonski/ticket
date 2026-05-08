@@ -424,6 +424,56 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, items)
 				return
 			}
+			if len(parts) == 4 && parts[1] == "work-items" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				workItemID := strings.TrimSpace(parts[2])
+				if workItemID == "" {
+					writeError(w, http.StatusBadRequest, "work_item_id is required")
+					return
+				}
+				action := strings.TrimSpace(strings.ToLower(parts[3]))
+				var payload struct {
+					Assignee string `json:"assignee"`
+					Message  string `json:"message"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				var (
+					item      store.WorkItem
+					actionErr error
+				)
+				switch action {
+				case "reassign":
+					item, actionErr = store.ReassignWorkItem(r.Context(), db, id, workItemID, payload.Assignee, user.Username, user.ID)
+				case "cancel":
+					item, actionErr = store.CancelWorkItem(r.Context(), db, id, workItemID, payload.Message, user.Username, user.ID)
+				case "retry":
+					item, actionErr = store.RetryWorkItem(r.Context(), db, id, workItemID, payload.Assignee, user.Username, user.ID)
+				default:
+					writeError(w, http.StatusBadRequest, "invalid work-item action")
+					return
+				}
+				if actionErr != nil {
+					writeStoreError(w, actionErr)
+					return
+				}
+				if err := store.AddHistoryEvent(r.Context(), db, ticketRef.ProjectID, ticketRef.ID, "ticket_work_item_"+action, map[string]any{
+					"work_item_id": item.ID,
+					"actor":        user.Username,
+					"message":      payload.Message,
+				}, user.ID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+				writeJSON(w, http.StatusOK, item)
+				return
+			}
 
 			if len(parts) == 2 && parts[1] == "health" && r.Method == http.MethodPost {
 				if !canWriteProject(role) {

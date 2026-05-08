@@ -2215,6 +2215,111 @@ func TestTicketWorkItemsAPIQueryFilters(t *testing.T) {
 	}
 }
 
+func TestTicketWorkItemActionAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Work Item Actions API",
+		"visibility": "private",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	createBobResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]string{
+		"username": "bob-workitem",
+		"password": "password123",
+	}, adminToken)
+	if createBobResp.Code != http.StatusCreated {
+		t.Fatalf("create user bob status = %d body=%s", createBobResp.Code, createBobResp.Body.String())
+	}
+	var bob store.User
+	decodeResponse(t, createBobResp, &bob)
+
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Work-item lifecycle actions",
+		"assignee":   "admin",
+	}, adminToken)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	setActiveResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":       ticket.Title,
+		"description": ticket.Description,
+		"assignee":    ticket.Assignee,
+		"priority":    ticket.Priority,
+		"order":       ticket.Order,
+		"state":       "active",
+	}, adminToken)
+	if setActiveResp.Code != http.StatusOK {
+		t.Fatalf("set active status = %d body=%s", setActiveResp.Code, setActiveResp.Body.String())
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/work-items?status=active", nil, adminToken)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list active work-items status = %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var activeItems []store.WorkItem
+	decodeResponse(t, listResp, &activeItems)
+	if len(activeItems) != 1 {
+		t.Fatalf("active items len = %d, want 1", len(activeItems))
+	}
+	activeID := activeItems[0].ID
+
+	reassignResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+activeID+"/reassign", map[string]any{
+		"assignee": "bob-workitem",
+		"message":  "handoff",
+	}, adminToken)
+	if reassignResp.Code != http.StatusOK {
+		t.Fatalf("reassign work-item status = %d body=%s", reassignResp.Code, reassignResp.Body.String())
+	}
+	var reassigned store.WorkItem
+	decodeResponse(t, reassignResp, &reassigned)
+	if reassigned.AssigneeID != bob.ID {
+		t.Fatalf("reassigned assignee_id = %q, want %q", reassigned.AssigneeID, bob.ID)
+	}
+
+	cancelResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+activeID+"/cancel", map[string]any{
+		"message": "stop this attempt",
+	}, adminToken)
+	if cancelResp.Code != http.StatusOK {
+		t.Fatalf("cancel work-item status = %d body=%s", cancelResp.Code, cancelResp.Body.String())
+	}
+	var cancelled store.WorkItem
+	decodeResponse(t, cancelResp, &cancelled)
+	if cancelled.Status != store.WorkItemStatusStopped {
+		t.Fatalf("cancelled status = %q, want %q", cancelled.Status, store.WorkItemStatusStopped)
+	}
+
+	retryResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+activeID+"/retry", map[string]any{
+		"assignee": "bob-workitem",
+	}, adminToken)
+	if retryResp.Code != http.StatusOK {
+		t.Fatalf("retry work-item status = %d body=%s", retryResp.Code, retryResp.Body.String())
+	}
+	var retried store.WorkItem
+	decodeResponse(t, retryResp, &retried)
+	if retried.Status != store.WorkItemStatusActive || retried.ID == activeID {
+		t.Fatalf("retried work-item = %#v, want new active item", retried)
+	}
+
+	invalidActionResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+retried.ID+"/unknown", map[string]any{}, adminToken)
+	if invalidActionResp.Code != http.StatusBadRequest {
+		t.Fatalf("invalid action status = %d body=%s", invalidActionResp.Code, invalidActionResp.Body.String())
+	}
+}
+
 func TestCountAPIAndAssignmentRules(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
