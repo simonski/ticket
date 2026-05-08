@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -36,7 +37,17 @@ type InterventionReport struct {
 	ResolvedCount   int                      `json:"resolved_count"`
 	WontFixCount    int                      `json:"wont_fix_count"`
 	OldestOpenAgeH  int                      `json:"oldest_open_age_h"`
+	Trends          []InterventionTrendPoint `json:"trends,omitempty"`
 	Items           []InterventionReportItem `json:"items"`
+}
+
+type InterventionTrendPoint struct {
+	Day             string `json:"day"`
+	OpenCount       int    `json:"open_count"`
+	TriagedCount    int    `json:"triaged_count"`
+	InProgressCount int    `json:"in_progress_count"`
+	ResolvedCount   int    `json:"resolved_count"`
+	WontFixCount    int    `json:"wont_fix_count"`
 }
 
 type InterventionReportItem struct {
@@ -222,5 +233,84 @@ func BuildInterventionReport(ctx context.Context, db *sql.DB, projectID int64, e
 	if err := rows.Err(); err != nil {
 		return InterventionReport{}, err
 	}
+	trends, trendErr := BuildInterventionTrends(ctx, db, projectID, 7)
+	if trendErr != nil {
+		return InterventionReport{}, trendErr
+	}
+	report.Trends = trends
 	return report, nil
+}
+
+func BuildInterventionTrends(ctx context.Context, db *sql.DB, projectID int64, days int) ([]InterventionTrendPoint, error) {
+	if err := ensureInterventionStateTable(ctx, db); err != nil {
+		return nil, err
+	}
+	if days <= 0 {
+		days = 7
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT DATE(COALESCE(i.updated_at, t.updated_at)) AS d,
+		       COALESCE(i.state, 'open') AS intervention_state,
+		       COUNT(1)
+		FROM tickets t
+		LEFT JOIN intervention_states i ON i.ticket_id = t.ticket_id
+		WHERE t.project_id = ? AND t.state = 'fail' AND t.deleted = 0
+		  AND DATE(COALESCE(i.updated_at, t.updated_at)) >= DATE('now', ?)
+		GROUP BY d, intervention_state
+		ORDER BY d ASC
+	`, projectID, fmt.Sprintf("-%d days", days-1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	pointsByDay := map[string]*InterventionTrendPoint{}
+	orderedDays := make([]string, 0)
+	for rows.Next() {
+		var day string
+		var state string
+		var count int
+		if scanErr := rows.Scan(&day, &state, &count); scanErr != nil {
+			return nil, scanErr
+		}
+		point, ok := pointsByDay[day]
+		if !ok {
+			point = &InterventionTrendPoint{Day: day}
+			pointsByDay[day] = point
+			orderedDays = append(orderedDays, day)
+		}
+		switch strings.ToLower(strings.TrimSpace(state)) {
+		case InterventionStateOpen:
+			point.OpenCount = count
+		case InterventionStateTriaged:
+			point.TriagedCount = count
+		case InterventionStateInProgress:
+			point.InProgressCount = count
+		case InterventionStateResolved:
+			point.ResolvedCount = count
+		case InterventionStateWontFix:
+			point.WontFixCount = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	for i := days - 1; i >= 0; i-- {
+		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		if _, ok := pointsByDay[day]; !ok {
+			pointsByDay[day] = &InterventionTrendPoint{Day: day}
+			orderedDays = append(orderedDays, day)
+		}
+	}
+	sort.Strings(orderedDays)
+	points := make([]InterventionTrendPoint, 0, len(orderedDays))
+	seen := map[string]bool{}
+	for _, day := range orderedDays {
+		if seen[day] {
+			continue
+		}
+		seen[day] = true
+		points = append(points, *pointsByDay[day])
+	}
+	return points, nil
 }

@@ -126,15 +126,34 @@ func runWorkItem(args []string) error {
 		id := fs.String("id", "", "specific ticket id/ref")
 		dryRun := fs.Bool("dry-run", false, "preview without assignment")
 		explain := fs.Bool("explain", false, "print explanation for returned status")
+		strategy := fs.String("strategy", "priority", "queue strategy (priority|order|aging)")
+		preview := fs.Bool("preview", false, "list queue candidates without claiming")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if len(fs.Args()) != 0 {
-			return errors.New("usage: tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain]")
+			return errors.New("usage: tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain] [-strategy <priority|order|aging>] [-preview]")
 		}
 		resolvedProjectID, err := resolveWorkItemProjectID(cfg, *projectID)
 		if err != nil {
 			return err
+		}
+		if *preview {
+			candidates, queueErr := api.ListProjectWorkItemQueue(ctx, resolvedProjectID, strings.TrimSpace(*strategy), 20)
+			if queueErr != nil {
+				return queueErr
+			}
+			if outputJSON {
+				return printJSON(candidates)
+			}
+			for _, candidate := range candidates {
+				blocked := ""
+				if candidate.Blocked {
+					blocked = " blocked_by=" + candidate.BlockedBy
+				}
+				fmt.Printf("%s\tp%d\torder=%d\t%s/%s%s\t%s\n", candidate.TicketID, candidate.Priority, candidate.Order, candidate.Stage, candidate.State, blocked, candidate.Title)
+			}
+			return nil
 		}
 		response, err := api.RequestTicket(ctx, client.TicketRequest{
 			ProjectID: resolvedProjectID,

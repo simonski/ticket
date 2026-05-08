@@ -385,6 +385,52 @@ func TestWorkflowStageTransitionEndpoint(t *testing.T) {
 	}
 }
 
+func TestWorkflowValidateEndpoint(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	workflowResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]any{
+		"name":        "Validate DAG",
+		"description": "workflow validation",
+	}, adminToken)
+	if workflowResp.Code != http.StatusCreated {
+		t.Fatalf("create workflow status=%d body=%s", workflowResp.Code, workflowResp.Body.String())
+	}
+	var workflow store.Workflow
+	decodeResponse(t, workflowResp, &workflow)
+	stageAResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/stages", map[string]any{
+		"stage_name": "design",
+		"sort_order": 0,
+	}, adminToken)
+	stageBResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/stages", map[string]any{
+		"stage_name": "done",
+		"sort_order": 1,
+	}, adminToken)
+	if stageAResp.Code != http.StatusCreated || stageBResp.Code != http.StatusCreated {
+		t.Fatalf("create stages status=(%d,%d)", stageAResp.Code, stageBResp.Code)
+	}
+	var stageA, stageB store.WorkflowStage
+	decodeResponse(t, stageAResp, &stageA)
+	decodeResponse(t, stageBResp, &stageB)
+	setResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/stages/"+strconv.FormatInt(stageA.ID, 10)+"/transitions", map[string]any{
+		"to_stage_ids": []int64{stageB.ID},
+	}, adminToken)
+	if setResp.Code != http.StatusOK {
+		t.Fatalf("set transitions status=%d body=%s", setResp.Code, setResp.Body.String())
+	}
+	validateResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/validate", nil, adminToken)
+	if validateResp.Code != http.StatusOK {
+		t.Fatalf("validate workflow status=%d body=%s", validateResp.Code, validateResp.Body.String())
+	}
+	var report store.WorkflowGraphValidation
+	decodeResponse(t, validateResp, &report)
+	if !report.Valid || report.StageCount != 2 {
+		t.Fatalf("unexpected validation report: %#v", report)
+	}
+}
+
 func TestTicketInterventionStateEndpoint(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
@@ -2066,6 +2112,14 @@ func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
 	if setFailResp.Code != http.StatusOK {
 		t.Fatalf("set fail status = %d body=%s", setFailResp.Code, setFailResp.Body.String())
 	}
+	queueableResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Queue me",
+	}, adminToken)
+	if queueableResp.Code != http.StatusCreated {
+		t.Fatalf("create queueable ticket status = %d body=%s", queueableResp.Code, queueableResp.Body.String())
+	}
 
 	reportResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/report?escalation_hours=1", nil, adminToken)
 	if reportResp.Code != http.StatusOK {
@@ -2075,6 +2129,22 @@ func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
 	decodeResponse(t, reportResp, &report)
 	if report.OpenCount < 1 || len(report.Items) < 1 || report.Items[0].TicketID != failing.ID {
 		t.Fatalf("unexpected intervention report payload: %#v", report)
+	}
+	trendsResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/trends?days=7", nil, adminToken)
+	if trendsResp.Code != http.StatusOK {
+		t.Fatalf("intervention trends status = %d body=%s", trendsResp.Code, trendsResp.Body.String())
+	}
+	var trends []store.InterventionTrendPoint
+	decodeResponse(t, trendsResp, &trends)
+	if len(trends) == 0 {
+		t.Fatalf("expected intervention trends payload, got %#v", trends)
+	}
+	reportCSVReq := httptest.NewRequest(http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/report?format=csv", nil)
+	reportCSVReq.Header.Set("Authorization", "Bearer "+adminToken)
+	reportCSVResp := httptest.NewRecorder()
+	handler.ServeHTTP(reportCSVResp, reportCSVReq)
+	if reportCSVResp.Code != http.StatusOK || !strings.Contains(reportCSVResp.Body.String(), "ticket_id,title,state") {
+		t.Fatalf("intervention report csv status=%d body=%s", reportCSVResp.Code, reportCSVResp.Body.String())
 	}
 
 	forecastResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/forecast?limit=10", nil, adminToken)
@@ -2095,6 +2165,24 @@ func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("missing failing ticket in forecast payload: %#v", forecast)
+	}
+	calibrationResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/forecast/calibration?lookback_hours=1", nil, adminToken)
+	if calibrationResp.Code != http.StatusOK {
+		t.Fatalf("forecast calibration status = %d body=%s", calibrationResp.Code, calibrationResp.Body.String())
+	}
+	var calibration store.ProjectForecastCalibration
+	decodeResponse(t, calibrationResp, &calibration)
+	if len(calibration.Buckets) != 3 {
+		t.Fatalf("unexpected calibration payload: %#v", calibration)
+	}
+	queueResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/work-items/queue?strategy=priority&limit=10", nil, adminToken)
+	if queueResp.Code != http.StatusOK {
+		t.Fatalf("work-item queue status = %d body=%s", queueResp.Code, queueResp.Body.String())
+	}
+	var queue []store.WorkItemQueueCandidate
+	decodeResponse(t, queueResp, &queue)
+	if len(queue) == 0 {
+		t.Fatalf("expected queue candidates, got %#v", queue)
 	}
 }
 

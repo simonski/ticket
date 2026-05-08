@@ -708,11 +708,20 @@ is restricted to project editors and owners.
 Intervention SLA reporting is available at
 `GET /api/projects/{project_ref}/interventions/report` (optional
 `?escalation_hours=<n>`), returning state counts, oldest active age, and
-ticket-level escalation markers.
+ticket-level escalation markers. Add `?format=csv` to export a CSV view.
+
+Intervention trend points are available at
+`GET /api/projects/{project_ref}/interventions/trends?days=7`.
 
 Server-backed next-work forecasting is available at
 `GET /api/projects/{project_ref}/forecast` (optional `?limit=<n>`). Site2 uses
 this endpoint for the `Predicted next work` panel and shows confidence scores.
+
+Forecast calibration metrics are available at
+`GET /api/projects/{project_ref}/forecast/calibration?lookback_hours=1`.
+
+Policy-ranked queue candidates are available at
+`GET /api/projects/{project_ref}/work-items/queue?strategy=priority|order|aging`.
 
 In the web app, the item detail pane shows:
 
@@ -893,10 +902,14 @@ Keyboard shortcuts in the board view:
   managed from Site2 without CLI-only configuration
 - workflow stages now support explicit DAG-style transitions (`next_stage_ids`) so
   progression can branch beyond simple linear ordering
+- workflow editor now includes graph governance controls: validate graph,
+  auto-chain transitions, and save-all stage bulk updates
 - board now includes a `Predicted next work` panel that forecasts next
   phase/role transitions from workflow policy + explicit stage transitions, now
   sourced from server-side `/api/projects/{id}/forecast` with confidence scores
   and dependency-aware blocking
+- board now supports quick filtering (`board-search`) and hide-done toggling for
+  denser high-volume workflows
 - the Interventions board includes built-in filter (`all`, `unassigned`, `agent`,
   `human`) and sort (`priority`, `order`, `most recent update`) controls for triage
 - each intervention card now shows a compact conversation thread (latest comments)
@@ -1076,7 +1089,7 @@ tk workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>
 tk workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <id,id,...>
 
 tk work-item list -id <ticket-id> [-status <active|success|fail|stopped>] [-assignee_type <human|agent>] [-limit <n>]
-tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain]
+tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain] [-strategy <priority|order|aging>] [-preview]
 tk work-item start -id <ticket-id> [-m <message>]
 tk work-item create [-project_id <id>] -title <title> [-type <task|bug|story|chore>] [-description <text>] [-start]
 tk work-item reassign -id <ticket-id> -work-item <id> -assignee <username> [-m <message>]

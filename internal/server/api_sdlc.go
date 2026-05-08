@@ -372,6 +372,26 @@ func (r *router) registerWorkflowHandlers() {
 				}
 				writeJSON(w, http.StatusOK, export)
 				return
+			case "validate":
+				if _, err := requireUser(db, r); err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				if r.Method != http.MethodGet {
+					writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+					return
+				}
+				report, err := store.ValidateWorkflowGraph(r.Context(), db, wfID)
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						writeError(w, http.StatusNotFound, "workflow not found")
+						return
+					}
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, report)
+				return
 			}
 		}
 		// Direct workflow resource — auth check moved here for non-sub-resource paths

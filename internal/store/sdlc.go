@@ -73,6 +73,17 @@ type WorkflowStageTransition struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type WorkflowGraphValidation struct {
+	WorkflowID          int64    `json:"workflow_id"`
+	StageCount          int      `json:"stage_count"`
+	TransitionCount     int      `json:"transition_count"`
+	TerminalStageIDs    []int64  `json:"terminal_stage_ids"`
+	UnreachableStageIDs []int64  `json:"unreachable_stage_ids,omitempty"`
+	Issues              []string `json:"issues,omitempty"`
+	Warnings            []string `json:"warnings,omitempty"`
+	Valid               bool     `json:"valid"`
+}
+
 func CreateWorkflow(ctx context.Context, db *sql.DB, name, description string) (Workflow, error) {
 	return CreateWorkflowWithParams(ctx, db, nil, name, description)
 }
@@ -563,55 +574,12 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 }
 
 func validateWorkflowStageGraphTx(ctx context.Context, tx *sql.Tx, workflowID int64) error {
-	stageRows, queryErr := tx.QueryContext(ctx, `
-		SELECT workflow_stage_id
-		FROM workflow_stages
-		WHERE workflow_id = ?
-		ORDER BY sort_order, workflow_stage_id
-	`, workflowID)
-	if queryErr != nil {
-		return queryErr
-	}
-	defer stageRows.Close()
-	stageOrder := make([]int64, 0)
-	for stageRows.Next() {
-		var stageID int64
-		if scanErr := stageRows.Scan(&stageID); scanErr != nil {
-			return scanErr
-		}
-		stageOrder = append(stageOrder, stageID)
-	}
-	if err := stageRows.Err(); err != nil {
+	stageOrder, _, edges, err := loadWorkflowGraphTx(ctx, tx, workflowID)
+	if err != nil {
 		return err
 	}
 	if len(stageOrder) <= 1 {
 		return nil
-	}
-	indexByID := make(map[int64]int, len(stageOrder))
-	for idx, stageID := range stageOrder {
-		indexByID[stageID] = idx
-	}
-	edges := make(map[int64][]int64, len(stageOrder))
-	explicitRows, err := tx.QueryContext(ctx, `
-		SELECT from_stage_id, to_stage_id
-		FROM workflow_stage_transitions
-		WHERE workflow_id = ?
-		ORDER BY from_stage_id, sort_order, to_stage_id
-	`, workflowID)
-	if err != nil {
-		return err
-	}
-	defer explicitRows.Close()
-	for explicitRows.Next() {
-		var fromID int64
-		var toID int64
-		if scanErr := explicitRows.Scan(&fromID, &toID); scanErr != nil {
-			return scanErr
-		}
-		edges[fromID] = append(edges[fromID], toID)
-	}
-	if err := explicitRows.Err(); err != nil {
-		return err
 	}
 	visiting := make(map[int64]bool, len(stageOrder))
 	visited := make(map[int64]bool, len(stageOrder))
@@ -625,9 +593,6 @@ func validateWorkflowStageGraphTx(ctx context.Context, tx *sql.Tx, workflowID in
 		}
 		visiting[stageID] = true
 		for _, nextID := range edges[stageID] {
-			if _, ok := indexByID[nextID]; !ok {
-				return fmt.Errorf("workflow transitions reference unknown stage %d", nextID)
-			}
 			if err := dfs(nextID); err != nil {
 				return err
 			}
@@ -642,6 +607,163 @@ func validateWorkflowStageGraphTx(ctx context.Context, tx *sql.Tx, workflowID in
 		}
 	}
 	return nil
+}
+
+func ValidateWorkflowGraph(ctx context.Context, db *sql.DB, workflowID int64) (WorkflowGraphValidation, error) {
+	wf, err := GetWorkflow(ctx, db, workflowID)
+	if err != nil {
+		return WorkflowGraphValidation{}, err
+	}
+	report := WorkflowGraphValidation{
+		WorkflowID: workflowID,
+		StageCount: len(wf.Stages),
+		Issues:     make([]string, 0),
+		Warnings:   make([]string, 0),
+	}
+	if err := ensureWorkflowTransitionTable(ctx, db); err != nil {
+		return WorkflowGraphValidation{}, err
+	}
+	edges := map[int64][]int64{}
+	stageOrder := make([]int64, 0, len(wf.Stages))
+	stageIndex := make(map[int64]int, len(wf.Stages))
+	for idx, stage := range wf.Stages {
+		stageOrder = append(stageOrder, stage.ID)
+		stageIndex[stage.ID] = idx
+		if len(stage.NextStageIDs) > 0 {
+			edges[stage.ID] = append([]int64{}, stage.NextStageIDs...)
+			report.TransitionCount += len(stage.NextStageIDs)
+		}
+	}
+	for idx, stageID := range stageOrder {
+		if len(edges[stageID]) == 0 && idx+1 < len(stageOrder) {
+			edges[stageID] = []int64{stageOrder[idx+1]}
+		}
+		if len(edges[stageID]) == 0 {
+			report.TerminalStageIDs = append(report.TerminalStageIDs, stageID)
+		}
+	}
+	visiting := make(map[int64]bool, len(stageOrder))
+	visited := make(map[int64]bool, len(stageOrder))
+	var dfs func(int64) error
+	dfs = func(stageID int64) error {
+		if visiting[stageID] {
+			return errors.New("workflow transitions contain a cycle")
+		}
+		if visited[stageID] {
+			return nil
+		}
+		visiting[stageID] = true
+		for _, nextID := range edges[stageID] {
+			if _, ok := stageIndex[nextID]; !ok {
+				return fmt.Errorf("workflow transitions reference unknown stage %d", nextID)
+			}
+			if err := dfs(nextID); err != nil {
+				return err
+			}
+		}
+		visiting[stageID] = false
+		visited[stageID] = true
+		return nil
+	}
+	for _, stageID := range stageOrder {
+		if err := dfs(stageID); err != nil {
+			report.Issues = append(report.Issues, err.Error())
+			report.Valid = false
+			return report, nil
+		}
+	}
+	if len(stageOrder) > 0 {
+		reachable := map[int64]bool{stageOrder[0]: true}
+		queue := []int64{stageOrder[0]}
+		for len(queue) > 0 {
+			current := queue[0]
+			queue = queue[1:]
+			for _, nextID := range edges[current] {
+				if !reachable[nextID] {
+					reachable[nextID] = true
+					queue = append(queue, nextID)
+				}
+			}
+		}
+		for _, stageID := range stageOrder {
+			if !reachable[stageID] {
+				report.UnreachableStageIDs = append(report.UnreachableStageIDs, stageID)
+			}
+		}
+		if len(report.UnreachableStageIDs) > 0 {
+			report.Warnings = append(report.Warnings, "workflow has stages unreachable from its first stage")
+		}
+	}
+	if len(report.TerminalStageIDs) == 0 && len(stageOrder) > 0 {
+		report.Warnings = append(report.Warnings, "workflow has no terminal stage")
+	}
+	report.Valid = len(report.Issues) == 0
+	return report, nil
+}
+
+func loadWorkflowGraphTx(ctx context.Context, tx *sql.Tx, workflowID int64) (stageOrder []int64, indexByID map[int64]int, edges map[int64][]int64, err error) {
+	stageRows, queryErr := tx.QueryContext(ctx, `
+		SELECT workflow_stage_id
+		FROM workflow_stages
+		WHERE workflow_id = ?
+		ORDER BY sort_order, workflow_stage_id
+	`, workflowID)
+	if queryErr != nil {
+		return nil, nil, nil, queryErr
+	}
+	defer stageRows.Close()
+	stageOrder = make([]int64, 0)
+	for stageRows.Next() {
+		var stageID int64
+		if scanErr := stageRows.Scan(&stageID); scanErr != nil {
+			return nil, nil, nil, scanErr
+		}
+		stageOrder = append(stageOrder, stageID)
+	}
+	if rowErr := stageRows.Err(); rowErr != nil {
+		return nil, nil, nil, rowErr
+	}
+	if len(stageOrder) <= 1 {
+		indexByID = make(map[int64]int, len(stageOrder))
+		for idx, stageID := range stageOrder {
+			indexByID[stageID] = idx
+		}
+		return stageOrder, indexByID, map[int64][]int64{}, nil
+	}
+	indexByID = make(map[int64]int, len(stageOrder))
+	for idx, stageID := range stageOrder {
+		indexByID[stageID] = idx
+	}
+	edges = make(map[int64][]int64, len(stageOrder))
+	explicitRows, err := tx.QueryContext(ctx, `
+		SELECT from_stage_id, to_stage_id
+		FROM workflow_stage_transitions
+		WHERE workflow_id = ?
+		ORDER BY from_stage_id, sort_order, to_stage_id
+	`, workflowID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer explicitRows.Close()
+	for explicitRows.Next() {
+		var fromID int64
+		var toID int64
+		if scanErr := explicitRows.Scan(&fromID, &toID); scanErr != nil {
+			return nil, nil, nil, scanErr
+		}
+		edges[fromID] = append(edges[fromID], toID)
+	}
+	if rowErr := explicitRows.Err(); rowErr != nil {
+		return nil, nil, nil, rowErr
+	}
+	for _, links := range edges {
+		for _, nextID := range links {
+			if _, ok := indexByID[nextID]; !ok {
+				return nil, nil, nil, fmt.Errorf("workflow transitions reference unknown stage %d", nextID)
+			}
+		}
+	}
+	return stageOrder, indexByID, edges, nil
 }
 
 func normalizeWorkflowApprovalPolicy(raw string) (string, error) {

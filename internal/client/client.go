@@ -1404,6 +1404,30 @@ func (c *Client) ListProjectHistoryFiltered(ctx context.Context, projectID int64
 	return events, err
 }
 
+func (c *Client) ListProjectWorkItemQueue(ctx context.Context, projectID int64, strategy string, limit int) ([]store.WorkItemQueueCandidate, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListProjectWorkItemQueue(ctx, db, projectID, strategy, limit)
+	}
+	params := url.Values{}
+	if limit > 0 {
+		params.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	if strings.TrimSpace(strategy) != "" {
+		params.Set("strategy", strings.TrimSpace(strategy))
+	}
+	path := fmt.Sprintf("/api/projects/%d/work-items/queue", projectID)
+	if encoded := params.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var queue []store.WorkItemQueueCandidate
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &queue)
+	return queue, err
+}
+
 func (c *Client) AddComment(ctx context.Context, id, comment string) (store.Comment, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

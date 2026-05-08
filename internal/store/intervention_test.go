@@ -98,4 +98,14 @@ func TestBuildInterventionReport(t *testing.T) {
 	if report.OldestOpenAgeH < 24 {
 		t.Fatalf("oldest age = %d, want >= 24", report.OldestOpenAgeH)
 	}
+	if len(report.Trends) == 0 {
+		t.Fatalf("expected trends in report, got %#v", report)
+	}
+	trends, err := BuildInterventionTrends(ctx, db, project.ID, 7)
+	if err != nil {
+		t.Fatalf("BuildInterventionTrends() error = %v", err)
+	}
+	if len(trends) != 7 {
+		t.Fatalf("trends len = %d, want 7", len(trends))
+	}
 }

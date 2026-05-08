@@ -122,4 +122,21 @@ func TestBuildProjectForecast(t *testing.T) {
 	if !hasBlocked || !hasFail || !hasNext {
 		t.Fatalf("unexpected forecast entries: %#v", forecasts)
 	}
+	queue, err := ListProjectWorkItemQueue(ctx, db, project.ID, "priority", 20)
+	if err != nil {
+		t.Fatalf("ListProjectWorkItemQueue() error = %v", err)
+	}
+	if len(queue) == 0 {
+		t.Fatalf("expected queue candidates, got %#v", queue)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE forecast_snapshots SET created_at = datetime('now', '-2 hours') WHERE project_id = ?`, project.ID); err != nil {
+		t.Fatalf("aging forecast snapshots error = %v", err)
+	}
+	calibration, err := BuildProjectForecastCalibration(ctx, db, project.ID, 1)
+	if err != nil {
+		t.Fatalf("BuildProjectForecastCalibration() error = %v", err)
+	}
+	if len(calibration.Buckets) != 3 {
+		t.Fatalf("unexpected calibration payload: %#v", calibration)
+	}
 }

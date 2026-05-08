@@ -783,6 +783,8 @@
                                 <p class="meta">Drag tickets between stages. Click a card to edit details, history, draft state, and lifecycle overrides.</p>
                             </div>
                             <div class="entity-actions">
+                                <input id="board-search" type="search" placeholder="Filter tickets">
+                                <label class="meta" style="display:flex;align-items:center;gap:6px;"><input id="board-hide-done" type="checkbox"> hide done</label>
                                 <button id="new-ticket-button" type="button" class="btn-primary">New ticket</button>
                             </div>
                         </div>
@@ -790,6 +792,7 @@
                         <div class="panel panel-padded" style="margin-top: 16px;">
                             <h3>Predicted next work</h3>
                             <p class="meta">Projected next phase/role transitions from the current workflow graph.</p>
+                            <div id="forecast-calibration-summary" class="meta"></div>
                             <div id="predicted-work-list" class="history-list" role="status" aria-live="polite"></div>
                         </div>
                     </div>
@@ -823,6 +826,7 @@
                             </div>
                         </div>
                         <div id="intervention-report-summary" class="meta" style="margin-bottom: 10px;"></div>
+                        <div id="intervention-trends-summary" class="meta" style="margin-bottom: 10px;"></div>
                         <div id="intervention-list" class="entity-list"></div>
                     </div>
                 </section>
@@ -945,6 +949,12 @@
                             <h3>Stages</h3>
                             <span class="meta">Drag whole cards to reorder the flow.</span>
                         </div>
+                        <div class="entity-actions" style="margin-bottom:8px;">
+                            <button id="validate-workflow-button" type="button">Validate graph</button>
+                            <button id="auto-chain-transitions-button" type="button">Auto-chain transitions</button>
+                            <button id="save-all-stages-button" type="button">Save all stages</button>
+                        </div>
+                        <div id="workflow-validation-summary" class="meta" style="margin-bottom: 8px;"></div>
                         <div class="field">
                             <label>Roles</label>
                             <div id="workflow-role-bank" class="role-bank"></div>
@@ -1259,7 +1269,10 @@
             tickets: [],
             interventions: [],
             interventionReport: null,
+            interventionTrends: [],
             projectForecast: [],
+            forecastCalibration: null,
+            workflowValidation: {},
             workflows: [],
             roles: [],
             agents: [],
@@ -1315,13 +1328,18 @@
             agentList: document.getElementById("agent-list"),
             teamList: document.getElementById("team-list"),
             ticketBoard: document.getElementById("ticket-board"),
+            boardSearch: document.getElementById("board-search"),
+            boardHideDone: document.getElementById("board-hide-done"),
             interventionList: document.getElementById("intervention-list"),
             interventionFilter: document.getElementById("intervention-filter"),
             interventionSort: document.getElementById("intervention-sort"),
+            interventionTrendsSummary: document.getElementById("intervention-trends-summary"),
             interventionReportSummary: document.getElementById("intervention-report-summary"),
             predictedWorkList: document.getElementById("predicted-work-list"),
+            forecastCalibrationSummary: document.getElementById("forecast-calibration-summary"),
             stageGrid: document.getElementById("stage-grid"),
             workflowRoleBank: document.getElementById("workflow-role-bank"),
+            workflowValidationSummary: document.getElementById("workflow-validation-summary"),
             ticketModal: document.getElementById("ticket-modal"),
             ticketHistory: document.getElementById("ticket-history"),
             ticketComments: document.getElementById("ticket-comments"),
@@ -1675,19 +1693,25 @@
                 state.tickets = [];
                 state.interventions = [];
                 state.interventionReport = null;
+                state.interventionTrends = [];
                 state.projectForecast = [];
+                state.forecastCalibration = null;
                 return;
             }
-            const [tickets, interventions, interventionReport, projectForecast] = await Promise.all([
+            const [tickets, interventions, interventionReport, interventionTrends, projectForecast, forecastCalibration] = await Promise.all([
                 api("/api/projects/" + state.selectedProjectID + "/tickets"),
                 api("/api/projects/" + state.selectedProjectID + "/interventions"),
                 api("/api/projects/" + state.selectedProjectID + "/interventions/report").catch(() => null),
+                api("/api/projects/" + state.selectedProjectID + "/interventions/trends?days=7").catch(() => []),
                 api("/api/projects/" + state.selectedProjectID + "/forecast?limit=100").catch(() => []),
+                api("/api/projects/" + state.selectedProjectID + "/forecast/calibration?lookback_hours=1").catch(() => null),
             ]);
             state.tickets = tickets.map(normalizeTicket);
             state.interventions = interventions.map(normalizeTicket);
             state.interventionReport = interventionReport;
+            state.interventionTrends = Array.isArray(interventionTrends) ? interventionTrends : [];
             state.projectForecast = Array.isArray(projectForecast) ? projectForecast : [];
+            state.forecastCalibration = forecastCalibration;
             const dependencyEntries = await Promise.all(state.tickets.map(async (ticket) => {
                 try {
                     const dependencies = await api("/api/tickets/" + ticket.id + "/dependencies");
@@ -1750,6 +1774,9 @@
                 state.selectedWorkflowID = state.workflows.length ? state.workflows[0].id : null;
             }
             state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
+            if (state.selectedWorkflowID) {
+                await loadWorkflowValidation(state.selectedWorkflowID).catch(() => null);
+            }
         }
 
         async function loadRoles() {
@@ -2008,16 +2035,20 @@
 
         function renderTicketBoard() {
             const lanes = getBoardLaneDescriptors();
+            const searchText = (els.boardSearch && els.boardSearch.value ? els.boardSearch.value : "").trim().toLowerCase();
+            const hideDone = Boolean(els.boardHideDone && els.boardHideDone.checked);
             els.ticketBoard.innerHTML = lanes.map((lane) => {
                 const cards = state.tickets
                     .filter((ticket) => (ticket.stage || lanes[0].name) === lane.name)
+                    .filter((ticket) => !hideDone || String(ticket.stage || "").toLowerCase() !== "done")
+                    .filter((ticket) => !searchText || String(ticket.title || "").toLowerCase().includes(searchText) || String(ticket.key || ticket.id || "").toLowerCase().includes(searchText))
                     .sort((a, b) => (a.order || 0) - (b.order || 0))
                     .map((ticket) => renderTicketCard(ticket))
                     .join("");
                 const draggable = lane.workflowStageID ? "true" : "false";
                 const stageAttr = lane.workflowStageID ? " data-workflow-stage-id=\"" + lane.workflowStageID + "\"" : "";
                 return "<div class=\"lane\" draggable=\"" + draggable + "\" data-lane-stage=\"" + escapeHTML(lane.name) + "\"" + stageAttr + ">" +
-                    "<div class=\"lane-head\"><h3>" + escapeHTML(lane.name) + "</h3><span class=\"chip\">" + state.tickets.filter((ticket) => (ticket.stage || lanes[0].name) === lane.name).length + "</span></div>" +
+                    "<div class=\"lane-head\"><h3>" + escapeHTML(lane.name) + "</h3><span class=\"chip\">" + (cards ? (cards.match(/ticket-card/g) || []).length : 0) + "</span></div>" +
                     (cards || "<div class=\"empty\">No tickets</div>") +
                     "</div>";
             }).join("");
@@ -2026,6 +2057,15 @@
         function renderPredictedNextWork() {
             if (!els.predictedWorkList) {
                 return;
+            }
+            if (els.forecastCalibrationSummary) {
+                const calibration = state.forecastCalibration;
+                if (calibration && Number(calibration.sample_count || 0) > 0) {
+                    els.forecastCalibrationSummary.textContent = "Calibration: " + String(Math.round((calibration.accuracy_rate || 0) * 100)) +
+                        "% accuracy across " + String(calibration.sample_count || 0) + " samples";
+                } else {
+                    els.forecastCalibrationSummary.textContent = "Calibration: building sample history";
+                }
             }
             const project = getCurrentProject();
             if (!project) {
@@ -2054,6 +2094,19 @@
                         " · oldest active age " + String(report.oldest_open_age_h || 0) + "h";
                 } else {
                     els.interventionReportSummary.textContent = "";
+                }
+            }
+            if (els.interventionTrendsSummary) {
+                const latest = Array.isArray(state.interventionTrends) && state.interventionTrends.length
+                    ? state.interventionTrends[state.interventionTrends.length - 1]
+                    : null;
+                if (latest) {
+                    els.interventionTrendsSummary.textContent = "Trend (" + String(latest.day || "today") + "): open " +
+                        String(latest.open_count || 0) + " · triaged " + String(latest.triaged_count || 0) +
+                        " · in progress " + String(latest.in_progress_count || 0) +
+                        " · resolved " + String(latest.resolved_count || 0);
+                } else {
+                    els.interventionTrendsSummary.textContent = "";
                 }
             }
             const failed = state.interventions
@@ -2179,6 +2232,19 @@
             document.getElementById("workflow-approval-policy").value = workflow.approval_policy || "single_role";
             document.getElementById("workflow-progression-mode").value = workflow.progression_mode || "linear";
             document.getElementById("delete-workflow-button").disabled = !workflow.id;
+            const validation = workflow.id ? state.workflowValidation[String(workflow.id)] : null;
+            if (els.workflowValidationSummary) {
+                if (!workflow.id) {
+                    els.workflowValidationSummary.textContent = "";
+                } else if (!validation) {
+                    els.workflowValidationSummary.textContent = "Validation: not run yet";
+                } else {
+                    const issues = Array.isArray(validation.issues) ? validation.issues.length : 0;
+                    const warnings = Array.isArray(validation.warnings) ? validation.warnings.length : 0;
+                    els.workflowValidationSummary.textContent = "Validation: " + (validation.valid ? "valid" : "invalid") +
+                        " · issues " + String(issues) + " · warnings " + String(warnings);
+                }
+            }
         }
 
         function renderRoleEditor() {
@@ -2332,7 +2398,7 @@
                 }
                 state.selectedWorkflowID = Number(card.dataset.workflowId);
                 state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
-                renderAll();
+                loadWorkflowValidation(state.selectedWorkflowID).then(renderAll).catch(() => renderAll());
             });
 
             document.getElementById("new-workflow-button").addEventListener("click", () => {
@@ -2380,6 +2446,61 @@
                     await Promise.all([loadWorkflows(), loadProjects(), loadRoles()]);
                     renderAll();
                     setNotice("Workflow deleted.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("validate-workflow-button").addEventListener("click", async () => {
+                const workflow = getCurrentWorkflow();
+                if (!workflow || !workflow.id) {
+                    return;
+                }
+                try {
+                    await loadWorkflowValidation(workflow.id, true);
+                    renderAll();
+                    setNotice("Workflow validation refreshed.");
+                } catch (error) {
+                    setNotice(error.message, true);
+                }
+            });
+
+            document.getElementById("auto-chain-transitions-button").addEventListener("click", () => {
+                const workflow = getCurrentWorkflow();
+                if (!workflow || !Array.isArray(workflow.stages) || workflow.stages.length < 2) {
+                    return;
+                }
+                workflow.stages.forEach((stage, index) => {
+                    const select = document.querySelector("[data-stage-next=\"" + stage.id + "\"]");
+                    if (!select) {
+                        return;
+                    }
+                    Array.from(select.options).forEach((option) => {
+                        option.selected = false;
+                    });
+                    if (index + 1 < workflow.stages.length) {
+                        const nextID = Number(workflow.stages[index + 1].id);
+                        const nextOption = Array.from(select.options).find((option) => Number(option.value) === nextID);
+                        if (nextOption) {
+                            nextOption.selected = true;
+                        }
+                    }
+                });
+                setNotice("Auto-chain transitions staged. Click Save all stages.");
+            });
+
+            document.getElementById("save-all-stages-button").addEventListener("click", async () => {
+                const workflow = getCurrentWorkflow();
+                if (!workflow || !Array.isArray(workflow.stages) || !workflow.stages.length) {
+                    return;
+                }
+                try {
+                    for (const stage of workflow.stages) {
+                        await saveStage(stage.id);
+                    }
+                    await loadWorkflowValidation(workflow.id, true);
+                    renderAll();
+                    setNotice("All stages saved.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }
@@ -2454,6 +2575,19 @@
             });
 
             bindStageDragAndDrop();
+        }
+
+        async function loadWorkflowValidation(workflowID, force) {
+            const key = String(workflowID || "");
+            if (!key) {
+                return null;
+            }
+            if (!force && state.workflowValidation[key]) {
+                return state.workflowValidation[key];
+            }
+            const report = await api("/api/workflows/" + workflowID + "/validate");
+            state.workflowValidation[key] = report;
+            return report;
         }
 
         async function saveStage(stageID) {
@@ -2683,6 +2817,12 @@
 
         function bindTicketsHandlers() {
             document.getElementById("new-ticket-button").addEventListener("click", () => openTicketModal(emptyTicket()));
+            if (els.boardSearch) {
+                els.boardSearch.addEventListener("input", () => renderTicketBoard());
+            }
+            if (els.boardHideDone) {
+                els.boardHideDone.addEventListener("change", () => renderTicketBoard());
+            }
             document.getElementById("close-ticket-modal").addEventListener("click", closeTicketModal);
             els.ticketModal.addEventListener("click", (event) => {
                 if (event.target === els.ticketModal) {

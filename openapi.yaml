@@ -387,6 +387,61 @@ components:
           minimum: 0
           maximum: 100
 
+    ForecastCalibrationBucket:
+      type: object
+      properties:
+        range:
+          type: string
+        total:
+          type: integer
+        hits:
+          type: integer
+        accuracy_rate:
+          type: number
+          format: float
+
+    ProjectForecastCalibration:
+      type: object
+      properties:
+        project_id:
+          type: integer
+        sample_count:
+          type: integer
+        hit_count:
+          type: integer
+        accuracy_rate:
+          type: number
+          format: float
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastCalibrationBucket'
+
+    WorkItemQueueCandidate:
+      type: object
+      properties:
+        ticket_id:
+          type: string
+        title:
+          type: string
+        priority:
+          type: integer
+        order:
+          type: integer
+        stage:
+          type: string
+        state:
+          type: string
+        assignee:
+          type: string
+        blocked:
+          type: boolean
+        blocked_by:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
     InterventionReportItem:
       type: object
       properties:
@@ -432,6 +487,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InterventionReportItem'
+        trends:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterventionTrendPoint'
+
+    InterventionTrendPoint:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+        open_count:
+          type: integer
+        triaged_count:
+          type: integer
+        in_progress_count:
+          type: integer
+        resolved_count:
+          type: integer
+        wont_fix_count:
+          type: integer
+
+    WorkflowGraphValidation:
+      type: object
+      properties:
+        workflow_id:
+          type: integer
+          format: int64
+        stage_count:
+          type: integer
+        transition_count:
+          type: integer
+        terminal_stage_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        unreachable_stage_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        issues:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        valid:
+          type: boolean
 
     Team:
       type: object
@@ -2442,6 +2549,37 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/workflows/{workflow_id}/validate:
+    get:
+      tags: [Workflows]
+      summary: Validate workflow graph topology
+      operationId: validateWorkflowGraph
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Workflow graph validation report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowGraphValidation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /api/workflows/stages/{stage_id}:
     delete:
       tags: [Workflows]
@@ -3612,6 +3750,12 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: format
+          in: query
+          description: Set to `csv` for CSV export.
+          schema:
+            type: string
+            enum: [csv]
       responses:
         '200':
           description: Intervention report
@@ -3619,6 +3763,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InterventionReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/interventions/trends:
+    get:
+      tags: [Projects]
+      summary: Get intervention trend series
+      operationId: getProjectInterventionTrends
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Trend points by day
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InterventionTrendPoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/work-items/queue:
+    get:
+      tags: [Projects]
+      summary: List policy-ranked work-item queue candidates
+      operationId: listProjectWorkItemQueue
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: strategy
+          in: query
+          schema:
+            type: string
+            enum: [priority, order, aging]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Ranked queue candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkItemQueueCandidate'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3658,6 +3883,42 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ProjectForecastEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/forecast/calibration:
+    get:
+      tags: [Projects]
+      summary: Get forecast calibration report
+      operationId: getProjectForecastCalibration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: lookback_hours
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Forecast calibration metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectForecastCalibration'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

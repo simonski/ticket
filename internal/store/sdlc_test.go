@@ -445,6 +445,45 @@ func TestSetWorkflowStageTransitionsRejectsCycle(t *testing.T) {
 
 }
 
+func TestValidateWorkflowGraph(t *testing.T) {
+	t.Parallel()
+	db := setupWorkflowTestDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateWorkflow(ctx, db, "dag-lint", "")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	a, err := AddWorkflowStage(ctx, db, wf.ID, "a", "", "", 0)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(a) error = %v", err)
+	}
+	_, err = AddWorkflowStage(ctx, db, wf.ID, "b", "", "", 1)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(b) error = %v", err)
+	}
+	c, err := AddWorkflowStage(ctx, db, wf.ID, "c", "", "", 2)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(c) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, a.ID, []int64{c.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(a->c) error = %v", err)
+	}
+	report, err := ValidateWorkflowGraph(ctx, db, wf.ID)
+	if err != nil {
+		t.Fatalf("ValidateWorkflowGraph() error = %v", err)
+	}
+	if !report.Valid || report.StageCount != 3 {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+	if len(report.UnreachableStageIDs) == 0 {
+		t.Fatalf("expected unreachable stage warning in report: %#v", report)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, c.ID, []int64{a.ID}); err == nil {
+		t.Fatalf("expected cycle rejection in transitions")
+	}
+}
+
 func TestWorkflowStageRoles(t *testing.T) {
 	t.Parallel()
 	db := setupWorkflowTestDB(t)
