@@ -19,8 +19,9 @@ type Workflow struct {
 }
 
 const (
-	WorkflowApprovalPolicyAllRoles = "all_roles"
-	WorkflowProgressionModeLinear  = "linear"
+	WorkflowApprovalPolicySingleRole = "single_role"
+	WorkflowApprovalPolicyAllRoles   = "all_roles"
+	WorkflowProgressionModeLinear    = "linear"
 )
 
 type WorkflowStage struct {
@@ -76,7 +77,7 @@ func CreateWorkflowWithParams(ctx context.Context, db *sql.DB, id *int64, name, 
 		INSERT INTO workflows (name, description, approval_policy, progression_mode, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`
-	args := []any{name, strings.TrimSpace(description), WorkflowApprovalPolicyAllRoles, WorkflowProgressionModeLinear}
+	args := []any{name, strings.TrimSpace(description), WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear}
 	if hasExplicitID {
 		query = `
 			INSERT INTO workflows (workflow_id, name, description, approval_policy, progression_mode, updated_at)
@@ -300,7 +301,7 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO workflows (name, description, approval_policy, progression_mode, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, name, strings.TrimSpace(export.Description), WorkflowApprovalPolicyAllRoles, WorkflowProgressionModeLinear)
+	`, name, strings.TrimSpace(export.Description), WorkflowApprovalPolicySingleRole, WorkflowProgressionModeLinear)
 	if err != nil {
 		return Workflow{}, err
 	}

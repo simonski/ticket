@@ -489,24 +489,51 @@ func UpdateTicket(ctx context.Context, db *sql.DB, id string, params TicketUpdat
 			}
 		}
 		state = nextState
-		// Auto-advance: when state becomes success on a non-final stage, advance to next stage
+		// Auto-advance according to workflow approval policy.
 		if state == StateSuccess && workflowStageID != nil {
-			nextStageID, nextStageName, nextStageErr := getNextWorkflowStage(ctx, db, *workflowStageID)
-			if nextStageErr == nil && nextStageID != nil {
-				var workflowID int64
-				if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *nextStageID).Scan(&workflowID); queryErr != nil {
-					return Ticket{}, queryErr
-				}
-				nextRoleID, roleErr := firstStageRoleID(ctx, db, workflowID, *nextStageID)
-				if roleErr != nil {
-					return Ticket{}, roleErr
-				}
-				workflowStageID = nextStageID
-				roleID = nextRoleID
-				stage = nextStageName
-				state = StateIdle
+			approvalPolicy := WorkflowApprovalPolicySingleRole
+			if queryErr := db.QueryRowContext(ctx, `
+				SELECT COALESCE(NULLIF(TRIM(w.approval_policy), ''), ?)
+				FROM workflow_stages ws
+				JOIN workflows w ON w.workflow_id = ws.workflow_id
+				WHERE ws.workflow_stage_id = ?
+			`, WorkflowApprovalPolicySingleRole, *workflowStageID).Scan(&approvalPolicy); queryErr != nil {
+				approvalPolicy = WorkflowApprovalPolicySingleRole
 			}
-			// If no next stage (final stage), stay at current stage with success state
+			if approvalPolicy == WorkflowApprovalPolicyAllRoles {
+				nextStageID, nextRoleID, nextStageName, done, nextStepErr := findNextStep(ctx, db, *workflowStageID, roleID)
+				if nextStepErr != nil {
+					return Ticket{}, nextStepErr
+				}
+				if !done {
+					workflowStageID = &nextStageID
+					roleID = nextRoleID
+					stage = nextStageName
+					state = StateIdle
+				} else if nextStageName == StageDone && stage != StageDone {
+					workflowStageID = &nextStageID
+					roleID = nil
+					stage = StageDone
+					state = StateIdle
+				}
+			} else {
+				nextStageID, nextStageName, nextStageErr := getNextWorkflowStage(ctx, db, *workflowStageID)
+				if nextStageErr == nil && nextStageID != nil {
+					var workflowID int64
+					if queryErr := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflow_stages WHERE workflow_stage_id = ?`, *nextStageID).Scan(&workflowID); queryErr != nil {
+						return Ticket{}, queryErr
+					}
+					nextRoleID, roleErr := firstStageRoleID(ctx, db, workflowID, *nextStageID)
+					if roleErr != nil {
+						return Ticket{}, roleErr
+					}
+					workflowStageID = nextStageID
+					roleID = nextRoleID
+					stage = nextStageName
+					state = StateIdle
+				}
+			}
+			// If no next step exists, stay at current stage with success state.
 		}
 	}
 

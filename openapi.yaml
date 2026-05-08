@@ -499,6 +499,56 @@ components:
           type: string
           format: date-time
 
+    WorkItem:
+      type: object
+      properties:
+        work_item_id:
+          type: string
+        ticket_id:
+          type: string
+        project_id:
+          type: integer
+          format: int64
+        workflow_id:
+          type: integer
+          format: int64
+          nullable: true
+        workflow_stage_id:
+          type: integer
+          format: int64
+          nullable: true
+        role_id:
+          type: integer
+          format: int64
+          nullable: true
+        status:
+          type: string
+          enum: [active, success, fail, stopped]
+        assignee_type:
+          type: string
+          enum: [human, agent]
+        assignee_id:
+          type: string
+        objective_snapshot:
+          type: string
+        prompt_snapshot:
+          type: string
+        feedback:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
     ProjectMember:
       type: object
       properties:
@@ -3973,6 +4023,111 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/work-items:
+    get:
+      tags: [Tickets]
+      summary: Get ticket work-item executions
+      operationId: listTicketWorkItems
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Work-item list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/intervene:
+    post:
+      tags: [Tickets]
+      summary: Decide intervention outcome for a failed ticket
+      description: Project owner only.
+      operationId: interveneTicket
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  enum: [retry-role, retry-stage, split-work, cancel]
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Intervention applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket:
+                    $ref: '#/components/schemas/Ticket'
+                  follow_up:
+                    allOf:
+                      - $ref: '#/components/schemas/Ticket'
+                    nullable: true
+                  decision:
+                    type: string
+                  intervention:
+                    type: boolean
+                  decision_actor:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ticket is not in an intervenable state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           $ref: '#/components/responses/InternalServerError'
   /api/tickets/{ticket_ref}/health:

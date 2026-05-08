@@ -465,7 +465,7 @@ CREATE TABLE IF NOT EXISTS workflows (
 	workflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL UNIQUE,
 	description TEXT NOT NULL DEFAULT '',
-	approval_policy TEXT NOT NULL DEFAULT 'all_roles',
+	approval_policy TEXT NOT NULL DEFAULT 'single_role',
 	progression_mode TEXT NOT NULL DEFAULT 'linear',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -698,9 +698,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if !columnExists(ctx, db, "workflows", "approval_policy") {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE workflows ADD COLUMN approval_policy TEXT NOT NULL DEFAULT 'all_roles'`); err != nil {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE workflows ADD COLUMN approval_policy TEXT NOT NULL DEFAULT 'single_role'`); err != nil {
 			return err
 		}
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE workflows SET approval_policy = 'single_role' WHERE TRIM(COALESCE(approval_policy, '')) = ''`); err != nil {
+		return err
 	}
 	if !columnExists(ctx, db, "workflows", "progression_mode") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE workflows ADD COLUMN progression_mode TEXT NOT NULL DEFAULT 'linear'`); err != nil {

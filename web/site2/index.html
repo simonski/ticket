@@ -1239,6 +1239,7 @@
             ticketTimeEntries: [],
             ticketTimeTotal: 0,
             interventionWorkItems: {},
+            interventionHistory: {},
             drag: null,
             liveSocket: null,
             liveRefreshTimer: null,
@@ -1628,7 +1629,7 @@
             ]);
             state.tickets = tickets.map(normalizeTicket);
             state.interventions = interventions.map(normalizeTicket);
-            const entries = await Promise.all(state.interventions.map(async (ticket) => {
+            const workItemEntries = await Promise.all(state.interventions.map(async (ticket) => {
                 try {
                     const workItems = await api("/api/tickets/" + ticket.id + "/work-items?limit=1");
                     return [String(ticket.id), Array.isArray(workItems) ? workItems : []];
@@ -1636,7 +1637,16 @@
                     return [String(ticket.id), []];
                 }
             }));
-            state.interventionWorkItems = Object.fromEntries(entries);
+            const historyEntries = await Promise.all(state.interventions.map(async (ticket) => {
+                try {
+                    const history = await api("/api/tickets/" + ticket.id + "/history?limit=3");
+                    return [String(ticket.id), Array.isArray(history) ? history : []];
+                } catch (error) {
+                    return [String(ticket.id), []];
+                }
+            }));
+            state.interventionWorkItems = Object.fromEntries(workItemEntries);
+            state.interventionHistory = Object.fromEntries(historyEntries);
         }
 
         async function loadWorkflows() {
@@ -1923,13 +1933,18 @@
             }
             els.interventionList.innerHTML = failed.map((ticket) => {
                 const latestWorkItem = (state.interventionWorkItems[String(ticket.id)] || [])[0] || null;
+                const latestHistory = (state.interventionHistory[String(ticket.id)] || [])[0] || null;
                 const latestLabel = latestWorkItem
                     ? ("latest work item: " + String(latestWorkItem.status || "unknown") + " · assignee " + String(latestWorkItem.assignee_id || "n/a"))
                     : "latest work item: none";
+                const historyLabel = latestHistory
+                    ? ("latest event: " + String(latestHistory.event_type || "unknown"))
+                    : "latest event: none";
                 return "<div class=\"entity-card\" data-intervention-ticket-id=\"" + ticket.id + "\">" +
                     "<h4>" + escapeHTML(ticket.key || ticket.id || "ticket") + " · " + escapeHTML(ticket.title || "(untitled)") + "</h4>" +
                     "<p>" + escapeHTML("stage: " + (ticket.stage || "unknown") + " · state: " + (ticket.state || "fail")) + "</p>" +
                     "<p>" + escapeHTML(latestLabel) + "</p>" +
+                    "<p>" + escapeHTML(historyLabel) + "</p>" +
                     "<div class=\"field\"><label>Decision</label><select data-intervention-outcome=\"" + ticket.id + "\">" +
                     optionHTML("retry-role", "Retry role", false) +
                     optionHTML("retry-stage", "Retry previous stage", false) +

@@ -127,6 +127,7 @@ func ensureActiveWorkItem(ctx context.Context, db *sql.DB, ticket Ticket, assign
 	}
 
 	workflowID := ResolveWorkflowID(ctx, db, ticket)
+	objectiveSnapshot, promptSnapshot := buildWorkItemSnapshots(ctx, db, ticket, workflowID)
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO work_items (
 			work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
@@ -134,7 +135,7 @@ func ensureActiveWorkItem(ctx context.Context, db *sql.DB, ticket Ticket, assign
 		)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', CURRENT_TIMESTAMP)
 	`, uuid.NewString(), ticket.ID, ticket.ProjectID, nullableInt64(workflowID), nullableInt64(ticket.WorkflowStageID), nullableInt64(ticket.RoleID),
-		WorkItemStatusActive, assigneeType, assigneeID, strings.TrimSpace(ticket.Stage), strings.TrimSpace(ticket.AcceptanceCriteria))
+		WorkItemStatusActive, assigneeType, assigneeID, objectiveSnapshot, promptSnapshot)
 	return err
 }
 
@@ -188,4 +189,44 @@ func nullInt64ToPtr(v sql.NullInt64) *int64 {
 	}
 	value := v.Int64
 	return &value
+}
+
+func buildWorkItemSnapshots(ctx context.Context, db *sql.DB, ticket Ticket, workflowID *int64) (objective, prompt string) {
+	stageName := strings.TrimSpace(ticket.Stage)
+	if stageName == "" {
+		stageName = StageDevelop
+	}
+	roleName := ""
+	if ticket.RoleID != nil {
+		_ = db.QueryRowContext(ctx, `SELECT title FROM roles WHERE role_id = ?`, *ticket.RoleID).Scan(&roleName)
+	}
+	roleName = strings.TrimSpace(roleName)
+	if roleName == "" {
+		roleName = "engineer"
+	}
+	objective = strings.TrimSpace(ticket.AcceptanceCriteria)
+	if objective == "" {
+		objective = strings.TrimSpace(ticket.Title)
+	}
+	if objective == "" {
+		objective = "progress ticket to next workflow step"
+	}
+	workflowLabel := "workflow"
+	if workflowID != nil {
+		var name string
+		if err := db.QueryRowContext(ctx, `SELECT name FROM workflows WHERE workflow_id = ?`, *workflowID).Scan(&name); err == nil && strings.TrimSpace(name) != "" {
+			workflowLabel = strings.TrimSpace(name)
+		}
+	}
+	prompt = fmt.Sprintf(
+		"During %s (%s), perform the role %s. Objective: %s. Ticket: %s (%s). Acceptance criteria: %s.",
+		stageName,
+		workflowLabel,
+		roleName,
+		objective,
+		strings.TrimSpace(ticket.ID),
+		strings.TrimSpace(ticket.Title),
+		objective,
+	)
+	return objective, prompt
 }
