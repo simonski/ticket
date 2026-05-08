@@ -1686,6 +1686,96 @@ func (c *Client) InterveneTicket(ctx context.Context, id string, request Interve
 	return response, err
 }
 
+func (c *Client) GetInterventionState(ctx context.Context, ticketID string) (store.InterventionState, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.InterventionState{}, err
+		}
+		return store.GetInterventionState(ctx, db, ticketID)
+	}
+	var response store.InterventionState
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/tickets/%s/intervention-state", ticketID), nil, &response)
+	return response, err
+}
+
+func (c *Client) SetInterventionState(ctx context.Context, ticketID, state string) (store.InterventionState, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.InterventionState{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.InterventionState{}, err
+		}
+		return store.SetInterventionState(ctx, db, ticketID, state, user.ID, user.ID)
+	}
+	var response store.InterventionState
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/intervention-state", ticketID), InterventionStateRequest{State: state}, &response)
+	return response, err
+}
+
+func (c *Client) ListWorkItems(ctx context.Context, ticketID, status, assigneeType string, limit int) ([]store.WorkItem, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListWorkItemsByTicketWithParams(ctx, db, ticketID, store.WorkItemListParams{
+			Status:       status,
+			AssigneeType: assigneeType,
+			Limit:        limit,
+		})
+	}
+	values := url.Values{}
+	if strings.TrimSpace(status) != "" {
+		values.Set("status", strings.TrimSpace(status))
+	}
+	if strings.TrimSpace(assigneeType) != "" {
+		values.Set("assignee_type", strings.TrimSpace(assigneeType))
+	}
+	if limit > 0 {
+		values.Set("limit", strconv.Itoa(limit))
+	}
+	path := fmt.Sprintf("/api/tickets/%s/work-items", ticketID)
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var items []store.WorkItem
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &items)
+	return items, err
+}
+
+func (c *Client) ActWorkItem(ctx context.Context, ticketID, workItemID, action string, request WorkItemActionRequest) (store.WorkItem, error) {
+	action = strings.TrimSpace(strings.ToLower(action))
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.WorkItem{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.WorkItem{}, err
+		}
+		switch action {
+		case "reassign":
+			return store.ReassignWorkItem(ctx, db, ticketID, workItemID, request.Assignee, user.Username, user.ID)
+		case "cancel":
+			return store.CancelWorkItem(ctx, db, ticketID, workItemID, request.Message, user.Username, user.ID)
+		case "retry":
+			return store.RetryWorkItem(ctx, db, ticketID, workItemID, request.Assignee, user.Username, user.ID)
+		case "feedback":
+			return store.AddWorkItemFeedback(ctx, db, ticketID, workItemID, request.Message, request.CommitRef, user.Username, user.ID)
+		default:
+			return store.WorkItem{}, errors.New("invalid work-item action")
+		}
+	}
+	var response store.WorkItem
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/work-items/%s/%s", ticketID, workItemID, action), request, &response)
+	return response, err
+}
+
 func (c *Client) CreateWorkflow(ctx context.Context, request WorkflowRequest) (store.Workflow, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

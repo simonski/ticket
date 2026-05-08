@@ -917,8 +917,8 @@ func findNextStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 		return currentStageID, &nextRole.ID, currentStageName, false, nil
 	}
 
-	// Otherwise, move to the next stage
-	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextStageID, &nextStageName)
+	// Otherwise, move to the configured transition target(s), falling back to linear order.
+	nextStageID, nextStageName, err = resolveNextStage(ctx, db, workflowID, currentStageID, currentOrder)
 	if errors.Is(err, sql.ErrNoRows) {
 		// No next stage — done
 		return currentStageID, nil, "done", true, nil
@@ -989,8 +989,8 @@ func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 		return currentStageID, &prevRole.ID, currentStageName, false, nil
 	}
 
-	// Otherwise, move to the previous stage
-	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1`, workflowID, currentOrder).Scan(&prevStageID, &prevStageName)
+	// Otherwise, move to the configured incoming transition source(s), falling back to linear order.
+	prevStageID, prevStageName, err = resolvePreviousStage(ctx, db, workflowID, currentStageID, currentOrder)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil, "", true, nil // at the very start
 	}
@@ -1007,6 +1007,62 @@ func findPrevStep(ctx context.Context, db *sql.DB, currentStageID int64, current
 		return prevStageID, &lastRole.ID, prevStageName, false, nil
 	}
 	return prevStageID, nil, prevStageName, false, nil
+}
+
+func resolveNextStage(ctx context.Context, db *sql.DB, workflowID, fromStageID int64, currentOrder int) (nextStageID int64, nextStageName string, err error) {
+	if transitionErr := ensureWorkflowTransitionTable(ctx, db); transitionErr != nil {
+		return 0, "", transitionErr
+	}
+	err = db.QueryRowContext(ctx, `
+		SELECT ws.workflow_stage_id, ws.stage_name
+		FROM workflow_stage_transitions t
+		JOIN workflow_stages ws ON ws.workflow_stage_id = t.to_stage_id
+		WHERE t.workflow_id = ? AND t.from_stage_id = ?
+		ORDER BY t.sort_order, ws.sort_order, ws.workflow_stage_id
+		LIMIT 1
+	`, workflowID, fromStageID).Scan(&nextStageID, &nextStageName)
+	if err == nil {
+		return nextStageID, nextStageName, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, "", err
+	}
+	err = db.QueryRowContext(ctx, `
+		SELECT workflow_stage_id, stage_name
+		FROM workflow_stages
+		WHERE workflow_id = ? AND sort_order > ?
+		ORDER BY sort_order, workflow_stage_id
+		LIMIT 1
+	`, workflowID, currentOrder).Scan(&nextStageID, &nextStageName)
+	return nextStageID, nextStageName, err
+}
+
+func resolvePreviousStage(ctx context.Context, db *sql.DB, workflowID, toStageID int64, currentOrder int) (prevStageID int64, prevStageName string, err error) {
+	if transitionErr := ensureWorkflowTransitionTable(ctx, db); transitionErr != nil {
+		return 0, "", transitionErr
+	}
+	err = db.QueryRowContext(ctx, `
+		SELECT ws.workflow_stage_id, ws.stage_name
+		FROM workflow_stage_transitions t
+		JOIN workflow_stages ws ON ws.workflow_stage_id = t.from_stage_id
+		WHERE t.workflow_id = ? AND t.to_stage_id = ?
+		ORDER BY t.sort_order DESC, ws.sort_order DESC, ws.workflow_stage_id DESC
+		LIMIT 1
+	`, workflowID, toStageID).Scan(&prevStageID, &prevStageName)
+	if err == nil {
+		return prevStageID, prevStageName, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, "", err
+	}
+	err = db.QueryRowContext(ctx, `
+		SELECT workflow_stage_id, stage_name
+		FROM workflow_stages
+		WHERE workflow_id = ? AND sort_order < ?
+		ORDER BY sort_order DESC, workflow_stage_id DESC
+		LIMIT 1
+	`, workflowID, currentOrder).Scan(&prevStageID, &prevStageName)
+	return prevStageID, prevStageName, err
 }
 
 func SetTicketHealth(ctx context.Context, db *sql.DB, id string, score int) (Ticket, error) {

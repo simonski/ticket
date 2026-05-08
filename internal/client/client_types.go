@@ -193,6 +193,16 @@ type InterventionRequest struct {
 	Message string `json:"message,omitempty"`
 }
 
+type InterventionStateRequest struct {
+	State string `json:"state"`
+}
+
+type WorkItemActionRequest struct {
+	Assignee  string `json:"assignee,omitempty"`
+	Message   string `json:"message,omitempty"`
+	CommitRef string `json:"commit_ref,omitempty"`
+}
+
 type InterventionResponse struct {
 	Ticket       store.Ticket  `json:"ticket"`
 	FollowUp     *store.Ticket `json:"follow_up,omitempty"`

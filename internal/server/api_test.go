@@ -338,6 +338,96 @@ func TestPublicAPIContractValidationAndAuthPaths(t *testing.T) {
 	}
 }
 
+func TestWorkflowStageTransitionEndpoint(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	workflowResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows", map[string]any{
+		"name":        "DAG",
+		"description": "dag test",
+	}, adminToken)
+	if workflowResp.Code != http.StatusCreated {
+		t.Fatalf("create workflow status=%d body=%s", workflowResp.Code, workflowResp.Body.String())
+	}
+	var workflow store.Workflow
+	decodeResponse(t, workflowResp, &workflow)
+	stageAResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/stages", map[string]any{
+		"stage_name": "design",
+		"sort_order": 0,
+	}, adminToken)
+	stageBResp := doJSONRequest(t, handler, http.MethodPost, "/api/workflows/"+strconv.FormatInt(workflow.ID, 10)+"/stages", map[string]any{
+		"stage_name": "done",
+		"sort_order": 1,
+	}, adminToken)
+	if stageAResp.Code != http.StatusCreated || stageBResp.Code != http.StatusCreated {
+		t.Fatalf("create stages status=(%d,%d)", stageAResp.Code, stageBResp.Code)
+	}
+	var stageA, stageB store.WorkflowStage
+	decodeResponse(t, stageAResp, &stageA)
+	decodeResponse(t, stageBResp, &stageB)
+
+	setResp := doJSONRequest(t, handler, http.MethodPut, "/api/workflows/stages/"+strconv.FormatInt(stageA.ID, 10)+"/transitions", map[string]any{
+		"to_stage_ids": []int64{stageB.ID},
+	}, adminToken)
+	if setResp.Code != http.StatusOK {
+		t.Fatalf("set transitions status=%d body=%s", setResp.Code, setResp.Body.String())
+	}
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/workflows/stages/"+strconv.FormatInt(stageA.ID, 10)+"/transitions", nil, adminToken)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get transitions status=%d body=%s", getResp.Code, getResp.Body.String())
+	}
+	var transitions []store.WorkflowStageTransition
+	decodeResponse(t, getResp, &transitions)
+	if len(transitions) != 1 || transitions[0].ToStageID != stageB.ID {
+		t.Fatalf("transitions=%#v", transitions)
+	}
+}
+
+func TestTicketInterventionStateEndpoint(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":  "Intervention API",
+		"prefix": "IAPI",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status=%d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+	ticketResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Needs intervention",
+	}, adminToken)
+	if ticketResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status=%d body=%s", ticketResp.Code, ticketResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, ticketResp, &ticket)
+
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/intervention-state", nil, adminToken)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get intervention state status=%d body=%s", getResp.Code, getResp.Body.String())
+	}
+	setResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/intervention-state", map[string]any{
+		"state": "triaged",
+	}, adminToken)
+	if setResp.Code != http.StatusOK {
+		t.Fatalf("set intervention state status=%d body=%s", setResp.Code, setResp.Body.String())
+	}
+	var state store.InterventionState
+	decodeResponse(t, setResp, &state)
+	if state.State != store.InterventionStateTriaged {
+		t.Fatalf("state=%#v", state)
+	}
+}
+
 func TestCreateEndpointsSupportForcedIDs(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

@@ -2181,6 +2181,73 @@ func TestWorkflowProgressionModeAffectsSuccessAdvance(t *testing.T) {
 	}
 }
 
+func TestWorkflowStageTransitionsDriveNextAndPrevious(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+	adminID := testAdminID(t, db)
+
+	wf, err := CreateWorkflow(ctx, db, "DAG Stage Flow", "")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	design, err := AddWorkflowStage(ctx, db, wf.ID, "design", "", "", 0)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
+	}
+	testStage, err := AddWorkflowStage(ctx, db, wf.ID, "test", "", "", 1)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
+	}
+	done, err := AddWorkflowStage(ctx, db, wf.ID, "done", "", "", 2)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(done) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, design.ID, []int64{done.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(design->done) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, done.ID, []int64{testStage.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(done->test) error = %v", err)
+	}
+	project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
+		Prefix:     "DAG",
+		Title:      "DAG Project",
+		WorkflowID: &wf.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Transition ticket",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, StateSuccess, RenderLifecycleStatus(ticket.Stage, StateSuccess), ticket.ID); err != nil {
+		t.Fatalf("set state success error = %v", err)
+	}
+	advanced, err := NextTicket(ctx, db, ticket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("NextTicket() error = %v", err)
+	}
+	if advanced.WorkflowStageID == nil || *advanced.WorkflowStageID != done.ID {
+		t.Fatalf("advanced.WorkflowStageID = %#v, want %d", advanced.WorkflowStageID, done.ID)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE tickets SET state = ?, status = ? WHERE ticket_id = ?`, StateFail, RenderLifecycleStatus(advanced.Stage, StateFail), ticket.ID); err != nil {
+		t.Fatalf("set state fail error = %v", err)
+	}
+	regressed, err := PreviousTicket(ctx, db, ticket.ID, "admin", adminID)
+	if err != nil {
+		t.Fatalf("PreviousTicket() error = %v", err)
+	}
+	if regressed.WorkflowStageID == nil || *regressed.WorkflowStageID != design.ID {
+		t.Fatalf("regressed.WorkflowStageID = %#v, want %d", regressed.WorkflowStageID, design.ID)
+	}
+}
+
 func TestGetTicketByRefAndValidateTicketStage(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

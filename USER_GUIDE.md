@@ -697,6 +697,11 @@ Work-item lifecycle operations are also available for editors/owners:
 Intervention decisions (`POST /api/tickets/{ticket_ref}/intervene`) are restricted
 to project owners.
 
+Intervention mailbox state is available at
+`GET /api/tickets/{ticket_ref}/intervention-state` and
+`POST /api/tickets/{ticket_ref}/intervention-state` (body: `state`) for
+owner/editor triage workflows.
+
 The intervention queue endpoint (`GET /api/projects/{project_ref}/interventions`)
 is restricted to project editors and owners.
 
@@ -877,14 +882,19 @@ Keyboard shortcuts in the board view:
 - workflow create/edit now exposes `approval_policy` (`single_role` / `all_roles`)
   and `progression_mode` (`linear` / `stage_only`) so lifecycle progression can be
   managed from Site2 without CLI-only configuration
+- workflow stages now support explicit DAG-style transitions (`next_stage_ids`) so
+  progression can branch beyond simple linear ordering
 - board now includes a `Predicted next work` panel that forecasts next
-  phase/role transitions from current workflow ordering and ticket state
+  phase/role transitions from workflow policy + explicit stage transitions, and
+  now marks tickets blocked by unresolved dependencies
 - the Interventions board includes built-in filter (`all`, `unassigned`, `agent`,
   `human`) and sort (`priority`, `order`, `most recent update`) controls for triage
 - each intervention card now shows a compact conversation thread (latest comments)
   and supports adding intervention comments inline for accountable handoff context
 - intervention cards expose quick actions for `retry-role` and `cancel` in addition
   to the existing decision dropdown submit path
+- intervention cards now expose mailbox state (`open`, `triaged`, `in_progress`,
+  `resolved`, `wont_fix`) with owner visibility for triage governance
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
@@ -1052,6 +1062,14 @@ tk workflow set -ticket <ticket-id> -workflow <workflow-id>
 tk workflow stage-role-add -workflow_id <id> -stage_id <id> -role_id <id>
 tk workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>
 tk workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <id,id,...>
+
+tk work-item list -id <ticket-id> [-status <active|success|fail|stopped>] [-assignee_type <human|agent>] [-limit <n>]
+tk work-item reassign -id <ticket-id> -work-item <id> -assignee <username> [-m <message>]
+tk work-item cancel -id <ticket-id> -work-item <id> [-m <message>]
+tk work-item retry -id <ticket-id> -work-item <id> [-assignee <username>]
+tk work-item feedback -id <ticket-id> -work-item <id> [-m <message>] [-commit_ref <sha>]
+tk work-item state-get -id <ticket-id>
+tk work-item state-set -id <ticket-id> -state <open|triaged|in_progress|resolved|wont_fix>
 
 tk role list
 tk role create -title <title> [-description <desc>] [-dor <text>] [-dod <text>] [-ac <criteria>] [-dor-map stage=text] [-dod-map stage=text] [-ac-map stage=text]

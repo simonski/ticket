@@ -940,6 +940,50 @@ func (r *router) registerTicketHandlers() {
 				writeJSON(w, http.StatusOK, ticket)
 				return
 			}
+			if len(parts) == 2 && parts[1] == "intervention-state" {
+				if r.Method == http.MethodGet {
+					if !canViewInterventions(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					state, err := store.GetInterventionState(r.Context(), db, id)
+					if err != nil {
+						writeStoreError(w, err)
+						return
+					}
+					writeJSON(w, http.StatusOK, state)
+					return
+				}
+				if r.Method == http.MethodPost {
+					if !canManageInterventions(role) {
+						writeAuthError(w, store.ErrForbidden)
+						return
+					}
+					var payload interventionStateRequest
+					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+						writeError(w, http.StatusBadRequest, "invalid json body")
+						return
+					}
+					state, err := store.SetInterventionState(r.Context(), db, id, payload.State, user.ID, user.ID)
+					if err != nil {
+						writeStoreError(w, err)
+						return
+					}
+					if err := store.AddHistoryEvent(r.Context(), db, ticketRef.ProjectID, ticketRef.ID, "ticket_intervention_state_updated", map[string]any{
+						"state": state.State,
+						"owner": state.OwnerName,
+						"who":   user.Username,
+					}, user.ID); err != nil {
+						writeStoreError(w, err)
+						return
+					}
+					notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+					writeJSON(w, http.StatusOK, state)
+					return
+				}
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
 			if len(parts) == 2 && parts[1] == "intervene" && r.Method == http.MethodPost {
 				if !canManageInterventions(role) {
 					writeAuthError(w, store.ErrForbidden)
@@ -1063,6 +1107,14 @@ func (r *router) registerTicketHandlers() {
 				if followUp != nil {
 					historyPayload["follow_up_ticket_id"] = followUp.ID
 					historyPayload["follow_up_ticket_key"] = followUp.ID
+				}
+				nextInterventionState := store.InterventionStateTriaged
+				if outcome == "cancel" {
+					nextInterventionState = store.InterventionStateWontFix
+				}
+				if _, setStateErr := store.SetInterventionState(r.Context(), db, ticket.ID, nextInterventionState, user.ID, user.ID); setStateErr != nil {
+					writeStoreError(w, setStateErr)
+					return
 				}
 				if err := store.AddHistoryEvent(r.Context(), db, ticket.ProjectID, ticket.ID, "ticket_intervention_decided", historyPayload, user.ID); err != nil {
 					writeStoreError(w, err)

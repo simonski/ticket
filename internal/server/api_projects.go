@@ -189,7 +189,53 @@ func (r *router) registerProjectHandlers() {
 				writeStoreError(w, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, interventions)
+			payload := make([]map[string]any, 0, len(interventions))
+			for _, ticket := range interventions {
+				state, stateErr := store.GetInterventionState(r.Context(), db, ticket.ID)
+				if stateErr != nil {
+					writeStoreError(w, stateErr)
+					return
+				}
+				payload = append(payload, map[string]any{
+					"ticket_id":                  ticket.ID,
+					"project_id":                 ticket.ProjectID,
+					"parent_id":                  ticket.ParentID,
+					"clone_of":                   ticket.CloneOf,
+					"type":                       ticket.Type,
+					"title":                      ticket.Title,
+					"description":                ticket.Description,
+					"acceptance_criteria":        ticket.AcceptanceCriteria,
+					"dor_map":                    ticket.DORMap,
+					"dod_map":                    ticket.DODMap,
+					"ac_map":                     ticket.ACMap,
+					"git_repository":             ticket.GitRepository,
+					"git_branch":                 ticket.GitBranch,
+					"workflow_id":                ticket.WorkflowID,
+					"workflow_stage_id":          ticket.WorkflowStageID,
+					"role_id":                    ticket.RoleID,
+					"stage":                      ticket.Stage,
+					"state":                      ticket.State,
+					"status":                     ticket.Status,
+					"priority":                   ticket.Priority,
+					"order":                      ticket.Order,
+					"estimate_effort":            ticket.EstimateEffort,
+					"estimate_complete":          ticket.EstimateComplete,
+					"health_score":               ticket.HealthScore,
+					"assignee":                   ticket.Assignee,
+					"author":                     ticket.Author,
+					"draft":                      ticket.Draft,
+					"complete":                   ticket.Complete,
+					"archived":                   ticket.Archived,
+					"deleted":                    ticket.Deleted,
+					"previous_workflow_stage_id": ticket.PreviousWorkflowStageID,
+					"previous_role_id":           ticket.PreviousRoleID,
+					"created_by":                 ticket.CreatedBy,
+					"created_at":                 ticket.CreatedAt,
+					"updated_at":                 ticket.UpdatedAt,
+					"intervention_state":         state,
+				})
+			}
+			writeJSON(w, http.StatusOK, payload)
 			return
 		}
 		if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {

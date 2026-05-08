@@ -104,6 +104,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Namespace for all ticket operations: list, search, board, add, get, update, state changes, ownership, hierarchy, comments, lifecycle.", "Run `tk ticket help` for the full verb list."},
 		example: "tk ticket list -type bug",
 	},
+	"work-item": {
+		usage:   "tk work-item <list|reassign|cancel|retry|feedback|state-get|state-set> [flags]",
+		details: []string{"Work-item-first execution commands for listing and mutating ticket work-items.", "`state-get`/`state-set` manage the intervention mailbox state machine for a ticket."},
+		example: "tk work-item list -id TK-42 -status active",
+	},
 	"prompt": {
 		usage:   "tk prompt <ticket-id>",
 		details: []string{"Builds a plaintext agent prompt for the given ticket.", "Includes sections for project, epic, story, ticket, role, and stage acceptance details when available."},

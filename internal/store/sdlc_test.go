@@ -253,6 +253,46 @@ func TestWorkflowStageDefinitionsCRUD(t *testing.T) {
 	}
 }
 
+func TestWorkflowStageTransitionsCRUD(t *testing.T) {
+	t.Parallel()
+	db := setupWorkflowTestDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateWorkflow(ctx, db, "dag", "dag workflow")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	design, err := AddWorkflowStage(ctx, db, wf.ID, "design", "", "", 0)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
+	}
+	testStage, err := AddWorkflowStage(ctx, db, wf.ID, "test", "", "", 1)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
+	}
+	done, err := AddWorkflowStage(ctx, db, wf.ID, "done", "", "", 2)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(done) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, design.ID, []int64{done.ID, testStage.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions() error = %v", err)
+	}
+	transitions, err := ListWorkflowStageTransitions(ctx, db, wf.ID, &design.ID)
+	if err != nil {
+		t.Fatalf("ListWorkflowStageTransitions() error = %v", err)
+	}
+	if len(transitions) != 2 || transitions[0].ToStageID != done.ID || transitions[1].ToStageID != testStage.ID {
+		t.Fatalf("transitions = %#v, want [done,test]", transitions)
+	}
+	stage, err := GetWorkflowStage(ctx, db, design.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflowStage() error = %v", err)
+	}
+	if len(stage.NextStageIDs) != 2 || stage.NextStageIDs[0] != done.ID {
+		t.Fatalf("stage.NextStageIDs = %#v, want [%d,%d]", stage.NextStageIDs, done.ID, testStage.ID)
+	}
+}
+
 func TestWorkflowExportImportRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := setupWorkflowTestDB(t)

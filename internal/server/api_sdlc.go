@@ -44,10 +44,60 @@ func (r *router) registerWorkflowHandlers() {
 		if strings.HasPrefix(trimmed, "roles/") {
 			return
 		}
+		stageParts := strings.Split(strings.TrimSpace(trimmed), "/")
 		var stageID int64
-		if _, err := fmt.Sscan(strings.TrimSpace(trimmed), &stageID); err != nil {
+		if _, err := fmt.Sscan(stageParts[0], &stageID); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid stage id")
 			return
+		}
+		if len(stageParts) > 1 && stageParts[1] == "transitions" {
+			stage, err := store.GetWorkflowStage(r.Context(), db, stageID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					writeError(w, http.StatusNotFound, "workflow stage not found")
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				if _, authErr := requireUser(db, r); authErr != nil {
+					writeAuthError(w, authErr)
+					return
+				}
+				transitions, listErr := store.ListWorkflowStageTransitions(r.Context(), db, stage.WorkflowID, &stageID)
+				if listErr != nil {
+					writeStoreError(w, listErr)
+					return
+				}
+				writeJSON(w, http.StatusOK, transitions)
+				return
+			case http.MethodPut:
+				if _, authErr := requireAdmin(db, r); authErr != nil {
+					writeAuthError(w, authErr)
+					return
+				}
+				var payload workflowStageTransitionRequest
+				if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				if setErr := store.SetWorkflowStageTransitions(r.Context(), db, stage.WorkflowID, stageID, payload.ToStageIDs); setErr != nil {
+					writeStoreError(w, setErr)
+					return
+				}
+				updated, getErr := store.GetWorkflowStage(r.Context(), db, stageID)
+				if getErr != nil {
+					writeStoreError(w, getErr)
+					return
+				}
+				writeJSON(w, http.StatusOK, updated)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
 		}
 		switch r.Method {
 		case http.MethodGet:

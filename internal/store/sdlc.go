@@ -26,17 +26,18 @@ const (
 )
 
 type WorkflowStage struct {
-	ID                 int64  `json:"workflow_stage_id"`
-	WorkflowID         int64  `json:"workflow_id"`
-	StageName          string `json:"stage_name"`
-	Description        string `json:"description"`
-	AcceptanceCriteria string `json:"acceptance_criteria"`
-	DefinitionOfReady  string `json:"definition_of_ready"`
-	DefinitionOfDone   string `json:"definition_of_done"`
-	SortOrder          int    `json:"sort_order"`
-	Roles              []Role `json:"roles,omitempty"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
+	ID                 int64   `json:"workflow_stage_id"`
+	WorkflowID         int64   `json:"workflow_id"`
+	StageName          string  `json:"stage_name"`
+	Description        string  `json:"description"`
+	AcceptanceCriteria string  `json:"acceptance_criteria"`
+	DefinitionOfReady  string  `json:"definition_of_ready"`
+	DefinitionOfDone   string  `json:"definition_of_done"`
+	SortOrder          int     `json:"sort_order"`
+	Roles              []Role  `json:"roles,omitempty"`
+	NextStageIDs       []int64 `json:"next_stage_ids,omitempty"`
+	CreatedAt          string  `json:"created_at"`
+	UpdatedAt          string  `json:"updated_at"`
 }
 
 type WorkflowWithStages struct {
@@ -62,6 +63,14 @@ type WorkflowExport struct {
 }
 
 var ErrWorkflowStageNotFound = errors.New("workflow stage not found in workflow")
+
+type WorkflowStageTransition struct {
+	WorkflowID  int64  `json:"workflow_id"`
+	FromStageID int64  `json:"from_stage_id"`
+	ToStageID   int64  `json:"to_stage_id"`
+	SortOrder   int    `json:"sort_order"`
+	CreatedAt   string `json:"created_at"`
+}
 
 func CreateWorkflow(ctx context.Context, db *sql.DB, name, description string) (Workflow, error) {
 	return CreateWorkflowWithParams(ctx, db, nil, name, description)
@@ -311,6 +320,97 @@ func ReorderWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64, or
 	return tx.Commit()
 }
 
+func ensureWorkflowTransitionTable(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS workflow_stage_transitions (
+			workflow_id INTEGER NOT NULL,
+			from_stage_id INTEGER NOT NULL,
+			to_stage_id INTEGER NOT NULL,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY(workflow_id, from_stage_id, to_stage_id),
+			FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id) ON DELETE CASCADE,
+			FOREIGN KEY(from_stage_id) REFERENCES workflow_stages(workflow_stage_id) ON DELETE CASCADE,
+			FOREIGN KEY(to_stage_id) REFERENCES workflow_stages(workflow_stage_id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_workflow_stage_transitions_from ON workflow_stage_transitions(from_stage_id);
+		CREATE INDEX IF NOT EXISTS idx_workflow_stage_transitions_to ON workflow_stage_transitions(to_stage_id);
+	`)
+	return err
+}
+
+func ListWorkflowStageTransitions(ctx context.Context, db *sql.DB, workflowID int64, fromStageID *int64) ([]WorkflowStageTransition, error) {
+	if err := ensureWorkflowTransitionTable(ctx, db); err != nil {
+		return nil, err
+	}
+	query := `
+		SELECT workflow_id, from_stage_id, to_stage_id, sort_order, created_at
+		FROM workflow_stage_transitions
+		WHERE workflow_id = ?
+	`
+	args := []any{workflowID}
+	if fromStageID != nil {
+		query += ` AND from_stage_id = ?`
+		args = append(args, *fromStageID)
+	}
+	query += ` ORDER BY from_stage_id, sort_order, to_stage_id`
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	transitions := make([]WorkflowStageTransition, 0)
+	for rows.Next() {
+		var item WorkflowStageTransition
+		if scanErr := rows.Scan(&item.WorkflowID, &item.FromStageID, &item.ToStageID, &item.SortOrder, &item.CreatedAt); scanErr != nil {
+			return nil, scanErr
+		}
+		transitions = append(transitions, item)
+	}
+	return transitions, rows.Err()
+}
+
+func SetWorkflowStageTransitions(ctx context.Context, db *sql.DB, workflowID, fromStageID int64, toStageIDs []int64) error {
+	if err := ensureWorkflowTransitionTable(ctx, db); err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var count int
+	if scanErr := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM workflow_stages WHERE workflow_id = ? AND workflow_stage_id = ?`, workflowID, fromStageID).Scan(&count); scanErr != nil {
+		return scanErr
+	}
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	if _, execErr := tx.ExecContext(ctx, `DELETE FROM workflow_stage_transitions WHERE workflow_id = ? AND from_stage_id = ?`, workflowID, fromStageID); execErr != nil {
+		return execErr
+	}
+	seen := map[int64]bool{}
+	for i, toStageID := range toStageIDs {
+		if toStageID == 0 || seen[toStageID] {
+			continue
+		}
+		seen[toStageID] = true
+		if scanErr := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM workflow_stages WHERE workflow_id = ? AND workflow_stage_id = ?`, workflowID, toStageID).Scan(&count); scanErr != nil {
+			return scanErr
+		}
+		if count == 0 {
+			return fmt.Errorf("%w %d in workflow %d", ErrWorkflowStageNotFound, toStageID, workflowID)
+		}
+		if _, execErr := tx.ExecContext(ctx, `
+			INSERT INTO workflow_stage_transitions (workflow_id, from_stage_id, to_stage_id, sort_order)
+			VALUES (?, ?, ?, ?)
+		`, workflowID, fromStageID, toStageID, i); execErr != nil {
+			return execErr
+		}
+	}
+	return tx.Commit()
+}
+
 func ExportWorkflow(ctx context.Context, db *sql.DB, id int64) (WorkflowExport, error) {
 	wf, err := GetWorkflow(ctx, db, id)
 	if err != nil {
@@ -460,6 +560,12 @@ func getWorkflowStageRow(ctx context.Context, db *sql.DB, id int64) (WorkflowSta
 		return WorkflowStage{}, err
 	}
 	s.Roles = roles
+	if transitions, transitionErr := ListWorkflowStageTransitions(ctx, db, s.WorkflowID, &s.ID); transitionErr == nil {
+		s.NextStageIDs = make([]int64, 0, len(transitions))
+		for _, transition := range transitions {
+			s.NextStageIDs = append(s.NextStageIDs, transition.ToStageID)
+		}
+	}
 	return s, nil
 }
 
@@ -493,6 +599,15 @@ func listWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64) ([]Wo
 			if r, ok := rolesByStage[stages[i].ID]; ok {
 				stages[i].Roles = r
 			}
+		}
+	}
+	if transitions, transitionErr := ListWorkflowStageTransitions(ctx, db, workflowID, nil); transitionErr == nil {
+		byStage := make(map[int64][]int64, len(stages))
+		for _, transition := range transitions {
+			byStage[transition.FromStageID] = append(byStage[transition.FromStageID], transition.ToStageID)
+		}
+		for i := range stages {
+			stages[i].NextStageIDs = byStage[stages[i].ID]
 		}
 	}
 	return stages, nil

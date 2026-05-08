@@ -59,6 +59,10 @@ type workflowReorderRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 
+type workflowStageTransitionRequest struct {
+	ToStageIDs []int64 `json:"to_stage_ids"`
+}
+
 type teamRequest struct {
 	ID           *int64 `json:"id,omitempty"`
 	Name         string `json:"name"`
@@ -108,6 +112,10 @@ type messageRequest struct {
 type interventionRequest struct {
 	Outcome string `json:"outcome"`
 	Message string `json:"message,omitempty"`
+}
+
+type interventionStateRequest struct {
+	State string `json:"state"`
 }
 
 type ticketHealthRequest struct {

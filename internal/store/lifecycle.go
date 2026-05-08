@@ -95,7 +95,20 @@ func getNextWorkflowStage(ctx context.Context, db *sql.DB, currentStageID int64)
 		return nil, "", queryErr
 	}
 	var nextStageID int64
-	err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextStageID, &nextName)
+	if transitionErr := ensureWorkflowTransitionTable(ctx, db); transitionErr != nil {
+		return nil, "", transitionErr
+	}
+	err = db.QueryRowContext(ctx, `
+		SELECT ws.workflow_stage_id, ws.stage_name
+		FROM workflow_stage_transitions t
+		JOIN workflow_stages ws ON ws.workflow_stage_id = t.to_stage_id
+		WHERE t.workflow_id = ? AND t.from_stage_id = ?
+		ORDER BY t.sort_order, ws.sort_order, ws.workflow_stage_id
+		LIMIT 1
+	`, workflowID, currentStageID).Scan(&nextStageID, &nextName)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = db.QueryRowContext(ctx, `SELECT workflow_stage_id, stage_name FROM workflow_stages WHERE workflow_id = ? AND sort_order > ? ORDER BY sort_order LIMIT 1`, workflowID, currentOrder).Scan(&nextStageID, &nextName)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, "", nil // final stage
 	}

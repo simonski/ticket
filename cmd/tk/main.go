@@ -194,6 +194,8 @@ func run(args []string) error {
 		return runCount(trimmedArgs[1:])
 	case "ticket":
 		return runTicketNS(trimmedArgs[1:])
+	case "work-item":
+		return runWorkItem(trimmedArgs[1:])
 	case "prompt":
 		return runPrompt(trimmedArgs[1:])
 	case "agent":
