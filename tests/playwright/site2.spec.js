@@ -459,6 +459,49 @@ test("remembers the selected project from localStorage after reload", async ({ p
   await expect(page.locator("#project-menu-button")).toHaveText("Website (WEB)");
 });
 
+test("remembers active panel and scroll position after refresh", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Projects" }).click();
+  await page.evaluate(() => {
+    document.body.style.minHeight = "3000px";
+    window.scrollTo(0, 420);
+    window.dispatchEvent(new Event("scroll"));
+  });
+
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("site2.selectedView"))).toBe("projects");
+  await expect.poll(() => page.evaluate(() => {
+    const raw = localStorage.getItem("site2.viewScroll");
+    if (!raw) {
+      return 0;
+    }
+    const parsed = JSON.parse(raw);
+    return Number(parsed.projects || 0);
+  })).toBeGreaterThan(300);
+
+  await page.reload();
+
+  await expect(page.locator('.nav button[data-view="projects"]')).toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => {
+    const raw = localStorage.getItem("site2.viewScroll");
+    if (!raw) {
+      return 0;
+    }
+    const parsed = JSON.parse(raw);
+    return Number(parsed.projects || 0);
+  })).toBeGreaterThan(300);
+});
+
 test.beforeEach(async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");

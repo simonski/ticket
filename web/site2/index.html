@@ -1264,6 +1264,8 @@
         const state = {
             auth: null,
             currentView: "tickets",
+            viewScrollByPanel: {},
+            scrollPersistenceReady: false,
             status: null,
             projects: [],
             tickets: [],
@@ -1310,6 +1312,8 @@
         const FALLBACK_STAGES = ["backlog", "todo", "doing", "done"];
         const AUTH_STORAGE_KEY = "site2.auth";
         const SELECTED_PROJECT_STORAGE_KEY = "site2.selectedProjectID";
+        const SELECTED_VIEW_STORAGE_KEY = "site2.selectedView";
+        const VIEW_SCROLL_STORAGE_KEY = "site2.viewScroll";
 
         const els = {
             loginScreen: document.getElementById("login-screen"),
@@ -1514,6 +1518,84 @@
             return parsed;
         }
 
+        function availableViewNames() {
+            return Array.from(document.querySelectorAll(".nav button[data-view]"))
+                .map((button) => String(button.dataset.view || "").trim())
+                .filter(Boolean);
+        }
+
+        function isKnownView(viewName) {
+            return availableViewNames().includes(String(viewName || "").trim());
+        }
+
+        function storeSelectedView(viewName) {
+            if (!isKnownView(viewName)) {
+                localStorage.removeItem(SELECTED_VIEW_STORAGE_KEY);
+                return;
+            }
+            localStorage.setItem(SELECTED_VIEW_STORAGE_KEY, String(viewName));
+        }
+
+        function loadStoredSelectedView() {
+            const raw = localStorage.getItem(SELECTED_VIEW_STORAGE_KEY);
+            if (!raw) {
+                return null;
+            }
+            if (!isKnownView(raw)) {
+                localStorage.removeItem(SELECTED_VIEW_STORAGE_KEY);
+                return null;
+            }
+            return raw;
+        }
+
+        function loadStoredViewScrollByPanel() {
+            const raw = localStorage.getItem(VIEW_SCROLL_STORAGE_KEY);
+            if (!raw) {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(raw);
+                const cleaned = {};
+                const known = new Set(availableViewNames());
+                Object.keys(parsed || {}).forEach((key) => {
+                    const value = Number(parsed[key]);
+                    if (!known.has(key) || !Number.isFinite(value) || value < 0) {
+                        return;
+                    }
+                    cleaned[key] = value;
+                });
+                return cleaned;
+            } catch (error) {
+                localStorage.removeItem(VIEW_SCROLL_STORAGE_KEY);
+                return {};
+            }
+        }
+
+        function storeViewScrollByPanel() {
+            localStorage.setItem(VIEW_SCROLL_STORAGE_KEY, JSON.stringify(state.viewScrollByPanel || {}));
+        }
+
+        function storeCurrentViewScroll() {
+            if (!state.scrollPersistenceReady) {
+                return;
+            }
+            if (!state.currentView || !isKnownView(state.currentView)) {
+                return;
+            }
+            state.viewScrollByPanel[state.currentView] = Math.max(0, Math.round(window.scrollY || 0));
+            storeViewScrollByPanel();
+        }
+
+        function restoreCurrentViewScroll() {
+            if (!state.currentView) {
+                return;
+            }
+            const nextY = Number((state.viewScrollByPanel || {})[state.currentView] || 0);
+            requestAnimationFrame(() => {
+                window.scrollTo(0, Number.isFinite(nextY) && nextY >= 0 ? nextY : 0);
+            });
+        }
+
         function loadStoredAuth() {
             const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
             if (!raw) {
@@ -1645,14 +1727,27 @@
             });
         }
 
-        function switchView(viewName) {
+        function switchView(viewName, options) {
+            if (!isKnownView(viewName)) {
+                return;
+            }
+            const settings = options || {};
+            if (state.currentView && state.currentView !== viewName) {
+                storeCurrentViewScroll();
+            }
             state.currentView = viewName;
+            if (settings.persist !== false) {
+                storeSelectedView(viewName);
+            }
             document.querySelectorAll(".nav button[data-view]").forEach((button) => {
                 button.classList.toggle("active", button.dataset.view === viewName);
             });
             document.querySelectorAll(".view").forEach((view) => {
                 view.classList.toggle("active", view.id === "view-" + viewName);
             });
+            if (settings.restoreScroll !== false) {
+                restoreCurrentViewScroll();
+            }
         }
 
         function renderProjectMenu() {
@@ -1867,9 +1962,12 @@
             els.loginScreen.classList.add("hidden");
             els.appShell.classList.remove("hidden");
             els.loginError.textContent = "";
+            state.scrollPersistenceReady = true;
+            restoreCurrentViewScroll();
         }
 
         function showLoginScreen() {
+            state.scrollPersistenceReady = false;
             els.appShell.classList.add("hidden");
             els.loginScreen.classList.remove("hidden");
             focusLoginUsername();
@@ -1942,6 +2040,7 @@
             renderPredictedNextWork();
             renderInterventions();
             renderEditors();
+            restoreCurrentViewScroll();
         }
 
         function renderProjects() {
@@ -3725,6 +3824,10 @@
         bindTicketsHandlers();
         bindMiscHandlers();
         els.loginForm.addEventListener("submit", handleLogin);
+        state.viewScrollByPanel = loadStoredViewScrollByPanel();
+        state.currentView = loadStoredSelectedView() || state.currentView;
+        switchView(state.currentView, { restoreScroll: false });
+        window.addEventListener("scroll", storeCurrentViewScroll, { passive: true });
 
         (async function restoreSession() {
             const auth = loadStoredAuth();
