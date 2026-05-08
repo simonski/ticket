@@ -705,6 +705,15 @@ owner/editor triage workflows.
 The intervention queue endpoint (`GET /api/projects/{project_ref}/interventions`)
 is restricted to project editors and owners.
 
+Intervention SLA reporting is available at
+`GET /api/projects/{project_ref}/interventions/report` (optional
+`?escalation_hours=<n>`), returning state counts, oldest active age, and
+ticket-level escalation markers.
+
+Server-backed next-work forecasting is available at
+`GET /api/projects/{project_ref}/forecast` (optional `?limit=<n>`). Site2 uses
+this endpoint for the `Predicted next work` panel and shows confidence scores.
+
 In the web app, the item detail pane shows:
 
 1. the current item
@@ -885,8 +894,9 @@ Keyboard shortcuts in the board view:
 - workflow stages now support explicit DAG-style transitions (`next_stage_ids`) so
   progression can branch beyond simple linear ordering
 - board now includes a `Predicted next work` panel that forecasts next
-  phase/role transitions from workflow policy + explicit stage transitions, and
-  now marks tickets blocked by unresolved dependencies
+  phase/role transitions from workflow policy + explicit stage transitions, now
+  sourced from server-side `/api/projects/{id}/forecast` with confidence scores
+  and dependency-aware blocking
 - the Interventions board includes built-in filter (`all`, `unassigned`, `agent`,
   `human`) and sort (`priority`, `order`, `most recent update`) controls for triage
 - each intervention card now shows a compact conversation thread (latest comments)
@@ -895,6 +905,8 @@ Keyboard shortcuts in the board view:
   to the existing decision dropdown submit path
 - intervention cards now expose mailbox state (`open`, `triaged`, `in_progress`,
   `resolved`, `wont_fix`) with owner visibility for triage governance
+- interventions view now includes an SLA summary bar from
+  `/api/projects/{id}/interventions/report` (state counts + oldest active age)
 - roles include `description` and `acceptance_criteria` fields for defining role personas
 - `chat` opens an LLM conversation view with a bottom composer and upward-scrolling message history
 - chat websocket traffic runs prompt-scoped external processes (default `codex exec`) and streams process stdout/stderr back to the browser; set `TICKET_CHAT_CMD` to override the command
@@ -1064,6 +1076,9 @@ tk workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>
 tk workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <id,id,...>
 
 tk work-item list -id <ticket-id> [-status <active|success|fail|stopped>] [-assignee_type <human|agent>] [-limit <n>]
+tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain]
+tk work-item start -id <ticket-id> [-m <message>]
+tk work-item create [-project_id <id>] -title <title> [-type <task|bug|story|chore>] [-description <text>] [-start]
 tk work-item reassign -id <ticket-id> -work-item <id> -assignee <username> [-m <message>]
 tk work-item cancel -id <ticket-id> -work-item <id> [-m <message>]
 tk work-item retry -id <ticket-id> -work-item <id> [-assignee <username>]

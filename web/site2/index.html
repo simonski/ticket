@@ -822,6 +822,7 @@
                                 </select>
                             </div>
                         </div>
+                        <div id="intervention-report-summary" class="meta" style="margin-bottom: 10px;"></div>
                         <div id="intervention-list" class="entity-list"></div>
                     </div>
                 </section>
@@ -1257,6 +1258,8 @@
             projects: [],
             tickets: [],
             interventions: [],
+            interventionReport: null,
+            projectForecast: [],
             workflows: [],
             roles: [],
             agents: [],
@@ -1315,6 +1318,7 @@
             interventionList: document.getElementById("intervention-list"),
             interventionFilter: document.getElementById("intervention-filter"),
             interventionSort: document.getElementById("intervention-sort"),
+            interventionReportSummary: document.getElementById("intervention-report-summary"),
             predictedWorkList: document.getElementById("predicted-work-list"),
             stageGrid: document.getElementById("stage-grid"),
             workflowRoleBank: document.getElementById("workflow-role-bank"),
@@ -1670,14 +1674,20 @@
             if (!state.selectedProjectID) {
                 state.tickets = [];
                 state.interventions = [];
+                state.interventionReport = null;
+                state.projectForecast = [];
                 return;
             }
-            const [tickets, interventions] = await Promise.all([
+            const [tickets, interventions, interventionReport, projectForecast] = await Promise.all([
                 api("/api/projects/" + state.selectedProjectID + "/tickets"),
                 api("/api/projects/" + state.selectedProjectID + "/interventions"),
+                api("/api/projects/" + state.selectedProjectID + "/interventions/report").catch(() => null),
+                api("/api/projects/" + state.selectedProjectID + "/forecast?limit=100").catch(() => []),
             ]);
             state.tickets = tickets.map(normalizeTicket);
             state.interventions = interventions.map(normalizeTicket);
+            state.interventionReport = interventionReport;
+            state.projectForecast = Array.isArray(projectForecast) ? projectForecast : [];
             const dependencyEntries = await Promise.all(state.tickets.map(async (ticket) => {
                 try {
                     const dependencies = await api("/api/tickets/" + ticket.id + "/dependencies");
@@ -1941,6 +1951,12 @@
                     "<div class=\"field\"><label>Add role</label><select data-add-role-select=\"" + stage.id + "\">" + optionHTML("", "Choose role", true) + addRoleOptions + "</select></div>" +
                     "<div class=\"field field-align-end\"><button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button></div>" +
                     "</div>" +
+                    "<div class=\"field\"><label>Transitions (next stages)</label><select multiple data-stage-next=\"" + stage.id + "\">" +
+                    workflow.stages
+                        .filter((candidate) => Number(candidate.id) !== Number(stage.id))
+                        .map((candidate) => optionHTML(candidate.id, candidate.name || candidate.stage_name || ("stage " + candidate.id), (stage.next_stage_ids || []).some((nextID) => Number(nextID) === Number(candidate.id))))
+                        .join("") +
+                    "</select></div>" +
                     "</div>";
             }).join("");
         }
@@ -2016,78 +2032,30 @@
                 els.predictedWorkList.innerHTML = "<div class=\"empty\">Select a project to see predictions.</div>";
                 return;
             }
-            const predictions = state.tickets
-                .filter((ticket) => !ticket.archived)
-                .map((ticket) => {
-                    const workflowID = ticket.workflow_id || project.workflow_id;
-                    const workflow = state.workflows.find((item) => Number(item.id) === Number(workflowID));
-                    if (!workflow || !Array.isArray(workflow.stages) || !workflow.stages.length) {
-                        return null;
-                    }
-                    const stageIndex = workflow.stages.findIndex((stage) =>
-                        Number(stage.id) === Number(ticket.workflow_stage_id) ||
-                        String(stage.name || "").toLowerCase() === String(ticket.stage || "").toLowerCase());
-                    if (stageIndex < 0) {
-                        return null;
-                    }
-                    const approvalPolicy = String(workflow.approval_policy || "single_role").toLowerCase();
-                    const progressionMode = String(workflow.progression_mode || "linear").toLowerCase();
-                    const roleByRole = approvalPolicy === "all_roles" && progressionMode !== "stage_only";
-                    const currentStage = workflow.stages[stageIndex];
-                    const dependencyIDs = state.dependencyIndex[String(ticket.id)] || [];
-                    const blockedBy = dependencyIDs.filter((dependencyID) => {
-                        const blocker = state.tickets.find((item) => String(item.id) === String(dependencyID));
-                        return blocker && !blocker.complete && !blocker.archived;
-                    });
-                    if (blockedBy.length) {
-                        return {
-                            key: ticket.key || ticket.id,
-                            detail: "blocked by: " + blockedBy.join(", "),
-                        };
-                    }
-                    const currentRoles = currentStage.roles || [];
-                    const currentRoleIndex = currentRoles.findIndex((role) => Number(role.id) === Number(ticket.role_id));
-                    if (String(ticket.state || "").toLowerCase() === "success") {
-                        if (roleByRole && currentRoles.length && currentRoleIndex >= 0 && currentRoleIndex + 1 < currentRoles.length) {
-                            const nextRoleInStage = currentRoles[currentRoleIndex + 1];
-                            return {
-                                key: ticket.key || ticket.id,
-                                detail: "next: " + String(currentStage.name || "unknown") + " / " + String(nextRoleInStage.title || ("role " + nextRoleInStage.id)),
-                            };
-                        }
-                        if (stageIndex + 1 < workflow.stages.length) {
-                            const configuredTargets = Array.isArray(currentStage.next_stage_ids) ? currentStage.next_stage_ids : [];
-                            const nextStage = configuredTargets.length
-                                ? workflow.stages.find((candidate) => Number(candidate.id) === Number(configuredTargets[0]))
-                                : workflow.stages[stageIndex + 1];
-                            if (!nextStage) {
-                                return { key: ticket.key || ticket.id, detail: "next: completion/close decision" };
-                            }
-                            const nextRole = (nextStage.roles || [])[0] || null;
-                            return {
-                                key: ticket.key || ticket.id,
-                                detail: "next: " + String(nextStage.name || "unknown") + (nextRole ? (" / " + (nextRole.title || ("role " + nextRole.id))) : ""),
-                            };
-                        }
-                        return { key: ticket.key || ticket.id, detail: "next: completion/close decision" };
-                    }
-                    const currentRole = (currentStage.roles || []).find((role) => Number(role.id) === Number(ticket.role_id)) || (currentStage.roles || [])[0] || null;
-                    return {
-                        key: ticket.key || ticket.id,
-                        detail: "in progress: " + String(currentStage.name || ticket.stage || "unknown") + (currentRole ? (" / " + (currentRole.title || ("role " + currentRole.id))) : ""),
-                    };
-                })
-                .filter(Boolean);
+            const predictions = state.projectForecast
+                .filter((entry) => entry && entry.key && entry.detail);
             if (!predictions.length) {
                 els.predictedWorkList.innerHTML = "<div class=\"empty\">No forecastable tickets.</div>";
                 return;
             }
             els.predictedWorkList.innerHTML = predictions
-                .map((entry) => "<div class=\"history-item\"><strong>" + escapeHTML(entry.key) + "</strong> — " + escapeHTML(entry.detail) + "</div>")
+                .map((entry) => "<div class=\"history-item\"><strong>" + escapeHTML(entry.key || entry.ticket_id || "") + "</strong> — " + escapeHTML(entry.detail || "") + " <span class=\"meta\">(" + escapeHTML(String(entry.confidence_percent || 0)) + "% confidence)</span></div>")
                 .join("");
         }
 
         function renderInterventions() {
+            if (els.interventionReportSummary) {
+                if (state.interventionReport) {
+                    const report = state.interventionReport;
+                    els.interventionReportSummary.textContent = "open " + String(report.open_count || 0) +
+                        " · triaged " + String(report.triaged_count || 0) +
+                        " · in progress " + String(report.in_progress_count || 0) +
+                        " · resolved " + String(report.resolved_count || 0) +
+                        " · oldest active age " + String(report.oldest_open_age_h || 0) + "h";
+                } else {
+                    els.interventionReportSummary.textContent = "";
+                }
+            }
             const failed = state.interventions
                 .filter((ticket) => {
                     const mode = (els.interventionFilter && els.interventionFilter.value) || "all";
@@ -2498,6 +2466,13 @@
                         dor: document.querySelector("[data-stage-dor=\"" + stageID + "\"]").value.trim(),
                         dod: document.querySelector("[data-stage-dod=\"" + stageID + "\"]").value.trim(),
                     }),
+                });
+                const selectedTransitions = Array.from(document.querySelectorAll("[data-stage-next=\"" + stageID + "\"] option:checked"))
+                    .map((option) => Number(option.value))
+                    .filter((id) => !Number.isNaN(id) && id > 0);
+                await api("/api/workflows/stages/" + stageID + "/transitions", {
+                    method: "PUT",
+                    body: JSON.stringify({ to_stage_ids: selectedTransitions }),
                 });
                 await loadWorkflows();
                 renderAll();

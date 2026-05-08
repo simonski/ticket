@@ -2028,6 +2028,76 @@ func TestProjectInterventionsAPIListsFailedTickets(t *testing.T) {
 	}
 }
 
+func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Ops maturity project",
+		"visibility": "private",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	failingResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": project.ID,
+		"type":       "task",
+		"title":      "Needs triage",
+	}, adminToken)
+	if failingResp.Code != http.StatusCreated {
+		t.Fatalf("create failing ticket status = %d body=%s", failingResp.Code, failingResp.Body.String())
+	}
+	var failing store.Ticket
+	decodeResponse(t, failingResp, &failing)
+	setFailResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+failing.ID, map[string]any{
+		"title":       failing.Title,
+		"description": failing.Description,
+		"assignee":    failing.Assignee,
+		"priority":    failing.Priority,
+		"order":       failing.Order,
+		"state":       "fail",
+	}, adminToken)
+	if setFailResp.Code != http.StatusOK {
+		t.Fatalf("set fail status = %d body=%s", setFailResp.Code, setFailResp.Body.String())
+	}
+
+	reportResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/report?escalation_hours=1", nil, adminToken)
+	if reportResp.Code != http.StatusOK {
+		t.Fatalf("intervention report status = %d body=%s", reportResp.Code, reportResp.Body.String())
+	}
+	var report store.InterventionReport
+	decodeResponse(t, reportResp, &report)
+	if report.OpenCount < 1 || len(report.Items) < 1 || report.Items[0].TicketID != failing.ID {
+		t.Fatalf("unexpected intervention report payload: %#v", report)
+	}
+
+	forecastResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/forecast?limit=10", nil, adminToken)
+	if forecastResp.Code != http.StatusOK {
+		t.Fatalf("forecast status = %d body=%s", forecastResp.Code, forecastResp.Body.String())
+	}
+	var forecast []store.ProjectForecastEntry
+	decodeResponse(t, forecastResp, &forecast)
+	if len(forecast) < 1 {
+		t.Fatalf("expected at least one forecast entry, got %#v", forecast)
+	}
+	found := false
+	for _, entry := range forecast {
+		if entry.TicketID == failing.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing failing ticket in forecast payload: %#v", forecast)
+	}
+}
+
 func TestTicketInterventionDecisionAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

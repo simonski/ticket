@@ -44,3 +44,58 @@ func TestInterventionStateLifecycle(t *testing.T) {
 		t.Fatalf("claimed state = %q, want %q", resolved.State, InterventionStateInProgress)
 	}
 }
+
+func TestBuildInterventionReport(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := context.Background()
+	project, err := CreateProject(ctx, db, "Interventions Report", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	ticket, err := CreateTicket(ctx, db, TicketCreateParams{
+		ProjectID: project.ID,
+		Type:      "task",
+		Title:     "Escalate me",
+		CreatedBy: "",
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	ticket, err = UpdateTicket(ctx, db, ticket.ID, TicketUpdateParams{
+		Title:         ticket.Title,
+		Description:   ticket.Description,
+		Assignee:      ticket.Assignee,
+		Priority:      ticket.Priority,
+		Order:         ticket.Order,
+		State:         StateFail,
+		ActorRole:     "admin",
+		ActorUsername: "admin",
+	})
+	if err != nil {
+		t.Fatalf("UpdateTicket() fail error = %v", err)
+	}
+	if _, err := SetInterventionState(ctx, db, ticket.ID, InterventionStateOpen, "", ""); err != nil {
+		t.Fatalf("SetInterventionState(open) error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE intervention_states SET updated_at = datetime('now', '-48 hours') WHERE ticket_id = ?`, ticket.ID); err != nil {
+		t.Fatalf("aging intervention state error = %v", err)
+	}
+
+	report, err := BuildInterventionReport(ctx, db, project.ID, 24)
+	if err != nil {
+		t.Fatalf("BuildInterventionReport() error = %v", err)
+	}
+	if report.ProjectID != project.ID {
+		t.Fatalf("report project id = %d, want %d", report.ProjectID, project.ID)
+	}
+	if report.OpenCount != 1 || len(report.Items) != 1 {
+		t.Fatalf("unexpected report counts: %#v", report)
+	}
+	if !report.Items[0].Escalated {
+		t.Fatalf("expected escalated intervention item, got %#v", report.Items[0])
+	}
+	if report.OldestOpenAgeH < 24 {
+		t.Fatalf("oldest age = %d, want >= 24", report.OldestOpenAgeH)
+	}
+}

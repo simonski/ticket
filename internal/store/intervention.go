@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 )
 
 const (
@@ -24,6 +26,28 @@ type InterventionState struct {
 	UpdatedBy   string `json:"updated_by,omitempty"`
 	UpdatedAt   string `json:"updated_at"`
 	CreatedAt   string `json:"created_at"`
+}
+
+type InterventionReport struct {
+	ProjectID       int64                    `json:"project_id"`
+	OpenCount       int                      `json:"open_count"`
+	TriagedCount    int                      `json:"triaged_count"`
+	InProgressCount int                      `json:"in_progress_count"`
+	ResolvedCount   int                      `json:"resolved_count"`
+	WontFixCount    int                      `json:"wont_fix_count"`
+	OldestOpenAgeH  int                      `json:"oldest_open_age_h"`
+	Items           []InterventionReportItem `json:"items"`
+}
+
+type InterventionReportItem struct {
+	TicketID    string `json:"ticket_id"`
+	Title       string `json:"title"`
+	State       string `json:"state"`
+	OwnerUserID string `json:"owner_user_id,omitempty"`
+	OwnerName   string `json:"owner_name,omitempty"`
+	AgeHours    int    `json:"age_hours"`
+	Escalated   bool   `json:"escalated"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 func normalizeInterventionState(raw string) (string, error) {
@@ -130,4 +154,73 @@ func SetInterventionState(ctx context.Context, db *sql.DB, ticketID, state, owne
 
 func ClaimIntervention(ctx context.Context, db *sql.DB, ticketID, ownerUserID, updatedBy string) (InterventionState, error) {
 	return SetInterventionState(ctx, db, ticketID, InterventionStateInProgress, ownerUserID, updatedBy)
+}
+
+func BuildInterventionReport(ctx context.Context, db *sql.DB, projectID int64, escalationHours int) (InterventionReport, error) {
+	if err := ensureInterventionStateTable(ctx, db); err != nil {
+		return InterventionReport{}, err
+	}
+	if escalationHours <= 0 {
+		escalationHours = 24
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT t.ticket_id, t.title, COALESCE(i.state, 'open'), i.owner_user_id, COALESCE(u.username, ''), COALESCE(i.updated_at, t.updated_at)
+		FROM tickets t
+		LEFT JOIN intervention_states i ON i.ticket_id = t.ticket_id
+		LEFT JOIN users u ON u.user_id = i.owner_user_id
+		WHERE t.project_id = ? AND t.state = 'fail' AND t.deleted = 0
+		ORDER BY COALESCE(i.updated_at, t.updated_at) ASC
+	`, projectID)
+	if err != nil {
+		return InterventionReport{}, err
+	}
+	defer rows.Close()
+	report := InterventionReport{
+		ProjectID: projectID,
+		Items:     make([]InterventionReportItem, 0),
+	}
+	now := time.Now().UTC()
+	for rows.Next() {
+		var item InterventionReportItem
+		var ownerUserID sql.NullString
+		if scanErr := rows.Scan(&item.TicketID, &item.Title, &item.State, &ownerUserID, &item.OwnerName, &item.UpdatedAt); scanErr != nil {
+			return InterventionReport{}, scanErr
+		}
+		if ownerUserID.Valid {
+			item.OwnerUserID = ownerUserID.String
+		}
+		updatedAt, parseErr := time.Parse("2006-01-02 15:04:05", item.UpdatedAt)
+		if parseErr != nil {
+			updatedAt, parseErr = time.Parse(time.RFC3339, item.UpdatedAt)
+			if parseErr != nil {
+				return InterventionReport{}, fmt.Errorf("invalid intervention timestamp for %s: %w", item.TicketID, parseErr)
+			}
+		}
+		ageHours := int(now.Sub(updatedAt.UTC()).Hours())
+		if ageHours < 0 {
+			ageHours = 0
+		}
+		item.AgeHours = ageHours
+		item.Escalated = ageHours >= escalationHours && (item.State == InterventionStateOpen || item.State == InterventionStateTriaged || item.State == InterventionStateInProgress)
+		switch item.State {
+		case InterventionStateOpen:
+			report.OpenCount++
+		case InterventionStateTriaged:
+			report.TriagedCount++
+		case InterventionStateInProgress:
+			report.InProgressCount++
+		case InterventionStateResolved:
+			report.ResolvedCount++
+		case InterventionStateWontFix:
+			report.WontFixCount++
+		}
+		if (item.State == InterventionStateOpen || item.State == InterventionStateTriaged || item.State == InterventionStateInProgress) && item.AgeHours > report.OldestOpenAgeH {
+			report.OldestOpenAgeH = item.AgeHours
+		}
+		report.Items = append(report.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return InterventionReport{}, err
+	}
+	return report, nil
 }

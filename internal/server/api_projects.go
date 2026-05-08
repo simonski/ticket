@@ -238,6 +238,84 @@ func (r *router) registerProjectHandlers() {
 			writeJSON(w, http.StatusOK, payload)
 			return
 		}
+		if len(parts) == 3 && parts[1] == "interventions" && parts[2] == "report" && r.Method == http.MethodGet {
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canViewInterventions(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			escalationHours := 24
+			if raw := strings.TrimSpace(r.URL.Query().Get("escalation_hours")); raw != "" {
+				if _, scanErr := fmt.Sscan(raw, &escalationHours); scanErr != nil {
+					writeError(w, http.StatusBadRequest, "escalation_hours must be numeric")
+					return
+				}
+			}
+			report, err := store.BuildInterventionReport(r.Context(), db, project.ID, escalationHours)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, report)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "forecast" && r.Method == http.MethodGet {
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !canReadProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			limit := 50
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if _, scanErr := fmt.Sscan(raw, &limit); scanErr != nil {
+					writeError(w, http.StatusBadRequest, "limit must be numeric")
+					return
+				}
+			}
+			forecast, err := store.BuildProjectForecast(r.Context(), db, project.ID, limit)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, forecast)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
 			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {

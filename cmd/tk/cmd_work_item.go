@@ -14,7 +14,7 @@ import (
 
 func runWorkItem(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Println("usage: tk work-item <list|reassign|cancel|retry|feedback|state-get|state-set> [flags]")
+		fmt.Println("usage: tk work-item <list|queue|start|create|reassign|cancel|retry|feedback|state-get|state-set> [flags]")
 		return nil
 	}
 	cfg, err := config.Load()
@@ -119,7 +119,130 @@ func runWorkItem(args []string) error {
 		}
 		fmt.Printf("ticket=%s state=%s owner=%s\n", state.TicketID, state.State, state.OwnerName)
 		return nil
+	case "queue":
+		fs := flag.NewFlagSet("work-item queue", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectID := fs.Int64("project_id", 0, "project id (default current)")
+		id := fs.String("id", "", "specific ticket id/ref")
+		dryRun := fs.Bool("dry-run", false, "preview without assignment")
+		explain := fs.Bool("explain", false, "print explanation for returned status")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if len(fs.Args()) != 0 {
+			return errors.New("usage: tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain]")
+		}
+		resolvedProjectID, err := resolveWorkItemProjectID(cfg, *projectID)
+		if err != nil {
+			return err
+		}
+		response, err := api.RequestTicket(ctx, client.TicketRequest{
+			ProjectID: resolvedProjectID,
+			TicketRef: strings.TrimSpace(*id),
+			DryRun:    *dryRun,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(response)
+		}
+		fmt.Printf("queue status: %s\n", response.Status)
+		if response.Ticket != nil {
+			fmt.Printf("ticket: %s\t%s\t%s/%s\n", response.Ticket.ID, response.Ticket.Title, response.Ticket.Stage, response.Ticket.State)
+		}
+		if *explain {
+			fmt.Println(requestStatusExplanation(response.Status, strings.TrimSpace(*id)))
+		}
+		return nil
+	case "start":
+		fs := flag.NewFlagSet("work-item start", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		id := fs.String("id", "", "ticket id")
+		message := fs.String("m", "", "optional comment")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		ticketID, rest, err := resolveIDFlag(*id, fs.Args())
+		if err != nil || len(rest) != 0 || strings.TrimSpace(ticketID) == "" {
+			return errors.New("usage: tk work-item start [-id] <ticket-id> [-m message]")
+		}
+		if _, readyErr := api.ReadyTicket(ctx, ticketID, strings.TrimSpace(*message)); readyErr != nil {
+			return readyErr
+		}
+		ticket, err := api.GetTicket(ctx, ticketID)
+		if err != nil {
+			return err
+		}
+		response, err := api.RequestTicket(ctx, client.TicketRequest{
+			ProjectID: ticket.ProjectID,
+			TicketRef: ticketID,
+		})
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(response)
+		}
+		fmt.Printf("start status: %s\n", response.Status)
+		if response.Ticket != nil {
+			fmt.Printf("ticket: %s\t%s\t%s/%s\n", response.Ticket.ID, response.Ticket.Title, response.Ticket.Stage, response.Ticket.State)
+		}
+		return nil
+	case "create":
+		fs := flag.NewFlagSet("work-item create", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectID := fs.Int64("project_id", 0, "project id (default current)")
+		title := fs.String("title", "", "title")
+		typ := fs.String("type", "task", "ticket type")
+		description := fs.String("description", "", "description")
+		startNow := fs.Bool("start", false, "immediately queue after creating")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if len(fs.Args()) != 0 || strings.TrimSpace(*title) == "" {
+			return errors.New("usage: tk work-item create [-project_id <id>] -title <title> [-type <task|bug|story|chore>] [-description <text>] [-start]")
+		}
+		resolvedProjectID, err := resolveWorkItemProjectID(cfg, *projectID)
+		if err != nil {
+			return err
+		}
+		created, err := api.CreateTicket(ctx, client.TicketCreateRequest{
+			ProjectID:   resolvedProjectID,
+			Type:        strings.TrimSpace(*typ),
+			Title:       strings.TrimSpace(*title),
+			Description: strings.TrimSpace(*description),
+		})
+		if err != nil {
+			return err
+		}
+		readyTicket, err := api.ReadyTicket(ctx, created.ID, "")
+		if err != nil {
+			return err
+		}
+		if *startNow {
+			_, err := api.RequestTicket(ctx, client.TicketRequest{ProjectID: readyTicket.ProjectID, TicketRef: readyTicket.ID})
+			if err != nil {
+				return err
+			}
+		}
+		if outputJSON {
+			return printJSON(readyTicket)
+		}
+		fmt.Printf("created work item ticket: %s\t%s\t%s/%s\n", readyTicket.ID, readyTicket.Title, readyTicket.Stage, readyTicket.State)
+		return nil
 	default:
 		return fmt.Errorf("unknown work-item command %q", args[0])
 	}
+}
+
+func resolveWorkItemProjectID(cfg config.Config, provided int64) (int64, error) {
+	if provided > 0 {
+		return provided, nil
+	}
+	var fromConfig int64
+	if _, err := fmt.Sscan(strings.TrimSpace(cfg.ProjectID), &fromConfig); err == nil && fromConfig > 0 {
+		return fromConfig, nil
+	}
+	return 0, errors.New("project_id is required (set an active project or pass -project_id)")
 }

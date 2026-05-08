@@ -339,6 +339,112 @@ func TestWorkflowExportImportRoundTrip(t *testing.T) {
 	}
 }
 
+func TestWorkflowExportImportPreservesTransitionsByName(t *testing.T) {
+	t.Parallel()
+	db := setupWorkflowTestDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateWorkflow(ctx, db, "dag-export", "dag")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	design, err := AddWorkflowStage(ctx, db, wf.ID, "design", "", "", 0)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
+	}
+	build, err := AddWorkflowStage(ctx, db, wf.ID, "build", "", "", 1)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(build) error = %v", err)
+	}
+	testStage, err := AddWorkflowStage(ctx, db, wf.ID, "test", "", "", 2)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(test) error = %v", err)
+	}
+	done, err := AddWorkflowStage(ctx, db, wf.ID, "done", "", "", 3)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(done) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, design.ID, []int64{build.ID, testStage.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(design) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, build.ID, []int64{done.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(build) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, testStage.ID, []int64{done.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(test) error = %v", err)
+	}
+
+	exported, err := ExportWorkflow(ctx, db, wf.ID)
+	if err != nil {
+		t.Fatalf("ExportWorkflow() error = %v", err)
+	}
+	if len(exported.Stages) != 4 {
+		t.Fatalf("ExportWorkflow stages = %d, want 4", len(exported.Stages))
+	}
+	foundDesignBranch := false
+	for _, stage := range exported.Stages {
+		if stage.StageName == "design" && len(stage.NextStages) == 2 {
+			foundDesignBranch = true
+		}
+	}
+	if !foundDesignBranch {
+		t.Fatalf("expected exported design stage to include branch transitions, got %#v", exported.Stages)
+	}
+
+	exported.Name = "dag-import"
+	imported, err := ImportWorkflow(ctx, db, exported)
+	if err != nil {
+		t.Fatalf("ImportWorkflow() error = %v", err)
+	}
+	loaded, err := GetWorkflow(ctx, db, imported.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflow() error = %v", err)
+	}
+	stageByName := map[string]WorkflowStage{}
+	for _, stage := range loaded.Stages {
+		stageByName[stage.StageName] = stage
+	}
+	if len(stageByName["design"].NextStageIDs) != 2 {
+		t.Fatalf("imported design next stages = %#v, want 2 items", stageByName["design"].NextStageIDs)
+	}
+	if len(stageByName["build"].NextStageIDs) != 1 || len(stageByName["test"].NextStageIDs) != 1 {
+		t.Fatalf("imported branch exits incorrect: build=%#v test=%#v", stageByName["build"].NextStageIDs, stageByName["test"].NextStageIDs)
+	}
+}
+
+func TestSetWorkflowStageTransitionsRejectsCycle(t *testing.T) {
+	t.Parallel()
+	db := setupWorkflowTestDB(t)
+	ctx := context.Background()
+
+	wf, err := CreateWorkflow(ctx, db, "dag-guardrails", "")
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+	design, err := AddWorkflowStage(ctx, db, wf.ID, "design", "", "", 0)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(design) error = %v", err)
+	}
+	build, err := AddWorkflowStage(ctx, db, wf.ID, "build", "", "", 1)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(build) error = %v", err)
+	}
+	done, err := AddWorkflowStage(ctx, db, wf.ID, "done", "", "", 2)
+	if err != nil {
+		t.Fatalf("AddWorkflowStage(done) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, design.ID, []int64{build.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(design) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, build.ID, []int64{done.ID}); err != nil {
+		t.Fatalf("SetWorkflowStageTransitions(build) error = %v", err)
+	}
+	if err := SetWorkflowStageTransitions(ctx, db, wf.ID, done.ID, []int64{design.ID}); err == nil {
+		t.Fatalf("expected cycle rejection, got nil")
+	}
+
+}
+
 func TestWorkflowStageRoles(t *testing.T) {
 	t.Parallel()
 	db := setupWorkflowTestDB(t)

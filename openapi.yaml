@@ -305,6 +305,11 @@ components:
                 type: array
                 items:
                   type: string
+              next_stages:
+                type: array
+                description: Ordered target stage names for explicit DAG transitions.
+                items:
+                  type: string
               sort_order:
                 type: integer
 
@@ -367,6 +372,66 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    ProjectForecastEntry:
+      type: object
+      properties:
+        ticket_id:
+          type: string
+        key:
+          type: string
+        detail:
+          type: string
+        confidence_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    InterventionReportItem:
+      type: object
+      properties:
+        ticket_id:
+          type: string
+        title:
+          type: string
+        state:
+          type: string
+          enum: [open, triaged, in_progress, resolved, wont_fix]
+        owner_user_id:
+          type: string
+          nullable: true
+        owner_name:
+          type: string
+        age_hours:
+          type: integer
+        escalated:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+
+    InterventionReport:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          format: int64
+        open_count:
+          type: integer
+        triaged_count:
+          type: integer
+        in_progress_count:
+          type: integer
+        resolved_count:
+          type: integer
+        wont_fix_count:
+          type: integer
+        oldest_open_age_h:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterventionReportItem'
 
     Team:
       type: object
@@ -3516,6 +3581,83 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/interventions/report:
+    get:
+      tags: [Projects]
+      summary: Get intervention SLA/escalation report
+      description: Aggregated fail-state intervention metrics and aging details. Restricted to project editors and owners.
+      operationId: getProjectInterventionReport
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: escalation_hours
+          in: query
+          description: Age threshold (hours) for escalation flags.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Intervention report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterventionReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_id}/forecast:
+    get:
+      tags: [Projects]
+      summary: Get server-side project forecast
+      description: Returns predicted next work entries with confidence computed from workflow policy, transitions, and dependency blocking.
+      operationId: getProjectForecast
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Project forecast entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectForecastEntry'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

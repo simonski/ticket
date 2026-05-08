@@ -105,9 +105,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk ticket list -type bug",
 	},
 	"work-item": {
-		usage:   "tk work-item <list|reassign|cancel|retry|feedback|state-get|state-set> [flags]",
-		details: []string{"Work-item-first execution commands for listing and mutating ticket work-items.", "`state-get`/`state-set` manage the intervention mailbox state machine for a ticket."},
-		example: "tk work-item list -id TK-42 -status active",
+		usage:   "tk work-item <list|queue|start|create|reassign|cancel|retry|feedback|state-get|state-set> [flags]",
+		details: []string{"Work-item-first execution commands for queue/start/create plus existing work-item mutations.", "`queue` requests assignment from the active project (or `-project_id`), `start` readies and requests a specific ticket, and `create` creates + readies a ticket with optional immediate assignment.", "`state-get`/`state-set` manage the intervention mailbox state machine for a ticket."},
+		example: "tk work-item queue -project_id 1 -dry-run -explain",
 	},
 	"prompt": {
 		usage:   "tk prompt <ticket-id>",

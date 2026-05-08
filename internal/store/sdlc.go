@@ -51,6 +51,7 @@ type WorkflowStageExport struct {
 	StageName   string   `json:"stage_name"`
 	Description string   `json:"description"`
 	Roles       []string `json:"roles,omitempty"`
+	NextStages  []string `json:"next_stages,omitempty"`
 	SortOrder   int      `json:"sort_order"`
 }
 
@@ -408,6 +409,9 @@ func SetWorkflowStageTransitions(ctx context.Context, db *sql.DB, workflowID, fr
 			return execErr
 		}
 	}
+	if validateErr := validateWorkflowStageGraphTx(ctx, tx, workflowID); validateErr != nil {
+		return validateErr
+	}
 	return tx.Commit()
 }
 
@@ -423,15 +427,26 @@ func ExportWorkflow(ctx context.Context, db *sql.DB, id int64) (WorkflowExport, 
 		ProgressionMode: wf.ProgressionMode,
 		Stages:          make([]WorkflowStageExport, len(wf.Stages)),
 	}
+	stageNameByID := make(map[int64]string, len(wf.Stages))
+	for _, s := range wf.Stages {
+		stageNameByID[s.ID] = s.StageName
+	}
 	for i, s := range wf.Stages {
 		var roleNames []string
 		for _, r := range s.Roles {
 			roleNames = append(roleNames, r.Title)
 		}
+		nextStages := make([]string, 0, len(s.NextStageIDs))
+		for _, nextID := range s.NextStageIDs {
+			if nextName, ok := stageNameByID[nextID]; ok && strings.TrimSpace(nextName) != "" {
+				nextStages = append(nextStages, nextName)
+			}
+		}
 		export.Stages[i] = WorkflowStageExport{
 			StageName:   s.StageName,
 			Description: s.Description,
 			Roles:       roleNames,
+			NextStages:  nextStages,
 			SortOrder:   s.SortOrder,
 		}
 	}
@@ -442,6 +457,9 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 	name := strings.TrimSpace(export.Name)
 	if name == "" {
 		return Workflow{}, errors.New("workflow name is required")
+	}
+	if err := ensureWorkflowTransitionTable(ctx, db); err != nil {
+		return Workflow{}, err
 	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -470,12 +488,22 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 		return Workflow{}, err
 	}
 
+	stageIDByName := make(map[string]int64, len(export.Stages))
+	type transitionSpec struct {
+		from string
+		to   []string
+	}
+	transitionSpecs := make([]transitionSpec, 0, len(export.Stages))
 	// Create stages and assign roles
 	for _, s := range export.Stages {
+		stageName := strings.TrimSpace(s.StageName)
+		if stageName == "" {
+			return Workflow{}, errors.New("workflow stage name is required")
+		}
 		stageResult, err := tx.ExecContext(ctx, `
 			INSERT INTO workflow_stages (workflow_id, stage_name, description, sort_order, updated_at)
 			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-		`, workflowID, strings.TrimSpace(s.StageName), strings.TrimSpace(s.Description), s.SortOrder)
+		`, workflowID, stageName, strings.TrimSpace(s.Description), s.SortOrder)
 		if err != nil {
 			return Workflow{}, err
 		}
@@ -483,6 +511,11 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 		if err != nil {
 			return Workflow{}, err
 		}
+		stageIDByName[strings.ToLower(stageName)] = stageID
+		transitionSpecs = append(transitionSpecs, transitionSpec{
+			from: stageName,
+			to:   s.NextStages,
+		})
 		for _, roleName := range s.Roles {
 			role, err := getRoleByTitleTx(ctx, tx, strings.TrimSpace(roleName))
 			if err != nil {
@@ -496,11 +529,119 @@ func ImportWorkflow(ctx context.Context, db *sql.DB, export WorkflowExport) (Wor
 			}
 		}
 	}
+	for _, spec := range transitionSpecs {
+		fromID, ok := stageIDByName[strings.ToLower(strings.TrimSpace(spec.from))]
+		if !ok {
+			return Workflow{}, fmt.Errorf("stage %q not found while importing transitions", spec.from)
+		}
+		seen := map[int64]bool{}
+		for i, toStageName := range spec.to {
+			toID, ok := stageIDByName[strings.ToLower(strings.TrimSpace(toStageName))]
+			if !ok {
+				return Workflow{}, fmt.Errorf("target stage %q not found while importing transitions", toStageName)
+			}
+			if seen[toID] {
+				continue
+			}
+			seen[toID] = true
+			if _, execErr := tx.ExecContext(ctx, `
+				INSERT INTO workflow_stage_transitions (workflow_id, from_stage_id, to_stage_id, sort_order)
+				VALUES (?, ?, ?, ?)
+			`, workflowID, fromID, toID, i); execErr != nil {
+				return Workflow{}, execErr
+			}
+		}
+	}
+	if validateErr := validateWorkflowStageGraphTx(ctx, tx, workflowID); validateErr != nil {
+		return Workflow{}, validateErr
+	}
 
 	if err := tx.Commit(); err != nil {
 		return Workflow{}, err
 	}
 	return getWorkflowRow(ctx, db, workflowID)
+}
+
+func validateWorkflowStageGraphTx(ctx context.Context, tx *sql.Tx, workflowID int64) error {
+	stageRows, queryErr := tx.QueryContext(ctx, `
+		SELECT workflow_stage_id
+		FROM workflow_stages
+		WHERE workflow_id = ?
+		ORDER BY sort_order, workflow_stage_id
+	`, workflowID)
+	if queryErr != nil {
+		return queryErr
+	}
+	defer stageRows.Close()
+	stageOrder := make([]int64, 0)
+	for stageRows.Next() {
+		var stageID int64
+		if scanErr := stageRows.Scan(&stageID); scanErr != nil {
+			return scanErr
+		}
+		stageOrder = append(stageOrder, stageID)
+	}
+	if err := stageRows.Err(); err != nil {
+		return err
+	}
+	if len(stageOrder) <= 1 {
+		return nil
+	}
+	indexByID := make(map[int64]int, len(stageOrder))
+	for idx, stageID := range stageOrder {
+		indexByID[stageID] = idx
+	}
+	edges := make(map[int64][]int64, len(stageOrder))
+	explicitRows, err := tx.QueryContext(ctx, `
+		SELECT from_stage_id, to_stage_id
+		FROM workflow_stage_transitions
+		WHERE workflow_id = ?
+		ORDER BY from_stage_id, sort_order, to_stage_id
+	`, workflowID)
+	if err != nil {
+		return err
+	}
+	defer explicitRows.Close()
+	for explicitRows.Next() {
+		var fromID int64
+		var toID int64
+		if scanErr := explicitRows.Scan(&fromID, &toID); scanErr != nil {
+			return scanErr
+		}
+		edges[fromID] = append(edges[fromID], toID)
+	}
+	if err := explicitRows.Err(); err != nil {
+		return err
+	}
+	visiting := make(map[int64]bool, len(stageOrder))
+	visited := make(map[int64]bool, len(stageOrder))
+	var dfs func(int64) error
+	dfs = func(stageID int64) error {
+		if visiting[stageID] {
+			return errors.New("workflow transitions contain a cycle")
+		}
+		if visited[stageID] {
+			return nil
+		}
+		visiting[stageID] = true
+		for _, nextID := range edges[stageID] {
+			if _, ok := indexByID[nextID]; !ok {
+				return fmt.Errorf("workflow transitions reference unknown stage %d", nextID)
+			}
+			if err := dfs(nextID); err != nil {
+				return err
+			}
+		}
+		visiting[stageID] = false
+		visited[stageID] = true
+		return nil
+	}
+	for _, stageID := range stageOrder {
+		if err := dfs(stageID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func normalizeWorkflowApprovalPolicy(raw string) (string, error) {
