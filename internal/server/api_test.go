@@ -2289,6 +2289,25 @@ func TestTicketWorkItemActionAPI(t *testing.T) {
 	if reassigned.AssigneeID != bob.ID {
 		t.Fatalf("reassigned assignee_id = %q, want %q", reassigned.AssigneeID, bob.ID)
 	}
+	feedbackResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+activeID+"/feedback", map[string]any{
+		"message":    "captured findings",
+		"commit_ref": "deadbeef",
+	}, adminToken)
+	if feedbackResp.Code != http.StatusOK {
+		t.Fatalf("feedback work-item status = %d body=%s", feedbackResp.Code, feedbackResp.Body.String())
+	}
+	var feedbacked store.WorkItem
+	decodeResponse(t, feedbackResp, &feedbacked)
+	if feedbacked.CommitRef != "deadbeef" {
+		t.Fatalf("feedbacked commit_ref = %q, want deadbeef", feedbacked.CommitRef)
+	}
+	if !strings.Contains(feedbacked.Feedback, "captured findings") {
+		t.Fatalf("feedbacked feedback = %q", feedbacked.Feedback)
+	}
+	emptyFeedbackResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+activeID+"/feedback", map[string]any{}, adminToken)
+	if emptyFeedbackResp.Code != http.StatusBadRequest {
+		t.Fatalf("empty feedback status = %d body=%s", emptyFeedbackResp.Code, emptyFeedbackResp.Body.String())
+	}
 
 	cancelResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/work-items/"+activeID+"/cancel", map[string]any{
 		"message": "stop this attempt",

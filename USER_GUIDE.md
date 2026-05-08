@@ -692,6 +692,7 @@ Work-item lifecycle operations are also available for editors/owners:
 - `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/reassign` (body: `assignee`, optional `message`)
 - `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/cancel` (optional `message`)
 - `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/retry` (optional `assignee`)
+- `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/feedback` (optional `message`, optional `commit_ref`, at least one required)
 
 Intervention decisions (`POST /api/tickets/{ticket_ref}/intervene`) are restricted
 to project owners.
@@ -876,8 +877,12 @@ Keyboard shortcuts in the board view:
 - workflow create/edit now exposes `approval_policy` (`single_role` / `all_roles`)
   and `progression_mode` (`linear` / `stage_only`) so lifecycle progression can be
   managed from Site2 without CLI-only configuration
+- board now includes a `Predicted next work` panel that forecasts next
+  phase/role transitions from current workflow ordering and ticket state
 - the Interventions board includes built-in filter (`all`, `unassigned`, `agent`,
   `human`) and sort (`priority`, `order`, `most recent update`) controls for triage
+- each intervention card now shows a compact conversation thread (latest comments)
+  and supports adding intervention comments inline for accountable handoff context
 - intervention cards expose quick actions for `retry-role` and `cancel` in addition
   to the existing decision dropdown submit path
 - roles include `description` and `acceptance_criteria` fields for defining role personas

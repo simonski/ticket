@@ -436,8 +436,9 @@ func (r *router) registerTicketHandlers() {
 				}
 				action := strings.TrimSpace(strings.ToLower(parts[3]))
 				var payload struct {
-					Assignee string `json:"assignee"`
-					Message  string `json:"message"`
+					Assignee  string `json:"assignee"`
+					Message   string `json:"message"`
+					CommitRef string `json:"commit_ref"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid json body")
@@ -454,6 +455,8 @@ func (r *router) registerTicketHandlers() {
 					item, actionErr = store.CancelWorkItem(r.Context(), db, id, workItemID, payload.Message, user.Username, user.ID)
 				case "retry":
 					item, actionErr = store.RetryWorkItem(r.Context(), db, id, workItemID, payload.Assignee, user.Username, user.ID)
+				case "feedback":
+					item, actionErr = store.AddWorkItemFeedback(r.Context(), db, id, workItemID, payload.Message, payload.CommitRef, user.Username, user.ID)
 				default:
 					writeError(w, http.StatusBadRequest, "invalid work-item action")
 					return
@@ -466,6 +469,7 @@ func (r *router) registerTicketHandlers() {
 					"work_item_id": item.ID,
 					"actor":        user.Username,
 					"message":      payload.Message,
+					"commit_ref":   payload.CommitRef,
 				}, user.ID); err != nil {
 					writeStoreError(w, err)
 					return

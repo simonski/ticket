@@ -30,6 +30,7 @@ type WorkItem struct {
 	ObjectiveSnapshot string `json:"objective_snapshot"`
 	PromptSnapshot    string `json:"prompt_snapshot"`
 	Feedback          string `json:"feedback"`
+	CommitRef         string `json:"commit_ref"`
 	StartedAt         string `json:"started_at,omitempty"`
 	CompletedAt       string `json:"completed_at,omitempty"`
 	CreatedAt         string `json:"created_at"`
@@ -67,7 +68,7 @@ func ListWorkItemsByTicketWithParams(ctx context.Context, db *sql.DB, ticketID s
 	}
 	query := `
 		SELECT work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
-		       assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback,
+		       assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, commit_ref,
 		       started_at, completed_at, created_at, updated_at
 		FROM work_items
 		WHERE ticket_id = ?
@@ -187,9 +188,9 @@ func ensureActiveWorkItem(ctx context.Context, db *sql.DB, ticket Ticket, assign
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO work_items (
 			work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
-			assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, started_at
+			assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, commit_ref, started_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', CURRENT_TIMESTAMP)
 	`, uuid.NewString(), ticket.ID, ticket.ProjectID, nullableInt64(workflowID), nullableInt64(ticket.WorkflowStageID), nullableInt64(ticket.RoleID),
 		WorkItemStatusActive, assigneeType, assigneeID, objectiveSnapshot, promptSnapshot)
 	return err
@@ -216,7 +217,7 @@ func closeActiveWorkItems(ctx context.Context, db *sql.DB, ticketID, finalStatus
 func GetWorkItemByTicket(ctx context.Context, db *sql.DB, ticketID, workItemID string) (WorkItem, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
-		       assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback,
+		       assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, commit_ref,
 		       started_at, completed_at, created_at, updated_at
 		FROM work_items
 		WHERE ticket_id = ? AND work_item_id = ?
@@ -250,6 +251,36 @@ func ReassignWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, ass
 		SET assignee_type = ?, assignee_id = ?, feedback = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE work_item_id = ? AND ticket_id = ?
 	`, assigneeType, assigneeID, appendWorkItemFeedback(item.Feedback, note), workItemID, ticketID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	return GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+}
+
+func AddWorkItemFeedback(ctx context.Context, db *sql.DB, ticketID, workItemID, message, commitRef, actorUsername, actorID string) (WorkItem, error) {
+	item, err := GetWorkItemByTicket(ctx, db, ticketID, workItemID)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	message = strings.TrimSpace(message)
+	commitRef = strings.TrimSpace(commitRef)
+	if message == "" && commitRef == "" {
+		return WorkItem{}, errors.New("feedback message or commit_ref is required")
+	}
+	note := message
+	if note == "" {
+		note = "feedback updated"
+	}
+	audit := fmt.Sprintf("feedback by %s (%s): %s", strings.TrimSpace(actorUsername), strings.TrimSpace(actorID), note)
+	nextCommitRef := item.CommitRef
+	if commitRef != "" {
+		nextCommitRef = commitRef
+	}
+	_, err = db.ExecContext(ctx, `
+		UPDATE work_items
+		SET feedback = ?, commit_ref = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE work_item_id = ? AND ticket_id = ?
+	`, appendWorkItemFeedback(item.Feedback, audit), nextCommitRef, workItemID, ticketID)
 	if err != nil {
 		return WorkItem{}, err
 	}
@@ -311,9 +342,9 @@ func RetryWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, assign
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO work_items (
 			work_item_id, ticket_id, project_id, workflow_id, workflow_stage_id, role_id, status,
-			assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, started_at
+			assignee_type, assignee_id, objective_snapshot, prompt_snapshot, feedback, commit_ref, started_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', CURRENT_TIMESTAMP)
 	`, nextID, item.TicketID, item.ProjectID, nullableInt64(item.WorkflowID), nullableInt64(item.WorkflowStageID), nullableInt64(item.RoleID),
 		WorkItemStatusActive, nextAssigneeType, nextAssigneeID, item.ObjectiveSnapshot, item.PromptSnapshot, note)
 	if err != nil {
@@ -359,7 +390,7 @@ func scanWorkItem(scan func(dest ...any) error) (WorkItem, error) {
 	var completedAt sql.NullString
 	if err := scan(
 		&item.ID, &item.TicketID, &item.ProjectID, &workflowID, &workflowStageID, &roleID, &item.Status,
-		&item.AssigneeType, &item.AssigneeID, &item.ObjectiveSnapshot, &item.PromptSnapshot, &item.Feedback,
+		&item.AssigneeType, &item.AssigneeID, &item.ObjectiveSnapshot, &item.PromptSnapshot, &item.Feedback, &item.CommitRef,
 		&startedAt, &completedAt, &item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return WorkItem{}, err

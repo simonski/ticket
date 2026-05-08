@@ -398,6 +398,19 @@ func TestWorkItemLifecycleActions(t *testing.T) {
 	if reassigned.AssigneeID != bob.ID {
 		t.Fatalf("ReassignWorkItem().AssigneeID = %q, want %q", reassigned.AssigneeID, bob.ID)
 	}
+	feedbackUpdated, err := AddWorkItemFeedback(context.Background(), db, ticket.ID, active.ID, "investigated root cause", "abc123", "admin", "admin")
+	if err != nil {
+		t.Fatalf("AddWorkItemFeedback() error = %v", err)
+	}
+	if feedbackUpdated.CommitRef != "abc123" {
+		t.Fatalf("AddWorkItemFeedback().CommitRef = %q, want %q", feedbackUpdated.CommitRef, "abc123")
+	}
+	if !strings.Contains(feedbackUpdated.Feedback, "investigated root cause") {
+		t.Fatalf("AddWorkItemFeedback().Feedback = %q", feedbackUpdated.Feedback)
+	}
+	if _, err := AddWorkItemFeedback(context.Background(), db, ticket.ID, active.ID, "", "", "admin", "admin"); err == nil {
+		t.Fatalf("AddWorkItemFeedback(empty payload) = nil, want error")
+	}
 	cancelled, err := CancelWorkItem(context.Background(), db, ticket.ID, active.ID, "stopping work", "admin", "admin")
 	if err != nil {
 		t.Fatalf("CancelWorkItem() error = %v", err)

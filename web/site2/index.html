@@ -787,6 +787,11 @@
                             </div>
                         </div>
                         <div id="ticket-board" class="board"></div>
+                        <div class="panel panel-padded" style="margin-top: 16px;">
+                            <h3>Predicted next work</h3>
+                            <p class="meta">Projected next phase/role transitions from the current workflow graph.</p>
+                            <div id="predicted-work-list" class="history-list"></div>
+                        </div>
                     </div>
                 </section>
 
@@ -1275,6 +1280,7 @@
             ticketTimeTotal: 0,
             interventionWorkItems: {},
             interventionHistory: {},
+            interventionComments: {},
             drag: null,
             liveSocket: null,
             liveRefreshTimer: null,
@@ -1307,6 +1313,7 @@
             interventionList: document.getElementById("intervention-list"),
             interventionFilter: document.getElementById("intervention-filter"),
             interventionSort: document.getElementById("intervention-sort"),
+            predictedWorkList: document.getElementById("predicted-work-list"),
             stageGrid: document.getElementById("stage-grid"),
             workflowRoleBank: document.getElementById("workflow-role-bank"),
             ticketModal: document.getElementById("ticket-modal"),
@@ -1684,8 +1691,17 @@
                     return [String(ticket.id), []];
                 }
             }));
+            const commentEntries = await Promise.all(state.interventions.map(async (ticket) => {
+                try {
+                    const comments = await api("/api/tickets/" + ticket.id + "/comments");
+                    return [String(ticket.id), Array.isArray(comments) ? comments.slice(-3).reverse() : []];
+                } catch (error) {
+                    return [String(ticket.id), []];
+                }
+            }));
             state.interventionWorkItems = Object.fromEntries(workItemEntries);
             state.interventionHistory = Object.fromEntries(historyEntries);
+            state.interventionComments = Object.fromEntries(commentEntries);
         }
 
         async function loadWorkflows() {
@@ -1824,6 +1840,7 @@
             renderAgents();
             renderTeams();
             renderTicketBoard();
+            renderPredictedNextWork();
             renderInterventions();
             renderEditors();
         }
@@ -1964,6 +1981,57 @@
             }).join("");
         }
 
+        function renderPredictedNextWork() {
+            if (!els.predictedWorkList) {
+                return;
+            }
+            const project = getCurrentProject();
+            if (!project) {
+                els.predictedWorkList.innerHTML = "<div class=\"empty\">Select a project to see predictions.</div>";
+                return;
+            }
+            const predictions = state.tickets
+                .filter((ticket) => !ticket.archived)
+                .map((ticket) => {
+                    const workflowID = ticket.workflow_id || project.workflow_id;
+                    const workflow = state.workflows.find((item) => Number(item.id) === Number(workflowID));
+                    if (!workflow || !Array.isArray(workflow.stages) || !workflow.stages.length) {
+                        return null;
+                    }
+                    const stageIndex = workflow.stages.findIndex((stage) =>
+                        Number(stage.id) === Number(ticket.workflow_stage_id) ||
+                        String(stage.name || "").toLowerCase() === String(ticket.stage || "").toLowerCase());
+                    if (stageIndex < 0) {
+                        return null;
+                    }
+                    if (String(ticket.state || "").toLowerCase() === "success") {
+                        if (stageIndex + 1 < workflow.stages.length) {
+                            const nextStage = workflow.stages[stageIndex + 1];
+                            const nextRole = (nextStage.roles || [])[0] || null;
+                            return {
+                                key: ticket.key || ticket.id,
+                                detail: "next: " + String(nextStage.name || "unknown") + (nextRole ? (" / " + (nextRole.title || ("role " + nextRole.id))) : ""),
+                            };
+                        }
+                        return { key: ticket.key || ticket.id, detail: "next: completion/close decision" };
+                    }
+                    const currentStage = workflow.stages[stageIndex];
+                    const currentRole = (currentStage.roles || []).find((role) => Number(role.id) === Number(ticket.role_id)) || (currentStage.roles || [])[0] || null;
+                    return {
+                        key: ticket.key || ticket.id,
+                        detail: "in progress: " + String(currentStage.name || ticket.stage || "unknown") + (currentRole ? (" / " + (currentRole.title || ("role " + currentRole.id))) : ""),
+                    };
+                })
+                .filter(Boolean);
+            if (!predictions.length) {
+                els.predictedWorkList.innerHTML = "<div class=\"empty\">No forecastable tickets.</div>";
+                return;
+            }
+            els.predictedWorkList.innerHTML = predictions
+                .map((entry) => "<div class=\"history-item\"><strong>" + escapeHTML(entry.key) + "</strong> — " + escapeHTML(entry.detail) + "</div>")
+                .join("");
+        }
+
         function renderInterventions() {
             const failed = state.interventions
                 .filter((ticket) => {
@@ -2002,6 +2070,10 @@
             els.interventionList.innerHTML = failed.map((ticket) => {
                 const latestWorkItem = (state.interventionWorkItems[String(ticket.id)] || [])[0] || null;
                 const latestHistory = (state.interventionHistory[String(ticket.id)] || [])[0] || null;
+                const latestComments = state.interventionComments[String(ticket.id)] || [];
+                const commentsHTML = latestComments.length
+                    ? latestComments.map((comment) => "<div class=\"history-item\">" + escapeHTML(comment.comment || "") + "</div>").join("")
+                    : "<div class=\"history-item\">No conversation yet.</div>";
                 const latestLabel = latestWorkItem
                     ? ("latest work item: " + String(latestWorkItem.status || "unknown") + " · assignee " + String(latestWorkItem.assignee_id || "n/a"))
                     : "latest work item: none";
@@ -2020,8 +2092,11 @@
                     optionHTML("cancel", "Cancel/archive ticket", false) +
                     "</select></div>" +
                     "<div class=\"field\"><label>Message</label><textarea data-intervention-message=\"" + ticket.id + "\" placeholder=\"Why this decision?\"></textarea></div>" +
+                    "<div class=\"field\"><label>Conversation</label><div class=\"history-list\">" + commentsHTML + "</div></div>" +
+                    "<div class=\"field\"><label>Add intervention comment</label><textarea data-intervention-comment=\"" + ticket.id + "\" placeholder=\"Add context for the accountable human or agent.\"></textarea></div>" +
                     "<div class=\"entity-actions\">" +
                     "<button type=\"button\" class=\"btn-primary\" data-open-intervention-ticket=\"" + ticket.id + "\">Open ticket</button>" +
+                    "<button type=\"button\" data-add-intervention-comment=\"" + ticket.id + "\">Add comment</button>" +
                     "<button type=\"button\" data-retry-intervention-ticket=\"" + ticket.id + "\">Quick retry</button>" +
                     "<button type=\"button\" data-cancel-intervention-ticket=\"" + ticket.id + "\">Quick cancel</button>" +
                     "<button type=\"button\" data-apply-intervention-ticket=\"" + ticket.id + "\">Apply decision</button>" +
@@ -2636,6 +2711,28 @@
                 if (cancelButton) {
                     const ticketID = cancelButton.dataset.cancelInterventionTicket;
                     interveneTicket(ticketID, "cancel", "Quick cancel from interventions board.").catch((error) => setNotice(error.message, true));
+                    return;
+                }
+                const commentButton = event.target.closest("[data-add-intervention-comment]");
+                if (commentButton) {
+                    const ticketID = commentButton.dataset.addInterventionComment;
+                    const commentInput = els.interventionList.querySelector("[data-intervention-comment=\"" + ticketID + "\"]");
+                    const comment = commentInput ? String(commentInput.value || "").trim() : "";
+                    if (!comment) {
+                        setNotice("Intervention comment is required.", true);
+                        return;
+                    }
+                    api("/api/tickets/" + ticketID + "/comments", {
+                        method: "POST",
+                        body: JSON.stringify({ comment: comment }),
+                    }).then(async () => {
+                        if (commentInput) {
+                            commentInput.value = "";
+                        }
+                        await loadTickets();
+                        renderAll();
+                        setNotice("Intervention comment added.");
+                    }).catch((error) => setNotice(error.message, true));
                     return;
                 }
                 const applyButton = event.target.closest("[data-apply-intervention-ticket]");

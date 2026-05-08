@@ -547,6 +547,8 @@ components:
           type: string
         feedback:
           type: string
+        commit_ref:
+          type: string
         started_at:
           type: string
           format: date-time
@@ -4318,6 +4320,53 @@ paths:
       responses:
         '200':
           description: Newly created active retry work-item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/tickets/{ticket_ref}/work-items/{work_item_id}/feedback:
+    post:
+      tags: [Tickets]
+      summary: Add feedback (and optional commit reference) to a work-item
+      description: Restricted to project editors and owners.
+      operationId: feedbackTicketWorkItem
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ticket_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: work_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                commit_ref:
+                  type: string
+      responses:
+        '200':
+          description: Updated work-item
           content:
             application/json:
               schema:

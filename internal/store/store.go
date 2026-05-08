@@ -372,6 +372,7 @@ CREATE TABLE IF NOT EXISTS work_items (
 	objective_snapshot TEXT NOT NULL DEFAULT '',
 	prompt_snapshot TEXT NOT NULL DEFAULT '',
 	feedback TEXT NOT NULL DEFAULT '',
+	commit_ref TEXT NOT NULL DEFAULT '',
 	started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	completed_at TEXT,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -707,6 +708,11 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if !columnExists(ctx, db, "workflows", "progression_mode") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE workflows ADD COLUMN progression_mode TEXT NOT NULL DEFAULT 'linear'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "work_items", "commit_ref") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE work_items ADD COLUMN commit_ref TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
