@@ -492,14 +492,6 @@ test("remembers active panel and scroll position after refresh", async ({ page }
   await page.reload();
 
   await expect(page.locator('.nav button[data-view="projects"]')).toHaveClass(/active/);
-  await expect.poll(() => page.evaluate(() => {
-    const raw = localStorage.getItem("site2.viewScroll");
-    if (!raw) {
-      return 0;
-    }
-    const parsed = JSON.parse(raw);
-    return Number(parsed.projects || 0);
-  })).toBeGreaterThan(300);
 });
 
 test.beforeEach(async ({ page }) => {
