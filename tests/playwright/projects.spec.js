@@ -103,7 +103,7 @@ test.describe("project management", () => {
     await page.fill("#proj-modal-prefix", "GM");
 
     await page.click("#proj-modal-create");
-    await page.waitForTimeout(300);
+    await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
     expect(postBody.title).toBe("Gamma");
@@ -144,7 +144,10 @@ test.describe("project management", () => {
       activatePerspective("members");
       loadProjectMembers();
     });
-    await page.waitForTimeout(500);
+    await expect.poll(async () => {
+      const members = await page.evaluate(() => document.getElementById("project-members-list")?.textContent || "");
+      return members.includes("alice") && members.includes("bob");
+    }).toBe(true);
 
     const result = await page.evaluate(() => {
       const membersEl = document.getElementById("project-members-list");
@@ -183,7 +186,10 @@ test.describe("project management", () => {
       activatePerspective("members");
     }, PROJECTS);
     await page.evaluate(() => loadProjectMembers());
-    await page.waitForTimeout(300);
+    await expect.poll(async () => {
+      const input = await page.locator("#project-member-user-id").count();
+      return input > 0;
+    }).toBe(true);
 
     // Fill user ID and click add via evaluate (element may not be in viewport)
     await page.evaluate(() => {
@@ -192,7 +198,7 @@ test.describe("project management", () => {
     await page.evaluate(() => {
       document.getElementById("project-member-add").click();
     });
-    await page.waitForTimeout(300);
+    await expect.poll(() => postBody).not.toBeNull();
     expect(postBody).not.toBeNull();
   });
 });

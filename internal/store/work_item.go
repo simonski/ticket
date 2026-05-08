@@ -244,7 +244,10 @@ func ReassignWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, ass
 	if assigneeUsername == "" {
 		return WorkItem{}, errors.New("assignee is required")
 	}
-	assigneeType, assigneeID := resolveWorkItemAssignee(ctx, db, assigneeUsername)
+	assigneeType, assigneeID, resolveErr := resolveExistingWorkItemAssignee(ctx, db, assigneeUsername)
+	if resolveErr != nil {
+		return WorkItem{}, resolveErr
+	}
 	note := fmt.Sprintf("reassigned by %s (%s) to %s", strings.TrimSpace(actorUsername), strings.TrimSpace(actorID), assigneeUsername)
 	_, err = db.ExecContext(ctx, `
 		UPDATE work_items
@@ -335,7 +338,11 @@ func RetryWorkItem(ctx context.Context, db *sql.DB, ticketID, workItemID, assign
 	nextAssigneeType := item.AssigneeType
 	nextAssigneeID := item.AssigneeID
 	if assignee := strings.TrimSpace(assigneeUsername); assignee != "" {
-		nextAssigneeType, nextAssigneeID = resolveWorkItemAssignee(ctx, db, assignee)
+		assigneeType, assigneeID, resolveErr := resolveExistingWorkItemAssignee(ctx, db, assignee)
+		if resolveErr != nil {
+			return WorkItem{}, resolveErr
+		}
+		nextAssigneeType, nextAssigneeID = assigneeType, assigneeID
 	}
 	nextID := uuid.NewString()
 	note := fmt.Sprintf("retry of %s by %s (%s)", item.ID, strings.TrimSpace(actorUsername), strings.TrimSpace(actorID))
@@ -367,6 +374,28 @@ func resolveWorkItemAssignee(ctx context.Context, db *sql.DB, assigneeUsername s
 		}
 	}
 	return assigneeType, assigneeID
+}
+
+func resolveExistingWorkItemAssignee(ctx context.Context, db *sql.DB, assigneeUsername string) (assigneeType, assigneeID string, err error) {
+	assigneeUsername = strings.TrimSpace(assigneeUsername)
+	if assigneeUsername == "" {
+		return "", "", errors.New("assignee is required")
+	}
+	user, userErr := GetUserByUsername(ctx, db, assigneeUsername)
+	if userErr != nil {
+		if errors.Is(userErr, sql.ErrNoRows) {
+			return "", "", errors.New("assignee user not found")
+		}
+		return "", "", userErr
+	}
+	if !user.Enabled {
+		return "", "", errors.New("assignee user is disabled")
+	}
+	assigneeType = "human"
+	if strings.EqualFold(strings.TrimSpace(user.UserType), "agent") {
+		assigneeType = "agent"
+	}
+	return assigneeType, user.ID, nil
 }
 
 func appendWorkItemFeedback(existing, note string) string {

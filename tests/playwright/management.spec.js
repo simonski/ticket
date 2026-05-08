@@ -107,7 +107,7 @@ test.describe("agent management", () => {
     await page.fill("#agent-password", "secret123");
 
     await page.click("#agent-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
     expect(postBody.name).toBe("NewBot");
@@ -144,7 +144,7 @@ test.describe("agent management", () => {
     const deleteBtn = page.locator("#agent-delete");
     if (await deleteBtn.count() > 0) {
       await deleteBtn.click();
-      await page.waitForTimeout(300);
+      await expect.poll(() => deleteCalled).toBe(true);
       expect(deleteCalled).toBe(true);
     }
 
@@ -230,7 +230,7 @@ test.describe("role management", () => {
     await page.fill("#role-motivation", "Protect");
     await page.fill("#role-goals", "Zero breaches");
     await page.click("#role-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
     expect(postBody.title).toBe("Security Lead");
@@ -266,7 +266,7 @@ test.describe("role management", () => {
 
     await page.fill("#role-title", "Chief Architect");
     await page.click("#role-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => putBody).not.toBeNull();
 
     expect(putBody).not.toBeNull();
     expect(putBody.title).toBe("Chief Architect");
@@ -302,7 +302,7 @@ test.describe("role management", () => {
     const deleteBtn = page.locator("#role-delete");
     if (await deleteBtn.count() > 0) {
       await deleteBtn.click();
-      await page.waitForTimeout(300);
+      await expect.poll(() => deleteCalled).toBe(true);
       expect(deleteCalled).toBe(true);
     }
     await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
@@ -370,7 +370,7 @@ test.describe("team management", () => {
 
     await page.fill("#team-name", "Backend");
     await page.click("#team-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
     expect(postBody.name).toBe("Backend");
@@ -406,7 +406,7 @@ test.describe("team management", () => {
 
     await page.fill("#team-name", "Platform V2");
     await page.click("#team-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => putBody).not.toBeNull();
 
     expect(putBody).not.toBeNull();
     expect(putBody.name).toBe("Platform V2");
@@ -442,7 +442,7 @@ test.describe("team management", () => {
     const deleteBtn = page.locator("#team-delete");
     if (await deleteBtn.count() > 0) {
       await deleteBtn.click();
-      await page.waitForTimeout(300);
+      await expect.poll(() => deleteCalled).toBe(true);
       expect(deleteCalled).toBe(true);
     }
     await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
@@ -484,8 +484,10 @@ test.describe("team management", () => {
     // openTeamEditor is async — need to await it
     await page.evaluate(() => openTeamEditor(teams[0]));
 
-    // Wait for team details to load
-    await page.waitForTimeout(500);
+    await expect.poll(async () => {
+      const text = await page.evaluate(() => document.getElementById("team-members")?.textContent || "");
+      return text.includes("alice");
+    }).toBe(true);
 
     const result = await page.evaluate(() => {
       const el = document.getElementById("team-members");

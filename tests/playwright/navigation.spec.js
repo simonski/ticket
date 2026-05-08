@@ -264,7 +264,7 @@ test.describe("settings", () => {
     });
 
     await page.click("#settings-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => configCalls.length).toBeGreaterThan(0);
 
     expect(configCalls.length).toBeGreaterThan(0);
   });

@@ -114,7 +114,7 @@ test.describe("stories", () => {
     await page.fill("#story-description", "Description here");
 
     await page.click("#story-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => capturedBody).not.toBeNull();
 
     expect(capturedBody).not.toBeNull();
     expect(capturedBody.title).toBe("New story");
@@ -149,7 +149,7 @@ test.describe("stories", () => {
     await page.evaluate(() => openStoryModal(stories[0]));
     await page.fill("#story-title", "Updated auth story");
     await page.click("#story-save");
-    await page.waitForTimeout(300);
+    await expect.poll(() => putBody).not.toBeNull();
 
     expect(putBody).not.toBeNull();
     expect(putBody.title).toBe("Updated auth story");

@@ -411,6 +411,18 @@ func TestWorkItemLifecycleActions(t *testing.T) {
 	if _, err := AddWorkItemFeedback(context.Background(), db, ticket.ID, active.ID, "", "", "admin", "admin"); err == nil {
 		t.Fatalf("AddWorkItemFeedback(empty payload) = nil, want error")
 	}
+	if _, err := ReassignWorkItem(context.Background(), db, ticket.ID, active.ID, "not-a-user", "admin", "admin"); err == nil {
+		t.Fatalf("ReassignWorkItem(unknown assignee) = nil, want error")
+	}
+	if err := SetUserEnabled(context.Background(), db, "bob", false); err != nil {
+		t.Fatalf("SetUserEnabled(false) error = %v", err)
+	}
+	if _, err := ReassignWorkItem(context.Background(), db, ticket.ID, active.ID, bob.Username, "admin", "admin"); err == nil {
+		t.Fatalf("ReassignWorkItem(disabled assignee) = nil, want error")
+	}
+	if err := SetUserEnabled(context.Background(), db, "bob", true); err != nil {
+		t.Fatalf("SetUserEnabled(true) error = %v", err)
+	}
 	cancelled, err := CancelWorkItem(context.Background(), db, ticket.ID, active.ID, "stopping work", "admin", "admin")
 	if err != nil {
 		t.Fatalf("CancelWorkItem() error = %v", err)

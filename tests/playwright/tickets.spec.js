@@ -281,7 +281,7 @@ test.describe("ticket lifecycle", () => {
         window.uiConfirm = async () => true;
       });
       await deleteBtn.click();
-      await page.waitForTimeout(200);
+      await expect.poll(() => deleteCalled).toBe(true);
       expect(deleteCalled).toBe(true);
       await page.evaluate(() => {
         if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm;

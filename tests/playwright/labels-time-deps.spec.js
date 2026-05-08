@@ -88,7 +88,7 @@ test.describe("labels", () => {
     ]);
 
     await page.evaluate(() => openEdit(tickets[0]));
-    await page.waitForTimeout(500); // Wait for labels to load
+    await expect(page.locator("#ticket-label-select")).toBeVisible();
 
     // Select a label and click add
     await page.evaluate(() => {
@@ -108,7 +108,7 @@ test.describe("labels", () => {
     const addBtn = page.locator("#ticket-label-add");
     if (await addBtn.count() > 0) {
       await addBtn.click();
-      await page.waitForTimeout(300);
+      await expect.poll(() => addLabelCalled).toBe(true);
       expect(addLabelCalled).toBe(true);
     }
   });
@@ -173,7 +173,7 @@ test.describe("time tracking", () => {
     await page.fill("#ticket-time-minutes", "45");
     await page.fill("#ticket-time-note", "Testing");
     await page.click("#ticket-time-log");
-    await page.waitForTimeout(200);
+    await expect.poll(() => timeLogBody).not.toBeNull();
 
     expect(timeLogBody).not.toBeNull();
     expect(timeLogBody.minutes).toBe(45);
@@ -192,7 +192,7 @@ test.describe("dependencies", () => {
     ]);
 
     await page.evaluate(() => openEdit(tickets[0]));
-    await page.waitForTimeout(500); // Wait for async loads
+    await expect(page.locator("#ticket-deps-list")).toBeVisible();
 
     const result = await page.evaluate(() => {
       const depsEl = document.getElementById("ticket-deps-list");
@@ -233,7 +233,7 @@ test.describe("dependencies", () => {
     if (await addBtn.count() > 0 && await addInput.count() > 0) {
       await addInput.fill("2");
       await addBtn.click();
-      await page.waitForTimeout(200);
+      await expect.poll(() => depBody).not.toBeNull();
       expect(depBody).not.toBeNull();
       expect(depBody.depends_on).toBe(2);
     }
@@ -263,7 +263,7 @@ test.describe("dependencies", () => {
     const removeBtn = page.locator("#ticket-deps-list .chip-remove, #ticket-deps-list .dep-remove, #ticket-deps-list button").first();
     if (await removeBtn.count() > 0) {
       await removeBtn.click();
-      await page.waitForTimeout(200);
+      await expect.poll(() => deleteCalled).toBe(true);
       expect(deleteCalled).toBe(true);
     }
   });
