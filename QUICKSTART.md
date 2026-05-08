@@ -14,7 +14,7 @@ Or, download a binary for your platform from the [releases page](https://github.
 
 ## Choose your mode
 
-`tk` works in two modes - *local* and *remote*
+`tk` has two primary operating modes:
 
 ### [Local mode](docs/quickstarts/client.md)
 
@@ -48,7 +48,7 @@ tk initdb
 tk server
 ```
 
-### Access a remote server 
+### Access a remote server
 
 ```bash
 tk remote add local-server http://localhost:8080
@@ -111,6 +111,12 @@ labels, dependencies, time entries, and decision/idea artifacts:
 ```
 
 Full walkthrough: [docs/quickstarts/todo-example.md](./docs/quickstarts/todo-example.md).
+
+Validation command (recommended before relying on the tutorial in CI/docs updates):
+
+```bash
+make build-dev && ./tests/quickstart_test.sh && ./scripts/verify_todo_example.sh
+```
 
 ---
 

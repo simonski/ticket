@@ -9,6 +9,12 @@ This tutorial walks through a simple end-to-end setup:
 
 It uses the default local server at `http://localhost:8080`.
 
+If you want the same path validated automatically, run:
+
+```bash
+make build-dev && ./tests/quickstart_test.sh
+```
+
 ---
 
 ## 1. Start the server

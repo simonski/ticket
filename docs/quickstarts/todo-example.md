@@ -45,4 +45,10 @@ source ./.ticket/demo-example.env
 ./scripts/verify_todo_example.sh
 ```
 
+Expected result:
+
+```text
+todo example verification passed
+```
+
 The scripts operate on your current active ticket database.
