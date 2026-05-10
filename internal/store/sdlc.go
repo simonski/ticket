@@ -313,17 +313,25 @@ func ReorderWorkflowStages(ctx context.Context, db *sql.DB, workflowID int64, or
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if len(orderedStageIDs) == 0 {
+		return tx.Commit()
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+		UPDATE workflow_stages SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE workflow_stage_id = ? AND workflow_id = ?
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
 	for i, id := range orderedStageIDs {
-		result, err := tx.ExecContext(ctx, `
-			UPDATE workflow_stages SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
-			WHERE workflow_stage_id = ? AND workflow_id = ?
-		`, i, id, workflowID)
-		if err != nil {
-			return err
+		result, execErr := stmt.ExecContext(ctx, i, id, workflowID)
+		if execErr != nil {
+			return execErr
 		}
-		affected, err := result.RowsAffected()
-		if err != nil {
-			return err
+		affected, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return rowsErr
 		}
 		if affected == 0 {
 			return fmt.Errorf("%w %d in workflow %d", ErrWorkflowStageNotFound, id, workflowID)
@@ -402,17 +410,40 @@ func SetWorkflowStageTransitions(ctx context.Context, db *sql.DB, workflowID, fr
 		return execErr
 	}
 	seen := map[int64]bool{}
-	for i, toStageID := range toStageIDs {
+	filtered := make([]int64, 0, len(toStageIDs))
+	for _, toStageID := range toStageIDs {
 		if toStageID == 0 || seen[toStageID] {
 			continue
 		}
 		seen[toStageID] = true
-		if scanErr := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM workflow_stages WHERE workflow_id = ? AND workflow_stage_id = ?`, workflowID, toStageID).Scan(&count); scanErr != nil {
-			return scanErr
+		filtered = append(filtered, toStageID)
+	}
+	if len(filtered) > 0 {
+		rows, qErr := tx.QueryContext(ctx, `SELECT workflow_stage_id FROM workflow_stages WHERE workflow_id = ?`, workflowID)
+		if qErr != nil {
+			return qErr
 		}
-		if count == 0 {
-			return fmt.Errorf("%w %d in workflow %d", ErrWorkflowStageNotFound, toStageID, workflowID)
+		known := make(map[int64]struct{}, len(filtered))
+		for rows.Next() {
+			var id int64
+			if scanErr := rows.Scan(&id); scanErr != nil {
+				_ = rows.Close()
+				return scanErr
+			}
+			known[id] = struct{}{}
 		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		_ = rows.Close()
+		for _, id := range filtered {
+			if _, ok := known[id]; !ok {
+				return fmt.Errorf("%w %d in workflow %d", ErrWorkflowStageNotFound, id, workflowID)
+			}
+		}
+	}
+	for i, toStageID := range filtered {
 		if _, execErr := tx.ExecContext(ctx, `
 			INSERT INTO workflow_stage_transitions (workflow_id, from_stage_id, to_stage_id, sort_order)
 			VALUES (?, ?, ?, ?)

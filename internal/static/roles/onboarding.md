@@ -17,7 +17,7 @@ The Onboarding Reviewer evaluates the project from the perspective of a develope
 - **Ticket Workflow**: How to pick up work, update ticket status, and mark work complete is documented. The `tk` tool usage is explained.
 - **Testing Expectations**: What tests to write, where to put them, how to run them, and what coverage is expected is clear. Contract test pattern is explained.
 - **Collaboration Norms**: Code review expectations, communication channels, and decision-making process are documented.
-- **Common Pitfalls**: Known gotchas are documented: `make build` increments version, `$TICKET_HOME` resolution, local vs remote mode differences, the 108-method Service interface.
+- **Common Pitfalls**: Known gotchas are documented: `make build` increments version, `$TICKET_HOME` resolution, server binding/auth setup, and the 108-method Service interface.
 - **Architecture Overview**: A new developer can understand the high-level architecture (four interfaces, two modes, key packages) within 15 minutes of reading.
 - **Environment Setup**: All environment variables, configuration files, and their purposes are documented. Example configurations exist.
 - **First Contribution Path**: A clear path exists for making a first contribution (e.g., a "good first issue" label or documented starter tasks).

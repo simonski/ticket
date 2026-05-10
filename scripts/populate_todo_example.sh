@@ -13,9 +13,12 @@ fi
 
 unset AGENT_ID AGENT_PASSWORD
 
-if [[ ! -f .ticket/config.json ]]; then
-	"$TK_BIN" initdb >/dev/null
-	"$TK_BIN" project init -prefix DEMO -title demo >/dev/null
+if [[ -z "${TICKET_URL:-}" || -z "${TICKET_USERNAME:-}" || -z "${TICKET_PASSWORD:-}" ]]; then
+	echo "server auth environment variables are required. Set:" >&2
+	echo "  TICKET_URL" >&2
+	echo "  TICKET_USERNAME" >&2
+	echo "  TICKET_PASSWORD" >&2
+	exit 1
 fi
 
 if ! "$TK_BIN" project use DEMO >/dev/null 2>&1; then

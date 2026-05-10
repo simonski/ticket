@@ -1,0 +1,151 @@
+# GOAL_PLAN
+
+## Measurement summary (GOAL vs current codebase)
+
+1. **Core platform shape is already present**
+   - CLI, server API, web UI, SQLite, and agent endpoints already exist.
+   - This is a refactor/recomposition problem, not a greenfield build.
+
+2. **Workflow + role primitives are present and usable**
+   - Workflows, stages, stage transitions, and stage-role mapping already exist.
+   - Roles already support acceptance criteria plus DOR/DOD/AC guidance maps.
+
+3. **Goal readiness/completion primitives exist but are fragmented**
+   - Ticket ready/not-ready (draft flag), completion, and lifecycle transitions exist.
+   - DOR/DOD criteria are stored across role/stage/ticket surfaces but not unified into one execution contract.
+
+4. **Escalation primitives exist, mailbox primitive does not yet match GOAL**
+   - Intervention state/reporting/escalation metrics exist for failed work.
+   - The explicit "mailbox entry with recommendations" model is not yet the primary escalation abstraction.
+
+5. **POC auth direction is aligned with current implementation**
+   - User session/bearer auth and agent Basic Auth are already implemented.
+   - Role-based authorization exists; policy-engine style authorization is not required for this phase.
+
+6. **Most important gap: orchestration contract**
+   - Runtime model "agent executes with goal + role + phase + project rules" is only partially represented today.
+   - There is no single canonical, machine-checkable evaluation path for this combined context.
+
+## Numbered initial recommendations (high-level to low-level)
+
+1. **Define a single execution contract for the runtime context**
+   1.1. Introduce a canonical "execution packet" shape that always resolves: goal rules + role rules + phase rules + project rules.
+   1.2. Make this packet the only source used by implementer and verifier agents.
+   1.3. Version the packet content so behavior remains reproducible across reruns.
+
+2. **Unify Ready/Done/Acceptance evaluation into one rule engine path**
+   2.1. Keep user-authored markdown as source of truth, but normalize it into a resolved rule bundle at runtime.
+   2.2. Define one evaluator API for: Definition of Ready, in-phase checks, Definition of Done.
+   2.3. Replace scattered ad hoc checks with evaluator results that are explicit and auditable.
+
+3. **Restructure workflow execution around role-driven orchestration**
+   3.1. Keep existing workflow/stage/role data model and transition graph.
+   3.2. Add an orchestration state machine that controls role execution order per phase.
+   3.3. Trigger assessment when implementing agent declares criteria completion, then verify using resolved rule bundle.
+
+4. **Promote escalation to a first-class mailbox flow**
+   4.1. Map current intervention state into mailbox entries as the user-facing escalation object.
+   4.2. Include required recommendation payloads: clarify goal, start again, refine requirements.
+   4.3. Add explicit human decision actions and decision history on each mailbox escalation item.
+
+5. **Consolidate rule authoring UX around markdown-backed CRUD**
+   5.1. Keep CRUD for projects/workflows/roles/goals, but standardize markdown fields and templates.
+   5.2. Provide deterministic merge/precedence order across project/phase/role/goal rules.
+   5.3. Add preview endpoints/UI to show the final resolved rule bundle before execution.
+
+6. **Preserve POC auth model while tightening boundaries**
+   6.1. Keep user bearer/session and agent Basic Auth as-is for this phase.
+   6.2. Keep role-based authorization and avoid policy-engine work in this iteration.
+   6.3. Ensure every orchestration/escalation endpoint has explicit role checks and audit events.
+
+7. **Adopt a deliberate breaking-change migration strategy**
+   7.1. Prefer internal model cleanup over backward compatibility where required.
+   7.2. Define cutover milestones by behavior (planning, implementation, verification, escalation), not by endpoint count.
+   7.3. Decommission superseded flows once the new execution contract is end-to-end functional.
+
+8. **Sequence delivery by proving the core loop first**
+   8.1. Milestone A: resolve and display execution packet (goal+role+phase+project rules).
+   8.2. Milestone B: run orchestrated implementation + assessment from that packet.
+   8.3. Milestone C: enforce verification + mandatory phase sign-off.
+   8.4. Milestone D: enforce mailbox-based escalation and human decision closure.
+
+## Trial plan: example goal execution through the new model
+
+### Trial goal
+
+1. **Example goal to run through `ticket`**
+   - "Build a todo list using CockroachDB and make it multi-player in a lightweight websocket website with user registration/login."
+
+2. **Scope interpretation for this trial**
+   - `ticket` system backend remains SQLite (per GOAL resolved decision).
+   - The **target application being built by agents** uses CockroachDB.
+   - Trial validates orchestration and governance flow, not just app delivery.
+
+### Readiness clarifications to capture before starting execution
+
+1. **Functional boundaries**
+   - Define minimum todo features for MVP (create/edit/delete/list, completion state, basic ownership).
+   - Define multiplayer behavior (shared project board, per-user lists, or both).
+2. **Realtime boundaries**
+   - Define websocket events required (todo created/updated/deleted, user presence optional vs required).
+3. **Auth boundaries**
+   - Define registration/login method for the sample app (username/password only in trial).
+4. **Non-functional boundaries**
+   - Define acceptable latency/reliability targets for the trial (lightweight baseline only).
+5. **Out-of-scope list**
+   - Explicitly exclude advanced auth/SSO/RBAC and production hardening for this trial.
+
+### Recommended decomposition (high-level to low-level)
+
+1. **Goal setup in `ticket`**
+   1.1. Create project and workflow for the trial.
+   1.2. Define phase rules (planning, implementation, verification) as markdown.
+   1.3. Define role objectives (e.g., Product, Architect, Engineer, QA, Compliance) as markdown.
+   1.4. Bind goal-level acceptance criteria and DOR/DOD.
+
+2. **Planning-phase execution**
+   2.1. Agent refines goal into explicit requirements and risks.
+   2.2. Agent produces architecture outline (web app + websocket + CockroachDB schema + auth flow).
+   2.3. Human performs mandatory planning sign-off.
+
+3. **Implementation-phase execution**
+   3.1. Orchestrator assigns role-driven execution packet for implementation.
+   3.2. Implementer agent builds vertical slices:
+       - slice A: user registration/login
+       - slice B: todo CRUD over CockroachDB
+       - slice C: websocket multiplayer sync
+       - slice D: lightweight web UI
+   3.3. Assessment roles run when implementer reports criteria completion.
+   3.4. Human performs mandatory implementation sign-off.
+
+4. **Verification-phase execution**
+   4.1. Verifier agent runs final checks against accepted criteria.
+   4.2. If pass: human signs off completion.
+   4.3. If fail: create mailbox escalation entry with recommendations (clarify goal, start again, refine requirements).
+
+5. **Trial success criteria for `ticket` itself**
+   5.1. All phase sign-offs are enforced and recorded.
+   5.2. Execution packet (goal+role+phase+project rules) is visible and used by agents.
+   5.3. Escalation path is mailbox-first and human-decision-driven.
+   5.4. Rule markdown is the operative source for decisions, not hidden logic.
+
+### Initial implementation priorities for this trial
+
+1. **Priority 1:** execution packet resolution + visibility.
+2. **Priority 2:** phase-gated orchestration and mandatory sign-off enforcement.
+3. **Priority 3:** mailbox escalation object with recommendation payloads.
+4. **Priority 4:** end-to-end dry run of this exact sample goal to validate flow.
+
+## Website goal-refinement implementation deltas (current phase)
+
+1. **Ready-state enforcement**
+   - Backend now rejects `ready` when `refined_goal` or `decomposition` is empty.
+   - API tests and store tests cover this guardrail.
+
+2. **Low-friction decomposition reprioritization**
+   - site2 includes an ordered decomposition editor for move up/down/remove/add.
+   - Editor remains persisted through the existing `refinement` API payload.
+
+3. **Refine → Ready user flow hardening**
+   - site2 ready action saves current refinement output before transitioning to `ready`.
+   - Playwright flow verifies refine + decomposition reorder + ready transition.

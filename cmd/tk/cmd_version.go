@@ -64,8 +64,8 @@ func runUpgradeDatabase(args []string) error {
 	if err != nil {
 		return err
 	}
-	if resolved.Mode != config.ModeLocal {
-		return errors.New("ticket upgrade-database requires local mode")
+	if strings.TrimSpace(resolved.DBPath) == "" {
+		return errors.New("ticket upgrade-database is a server-side maintenance command; pass -f <source-db> to select the database file")
 	}
 	target := strings.TrimSpace(*outputPath)
 	if target == "" {

@@ -99,6 +99,9 @@ func DeleteLabel(ctx context.Context, db *sql.DB, id int64) error {
 	if _, err := db.ExecContext(ctx, `DELETE FROM ticket_labels WHERE label_id = ?`, id); err != nil {
 		return err
 	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM document_labels WHERE label_id = ?`, id); err != nil {
+		return err
+	}
 	result, err := db.ExecContext(ctx, `DELETE FROM labels WHERE label_id = ?`, id)
 	if err != nil {
 		return err

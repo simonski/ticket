@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -60,7 +61,9 @@ func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
 	const thresholdMinutes = 10
 
 	reap := func() {
-		n, err := store.ReapStaleAgents(context.Background(), db, thresholdMinutes)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		n, err := store.ReapStaleAgents(ctx, db, thresholdMinutes)
 		if err != nil && verbose {
 			slog.Error("agent reaper error", "error", err)
 		}
@@ -89,11 +92,13 @@ func (s *Server) runAgentReaper(db *sql.DB, verbose bool, output io.Writer) {
 // environment variable (default: 0 = keep forever).
 func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 	purge := func() {
-		if n, err := store.PurgeExpiredSessions(context.Background(), db); err != nil {
+		sessionCtx, cancelSessions := context.WithTimeout(context.Background(), 30*time.Second)
+		if n, err := store.PurgeExpiredSessions(sessionCtx, db); err != nil {
 			slog.Error("session purge error", "error", err)
 		} else if n > 0 && verbose {
 			slog.Info("purged expired sessions", "count", n)
 		}
+		cancelSessions()
 
 		retentionDays := 0
 		if v := os.Getenv("TICKET_HISTORY_RETENTION_DAYS"); v != "" {
@@ -101,11 +106,13 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 				slog.Error("invalid TICKET_HISTORY_RETENTION_DAYS", "value", v) // #nosec G706 -- env var is numeric config, not user-controlled log data
 			}
 		}
-		if n, err := store.PurgeOldHistory(context.Background(), db, retentionDays); err != nil {
+		historyCtx, cancelHistory := context.WithTimeout(context.Background(), 30*time.Second)
+		if n, err := store.PurgeOldHistory(historyCtx, db, retentionDays); err != nil {
 			slog.Error("history purge error", "error", err)
 		} else if n > 0 && verbose {
 			slog.Info("purged old history events", "count", n, "retention_days", retentionDays)
 		}
+		cancelHistory()
 	}
 
 	// Run once at startup, then daily.
@@ -138,7 +145,7 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 	live := newLiveHub()
 	registerAPI(mux, db, version, live, verbose, output)
 
-	fileServer := http.FileServer(http.FS(staticFS))
+	fileServer := staticCacheHeadersMiddleware(http.FileServer(http.FS(staticFS)))
 	mux.Handle("/", spaHandler(fileServer, staticFS))
 
 	var handler http.Handler = mux
@@ -437,6 +444,7 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 				indexHTML = strings.Replace(indexHTML, "<script>", fmt.Sprintf(`<script nonce=%q>`, nonce), 1)
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
 			if _, err := io.WriteString(w, indexHTML); err != nil {
 				slog.Error("write spa index response", "error", err)
 			}
@@ -448,6 +456,17 @@ func spaHandler(next http.Handler, staticFS fs.FS) http.Handler {
 		}
 
 		r.URL.Path = "/"
+		next.ServeHTTP(w, r)
+	})
+}
+
+func staticCacheHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ext := strings.ToLower(path.Ext(r.URL.Path))
+		switch ext {
+		case ".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".ttf":
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

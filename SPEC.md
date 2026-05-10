@@ -26,16 +26,16 @@ work. It is delivered as a single Go binary that provides:
 5. **Agent Framework** — Autonomous worker agents with LLM integration
 6. **Real-time** — WebSocket channels for live updates and chat
 
-The system operates in two modes:
+The system operates as a client/server architecture:
 
-- **Local mode** — Direct SQLite access via a named local remote, normally the shared database at `$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`), with repo-local `.ticket/config.json` used for project routing
-- **Remote mode** — HTTP client connecting to the URL resolved from a named remote in `$TICKET_HOME/config.json`; repo-local `.ticket/config.json` stores only the selected `remote` name and `project_id`
+- **Server** — owns the SQLite database and exposes HTTP API + web UI
+- **Client** — CLI/TUI connect to the URL resolved from a named remote in `$TICKET_HOME/config.json`; repo-local `.ticket/config.json` stores the selected `remote` name and `project_id`
 
 ---
 
 ## 2. Goals
 
-1. Provide a lightweight, self-contained issue tracker that works locally or as a server.
+1. Provide a lightweight, self-contained issue tracker that runs as a server with first-class CLI and web clients.
 2. Model projects, tickets, workflows, teams, and agents as first-class entities.
 3. Give every ticket a stable, project-scoped human identifier (e.g. `CUS-42`).
 4. Preserve the `stage + state` lifecycle model with workflow-driven progression.
@@ -625,16 +625,16 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 5. If a repo-local `remote` is set, resolve it from the global `remotes[]` registry
 6. Otherwise, if a global `default_remote` is set, resolve that
 7. Legacy raw `location` values are accepted only as a compatibility fallback
-8. If the resolved remote URL is `http://...` or `https://...` -> **remote mode**
-9. If the resolved remote URL is `file://...` or a bare path -> **local mode** using that path
-10. If no remote can be resolved -> **local mode** at `$TICKET_HOME/ticket.db`
+8. If the resolved remote URL is `http://...` or `https://...` -> connect to that server
+9. If the resolved remote URL is `file://...` or a bare path -> treat it as compatibility-only legacy config
+10. If no remote can be resolved -> CLI is unconfigured until a server remote is selected
 
 ### 11.3 Config Files
 
 - `.ticket/config.json` — repo-local routing (`remote`, `project_id`, local project state)
 - `$TICKET_HOME/config.json` — global defaults (`default_remote`, `remotes[]`, TUI state)
 - `$TICKET_HOME/credentials.json` — remote auth tokens keyed by canonical remote URL
-- `$TICKET_HOME/ticket.db` — default SQLite database (local mode)
+- `$TICKET_HOME/ticket.db` — default SQLite database used by `tk server`
 
 ---
 
@@ -1153,7 +1153,7 @@ ticket/
 │   ├── prompt.go            # Interactive prompts
 │   └── VERSION              # Semantic version
 ├── internal/
-│   ├── client/              # HTTP client for remote mode
+│   ├── client/              # HTTP client for server mode
 │   ├── config/              # Configuration resolution
 │   ├── password/            # Argon2id password hashing
 │   ├── server/              # HTTP server, API handlers, WebSocket

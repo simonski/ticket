@@ -213,7 +213,7 @@ test.describe("ticket lifecycle", () => {
       showApp("alice", "admin");
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
-      tickets = JSON.parse(JSON.stringify(tix));
+      tickets = structuredClone(tix);
       renderBoard();
     }, SAMPLE_TICKETS);
 
@@ -261,7 +261,7 @@ test.describe("ticket lifecycle", () => {
       showApp("alice", "admin");
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
-      tickets = JSON.parse(JSON.stringify(tix));
+      tickets = structuredClone(tix);
       renderBoard();
     }, SAMPLE_TICKETS);
 
@@ -341,7 +341,7 @@ test.describe("ticket lifecycle", () => {
       showApp("alice", "admin");
       projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
       localStorage.setItem("task-project", "1");
-      tickets = JSON.parse(JSON.stringify(tix));
+      tickets = structuredClone(tix);
       renderBoard();
     }, SAMPLE_TICKETS);
 

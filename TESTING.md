@@ -4,20 +4,32 @@
 
 | Target                | What it covers                                      | Duration |
 |-----------------------|-----------------------------------------------------|----------|
+| `make test`           | Fast default (unit tests only)                      | ~1s      |
 | `make test-unit`      | Config, password hashing, web package                | ~1s      |
+| `make test-api-js`    | JavaScript API client-library tests (`web/site2/api.test.js`) | ~2s |
+| `make test-api-cli`   | CLI/API contract path (`cmd/tk`, client, server, libticket) | ~25s |
+| `make test-api`       | Both API suites (`test-api-js` + `test-api-cli`)    | ~35s     |
+| `make test-browser`   | Browser E2E Playwright suite                         | ~20s     |
 | `make test-integration` | CLI, internal/client, server, store, libticket | ~25s     |
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds    | ~30s     |
 | `make test-playwright`| Browser tests against the web UI (12 spec files)     | ~20s     |
-| `make test-tk-test`   | Executable documentation tests (see below)           | ~15s     |
+| `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)     | ~15s     |
 | `make test-todo-example` | Reproducible todo tutorial seed + verification     | ~5s      |
 | `make testscripts`    | Shell-based CLI harness scenarios                    | ~5s      |
-| `make test`           | Unit + integration + docs + shell harnesses + playwright | ~70s |
+| `make test-all`       | Unit + api + browser + quickstart + shell harnesses + todo example | ~80s |
 
 Run a single Go test:
 
 ```bash
 go test ./internal/store/ -run TestTicketLifecycle
 ```
+
+## Recommended staged workflow
+
+1. Fast local loop: `make test` + targeted tests.
+2. If API contracts/surface changed: `make test-api`.
+3. If web UI behavior changed: `make test-browser`.
+4. Before completion/PR: `make test-all` and `make lint`.
 
 ## tk-test: executable documentation
 
@@ -38,14 +50,14 @@ verifying each block exits 0.
 ### Usage
 
 ```bash
-# Run against the quickstart guides (requires make build-dev first)
-make test-tk-test
+# Run against QUICKSTART + TUTORIAL (requires make build-dev first)
+make test-quickstart
 
 # Run directly with verbose output
-go run ./cmd/tk-test -v docs/quickstarts/client.md docs/quickstarts/server.md
+go run ./cmd/tk-test -v QUICKSTART.md TUTORIAL.md
 
 # Point at a different binary
-go run ./cmd/tk-test -ticket ./bin/tk docs/quickstarts/client.md
+go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART.md
 ```
 
 ### What gets skipped
@@ -67,13 +79,12 @@ When a block contains `tk server`, tk-test:
 3. Starts the server in the background on that port
 4. Waits for `/api/healthz` to respond and prints captured server logs on failure
 5. Rewrites `localhost:8080` references in subsequent blocks to the dynamic port
-6. Updates repo-local `.ticket/config.json` so the CLI detects remote mode
+6. Updates repo-local `.ticket/config.json` so the CLI targets the test server
 7. Kills the server when the file finishes
 
 ### Remote binding in docs
 
-The quickstart docs now use `tk remote add NAME http://localhost:8080` plus
-`tk project remote NAME` to switch the CLI to remote mode. `cmd/tk-test`
+The executable docs are `QUICKSTART.md` and `TUTORIAL.md`. `cmd/tk-test`
 rewrites `localhost:8080` references to the dynamic test server port so those
 blocks stay executable.
 

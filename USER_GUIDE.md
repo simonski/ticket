@@ -99,17 +99,15 @@ tk init
 ```
 
 `tk init` requires the current working directory to be inside a git repository.
-It writes `.ticket/config.json` in that repo root. In local mode it binds that
-repo to a project in the selected local remote database. In remote mode it
-writes the selected remote name and project binding locally, while keeping
-credentials in `$TICKET_HOME/credentials.json`.
+It writes `.ticket/config.json` in that repo root with the project binding.
+During interactive setup, the default server URL prompt is `https://ticket.localhost`.
 
-Manage named remotes explicitly:
+Configure server access with environment variables:
 
 ```bash
-tk remote add prod https://ticket.example.com
-tk remote ls
-tk project remote prod
+export TICKET_URL=https://ticket.example.com
+export TICKET_USERNAME=alice
+export TICKET_PASSWORD=secret12
 ```
 
 For example:
@@ -118,16 +116,19 @@ For example:
 tk init -prefix CUS -name "Customer Portal" -git https://github.com/acme/customer-portal.git -workflow agile
 ```
 
-Create or restore database snapshots (LOCAL mode):
+Snapshot export/import are removed from client mode. Run these as server-side
+maintenance operations instead:
 
 ```bash
-tk export -o ./ticket-snapshot.json
-tk import -i ./ticket-snapshot.json
+tk export -o ./ticket-snapshot.json   # server-side maintenance
+tk import -i ./ticket-snapshot.json   # server-side maintenance
 ```
 
-Snapshot files are JSON and include a `schema_version`; imports replace existing database contents and preserve entity ids.
+Snapshot files are JSON and include a `schema_version`; imports replace existing
+database contents and preserve entity ids.
 
-If the CLI reports that a local database schema is older than the binary, port it into a fresh database without modifying the source database:
+If the CLI reports that a database schema is older than the binary, port it
+into a fresh database without modifying the source database:
 
 ```bash
 tk -f old_ticket/ticket.db upgrade-database -o new_database/ticket.db
@@ -186,18 +187,17 @@ tk version
 
 Running `ticket` with no arguments prints a colored ASCII-art `TICKET` banner above the main usage output.
 
-If you are using the CLI against a running server on another host, add a named
-remote first:
+If you are using the CLI against a running server on another host:
 
 ```bash
-tk remote add prod http://your-server:8080
-tk project remote prod
-tk login -username alice -password secret12
+export TICKET_URL=http://your-server:8080
+export TICKET_USERNAME=alice
+export TICKET_PASSWORD=secret12
 tk status
 tk whoami
 ```
 
-Use `tk project remote <name>` to bind the current repo to a remote before
+Use `tk project use <id|prefix>` to bind the current repo before
 running normal project-scoped commands like `tk ls`, `tk add`, or `tk summary`.
 You can tune remote API timeout with `TICKET_TIMEOUT` (seconds, default `5`,
 minimum `1`, maximum `30`).
@@ -267,31 +267,18 @@ Create an account:
 tk register -username name -password '*******'
 ```
 
-Log in:
+Set environment credentials for authenticated CLI use:
 
 ```bash
-tk login -username name -password '*******'
+export TICKET_URL=https://ticket.localhost
+export TICKET_USERNAME=name
+export TICKET_PASSWORD='*******'
 ```
 
-`tk login` resolves values in this order:
-
-1. a valid session already stored in `$TICKET_HOME/credentials.json`
-2. the stored username for the selected remote
-3. `-username` and `-password`
-4. interactive prompts for anything still missing
-
-If login fails with `invalid credentials`, the CLI prints that message, prompts for username and password, and retries once.
-
-When prompts are shown, any discovered values are presented as defaults that you can keep or replace.
-
-When `tk login` prompts for a password in an interactive terminal, typed characters are masked with `*`.
-
-On successful login:
-
-- the session token is stored in `$TICKET_HOME/credentials.json`
-- the selected remote entry in `$TICKET_HOME/credentials.json` is updated with the latest username and token
-
-Registering a user does not log that user in or create local session credentials.
+`tk login` remains available for server-side account verification workflows, but
+normal CLI command authentication is now driven by `TICKET_URL`
+(defaults to `https://ticket.localhost` when unset),
+`TICKET_USERNAME`, and `TICKET_PASSWORD`.
 
 Check the current mode and connection state:
 
@@ -299,7 +286,7 @@ Check the current mode and connection state:
 tk status
 ```
 
-`tk status` always prints the current effective configuration first, then performs a mode-appropriate connectivity check.
+`tk status` prints current effective configuration and connection/auth state.
 
 Inspect or clear local CLI config keys:
 
@@ -315,13 +302,13 @@ Supported local keys are:
 - `project_id`
 - `current_epic_id`
 
-`location` is now mainly a compatibility and explicit-local override key. The
-steady-state routing model is named remotes in `$TICKET_HOME/config.json` plus a
-repo-local `remote` binding in `.ticket/config.json`.
+`location` is now mainly a compatibility key. The steady-state routing model is
+named remotes in `$TICKET_HOME/config.json` plus a repo-local `remote` binding
+in `.ticket/config.json`.
 
-In REMOTE mode it prints at least:
+In server mode it prints at least:
 
-- `mode: remote`
+- `mode: server`
 - `remote: <name>`
 - `location: <http(s)://server>`
 - `username: <configured username or blank>`
@@ -332,23 +319,7 @@ Then it calls the remote status endpoint and prints:
 - `connection: success` in green if the server responds successfully
 - `connection: failure` in red if the server cannot be contacted or returns an error
 
-In LOCAL mode it prints at least:
-
-- `mode: local`
-- `TICKET_HOME: <resolved ticket home path>`
-- `project: <current project>`
-- `config_file: <repo-local config path when present>`
-
-In LOCAL mode, commands act as the bootstrap `admin` user by default. No login or password prompt is required.
-
-Then it opens the database if present and verifies the schema is usable. It prints:
-
-- `connection: success` in green if the database can be opened and queried
-- `connection: failure` in red if the database is missing, cannot be opened, or the schema is invalid
-
-If the database does not exist in LOCAL mode, it also prints:
-
-- `hint: run tk init`
+Server connectivity and authentication status are shown in the same status view.
 
 If `-nocolor` is set, the same output is printed without ANSI colors.
 
@@ -430,7 +401,7 @@ tk project rename-prefix NEW
 
 This changes every ticket key in the active project (e.g. `CUS-1` → `NEW-T-1`),
 including parent references, dependencies, comments, history, and time entries.
-The config is updated automatically. Local mode only.
+The config is updated automatically.
 
 ### Per-directory project binding
 
@@ -673,6 +644,19 @@ tk complete CUS-42
 
 Most client-facing commands also support `-json` to pretty-print the JSON response.
 
+Document management commands:
+
+```bash
+tk document new -title "Architecture notes" -content "Initial design"
+tk document ls
+tk document get 1
+tk document update 1 -notes "Reviewed with team"
+tk document file-add 1 -path ./notes.md
+tk document file-ls 1
+tk document file-get 1 1 -o ./downloaded-notes.md
+tk document rm 1
+```
+
 Show the history of any item:
 
 ```bash
@@ -686,6 +670,14 @@ Each ticket now also tracks first-class execution work items in the API. Use
 records linked to lifecycle transitions. Access is restricted to project
 editors and owners. Optional query filters: `status=active|success|fail|stopped`
 and `assignee_type=human|agent`.
+
+Project documents are available via:
+
+- `GET|POST /api/projects/{project_ref}/documents`
+- `GET|PUT|DELETE /api/documents/{document_id}`
+- `GET|POST|DELETE /api/documents/{document_id}/labels` (DELETE requires `label_id` query param)
+- `GET|POST /api/documents/{document_id}/files`
+- `GET|DELETE /api/documents/{document_id}/files/{file_id}`
 
 Work-item lifecycle operations are also available for editors/owners:
 
@@ -701,6 +693,12 @@ Intervention mailbox state is available at
 `GET /api/tickets/{ticket_ref}/intervention-state` and
 `POST /api/tickets/{ticket_ref}/intervention-state` (body: `state`) for
 owner/editor triage workflows.
+
+Failure escalation inbox entries are available at:
+
+- `GET /api/tickets/{ticket_ref}/inbox` (optional `?status=open|resolved`)
+- `POST /api/tickets/{ticket_ref}/inbox/escalate` (owner decision queue entry; optional `message`)
+- `POST /api/tickets/{ticket_ref}/inbox/{inbox_id}/decide` (body: `decision=clarify_goal|start_again|refine_requirements`, optional `message`)
 
 The intervention queue endpoint (`GET /api/projects/{project_ref}/interventions`)
 is restricted to project editors and owners.
@@ -732,6 +730,23 @@ Policy-ranked queue candidates are available at
 Global automation policy controls are available at
 `GET|PUT /api/config/automation_policy`, and ticket-level diagnostics are
 available at `GET /api/tickets/policy/{ticket_ref}`.
+
+Agent model configuration supports inheritance from system → project → goal:
+
+- `GET|PUT /api/config/agent-model` (system default + provider catalog)
+- `GET|PUT /api/projects/{project_ref}/agent-model` (project override)
+- `GET|PUT /api/goals/{goal_id}/agent-model` (goal override)
+- `GET /api/goals/{goal_id}/agent-model/resolved` (effective resolved config)
+
+Execution packet visibility is available at
+`GET /api/tickets/{ticket_ref}/execution-packet`, returning the resolved
+goal + role + phase + project guidance layers and the effective merged rules
+used for agent execution.
+
+Phase sign-off tracking is available at:
+
+- `GET /api/tickets/{ticket_ref}/phase-signoffs` to view planning/implementation/verification approvals
+- `POST /api/tickets/{ticket_ref}/phase-signoffs/{phase}` with body `{ "approved": true|false, "note": "..." }`
 
 Workflow governance versioning is available at:
 
@@ -949,7 +964,7 @@ Keyboard shortcuts in the board view:
 - when chat capacity is full, new chat input is disabled until the server reports a free slot
 - `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
-- story analyse spawns an external Codex process with remote Ticket context for the selected server and instructs Codex to run `tk login` plus `tk create` commands for epics/tasks in the selected project
+- story analyse spawns an external Codex process with Ticket server context and instructs Codex to run `tk create` commands for epics/tasks in the selected project
 - Epic ticket dialog includes `Analyse` which decomposes an epic into tickets using the `EpicReview` role
 
 Security notes:
@@ -967,7 +982,6 @@ tk server -v
 tk version
 
 tk register -username <name> -password <password>
-tk login -username <name> -password <password>
 tk status
 tk config ls
 tk config rm server
@@ -1181,16 +1195,17 @@ tk server
 You can now run as the user
 
 ```bash
-tk remote add demo http://localhost:8080
-tk project remote demo
-tk login -username user-username -password user-password
+export TICKET_URL=http://localhost:8080
+export TICKET_USERNAME=user-username
+export TICKET_PASSWORD=user-password
+tk project use DEMO
 tk ls
 ```
 
 You could run as an agent to do work automatically
 
 ```bash
-tk project remote demo
+tk project use DEMO
 export AGENT_ID=<agent-uuid>
 export AGENT_PASSWORD=agent-password
 tk agent run                  # default LLM: claude (Sonnet 4.5)

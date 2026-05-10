@@ -1038,7 +1038,7 @@ func TestLocalModeClientLogoutFails(t *testing.T) {
 
 	api := New(localClientConfig(filepath.Join(t.TempDir(), "ticket.db")))
 	if err := api.Logout(context.Background()); err == nil {
-		t.Fatal("Logout() error = nil, want local mode error")
+		t.Fatal("Logout() error = nil, want server-required error")
 	}
 }
 
@@ -1047,7 +1047,7 @@ func TestLocalModeClientLoginFails(t *testing.T) {
 
 	api := New(localClientConfig(filepath.Join(t.TempDir(), "ticket.db")))
 	if _, err := api.Login(context.Background(), "admin", "secret"); err == nil {
-		t.Fatal("Login() error = nil, want local mode error")
+		t.Fatal("Login() error = nil, want server-required error")
 	}
 }
 

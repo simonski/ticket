@@ -33,9 +33,6 @@ func conciseRuntimeError(err error) error {
 	if resolveErr != nil {
 		return nil
 	}
-	if resolved.Mode != config.ModeRemote {
-		return nil
-	}
 	subject := remoteConfigSubject()
 	var statusErr *client.HTTPStatusError
 	if errors.As(err, &statusErr) {
@@ -93,28 +90,11 @@ func currentSetupDetails(err error) (string, error) {
 	lines := []string{
 		"setup:",
 	}
-	switch resolved.Mode {
-	case config.ModeRemote:
-		lines = append(lines,
-			fmt.Sprintf("  mode             : %s", resolved.Mode),
-			fmt.Sprintf("  configured via   : %s", remoteConfiguredVia(resolved.ServerURL, locationSource)),
-		)
-		lines = append(lines,
-			fmt.Sprintf("  explanation      : %s", remoteIssueExplanation(err)),
-		)
-	case config.ModeLocal:
-		lines = append(lines,
-			fmt.Sprintf("  mode             : %s", resolved.Mode),
-			fmt.Sprintf("  database         : %s", resolved.DBPath),
-			fmt.Sprintf("  configured via   : %s", localConfiguredVia(locationSource)),
-			fmt.Sprintf("  explanation      : %s", localIssueExplanation()),
-		)
-	default:
-		lines = append(lines,
-			fmt.Sprintf("  mode             : %s", resolved.Mode),
-			fmt.Sprintf("  explanation      : %s", "the current setup could not be classified as local or remote"),
-		)
-	}
+	lines = append(lines,
+		"  mode             : server",
+		fmt.Sprintf("  configured via   : %s", remoteConfiguredVia(resolved.ServerURL, locationSource)),
+		fmt.Sprintf("  explanation      : %s", remoteIssueExplanation(err)),
+	)
 	return strings.Join(lines, "\n"), nil
 }
 
@@ -155,33 +135,18 @@ func remoteConfiguredVia(serverURL, source string) string {
 	return source
 }
 
-func localConfiguredVia(source string) string {
-	if config.HasLocationOverride() {
-		return source
-	}
-	ticketHome := strings.TrimSpace(os.Getenv("TICKET_HOME"))
-	if source == "default local database path" && ticketHome != "" {
-		return source + " (TICKET_HOME=" + ticketHome + ")"
-	}
-	return source
-}
-
 func remoteIssueExplanation(err error) string {
 	msg := strings.ToLower(err.Error())
 	if strings.Contains(msg, "503") || strings.Contains(msg, "service unavailable") {
 		if config.HasLocationOverride() {
-			return "remote mode is active because this command is using an explicit override; a 503 means that remote server, or something in front of it, is currently unavailable"
+			return "this command is using an explicit server override; a 503 means that server, or something in front of it, is currently unavailable"
 		}
 		return "this directory is configured for a remote server; a 503 means that remote server, or something in front of it, is currently unavailable"
 	}
 	if config.HasLocationOverride() {
-		return "remote mode is active because this command is using an explicit override; check that host, port, credentials, and any proxy or tunnel are the ones you expect"
+		return "this command is using an explicit server override; check that host, port, credentials, and any proxy or tunnel are the ones you expect"
 	}
 	return "this directory is configured for a remote server, so check the repo or global config that selected that remote"
-}
-
-func localIssueExplanation() string {
-	return "local mode is active; the CLI is trying to use the SQLite database shown above, so this looks like a local database path, file access, or initialisation problem"
 }
 
 func remoteConfigSubject() string {

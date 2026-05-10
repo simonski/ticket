@@ -16,10 +16,10 @@ The Software Architect evaluates the high-level structure of the system, ensurin
 - **Resource Bounding**: All resource allocations (goroutines, connections, buffers, channels) have upper bounds. No unbounded growth under load.
 - **Plugin/Provider Patterns**: Extensibility points (store backends, service implementations) use clean interfaces. Adding a new implementation does not require modifying existing code.
 - **Event Systems**: WebSocket, SSE, and any pub/sub patterns have proper lifecycle management, backpressure handling, and cleanup on disconnect.
-- **Reconciliation Loops**: State synchronisation between local and remote modes is correct. Conflict resolution is deterministic.
-- **Interface Abstraction**: The `Service` interface properly abstracts over local (SQLite) and remote (HTTP) implementations. Leaky abstractions are identified.
+- **Reconciliation Loops**: State synchronisation between CLI clients and the server is correct. Conflict resolution is deterministic.
+- **Interface Abstraction**: The `Service` interface cleanly separates business workflows from transport/storage details. Leaky abstractions are identified.
 - **Separation of Concerns**: CLI command handling, business logic, data access, and presentation are in distinct layers. No business logic in handlers or store code.
-- **Configuration Architecture**: Configuration resolution (`$TICKET_HOME`, mode detection, flag overrides) follows a clear precedence order.
+- **Configuration Architecture**: Configuration resolution (`$TICKET_HOME`, server bindings, flag overrides) follows a clear precedence order.
 
 ## How This Role Operates
 

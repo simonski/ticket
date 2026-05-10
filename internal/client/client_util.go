@@ -83,7 +83,7 @@ func friendlyConnectionError(err error, baseURL string) error {
 	if errors.As(err, &urlErr) {
 		var netErr *net.OpError
 		if errors.As(urlErr.Err, &netErr) {
-			return fmt.Errorf("cannot connect to %s\nhint: is the server running? check your config location", baseURL)
+			return fmt.Errorf("cannot connect to %s\nhint: is the server running? check TICKET_URL", baseURL)
 		}
 	}
 	return fmt.Errorf("cannot connect to %s", baseURL)
@@ -174,7 +174,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		payload = encoded
 	}
 
-	send := func(token string) (*http.Response, error) {
+	send := func(username, password, token string) (*http.Response, error) {
 		httpRequest, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(payload))
 		if err != nil {
 			return nil, err
@@ -182,7 +182,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		if body != nil {
 			httpRequest.Header.Set("Content-Type", "application/json")
 		}
-		if token != "" {
+		if username != "" || password != "" {
+			httpRequest.SetBasicAuth(username, password)
+		} else if token != "" {
 			httpRequest.Header.Set("Authorization", "Bearer "+token)
 		}
 		resp, err := c.http.Do(httpRequest)
@@ -192,7 +194,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		return resp, nil
 	}
 
-	resp, err := send(c.token)
+	resp, err := send(c.username, c.password, c.token)
 	if err != nil {
 		return err
 	}

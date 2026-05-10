@@ -216,14 +216,14 @@ Review the above, clarify any remaining design choices, and then turn it into a 
 
 Keep the write-up plain and direct. Avoid emojis and avoid decorative or cosmetic noise.
 
-## 9. Local mode and remote mode must feel similar
+## 9. Legacy local-vs-remote notes (superseded)
 
-The ideas above mainly describe local mode:
+The ideas above were originally written around a local SQLite workflow:
 
 - direct access to a SQLite database
 - usually one person working in one shell at a time
 
-Remote mode is different:
+The current product model is server-first:
 
 - SQLite is hidden behind the server
 - access happens over HTTP or HTTPS
@@ -231,7 +231,7 @@ Remote mode is different:
 
 Concurrency and SQLite tuning are not the main concern for this design pass.
 
-The main concern is preserving the same user workflow as much as possible, while adding the extra information remote mode requires.
+The main concern is preserving a consistent user workflow while adding the server binding and authentication details the client needs.
 
 That extra information is:
 
@@ -351,8 +351,5 @@ The server remains the source of truth for actual user records, password hashes,
 
 The client machine only needs enough information to:
 
-- discover whether this project is local or remote
-- find the local database path or remote server URL
+- find the server URL for this project
 - identify the project on that backend
-
-For purely local mode, no remote credentials are needed at all.

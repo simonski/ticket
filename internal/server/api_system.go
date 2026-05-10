@@ -3,7 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strings"
@@ -72,13 +72,13 @@ func (r *router) registerSystemHandlers() {
 		var ticketCount, projectCount, userCount int
 		var queueReadyCount, interventionOpenCount, forecastSnapshotCount int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE open = 1`).Scan(&ticketCount); err != nil {
-			log.Printf("server: load ticket count metric: %v", err)
+			slog.Error("load ticket count metric", "error", err)
 		}
 		if err := db.QueryRow(`SELECT COUNT(*) FROM projects`).Scan(&projectCount); err != nil {
-			log.Printf("server: load project count metric: %v", err)
+			slog.Error("load project count metric", "error", err)
 		}
 		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE user_type = 'user' OR user_type = '' OR user_type IS NULL`).Scan(&userCount); err != nil {
-			log.Printf("server: load user count metric: %v", err)
+			slog.Error("load user count metric", "error", err)
 		}
 		if err := db.QueryRow(`
 			SELECT COUNT(*)
@@ -87,7 +87,7 @@ func (r *router) registerSystemHandlers() {
 			  AND (assignee IS NULL OR TRIM(assignee) = '')
 			  AND LOWER(COALESCE(state, '')) <> 'fail'
 		`).Scan(&queueReadyCount); err != nil {
-			log.Printf("server: load queue ready metric: %v", err)
+			slog.Error("load queue ready metric", "error", err)
 		}
 		if err := db.QueryRow(`
 			SELECT COUNT(*)
@@ -95,11 +95,11 @@ func (r *router) registerSystemHandlers() {
 			WHERE deleted = 0 AND archived = 0 AND complete = 0
 			  AND LOWER(COALESCE(state, '')) = 'fail'
 		`).Scan(&interventionOpenCount); err != nil {
-			log.Printf("server: load intervention metric: %v", err)
+			slog.Error("load intervention metric", "error", err)
 		}
 		if err := db.QueryRow(`SELECT COUNT(*) FROM forecast_snapshots`).Scan(&forecastSnapshotCount); err != nil {
 			if !strings.Contains(strings.ToLower(err.Error()), "no such table") {
-				log.Printf("server: load forecast snapshot metric: %v", err)
+				slog.Error("load forecast snapshot metric", "error", err)
 			}
 		}
 
@@ -224,6 +224,49 @@ func (r *router) registerSystemHandlers() {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"chat_enabled": payload.Enabled,
 		})
+	})
+	mux.HandleFunc("/api/config/agent-model", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if _, err := requireUser(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			cfg, err := store.SystemAgentModelConfig(r.Context(), db)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, cfg)
+		case http.MethodPut:
+			if _, err := requireAdmin(db, r); err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var payload agentModelConfigRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			if err := store.SetSystemAgentModelConfig(r.Context(), db, store.AgentModelConfig{
+				Provider:  payload.Provider,
+				Model:     payload.Model,
+				URL:       payload.URL,
+				APIKey:    payload.APIKey,
+				Providers: payload.Providers,
+			}); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			cfg, err := store.SystemAgentModelConfig(r.Context(), db)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, cfg)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
 	})
 	mux.HandleFunc("/api/config/automation_policy", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

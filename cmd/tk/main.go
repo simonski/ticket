@@ -82,13 +82,6 @@ func run(args []string) error {
 		}
 		config.SetLocationOverride(location)
 	}
-	var resolved config.Resolved
-	if !explicitServerDB {
-		resolved, err = config.ResolveURL()
-		if err != nil {
-			return err
-		}
-	}
 	// -g launches the TUI (may appear before or after other args)
 	if guiTheme != "" || (len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui")) {
 		return runGUI(guiTheme)
@@ -98,15 +91,14 @@ func run(args []string) error {
 		fmt.Print(renderRootUsage())
 		return nil
 	}
-
 	// Commands that don't require an initialised project binding.
 	noInitRequired := map[string]bool{
 		"init": true, "initdb": true, "setup": true, "server": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true, "remote": true,
-		"login": true, "logout": true, "register": true, "status": true,
+		"login": true, "logout": true, "register": true, "status": true, "whoami": true, "project": true,
 	}
 	if len(trimmedArgs) == 1 {
 		switch trimmedArgs[0] {
-		case "project", "workflow", "team", "story", "user", "label", "dep", "decision", "agent", "role", "idea":
+		case "project", "workflow", "team", "story", "goal", "document", "user", "label", "dep", "decision", "agent", "role", "idea":
 			noInitRequired[trimmedArgs[0]] = true
 		}
 	}
@@ -122,7 +114,7 @@ func run(args []string) error {
 			noInitRequired[trimmedArgs[0]] = true
 		}
 	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() && resolved.Mode == config.ModeLocal {
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() {
 		if _, ok, pathErr := config.ProjectPath(); pathErr != nil {
 			return pathErr
 		} else if !ok {
@@ -133,7 +125,13 @@ func run(args []string) error {
 				return pathErr
 			}
 			if !ok {
-				return advisoryNotManagedProject()
+				cfg, cfgErr := config.Load()
+				if cfgErr != nil {
+					return cfgErr
+				}
+				if strings.TrimSpace(cfg.ProjectID) == "" {
+					return advisoryNotManagedProject()
+				}
 			}
 		}
 	}
@@ -156,15 +154,9 @@ func run(args []string) error {
 	case "server":
 		return runServer(trimmedArgs[1:])
 	case "export":
-		if resolved.Mode != config.ModeLocal {
-			return errors.New("ticket export requires local mode")
-		}
-		return runExportSnapshot(trimmedArgs[1:])
+		return errors.New("ticket export has been removed from client mode; run server-side maintenance commands instead")
 	case "import":
-		if resolved.Mode != config.ModeLocal {
-			return errors.New("ticket import requires local mode")
-		}
-		return runImportSnapshot(trimmedArgs[1:])
+		return errors.New("ticket import has been removed from client mode; run server-side maintenance commands instead")
 	case "version":
 		return runVersion(trimmedArgs[1:])
 	case "upgrade":
@@ -172,19 +164,10 @@ func run(args []string) error {
 	case "upgrade-database":
 		return runUpgradeDatabase(trimmedArgs[1:])
 	case "register":
-		if resolved.Mode != config.ModeRemote {
-			return errors.New("ticket register requires remote mode (run tk init to configure)")
-		}
 		return runRegister(trimmedArgs[1:])
 	case "login":
-		if resolved.Mode != config.ModeRemote {
-			return errors.New("ticket login requires remote mode (run tk init to configure)")
-		}
 		return runLogin(trimmedArgs[1:])
 	case "logout":
-		if resolved.Mode != config.ModeRemote {
-			return errors.New("ticket logout requires remote mode (run tk init to configure)")
-		}
 		return runLogout(trimmedArgs[1:])
 	case "status":
 		return runStatus(trimmedArgs[1:])
@@ -212,6 +195,10 @@ func run(args []string) error {
 		return runRole(trimmedArgs[1:])
 	case "story":
 		return runStory(trimmedArgs[1:])
+	case "goal":
+		return runGoal(trimmedArgs[1:])
+	case "document":
+		return runDocument(trimmedArgs[1:])
 	case "workflow":
 		return runWorkflow(trimmedArgs[1:])
 	case "board":
@@ -342,6 +329,10 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("no such command %q", trimmedArgs[0])
 	}
+}
+
+func isTestBinary() bool {
+	return strings.HasSuffix(os.Args[0], ".test")
 }
 
 func runHelp(args []string) error {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -205,14 +204,7 @@ func printStatusBoxWidth(lines []statusLine, fixedWidth int) {
 }
 
 func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) error {
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return err
-	}
-	serverURL := strings.TrimSpace(resolved.ServerURL)
-	if serverURL == "" {
-		return errors.New("remote mode requires a location (run tk init to configure)")
-	}
+	var err error
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
@@ -259,6 +251,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	return err
 }
 
+//nolint:unused // retained temporarily during server-only migration cleanup
 func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	resolved, err := config.ResolveURL()
 	if err != nil {
@@ -312,6 +305,7 @@ func valueOrDefault(value, fallback string) string {
 	return value
 }
 
+//nolint:unused // retained temporarily during server-only migration cleanup
 func localStatusCheck(dbPath string) error {
 	if _, err := os.Stat(dbPath); err != nil {
 		return err

@@ -199,22 +199,11 @@ func runSetupNew(reader *bufio.Reader, flags ...initFlags) error {
 		f = flags[0]
 	}
 	fmt.Println()
-
-	choice := promptChoice(reader, "How do you want to use ticket?", []string{
-		"Local mode — standalone SQLite, no server needed",
-		"Remote server — connect to a running ticket server",
-	})
-	fmt.Println()
-
-	switch choice {
-	case 0:
-		return runSetupLocal(reader, f)
-	case 1:
-		return runSetupRemote(reader)
-	}
-	return nil
+	_ = f
+	return runSetupRemote(reader)
 }
 
+//nolint:unused // retained temporarily during server-only migration cleanup
 func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	var f initFlags
 	if len(flags) > 0 {
@@ -280,7 +269,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 
 func runSetupRemote(reader *bufio.Reader) error {
 	// 1. Server URL
-	defaultURL := "https://ticket.exe.xyz"
+	defaultURL := defaultTicketURL
 	serverURL := prompt(reader, "server URL", defaultURL)
 	serverURL = strings.TrimRight(strings.TrimSpace(serverURL), "/")
 	if serverURL == "" {
@@ -289,11 +278,14 @@ func runSetupRemote(reader *bufio.Reader) error {
 
 	// 2. Verify connectivity
 	fmt.Printf("connecting : %s ... ", serverURL)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/healthz", http.NoBody) // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/api/healthz", http.NoBody) // #nosec G107 G704 -- URL is entered by the operator during setup, not constructed from untrusted input
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println("FAILED")
 		return fmt.Errorf("could not reach server: %w", err)
@@ -970,6 +962,7 @@ func seedWorkflowStages(svc libticket.Service, workflowID int64, seed static.Wor
 	return nil
 }
 
+//nolint:unused // retained temporarily during server-only migration cleanup
 func runExportSnapshot(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -1008,6 +1001,7 @@ func runExportSnapshot(args []string) error {
 	return nil
 }
 
+//nolint:unused // retained temporarily during server-only migration cleanup
 func runImportSnapshot(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)

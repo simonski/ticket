@@ -3081,7 +3081,9 @@
         if (currentPerspective === "hierarchy") renderHierarchy();
         if (currentPerspective === "roles") loadRoles();
         if (currentPerspective === "teams") {
-          loadTeams().then(refreshSelectedTeamDetails).catch(() => {});
+          loadTeams().then(refreshSelectedTeamDetails).catch((err) => {
+            console.warn("failed to load teams", err);
+          });
         }
         if (currentPerspective === "settings") populateSettingsPanel();
       }
@@ -3438,8 +3440,9 @@
 
         // Others: recent first (excluding current), then rest alphabetically
         const others = projects.filter((p) => String(p.project_id) !== selectedProjectID());
+        const othersByID = new Map(others.map((p) => [String(p.project_id), p]));
         const recentOthers = recentProjects
-          .map((id) => others.find((p) => String(p.project_id) === id))
+          .map((id) => othersByID.get(id))
           .filter(Boolean);
         const recentIds = new Set(recentOthers.map((p) => String(p.project_id)));
         const alphaOthers = others.filter((p) => !recentIds.has(String(p.project_id)))
@@ -5385,7 +5388,9 @@
             empty.textContent = "No child tickets";
             group.appendChild(empty);
           } else {
-            for (const t of kids) group.appendChild(makeRow(t));
+            const fragment = document.createDocumentFragment();
+            for (const t of kids) fragment.appendChild(makeRow(t));
+            group.appendChild(fragment);
           }
           return group;
         }

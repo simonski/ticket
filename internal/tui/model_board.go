@@ -27,24 +27,22 @@ func (m *Model) buildBoardColumns() {
 	}
 
 	cols := make([]boardColumn, len(stages))
+	colByStage := make(map[string]int, len(stages))
 	for i, s := range stages {
 		cols[i].stage = s
+		colByStage[s] = i
 	}
 	// Collect all open non-epic tickets (children + toplevel).
 	for _, n := range m.nodes {
 		for _, t := range n.children {
-			for i, c := range cols {
-				if c.stage == t.Stage {
-					cols[i].tickets = append(cols[i].tickets, t)
-				}
+			if i, ok := colByStage[t.Stage]; ok {
+				cols[i].tickets = append(cols[i].tickets, t)
 			}
 		}
 	}
 	for _, t := range m.toplevel {
-		for i, c := range cols {
-			if c.stage == t.Stage {
-				cols[i].tickets = append(cols[i].tickets, t)
-			}
+		if i, ok := colByStage[t.Stage]; ok {
+			cols[i].tickets = append(cols[i].tickets, t)
 		}
 	}
 	m.boardCols = cols

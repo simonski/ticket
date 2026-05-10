@@ -1459,9 +1459,6 @@ func runUnclaim(args []string) error {
 		return err
 	}
 	username := strings.TrimSpace(cfg.Username)
-	if resolved, rErr := config.ResolveURL(); rErr == nil && resolved.Mode == config.ModeLocal {
-		username = localModeUsername()
-	}
 	if strings.TrimSpace(username) == "" {
 		return errors.New("no current username; log in first")
 	}

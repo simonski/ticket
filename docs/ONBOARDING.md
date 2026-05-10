@@ -39,7 +39,7 @@ Read these documents in order — each one builds on the last:
 
 1. `README.md` — what the project is and why it exists
 2. `CLAUDE.md` — architecture, package table, build commands, special commands
-3. `QUICKSTART.md` — choose local or server mode, then follow the linked guide under `docs/quickstarts/`
+3. `QUICKSTART.md` — choose local or server mode, then follow `TUTORIAL.md`
 4. `TESTING.md` — test strategy, how to run each suite, coverage thresholds
 5. `docs/DESIGN.md` — deeper architecture, data model, design decisions
 6. `docs/LIFECYCLE.md` — Workflow lifecycle, stages, roles, and stage-role assignments
@@ -211,11 +211,11 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 | `make build` bumped the version and you wanted a stable dev binary | Use `make build-dev` for development builds |
 | Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
 | `tk` command not found | Run `make build-dev` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
-| `tk` is talking to the wrong backend | Run `tk status` first. Local mode normally resolves the named `local` remote to `$TICKET_HOME/ticket.db`; remote mode resolves the repo-local `remote` name through `$TICKET_HOME/config.json`. Legacy raw `location` values are compatibility-only. |
+| `tk` is talking to the wrong backend | Run `tk status` first. The CLI resolves the repo-local `remote` name through `$TICKET_HOME/config.json`. Legacy raw `location` values are compatibility-only. |
 | API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo Workflow commands, run the `spec` workflow |
 | `.ticket/config.json` blocks a rebase or pull | If you do not need your local Ticket routing state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
 | `make test` times out | Playwright starts its own local static server automatically. If it still fails, rerun `make test-playwright` to isolate the browser step and check the printed startup error |
-| Local and remote mode behave differently | Read `tk status` before debugging. The same CLI can talk directly to SQLite or to a server depending on `.ticket/config.json` |
+| Different repos hit different servers | Read `tk status` before debugging. `.ticket/config.json` controls the active remote + project binding per repo |
 | Import cycle errors | The dependency flow must be `cmd -> libticket -> internal/store`. Nothing in `internal/` may import `cmd/` |
 | Coverage threshold failure | Run `make test-go-cover` to see which package is below threshold; add tests or adjust the threshold in the Makefile with a comment explaining why |
 

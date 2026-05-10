@@ -109,6 +109,31 @@ type StoryCreateRequest struct {
 	Description string `json:"description"`
 }
 
+type GoalRequest struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Notes       string `json:"notes"`
+	ETA         string `json:"eta"`
+	Priority    int    `json:"priority"`
+}
+
+type DocumentRequest struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Notes       string `json:"notes"`
+	Content     string `json:"content"`
+}
+
+type DocumentLabelRequest struct {
+	LabelID int64 `json:"label_id"`
+}
+
+type DocumentFileRequest struct {
+	FileName    string `json:"file_name"`
+	ContentType string `json:"content_type"`
+	Content     []byte `json:"content"`
+}
+
 type TicketCreateRequest struct {
 	ProjectID          int64             `json:"project_id"`
 	ParentID           *string           `json:"parent_id,omitempty"`

@@ -17,18 +17,20 @@ import (
 )
 
 func runProject(args []string) error {
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(projectUsage)
+		return nil
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+	if args[0] == "remote" {
+		return runProjectRemote(cfg, args[1:])
+	}
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
-	}
-
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Println(projectUsage)
-		return nil
 	}
 
 	if projectID, ok := parseProjectCommandID(args[0]); ok {
@@ -409,18 +411,11 @@ func runProjectInit(cfg config.Config, svc libticket.Service, args []string) err
 		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
 	}
 
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return err
+	remoteName := strings.TrimSpace(cfg.Remote)
+	if remoteName == "" {
+		remoteName = strings.TrimSpace(cfg.DefaultRemote)
 	}
-	if resolved.Mode == config.ModeRemote {
-		remoteName := strings.TrimSpace(cfg.Remote)
-		if remoteName == "" {
-			remoteName = strings.TrimSpace(cfg.DefaultRemote)
-		}
-		return bindRootToRemoteProject(cwd, remoteName, project.Prefix)
-	}
-	return bindRootToLocalProject(cwd, project.Title, project.Prefix, project.GitRepository)
+	return bindRootToRemoteProject(cwd, remoteName, project.Prefix)
 }
 
 func runProjectRemote(cfg config.Config, args []string) error {

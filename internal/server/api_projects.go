@@ -56,6 +56,10 @@ func (r *router) registerProjectHandlers() {
 				Visibility:         projectPayload.Visibility,
 				CreatedBy:          user.ID,
 				WorkflowID:         projectPayload.WorkflowID,
+				AgentModelProvider: projectPayload.AgentModelProvider,
+				AgentModelName:     projectPayload.AgentModelName,
+				AgentModelURL:      projectPayload.AgentModelURL,
+				AgentModelAPIKey:   projectPayload.AgentModelAPIKey,
 			})
 			if err != nil {
 				writeStoreError(w, err)
@@ -76,6 +80,21 @@ func (r *router) registerProjectHandlers() {
 
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/projects/")
 		parts := strings.Split(trimmed, "/")
+		if len(parts) == 2 && parts[1] == "goals" {
+			if handled := handleProjectGoals(w, r, db, parts[0]); handled {
+				return
+			}
+		}
+		if len(parts) == 2 && parts[1] == "goal-inbox" {
+			if handled := handleProjectGoalInbox(w, r, db, parts[0]); handled {
+				return
+			}
+		}
+		if len(parts) == 2 && parts[1] == "documents" {
+			if handled := handleProjectDocuments(w, r, db, parts[0]); handled {
+				return
+			}
+		}
 		if len(parts) == 2 && parts[1] == "tickets" && r.Method == http.MethodGet {
 			project, err := store.GetProject(r.Context(), db, parts[0])
 			if err != nil {
@@ -897,6 +916,63 @@ func (r *router) registerProjectHandlers() {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 			return
 		}
+		if len(parts) == 2 && parts[1] == "agent-model" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				writeJSON(w, http.StatusOK, store.AgentModelConfig{
+					Provider: project.AgentModelProvider,
+					Model:    project.AgentModelName,
+					URL:      project.AgentModelURL,
+					APIKey:   project.AgentModelAPIKey,
+				})
+				return
+			case http.MethodPut:
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload agentModelConfigRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				updated, err := store.SetProjectAgentModelConfig(r.Context(), db, project.ID, store.AgentModelConfig{
+					Provider: payload.Provider,
+					Model:    payload.Model,
+					URL:      payload.URL,
+					APIKey:   payload.APIKey,
+				})
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("project_updated", updated.ID, "")
+				writeJSON(w, http.StatusOK, updated)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+		}
 
 		if len(parts) == 2 && r.Method == http.MethodPost {
 			user, err := requireUser(db, r)
@@ -1008,6 +1084,10 @@ func (r *router) registerProjectHandlers() {
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
 				WorkflowID:         projectPayload.WorkflowID,
+				AgentModelProvider: projectPayload.AgentModelProvider,
+				AgentModelName:     projectPayload.AgentModelName,
+				AgentModelURL:      projectPayload.AgentModelURL,
+				AgentModelAPIKey:   projectPayload.AgentModelAPIKey,
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {

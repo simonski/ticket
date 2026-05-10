@@ -338,9 +338,8 @@ Bootstrap defaults:
   - 3 example teams with sample users assigned across those teams
 
 `tk init` must bind the current repo or directory by writing `.ticket/config.json`.
-In local mode that file binds the repo to a project in the selected local
-remote database. In remote mode it binds the repo to a named remote and
-project, while credentials remain under `$TICKET_HOME`.
+That file binds the repo to a named remote and project, while credentials
+remain under `$TICKET_HOME`.
 
 Snapshot portability:
 
@@ -425,46 +424,21 @@ tk logout
 
 `tk status` must always print the current effective configuration first, then perform a mode-appropriate connectivity check.
 
-In REMOTE mode it must print at least:
+In server mode it must print at least:
 
-- `mode: remote`
+- `mode: server`
 - `server: <configured http(s) remote URL>`
 - `username: <configured username or blank>`
 - `authenticated: true|false`
 
-The REMOTE connectivity check is:
+Connectivity check:
 
-- call the remote status endpoint
+- call the server status endpoint
 
-The REMOTE result must then print:
+Result must then print:
 
 - `connection: success` in green if the server responds successfully
 - `connection: failure` in red if the server cannot be contacted or returns an error
-
-In LOCAL mode it must print at least:
-
-- `mode: local`
-- `db_path: <resolved database path>`
-- `db_exists: true|false`
-
-In LOCAL mode, commands should default to the bootstrap `admin` user and should not require a password prompt.
-
-The LOCAL connectivity check is:
-
-- if the database file exists, open it and verify the schema is usable
-
-A usable schema means:
-
-- the required application tables exist and can be queried
-
-The LOCAL result must then print:
-
-- `connection: success` in green if the database can be opened and the schema is valid
-- `connection: failure` in red if the database is missing, cannot be opened, or the schema is invalid
-
-If the database does not exist in LOCAL mode, `tk status` must also print:
-
-- `hint: run tk init`
 
 If `-nocolor` is set, the same output must be printed without ANSI colors.
 
@@ -803,7 +777,7 @@ The web UI should make these activities easy:
 ### Storage
 
 - SQLite is the only database in the first release.
-- SQLite remains the persistence layer behind the server data model; local mode uses the same data model and validation rules as the server-backed flow.
+- SQLite remains the persistence layer behind the server data model.
 
 Storage areas (22 tables):
 

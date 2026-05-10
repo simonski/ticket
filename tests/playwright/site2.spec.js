@@ -70,6 +70,51 @@ function installSite2Mock(page, seed = {}) {
       ],
       agents: [{ user_id: "agent-1", enabled: true }],
       teams: [{ team_id: 21, name: "Platform", parent_team_id: null }],
+      nextGoalID: Number(mockSeed.nextGoalID || 2),
+      goals: Array.isArray(mockSeed.goals)
+        ? mockSeed.goals.map((goal) => ({ ...goal }))
+        : [
+            {
+              goal_id: 1,
+              project_id: 1,
+              title: "Ship MVP",
+              description: "Initial release goal",
+              notes: "",
+              eta: "",
+              priority: 1,
+              status: "draft",
+              refined_goal: "",
+              decomposition: "",
+            },
+          ],
+      goalChatByGoal: {},
+      nextDocumentID: 2,
+      nextDocumentFileID: 2,
+      documents: [
+        {
+          document_id: 1,
+          project_id: 1,
+          title: "Runbook",
+          description: "Primary ops runbook",
+          notes: "",
+          content: "Initial content",
+          created_at: "now",
+          updated_at: "now",
+        },
+      ],
+      documentFilesByDocument: {
+        "1": [
+          {
+            file_id: 1,
+            document_id: 1,
+            file_name: "runbook.txt",
+            content_type: "text/plain",
+            size_bytes: 7,
+            content: "UkVOREFNQQ==",
+            created_at: "now",
+          },
+        ],
+      },
     };
 
     window.__site2Requests = [];
@@ -144,6 +189,230 @@ function installSite2Mock(page, seed = {}) {
         project.default_draft = Boolean(body.draft);
         return json(project);
       }
+      if (path.match(/^\/api\/projects\/\d+\/goals$/) && method === "GET") {
+        const id = Number(path.split("/")[3]);
+        return json(db.goals.filter((goal) => goal.project_id === id));
+      }
+      if (path.match(/^\/api\/projects\/\d+\/goal-inbox$/) && method === "GET") {
+        const id = Number(path.split("/")[3]);
+        const statusFilter = String(url.searchParams.get("status") || "").trim();
+        const sort = String(url.searchParams.get("sort") || "updated_desc").trim();
+        let goals = db.goals.filter((goal) => goal.project_id === id);
+        if (statusFilter) {
+          goals = goals.filter((goal) => goal.status === statusFilter);
+        }
+        if (sort === "priority_asc") {
+          goals = goals.slice().sort((a, b) => Number(a.priority || 0) - Number(b.priority || 0));
+        } else if (sort === "status") {
+          const rank = { refining: 0, draft: 1, ready: 2 };
+          goals = goals.slice().sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9));
+        } else {
+          goals = goals.slice().reverse();
+        }
+        return json(goals.map((goal) => ({
+          goal_id: goal.goal_id,
+          project_id: goal.project_id,
+          title: goal.title,
+          status: goal.status,
+          priority: goal.priority,
+          updated_at: "now",
+          refinement_confirmed: Boolean(goal.refinement_confirmed),
+          decomposition_depth: String(goal.decomposition || "").split(/\r?\n/).filter((line) => String(line).trim()).length,
+          unresolved_clarifications: 0,
+        })));
+      }
+      if (path.match(/^\/api\/projects\/\d+\/goals$/) && method === "POST") {
+        const projectID = Number(path.split("/")[3]);
+        const goal = {
+          goal_id: db.nextGoalID++,
+          project_id: projectID,
+          title: body.title || "",
+          description: body.description || "",
+          notes: body.notes || "",
+          eta: body.eta || "",
+          priority: Number(body.priority || 1),
+          status: "draft",
+          refined_goal: "",
+          decomposition: "",
+        };
+        db.goals.push(goal);
+        return json(goal, 201);
+      }
+      if (path.match(/^\/api\/projects\/\d+\/documents$/) && method === "GET") {
+        const id = Number(path.split("/")[3]);
+        return json(db.documents.filter((documentItem) => documentItem.project_id === id));
+      }
+      if (path.match(/^\/api\/projects\/\d+\/documents$/) && method === "POST") {
+        const projectID = Number(path.split("/")[3]);
+        const documentItem = {
+          document_id: db.nextDocumentID++,
+          project_id: projectID,
+          title: body.title || "",
+          description: body.description || "",
+          notes: body.notes || "",
+          content: body.content || "",
+          created_at: "now",
+          updated_at: "now",
+        };
+        db.documents.push(documentItem);
+        return json(documentItem, 201);
+      }
+      if (path.match(/^\/api\/documents\/\d+$/) && method === "GET") {
+        const documentID = Number(path.split("/")[3]);
+        const documentItem = db.documents.find((item) => item.document_id === documentID);
+        if (!documentItem) {
+          return json({ error: "not found" }, 404);
+        }
+        return json(documentItem);
+      }
+      if (path.match(/^\/api\/documents\/\d+$/) && method === "PUT") {
+        const documentID = Number(path.split("/")[3]);
+        const documentItem = db.documents.find((item) => item.document_id === documentID);
+        if (!documentItem) {
+          return json({ error: "not found" }, 404);
+        }
+        Object.assign(documentItem, body, { updated_at: "now" });
+        return json(documentItem);
+      }
+      if (path.match(/^\/api\/documents\/\d+$/) && method === "DELETE") {
+        const documentID = Number(path.split("/")[3]);
+        db.documents = db.documents.filter((item) => item.document_id !== documentID);
+        delete db.documentFilesByDocument[String(documentID)];
+        return new Response(null, { status: 204 });
+      }
+      if (path.match(/^\/api\/documents\/\d+\/files$/) && method === "GET") {
+        const documentID = Number(path.split("/")[3]);
+        const files = db.documentFilesByDocument[String(documentID)] || [];
+        return json(files.map(({ content, ...rest }) => rest));
+      }
+      if (path.match(/^\/api\/documents\/\d+\/files$/) && method === "POST") {
+        const documentID = Number(path.split("/")[3]);
+        const file = {
+          file_id: db.nextDocumentFileID++,
+          document_id: documentID,
+          file_name: body.file_name || "upload.bin",
+          content_type: body.content_type || "application/octet-stream",
+          size_bytes: body.content ? body.content.length : 0,
+          content: body.content || "",
+          created_at: "now",
+        };
+        if (!db.documentFilesByDocument[String(documentID)]) {
+          db.documentFilesByDocument[String(documentID)] = [];
+        }
+        db.documentFilesByDocument[String(documentID)].push(file);
+        const { content, ...response } = file;
+        return json(response, 201);
+      }
+      if (path.match(/^\/api\/documents\/\d+\/files\/\d+$/) && method === "GET") {
+        const parts = path.split("/");
+        const documentID = Number(parts[3]);
+        const fileID = Number(parts[5]);
+        const file = (db.documentFilesByDocument[String(documentID)] || []).find((item) => item.file_id === fileID);
+        if (!file) {
+          return json({ error: "not found" }, 404);
+        }
+        const binary = atob(file.content || "");
+        return new Response(binary, {
+          status: 200,
+          headers: {
+            "Content-Type": file.content_type || "application/octet-stream",
+            "Content-Disposition": `attachment; filename="${file.file_name}"`,
+          },
+        });
+      }
+      if (path.match(/^\/api\/documents\/\d+\/files\/\d+$/) && method === "DELETE") {
+        const parts = path.split("/");
+        const documentID = Number(parts[3]);
+        const fileID = Number(parts[5]);
+        db.documentFilesByDocument[String(documentID)] = (db.documentFilesByDocument[String(documentID)] || []).filter((item) => item.file_id !== fileID);
+        return new Response(null, { status: 204 });
+      }
+      if (path.match(/^\/api\/goals\/\d+$/) && method === "GET") {
+        const goalID = Number(path.split("/")[3]);
+        const goal = db.goals.find((item) => item.goal_id === goalID);
+        if (!goal) {
+          return json({ error: "not found" }, 404);
+        }
+        return json(goal);
+      }
+      if (path.match(/^\/api\/goals\/\d+$/) && method === "PUT") {
+        const goalID = Number(path.split("/")[3]);
+        const goal = db.goals.find((item) => item.goal_id === goalID);
+        if (!goal) {
+          return json({ error: "not found" }, 404);
+        }
+        Object.assign(goal, body);
+        return json(goal);
+      }
+      if (path.match(/^\/api\/goals\/\d+$/) && method === "DELETE") {
+        const goalID = Number(path.split("/")[3]);
+        db.goals = db.goals.filter((item) => item.goal_id !== goalID);
+        delete db.goalChatByGoal[String(goalID)];
+        return json({ status: "deleted" });
+      }
+      if (path.match(/^\/api\/goals\/\d+\/refine$/) && method === "POST") {
+        const goalID = Number(path.split("/")[3]);
+        const goal = db.goals.find((item) => item.goal_id === goalID);
+        if (!goal) {
+          return json({ error: "not found" }, 404);
+        }
+        goal.status = "refining";
+        return json(goal);
+      }
+      if (path.match(/^\/api\/goals\/\d+\/ready$/) && method === "POST") {
+        const goalID = Number(path.split("/")[3]);
+        const goal = db.goals.find((item) => item.goal_id === goalID);
+        if (!goal) {
+          return json({ error: "not found" }, 404);
+        }
+        if (!body.confirm_refinement) {
+          return json({ error: "confirm_refinement must be true before setting ready" }, 400);
+        }
+        if (!String(goal.refined_goal || "").trim()) {
+          return json({ error: "goal refined_goal is required before setting ready" }, 400);
+        }
+        if (!String(goal.decomposition || "").trim()) {
+          return json({ error: "goal decomposition is required before setting ready" }, 400);
+        }
+        goal.status = "ready";
+        return json(goal);
+      }
+      if (path.match(/^\/api\/goals\/\d+\/refinement$/) && method === "GET") {
+        const goalID = Number(path.split("/")[3]);
+        const goal = db.goals.find((item) => item.goal_id === goalID);
+        if (!goal) {
+          return json({ error: "not found" }, 404);
+        }
+        return json({ refined_goal: goal.refined_goal || "", decomposition: goal.decomposition || "" });
+      }
+      if (path.match(/^\/api\/goals\/\d+\/refinement$/) && method === "PUT") {
+        const goalID = Number(path.split("/")[3]);
+        const goal = db.goals.find((item) => item.goal_id === goalID);
+        if (!goal) {
+          return json({ error: "not found" }, 404);
+        }
+        goal.refined_goal = body.refined_goal || "";
+        goal.decomposition = body.decomposition || "";
+        return json(goal);
+      }
+      if (path.match(/^\/api\/goals\/\d+\/chat\/messages$/) && method === "GET") {
+        const goalID = Number(path.split("/")[3]);
+        return json((db.goalChatByGoal[String(goalID)] || []).map((message, index) => ({
+          message_id: index + 1,
+          goal_id: goalID,
+          author: message.author,
+          text: message.text,
+        })));
+      }
+      if (path.match(/^\/api\/goals\/\d+\/chat\/messages$/) && method === "POST") {
+        const goalID = Number(path.split("/")[3]);
+        const key = String(goalID);
+        if (!db.goalChatByGoal[key]) {
+          db.goalChatByGoal[key] = [];
+        }
+        db.goalChatByGoal[key].push({ author: body.author || "user", text: body.text || "" });
+        return json({ message_id: db.goalChatByGoal[key].length, goal_id: goalID, author: body.author || "user", text: body.text || "" }, 201);
+      }
       if (path.match(/^\/api\/projects\/\d+\/tickets$/) && method === "GET") {
         const id = Number(path.split("/")[3]);
         return json(db.tickets.filter((ticket) => ticket.project_id === id));
@@ -177,7 +446,8 @@ function installSite2Mock(page, seed = {}) {
       }
       if (path.match(/^\/api\/tickets\/[^/]+\/comments$/) && method === "GET") {
         const id = path.split("/")[3];
-        return json(db.commentsByTicket[id] || []);
+        const comments = db.commentsByTicket[id] || [];
+        return json([...comments].reverse());
       }
       if (path.match(/^\/api\/tickets\/[^/]+\/comments$/) && method === "POST") {
         const id = path.split("/")[3];
@@ -189,13 +459,14 @@ function installSite2Mock(page, seed = {}) {
           text: body.comment || "",
           date: "now",
         };
-        db.commentsByTicket[id].unshift(comment);
+        db.commentsByTicket[id].push(comment);
         return json(comment, 201);
       }
       if (path.match(/^\/api\/tickets\/[^/]+\/labels$/) && method === "GET") {
         const id = path.split("/")[3];
         const ids = db.ticketLabelIDs[id] || [];
-        return json(ids.map((labelID) => db.labels.find((label) => label.label_id === labelID)).filter(Boolean));
+        const labelsByID = new Map(db.labels.map((label) => [label.label_id, label]));
+        return json(ids.map((labelID) => labelsByID.get(labelID)).filter(Boolean));
       }
       if (path.match(/^\/api\/tickets\/[^/]+\/labels$/) && method === "POST") {
         const id = path.split("/")[3];
@@ -331,7 +602,8 @@ function installSite2Mock(page, seed = {}) {
       }
       if (path.match(/^\/api\/workflows\/\d+\/reorder$/) && method === "PUT") {
         const workflow = db.workflows.find((item) => item.workflow_id === Number(path.split("/")[3]));
-        workflow.stages = body.stage_ids.map((id) => workflow.stages.find((stage) => stage.workflow_stage_id === id));
+        const stagesByID = new Map(workflow.stages.map((stage) => [stage.workflow_stage_id, stage]));
+        workflow.stages = body.stage_ids.map((id) => stagesByID.get(id)).filter(Boolean);
         return json({ status: "reordered" });
       }
       if (path.match(/^\/api\/workflows\/stages\/roles\/\d+\/\d+$/) && method === "POST") {
@@ -346,8 +618,9 @@ function installSite2Mock(page, seed = {}) {
         const parts = path.split("/");
         const workflow = db.workflows.find((item) => item.workflow_id === Number(parts[5]));
         const stage = workflow.stages.find((item) => item.workflow_stage_id === Number(parts[6]));
+        const rolesByID = new Map(db.roles.map((item) => [item.role_id, item]));
         stage.roles = body.role_ids.map((id) => {
-          const role = db.roles.find((item) => item.role_id === id);
+          const role = rolesByID.get(id);
           return { role_id: role.role_id, title: role.title };
         });
         return json({ status: "reordered" });
@@ -388,6 +661,97 @@ test("does not emit CSP inline-style violations after login", async ({ page }) =
 
   const cspMessages = messages.filter((text) => text.includes("Applying inline style violates the following Content Security Policy directive"));
   expect(cspMessages).toEqual([]);
+});
+
+test("logs in without leaking credentials into URL query parameters", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+  await expect(page).toHaveURL(/\/site2\/?$/);
+  await expect(page).not.toHaveURL(/username=|password=/);
+
+  const requests = await page.evaluate(() => window.__site2Requests || []);
+  const loginRequest = requests.find((request) => request.path === "/api/login");
+  expect(loginRequest).toBeTruthy();
+  expect(loginRequest.method).toBe("POST");
+  expect(loginRequest.body).toEqual(expect.objectContaining({
+    username: "admin",
+    password: "secret",
+  }));
+});
+
+test("continues to board when goals API returns null", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    const original = window.__site2MockFetch;
+    window.__site2MockFetch = async (input, init = {}) => {
+      const method = (init.method || "GET").toUpperCase();
+      const url = new URL(typeof input === "string" ? input : input.url, window.location.origin);
+      if (method === "GET" && /^\/api\/projects\/\d+\/goals$/.test(url.pathname)) {
+        return new Response("null", { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return original(input, init);
+    };
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+});
+
+test("goal refine -> decomposition reorder -> ready flow works in site2", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Goals" }).click();
+  await expect(page.getByRole("heading", { name: "Goals" })).toBeVisible();
+
+  await page.locator("#new-goal-button").click();
+  await page.locator("#goal-title").fill("Realtime todo app");
+  await page.locator("#save-goal-button").click();
+  await expect(page.locator("#goal-status")).toHaveValue("draft");
+
+  await page.locator("#refine-goal-button").click();
+  await expect(page.locator("#goal-status")).toHaveValue("refining");
+
+  await page.locator("#goal-refined-goal").fill("Build a multiplayer todo app with login.");
+  await page.locator("#goal-decomposition").fill("1. Epic: Auth\n2. Epic: Realtime sync\n3. Story: Presence");
+  await page.locator('[data-decomposition-up="1"]').click();
+  await page.locator("#save-goal-refinement-button").click();
+  await page.locator("#ready-goal-button").click();
+  await expect(page.locator("#goal-status")).toHaveValue("ready");
+
+  const requests = await page.evaluate(() => window.__site2Requests || []);
+  const refinementRequest = requests
+    .filter((request) => request.method === "PUT" && /\/api\/goals\/\d+\/refinement$/.test(request.path))
+    .slice(-1)[0];
+  expect(refinementRequest).toBeTruthy();
+  expect(refinementRequest.body.decomposition.startsWith("1. Epic: Realtime sync")).toBe(true);
 });
 
 test("keeps the session and visible tickets across refresh", async ({ page }) => {
@@ -604,6 +968,43 @@ test("manages labels, dependencies, and time from the ticket modal", async ({ pa
       expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/labels", body: { label_id: 51 } }),
       expect.objectContaining({ method: "POST", path: "/api/dependencies", body: expect.objectContaining({ ticket_id: "OPS-101", depends_on: "OPS-102" }) }),
       expect.objectContaining({ method: "POST", path: "/api/tickets/OPS-101/time", body: { minutes: 15, note: "Refactor" } }),
+    ]),
+  );
+});
+
+test("creates, updates, uploads, and deletes documents from the Documents view", async ({ page }) => {
+  await page.getByRole("button", { name: "Documents" }).click();
+  await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New document" }).click();
+  await page.locator("#document-title").fill("Incident SOP");
+  await page.locator("#document-description").fill("Runbook for incidents");
+  await page.locator("#document-content").fill("step 1");
+  await page.getByRole("button", { name: "Save document" }).click();
+  await expect(page.locator("#document-list")).toContainText("Incident SOP");
+
+  await page.locator("#document-title").fill("Incident SOP v2");
+  await page.getByRole("button", { name: "Save document" }).click();
+  await expect(page.locator("#document-list")).toContainText("Incident SOP v2");
+
+  await page.setInputFiles("#document-upload-file", {
+    name: "sop.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("steps"),
+  });
+  await page.getByRole("button", { name: "Upload file" }).click();
+  await expect(page.locator("#document-files-list")).toContainText("sop.txt");
+
+  await page.getByRole("button", { name: "Delete document" }).click();
+  await expect(page.locator("#document-list")).not.toContainText("Incident SOP v2");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ method: "POST", path: "/api/projects/1/documents", body: expect.objectContaining({ title: "Incident SOP" }) }),
+      expect.objectContaining({ method: "PUT", path: "/api/documents/2", body: expect.objectContaining({ title: "Incident SOP v2" }) }),
+      expect.objectContaining({ method: "POST", path: "/api/documents/2/files", body: expect.objectContaining({ file_name: "sop.txt" }) }),
+      expect.objectContaining({ method: "DELETE", path: "/api/documents/2" }),
     ]),
   );
 });

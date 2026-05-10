@@ -10,6 +10,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/libticket"
 )
 
 func runRegister(args []string) error {
@@ -30,10 +31,11 @@ func runRegister(args []string) error {
 	if err != nil {
 		return err
 	}
-	svc, err := resolveService(cfg)
+	serverURL, err := resolveServerURLForAuth(cfg)
 	if err != nil {
 		return err
 	}
+	svc := libticket.NewHTTP(config.Config{Location: serverURL, Username: cfg.Username, Token: cfg.Token})
 	user, err := svc.Register(context.Background(), username, password)
 	if err != nil {
 		return err
@@ -67,10 +69,11 @@ func runLogin(args []string) error {
 	if err != nil {
 		return err
 	}
-	svc, err := resolveService(cfg)
+	serverURL, err := resolveServerURLForAuth(cfg)
 	if err != nil {
 		return err
 	}
+	svc := libticket.NewHTTP(config.Config{Location: serverURL, Username: cfg.Username, Token: cfg.Token})
 
 	if cfg.Token != "" {
 		status, statusErr := svc.Status(context.Background())
@@ -94,9 +97,9 @@ func runLogin(args []string) error {
 	}
 
 	if username != "" && password != "" {
-		user, token, loginErr := svc.Login(context.Background(), username, password)
+		user, _, loginErr := svc.Login(context.Background(), username, password)
 		if loginErr == nil {
-			return finishLogin(cfg, user, token)
+			return finishLogin(cfg, user, password)
 		}
 		if loginErr.Error() != "invalid credentials" {
 			return loginErr
@@ -108,19 +111,43 @@ func runLogin(args []string) error {
 	if err != nil {
 		return err
 	}
-	user, token, err := svc.Login(context.Background(), username, password)
+	user, _, err := svc.Login(context.Background(), username, password)
 	if err != nil {
 		return err
 	}
-	return finishLogin(cfg, user, token)
+	return finishLogin(cfg, user, password)
+}
+
+func resolveServerURLForAuth(cfg config.Config) (string, error) {
+	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
+	if location == "" {
+		if isTestBinary() {
+			location = strings.TrimSpace(cfg.Location)
+		} else {
+			location = defaultTicketURL
+		}
+	}
+	resolved, err := config.ResolveLocation(location)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(resolved.ServerURL) == "" {
+		return "", errors.New("ticket login/register require a running server")
+	}
+	return resolved.ServerURL, nil
 }
 
 func finishLogin(cfg config.Config, user store.User, token string) error {
+	serverURL, err := resolveServerURLForAuth(cfg)
+	if err != nil {
+		return err
+	}
+	cfg.Location = serverURL
 	cfg.Username = user.Username
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-	if err := config.SaveRemoteCredentials(cfg.Location, user.Username, token); err != nil {
+	if err := config.SaveRemoteCredentials(serverURL, user.Username, token); err != nil {
 		return err
 	}
 	if outputJSON {
@@ -170,22 +197,11 @@ func runStatus(args []string) error {
 }
 
 func runStatusWithSummaryStyle(statusUnicode bool) error {
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return err
-	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	switch resolved.Mode {
-	case config.ModeRemote:
-		return runRemoteStatusWithSummaryStyle(cfg, statusUnicode)
-	case config.ModeLocal:
-		return runLocalStatusWithSummaryStyle(statusUnicode)
-	default:
-		return fmt.Errorf("unsupported mode %q", resolved.Mode)
-	}
+	return runRemoteStatusWithSummaryStyle(cfg, statusUnicode)
 }
 
 func runCount(args []string) error {
@@ -355,12 +371,8 @@ func runWhoami(args []string) error {
 	// Connection info
 	fmt.Println()
 	fmt.Println("CONNECTION")
-	fmt.Printf("  mode     : %s\n", resolved.Mode)
-	if resolved.Mode == config.ModeRemote {
-		fmt.Printf("  server   : %s\n", resolved.ServerURL)
-	} else {
-		fmt.Printf("  database : %s\n", resolved.DBPath)
-	}
+	fmt.Printf("  mode     : server\n")
+	fmt.Printf("  server   : %s\n", resolved.ServerURL)
 
 	// Projects with user role
 	fmt.Println()

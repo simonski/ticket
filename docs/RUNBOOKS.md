@@ -40,12 +40,11 @@ docker compose up -d
 curl http://localhost:8080/api/healthz
 # Expected: {"status":"ok","version":"0.1.x"}
 
-# 6. Configure the CLI for the running server
-tk init
-# Choose "Remote server" and enter http://localhost:8080 when prompted.
-
-# 7. Log in with the bootstrapped admin account
-tk login -username admin -password <secret>
+# 6. Configure CLI environment for the running server
+export TICKET_URL=http://localhost:8080
+export TICKET_USERNAME=admin
+export TICKET_PASSWORD=<secret>
+tk project use 1
 
 # 8. Create the first project
 tk project new -title "My Project" -prefix MP
@@ -188,7 +187,7 @@ tk project ls
 > **Note:** `tk import` replaces the local database contents with the snapshot
 > in the file you pass via `-i`.
 
-### Local mode restore checklist
+### Client/server restore checklist
 
 1. Stop any running `tk server` process pointed at the same local database.
 2. Confirm `TICKET_HOME` points at the target global home and that you are in the repo or directory whose `.ticket/config.json` should route to that database.

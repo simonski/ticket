@@ -560,6 +560,313 @@ func TestAutomationPolicyAPI(t *testing.T) {
 	}
 }
 
+func TestTicketExecutionPacketEndpoint(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "execution packet",
+		"dor_map": map[string]string{
+			"default": "goal dor",
+		},
+		"dod_map": map[string]string{
+			"default": "goal dod",
+		},
+		"ac_map": map[string]string{
+			"default": "goal ac",
+		},
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+
+	packetResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/execution-packet", nil, adminToken)
+	if packetResp.Code != http.StatusOK {
+		t.Fatalf("execution packet status=%d body=%s", packetResp.Code, packetResp.Body.String())
+	}
+	var packet store.ExecutionPacket
+	decodeResponse(t, packetResp, &packet)
+	if packet.TicketID != ticket.ID {
+		t.Fatalf("packet ticket id=%q want=%q", packet.TicketID, ticket.ID)
+	}
+	if packet.Effective.DOR != "goal dor" || packet.Effective.DOD != "goal dod" || packet.Effective.AC != "goal ac" {
+		t.Fatalf("unexpected effective guidance: %#v", packet.Effective)
+	}
+}
+
+func TestGoalEndpoints(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/goals", map[string]any{
+		"title":       "Build a multiplayer todo app",
+		"description": "CockroachDB + websocket website",
+		"notes":       "registration/login required",
+		"eta":         "2026-07-01",
+		"priority":    2,
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create goal status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var goal store.Goal
+	decodeResponse(t, createResp, &goal)
+	if goal.Status != "draft" {
+		t.Fatalf("goal status=%q want=draft", goal.Status)
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/goals", nil, adminToken)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list goals status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var goals []store.Goal
+	decodeResponse(t, listResp, &goals)
+	if len(goals) != 1 {
+		t.Fatalf("goals len=%d want=1", len(goals))
+	}
+
+	refineResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/refine", map[string]any{}, adminToken)
+	if refineResp.Code != http.StatusOK {
+		t.Fatalf("refine goal status=%d body=%s", refineResp.Code, refineResp.Body.String())
+	}
+	var refining store.Goal
+	decodeResponse(t, refineResp, &refining)
+	if refining.Status != "refining" {
+		t.Fatalf("refine status=%q want=refining", refining.Status)
+	}
+
+	readyResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/ready", map[string]any{"confirm_refinement": true}, adminToken)
+	if readyResp.Code != http.StatusBadRequest {
+		t.Fatalf("ready goal (without refinement) status=%d body=%s", readyResp.Code, readyResp.Body.String())
+	}
+	var readyErr map[string]string
+	decodeResponse(t, readyResp, &readyErr)
+	if !strings.Contains(strings.ToLower(readyErr["error"]), "refined_goal") {
+		t.Fatalf("ready goal expected refined_goal error, body=%#v", readyErr)
+	}
+
+	refinementResp := doJSONRequest(t, handler, http.MethodPut, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/refinement", map[string]any{
+		"refined_goal":  "Build a low-friction realtime todo platform.",
+		"decomposition": "- Epic: Auth\n- Epic: Collaboration\n- Story: registration/login\n- Story: websocket sync",
+	}, adminToken)
+	if refinementResp.Code != http.StatusOK {
+		t.Fatalf("refinement update status=%d body=%s", refinementResp.Code, refinementResp.Body.String())
+	}
+	var refined store.Goal
+	decodeResponse(t, refinementResp, &refined)
+	if refined.RefinedGoal == "" || refined.Decompose == "" {
+		t.Fatalf("refined goal missing fields: %#v", refined)
+	}
+
+	decompositionListResp := doJSONRequest(t, handler, http.MethodGet, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/decomposition", nil, adminToken)
+	if decompositionListResp.Code != http.StatusOK {
+		t.Fatalf("decomposition list status=%d body=%s", decompositionListResp.Code, decompositionListResp.Body.String())
+	}
+	var decompositionItems []store.GoalDecompositionItem
+	decodeResponse(t, decompositionListResp, &decompositionItems)
+	if len(decompositionItems) != 4 {
+		t.Fatalf("decomposition items len=%d want=4", len(decompositionItems))
+	}
+
+	createClarificationResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/clarifications", map[string]any{
+		"question": "Should realtime include typing indicators?",
+	}, adminToken)
+	if createClarificationResp.Code != http.StatusCreated {
+		t.Fatalf("clarification create status=%d body=%s", createClarificationResp.Code, createClarificationResp.Body.String())
+	}
+	var clarification store.GoalClarification
+	decodeResponse(t, createClarificationResp, &clarification)
+
+	readyResp = doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/ready", map[string]any{"confirm_refinement": true}, adminToken)
+	if readyResp.Code != http.StatusBadRequest {
+		t.Fatalf("ready goal with unresolved clarification status=%d body=%s", readyResp.Code, readyResp.Body.String())
+	}
+
+	resolveClarificationResp := doJSONRequest(t, handler, http.MethodPut, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/clarifications/"+strconv.FormatInt(clarification.ID, 10), map[string]any{
+		"resolved": true,
+	}, adminToken)
+	if resolveClarificationResp.Code != http.StatusOK {
+		t.Fatalf("clarification resolve status=%d body=%s", resolveClarificationResp.Code, resolveClarificationResp.Body.String())
+	}
+
+	readyResp = doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/ready", map[string]any{"confirm_refinement": true}, adminToken)
+	if readyResp.Code != http.StatusOK {
+		t.Fatalf("ready goal status=%d body=%s", readyResp.Code, readyResp.Body.String())
+	}
+	var ready store.Goal
+	decodeResponse(t, readyResp, &ready)
+	if ready.Status != "ready" {
+		t.Fatalf("ready status=%q want=ready", ready.Status)
+	}
+
+	goalInboxResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/goal-inbox?status=ready&sort=updated_desc", nil, adminToken)
+	if goalInboxResp.Code != http.StatusOK {
+		t.Fatalf("goal inbox status=%d body=%s", goalInboxResp.Code, goalInboxResp.Body.String())
+	}
+	var inbox []store.GoalInboxItem
+	decodeResponse(t, goalInboxResp, &inbox)
+	if len(inbox) != 1 || inbox[0].GoalID != goal.ID {
+		t.Fatalf("goal inbox payload=%#v want goal %d", inbox, goal.ID)
+	}
+
+	chatCreateResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/chat/messages", map[string]any{
+		"author": "user",
+		"text":   "please tighten the scope",
+	}, adminToken)
+	if chatCreateResp.Code != http.StatusCreated {
+		t.Fatalf("chat create status=%d body=%s", chatCreateResp.Code, chatCreateResp.Body.String())
+	}
+	chatListResp := doJSONRequest(t, handler, http.MethodGet, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/chat/messages", nil, adminToken)
+	if chatListResp.Code != http.StatusOK {
+		t.Fatalf("chat list status=%d body=%s", chatListResp.Code, chatListResp.Body.String())
+	}
+	var chatMessages []store.GoalChatMessage
+	decodeResponse(t, chatListResp, &chatMessages)
+	if len(chatMessages) != 1 {
+		t.Fatalf("chat messages len=%d want=1", len(chatMessages))
+	}
+
+	storyResp := doJSONRequest(t, handler, http.MethodPost, "/api/stories", map[string]any{
+		"project_id":  1,
+		"title":       "Goal story",
+		"description": "linked to goal",
+	}, adminToken)
+	if storyResp.Code != http.StatusCreated {
+		t.Fatalf("story create status=%d body=%s", storyResp.Code, storyResp.Body.String())
+	}
+	var story store.Story
+	decodeResponse(t, storyResp, &story)
+
+	linkResp := doJSONRequest(t, handler, http.MethodPost, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/stories", map[string]any{
+		"story_id": story.ID,
+	}, adminToken)
+	if linkResp.Code != http.StatusCreated {
+		t.Fatalf("goal/story link status=%d body=%s", linkResp.Code, linkResp.Body.String())
+	}
+
+	listStoriesResp := doJSONRequest(t, handler, http.MethodGet, "/api/goals/"+strconv.FormatInt(goal.ID, 10)+"/stories", nil, adminToken)
+	if listStoriesResp.Code != http.StatusOK {
+		t.Fatalf("list goal stories status=%d body=%s", listStoriesResp.Code, listStoriesResp.Body.String())
+	}
+	var linkedStories []store.Story
+	decodeResponse(t, listStoriesResp, &linkedStories)
+	if len(linkedStories) != 1 || linkedStories[0].ID != story.ID {
+		t.Fatalf("linked stories=%#v, want story %d", linkedStories, story.ID)
+	}
+}
+
+func TestTicketPhaseSignoffEndpoints(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "phase signoff",
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/phase-signoffs", nil, adminToken)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list signoffs status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var signoffs []store.TicketPhaseSignoff
+	decodeResponse(t, listResp, &signoffs)
+	if len(signoffs) != 3 {
+		t.Fatalf("signoff len=%d want=3", len(signoffs))
+	}
+
+	approveResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/phase-signoffs/planning", map[string]any{
+		"approved": true,
+		"note":     "planning approved",
+	}, adminToken)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("approve signoff status=%d body=%s", approveResp.Code, approveResp.Body.String())
+	}
+	var updated store.TicketPhaseSignoff
+	decodeResponse(t, approveResp, &updated)
+	if updated.Phase != store.PhasePlanning || !updated.Approved {
+		t.Fatalf("updated signoff=%#v", updated)
+	}
+}
+
+func TestTicketInboxEscalationEndpoints(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": 1,
+		"type":       "task",
+		"title":      "inbox escalation",
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, createResp, &ticket)
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/tickets/"+ticket.ID, map[string]any{
+		"title":               ticket.Title,
+		"description":         ticket.Description,
+		"acceptance_criteria": ticket.AcceptanceCriteria,
+		"git_repository":      ticket.GitRepository,
+		"git_branch":          ticket.GitBranch,
+		"assignee":            ticket.Assignee,
+		"type":                ticket.Type,
+		"stage":               ticket.Stage,
+		"state":               store.StateFail,
+		"priority":            ticket.Priority,
+		"order":               ticket.Order,
+		"estimate_effort":     ticket.EstimateEffort,
+		"estimate_complete":   ticket.EstimateComplete,
+		"message":             "failed in qa",
+	}, adminToken)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update ticket fail status=%d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/tickets/"+ticket.ID+"/inbox", nil, adminToken)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list inbox status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var entries []store.InboxEntry
+	decodeResponse(t, listResp, &entries)
+	if len(entries) == 0 {
+		t.Fatalf("expected at least one inbox entry, got %#v", entries)
+	}
+	if entries[0].Kind != store.InboxKindFailureEscalation {
+		t.Fatalf("unexpected inbox kind: %#v", entries[0])
+	}
+
+	decideResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/inbox/"+strconv.FormatInt(entries[0].ID, 10)+"/decide", map[string]any{
+		"decision": store.InboxDecisionRefineRequirements,
+		"message":  "tighten AC",
+	}, adminToken)
+	if decideResp.Code != http.StatusOK {
+		t.Fatalf("decide inbox status=%d body=%s", decideResp.Code, decideResp.Body.String())
+	}
+	var decided store.InboxEntry
+	decodeResponse(t, decideResp, &decided)
+	if decided.Status != store.InboxStatusResolved || decided.Decision != store.InboxDecisionRefineRequirements {
+		t.Fatalf("decided inbox entry=%#v", decided)
+	}
+}
+
 func TestTicketInterventionStateEndpoint(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
@@ -4249,6 +4556,127 @@ func TestStoryCRUDAPI(t *testing.T) {
 	getGoneResp := doJSONRequest(t, handler, http.MethodGet, "/api/stories/"+sid, nil, token)
 	if getGoneResp.Code != http.StatusNotFound {
 		t.Fatalf("get deleted story status = %d, want %d", getGoneResp.Code, http.StatusNotFound)
+	}
+}
+
+func TestDocumentCRUDAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/documents", map[string]any{
+		"title":       "Architecture notes",
+		"description": "high level system notes",
+		"notes":       "share with team",
+		"content":     "markdown content",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create document status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var document store.Document
+	decodeResponse(t, createResp, &document)
+	documentID := strconv.FormatInt(document.ID, 10)
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/1/documents", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list documents status = %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var documents []store.Document
+	decodeResponse(t, listResp, &documents)
+	if len(documents) != 1 || documents[0].ID != document.ID {
+		t.Fatalf("documents = %#v, want document %d", documents, document.ID)
+	}
+
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/documents/"+documentID, nil, token)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("get document status = %d body=%s", getResp.Code, getResp.Body.String())
+	}
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/documents/"+documentID, map[string]any{
+		"title":       "Architecture notes v2",
+		"description": "updated",
+		"notes":       "updated notes",
+		"content":     "updated content",
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("update document status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+	var updated store.Document
+	decodeResponse(t, updateResp, &updated)
+	if updated.Title != "Architecture notes v2" {
+		t.Fatalf("updated title = %q, want %q", updated.Title, "Architecture notes v2")
+	}
+
+	labelResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/1/labels", map[string]any{
+		"name":  "docs",
+		"color": "#112233",
+	}, token)
+	if labelResp.Code != http.StatusCreated {
+		t.Fatalf("create label status = %d body=%s", labelResp.Code, labelResp.Body.String())
+	}
+	var label store.Label
+	decodeResponse(t, labelResp, &label)
+
+	addLabelResp := doJSONRequest(t, handler, http.MethodPost, "/api/documents/"+documentID+"/labels", map[string]any{
+		"label_id": label.ID,
+	}, token)
+	if addLabelResp.Code != http.StatusNoContent {
+		t.Fatalf("add document label status = %d body=%s", addLabelResp.Code, addLabelResp.Body.String())
+	}
+
+	listLabelsResp := doJSONRequest(t, handler, http.MethodGet, "/api/documents/"+documentID+"/labels", nil, token)
+	if listLabelsResp.Code != http.StatusOK {
+		t.Fatalf("list document labels status = %d body=%s", listLabelsResp.Code, listLabelsResp.Body.String())
+	}
+	var labels []store.Label
+	decodeResponse(t, listLabelsResp, &labels)
+	if len(labels) != 1 || labels[0].ID != label.ID {
+		t.Fatalf("document labels = %#v, want label %d", labels, label.ID)
+	}
+
+	removeLabelResp := doJSONRequest(t, handler, http.MethodDelete, "/api/documents/"+documentID+"/labels?label_id="+strconv.FormatInt(label.ID, 10), nil, token)
+	if removeLabelResp.Code != http.StatusNoContent {
+		t.Fatalf("remove document label status = %d body=%s", removeLabelResp.Code, removeLabelResp.Body.String())
+	}
+
+	addFileResp := doJSONRequest(t, handler, http.MethodPost, "/api/documents/"+documentID+"/files", map[string]any{
+		"file_name":    "note.txt",
+		"content_type": "text/plain",
+		"content":      []byte("hello file"),
+	}, token)
+	if addFileResp.Code != http.StatusCreated {
+		t.Fatalf("add document file status = %d body=%s", addFileResp.Code, addFileResp.Body.String())
+	}
+	var file store.DocumentFile
+	decodeResponse(t, addFileResp, &file)
+
+	listFilesResp := doJSONRequest(t, handler, http.MethodGet, "/api/documents/"+documentID+"/files", nil, token)
+	if listFilesResp.Code != http.StatusOK {
+		t.Fatalf("list document files status = %d body=%s", listFilesResp.Code, listFilesResp.Body.String())
+	}
+	var files []store.DocumentFile
+	decodeResponse(t, listFilesResp, &files)
+	if len(files) != 1 || files[0].ID != file.ID {
+		t.Fatalf("document files = %#v, want file %d", files, file.ID)
+	}
+
+	getFileResp := doRawRequest(t, handler, http.MethodGet, "/api/documents/"+documentID+"/files/"+strconv.FormatInt(file.ID, 10), nil, token)
+	if getFileResp.Code != http.StatusOK {
+		t.Fatalf("get document file status = %d body=%s", getFileResp.Code, getFileResp.Body.String())
+	}
+	if getFileResp.Body.String() != "hello file" {
+		t.Fatalf("downloaded file content = %q, want %q", getFileResp.Body.String(), "hello file")
+	}
+
+	deleteFileResp := doJSONRequest(t, handler, http.MethodDelete, "/api/documents/"+documentID+"/files/"+strconv.FormatInt(file.ID, 10), nil, token)
+	if deleteFileResp.Code != http.StatusNoContent {
+		t.Fatalf("delete document file status = %d body=%s", deleteFileResp.Code, deleteFileResp.Body.String())
+	}
+
+	deleteResp := doJSONRequest(t, handler, http.MethodDelete, "/api/documents/"+documentID, nil, token)
+	if deleteResp.Code != http.StatusNoContent {
+		t.Fatalf("delete document status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
 	}
 }
 

@@ -36,17 +36,17 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]",
-		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account.", "Without a path, the database defaults to the global local remote (`~/.ticket/ticket.db` once initialised).", "A directory path like `tk initdb .` creates `./.ticket/ticket.db`, registers a named local remote for that path, and points the current repo at that remote.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive repo/project binding command."},
+		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account.", "This is a server-side maintenance command.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive repo/project binding command."},
 		example: "tk initdb . --force -password secret -populate",
 	},
 	"export": {
 		usage:   "tk export [-o <snapshot-file>]",
-		details: []string{"Local mode only. Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
+		details: []string{"Server-side maintenance command. Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
 		example: "tk export -o ./ticket-snapshot.json",
 	},
 	"import": {
 		usage:   "tk import -i <snapshot-file>",
-		details: []string{"Local mode only. Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
+		details: []string{"Server-side maintenance command. Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
 		example: "tk import -i ./ticket-snapshot.json",
 	},
 	"server": {
@@ -66,27 +66,27 @@ var helpIndex = map[string]commandHelp{
 	},
 	"upgrade-database": {
 		usage:   "tk upgrade-database [-o <target-db>]",
-		details: []string{"Local mode only. Reads an older ticket database and ports its contents into a fresh database file without modifying the source database.", "By default the upgraded database is written to `new_database/ticket.db` relative to the current working directory.", "Use `-f <source-db>` to point the command at a specific legacy database file or directory."},
+		details: []string{"Server-side maintenance command. Reads an older ticket database and ports its contents into a fresh database file without modifying the source database.", "By default the upgraded database is written to `new_database/ticket.db` relative to the current working directory.", "Use `-f <source-db>` to point the command at a specific legacy database file or directory."},
 		example: "tk -f old_ticket/ticket.db upgrade-database -o new_database/ticket.db",
 	},
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only. Logs into the server selected by the current repo/global remote configuration and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
-		example: "tk login -username simon -password secret -url http://localhost:8080",
+		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
+		example: "tk login -username simon -password secret -url https://ticket.localhost",
 	},
 	"register": {
 		usage:   "tk register [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Remote mode only. Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then stored username, then OS `whoami`; `-password`, then the supplied flag, then `password`."},
+		details: []string{"Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then stored username, then OS `whoami`; `-password`, then the supplied flag, then `password`."},
 		example: "tk register -username simon -password secret",
 	},
 	"logout": {
 		usage:   "tk logout [-url <server-url>]",
-		details: []string{"Remote mode only. Logs out from the configured server and removes the active `.ticket/credentials.json` session token."},
+		details: []string{"Logs out from the configured server and removes the active `.ticket/credentials.json` session token."},
 		example: "tk logout",
 	},
 	"status": {
 		usage:   "tk status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration, then performs a connectivity check.", "Both local and remote output include the active project, its current Workflow name, and whether new tickets default to draft mode.", "Local mode also prints `db_path` / `db_exists`; remote mode also prints `username` / `authenticated` and the selected remote when available."},
+		details: []string{"Prints the current effective configuration, then performs a server connectivity check.", "Output includes the active project, its current Workflow name, and whether new tickets default to draft mode.", "Also prints `username`, `authenticated`, and server metadata when available."},
 		example: "tk status",
 	},
 	"help": {
@@ -349,9 +349,19 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Manages stories within the active project.", "Stories provide a lightweight grouping layer within a project."},
 		example: "tk story create -title \"User onboarding flow\"",
 	},
+	"goal": {
+		usage:   "tk goal <create|list|get|update|delete>",
+		details: []string{"Manages goals within the active project.", "Goals support planning and refinement workflows for ticket execution."},
+		example: "tk goal create -title \"Reduce support response time\" -d \"Cut median response by 20%\"",
+	},
+	"document": {
+		usage:   "tk document <create|list|get|update|delete|label-add|label-rm|label-ls|file-add|file-ls|file-get|file-rm>",
+		details: []string{"Manages documents within the active project.", "Documents support text content, labels, and uploaded files."},
+		example: "tk document create -title \"Architecture notes\" -content \"...\"",
+	},
 	"config": {
 		usage:   "tk config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
-		details: []string{"Local config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges in remote mode."},
+		details: []string{"Config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges."},
 		example: "tk config ls",
 	},
 	"label": {
@@ -436,7 +446,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-workflow <name>]",
-		details: []string{"Interactive setup for local or remote mode.", "`tk init` requires the current working directory to be inside a git repository.", "In local mode, initializes `.ticket/ticket.db`, sets admin password to `password` (unless overridden by other setup flows), and can apply project bootstrap flags (`-prefix`, `-name`, `-git`, `-workflow`).", "In remote mode, configures server URL, login/registration, and active project selection."},
+		details: []string{"Interactive setup for server client configuration.", "`tk init` requires the current working directory to be inside a git repository.", "It configures server URL, login/registration, and active project selection."},
 		example: "tk init",
 	},
 	"curate": {
@@ -487,6 +497,8 @@ func renderRootUsage() string {
 		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
 		{"time", "Log and view time entries (log, ls, total, rm)"},
 		{"story", "Manage stories (ls, new, get, update, rm)"},
+		{"goal", "Manage goals (ls, new, get, update, rm)"},
+		{"document", "Manage documents (ls, new, get, update, rm, labels, files)"},
 		{"decision", "Record and list decisions (ls, new)"},
 		{"doctor", "Interactive health review (project, ticket)"},
 	}
@@ -731,6 +743,31 @@ Commands:
   get      <id>                            Show story detail
   update   <id> -title <title> [-d <desc>] Update a story
   rm       <id>                            Delete a story`
+
+const goalUsage = `Usage: tk goal <command> [flags]
+
+Commands:
+  ls                                            List goals in active project
+  new      -title <title> [-d <desc>]          Create a goal
+  get      <id>                                 Show goal detail
+  update   <id> [-title <title>] [-d <desc>]   Update a goal
+  rm       <id>                                 Delete a goal`
+
+const documentUsage = `Usage: tk document <command> [flags]
+
+Commands:
+  ls                                                  List documents in active project
+  new       -title <title> [-d <desc>]               Create a document
+  get       <id>                                      Show document detail
+  update    <id> [-title <title>] [-d <desc>]        Update a document
+  rm        <id>                                      Delete a document
+  label-add <document-id> <label-id>                 Add label to document
+  label-rm  <document-id> <label-id>                 Remove label from document
+  label-ls  <document-id>                            List document labels
+  file-add  <document-id> -path <file>               Upload file to document
+  file-ls   <document-id>                            List document files
+  file-get  <document-id> <file-id> -o <path>        Download document file
+  file-rm   <document-id> <file-id>                  Remove document file`
 
 const ideaUsage = `Usage: tk idea <command> [flags]
 

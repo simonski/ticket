@@ -1,6 +1,5 @@
-// Package libticket provides the core service interface and LocalService implementation
-// for interacting with ticket data. Both local (SQLite) and remote (HTTP) implementations
-// satisfy the Service interface, enabling identical behaviour regardless of deployment mode.
+// Package libticket provides the core service interface and implementations
+// used by the CLI and server runtime.
 package libticket
 
 import (
@@ -16,8 +15,7 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
-// LocalService implements Service directly against a local SQLite database.
-// Obtain one via NewLocal after loading a config with a local location.
+// LocalService implements Service directly against a SQLite database.
 type LocalService struct {
 	cfg config.Config
 
@@ -102,15 +100,15 @@ func (s *LocalService) SetRegistrationEnabled(ctx context.Context, enabled bool)
 }
 
 func (s *LocalService) Register(ctx context.Context, username, password string) (store.User, error) {
-	return store.User{}, errors.New("ticket register requires remote mode (run tk init to configure)")
+	return store.User{}, errors.New("ticket register requires a configured server (run tk init and tk login)")
 }
 
 func (s *LocalService) Login(ctx context.Context, username, password string) (store.User, string, error) {
-	return store.User{}, "", errors.New("ticket login requires remote mode (run tk init to configure)")
+	return store.User{}, "", errors.New("ticket login requires a configured server (run tk init to configure one)")
 }
 
 func (s *LocalService) Logout(ctx context.Context) error {
-	return errors.New("ticket logout requires remote mode (run tk init to configure)")
+	return errors.New("ticket logout requires a configured server (run tk init and tk login)")
 }
 
 func (s *LocalService) Count(ctx context.Context, projectID *int64) (CountSummary, error) {
@@ -1581,4 +1579,140 @@ func (s *LocalService) DeleteStory(ctx context.Context, id int64) error {
 		return err
 	}
 	return store.DeleteStory(ctx, db, id)
+}
+
+func (s *LocalService) CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Goal{}, err
+	}
+	return store.CreateGoal(ctx, db, projectID, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
+}
+
+func (s *LocalService) ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListGoals(ctx, db, projectID)
+}
+
+func (s *LocalService) GetGoal(ctx context.Context, id int64) (store.Goal, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Goal{}, err
+	}
+	return store.GetGoal(ctx, db, id)
+}
+
+func (s *LocalService) UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Goal{}, err
+	}
+	return store.UpdateGoal(ctx, db, id, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
+}
+
+func (s *LocalService) DeleteGoal(ctx context.Context, id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.DeleteGoal(ctx, db, id)
+}
+
+func (s *LocalService) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Document{}, err
+	}
+	return store.CreateDocument(ctx, db, projectID, request.Title, request.Description, request.Notes, request.Content)
+}
+
+func (s *LocalService) ListDocuments(ctx context.Context, projectID int64) ([]store.Document, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListDocumentsByProject(ctx, db, projectID)
+}
+
+func (s *LocalService) GetDocument(ctx context.Context, id int64) (store.Document, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Document{}, err
+	}
+	return store.GetDocument(ctx, db, id)
+}
+
+func (s *LocalService) UpdateDocument(ctx context.Context, id int64, request DocumentRequest) (store.Document, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Document{}, err
+	}
+	return store.UpdateDocument(ctx, db, id, request.Title, request.Description, request.Notes, request.Content)
+}
+
+func (s *LocalService) DeleteDocument(ctx context.Context, id int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.DeleteDocument(ctx, db, id)
+}
+
+func (s *LocalService) AddDocumentLabel(ctx context.Context, documentID int64, request DocumentLabelRequest) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.AddDocumentLabel(ctx, db, documentID, request.LabelID)
+}
+
+func (s *LocalService) RemoveDocumentLabel(ctx context.Context, documentID, labelID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.RemoveDocumentLabel(ctx, db, documentID, labelID)
+}
+
+func (s *LocalService) ListDocumentLabels(ctx context.Context, documentID int64) ([]store.Label, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListDocumentLabels(ctx, db, documentID)
+}
+
+func (s *LocalService) AddDocumentFile(ctx context.Context, documentID int64, request DocumentFileUploadRequest) (store.DocumentFile, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.DocumentFile{}, err
+	}
+	return store.AddDocumentFile(ctx, db, documentID, request.FileName, request.ContentType, request.Content)
+}
+
+func (s *LocalService) ListDocumentFiles(ctx context.Context, documentID int64) ([]store.DocumentFile, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListDocumentFiles(ctx, db, documentID)
+}
+
+func (s *LocalService) GetDocumentFile(ctx context.Context, documentID, fileID int64) (store.DocumentFile, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.DocumentFile{}, err
+	}
+	return store.GetDocumentFile(ctx, db, documentID, fileID)
+}
+
+func (s *LocalService) DeleteDocumentFile(ctx context.Context, documentID, fileID int64) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.DeleteDocumentFile(ctx, db, documentID, fileID)
 }

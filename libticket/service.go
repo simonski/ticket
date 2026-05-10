@@ -154,6 +154,23 @@ type TicketService interface {
 	GetStory(ctx context.Context, id int64) (store.Story, error)
 	UpdateStory(ctx context.Context, id int64, title, description string) (store.Story, error)
 	DeleteStory(ctx context.Context, id int64) error
+	CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error)
+	ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error)
+	GetGoal(ctx context.Context, id int64) (store.Goal, error)
+	UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error)
+	DeleteGoal(ctx context.Context, id int64) error
+	CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error)
+	ListDocuments(ctx context.Context, projectID int64) ([]store.Document, error)
+	GetDocument(ctx context.Context, id int64) (store.Document, error)
+	UpdateDocument(ctx context.Context, id int64, request DocumentRequest) (store.Document, error)
+	DeleteDocument(ctx context.Context, id int64) error
+	AddDocumentLabel(ctx context.Context, documentID int64, request DocumentLabelRequest) error
+	RemoveDocumentLabel(ctx context.Context, documentID, labelID int64) error
+	ListDocumentLabels(ctx context.Context, documentID int64) ([]store.Label, error)
+	AddDocumentFile(ctx context.Context, documentID int64, request DocumentFileUploadRequest) (store.DocumentFile, error)
+	ListDocumentFiles(ctx context.Context, documentID int64) ([]store.DocumentFile, error)
+	GetDocumentFile(ctx context.Context, documentID, fileID int64) (store.DocumentFile, error)
+	DeleteDocumentFile(ctx context.Context, documentID, fileID int64) error
 }
 
 // Service defines all ticket management operations. It is implemented by

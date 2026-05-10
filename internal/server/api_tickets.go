@@ -263,21 +263,27 @@ func (r *router) registerTicketHandlers() {
 		}
 		createdEpics := 0
 		createdTasks := 0
+		createdTicketIDs := make([]string, 0)
+		createdTickets := make([]store.Ticket, 0)
 		for _, ticket := range afterTickets {
 			if _, existed := beforeIDs[ticket.ID]; existed {
 				continue
 			}
-			if linkErr := store.LinkStoryToTicket(r.Context(), db, story.ID, ticket.ID); linkErr != nil {
-				writeError(w, http.StatusInternalServerError, linkErr.Error())
-				return
-			}
-			notify("ticket_created", ticket.ProjectID, ticket.ID)
+			createdTicketIDs = append(createdTicketIDs, ticket.ID)
+			createdTickets = append(createdTickets, ticket)
 			switch strings.ToLower(strings.TrimSpace(ticket.Type)) {
 			case "epic":
 				createdEpics++
 			case "task":
 				createdTasks++
 			}
+		}
+		if linkErr := store.LinkStoryToTickets(r.Context(), db, story.ID, createdTicketIDs); linkErr != nil {
+			writeError(w, http.StatusInternalServerError, linkErr.Error())
+			return
+		}
+		for _, ticket := range createdTickets {
+			notify("ticket_created", ticket.ProjectID, ticket.ID)
 		}
 		updatedStory, err := store.UpdateStoryStatus(r.Context(), db, story.ID, "ready_for_review")
 		if err == nil {
@@ -394,6 +400,146 @@ func (r *router) registerTicketHandlers() {
 					return
 				}
 				writeJSON(w, http.StatusOK, events)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "phase-signoffs" && r.Method == http.MethodGet {
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				signoffs, err := store.ListTicketPhaseSignoffs(r.Context(), db, id)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, signoffs)
+				return
+			}
+			if len(parts) == 3 && parts[1] == "phase-signoffs" && r.Method == http.MethodPost {
+				if !canWriteProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				phase := strings.TrimSpace(parts[2])
+				var payload phaseSignoffRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				signoff, err := store.SetTicketPhaseSignoff(r.Context(), db, id, phase, payload.Approved, user.ID, payload.Note)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if err := store.AddHistoryEvent(r.Context(), db, ticketRef.ProjectID, ticketRef.ID, "ticket_phase_signoff_updated", map[string]any{
+					"phase":    signoff.Phase,
+					"approved": signoff.Approved,
+					"note":     signoff.Note,
+					"who":      user.Username,
+				}, user.ID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+				writeJSON(w, http.StatusOK, signoff)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "inbox" && r.Method == http.MethodGet {
+				if !canViewInterventions(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				status := strings.TrimSpace(r.URL.Query().Get("status"))
+				entries, err := store.ListInboxEntriesByTicket(r.Context(), db, id, status)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, entries)
+				return
+			}
+			if len(parts) == 3 && parts[1] == "inbox" && parts[2] == "escalate" && r.Method == http.MethodPost {
+				if !canManageInterventions(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload inboxEscalateRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				ticket, err := store.GetTicket(r.Context(), db, id)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				entry, err := store.CreateFailureEscalationInboxEntry(r.Context(), db, ticket, payload.Message, user.ID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if err := store.AddHistoryEvent(r.Context(), db, ticket.ProjectID, ticket.ID, "ticket_escalated_to_inbox", map[string]any{
+					"inbox_id":         entry.ID,
+					"recommendations":  entry.Recommendations,
+					"message":          entry.Message,
+					"escalated_by":     user.Username,
+					"escalation_state": entry.Status,
+				}, user.ID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticket.ProjectID, ticket.ID)
+				writeJSON(w, http.StatusCreated, entry)
+				return
+			}
+			if len(parts) == 4 && parts[1] == "inbox" && parts[3] == "decide" && r.Method == http.MethodPost {
+				if !canManageInterventions(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var inboxID int64
+				if _, err := fmt.Sscan(parts[2], &inboxID); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid inbox id")
+					return
+				}
+				var payload inboxDecisionRequest
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				entry, err := store.DecideInboxEntry(r.Context(), db, inboxID, payload.Decision, payload.Message, user.ID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if entry.TicketID != id {
+					writeError(w, http.StatusBadRequest, "inbox entry does not belong to this ticket")
+					return
+				}
+				if err := store.AddHistoryEvent(r.Context(), db, ticketRef.ProjectID, ticketRef.ID, "ticket_inbox_decision_recorded", map[string]any{
+					"inbox_id":   entry.ID,
+					"decision":   entry.Decision,
+					"message":    entry.Message,
+					"decided_by": user.Username,
+				}, user.ID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				notify("ticket_updated", ticketRef.ProjectID, ticketRef.ID)
+				writeJSON(w, http.StatusOK, entry)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "execution-packet" && r.Method == http.MethodGet {
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				packet, err := store.BuildExecutionPacket(r.Context(), db, id)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, packet)
 				return
 			}
 			if len(parts) == 2 && parts[1] == "work-items" && r.Method == http.MethodGet {
@@ -1206,6 +1352,7 @@ func (r *router) registerTicketHandlers() {
 				}
 
 				created := 0
+				createdTasks := make([]store.Ticket, 0, len(analysis.Tickets))
 				for _, taskSpec := range analysis.Tickets {
 					taskTitle := strings.TrimSpace(taskSpec.Title)
 					if taskTitle == "" {
@@ -1226,12 +1373,19 @@ func (r *router) registerTicketHandlers() {
 						writeStoreError(w, err)
 						return
 					}
-					if err := store.LinkStoryToTicket(r.Context(), db, story.ID, task.ID); err != nil {
-						writeError(w, http.StatusInternalServerError, err.Error())
-						return
-					}
-					notify("ticket_created", task.ProjectID, task.ID)
+					createdTasks = append(createdTasks, task)
 					created++
+				}
+				createdIDs := make([]string, 0, len(createdTasks))
+				for _, ticket := range createdTasks {
+					createdIDs = append(createdIDs, ticket.ID)
+				}
+				if linkErr := store.LinkStoryToTickets(r.Context(), db, story.ID, createdIDs); linkErr != nil {
+					writeError(w, http.StatusInternalServerError, linkErr.Error())
+					return
+				}
+				for _, task := range createdTasks {
+					notify("ticket_created", task.ProjectID, task.ID)
 				}
 				writeJSON(w, http.StatusOK, map[string]any{
 					"epic_id":         epic.ID,
@@ -1319,6 +1473,27 @@ func (r *router) registerTicketHandlers() {
 				if ticketPayload.Message != "" {
 					if _, commentErr := store.AddComment(r.Context(), db, ticket.ID, user.ID, ticketPayload.Message); commentErr != nil {
 						log.Printf("warning: add comment after ticket update %s: %v", ticket.ID, commentErr)
+					}
+				}
+				if strings.EqualFold(strings.TrimSpace(ticket.State), store.StateFail) {
+					message := strings.TrimSpace(ticketPayload.Message)
+					if message == "" {
+						message = "Outcome failed and requires human decision."
+					}
+					entry, entryErr := store.EnsureFailureEscalationInboxEntry(r.Context(), db, ticket, message, user.ID)
+					if entryErr != nil {
+						writeStoreError(w, entryErr)
+						return
+					}
+					if err := store.AddHistoryEvent(r.Context(), db, ticket.ProjectID, ticket.ID, "ticket_escalated_to_inbox", map[string]any{
+						"inbox_id":         entry.ID,
+						"recommendations":  entry.Recommendations,
+						"message":          entry.Message,
+						"escalated_by":     user.Username,
+						"escalation_state": entry.Status,
+					}, user.ID); err != nil {
+						writeStoreError(w, err)
+						return
 					}
 				}
 				notify("ticket_updated", ticket.ProjectID, ticket.ID)

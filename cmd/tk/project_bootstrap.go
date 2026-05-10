@@ -1,7 +1,7 @@
 package main
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
-	"github.com/simonski/ticket/internal/store"
-	"github.com/simonski/ticket/libticket"
 )
 
 func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
@@ -56,157 +54,18 @@ func defaultProjectPrefix(root string) string {
 	return string(letters[:2])
 }
 
-func uniqueProjectPrefix(svc libticket.Service, root string) (string, error) {
-	base := defaultProjectPrefix(root)
-	projects, err := svc.ListProjects(context.Background())
-	if err != nil {
-		return "", err
-	}
-	used := map[string]bool{}
-	for _, project := range projects {
-		used[strings.ToUpper(strings.TrimSpace(project.Prefix))] = true
-	}
-	if !used[base] {
-		return base, nil
-	}
-	title := strings.ToUpper(strings.TrimSpace(filepath.Base(root)))
-	letters := make([]rune, 0, len(title))
-	for _, r := range title {
-		if r >= 'A' && r <= 'Z' {
-			letters = append(letters, r)
-		}
-	}
-	for l := 3; l <= len(letters) && l <= 5; l++ {
-		candidate := string(letters[:l])
-		if !used[candidate] {
-			return candidate, nil
-		}
-	}
-	stem := base
-	if len(stem) > 4 {
-		stem = stem[:4]
-	}
-	for suffix := 'A'; suffix <= 'Z'; suffix++ {
-		candidate := stem + string(suffix)
-		if !used[candidate] {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("could not find unique prefix for %s", root)
-}
-
+//nolint:unused // kept as explicit removal guard while callers are migrated
 func ensureLocalDatabase() (config.Config, error) {
-	dbPath, err := defaultDatabasePath()
-	if err != nil {
-		return config.Config{}, err
-	}
-	if _, err := os.Stat(dbPath); err == nil {
-		return ensureDefaultLocalRemote(dbPath)
-	} else if !os.IsNotExist(err) {
-		return config.Config{}, err
-	}
-	if err := runInitDB(nil); err != nil {
-		return config.Config{}, err
-	}
-	return ensureDefaultLocalRemote(dbPath)
+	return config.Config{}, errors.New("standalone database mode has been removed; configure a server and run tk init")
 }
 
+//nolint:unused // kept as explicit removal guard while callers are migrated
 func bindRootToLocalProject(root, titleOverride, prefixOverride, gitOverride string) error {
-	cfg, err := ensureLocalDatabase()
-	if err != nil {
-		return err
-	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		return err
-	}
-
-	gitRepo := strings.TrimSpace(gitOverride)
-	if gitRepo == "" {
-		gitRepo = detectGitOriginAt(root)
-	}
-	projects, err := svc.ListProjects(context.Background())
-	if err != nil {
-		return err
-	}
-	var projectID string
-	var matchedProject *store.Project
-	if gitRepo != "" {
-		if match := matchProjectByGitOrigin(projects, gitRepo); match != nil {
-			projectID = match.Prefix
-			matchedProject = match
-		}
-	}
-	if projectID == "" {
-		prefix := strings.ToUpper(strings.TrimSpace(prefixOverride))
-		if prefix != "" {
-			for _, project := range projects {
-				if strings.EqualFold(project.Prefix, prefix) {
-					projectID = project.Prefix
-					projectCopy := project
-					matchedProject = &projectCopy
-					break
-				}
-			}
-		}
-	}
-	if projectID == "" {
-		title := strings.TrimSpace(titleOverride)
-		if title == "" {
-			title = defaultProjectTitle(root)
-		}
-		prefix := strings.ToUpper(strings.TrimSpace(prefixOverride))
-		if prefix == "" {
-			prefix, err = uniqueProjectPrefix(svc, root)
-			if err != nil {
-				return err
-			}
-		}
-		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
-			Prefix:        prefix,
-			Title:         title,
-			GitRepository: gitRepo,
-		})
-		if err != nil {
-			return err
-		}
-		projectID = project.Prefix
-	}
-	if matchedProject != nil && gitRepo != "" && strings.TrimSpace(matchedProject.GitRepository) == "" {
-		updated, err := svc.UpdateProject(context.Background(), matchedProject.ID, libticket.ProjectUpdateRequest{
-			Title:              matchedProject.Title,
-			Description:        matchedProject.Description,
-			AcceptanceCriteria: matchedProject.AcceptanceCriteria,
-			DORMap:             matchedProject.DORMap,
-			DODMap:             matchedProject.DODMap,
-			ACMap:              matchedProject.ACMap,
-			GitRepository:      gitRepo,
-			Notes:              matchedProject.Notes,
-			Status:             matchedProject.Status,
-			Visibility:         matchedProject.Visibility,
-			WorkflowID:         matchedProject.WorkflowID,
-		})
-		if err != nil {
-			return err
-		}
-		projectID = updated.Prefix
-	}
-	if err := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); err != nil {
-		return err
-	}
-	remoteName := strings.TrimSpace(cfg.Remote)
-	if remoteName == "" {
-		remoteName = strings.TrimSpace(cfg.DefaultRemote)
-	}
-	projectCfg := config.Config{
-		Remote:    remoteName,
-		ProjectID: projectID,
-	}
-	if err := config.SaveProjectConfigAt(root, projectCfg); err != nil {
-		return err
-	}
-	cfg.ProjectID = projectID
-	return config.Save(cfg)
+	_ = root
+	_ = titleOverride
+	_ = prefixOverride
+	_ = gitOverride
+	return errors.New("standalone database mode has been removed; configure a server and run tk init")
 }
 
 func bindRootToRemoteProject(root, remoteName, projectID string) error {
@@ -239,27 +98,6 @@ func bindRootToRemoteProject(root, remoteName, projectID string) error {
 func maybeBootstrapMutableCommand(args []string) error {
 	if len(args) == 0 || !isMutableCommand(args) {
 		return nil
-	}
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return err
-	}
-	if resolved.Mode == config.ModeRemote {
-		return nil
-	}
-	root, hasProject, err := currentOrAncestorProjectRoot()
-	if err != nil {
-		return err
-	}
-	if hasProject {
-		return nil
-	}
-	if outputJSON {
-		return nil
-	}
-	fmt.Println("ticket is not set up yet — creating the local database and binding this repo/directory")
-	if err := bindRootToLocalProject(root, "", "", ""); err != nil {
-		return err
 	}
 	return nil
 }

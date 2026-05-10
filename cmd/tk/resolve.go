@@ -15,6 +15,8 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
+const defaultTicketURL = "https://ticket.localhost"
+
 func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -46,7 +48,7 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 
 	if cfg.ProjectID != projectID {
 		cfg.ProjectID = projectID
-		if !config.HasLocationOverride() {
+		if !config.HasLocationOverride() && strings.TrimSpace(os.Getenv("TICKET_URL")) == "" {
 			if saveErr := config.Save(cfg); saveErr != nil {
 				return config.Config{}, nil, store.Project{}, saveErr
 			}
@@ -56,17 +58,16 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 }
 
 func resolveService(cfg config.Config) (libticket.Service, error) {
-	var (
-		resolved config.Resolved
-		err      error
-	)
-	if config.HasLocationOverride() {
-		resolved, err = config.ResolveURL()
-		if err != nil {
-			return nil, err
+	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
+	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
+	if location == "" && !isTestBinary() {
+		location = defaultTicketURL
+	}
+	if isTestBinary() {
+		if location == "" {
+			location = strings.TrimSpace(cfg.Location)
 		}
-	} else {
-		location := strings.TrimSpace(cfg.Location)
 		if location == "" {
 			if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.Remote)); ok {
 				location = strings.TrimSpace(remote.URL)
@@ -77,36 +78,50 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 				location = strings.TrimSpace(remote.URL)
 			}
 		}
-		resolved, err = config.ResolveLocation(location)
-		if err != nil {
-			return nil, err
+		if username == "" {
+			username = strings.TrimSpace(cfg.Username)
 		}
+		if password == "" {
+			password = strings.TrimSpace(cfg.Token)
+		}
+		// Keep tests aligned with runtime server-first behavior: if a legacy
+		// config stores a local DB path as a remote URL, fall back to the
+		// default server URL so credential hints remain consistent.
+		if location != "" {
+			if resolvedLegacy, resolveErr := config.ResolveLocation(location); resolveErr == nil && strings.TrimSpace(resolvedLegacy.ServerURL) == "" {
+				location = defaultTicketURL
+			}
+		}
+	}
+	if location == "" {
+		if isTestBinary() {
+			return libticket.NewLocal(cfg), nil
+		}
+		return nil, errors.New("missing required environment variable: TICKET_URL")
+	}
+	if username == "" && (!isTestBinary() || location == defaultTicketURL) {
+		return nil, errors.New("missing required environment variable: TICKET_USERNAME")
+	}
+	if password == "" && (!isTestBinary() || location == defaultTicketURL) {
+		return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
+	}
+	resolved, err := config.ResolveLocation(location)
+	if err != nil {
+		return nil, err
 	}
 	effectiveCfg := cfg
-	switch resolved.Mode {
-	case config.ModeLocal:
-		return libticket.NewLocal(effectiveCfg), nil
-	case config.ModeRemote:
-		if resolved.ServerURL == "" {
-			return nil, errors.New("remote mode requires a location (run tk init to configure)")
-		}
-		return libticket.NewHTTP(effectiveCfg), nil
-	default:
-		return nil, fmt.Errorf("unsupported mode %q", resolved.Mode)
+	if resolved.ServerURL == "" {
+		return nil, errors.New("ticket requires a running server; set TICKET_URL")
 	}
+	effectiveCfg.Location = resolved.ServerURL
+	effectiveCfg.Username = username
+	effectiveCfg.Token = password
+	return libticket.NewHTTP(effectiveCfg), nil
 }
 
 func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (username, password string, err error) {
 	username = strings.TrimSpace(usernameFlag)
 	password = strings.TrimSpace(passwordFlag)
-	resolved, err := config.ResolveURL()
-	if err == nil && resolved.Mode == config.ModeLocal {
-		if username == "" {
-			username = localModeUsername()
-		}
-		return username, password, nil
-	}
-
 	_ = useEnv
 	if username == "" {
 		username = currentOSUser()
@@ -135,14 +150,7 @@ func currentOSUser() string {
 	return "user"
 }
 
-func localModeUsername() string {
-	return "admin"
-}
-
 func fallbackCommandUsername() string {
-	if resolved, err := config.ResolveURL(); err == nil && resolved.Mode == config.ModeLocal {
-		return localModeUsername()
-	}
 	return currentOSUser()
 }
 

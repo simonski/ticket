@@ -1,12 +1,26 @@
 # CLAUDE.md
 
+Design
+- red/green testing - on all work
+
+Compile
+- `make test` on every run (fast default: unit tests).
+- `make test-all` before completion/PR - full suite must pass.
+- `make lint` - on every turn - no lint failures.
+
 ## Build and Test
 
 ```bash
 make setup                # Install all dev dependencies (Go modules + Node + Playwright)
 make build                # Build binary to ./bin/tk and increment the patch version
 make build-dev            # Build binary to ./bin/tk without changing the version
-make test                 # Run all tests (unit + integration + playwright)
+make test                 # Fast default: unit tests only
+make test-api-js          # JavaScript API client-library tests (web/site2/api.test.js)
+make test-api-cli         # CLI/API interface tests (cmd + client + server + contract)
+make test-api             # API interface suites: test-api-js + test-api-cli
+make test-browser         # Browser end-to-end Playwright suite
+make test-quickstart      # Executable QUICKSTART/TUTORIAL docs tests
+make test-all             # Full suite: unit + api + browser + docs/harness
 make test-go              # Run all Go tests (unit + integration)
 make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, internal/client, server, store, libticket)
@@ -27,6 +41,13 @@ Docker: `make docker-build`, `make docker-up`, `make docker-down`.
 
 Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `make test-playwright`.
 
+### Staged test policy
+
+- Default inner loop: `make test` + targeted package tests.
+- If API contract/surface changes (`openapi.yaml`, `internal/server`, `internal/client`, `cmd/tk` handlers), run `make test-api`.
+- If web/site2 UX changes, run `make test-browser` (or targeted Playwright specs while iterating).
+- Before finishing a feature or opening a PR, run `make test-all` and `make lint`.
+
 ## Architecture
 
 Single Go binary (`cmd/tk/main.go`) providing four interfaces to the same data:
@@ -36,12 +57,12 @@ Single Go binary (`cmd/tk/main.go`) providing four interfaces to the same data:
 3. **Web UI** — Embedded SPA served from `web/static/`
 4. **TUI** — BubbleTea terminal UI in `internal/tui/`
 
-### Two Modes
+### Runtime model
 
-- **Local mode** (default) — Direct SQLite via `internal/store`. No server needed.
-- **Remote mode** — HTTP client via `internal/client` to a running server.
+- **Server** — SQLite-backed HTTP API and web UI.
+- **Client** — CLI/TUI connect via `internal/client` to a configured server remote.
 
-Mode is determined from the selected remote binding: repo-local `.ticket/config.json` stores the active `remote` name and `project_id`, global `~/.ticket/config.json` stores `default_remote` plus the `remotes[]` registry, and legacy raw `location` values are only a compatibility fallback. The CLI, `libticket.LocalService`, and the remote service path backed by `internal/client` all implement the same `libticket.Service` interface.
+Routing is determined from the selected remote binding: repo-local `.ticket/config.json` stores the active `remote` name and `project_id`, global `~/.ticket/config.json` stores `default_remote` plus the `remotes[]` registry, and legacy raw `location` values are compatibility-only.
 
 `$TICKET_HOME` controls the data directory. If unset, the CLI walks up from `cwd` looking for a `.git` directory, then uses `.ticket/` as a sibling. `~/.ticket/config.json` stores named remotes, `~/.ticket/credentials.json` stores per-remote credentials keyed by canonical URL, and `-f /path` is a per-command local database override.
 
@@ -52,7 +73,7 @@ Mode is determined from the selected remote binding: repo-local `.ticket/config.
 | `cmd/tk` | CLI entry point, all command handlers |
 | `internal/server` | HTTP server, API handlers, WebSocket, chat |
 | `internal/store` | SQLite schema, CRUD, lifecycle rules (20+ files) |
-| `internal/client` | HTTP client for remote mode |
+| `internal/client` | HTTP client for server access |
 | `internal/config` | Config resolution (`$TICKET_HOME`, mode detection) |
 | `internal/password` | Argon2id hashing |
 | `internal/tui` | BubbleTea terminal UI |

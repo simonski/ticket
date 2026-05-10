@@ -59,7 +59,7 @@ func TestHTTPServiceRegisterLoginLogoutRoundTrip(t *testing.T) {
 		t.Fatalf("Login() = %#v, token=%q", loggedIn, token)
 	}
 
-	authed := libticket.NewHTTP(config.Config{Location: fixture.server.URL, Token: token, Username: "alice"})
+	authed := libticket.NewHTTP(config.Config{Location: fixture.server.URL, Token: "secret12", Username: "alice"})
 	status, err := authed.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status(authenticated) error = %v", err)
@@ -379,7 +379,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *libticket.HTTPService) {
 
 	svc := libticket.NewHTTP(config.Config{
 		Location: httpServer.URL,
-		Token:    auth.Token,
+		Token:    "secret12",
 		Username: auth.User.Username,
 	})
 	return &remoteFixture{server: httpServer, db: db}, svc

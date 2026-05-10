@@ -17,28 +17,24 @@
 | Stages | `design → develop → test → done` |
 | States | `idle`, `active`, `success`, `fail` |
 
-It works in two modes:
+It operates as a client/server system:
 
-- **Local** — CLI and TUI operate directly on a SQLite file. No server required.
-- **Server** — HTTP server adds multi-user auth, a web Kanban board, WebSocket live updates, and AI agent support.
+- **Server** — the HTTP server owns the SQLite database and exposes API + web UI.
+- **Client** — CLI/TUI talk to the configured server with basic auth credentials.
 
-The authoritative system contract is in [SPEC.md](./SPEC.md). Full user-facing documentation is in [USER_GUIDE.md](./USER_GUIDE.md). Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
+Full user-facing documentation is in [USER_GUIDE.md](./USER_GUIDE.md). Architecture and design notes are in [docs/DESIGN.md](./docs/DESIGN.md).
 
 ## Start here
 
 If you're new to the repo, read these first:
 
-1. [QUICKSTART.md](./QUICKSTART.md) - choose local, server, or deployed mode
-2. [docs/quickstarts/todo-example.md](./docs/quickstarts/todo-example.md) - reproducible seeded todo scenario
+1. [QUICKSTART.md](./QUICKSTART.md) - quick setup and daily workflow
+2. [TUTORIAL.md](./TUTORIAL.md) - executable end-to-end walkthrough
 3. [USER_GUIDE.md](./USER_GUIDE.md) - practical CLI, server, web, and TUI reference
-4. [SPEC.md](./SPEC.md) and [openapi.yaml](./openapi.yaml) - public contract
-5. [docs/ONBOARDING.md](./docs/ONBOARDING.md) - contributor setup, reading order, and common pitfalls
-6. [CLAUDE.md](./CLAUDE.md) - build/test commands, architecture, and package map
-7. [CONTRIBUTING.md](./CONTRIBUTING.md) - branch naming, commit style, and PR expectations
+4. [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) - contributor and agent implementation context
+5. [CLAUDE.md](./CLAUDE.md) - execution-focused build/test guidance
 
-Longer mode-specific guides live under [docs/quickstarts/](./docs/quickstarts/).
-Operational runbooks live in [docs/RUNBOOKS.md](./docs/RUNBOOKS.md), and
-historical planning notes are archived under [docs/archive/](./docs/archive/).
+Historical and superseded documents are archived under [docs/archive/](./docs/archive/).
 
 ## Community
 

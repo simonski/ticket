@@ -12,49 +12,32 @@ Or, download a binary for your platform from the [releases page](https://github.
 
 ---
 
-## Choose your mode
+## Start server mode
 
-`tk` has two primary operating modes:
+`tk` runs as a client/server system.
 
-### [Local mode](docs/quickstarts/client.md)
-
-In local mode, the client talks to SQLite directly. No server needed.
-`tk initdb` creates the shared local database at `$TICKET_HOME/ticket.db`
-(default `~/.ticket/ticket.db`), registers the default `local` remote, and
-`tk init` requires a git repo and binds the current repo by writing
-`.ticket/config.json`.
-Best for solo use, small projects, or getting started quickly.
-
-```bash
-# inside an existing repo (or after `git init`)
-tk initdb
-
-# bind this repo to a project and choose Local mode when prompted
-tk init
-tk new "First ticket"
-tk ls
-```
-
-### [Server mode](docs/quickstarts/server.md)
+### Server setup
 
 Run an HTTP server with multi-user auth, a web Kanban board, WebSocket live
 updates, and AI agent support. Best for teams, shared backlogs, and CI/CD.
 
 ```bash
-# create the shared local database once
-tk initdb
+# create the database once (server-side)
+tk initdb --force
 
 # now run the server
 tk server
 ```
 
-### Access a remote server
+### Configure client access
 
 ```bash
-tk remote add local-server http://localhost:8080
-tk project remote local-server
+export TICKET_URL=http://localhost:8080
+export TICKET_USERNAME=alice
+export TICKET_PASSWORD=secret12
 tk register -username alice -password secret12
-tk login -username alice -password secret12
+tk project use 1
+tk whoami
 ```
 
 ---
@@ -106,17 +89,7 @@ Tabs: **Home · Projects · Ideas · Tickets · Workflows · Config**
 Use the dedicated tutorial to seed a realistic project with Workflow, epics, tasks,
 labels, dependencies, time entries, and decision/idea artifacts:
 
-```bash
-./scripts/populate_todo_example.sh
-```
-
-Full walkthrough: [docs/quickstarts/todo-example.md](./docs/quickstarts/todo-example.md).
-
-Validation command (recommended before relying on the tutorial in CI/docs updates):
-
-```bash
-make build-dev && ./tests/quickstart_test.sh && ./scripts/verify_todo_example.sh
-```
+Hands-on end-to-end workflow: [TUTORIAL.md](./TUTORIAL.md).
 
 ---
 
@@ -139,10 +112,12 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 | Variable | Purpose |
 |----------|---------|
 | `TICKET_HOME` | Override the global Ticket home directory (default `~/.ticket`) |
+| `TICKET_URL` | Base URL for the running Ticket server (defaults to `https://ticket.localhost` when unset) |
+| `TICKET_USERNAME` | Username for API authentication |
+| `TICKET_PASSWORD` | Password for API authentication |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |
 | `AGENT_ID` | Agent UUID for `tk agent run` |
 | `AGENT_PASSWORD` | Agent password for `tk agent run` |
 | `TICKET_AGENT_LLM` | Override default LLM command (default: `claude`) |
 
-Use `tk remote add NAME URL` plus `tk project remote NAME` to select a server.
-Remote credentials are stored per canonical URL in `$TICKET_HOME/credentials.json`.
+Set `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` to connect the CLI to a server.

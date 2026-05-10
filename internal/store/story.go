@@ -177,6 +177,43 @@ func LinkStoryToTicket(ctx context.Context, db *sql.DB, storyID int64, ticketID 
 	return err
 }
 
+func LinkStoryToTickets(ctx context.Context, db *sql.DB, storyID int64, ticketIDs []string) error {
+	if storyID == 0 {
+		return errors.New("story and ticket are required")
+	}
+	if len(ticketIDs) == 0 {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR IGNORE INTO story_ticket_links (story_id, ticket_id)
+		VALUES (?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	seen := make(map[string]struct{}, len(ticketIDs))
+	for _, id := range ticketIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		if _, execErr := stmt.ExecContext(ctx, storyID, id); execErr != nil {
+			return execErr
+		}
+	}
+	return tx.Commit()
+}
+
 func DeleteStory(ctx context.Context, db *sql.DB, storyID int64) error {
 	result, err := db.ExecContext(ctx, `DELETE FROM stories WHERE story_id = ?`, storyID)
 	if err != nil {

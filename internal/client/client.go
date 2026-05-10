@@ -22,6 +22,8 @@ import (
 
 type Client struct {
 	baseURL     string
+	username    string
+	password    string
 	token       string
 	http        *http.Client
 	mode        string
@@ -41,9 +43,16 @@ func New(cfg config.Config) *Client {
 	if resolved.Mode == config.ModeRemote {
 		timeout = remoteTimeoutFromEnv()
 	}
+	username := strings.TrimSpace(cfg.Username)
+	password := ""
+	if username != "" {
+		password = strings.TrimSpace(cfg.Token)
+	}
 	return &Client{
-		baseURL: baseURL,
-		token:   cfg.Token,
+		baseURL:  baseURL,
+		username: username,
+		password: password,
+		token:    cfg.Token,
 		http: &http.Client{
 			Timeout:   timeout,
 			Transport: newHTTPTransport(),
@@ -82,7 +91,7 @@ func remoteTimeoutFromEnv() time.Duration {
 
 func (c *Client) Register(ctx context.Context, username, password string) (store.User, error) {
 	if c.mode == config.ModeLocal {
-		return store.User{}, errors.New("ticket register requires remote mode (run tk init to configure)")
+		return store.User{}, errors.New("ticket register requires a configured server (run tk init and tk login)")
 	}
 	var user store.User
 	err := c.doJSON(ctx, http.MethodPost, "/api/register", map[string]string{
@@ -94,7 +103,7 @@ func (c *Client) Register(ctx context.Context, username, password string) (store
 
 func (c *Client) Login(ctx context.Context, username, password string) (AuthResponse, error) {
 	if c.mode == config.ModeLocal {
-		return AuthResponse{}, errors.New("ticket login requires remote mode (run tk init to configure)")
+		return AuthResponse{}, errors.New("ticket login requires a configured server (run tk init to configure one)")
 	}
 	var response AuthResponse
 	err := c.doJSON(ctx, http.MethodPost, "/api/login", map[string]string{
@@ -106,7 +115,7 @@ func (c *Client) Login(ctx context.Context, username, password string) (AuthResp
 
 func (c *Client) Logout(ctx context.Context) error {
 	if c.mode == config.ModeLocal {
-		return errors.New("ticket logout requires remote mode (run tk init to configure)")
+		return errors.New("ticket logout requires a configured server (run tk init and tk login)")
 	}
 	return c.doJSON(ctx, http.MethodPost, "/api/logout", nil, nil)
 }
@@ -1557,7 +1566,9 @@ func (c *Client) RequestTicket(ctx context.Context, request TicketRequest) (Tick
 		return TicketRequestResponse{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	if c.token != "" {
+	if c.username != "" || c.password != "" {
+		httpReq.SetBasicAuth(c.username, c.password)
+	} else if c.token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
@@ -2265,4 +2276,246 @@ func (c *Client) DeleteStory(ctx context.Context, id int64) error {
 		return store.DeleteStory(ctx, db, id)
 	}
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/stories/%d", id), nil, nil)
+}
+
+func (c *Client) CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Goal{}, err
+		}
+		return store.CreateGoal(ctx, db, projectID, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
+	}
+	var goal store.Goal
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/goals", projectID), request, &goal)
+	return goal, err
+}
+
+func (c *Client) ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListGoals(ctx, db, projectID)
+	}
+	var goals []store.Goal
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/goals", projectID), nil, &goals)
+	return goals, err
+}
+
+func (c *Client) GetGoal(ctx context.Context, id int64) (store.Goal, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Goal{}, err
+		}
+		return store.GetGoal(ctx, db, id)
+	}
+	var goal store.Goal
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/goals/%d", id), nil, &goal)
+	return goal, err
+}
+
+func (c *Client) UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Goal{}, err
+		}
+		return store.UpdateGoal(ctx, db, id, request.Title, request.Description, request.Notes, request.ETA, request.Priority)
+	}
+	var goal store.Goal
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/goals/%d", id), request, &goal)
+	return goal, err
+}
+
+func (c *Client) DeleteGoal(ctx context.Context, id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.DeleteGoal(ctx, db, id)
+	}
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/goals/%d", id), nil, nil)
+}
+
+func (c *Client) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Document{}, err
+		}
+		return store.CreateDocument(ctx, db, projectID, request.Title, request.Description, request.Notes, request.Content)
+	}
+	var document store.Document
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%d/documents", projectID), request, &document)
+	return document, err
+}
+
+func (c *Client) ListDocuments(ctx context.Context, projectID int64) ([]store.Document, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListDocumentsByProject(ctx, db, projectID)
+	}
+	var documents []store.Document
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%d/documents", projectID), nil, &documents)
+	return documents, err
+}
+
+func (c *Client) GetDocument(ctx context.Context, id int64) (store.Document, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Document{}, err
+		}
+		return store.GetDocument(ctx, db, id)
+	}
+	var document store.Document
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/documents/%d", id), nil, &document)
+	return document, err
+}
+
+func (c *Client) UpdateDocument(ctx context.Context, id int64, request DocumentRequest) (store.Document, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Document{}, err
+		}
+		return store.UpdateDocument(ctx, db, id, request.Title, request.Description, request.Notes, request.Content)
+	}
+	var document store.Document
+	err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/documents/%d", id), request, &document)
+	return document, err
+}
+
+func (c *Client) DeleteDocument(ctx context.Context, id int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.DeleteDocument(ctx, db, id)
+	}
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/documents/%d", id), nil, nil)
+}
+
+func (c *Client) AddDocumentLabel(ctx context.Context, documentID int64, request DocumentLabelRequest) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.AddDocumentLabel(ctx, db, documentID, request.LabelID)
+	}
+	return c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/documents/%d/labels", documentID), request, nil)
+}
+
+func (c *Client) RemoveDocumentLabel(ctx context.Context, documentID, labelID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.RemoveDocumentLabel(ctx, db, documentID, labelID)
+	}
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/documents/%d/labels?label_id=%d", documentID, labelID), nil, nil)
+}
+
+func (c *Client) ListDocumentLabels(ctx context.Context, documentID int64) ([]store.Label, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListDocumentLabels(ctx, db, documentID)
+	}
+	var labels []store.Label
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/documents/%d/labels", documentID), nil, &labels)
+	return labels, err
+}
+
+func (c *Client) AddDocumentFile(ctx context.Context, documentID int64, request DocumentFileRequest) (store.DocumentFile, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.DocumentFile{}, err
+		}
+		return store.AddDocumentFile(ctx, db, documentID, request.FileName, request.ContentType, request.Content)
+	}
+	var file store.DocumentFile
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/documents/%d/files", documentID), request, &file)
+	return file, err
+}
+
+func (c *Client) ListDocumentFiles(ctx context.Context, documentID int64) ([]store.DocumentFile, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListDocumentFiles(ctx, db, documentID)
+	}
+	var files []store.DocumentFile
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/documents/%d/files", documentID), nil, &files)
+	return files, err
+}
+
+func (c *Client) GetDocumentFile(ctx context.Context, documentID, fileID int64) (store.DocumentFile, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.DocumentFile{}, err
+		}
+		return store.GetDocumentFile(ctx, db, documentID, fileID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/documents/%d/files/%d", c.baseURL, documentID, fileID), http.NoBody)
+	if err != nil {
+		return store.DocumentFile{}, err
+	}
+	if c.username != "" || c.password != "" {
+		req.SetBasicAuth(c.username, c.password)
+	} else if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return store.DocumentFile{}, friendlyConnectionError(err, c.baseURL)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return store.DocumentFile{}, statusErrorFromResponse(resp)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return store.DocumentFile{}, err
+	}
+	file := store.DocumentFile{
+		ID:         fileID,
+		DocumentID: documentID,
+		Content:    data,
+	}
+	if disp := strings.TrimSpace(resp.Header.Get("Content-Disposition")); disp != "" {
+		if parts := strings.Split(disp, "filename="); len(parts) == 2 {
+			file.FileName = strings.Trim(parts[1], `"`)
+		}
+	}
+	file.ContentType = strings.TrimSpace(resp.Header.Get("Content-Type"))
+	file.SizeBytes = int64(len(data))
+	return file, nil
+}
+
+func (c *Client) DeleteDocumentFile(ctx context.Context, documentID, fileID int64) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.DeleteDocumentFile(ctx, db, documentID, fileID)
+	}
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/documents/%d/files/%d", documentID, fileID), nil, nil)
 }

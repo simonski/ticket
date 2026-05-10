@@ -229,6 +229,12 @@ func Save(cfg Config) error {
 		if loadErr != nil {
 			return loadErr
 		}
+		if strings.TrimSpace(cfg.ProjectID) != "" {
+			projectCfg.ProjectID = strings.TrimSpace(cfg.ProjectID)
+		}
+		if strings.TrimSpace(cfg.Remote) != "" {
+			projectCfg.Remote = strings.TrimSpace(cfg.Remote)
+		}
 		projectCfg.CurrentEpicID = cfg.CurrentEpicID
 		projectCfg.DeleteConfirmToken = cfg.DeleteConfirmToken
 		projectCfg.DeleteConfirmProject = cfg.DeleteConfirmProject

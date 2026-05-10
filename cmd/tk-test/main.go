@@ -5,8 +5,8 @@
 //
 // Usage:
 //
-//	go run ./cmd/tk-test docs/quickstarts/client.md [docs/quickstarts/server.md ...]
-//	go run ./cmd/tk-test -ticket ./bin/ticket docs/quickstarts/client.md
+//	go run ./cmd/tk-test QUICKSTART.md [TUTORIAL.md ...]
+//	go run ./cmd/tk-test -ticket ./bin/tk QUICKSTART.md
 package main
 
 import (
@@ -192,28 +192,42 @@ func runFile(file, ticketBin string, verbose bool) (pass, fail, skip int, err er
 					continue
 				}
 			}
-			// Pick a free port to avoid conflicts.
-			port, portErr := freePort()
-			if portErr != nil {
-				fmt.Printf("  FAIL  %s  |  free port: %v\n", label, portErr)
-				fail++
-				continue
-			}
-			serverPort = port
-			serverURL := fmt.Sprintf("http://localhost:%d", port)
+			const serverStartAttempts = 5
+			for attempt := 1; attempt <= serverStartAttempts; attempt++ {
+				port, portErr := freePort()
+				if portErr != nil {
+					fmt.Printf("  FAIL  %s  |  free port: %v\n", label, portErr)
+					fail++
+					break
+				}
+				serverPort = port
+				serverURL := fmt.Sprintf("http://localhost:%d", port)
 
-			serverCmd, serverLog, err = startServerOnPort(ticketBin, repoDir, env, port, "")
-			if err != nil {
-				fmt.Printf("  FAIL  %s  |  server start: %v\n", label, err)
+				serverCmd, serverLog, err = startServerOnPort(ticketBin, repoDir, env, port, "")
+				if err != nil {
+					if attempt == serverStartAttempts {
+						fmt.Printf("  FAIL  %s  |  server start: %v\n", label, err)
+						fail++
+					}
+					continue
+				}
+				if waitHealthz(serverURL, 20*time.Second) {
+					fmt.Printf("  PASS  %s  (port %d)\n", label, port)
+					pass++
+					break
+				}
+
+				logTail := tailFile(serverLog, 40)
+				if strings.Contains(logTail, "address already in use") && attempt < serverStartAttempts {
+					if serverCmd != nil && serverCmd.Process != nil {
+						_ = serverCmd.Process.Kill()
+						_ = serverCmd.Wait()
+					}
+					continue
+				}
+				fmt.Printf("  FAIL  %s  |  server not ready after 20s\n%s\n", label, logTail)
 				fail++
-				continue
-			}
-			if waitHealthz(serverURL, 20*time.Second) {
-				fmt.Printf("  PASS  %s  (port %d)\n", label, port)
-				pass++
-			} else {
-				fmt.Printf("  FAIL  %s  |  server not ready after 20s\n%s\n", label, tailFile(serverLog, 40))
-				fail++
+				break
 			}
 			continue
 		}

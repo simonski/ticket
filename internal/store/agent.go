@@ -274,30 +274,54 @@ func ListAgentStatuses(ctx context.Context, db *sql.DB) ([]AgentStatus, error) {
 	if err != nil {
 		return nil, err
 	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT assignee, ticket_id, project_prefix, workflow_name, role_title
+		FROM (
+			SELECT
+				t.assignee AS assignee,
+				t.ticket_id AS ticket_id,
+				COALESCE(p.prefix, '') AS project_prefix,
+				COALESCE(w.name, '') AS workflow_name,
+				COALESCE(r.title, '') AS role_title,
+				ROW_NUMBER() OVER (PARTITION BY t.assignee ORDER BY t.updated_at DESC, t.ticket_id DESC) AS rn
+			FROM tickets t
+			LEFT JOIN projects p ON p.project_id = t.project_id
+			LEFT JOIN workflows w ON w.workflow_id = t.workflow_id
+			LEFT JOIN roles r ON r.role_id = t.role_id
+			WHERE t.state = 'active' AND t.open = 1 AND t.assignee IS NOT NULL AND TRIM(t.assignee) <> ''
+		)
+		WHERE rn = 1
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	type ticketContext struct {
+		ticketID     string
+		projectName  string
+		workflowName string
+		roleTitle    string
+	}
+	byAssignee := make(map[string]ticketContext)
+	for rows.Next() {
+		var assignee string
+		var ctxRow ticketContext
+		if scanErr := rows.Scan(&assignee, &ctxRow.ticketID, &ctxRow.projectName, &ctxRow.workflowName, &ctxRow.roleTitle); scanErr != nil {
+			return nil, scanErr
+		}
+		byAssignee[assignee] = ctxRow
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	statuses := make([]AgentStatus, 0, len(agents))
 	for _, a := range agents {
 		as := AgentStatus{Agent: a}
-		var ticketID string
-		err := db.QueryRowContext(ctx, `
-			SELECT t.ticket_id FROM tickets t
-			WHERE t.assignee = ? AND t.state = 'active' AND t.open = 1
-			LIMIT 1
-		`, a.Username).Scan(&ticketID)
-		if err == nil {
-			as.TicketKey = &ticketID
-			ticket, err := GetTicket(ctx, db, ticketID)
-			if err == nil {
-				ctx := EnrichTicketContext(ctx, db, ticket)
-				if ctx.Project != nil {
-					as.ProjectName = ctx.Project.Prefix
-				}
-				if ctx.Workflow != nil {
-					as.WorkflowName = ctx.Workflow.Name
-				}
-				if ctx.Role != nil {
-					as.RoleTitle = ctx.Role.Title
-				}
-			}
+		if current, ok := byAssignee[a.Username]; ok {
+			as.TicketKey = &current.ticketID
+			as.ProjectName = current.projectName
+			as.WorkflowName = current.workflowName
+			as.RoleTitle = current.roleTitle
 		}
 		statuses = append(statuses, as)
 	}

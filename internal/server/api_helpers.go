@@ -153,6 +153,9 @@ func nullableTrimmed(value string) *string {
 }
 
 func userFromRequest(db *sql.DB, r *http.Request) (store.User, error) {
+	if username, password, ok := r.BasicAuth(); ok {
+		return store.AuthenticateUser(r.Context(), db, username, password)
+	}
 	return store.GetUserByToken(r.Context(), db, bearerToken(r))
 }
 

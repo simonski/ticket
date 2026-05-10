@@ -9,9 +9,15 @@ make setup              # Go modules + Node + Playwright
 make build-dev          # build ./bin/tk (does NOT bump cmd/tk/VERSION)
 make build              # build + bump patch version + sync openapi.yaml version
 make lint               # golangci-lint + gosec
+make test               # fast default: unit tests
+make test-all           # full suite: unit + api + browser + quickstart + docs/harness
+make test-api-js        # JavaScript API client-library tests (web/site2/api.test.js)
+make test-api-cli       # CLI/API interface tests (cmd + client + server + contract)
+make test-api           # both API interface suites (js + cli)
+make test-browser       # browser E2E suite (Playwright)
+make test-quickstart    # executable QUICKSTART/TUTORIAL docs tests
 make test-go            # all Go tests
 make test-go-cover      # package coverage gates (cmd/tk, libticket, client, store, server, config)
-make test               # full suite: unit + integration + docs tests + harness + playwright
 ```
 
 Targeted runs:
@@ -25,7 +31,7 @@ go test ./... -race
 Executable docs/tutorial verification:
 
 ```bash
-make test-tk-test         # runs cmd/tk-test against docs/quickstarts/*.md
+make test-quickstart      # runs cmd/tk-test against QUICKSTART.md and TUTORIAL.md
 make test-todo-example    # verifies scripts/populate_todo_example.sh scenario
 make testscripts          # shell harness regression
 make validate-openapi     # structural OpenAPI check
@@ -39,10 +45,10 @@ make validate-openapi     # structural OpenAPI check
   3. Embedded web UIs (`web/static` + `web/site2`, served by server)
   4. BubbleTea TUI (`internal/tui`)
 
-- There are two execution modes behind one service contract:
-  - **Local mode**: direct SQLite via `internal/store`
-  - **Remote mode**: HTTP client via `internal/client`
-  - Both are aligned through `libticket.Service` and contract tests in `libticket/contract_test.go`.
+- Runtime is client/server behind one service contract:
+  - **Server**: SQLite persistence via `internal/store`
+  - **Client**: HTTP access via `internal/client`
+  - Both align through `libticket.Service` and contract tests in `libticket/contract_test.go`.
 
 - Configuration is split between global and repo-local state:
   - Global `$TICKET_HOME` (default `~/.ticket`) stores DB, remotes registry, and credentials.
@@ -70,8 +76,14 @@ make validate-openapi     # structural OpenAPI check
 - **Service changes should be covered in contract tests**, not just one implementation:
   - extend `libticket/contract_test.go` and ensure both local + HTTP implementations pass.
 
-- **Docs quickstarts are executable test assets**:
-  - shell blocks in `docs/quickstarts/client.md` and `docs/quickstarts/server.md` are run by `cmd/tk-test`.
+- **Quickstart/tutorial docs are executable test assets**:
+  - shell blocks in `QUICKSTART.md` and `TUTORIAL.md` are run by `cmd/tk-test`.
   - keep examples automation-safe and consistent with current CLI behavior.
+
+- **Use staged test gates to keep iteration fast**:
+  - always run `make test` + `make lint` for normal edits
+  - run `make test-api` when API contract/surface changes (`openapi.yaml`, `internal/server`, `internal/client`, CLI API handlers)
+  - run `make test-browser` for web UX changes
+  - run `make test-all` before completion/PR
 
 - `tk server` serves **site2 by default**; use `tk server -site default` only when explicitly testing the legacy site.

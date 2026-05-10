@@ -23,8 +23,9 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 		if r.URL.Path != "/api/status" {
 			t.Fatalf("path = %q, want /api/status", r.URL.Path)
 		}
-		if r.Header.Get("Authorization") != "Bearer token-123" {
-			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "alice" || password != "token-123" {
+			t.Fatalf("BasicAuth = (%q, %q, %v), want alice/token-123/true", username, password, ok)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -39,7 +40,7 @@ func TestRemoteClientSendsAuthHeaderAndParsesStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	api := New(config.Config{Location: server.URL, Token: "token-123"})
+	api := New(config.Config{Location: server.URL, Username: "alice", Token: "token-123"})
 	status, err := api.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
@@ -56,8 +57,8 @@ func TestRemoteClientDoesNotAutoAuthenticateWithoutToken(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/status":
 			statusCalls++
-			if got := r.Header.Get("Authorization"); got != "" {
-				t.Fatalf("Authorization = %q, want empty", got)
+			if _, _, ok := r.BasicAuth(); ok {
+				t.Fatal("BasicAuth unexpectedly set")
 			}
 			_, _ = w.Write([]byte(`{"status":"ok","authenticated":false}`))
 		default:
@@ -86,8 +87,9 @@ func TestRemoteClientReturnsUnauthorizedWithoutReauth(t *testing.T) {
 		case "/api/login":
 			loginCalls++
 		case "/api/status":
-			if got := r.Header.Get("Authorization"); got != "Bearer stale-token" {
-				t.Fatalf("Authorization = %q, want Bearer stale-token", got)
+			username, password, ok := r.BasicAuth()
+			if !ok || username != "alice" || password != "stale-token" {
+				t.Fatalf("BasicAuth = (%q, %q, %v), want alice/stale-token/true", username, password, ok)
 			}
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
@@ -97,7 +99,7 @@ func TestRemoteClientReturnsUnauthorizedWithoutReauth(t *testing.T) {
 	}))
 	defer server.Close()
 
-	api := New(config.Config{Location: server.URL, Token: "stale-token"})
+	api := New(config.Config{Location: server.URL, Username: "alice", Token: "stale-token"})
 	if _, err := api.Status(context.Background()); err == nil {
 		t.Fatal("Status() error = nil, want unauthorized")
 	}
@@ -262,8 +264,9 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/tickets/claim" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
-		if r.Header.Get("Authorization") != "Bearer token-123" {
-			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "alice" || password != "token-123" {
+			t.Fatalf("BasicAuth = (%q, %q, %v), want alice/token-123/true", username, password, ok)
 		}
 		var payload TicketRequest
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -278,7 +281,7 @@ func TestRemoteClientRequestTicketPostsJSON(t *testing.T) {
 	defer server.Close()
 
 	taskID := "9"
-	api := New(config.Config{Location: server.URL, Token: "token-123"})
+	api := New(config.Config{Location: server.URL, Username: "alice", Token: "token-123"})
 	resp, err := api.RequestTicket(context.Background(), TicketRequest{ProjectID: 3, TicketID: &taskID})
 	if err != nil {
 		t.Fatalf("RequestTicket() error = %v", err)

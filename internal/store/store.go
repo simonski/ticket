@@ -265,6 +265,10 @@ CREATE TABLE IF NOT EXISTS projects (
 	ticket_sequence INTEGER NOT NULL DEFAULT 0,
 	default_draft INTEGER NOT NULL DEFAULT 0,
 	workflow_id INTEGER,
+	agent_model_provider TEXT NOT NULL DEFAULT '',
+	agent_model_name TEXT NOT NULL DEFAULT '',
+	agent_model_url TEXT NOT NULL DEFAULT '',
+	agent_model_api_key TEXT NOT NULL DEFAULT '',
 	FOREIGN KEY(created_by) REFERENCES users(user_id),
 	FOREIGN KEY(workflow_id) REFERENCES workflows(workflow_id)
 );
@@ -549,9 +553,119 @@ CREATE TABLE IF NOT EXISTS goals (
 	notes TEXT NOT NULL DEFAULT '',
 	eta TEXT NOT NULL DEFAULT '',
 	priority INTEGER NOT NULL DEFAULT 1,
+	status TEXT NOT NULL DEFAULT 'draft',
+	refined_goal TEXT NOT NULL DEFAULT '',
+	decomposition TEXT NOT NULL DEFAULT '',
+	refinement_confirmed INTEGER NOT NULL DEFAULT 0,
+	agent_model_provider TEXT NOT NULL DEFAULT '',
+	agent_model_name TEXT NOT NULL DEFAULT '',
+	agent_model_url TEXT NOT NULL DEFAULT '',
+	agent_model_api_key TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS documents (
+	document_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
+	content TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id)
+);
+
+CREATE TABLE IF NOT EXISTS document_labels (
+	document_id INTEGER NOT NULL,
+	label_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(document_id, label_id),
+	FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
+	FOREIGN KEY(label_id) REFERENCES labels(label_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS document_files (
+	file_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	document_id INTEGER NOT NULL,
+	file_name TEXT NOT NULL,
+	content_type TEXT NOT NULL DEFAULT '',
+	size_bytes INTEGER NOT NULL DEFAULT 0,
+	content BLOB NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS goal_decomposition_items (
+	item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	goal_id INTEGER NOT NULL,
+	kind TEXT NOT NULL DEFAULT 'task',
+	text TEXT NOT NULL,
+	sort_order INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(goal_id) REFERENCES goals(goal_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS goal_chat_messages (
+	message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	goal_id INTEGER NOT NULL,
+	author TEXT NOT NULL,
+	text TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(goal_id) REFERENCES goals(goal_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS goal_story_links (
+	goal_id INTEGER NOT NULL,
+	story_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(goal_id, story_id),
+	FOREIGN KEY(goal_id) REFERENCES goals(goal_id) ON DELETE CASCADE,
+	FOREIGN KEY(story_id) REFERENCES stories(story_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS goal_clarifications (
+	clarification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	goal_id INTEGER NOT NULL,
+	question TEXT NOT NULL,
+	resolved INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(goal_id) REFERENCES goals(goal_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ticket_phase_signoffs (
+	ticket_id TEXT NOT NULL,
+	phase TEXT NOT NULL,
+	approved INTEGER NOT NULL DEFAULT 0,
+	approved_by TEXT,
+	note TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(ticket_id, phase),
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+	FOREIGN KEY(approved_by) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS inbox_entries (
+	inbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	project_id INTEGER NOT NULL,
+	ticket_id TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'open',
+	recommendations_json TEXT NOT NULL DEFAULT '[]',
+	decision TEXT NOT NULL DEFAULT '',
+	message TEXT NOT NULL DEFAULT '',
+	created_by TEXT,
+	decided_by TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+	FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+	FOREIGN KEY(created_by) REFERENCES users(user_id),
+	FOREIGN KEY(decided_by) REFERENCES users(user_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -590,6 +704,21 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_messages_from_user_id ON messages(from_user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_to_user_id ON messages(to_user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_project_id ON goals(project_id);
+CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+CREATE INDEX IF NOT EXISTS idx_goal_decomposition_items_goal_id ON goal_decomposition_items(goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_decomposition_items_sort ON goal_decomposition_items(goal_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_goal_chat_messages_goal_id ON goal_chat_messages(goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_story_links_story_id ON goal_story_links(story_id);
+CREATE INDEX IF NOT EXISTS idx_goal_clarifications_goal_id ON goal_clarifications(goal_id);
+CREATE INDEX IF NOT EXISTS idx_goal_clarifications_resolved ON goal_clarifications(goal_id, resolved);
+CREATE INDEX IF NOT EXISTS idx_documents_project_id ON documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_document_labels_label_id ON document_labels(label_id);
+CREATE INDEX IF NOT EXISTS idx_document_files_document_id ON document_files(document_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_phase_signoffs_ticket_id ON ticket_phase_signoffs(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_phase_signoffs_phase ON ticket_phase_signoffs(phase);
+CREATE INDEX IF NOT EXISTS idx_inbox_entries_project_id ON inbox_entries(project_id);
+CREATE INDEX IF NOT EXISTS idx_inbox_entries_ticket_id ON inbox_entries(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_inbox_entries_status ON inbox_entries(status);
 
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
@@ -645,6 +774,124 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	if !columnExists(ctx, db, "goals", "status") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "refined_goal") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN refined_goal TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "decomposition") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN decomposition TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "refinement_confirmed") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN refinement_confirmed INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "agent_model_provider") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN agent_model_provider TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "agent_model_name") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN agent_model_name TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "agent_model_url") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN agent_model_url TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "goals", "agent_model_api_key") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE goals ADD COLUMN agent_model_api_key TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "goal_decomposition_items") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE goal_decomposition_items (
+				item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				goal_id INTEGER NOT NULL,
+				kind TEXT NOT NULL DEFAULT 'task',
+				text TEXT NOT NULL,
+				sort_order INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(goal_id) REFERENCES goals(goal_id) ON DELETE CASCADE
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "goal_clarifications") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE goal_clarifications (
+				clarification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				goal_id INTEGER NOT NULL,
+				question TEXT NOT NULL,
+				resolved INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(goal_id) REFERENCES goals(goal_id) ON DELETE CASCADE
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "documents") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE documents (
+				document_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				title TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				notes TEXT NOT NULL DEFAULT '',
+				content TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(project_id) REFERENCES projects(project_id)
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "document_labels") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE document_labels (
+				document_id INTEGER NOT NULL,
+				label_id INTEGER NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(document_id, label_id),
+				FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE,
+				FOREIGN KEY(label_id) REFERENCES labels(label_id) ON DELETE CASCADE
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "document_files") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE document_files (
+				file_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				document_id INTEGER NOT NULL,
+				file_name TEXT NOT NULL,
+				content_type TEXT NOT NULL DEFAULT '',
+				size_bytes INTEGER NOT NULL DEFAULT 0,
+				content BLOB NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
+			)
+		`); err != nil {
+			return err
+		}
+	}
 	if !columnExists(ctx, db, "projects", "notes") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN notes TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
@@ -692,6 +939,26 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if !columnExists(ctx, db, "projects", "workflow_id") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN workflow_id INTEGER REFERENCES workflows(workflow_id)`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "agent_model_provider") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_provider TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "agent_model_name") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_name TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "agent_model_url") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_url TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "agent_model_api_key") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN agent_model_api_key TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
@@ -920,6 +1187,21 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_enabled', '1')`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent_model_provider', 'openai')`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent_model_name', 'gpt-5.3-codex')`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent_model_url', '')`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent_model_api_key', '')`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent_model_providers', ?)`, DefaultAgentModelProvidersJSON); err != nil {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -1188,6 +1470,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		{table: "workflow_stages", column: "workflow_id", stmt: `CREATE INDEX IF NOT EXISTS idx_workflow_stages_workflow_id ON workflow_stages(workflow_id)`},
 		{table: "workflow_stage_roles", column: "stage_id", stmt: `CREATE INDEX IF NOT EXISTS idx_workflow_stage_roles_stage_id ON workflow_stage_roles(stage_id)`},
 		{table: "workflow_stage_roles", column: "role_id", stmt: `CREATE INDEX IF NOT EXISTS idx_workflow_stage_roles_role_id ON workflow_stage_roles(role_id)`},
+		{table: "documents", column: "project_id", stmt: `CREATE INDEX IF NOT EXISTS idx_documents_project_id ON documents(project_id)`},
+		{table: "document_labels", column: "label_id", stmt: `CREATE INDEX IF NOT EXISTS idx_document_labels_label_id ON document_labels(label_id)`},
+		{table: "document_files", column: "document_id", stmt: `CREATE INDEX IF NOT EXISTS idx_document_files_document_id ON document_files(document_id)`},
 	}
 	for _, idx := range missingIndexes {
 		if !columnExists(ctx, db, idx.table, idx.column) {

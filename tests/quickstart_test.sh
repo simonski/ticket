@@ -19,4 +19,4 @@ if [[ ! -x "$TICKET_BIN" ]]; then
 fi
 
 cd "$ROOT_DIR"
-go run ./cmd/tk-test -ticket "$TICKET_BIN" docs/quickstarts/client.md docs/quickstarts/server.md
+go run ./cmd/tk-test -ticket "$TICKET_BIN" QUICKSTART.md TUTORIAL.md

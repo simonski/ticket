@@ -1,0 +1,4 @@
+https://ticket.localhost {
+	tls internal
+	reverse_proxy http://localhost:8080
+}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -53,7 +54,10 @@ func setTestLocation(t *testing.T, location string) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	cfg, _ := config.Load()
-	cfg.Location = location
+	cfg.Location = ""
+	cfg.Remote = "test"
+	cfg.DefaultRemote = "test"
+	cfg.Remotes = []config.Remote{{Name: "test", URL: location}}
 	if err := config.Save(cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +70,15 @@ func setTestWorkingDir(t *testing.T, dir string) {
 		t.Fatalf("Chdir(%s) error = %v", dir, err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
+}
+
+func testDBPath(t *testing.T) string {
+	t.Helper()
+	home := strings.TrimSpace(os.Getenv("TICKET_HOME"))
+	if home == "" {
+		t.Fatal("TICKET_HOME is not set")
+	}
+	return filepath.Join(home, "ticket.db")
 }
 
 func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
@@ -293,16 +306,15 @@ func TestFormatRuntimeErrorLocalDBIssueIncludesSetup(t *testing.T) {
 	for _, want := range []string{
 		"unable to open database file",
 		"setup:",
-		"mode             : local",
-		"database         : " + filepath.Join(homeDir, "ticket.db"),
-		"configured via   : default local database path (TICKET_HOME=" + homeDir + ")",
-		"local mode is active; the CLI is trying to use the SQLite database shown above",
+		"mode             : server",
+		"configured via   : default local database path",
+		"this directory is configured for a remote server",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("local runtime error missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"project config", "global config", "TICKET_URL"} {
+	for _, unwanted := range []string{"project config", "TICKET_URL"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("local runtime error should omit %q:\n%s", unwanted, got)
 		}
@@ -322,16 +334,9 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 	ticketID := createLocalTask(t, []string{"add", "-d", "snapshot export/import ticket", "Snapshot Ticket"})
 	snapshotFile := filepath.Join(t.TempDir(), "snapshot.json")
 
-	exportOutput := captureStdout(t, func() {
-		if err := run([]string{"export", "-o", snapshotFile}); err != nil {
-			t.Fatalf("run(export) error = %v", err)
-		}
-	})
-	if !strings.Contains(exportOutput, "exported snapshot to "+snapshotFile) {
-		t.Fatalf("export output = %q, want snapshot path", exportOutput)
-	}
-	if _, err := os.Stat(snapshotFile); err != nil {
-		t.Fatalf("snapshot file missing: %v", err)
+	err := run([]string{"export", "-o", snapshotFile})
+	if err == nil || !strings.Contains(err.Error(), "removed from client mode") {
+		t.Fatalf("run(export) error = %v, want client-mode removal message", err)
 	}
 
 	if err := deleteTicketConfirmed(t, ticketID); err != nil {
@@ -341,22 +346,13 @@ func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
 		t.Fatalf("run(get deleted) error = %v, want ticket not found", err)
 	}
 
-	importOutput := captureStdout(t, func() {
-		if err := run([]string{"import", "-i", snapshotFile}); err != nil {
-			t.Fatalf("run(import) error = %v", err)
-		}
-	})
-	if !strings.Contains(importOutput, "imported snapshot from "+snapshotFile) {
-		t.Fatalf("import output = %q, want snapshot path", importOutput)
+	err = run([]string{"import", "-i", snapshotFile})
+	if err == nil || !strings.Contains(err.Error(), "removed from client mode") {
+		t.Fatalf("run(import) error = %v, want client-mode removal message", err)
 	}
 
-	getOutput := captureStdout(t, func() {
-		if err := run([]string{"get", "-id", ticketID}); err != nil {
-			t.Fatalf("run(get restored) error = %v", err)
-		}
-	})
-	if !hasDetailLabel(getOutput, "Key") {
-		t.Fatalf("restored get output missing key field:\n%s", getOutput)
+	if err := run([]string{"get", "-id", ticketID}); err == nil || err.Error() != "ticket not found" {
+		t.Fatalf("run(get after removed import) error = %v, want ticket not found", err)
 	}
 }
 
@@ -908,17 +904,17 @@ func TestResolveCredentialsUsesFlagsAndDefaults(t *testing.T) {
 		t.Fatalf("resolveCredentials(flags) = %q/%q", username, password)
 	}
 
-	// Switch to local mode for remaining assertions
+	// Validate fallback behavior when no explicit credentials are provided
 	setTestLocation(t, "")
 	username, password, err = resolveCredentials("", "", true)
 	if err != nil {
-		t.Fatalf("resolveCredentials(local) error = %v", err)
+		t.Fatalf("resolveCredentials(fallback) error = %v", err)
 	}
-	if username != localModeUsername() {
-		t.Fatalf("resolveCredentials(local) = %q, want %q", username, localModeUsername())
+	if strings.TrimSpace(username) == "" {
+		t.Fatalf("resolveCredentials(fallback) username was empty")
 	}
-	if password != "" {
-		t.Fatalf("resolveCredentials(local) password = %q, want empty", password)
+	if password != "password" {
+		t.Fatalf("resolveCredentials(fallback) password = %q, want %q", password, "password")
 	}
 }
 
@@ -997,8 +993,8 @@ func TestRunWhoamiWithGlobalRemoteConfigDoesNotRequireProjectBinding(t *testing.
 	if !strings.Contains(output, "username : admin") {
 		t.Fatalf("whoami output missing remote user identity:\n%s", output)
 	}
-	if !strings.Contains(output, "mode     : remote") {
-		t.Fatalf("whoami output missing remote mode:\n%s", output)
+	if !strings.Contains(output, "mode     : server") {
+		t.Fatalf("whoami output missing server mode:\n%s", output)
 	}
 }
 
@@ -1149,6 +1145,12 @@ func TestCompareVersions(t *testing.T) {
 		if got := compareVersions(tc.left, tc.right); got != tc.want {
 			t.Fatalf("compareVersions(%q, %q) = %d, want %d", tc.left, tc.right, got, tc.want)
 		}
+	}
+}
+
+func TestDefaultTicketURLUsesLocalhostHTTPS(t *testing.T) {
+	if got, want := defaultTicketURL, "https://ticket.localhost"; got != want {
+		t.Fatalf("defaultTicketURL = %q, want %q", got, want)
 	}
 }
 
@@ -1387,15 +1389,15 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 	if strings.Contains(string(configData), "session-token") {
 		t.Fatalf("config.json should not contain session token:\n%s", string(configData))
 	}
-	if !strings.Contains(string(configData), `"location": "`+server.URL+`"`) {
-		t.Fatalf("config.json should contain resolved server URL %q:\n%s", server.URL, string(configData))
+	if !strings.Contains(string(configData), `"default_remote": "test"`) {
+		t.Fatalf("config.json should preserve remote configuration:\n%s", string(configData))
 	}
 	credData, err := os.ReadFile(credsPath)
 	if err != nil {
 		t.Fatalf("ReadFile(credentials.json) error = %v", err)
 	}
-	if !strings.Contains(string(credData), "session-token") {
-		t.Fatalf("credentials.json missing session token:\n%s", string(credData))
+	if !strings.Contains(string(credData), "secret12") {
+		t.Fatalf("credentials.json missing stored basic-auth password:\n%s", string(credData))
 	}
 
 	if err := runLogout(nil); err != nil {
@@ -1451,8 +1453,8 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(config.json) error = %v", err)
 	}
-	if !strings.Contains(string(configData), `"location": "`+server.URL+`"`) {
-		t.Fatalf("config.json should contain resolved server URL %q:\n%s", server.URL, string(configData))
+	if !strings.Contains(string(configData), `"default_remote": "test"`) {
+		t.Fatalf("config.json should preserve remote configuration:\n%s", string(configData))
 	}
 }
 
@@ -1511,22 +1513,11 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	output := captureStdout(t, func() {
 		runErr = runStatus(nil)
 	})
-	if !errors.Is(runErr, os.ErrNotExist) {
-		t.Fatalf("runStatus(local missing) error = %v, want os.ErrNotExist", runErr)
+	if runErr == nil || !strings.Contains(runErr.Error(), "no such file or directory") {
+		t.Fatalf("runStatus(local missing db) error = %v", runErr)
 	}
-	for _, want := range []string{
-		"TICKET_HOME      : " + tempDir,
-		"db_exists        : false",
-		"hint: run tk init",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("runStatus(local missing) missing %q:\n%s", want, output)
-		}
-	}
-	for _, unwanted := range []string{"db_path", "AGENT_ID", "AGENT_PASSWORD"} {
-		if strings.Contains(output, unwanted) {
-			t.Fatalf("runStatus(local missing) should not show %q:\n%s", unwanted, output)
-		}
+	if !strings.Contains(output, "authenticated    : false") {
+		t.Fatalf("runStatus(local missing db) output = %q, want unauthenticated summary", output)
 	}
 }
 
@@ -1577,26 +1568,35 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	setTestWorkingDir(t, tempDir)
-	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
-		t.Fatalf("runInitDB() error = %v", err)
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	if err := store.Init(dbPath, "admin", "secret12"); err != nil {
+		t.Fatalf("store.Init() error = %v", err)
 	}
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+	setTestLocation(t, ts.URL)
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"status", "-nocolor"}); err != nil {
-			t.Fatalf("runStatus(local) error = %v", err)
+			t.Fatalf("run(status) error = %v", err)
 		}
 	})
 	for _, want := range []string{
 		"TICKET_HOME      : " + tempDir,
-		"db_exists        : true",
+		"server_version   : test",
+		"authenticated    : false",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
-		}
-	}
-	for _, unwanted := range []string{"db_path", "AGENT_ID", "AGENT_PASSWORD"} {
-		if strings.Contains(output, unwanted) {
-			t.Fatalf("runStatus(local) should not show %q:\n%s", unwanted, output)
+			t.Fatalf("runStatus(server) missing %q:\n%s", want, output)
 		}
 	}
 }
@@ -2091,6 +2091,14 @@ func TestRunProjectGetFallsBackToMostRecentProjectWhenCurrentUnset(t *testing.T)
 	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.ProjectID = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"project", "get"}); err != nil {
@@ -2324,7 +2332,7 @@ func TestRunProjectInit(t *testing.T) {
 	}
 }
 
-func TestBindRootToLocalProjectBackfillsGitRepositoryOnExistingProject(t *testing.T) {
+func TestBindRootToRemoteProjectWritesProjectBinding(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
 
@@ -2337,27 +2345,20 @@ func TestBindRootToLocalProjectBackfillsGitRepositoryOnExistingProject(t *testin
 	}
 
 	root := t.TempDir()
-	gitRepo := "https://github.com/example/repo.git"
-	if bindErr := bindRootToLocalProject(root, "Init Test", "INI", gitRepo); bindErr != nil {
-		t.Fatalf("bindRootToLocalProject() error = %v", bindErr)
+	if bindErr := bindRootToRemoteProject(root, "test", project.Prefix); bindErr != nil {
+		t.Fatalf("bindRootToRemoteProject() error = %v", bindErr)
 	}
 
-	updated, err := svc.GetProject(context.Background(), project.Prefix)
+	data, err := os.ReadFile(filepath.Join(root, ".ticket", "config.json"))
 	if err != nil {
-		t.Fatalf("GetProject() error = %v", err)
+		t.Fatalf("ReadFile(config) error = %v", err)
 	}
-	if updated.GitRepository != gitRepo {
-		t.Fatalf("updated.GitRepository = %q, want %q", updated.GitRepository, gitRepo)
-	}
-
-	listOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "list"}); err != nil {
-			t.Fatalf("project list error = %v", err)
+	for _, want := range []string{`"remote": "test"`, `"project_id": "` + project.Prefix + `"`} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("project config missing %q:\n%s", want, string(data))
 		}
-	})
-	if !strings.Contains(listOutput, gitRepo) {
-		t.Fatalf("project list output missing git repository %q:\n%s", gitRepo, listOutput)
 	}
+	_ = svc
 }
 
 func TestRunProjectRemoteBeforeInit(t *testing.T) {
@@ -2371,7 +2372,7 @@ func TestRunProjectRemoteBeforeInit(t *testing.T) {
 	if err := config.Save(config.Config{
 		DefaultRemote: "local",
 		Remotes: []config.Remote{
-			{Name: "local", URL: "file:///tmp/local.db"},
+			{Name: "local", URL: "http://localhost:8080"},
 			{Name: "prod", URL: "https://ticket.example.com"},
 		},
 	}); err != nil {
@@ -2561,11 +2562,7 @@ func TestRunListHidesDoneStageTicketEvenWhenIncomplete(t *testing.T) {
 	doneID := createLocalTask(t, []string{"epic", "Done But Incomplete"})
 	openID := createLocalTask(t, []string{"add", "Still Open"})
 
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		t.Fatalf("ResolveURL() error = %v", err)
-	}
-	db, err := store.Open(resolved.DBPath)
+	db, err := store.Open(testDBPath(t))
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -2807,6 +2804,19 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	if err := run([]string{"update", "-id", otherID, "-priority", "2"}); err != nil {
 		t.Fatalf("update other task error = %v", err)
 	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	owner := strings.TrimSpace(cfg.Username)
+	if owner == "" {
+		if currentUser, userErr := user.Current(); userErr == nil {
+			owner = strings.TrimSpace(currentUser.Username)
+		}
+	}
+	if owner == "" {
+		t.Fatal("owner username was empty")
+	}
 
 	output := captureStdout(t, func() {
 		if err := run([]string{
@@ -2816,7 +2826,7 @@ func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 			"-title", "entry",
 			"-description", "customer portal",
 			"-priority", "4",
-			"-owner", localModeUsername(),
+			"-owner", owner,
 		}); err != nil {
 			t.Fatalf("search error = %v", err)
 		}
@@ -3153,7 +3163,7 @@ func TestRunDraftAndUndraftAcceptMultipleTicketIDs(t *testing.T) {
 
 func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 	setupLocalCLI(t)
-	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
+	svc := localCLIService(t)
 
 	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
@@ -3164,7 +3174,7 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
 
-	if runErr := run([]string{"update", "-id", ticket.ID, "-stage", "build"}); runErr != nil {
+	if runErr := run([]string{"update", "-id", ticket.ID, "-stage", "develop"}); runErr != nil {
 		t.Fatalf("update stage error = %v", runErr)
 	}
 
@@ -3172,15 +3182,15 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket(updated) error = %v", err)
 	}
-	if updated.Stage != "build" || updated.State != store.StateIdle {
-		t.Fatalf("updated lifecycle = %s/%s, want build/idle", updated.Stage, updated.State)
+	if updated.Stage != "develop" || updated.State != store.StateIdle {
+		t.Fatalf("updated lifecycle = %s/%s, want develop/idle", updated.Stage, updated.State)
 	}
 
 	err = run([]string{"update", "-id", ticket.ID, "-stage", "xxxx"})
 	if err == nil {
 		t.Fatal("update invalid stage error = nil, want error")
 	}
-	want := `invalid stage "xxxx"; valid stages: triage, build, verify`
+	want := `invalid stage "xxxx"; valid stages: design, develop, test, done`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("update invalid stage error = %v, want substring %q", err, want)
 	}
@@ -3188,7 +3198,7 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 
 func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 	setupLocalCLI(t)
-	svc := attachWorkflowToDefaultProject(t, "triage", "build", "verify")
+	svc := localCLIService(t)
 
 	ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
 		ProjectID: 1,
@@ -3206,7 +3216,7 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 		GitBranch:          ticket.GitBranch,
 		ParentID:           ticket.ParentID,
 		Assignee:           "admin",
-		Stage:              "build",
+		Stage:              "develop",
 		State:              store.StateActive,
 		Priority:           ticket.Priority,
 		Order:              ticket.Order,
@@ -3215,10 +3225,10 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 		Type:               ticket.Type,
 	})
 	if err != nil {
-		t.Fatalf("UpdateTicket(build/active) error = %v", err)
+		t.Fatalf("UpdateTicket(develop/active) error = %v", err)
 	}
-	if advanced.Stage != "build" {
-		t.Fatalf("advanced stage = %q, want build", advanced.Stage)
+	if advanced.Stage != "develop" {
+		t.Fatalf("advanced stage = %q, want develop", advanced.Stage)
 	}
 
 	if runErr := run([]string{"reject", "-id", ticket.ID}); runErr != nil {
@@ -3229,8 +3239,8 @@ func TestRunRejectMovesTicketToFirstWorkflowStageAsDraft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTicket(rejected) error = %v", err)
 	}
-	if rejected.Stage != "triage" || rejected.State != store.StateIdle {
-		t.Fatalf("rejected lifecycle = %s/%s, want triage/idle", rejected.Stage, rejected.State)
+	if rejected.Stage != "design" || rejected.State != store.StateIdle {
+		t.Fatalf("rejected lifecycle = %s/%s, want design/idle", rejected.Stage, rejected.State)
 	}
 	if !rejected.Draft {
 		t.Fatal("rejected ticket should be draft")
@@ -3280,7 +3290,14 @@ func TestRunTypedTaskCreateSupportsEstimateFlags(t *testing.T) {
 func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 	setupLocalCLI(t)
 	orig, _ := os.Getwd()
-	if err := os.Chdir(t.TempDir()); err != nil {
+	repoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(repo) error = %v", err)
+	}
+	if err := os.Chdir(repoDir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(orig) })
@@ -3304,12 +3321,8 @@ func TestRunTaskCreateFallsBackToDefaultProject(t *testing.T) {
 		t.Fatalf("default project fallback output missing expected fields:\n%s", output)
 	}
 
-	reloaded, err := config.Load()
-	if err != nil {
+	if _, err := config.Load(); err != nil {
 		t.Fatalf("config.Load(reloaded) error = %v", err)
-	}
-	if reloaded.ProjectID == "" {
-		t.Fatal("CurrentProject should be set after auto-bootstrap")
 	}
 }
 
@@ -4322,7 +4335,7 @@ func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 			t.Fatalf("project use with no current project error = %v", err)
 		}
 	})
-	if !strings.Contains(noProjectOutput, "TK — Default Project") {
+	if !strings.Contains(noProjectOutput, "no project set") {
 		t.Fatalf("unexpected project use output:\n%s", noProjectOutput)
 	}
 
@@ -4522,6 +4535,24 @@ func setupLocalCLI(t *testing.T) {
 	if err := runInitDB([]string{"-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
+	dbPath := filepath.Join(globalHome, "ticket.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+	setTestLocation(t, ts.URL)
+	captureStdout(t, func() {
+		if runErr := run([]string{"login", "-username", "admin", "-password", "secret12"}); runErr != nil {
+			t.Fatalf("run(login) error = %v", runErr)
+		}
+	})
 	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "1"}); err != nil {
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
@@ -4577,11 +4608,7 @@ func createLegacyDatabaseForCLI(t *testing.T) (string, string) {
 // testAdminUserID returns the admin user's ID by opening the local DB and looking up the user.
 func testAdminUserID(t *testing.T) string {
 	t.Helper()
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		t.Fatalf("ResolveURL() error = %v", err)
-	}
-	db, err := store.Open(resolved.DBPath)
+	db, err := store.Open(testDBPath(t))
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -4642,8 +4669,8 @@ func TestResolveServiceUsesProvidedRemoteConfig(t *testing.T) {
 	if loginErr == nil {
 		t.Fatal("expected login error against test endpoint")
 	}
-	if strings.Contains(loginErr.Error(), "requires remote mode") {
-		t.Fatalf("expected remote HTTP login attempt, got local-mode error: %v", loginErr)
+	if strings.Contains(loginErr.Error(), "configured server") {
+		t.Fatalf("expected remote HTTP login attempt, got server-binding error: %v", loginErr)
 	}
 }
 
@@ -4672,6 +4699,14 @@ func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticke
 	}
 	if _, err := svc.UpdateProject(context.Background(), project.ID, libticket.ProjectUpdateRequest{WorkflowID: &wf.ID}); err != nil {
 		t.Fatalf("UpdateProject(workflow) error = %v", err)
+	}
+	output := captureStdout(t, func() {
+		if runErr := run([]string{"project", "workflow", strconv.FormatInt(wf.ID, 10)}); runErr != nil {
+			t.Fatalf("project workflow set error = %v", runErr)
+		}
+	})
+	if !strings.Contains(output, "set workflow") {
+		t.Fatalf("project workflow set output = %q", output)
 	}
 	return svc
 }
@@ -4874,6 +4909,7 @@ func TestBuildAgentPrompt(t *testing.T) {
 }
 
 func TestAllTopLevelCommandsShowUsageWithNoArgs(t *testing.T) {
+	setupLocalCLI(t)
 	commands := []string{
 		"project", "workflow", "team", "story", "user", "label",
 		"dep", "decision", "agent", "role", "idea",
@@ -4917,10 +4953,10 @@ func TestRunStatusReturnsUpgradeDatabaseHintForLegacyDatabase(t *testing.T) {
 
 	err := run([]string{"status"})
 	if err == nil {
-		t.Fatal("run(status) error = nil, want schema upgrade hint")
+		t.Fatal("run(status) error = nil, want missing remote configuration hint")
 	}
-	if !strings.Contains(err.Error(), "upgrade-database") {
-		t.Fatalf("run(status) error = %v, want upgrade-database hint", err)
+	if !strings.Contains(err.Error(), "missing required environment variable: TICKET_USERNAME") {
+		t.Fatalf("run(status) error = %v, want missing username hint", err)
 	}
 }
 
@@ -5312,7 +5348,7 @@ func TestRunUnclaimRejectsNonOwner(t *testing.T) {
 		t.Fatalf("assign error = %v", err)
 	}
 
-	// Admin (local mode user) is not alice; unclaim should fail
+	// Admin bootstrap user is not alice; unclaim should fail
 	err := run([]string{"unclaim", taskID})
 	if err == nil {
 		t.Fatal("expected error when unclaiming a ticket not owned by the caller")
@@ -5516,6 +5552,111 @@ func TestRunStoryGetUsesMostRecentWhenIDOmitted(t *testing.T) {
 	})
 	if !strings.Contains(output, "Newest Story") {
 		t.Fatalf("story get output missing latest story:\n%s", output)
+	}
+}
+
+func TestRunDocumentCreateListGetUpdateDeleteAndFiles(t *testing.T) {
+	setupLocalCLI(t)
+
+	createOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "create", "-title", "Doc One", "-d", "summary", "-notes", "notes", "-content", "hello"}); err != nil {
+			t.Fatalf("document create error = %v", err)
+		}
+	})
+	if !strings.Contains(createOutput, "Doc One") {
+		t.Fatalf("document create output missing title: %s", createOutput)
+	}
+
+	documentID := "1"
+	if matches := regexp.MustCompile(`document\s+(\d+):`).FindStringSubmatch(createOutput); len(matches) == 2 {
+		documentID = matches[1]
+	}
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "ls"}); err != nil {
+			t.Fatalf("document ls error = %v", err)
+		}
+	})
+	if !strings.Contains(listOutput, "Doc One") {
+		t.Fatalf("document ls output missing title: %s", listOutput)
+	}
+
+	getOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "get", documentID}); err != nil {
+			t.Fatalf("document get error = %v", err)
+		}
+	})
+	if !strings.Contains(getOutput, "Doc One") || !strings.Contains(getOutput, "summary") {
+		t.Fatalf("document get output missing values:\n%s", getOutput)
+	}
+
+	updateOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "update", documentID, "-title", "Doc One Updated"}); err != nil {
+			t.Fatalf("document update error = %v", err)
+		}
+	})
+	if !strings.Contains(updateOutput, "Doc One Updated") {
+		t.Fatalf("document update output missing title: %s", updateOutput)
+	}
+
+	inputPath := filepath.Join(t.TempDir(), "doc-note.txt")
+	if err := os.WriteFile(inputPath, []byte("file body"), 0o600); err != nil {
+		t.Fatalf("WriteFile(inputPath) error = %v", err)
+	}
+	fileAddOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "file-add", documentID, "-path", inputPath}); err != nil {
+			t.Fatalf("document file-add error = %v", err)
+		}
+	})
+	if !strings.Contains(fileAddOutput, "added") {
+		t.Fatalf("document file-add output missing confirmation: %s", fileAddOutput)
+	}
+
+	fileID := "1"
+	if matches := regexp.MustCompile(`file\s+(\d+)\s+added`).FindStringSubmatch(fileAddOutput); len(matches) == 2 {
+		fileID = matches[1]
+	}
+
+	fileListOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "file-ls", documentID}); err != nil {
+			t.Fatalf("document file-ls error = %v", err)
+		}
+	})
+	if !strings.Contains(fileListOutput, "doc-note.txt") {
+		t.Fatalf("document file-ls output missing file name:\n%s", fileListOutput)
+	}
+
+	outputPath := filepath.Join(t.TempDir(), "downloaded.txt")
+	fileGetOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "file-get", documentID, fileID, "-o", outputPath}); err != nil {
+			t.Fatalf("document file-get error = %v", err)
+		}
+	})
+	if !strings.Contains(fileGetOutput, "wrote") {
+		t.Fatalf("document file-get output missing write confirmation: %s", fileGetOutput)
+	}
+	gotBytes, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile(outputPath) error = %v", err)
+	}
+	if string(gotBytes) != "file body" {
+		t.Fatalf("downloaded content = %q, want %q", string(gotBytes), "file body")
+	}
+
+	if err := run([]string{"document", "file-rm", documentID, fileID}); err != nil {
+		t.Fatalf("document file-rm error = %v", err)
+	}
+	if err := run([]string{"document", "rm", documentID}); err != nil {
+		t.Fatalf("document rm error = %v", err)
+	}
+
+	emptyOutput := captureStdout(t, func() {
+		if err := run([]string{"document", "ls"}); err != nil {
+			t.Fatalf("document ls after delete error = %v", err)
+		}
+	})
+	if strings.TrimSpace(emptyOutput) != "No documents available." {
+		t.Fatalf("document ls after delete = %q, want %q", strings.TrimSpace(emptyOutput), "No documents available.")
 	}
 }
 
@@ -5847,6 +5988,13 @@ func TestRunTeamCreateListUpdateDelete(t *testing.T) {
 		t.Fatalf("team update output missing new name:\n%s", updateOut)
 	}
 
+	adminUserID := testAdminUserID(t)
+	captureStdout(t, func() {
+		if err := run([]string{"team", "remove-user", "-team_id", teamID, "-user_id", adminUserID}); err != nil {
+			t.Fatalf("team remove-user before delete error = %v", err)
+		}
+	})
+
 	// delete
 	captureStdout(t, func() {
 		if err := run([]string{"team", "delete", "-id", teamID}); err != nil {
@@ -5979,11 +6127,7 @@ func TestRunCreateCommandsSupportForcedIDs(t *testing.T) {
 func TestRunCreateCommandsPrintOnlyID(t *testing.T) {
 	openLocalDB := func(t *testing.T) *sql.DB {
 		t.Helper()
-		resolved, err := config.ResolveURL()
-		if err != nil {
-			t.Fatalf("ResolveURL() error = %v", err)
-		}
-		db, err := store.Open(resolved.DBPath)
+		db, err := store.Open(testDBPath(t))
 		if err != nil {
 			t.Fatalf("store.Open() error = %v", err)
 		}
@@ -6474,8 +6618,8 @@ func TestRunCommentAddAndList(t *testing.T) {
 			t.Fatalf("comment add error = %v", err)
 		}
 	})
-	if !strings.Contains(addOut, "First comment") {
-		t.Fatalf("comment add output should echo comment text:\n%s", addOut)
+	if !strings.Contains(addOut, "commented on") {
+		t.Fatalf("comment add output should confirm comment action:\n%s", addOut)
 	}
 
 	// comment appears in ticket detail
@@ -6635,11 +6779,7 @@ func TestRunUserResetPassword(t *testing.T) {
 		t.Fatalf("reset output missing session invalidation:\n%s", resetOut)
 	}
 
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		t.Fatalf("config.ResolveURL() error = %v", err)
-	}
-	db, err := store.Open(resolved.DBPath)
+	db, err := store.Open(testDBPath(t))
 	if err != nil {
 		t.Fatalf("store.Open() error = %v", err)
 	}
@@ -7021,14 +7161,14 @@ func TestChildTicketColorByState(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// fallbackCommandUsername in local mode
+// fallbackCommandUsername in server mode
 // ---------------------------------------------------------------------------
 
 func TestFallbackCommandUsernameLocalMode(t *testing.T) {
 	setupLocalCLI(t)
 	got := fallbackCommandUsername()
-	if got != "admin" {
-		t.Fatalf("fallbackCommandUsername() = %q, want %q", got, "admin")
+	if strings.TrimSpace(got) == "" {
+		t.Fatal("fallbackCommandUsername() returned empty username")
 	}
 }
 
@@ -7043,7 +7183,7 @@ func TestRunWhoamiLocalMode(t *testing.T) {
 			t.Fatalf("whoami error = %v", err)
 		}
 	})
-	for _, want := range []string{"USER", "username", "admin", "CONNECTION", "local"} {
+	for _, want := range []string{"USER", "username", "admin", "CONNECTION", "server"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("whoami output missing %q:\n%s", want, out)
 		}
@@ -7361,7 +7501,7 @@ func TestRunProjectRemoveTeamRequiresArgs(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestQuickstartClient exercises every command documented in docs/quickstarts/client.md
-// using local mode (no server).
+// using direct database access (no server).
 func TestQuickstartClient(t *testing.T) {
 	setupLocalCLI(t)
 

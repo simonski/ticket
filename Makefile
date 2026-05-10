@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-go test-go-race test-go-cover test-unit test-integration test-playwright test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-all test-go test-go-race test-go-cover test-unit test-integration test-api test-api-js test-api-cli test-browser test-playwright test-quickstart test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -17,6 +17,7 @@ help:
 	@printf "                       Also increments the patch version in ./VERSION.\n"
 	@printf "  make build-dev       Build tk binary into ./bin/tk without changing the version.\n"
 	@printf "  make build-linux     Build a linux/amd64 tk binary into ./bin/tk-linux using BuildKit.\n"
+	@printf "  make caddy           Run local HTTPS reverse proxy https://ticket.localhost -> http://localhost:8080.\n"
 	@printf "  make sync-openapi-version Sync openapi.yaml version with cmd/tk/VERSION.\n"
 	@printf "  make validate-openapi Parse openapi.yaml and require core metadata.\n"
 	@printf "  make backup-db       Export and compress a local snapshot under .ticket/backups/.\n"
@@ -24,14 +25,20 @@ help:
 	@printf "  make setup-go        Download and cache Go module dependencies.\n"
 	@printf "  make setup-node      Install Node dependencies.\n"
 	@printf "  make setup-playwright Install Chromium for Playwright.\n"
-	@printf "  make test            Run all tests.\n"
+	@printf "  make test            Run fast default tests (unit).\n"
+	@printf "  make test-all        Run all tests (unit + api + browser + docs/harness).\n"
 	@printf "  make test-go         Run Go tests.\n"
 	@printf "  make test-go-race    Run Go tests with the race detector.\n"
 	@printf "  make test-unit       Run unit-oriented Go test packages.\n"
+	@printf "  make test-api-js     Run JavaScript API client-library tests.\n"
+	@printf "  make test-api-cli    Run CLI/API interface tests (cmd + client + server + contract).\n"
+	@printf "  make test-api        Run both API interface suites (js + cli).\n"
+	@printf "  make test-browser    Run browser end-to-end tests.\n"
 	@printf "  make test-integration Run integration-oriented Go test packages.\n"
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
-	@printf "  make test-tk-test    Run executable documentation tests.\n"
+	@printf "  make test-quickstart Run executable QUICKSTART/TUTORIAL docs tests.\n"
+	@printf "  make test-tk-test    Alias for make test-quickstart.\n"
 	@printf "  make test-todo-example Validate the seeded todo tutorial scenario.\n"
 	@printf "  make testscripts     Run the shell-based CLI harness scenarios.\n"
 	@printf "  make lint            Run golangci-lint on all packages.\n"
@@ -72,6 +79,9 @@ build-linux:
 	@mkdir -p ./bin
 	DOCKER_BUILDKIT=1 docker buildx build --platform linux/amd64 --target artifact --output type=local,dest=./bin .
 	@chmod +x ./bin/tk-linux
+
+caddy:
+	caddy run --config ./Caddyfile
 
 
 setup: setup-go setup-node setup-playwright
@@ -118,7 +128,9 @@ backup-db:
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
 INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket
 
-test: test-unit test-integration test-tk-test testscripts test-todo-example test-playwright
+test: test-unit
+
+test-all: test-unit test-api test-browser test-quickstart testscripts test-todo-example
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
@@ -131,6 +143,14 @@ test-unit:
 
 test-integration:
 	TICKET_FAST_HASH=1 go test $(INTEGRATION_TEST_PKGS)
+
+test-api-cli:
+	TICKET_FAST_HASH=1 go test ./cmd/tk ./internal/client ./internal/server ./libticket
+
+test-api-js:
+	node --test web/site2/api.test.js
+
+test-api: test-api-js test-api-cli
 
 test-go-cover:
 	@export TICKET_FAST_HASH=1; set -e; \
@@ -157,12 +177,17 @@ test-go-cover:
 	done
 
 test-playwright:
-	npm install
+	@if [ ! -d node_modules ]; then npm install; fi
 	npx playwright install chromium
-	npx playwright test
+	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
+	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test
 
-test-tk-test: build-bin
-	go run ./cmd/tk-test docs/quickstarts/client.md docs/quickstarts/server.md
+test-browser: test-playwright
+
+test-quickstart: build-bin
+	go run ./cmd/tk-test QUICKSTART.md TUTORIAL.md
+
+test-tk-test: test-quickstart
 
 test-todo-example: build-bin
 	./scripts/verify_todo_example.sh
@@ -269,7 +294,7 @@ release: release-publish
 # ─── docker ───────────────────────────────────────────────────────────────────
 
 docker-build:
-	docker build -t ticket:$(VERSION) -t ticket:latest .
+	DOCKER_BUILDKIT=1 docker build -t ticket:$(VERSION) -t ticket:latest .
 
 docker-push: docker-build
 	docker tag ticket:$(VERSION) $(GHCR_IMAGE):$(VERSION)

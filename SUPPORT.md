@@ -27,7 +27,7 @@ When reporting a problem, include:
 - how `tk` was installed
 - the command you ran
 - the exact error output
-- whether you are using local mode or server mode
+- your server URL / remote name (from `tk status`)
 
 ## Project status
 

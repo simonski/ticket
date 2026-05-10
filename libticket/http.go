@@ -522,3 +522,71 @@ func (s *HTTPService) UpdateStory(ctx context.Context, id int64, title, descript
 func (s *HTTPService) DeleteStory(ctx context.Context, id int64) error {
 	return s.client.DeleteStory(ctx, id)
 }
+
+func (s *HTTPService) CreateGoal(ctx context.Context, projectID int64, request GoalRequest) (store.Goal, error) {
+	return s.client.CreateGoal(ctx, projectID, client.GoalRequest(request))
+}
+
+func (s *HTTPService) ListGoals(ctx context.Context, projectID int64) ([]store.Goal, error) {
+	return s.client.ListGoals(ctx, projectID)
+}
+
+func (s *HTTPService) GetGoal(ctx context.Context, id int64) (store.Goal, error) {
+	return s.client.GetGoal(ctx, id)
+}
+
+func (s *HTTPService) UpdateGoal(ctx context.Context, id int64, request GoalRequest) (store.Goal, error) {
+	return s.client.UpdateGoal(ctx, id, client.GoalRequest(request))
+}
+
+func (s *HTTPService) DeleteGoal(ctx context.Context, id int64) error {
+	return s.client.DeleteGoal(ctx, id)
+}
+
+func (s *HTTPService) CreateDocument(ctx context.Context, projectID int64, request DocumentRequest) (store.Document, error) {
+	return s.client.CreateDocument(ctx, projectID, client.DocumentRequest(request))
+}
+
+func (s *HTTPService) ListDocuments(ctx context.Context, projectID int64) ([]store.Document, error) {
+	return s.client.ListDocuments(ctx, projectID)
+}
+
+func (s *HTTPService) GetDocument(ctx context.Context, id int64) (store.Document, error) {
+	return s.client.GetDocument(ctx, id)
+}
+
+func (s *HTTPService) UpdateDocument(ctx context.Context, id int64, request DocumentRequest) (store.Document, error) {
+	return s.client.UpdateDocument(ctx, id, client.DocumentRequest(request))
+}
+
+func (s *HTTPService) DeleteDocument(ctx context.Context, id int64) error {
+	return s.client.DeleteDocument(ctx, id)
+}
+
+func (s *HTTPService) AddDocumentLabel(ctx context.Context, documentID int64, request DocumentLabelRequest) error {
+	return s.client.AddDocumentLabel(ctx, documentID, client.DocumentLabelRequest(request))
+}
+
+func (s *HTTPService) RemoveDocumentLabel(ctx context.Context, documentID, labelID int64) error {
+	return s.client.RemoveDocumentLabel(ctx, documentID, labelID)
+}
+
+func (s *HTTPService) ListDocumentLabels(ctx context.Context, documentID int64) ([]store.Label, error) {
+	return s.client.ListDocumentLabels(ctx, documentID)
+}
+
+func (s *HTTPService) AddDocumentFile(ctx context.Context, documentID int64, request DocumentFileUploadRequest) (store.DocumentFile, error) {
+	return s.client.AddDocumentFile(ctx, documentID, client.DocumentFileRequest(request))
+}
+
+func (s *HTTPService) ListDocumentFiles(ctx context.Context, documentID int64) ([]store.DocumentFile, error) {
+	return s.client.ListDocumentFiles(ctx, documentID)
+}
+
+func (s *HTTPService) GetDocumentFile(ctx context.Context, documentID, fileID int64) (store.DocumentFile, error) {
+	return s.client.GetDocumentFile(ctx, documentID, fileID)
+}
+
+func (s *HTTPService) DeleteDocumentFile(ctx context.Context, documentID, fileID int64) error {
+	return s.client.DeleteDocumentFile(ctx, documentID, fileID)
+}
