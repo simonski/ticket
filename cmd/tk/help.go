@@ -36,7 +36,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]",
-		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account.", "This is a server-side maintenance command.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive repo/project binding command."},
+		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive client setup command."},
 		example: "tk initdb . --force -password secret -populate",
 	},
 	"export": {
@@ -86,7 +86,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"status": {
 		usage:   "tk status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration, then performs a server connectivity check.", "Output includes the active project, its current Workflow name, and whether new tickets default to draft mode.", "Also prints `username`, `authenticated`, and server metadata when available."},
+		details: []string{"Prints the current effective configuration and connectivity details.", "Mode is auto-detected: remote when `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are set; otherwise local when `~/.ticket/ticket.db` is available.", "Output includes the active project, its current Workflow name, and whether new tickets default to draft mode."},
 		example: "tk status",
 	},
 	"help": {
@@ -175,8 +175,10 @@ var helpIndex = map[string]commandHelp{
 		example: "tk search password reset -status develop/active -owner alice -allprojects",
 	},
 	"update": {
-		usage: "tk update [-id <id>|<id>]\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
+		usage: "tk update [-f <file>] [-commit] [-id <id>|<id>]\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-ac <acceptance-criteria>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]",
 		details: []string{
+			"-f <file>: preview updates from file; add -commit to apply",
+			"-commit: required with -f to apply updates",
 			"-id <id> or positional <id>: required; ticket id or key",
 			"-title <title>: set title",
 			"-desc <description>: set description (alias: -description)",
@@ -235,8 +237,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk complete TK-42",
 	},
 	"add": {
-		usage:   "tk add|create|new [-title <title>] [-t <type>] [-p <priority>] [-a <assignee>] [-d <description>] [-ac <criteria>] [-parent <id>] [-project <project>] [-estimate_effort <n>] [-estimate_complete <rfc3339>] [title words]",
-		details: []string{"Creates a ticket-like entity in the active project.", "Positional title words and `-title` are equivalent ways to set the title.", "Defaults: `type=ticket`, `stage=design`, `state=idle`, `priority=1`, blank assignee, blank description, blank acceptance criteria, blank parent, current project, `estimate_effort=0`, blank `estimate_complete`."},
+		usage:   "tk add|create|new [-f <file>] [-commit] [-title <title>] [-t <type>] [-p <priority>] [-a <assignee>] [-d <description>] [-ac <criteria>] [-parent <id>] [-project <project>] [-estimate_effort <n>] [-estimate_complete <rfc3339>] [title words]",
+		details: []string{"Creates a ticket-like entity in the active project.", "Positional title words and `-title` are equivalent ways to set the title.", "`-f` reads multiple ticket entries from a file: headings `#`, `##`, `###` define ticket hierarchy (children attach to the nearest parent heading), description is the remaining text, `labels: a,b` sets labels, `type: bug` overrides type, and `id: TK-1` updates an existing ticket entry.", "Without `-commit`, `-f` prints the intended outcomes only. With `-commit`, entries are created/updated and the file is written back with `id:` values for newly created tickets.", "Defaults: `type=ticket`, `stage=design`, `state=idle`, `priority=1`, blank assignee, blank description, blank acceptance criteria, blank parent, current project, `estimate_effort=0`, blank `estimate_complete`."},
 		example: "tk add \"Customers can reset their password.\"",
 	},
 	"comment": {
@@ -446,7 +448,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"init": {
 		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-workflow <name>]",
-		details: []string{"Interactive setup for server client configuration.", "`tk init` requires the current working directory to be inside a git repository.", "It configures server URL, login/registration, and active project selection."},
+		details: []string{"Interactive client setup for local or remote mode.", "`tk init` requires the current working directory to be inside a git repository.", "It detects current settings from environment variables and nearest `.ticket.json` (up to git root), then lets you review/amend them."},
 		example: "tk init",
 	},
 	"curate": {

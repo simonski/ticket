@@ -881,8 +881,37 @@ func ResolveGoalAgentModelConfig(ctx context.Context, db *sql.DB, goalID int64) 
 		return AgentModelConfig{}, err
 	}
 	cfg := system
+	providerIndex := map[string]AgentModelProvider{}
+	for _, provider := range system.Providers {
+		id := strings.TrimSpace(provider.ID)
+		if id == "" {
+			continue
+		}
+		providerIndex[id] = provider
+	}
+	applyProviderProfile := func(profileID string) {
+		id := strings.TrimSpace(profileID)
+		if id == "" {
+			return
+		}
+		profile, ok := providerIndex[id]
+		if !ok {
+			return
+		}
+		cfg.Provider = id
+		if strings.TrimSpace(profile.DefaultModel) != "" {
+			cfg.Model = strings.TrimSpace(profile.DefaultModel)
+		}
+		if strings.TrimSpace(profile.BaseURL) != "" {
+			cfg.URL = strings.TrimSpace(profile.BaseURL)
+		}
+		if strings.TrimSpace(profile.APIKey) != "" {
+			cfg.APIKey = strings.TrimSpace(profile.APIKey)
+		}
+	}
+	applyProviderProfile(cfg.Provider)
 	if strings.TrimSpace(project.AgentModelProvider) != "" {
-		cfg.Provider = strings.TrimSpace(project.AgentModelProvider)
+		applyProviderProfile(project.AgentModelProvider)
 	}
 	if strings.TrimSpace(project.AgentModelName) != "" {
 		cfg.Model = strings.TrimSpace(project.AgentModelName)
@@ -894,7 +923,7 @@ func ResolveGoalAgentModelConfig(ctx context.Context, db *sql.DB, goalID int64) 
 		cfg.APIKey = strings.TrimSpace(project.AgentModelAPIKey)
 	}
 	if strings.TrimSpace(goal.AgentModelProvider) != "" {
-		cfg.Provider = strings.TrimSpace(goal.AgentModelProvider)
+		applyProviderProfile(goal.AgentModelProvider)
 	}
 	if strings.TrimSpace(goal.AgentModelName) != "" {
 		cfg.Model = strings.TrimSpace(goal.AgentModelName)

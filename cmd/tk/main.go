@@ -114,7 +114,11 @@ func run(args []string) error {
 			noInitRequired[trimmedArgs[0]] = true
 		}
 	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() {
+	remoteConfigured, remoteConfigErr := hasCompleteRemoteRuntimeConfig()
+	if remoteConfigErr != nil {
+		return remoteConfigErr
+	}
+	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() && !remoteConfigured {
 		if _, ok, pathErr := config.ProjectPath(); pathErr != nil {
 			return pathErr
 		} else if !ok {

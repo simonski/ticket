@@ -73,10 +73,17 @@
             goalChatSocket: null,
             goalChatMessages: [],
             goalChatLoadedFor: null,
+            goalChatAgentState: "idle",
             goalDecompositionItems: [],
             documentFiles: [],
             goalInboxStatusFilter: "",
             goalInboxSort: "updated_desc",
+            systemAgentModelConfig: { provider: "", model: "", url: "", api_key: "", providers: [] },
+            projectAgentModelConfig: { provider: "", model: "", url: "", api_key: "" },
+            goalAgentModelConfig: { provider: "", model: "", url: "", api_key: "" },
+            resolvedGoalAgentModelConfig: null,
+            selectedProviderConfigID: "",
+            navOrder: [],
         };
 
         const TICKET_TYPES = ["epic", "task", "bug", "spike", "chore", "story", "note", "question", "requirement", "decision"];
@@ -85,6 +92,23 @@
         const SELECTED_PROJECT_STORAGE_KEY = "site2.selectedProjectID";
         const SELECTED_VIEW_STORAGE_KEY = "site2.selectedView";
         const VIEW_SCROLL_STORAGE_KEY = "site2.viewScroll";
+        const NAV_ORDER_STORAGE_KEY = "site2.navOrder";
+        const NAV_ITEMS = [
+            { view: "goals", label: "Goals", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.8 6.4 20.5l1.1-6.2L3 9.9 9 9z\"></path></svg>" },
+            { view: "tickets", label: "Board", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
+            { view: "documents", label: "Documents", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
+            { view: "providers", label: "Providers", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
+            { view: "interventions", label: "Interventions", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
+            { view: "projects", label: "Projects", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
+            { view: "workflows", label: "Workflows", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
+            { view: "roles", label: "Roles", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
+            { view: "agents", label: "Agents", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M8 8a4 4 0 1 1 8 0\"></path><path d=\"M7 13h10v7H7z\"></path></svg>" },
+            { view: "teams", label: "Teams", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 11a2.5 2.5 0 1 0 0.001 0\"></path><path d=\"M16 9a2 2 0 1 0 0.001 0\"></path><path d=\"M4 19a4 4 0 0 1 8 0\"></path><path d=\"M14 19a3 3 0 0 1 6 0\"></path></svg>" },
+        ];
+        let navDragView = "";
+        let goalChatIdleTimer = null;
+        let documentDropDepth = 0;
+        let documentDropSuccessTimer = null;
 
         const els = {
             loginScreen: document.getElementById("login-screen"),
@@ -138,15 +162,36 @@
             addTicketTimeButton: document.getElementById("add-ticket-time-button"),
             goalChatLog: document.getElementById("goal-chat-log"),
             goalChatInput: document.getElementById("goal-chat-input"),
+            goalChatStatus: document.getElementById("goal-chat-status"),
             goalRefinedGoal: document.getElementById("goal-refined-goal"),
             goalDecomposition: document.getElementById("goal-decomposition"),
             goalDecompositionList: document.getElementById("goal-decomposition-list"),
             goalDecompositionItemInput: document.getElementById("goal-decomposition-item-input"),
             goalInboxStatusFilter: document.getElementById("goal-inbox-status-filter"),
             goalInboxSort: document.getElementById("goal-inbox-sort"),
+            agentHarnessSummary: document.getElementById("agent-harness-summary"),
+            systemAgentProvider: document.getElementById("system-agent-provider"),
+            projectAgentProvider: document.getElementById("project-agent-provider"),
+            goalAgentProvider: document.getElementById("goal-agent-provider"),
+            resolvedAgentProvider: document.getElementById("resolved-agent-provider"),
+            resolvedAgentModel: document.getElementById("resolved-agent-model"),
+            resolvedAgentURL: document.getElementById("resolved-agent-url"),
+            resolvedAgentAPIKey: document.getElementById("resolved-agent-api-key"),
+            providerConfigSelect: document.getElementById("provider-config-select"),
+            providerConfigForm: document.getElementById("provider-config-form"),
+            providerConfigID: document.getElementById("provider-config-id"),
+            providerConfigLabel: document.getElementById("provider-config-label"),
+            providerConfigModel: document.getElementById("provider-config-model"),
+            providerConfigURL: document.getElementById("provider-config-url"),
+            providerConfigAuthType: document.getElementById("provider-config-auth-type"),
+            providerConfigRequiresURL: document.getElementById("provider-config-requires-url"),
+            providerConfigAPIKey: document.getElementById("provider-config-api-key"),
+            providerConfigModels: document.getElementById("provider-config-models"),
             documentFilesList: document.getElementById("document-files-list"),
             documentUploadFile: document.getElementById("document-upload-file"),
             documentUploadName: document.getElementById("document-upload-name"),
+            documentsView: document.getElementById("view-documents"),
+            documentDropOverlay: document.getElementById("document-drop-overlay"),
         };
 
         function emptyProject() {
@@ -274,6 +319,27 @@
             });
         }
 
+        function emptyAgentModelConfig() {
+            return {
+                provider: "",
+                model: "",
+                url: "",
+                api_key: "",
+                providers: [],
+            };
+        }
+
+        function normalizeAgentModelConfig(config) {
+            const cfg = config || {};
+            return {
+                provider: String(cfg.provider || cfg.agent_model_provider || "").trim(),
+                model: String(cfg.model || cfg.agent_model_name || "").trim(),
+                url: String(cfg.url || cfg.agent_model_url || "").trim(),
+                api_key: String(cfg.api_key || cfg.agent_model_api_key || "").trim(),
+                providers: Array.isArray(cfg.providers) ? cfg.providers : [],
+            };
+        }
+
         function normalizeGoal(goal) {
             return Object.assign({}, goal, {
                 id: goal.id !== undefined ? goal.id : goal.goal_id,
@@ -382,13 +448,64 @@
         }
 
         function availableViewNames() {
-            return Array.from(document.querySelectorAll(".nav button[data-view]"))
-                .map((button) => String(button.dataset.view || "").trim())
-                .filter(Boolean);
+            return NAV_ITEMS.map((item) => item.view);
+        }
+
+        function sanitizeNavOrder(order) {
+            const knownViews = availableViewNames();
+            const knownSet = new Set(knownViews);
+            const next = [];
+            (Array.isArray(order) ? order : []).forEach((value) => {
+                const view = String(value || "").trim();
+                if (!view || !knownSet.has(view) || next.includes(view)) {
+                    return;
+                }
+                next.push(view);
+            });
+            knownViews.forEach((view) => {
+                if (!next.includes(view)) {
+                    next.push(view);
+                }
+            });
+            return next;
         }
 
         function isKnownView(viewName) {
             return availableViewNames().includes(String(viewName || "").trim());
+        }
+
+        function storeNavOrder(order) {
+            localStorage.setItem(NAV_ORDER_STORAGE_KEY, JSON.stringify(sanitizeNavOrder(order)));
+        }
+
+        function loadStoredNavOrder() {
+            const raw = localStorage.getItem(NAV_ORDER_STORAGE_KEY);
+            if (!raw) {
+                return sanitizeNavOrder([]);
+            }
+            try {
+                return sanitizeNavOrder(JSON.parse(raw));
+            } catch (error) {
+                localStorage.removeItem(NAV_ORDER_STORAGE_KEY);
+                return sanitizeNavOrder([]);
+            }
+        }
+
+        function renderMainNav() {
+            const navByView = new Map(NAV_ITEMS.map((item) => [item.view, item]));
+            const order = sanitizeNavOrder(state.navOrder && state.navOrder.length ? state.navOrder : loadStoredNavOrder());
+            state.navOrder = order;
+            storeNavOrder(order);
+            const html = order.map((view) => {
+                const item = navByView.get(view);
+                if (!item) {
+                    return "";
+                }
+                const active = view === state.currentView ? " active" : "";
+                return "<button type=\"button\" data-view=\"" + item.view + "\" class=\"" + active.trim() + "\" draggable=\"true\">" +
+                    "<span class=\"nav-icon\">" + item.icon + "</span><span>" + escapeHTML(item.label) + "</span></button>";
+            }).join("");
+            setInnerHTMLIfChanged(els.mainNav, html);
         }
 
         function storeSelectedView(viewName) {
@@ -585,6 +702,58 @@
                 }
                 switchView(button.dataset.view);
             });
+            els.mainNav.addEventListener("dragstart", (event) => {
+                const button = event.target.closest("button[data-view]");
+                if (!button) {
+                    return;
+                }
+                navDragView = String(button.dataset.view || "").trim();
+                if (!navDragView) {
+                    return;
+                }
+                button.classList.add("dragging");
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", navDragView);
+                }
+            });
+            els.mainNav.addEventListener("dragend", () => {
+                navDragView = "";
+                els.mainNav.querySelectorAll("button.dragging").forEach((button) => button.classList.remove("dragging"));
+            });
+            els.mainNav.addEventListener("dragover", (event) => {
+                const targetButton = event.target.closest("button[data-view]");
+                if (!targetButton || !navDragView || targetButton.dataset.view === navDragView) {
+                    return;
+                }
+                event.preventDefault();
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = "move";
+                }
+            });
+            els.mainNav.addEventListener("drop", (event) => {
+                const targetButton = event.target.closest("button[data-view]");
+                if (!targetButton || !navDragView) {
+                    return;
+                }
+                event.preventDefault();
+                const targetView = String(targetButton.dataset.view || "").trim();
+                if (!targetView || targetView === navDragView) {
+                    return;
+                }
+                const nextOrder = sanitizeNavOrder(state.navOrder);
+                const fromIndex = nextOrder.indexOf(navDragView);
+                const toIndex = nextOrder.indexOf(targetView);
+                if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+                    return;
+                }
+                nextOrder.splice(fromIndex, 1);
+                nextOrder.splice(toIndex, 0, navDragView);
+                state.navOrder = nextOrder;
+                storeNavOrder(nextOrder);
+                renderMainNav();
+                switchView(state.currentView, { persist: false, restoreScroll: false });
+            });
         }
 
         function switchView(viewName, options) {
@@ -596,10 +765,13 @@
                 storeCurrentViewScroll();
             }
             state.currentView = viewName;
+            if (viewName !== "documents") {
+                clearDocumentDropState();
+            }
             if (settings.persist !== false) {
                 storeSelectedView(viewName);
             }
-            document.querySelectorAll(".nav button[data-view]").forEach((button) => {
+            els.mainNav.querySelectorAll("button[data-view]").forEach((button) => {
                 button.classList.toggle("active", button.dataset.view === viewName);
             });
             document.querySelectorAll(".view").forEach((view) => {
@@ -624,6 +796,7 @@
             storeSelectedProjectID(state.selectedProjectID);
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
+            await loadProjectAgentModelConfig();
             await Promise.all([loadTickets(), loadGoals(), loadDocuments()]);
             renderAll();
         }
@@ -657,6 +830,54 @@
             els.accountMenuName.textContent = username;
         }
 
+        async function loadSystemAgentModelConfig() {
+            try {
+                const response = await api("/api/config/agent-model");
+                state.systemAgentModelConfig = normalizeAgentModelConfig(response);
+            } catch (error) {
+                state.systemAgentModelConfig = emptyAgentModelConfig();
+            }
+        }
+
+        async function loadProjectAgentModelConfig() {
+            if (!state.selectedProjectID) {
+                state.projectAgentModelConfig = emptyAgentModelConfig();
+                return;
+            }
+            try {
+                const response = await api("/api/projects/" + state.selectedProjectID + "/agent-model");
+                state.projectAgentModelConfig = normalizeAgentModelConfig(response);
+            } catch (error) {
+                state.projectAgentModelConfig = emptyAgentModelConfig();
+            }
+        }
+
+        async function loadGoalAgentModelConfig() {
+            if (!state.selectedGoalID) {
+                state.goalAgentModelConfig = emptyAgentModelConfig();
+                return;
+            }
+            try {
+                const response = await api("/api/goals/" + state.selectedGoalID + "/agent-model");
+                state.goalAgentModelConfig = normalizeAgentModelConfig(response);
+            } catch (error) {
+                state.goalAgentModelConfig = emptyAgentModelConfig();
+            }
+        }
+
+        async function loadResolvedGoalAgentModelConfig() {
+            if (!state.selectedGoalID) {
+                state.resolvedGoalAgentModelConfig = null;
+                return;
+            }
+            try {
+                const response = await api("/api/goals/" + state.selectedGoalID + "/agent-model/resolved");
+                state.resolvedGoalAgentModelConfig = normalizeAgentModelConfig(response);
+            } catch (error) {
+                state.resolvedGoalAgentModelConfig = null;
+            }
+        }
+
         async function loadProjects() {
             const projects = await api("/api/projects");
             state.projects = Array.isArray(projects) ? projects.map(normalizeProject) : [];
@@ -672,6 +893,7 @@
             storeSelectedProjectID(state.selectedProjectID);
             const project = getCurrentProject();
             state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
+            await loadProjectAgentModelConfig();
         }
 
         async function loadTickets() {
@@ -761,6 +983,8 @@
                 state.goals = [];
                 state.selectedGoalID = null;
                 state.selectedGoalDraft = emptyGoal(state.selectedProjectID);
+                state.goalAgentModelConfig = emptyAgentModelConfig();
+                state.resolvedGoalAgentModelConfig = null;
                 return;
             }
             try {
@@ -801,6 +1025,7 @@
             const current = getCurrentGoal();
             state.selectedGoalDraft = current ? structuredClone(normalizeGoal(current)) : emptyGoal(state.selectedProjectID);
             await loadGoalChatMessages();
+            await Promise.all([loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
         }
 
         async function loadDocuments() {
@@ -845,6 +1070,7 @@
             if (!state.selectedGoalID) {
                 state.goalChatMessages = [];
                 state.goalChatLoadedFor = null;
+                setGoalChatAgentState("idle");
                 return;
             }
             if (state.goalChatLoadedFor === state.selectedGoalID) {
@@ -859,6 +1085,7 @@
                 state.goalChatMessages = [];
             }
             state.goalChatLoadedFor = state.selectedGoalID;
+            setGoalChatAgentState("idle");
         }
 
         async function loadWorkflows() {
@@ -921,7 +1148,7 @@
 
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
+            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
             renderProjectMenu();
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
@@ -999,6 +1226,7 @@
         }
 
         function renderAll() {
+            renderMainNav();
             renderProjectMenu();
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
@@ -1104,6 +1332,326 @@
             document.getElementById("ready-goal-button").disabled = !goal.id;
             document.getElementById("save-goal-refinement-button").disabled = !goal.id;
             document.getElementById("goal-use-last-agent-response").disabled = !goal.id;
+            renderAgentHarnessEditor();
+        }
+
+        function maskSecret(value) {
+            const raw = String(value || "").trim();
+            if (!raw) {
+                return "(inherited/empty)";
+            }
+            if (raw.length <= 4) {
+                return "****";
+            }
+            return "****" + raw.slice(-4);
+        }
+
+        function renderProviderSelect(selectElement, selectedProvider, includeInherit) {
+            if (!selectElement) {
+                return;
+            }
+            const providers = Array.isArray(state.systemAgentModelConfig.providers) ? state.systemAgentModelConfig.providers : [];
+            const options = [];
+            const providerIDs = new Set();
+            if (includeInherit) {
+                options.push(optionHTML("", "(inherit)", !selectedProvider));
+            } else if (!providers.length) {
+                options.push(optionHTML("", "(none)", true));
+            }
+            providers.forEach((provider) => {
+                const id = String(provider.id || "").trim();
+                if (!id) {
+                    return;
+                }
+                providerIDs.add(id);
+                const label = String(provider.label || id);
+                options.push(optionHTML(id, label, id === selectedProvider));
+            });
+            if (selectedProvider && !providerIDs.has(selectedProvider)) {
+                options.push(optionHTML(selectedProvider, selectedProvider + " (custom)", true));
+            }
+            setInnerHTMLIfChanged(selectElement, options.join(""));
+            selectElement.value = selectedProvider || "";
+        }
+
+        function providerByID(providerID) {
+            const providers = Array.isArray(state.systemAgentModelConfig.providers) ? state.systemAgentModelConfig.providers : [];
+            const id = String(providerID || "").trim();
+            return providers.find((provider) => String(provider.id || "").trim() === id) || null;
+        }
+
+        function renderModelSelect(selectElement, providerID, selectedModel, includeInherit) {
+            if (!selectElement) {
+                return;
+            }
+            const provider = providerByID(providerID);
+            const models = provider && Array.isArray(provider.models) ? provider.models : [];
+            const options = [];
+            if (includeInherit) {
+                options.push(optionHTML("", "(inherit)", !selectedModel));
+            }
+            models.forEach((model) => {
+                const value = String(model || "").trim();
+                if (!value) {
+                    return;
+                }
+                options.push(optionHTML(value, value, value === selectedModel));
+            });
+            if (selectedModel && !models.includes(selectedModel)) {
+                options.push(optionHTML(selectedModel, selectedModel + " (custom)", true));
+            } else if (!includeInherit && !selectedModel && provider && provider.default_model) {
+                options.push(optionHTML(provider.default_model, provider.default_model, true));
+            }
+            if (!options.length) {
+                options.push(optionHTML("", "(none)", true));
+            }
+            setInnerHTMLIfChanged(selectElement, options.join(""));
+            selectElement.value = selectedModel || "";
+        }
+
+        function harnessFields(scope) {
+            if (scope === "system") {
+                return {
+                    provider: els.systemAgentProvider,
+                    model: els.systemAgentModel,
+                    url: els.systemAgentURL,
+                    apiKey: els.systemAgentAPIKey,
+                    includeInherit: false,
+                };
+            }
+            if (scope === "project") {
+                return {
+                    provider: els.projectAgentProvider,
+                    model: els.projectAgentModel,
+                    url: els.projectAgentURL,
+                    apiKey: els.projectAgentAPIKey,
+                    includeInherit: true,
+                };
+            }
+            return {
+                provider: els.goalAgentProvider,
+                model: els.goalAgentModel,
+                url: els.goalAgentURL,
+                apiKey: els.goalAgentAPIKey,
+                includeInherit: true,
+            };
+        }
+
+        function applyProviderSelectionDefaults(scope) {
+            const fields = harnessFields(scope);
+            if (!fields.provider) {
+                return;
+            }
+            const providerID = String(fields.provider.value || "").trim();
+            const provider = providerByID(providerID);
+            if (!provider) {
+                return;
+            }
+            if (fields.model && !String(fields.model.value || "").trim() && provider.default_model) {
+                fields.model.value = provider.default_model;
+            }
+            if (fields.url && !String(fields.url.value || "").trim() && provider.base_url) {
+                fields.url.value = provider.base_url;
+            }
+        }
+
+        function applyHarnessRequirements(scope) {
+            const fields = harnessFields(scope);
+            const providerID = fields.provider ? String(fields.provider.value || "").trim() : "";
+            const provider = providerByID(providerID);
+            const inherited = fields.includeInherit && !providerID;
+
+            if (fields.model) {
+                fields.model.disabled = inherited;
+                fields.model.required = !inherited;
+            }
+            if (fields.url) {
+                fields.url.disabled = inherited;
+                fields.url.required = Boolean(provider && provider.requires_url);
+                fields.url.placeholder = inherited
+                    ? "inherits from parent"
+                    : (provider && provider.requires_url ? "required for this provider" : (provider && provider.base_url ? provider.base_url : "optional"));
+            }
+            if (fields.apiKey) {
+                const authType = provider ? String(provider.auth_type || "api_key").toLowerCase() : "api_key";
+                const apiKeyRequired = !inherited && authType === "api_key";
+                fields.apiKey.disabled = inherited || authType === "none";
+                fields.apiKey.required = apiKeyRequired;
+                fields.apiKey.placeholder = inherited
+                    ? "inherits from parent"
+                    : (authType === "none" ? "not required for this provider" : "required for this provider");
+            }
+        }
+
+        function normalizedProviderConfig(provider) {
+            const item = provider || {};
+            const models = Array.isArray(item.models) ? item.models.map((model) => String(model || "").trim()).filter(Boolean) : [];
+            const defaultModel = String(item.default_model || "").trim();
+            if (defaultModel && !models.includes(defaultModel)) {
+                models.unshift(defaultModel);
+            }
+            return {
+                id: String(item.id || "").trim(),
+                label: String(item.label || "").trim(),
+                base_url: String(item.base_url || "").trim(),
+                default_model: defaultModel,
+                auth_type: String(item.auth_type || "api_key").trim() || "api_key",
+                requires_url: Boolean(item.requires_url),
+                api_key: String(item.api_key || "").trim(),
+                models: models,
+            };
+        }
+
+        function providerConfigs() {
+            return (Array.isArray(state.systemAgentModelConfig.providers) ? state.systemAgentModelConfig.providers : [])
+                .map(normalizedProviderConfig)
+                .filter((provider) => provider.id);
+        }
+
+        function renderProviderConfigPanel() {
+            if (!els.providerConfigSelect || !els.providerConfigID) {
+                return;
+            }
+            const providers = providerConfigs();
+            if (!state.selectedProviderConfigID || !providers.some((provider) => provider.id === state.selectedProviderConfigID)) {
+                state.selectedProviderConfigID = providers.length ? providers[0].id : "";
+            }
+            if (!providers.length) {
+                setInnerHTMLIfChanged(els.providerConfigSelect, optionHTML("", "No configurations defined", true));
+                els.providerConfigID.value = "";
+                els.providerConfigLabel.value = "";
+                els.providerConfigModel.value = "";
+                els.providerConfigURL.value = "";
+                els.providerConfigAuthType.value = "api_key";
+                els.providerConfigRequiresURL.value = "false";
+                els.providerConfigAPIKey.value = "";
+                els.providerConfigModels.value = "";
+                document.getElementById("delete-provider-config-button").disabled = true;
+                return;
+            }
+            const selectOptions = providers.map((provider) => {
+                const label = (provider.label || provider.id) + " (" + provider.id + ")";
+                return optionHTML(provider.id, label, provider.id === state.selectedProviderConfigID);
+            }).join("");
+            setInnerHTMLIfChanged(els.providerConfigSelect, selectOptions);
+            els.providerConfigSelect.value = state.selectedProviderConfigID;
+            const selected = providers.find((provider) => provider.id === state.selectedProviderConfigID) || providers[0];
+            els.providerConfigID.value = selected.id;
+            els.providerConfigLabel.value = selected.label;
+            els.providerConfigModel.value = selected.default_model;
+            els.providerConfigURL.value = selected.base_url;
+            els.providerConfigAuthType.value = selected.auth_type || "api_key";
+            els.providerConfigRequiresURL.value = selected.requires_url ? "true" : "false";
+            els.providerConfigAPIKey.value = selected.api_key || "";
+            els.providerConfigModels.value = (selected.models || []).join("\n");
+            document.getElementById("delete-provider-config-button").disabled = !selected.id;
+        }
+
+        function renderAgentHarnessEditor() {
+            const hasProject = Boolean(state.selectedProjectID);
+            const hasGoal = Boolean(state.selectedGoalID);
+
+            const system = normalizeAgentModelConfig(state.systemAgentModelConfig);
+            const project = normalizeAgentModelConfig(state.projectAgentModelConfig);
+            const goal = normalizeAgentModelConfig(state.goalAgentModelConfig);
+            const resolved = state.resolvedGoalAgentModelConfig ? normalizeAgentModelConfig(state.resolvedGoalAgentModelConfig) : null;
+
+            renderProviderSelect(els.systemAgentProvider, system.provider, false);
+            renderProviderSelect(els.projectAgentProvider, project.provider, true);
+            renderProviderSelect(els.goalAgentProvider, goal.provider, true);
+            renderModelSelect(els.systemAgentModel, system.provider, system.model, false);
+            renderModelSelect(els.projectAgentModel, project.provider, project.model, true);
+            renderModelSelect(els.goalAgentModel, goal.provider, goal.model, true);
+
+            if (els.systemAgentModel) {
+                els.systemAgentModel.value = system.model || "";
+            }
+            if (els.systemAgentURL) {
+                els.systemAgentURL.value = system.url || "";
+            }
+            if (els.systemAgentAPIKey) {
+                els.systemAgentAPIKey.value = system.api_key || "";
+            }
+
+            if (els.projectAgentModel) {
+                els.projectAgentModel.disabled = !hasProject;
+            }
+            if (els.projectAgentURL) {
+                els.projectAgentURL.value = project.url || "";
+                els.projectAgentURL.disabled = !hasProject;
+            }
+            if (els.projectAgentAPIKey) {
+                els.projectAgentAPIKey.value = project.api_key || "";
+                els.projectAgentAPIKey.disabled = !hasProject;
+            }
+            if (els.projectAgentProvider) {
+                els.projectAgentProvider.disabled = !hasProject;
+            }
+
+            if (els.goalAgentModel) {
+                els.goalAgentModel.disabled = !hasGoal;
+            }
+            if (els.goalAgentURL) {
+                els.goalAgentURL.value = goal.url || "";
+                els.goalAgentURL.disabled = !hasGoal;
+            }
+            if (els.goalAgentAPIKey) {
+                els.goalAgentAPIKey.value = goal.api_key || "";
+                els.goalAgentAPIKey.disabled = !hasGoal;
+            }
+            if (els.goalAgentProvider) {
+                els.goalAgentProvider.disabled = !hasGoal;
+            }
+
+            applyHarnessRequirements("system");
+            applyHarnessRequirements("project");
+            applyHarnessRequirements("goal");
+
+            if (!hasProject) {
+                if (els.projectAgentProvider) els.projectAgentProvider.disabled = true;
+                if (els.projectAgentModel) els.projectAgentModel.disabled = true;
+                if (els.projectAgentURL) els.projectAgentURL.disabled = true;
+                if (els.projectAgentAPIKey) els.projectAgentAPIKey.disabled = true;
+            }
+            if (!hasGoal) {
+                if (els.goalAgentProvider) els.goalAgentProvider.disabled = true;
+                if (els.goalAgentModel) els.goalAgentModel.disabled = true;
+                if (els.goalAgentURL) els.goalAgentURL.disabled = true;
+                if (els.goalAgentAPIKey) els.goalAgentAPIKey.disabled = true;
+            }
+
+            if (els.resolvedAgentProvider) {
+                els.resolvedAgentProvider.value = resolved ? resolved.provider : "(select a goal)";
+            }
+            if (els.resolvedAgentModel) {
+                els.resolvedAgentModel.value = resolved ? resolved.model : "(select a goal)";
+            }
+            if (els.resolvedAgentURL) {
+                els.resolvedAgentURL.value = resolved ? (resolved.url || "(provider default)") : "(select a goal)";
+            }
+            if (els.resolvedAgentAPIKey) {
+                els.resolvedAgentAPIKey.value = resolved ? maskSecret(resolved.api_key) : "(select a goal)";
+            }
+
+            const saveProjectButton = document.getElementById("save-project-agent-model");
+            const clearProjectButton = document.getElementById("clear-project-agent-model");
+            const saveGoalButton = document.getElementById("save-goal-agent-model");
+            const clearGoalButton = document.getElementById("clear-goal-agent-model");
+            if (saveProjectButton) saveProjectButton.disabled = !hasProject;
+            if (clearProjectButton) clearProjectButton.disabled = !hasProject;
+            if (saveGoalButton) saveGoalButton.disabled = !hasGoal;
+            if (clearGoalButton) clearGoalButton.disabled = !hasGoal;
+
+            if (els.agentHarnessSummary) {
+                if (!hasProject) {
+                    els.agentHarnessSummary.textContent = "Select a project to configure project/goal overrides.";
+                } else if (!hasGoal) {
+                    els.agentHarnessSummary.textContent = "Project override is active. Select a goal to configure or inspect goal-level resolution.";
+                } else {
+                    els.agentHarnessSummary.textContent = "Hierarchy: goal → project → system. Effective model shown below.";
+                }
+            }
+            renderProviderConfigPanel();
         }
 
         function renderGoalDecompositionList() {
@@ -1125,23 +1673,67 @@
             }).join("");
         }
 
+        function renderGoalChatStatus() {
+            if (!els.goalChatStatus) {
+                return;
+            }
+            const isProcessing = state.goalChatAgentState === "processing";
+            els.goalChatStatus.classList.toggle("processing", isProcessing);
+            const label = els.goalChatStatus.querySelector("span:last-child");
+            if (label) {
+                label.textContent = isProcessing ? "processing" : "idle";
+            }
+        }
+
+        function setGoalChatAgentState(nextState) {
+            state.goalChatAgentState = nextState === "processing" ? "processing" : "idle";
+            renderGoalChatStatus();
+        }
+
+        function scheduleGoalChatIdle() {
+            if (goalChatIdleTimer) {
+                clearTimeout(goalChatIdleTimer);
+            }
+            goalChatIdleTimer = setTimeout(() => {
+                setGoalChatAgentState("idle");
+                goalChatIdleTimer = null;
+            }, 1200);
+        }
+
         function renderGoalChat() {
             if (!els.goalChatLog) {
                 return;
             }
+            renderGoalChatStatus();
             if (!Array.isArray(state.goalChatMessages) || !state.goalChatMessages.length) {
                 els.goalChatLog.innerHTML = "<div class=\"empty\">No messages yet.</div>";
                 return;
             }
-            els.goalChatLog.innerHTML = state.goalChatMessages.map((message) => {
+            let latestAgentIndex = -1;
+            for (let index = state.goalChatMessages.length - 1; index >= 0; index -= 1) {
+                const maybeAuthor = String((state.goalChatMessages[index] && state.goalChatMessages[index].author) || "").toLowerCase();
+                if (maybeAuthor === "agent") {
+                    latestAgentIndex = index;
+                    break;
+                }
+            }
+            const agentStateClass = state.goalChatAgentState === "processing" ? "agent-active" : "agent-stopped";
+            els.goalChatLog.innerHTML = state.goalChatMessages.map((message, index) => {
                 const author = String(message.author || "system").toLowerCase();
                 let className = "history-item";
+                let indicatorHTML = "";
                 if (author === "agent") {
                     className += " history-item-agent";
+                    if (index === latestAgentIndex) {
+                        className += " history-item-latest-agent " + agentStateClass;
+                        indicatorHTML = "<span class=\"agent-live-dot\" aria-label=\"" + (state.goalChatAgentState === "processing" ? "agent active" : "agent stopped") + "\"></span>";
+                    }
+                } else if (author === "user") {
+                    className += " history-item-user";
                 } else if (author === "system") {
                     className += " history-item-system";
                 }
-                return "<div class=\"" + className + "\"><strong>" + escapeHTML(message.author || "system") + "</strong><div class=\"meta\">" +
+                return "<div class=\"" + className + "\">" + indicatorHTML + "<strong>" + escapeHTML(message.author || "system") + "</strong><div class=\"meta\">" +
                     escapeHTML(message.text || "") + "</div></div>";
             }).join("");
             els.goalChatLog.scrollTop = els.goalChatLog.scrollHeight;
@@ -1513,6 +2105,67 @@
             )).join("");
         }
 
+        function isTextUploadableFile(file) {
+            if (!file) {
+                return false;
+            }
+            const contentType = String(file.type || "").toLowerCase();
+            if (contentType.startsWith("text/")) {
+                return true;
+            }
+            const name = String(file.name || "").toLowerCase();
+            return /\.(txt|md|markdown|json|ya?ml|csv|tsv|xml|html?|css|js|jsx|ts|tsx|go|py|java|rb|php|sh|sql|log)$/.test(name);
+        }
+
+        function setDocumentDropState(nextState) {
+            const view = els.documentsView;
+            if (!view) {
+                return;
+            }
+            view.classList.remove("document-drop-active", "document-drop-uploading", "document-drop-success");
+            if (nextState) {
+                view.classList.add("document-drop-" + nextState);
+            }
+        }
+
+        function clearDocumentDropState() {
+            setDocumentDropState("");
+            documentDropDepth = 0;
+            if (documentDropSuccessTimer) {
+                clearTimeout(documentDropSuccessTimer);
+                documentDropSuccessTimer = null;
+            }
+        }
+
+        async function uploadFileToCurrentDocument(selectedFile, overrideName) {
+            const draft = state.selectedDocumentDraft || emptyDocument(state.selectedProjectID);
+            if (!draft.id) {
+                setNotice("Save the document before uploading files.", true);
+                return false;
+            }
+            if (!selectedFile) {
+                setNotice("Choose a file first.", true);
+                return false;
+            }
+            if (!isTextUploadableFile(selectedFile)) {
+                setNotice("Only text files can be uploaded here.", true);
+                return false;
+            }
+            const buffer = await selectedFile.arrayBuffer();
+            const payload = {
+                file_name: String(overrideName || "").trim() || selectedFile.name,
+                content_type: selectedFile.type || "text/plain",
+                content: arrayBufferToBase64(buffer),
+            };
+            await api("/api/documents/" + draft.id + "/files", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            await loadDocumentFiles(draft.id);
+            renderEditors();
+            return true;
+        }
+
         function renderRoleEditor() {
             const role = state.selectedRoleDraft || emptyRole();
             document.getElementById("role-editor-title").textContent = role.id ? "Role: " + role.title : "Role editor";
@@ -1577,13 +2230,16 @@
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
                 populateTicketTypeAndStageSelects();
-                Promise.all([loadTickets(), loadGoals(), loadDocuments()]).then(renderAll).catch((error) => setNotice(error.message, true));
+                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadDocuments()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("new-project-button").addEventListener("click", () => {
                 state.selectedProjectID = null;
                 storeSelectedProjectID(state.selectedProjectID);
                 state.selectedProjectDraft = emptyProject();
+                state.projectAgentModelConfig = emptyAgentModelConfig();
+                state.goalAgentModelConfig = emptyAgentModelConfig();
+                state.resolvedGoalAgentModelConfig = null;
                 renderEditors();
             });
 
@@ -1640,6 +2296,9 @@
                     state.selectedProjectID = null;
                     storeSelectedProjectID(state.selectedProjectID);
                     state.selectedProjectDraft = emptyProject();
+                    state.projectAgentModelConfig = emptyAgentModelConfig();
+                    state.goalAgentModelConfig = emptyAgentModelConfig();
+                    state.resolvedGoalAgentModelConfig = null;
                     await loadProjects();
                     await Promise.all([loadTickets(), loadGoals(), loadDocuments()]);
                     renderAll();
@@ -1657,6 +2316,11 @@
             const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
             const socket = new WebSocket(scheme + "//" + window.location.host + "/api/chat/ws");
             state.goalChatSocket = socket;
+            socket.addEventListener("open", () => {
+                if (state.goalChatAgentState !== "processing") {
+                    setGoalChatAgentState("idle");
+                }
+            });
             socket.addEventListener("message", (event) => {
                 try {
                     const payload = JSON.parse(event.data);
@@ -1672,6 +2336,7 @@
                                 body: JSON.stringify({ author: "agent", text: text }),
                             }).catch(() => {});
                         }
+                        scheduleGoalChatIdle();
                         renderGoalChat();
                         return;
                     }
@@ -1684,6 +2349,7 @@
                                 body: JSON.stringify({ author: "system", text: text }),
                             }).catch(() => {});
                         }
+                        setGoalChatAgentState("idle");
                         renderGoalChat();
                     }
                 } catch (error) {
@@ -1694,6 +2360,10 @@
                 if (state.goalChatSocket === socket) {
                     state.goalChatSocket = null;
                 }
+                setGoalChatAgentState("idle");
+            });
+            socket.addEventListener("error", () => {
+                setGoalChatAgentState("idle");
             });
         }
 
@@ -1702,6 +2372,11 @@
             if (!messageText) {
                 return;
             }
+            if (goalChatIdleTimer) {
+                clearTimeout(goalChatIdleTimer);
+                goalChatIdleTimer = null;
+            }
+            setGoalChatAgentState("processing");
             if (window.__site2MockFetch) {
                 state.goalChatMessages.push({ author: "user", text: messageText });
                 if (state.selectedGoalID) {
@@ -1711,6 +2386,7 @@
                     }).catch(() => {});
                 }
                 renderGoalChat();
+                scheduleGoalChatIdle();
                 return;
             }
             ensureGoalChatConnected();
@@ -1750,6 +2426,32 @@
         }
 
         function bindGoalsHandlers() {
+            function buildAgentModelPayload(scope) {
+                if (scope === "system") {
+                    return {
+                        provider: String(els.systemAgentProvider ? els.systemAgentProvider.value : "").trim(),
+                        model: String(els.systemAgentModel ? els.systemAgentModel.value : "").trim(),
+                        url: String(els.systemAgentURL ? els.systemAgentURL.value : "").trim(),
+                        api_key: String(els.systemAgentAPIKey ? els.systemAgentAPIKey.value : "").trim(),
+                        providers: Array.isArray(state.systemAgentModelConfig.providers) ? state.systemAgentModelConfig.providers : [],
+                    };
+                }
+                if (scope === "project") {
+                    return {
+                        provider: String(els.projectAgentProvider ? els.projectAgentProvider.value : "").trim(),
+                        model: String(els.projectAgentModel ? els.projectAgentModel.value : "").trim(),
+                        url: String(els.projectAgentURL ? els.projectAgentURL.value : "").trim(),
+                        api_key: String(els.projectAgentAPIKey ? els.projectAgentAPIKey.value : "").trim(),
+                    };
+                }
+                return {
+                    provider: String(els.goalAgentProvider ? els.goalAgentProvider.value : "").trim(),
+                    model: String(els.goalAgentModel ? els.goalAgentModel.value : "").trim(),
+                    url: String(els.goalAgentURL ? els.goalAgentURL.value : "").trim(),
+                    api_key: String(els.goalAgentAPIKey ? els.goalAgentAPIKey.value : "").trim(),
+                };
+            }
+
             els.goalList.addEventListener("click", (event) => {
                 const card = event.target.closest("[data-goal-id]");
                 if (!card) {
@@ -1837,9 +2539,235 @@
                 });
             }
 
+            if (els.systemAgentProvider) {
+                els.systemAgentProvider.addEventListener("change", () => {
+                    applyProviderSelectionDefaults("system");
+                    renderAgentHarnessEditor();
+                });
+            }
+            if (els.projectAgentProvider) {
+                els.projectAgentProvider.addEventListener("change", () => {
+                    applyProviderSelectionDefaults("project");
+                    renderAgentHarnessEditor();
+                });
+            }
+            if (els.goalAgentProvider) {
+                els.goalAgentProvider.addEventListener("change", () => {
+                    applyProviderSelectionDefaults("goal");
+                    renderAgentHarnessEditor();
+                });
+            }
+            if (els.providerConfigSelect) {
+                els.providerConfigSelect.addEventListener("change", () => {
+                    state.selectedProviderConfigID = String(els.providerConfigSelect.value || "").trim();
+                    renderProviderConfigPanel();
+                });
+            }
+            const newProviderConfigButton = document.getElementById("new-provider-config-button");
+            if (newProviderConfigButton) {
+                newProviderConfigButton.addEventListener("click", () => {
+                    state.selectedProviderConfigID = "";
+                    if (els.providerConfigID) els.providerConfigID.value = "";
+                    if (els.providerConfigLabel) els.providerConfigLabel.value = "";
+                    if (els.providerConfigModel) els.providerConfigModel.value = "";
+                    if (els.providerConfigURL) els.providerConfigURL.value = "";
+                    if (els.providerConfigAuthType) els.providerConfigAuthType.value = "api_key";
+                    if (els.providerConfigRequiresURL) els.providerConfigRequiresURL.value = "false";
+                    if (els.providerConfigAPIKey) els.providerConfigAPIKey.value = "";
+                    if (els.providerConfigModels) els.providerConfigModels.value = "";
+                });
+            }
+            if (els.providerConfigForm) {
+                els.providerConfigForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const id = String(els.providerConfigID ? els.providerConfigID.value : "").trim();
+                    if (!id) {
+                        setNotice("Configuration name is required.", true);
+                        return;
+                    }
+                    const draft = normalizedProviderConfig({
+                        id: id,
+                        label: String(els.providerConfigLabel ? els.providerConfigLabel.value : "").trim(),
+                        default_model: String(els.providerConfigModel ? els.providerConfigModel.value : "").trim(),
+                        base_url: String(els.providerConfigURL ? els.providerConfigURL.value : "").trim(),
+                        auth_type: String(els.providerConfigAuthType ? els.providerConfigAuthType.value : "api_key").trim() || "api_key",
+                        requires_url: String(els.providerConfigRequiresURL ? els.providerConfigRequiresURL.value : "false") === "true",
+                        api_key: String(els.providerConfigAPIKey ? els.providerConfigAPIKey.value : "").trim(),
+                        models: String(els.providerConfigModels ? els.providerConfigModels.value : "")
+                            .split(/\r?\n/)
+                            .map((line) => line.trim())
+                            .filter(Boolean),
+                    });
+                    const providers = providerConfigs().filter((provider) => provider.id !== draft.id).concat([draft]);
+                    try {
+                        await api("/api/config/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify({
+                                provider: String(els.systemAgentProvider ? els.systemAgentProvider.value : "").trim(),
+                                model: "",
+                                url: "",
+                                api_key: "",
+                                providers: providers,
+                            }),
+                        });
+                        state.selectedProviderConfigID = draft.id;
+                        await Promise.all([loadSystemAgentModelConfig(), loadProjectAgentModelConfig(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        renderAll();
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+            const deleteProviderConfigButton = document.getElementById("delete-provider-config-button");
+            if (deleteProviderConfigButton) {
+                deleteProviderConfigButton.addEventListener("click", async () => {
+                    const targetID = String(state.selectedProviderConfigID || "").trim();
+                    if (!targetID) {
+                        return;
+                    }
+                    const providers = providerConfigs().filter((provider) => provider.id !== targetID);
+                    if (!providers.length) {
+                        setNotice("At least one configuration is required.", true);
+                        return;
+                    }
+                    try {
+                        const systemProvider = String(els.systemAgentProvider ? els.systemAgentProvider.value : "").trim();
+                        const nextSystemProvider = systemProvider === targetID ? providers[0].id : systemProvider;
+                        await api("/api/config/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify({
+                                provider: nextSystemProvider,
+                                model: "",
+                                url: "",
+                                api_key: "",
+                                providers: providers,
+                            }),
+                        });
+                        if (state.selectedProjectID && String(els.projectAgentProvider ? els.projectAgentProvider.value : "").trim() === targetID) {
+                            await api("/api/projects/" + state.selectedProjectID + "/agent-model", {
+                                method: "PUT",
+                                body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
+                            });
+                        }
+                        if (state.selectedGoalID && String(els.goalAgentProvider ? els.goalAgentProvider.value : "").trim() === targetID) {
+                            await api("/api/goals/" + state.selectedGoalID + "/agent-model", {
+                                method: "PUT",
+                                body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
+                            });
+                        }
+                        state.selectedProviderConfigID = providers[0].id;
+                        await Promise.all([loadSystemAgentModelConfig(), loadProjectAgentModelConfig(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig(), loadProjects(), loadGoals()]);
+                        renderAll();
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const saveSystemAgentModelButton = document.getElementById("save-system-agent-model");
+            if (saveSystemAgentModelButton) {
+                saveSystemAgentModelButton.addEventListener("click", async () => {
+                    try {
+                        await api("/api/config/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify(buildAgentModelPayload("system")),
+                        });
+                        await Promise.all([loadSystemAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        renderAll();
+                        setNotice("System agent model configuration saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const saveProjectAgentModelButton = document.getElementById("save-project-agent-model");
+            if (saveProjectAgentModelButton) {
+                saveProjectAgentModelButton.addEventListener("click", async () => {
+                    if (!state.selectedProjectID) {
+                        setNotice("Select a project first.", true);
+                        return;
+                    }
+                    try {
+                        await api("/api/projects/" + state.selectedProjectID + "/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify(buildAgentModelPayload("project")),
+                        });
+                        await Promise.all([loadProjects(), loadProjectAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        renderAll();
+                        setNotice("Project agent model override saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const clearProjectAgentModelButton = document.getElementById("clear-project-agent-model");
+            if (clearProjectAgentModelButton) {
+                clearProjectAgentModelButton.addEventListener("click", async () => {
+                    if (!state.selectedProjectID) {
+                        return;
+                    }
+                    try {
+                        await api("/api/projects/" + state.selectedProjectID + "/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
+                        });
+                        await Promise.all([loadProjects(), loadProjectAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        renderAll();
+                        setNotice("Project agent model override cleared.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const saveGoalAgentModelButton = document.getElementById("save-goal-agent-model");
+            if (saveGoalAgentModelButton) {
+                saveGoalAgentModelButton.addEventListener("click", async () => {
+                    if (!state.selectedGoalID) {
+                        setNotice("Select a goal first.", true);
+                        return;
+                    }
+                    try {
+                        await api("/api/goals/" + state.selectedGoalID + "/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify(buildAgentModelPayload("goal")),
+                        });
+                        await Promise.all([loadGoals(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        renderAll();
+                        setNotice("Goal agent model override saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const clearGoalAgentModelButton = document.getElementById("clear-goal-agent-model");
+            if (clearGoalAgentModelButton) {
+                clearGoalAgentModelButton.addEventListener("click", async () => {
+                    if (!state.selectedGoalID) {
+                        return;
+                    }
+                    try {
+                        await api("/api/goals/" + state.selectedGoalID + "/agent-model", {
+                            method: "PUT",
+                            body: JSON.stringify({ provider: "", model: "", url: "", api_key: "" }),
+                        });
+                        await Promise.all([loadGoals(), loadGoalAgentModelConfig(), loadResolvedGoalAgentModelConfig()]);
+                        renderAll();
+                        setNotice("Goal agent model override cleared.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
             document.getElementById("new-goal-button").addEventListener("click", () => {
                 state.selectedGoalID = null;
                 state.selectedGoalDraft = emptyGoal(state.selectedProjectID);
+                state.goalAgentModelConfig = emptyAgentModelConfig();
+                state.resolvedGoalAgentModelConfig = null;
                 renderEditors();
             });
 
@@ -2077,37 +3005,99 @@
             });
 
             document.getElementById("upload-document-file-button").addEventListener("click", async () => {
-                const draft = state.selectedDocumentDraft || emptyDocument(state.selectedProjectID);
-                if (!draft.id) {
-                    setNotice("Save the document before uploading files.", true);
-                    return;
-                }
                 const fileInput = els.documentUploadFile;
                 const selectedFile = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-                if (!selectedFile) {
-                    setNotice("Choose a file first.", true);
-                    return;
-                }
                 try {
-                    const buffer = await selectedFile.arrayBuffer();
-                    const payload = {
-                        file_name: (els.documentUploadName.value || "").trim() || selectedFile.name,
-                        content_type: selectedFile.type || "application/octet-stream",
-                        content: arrayBufferToBase64(buffer),
-                    };
-                    await api("/api/documents/" + draft.id + "/files", {
-                        method: "POST",
-                        body: JSON.stringify(payload),
-                    });
+                    const uploaded = await uploadFileToCurrentDocument(selectedFile, els.documentUploadName.value || "");
+                    if (!uploaded) {
+                        return;
+                    }
                     fileInput.value = "";
                     els.documentUploadName.value = "";
-                    await loadDocumentFiles(draft.id);
-                    renderEditors();
                     setNotice("File uploaded.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }
             });
+
+            const hasFilesInEvent = (event) => {
+                const types = event && event.dataTransfer && event.dataTransfer.types ? Array.from(event.dataTransfer.types) : [];
+                return types.includes("Files");
+            };
+
+            const withDocumentsDropGuard = (event) => {
+                if (state.currentView !== "documents" || !hasFilesInEvent(event)) {
+                    return false;
+                }
+                event.preventDefault();
+                return true;
+            };
+
+            if (els.documentsView) {
+                els.documentsView.addEventListener("dragenter", (event) => {
+                    if (!withDocumentsDropGuard(event)) {
+                        return;
+                    }
+                    documentDropDepth += 1;
+                    if (!els.documentsView.classList.contains("document-drop-uploading")) {
+                        setDocumentDropState("active");
+                    }
+                });
+
+                els.documentsView.addEventListener("dragover", (event) => {
+                    if (!withDocumentsDropGuard(event)) {
+                        return;
+                    }
+                    if (event.dataTransfer) {
+                        event.dataTransfer.dropEffect = "copy";
+                    }
+                });
+
+                els.documentsView.addEventListener("dragleave", (event) => {
+                    if (!withDocumentsDropGuard(event)) {
+                        return;
+                    }
+                    documentDropDepth = Math.max(0, documentDropDepth - 1);
+                    if (!documentDropDepth && !els.documentsView.classList.contains("document-drop-uploading")) {
+                        setDocumentDropState("");
+                    }
+                });
+
+                els.documentsView.addEventListener("drop", async (event) => {
+                    if (!withDocumentsDropGuard(event)) {
+                        return;
+                    }
+                    documentDropDepth = 0;
+                    const droppedFiles = event.dataTransfer && event.dataTransfer.files ? Array.from(event.dataTransfer.files) : [];
+                    const selectedFile = droppedFiles.find((file) => isTextUploadableFile(file));
+                    if (!selectedFile) {
+                        clearDocumentDropState();
+                        setNotice("Drop a text file to upload.", true);
+                        return;
+                    }
+                    setDocumentDropState("uploading");
+                    try {
+                        const uploaded = await uploadFileToCurrentDocument(selectedFile, "");
+                        if (!uploaded) {
+                            clearDocumentDropState();
+                            return;
+                        }
+                        setDocumentDropState("success");
+                        if (documentDropSuccessTimer) {
+                            clearTimeout(documentDropSuccessTimer);
+                        }
+                        documentDropSuccessTimer = setTimeout(() => {
+                            if (state.currentView === "documents") {
+                                setDocumentDropState("");
+                            }
+                        }, 520);
+                        setNotice("File uploaded.");
+                    } catch (error) {
+                        clearDocumentDropState();
+                        setNotice(error.message, true);
+                    }
+                });
+            }
 
             els.documentFilesList.addEventListener("click", async (event) => {
                 const downloadButton = event.target.closest("[data-document-file-download]");
@@ -2619,6 +3609,9 @@
                     state.selectedProjectID = null;
                     storeSelectedProjectID(state.selectedProjectID);
                     state.selectedProjectDraft = emptyProject();
+                    state.projectAgentModelConfig = emptyAgentModelConfig();
+                    state.goalAgentModelConfig = emptyAgentModelConfig();
+                    state.resolvedGoalAgentModelConfig = null;
                     switchView("projects");
                     renderAll();
                 }
@@ -3432,6 +4425,8 @@
             });
         }
 
+        state.navOrder = loadStoredNavOrder();
+        renderMainNav();
         bindViewNavigation();
         bindProjectHandlers();
         bindGoalsHandlers();

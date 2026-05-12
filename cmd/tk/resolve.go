@@ -8,26 +8,48 @@ import (
 	"fmt"
 	"os"
 	osuser "os/user"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
 )
 
+type ticketJSONSettings struct {
+	Path      string
+	URL       string
+	Username  string
+	ProjectID string
+}
+
 const defaultTicketURL = "https://ticket.localhost"
+
+var localModeWarningOnce sync.Once
 
 func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
+	projectID := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
+	if projectID == "" {
+		if fileSettings, settingsErr := loadNearestTicketJSONSettings(); settingsErr != nil {
+			return config.Config{}, nil, store.Project{}, settingsErr
+		} else if strings.TrimSpace(fileSettings.ProjectID) != "" {
+			projectID = strings.TrimSpace(fileSettings.ProjectID)
+		}
+	}
+	if projectID != "" {
+		cfg.ProjectID = projectID
+	}
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
 
-	projectID := strings.TrimSpace(cfg.ProjectID)
+	projectID = strings.TrimSpace(cfg.ProjectID)
 	if projectID == "" {
 		projectID = "1"
 	}
@@ -61,62 +83,215 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
-	if location == "" && !isTestBinary() {
-		location = defaultTicketURL
-	}
-	if isTestBinary() {
-		if location == "" {
-			location = strings.TrimSpace(cfg.Location)
-		}
-		if location == "" {
-			if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.Remote)); ok {
-				location = strings.TrimSpace(remote.URL)
-			}
-		}
-		if location == "" {
-			if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.DefaultRemote)); ok {
-				location = strings.TrimSpace(remote.URL)
-			}
-		}
-		if username == "" {
-			username = strings.TrimSpace(cfg.Username)
-		}
-		if password == "" {
-			password = strings.TrimSpace(cfg.Token)
-		}
-		// Keep tests aligned with runtime server-first behavior: if a legacy
-		// config stores a local DB path as a remote URL, fall back to the
-		// default server URL so credential hints remain consistent.
-		if location != "" {
-			if resolvedLegacy, resolveErr := config.ResolveLocation(location); resolveErr == nil && strings.TrimSpace(resolvedLegacy.ServerURL) == "" {
-				location = defaultTicketURL
-			}
-		}
-	}
-	if location == "" {
-		if isTestBinary() {
-			return libticket.NewLocal(cfg), nil
-		}
-		return nil, errors.New("missing required environment variable: TICKET_URL")
-	}
-	if username == "" && (!isTestBinary() || location == defaultTicketURL) {
-		return nil, errors.New("missing required environment variable: TICKET_USERNAME")
-	}
-	if password == "" && (!isTestBinary() || location == defaultTicketURL) {
-		return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
-	}
-	resolved, err := config.ResolveLocation(location)
+	projectID := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
+
+	fileSettings, err := loadNearestTicketJSONSettings()
 	if err != nil {
 		return nil, err
 	}
-	effectiveCfg := cfg
-	if resolved.ServerURL == "" {
-		return nil, errors.New("ticket requires a running server; set TICKET_URL")
+	if location == "" {
+		location = strings.TrimSpace(fileSettings.URL)
 	}
-	effectiveCfg.Location = resolved.ServerURL
-	effectiveCfg.Username = username
-	effectiveCfg.Token = password
-	return libticket.NewHTTP(effectiveCfg), nil
+	if username == "" {
+		username = strings.TrimSpace(fileSettings.Username)
+	}
+	if projectID == "" {
+		projectID = strings.TrimSpace(fileSettings.ProjectID)
+	}
+
+	remoteHintProvided := location != "" || username != "" || password != ""
+	if remoteHintProvided {
+		if location == "" {
+			return nil, errors.New("missing required environment variable: TICKET_URL")
+		}
+		if username == "" {
+			return nil, errors.New("missing required environment variable: TICKET_USERNAME")
+		}
+		if password == "" {
+			return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
+		}
+		resolved, resolveErr := config.ResolveLocation(location)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if strings.TrimSpace(resolved.ServerURL) == "" {
+			return nil, errors.New("ticket requires a running server; set TICKET_URL")
+		}
+		effectiveCfg := cfg
+		effectiveCfg.Location = resolved.ServerURL
+		effectiveCfg.Username = username
+		effectiveCfg.Token = password
+		if projectID != "" {
+			effectiveCfg.ProjectID = projectID
+		}
+		return libticket.NewHTTP(effectiveCfg), nil
+	}
+
+	// Compatibility fallback for explicit remote config.
+	location = strings.TrimSpace(cfg.Location)
+	if location == "" {
+		if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.Remote)); ok {
+			location = strings.TrimSpace(remote.URL)
+		}
+	}
+	if location == "" {
+		if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.DefaultRemote)); ok {
+			location = strings.TrimSpace(remote.URL)
+		}
+	}
+	if location != "" {
+		resolvedCfgLocation, resolveErr := config.ResolveLocation(location)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if resolvedCfgLocation.Mode == config.ModeRemote {
+			effectiveCfg := cfg
+			effectiveCfg.Location = resolvedCfgLocation.ServerURL
+			if projectID != "" {
+				effectiveCfg.ProjectID = projectID
+			}
+			return libticket.NewHTTP(effectiveCfg), nil
+		}
+		if strings.TrimSpace(resolvedCfgLocation.DBPath) != "" {
+			localCfg := cfg
+			localCfg.Location = resolvedCfgLocation.DBPath
+			warnLocalMode(resolvedCfgLocation.DBPath)
+			return libticket.NewLocal(localCfg), nil
+		}
+	}
+
+	localPath, err := config.LocalDBPath()
+	if err != nil {
+		return nil, err
+	}
+	if config.HasLocationOverride() {
+		if resolvedOverride, resolveErr := config.ResolveURL(); resolveErr == nil && resolvedOverride.Mode == config.ModeLocal && strings.TrimSpace(resolvedOverride.DBPath) != "" {
+			localPath = strings.TrimSpace(resolvedOverride.DBPath)
+		}
+	}
+	if _, statErr := os.Stat(localPath); statErr == nil {
+		localCfg := cfg
+		localCfg.Location = localPath
+		if projectID != "" {
+			localCfg.ProjectID = projectID
+		}
+		warnLocalMode(localPath)
+		return libticket.NewLocal(localCfg), nil
+	}
+
+	localCfg := cfg
+	localCfg.Location = localPath
+	if projectID != "" {
+		localCfg.ProjectID = projectID
+	}
+	return libticket.NewLocal(localCfg), nil
+}
+
+func hasCompleteRemoteRuntimeConfig() (bool, error) {
+	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
+	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
+	if location != "" && username != "" && password != "" {
+		return true, nil
+	}
+	fileSettings, err := loadNearestTicketJSONSettings()
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(location) == "" {
+		location = strings.TrimSpace(fileSettings.URL)
+	}
+	if strings.TrimSpace(username) == "" {
+		username = strings.TrimSpace(fileSettings.Username)
+	}
+	return strings.TrimSpace(location) != "" && strings.TrimSpace(username) != "" && strings.TrimSpace(password) != "", nil
+}
+
+func warnLocalMode(dbPath string) {
+	localModeWarningOnce.Do(func() {
+		fmt.Fprintf(os.Stderr, "Warning: you are in local-mode under %s\n", dbPath)
+	})
+}
+
+func loadNearestTicketJSONSettings() (ticketJSONSettings, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ticketJSONSettings{}, err
+	}
+	path, ok, err := findTicketJSONPath(cwd)
+	if err != nil {
+		return ticketJSONSettings{}, err
+	}
+	if !ok {
+		return ticketJSONSettings{}, nil
+	}
+	return parseTicketJSON(path)
+}
+
+func findTicketJSONPath(startDir string) (path string, ok bool, err error) {
+	startDir = strings.TrimSpace(startDir)
+	if startDir == "" {
+		return "", false, nil
+	}
+	stopDir := ""
+	if gitRoot, ok := config.FindGitRoot(startDir); ok {
+		stopDir = gitRoot
+	}
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, ".ticket.json")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, true, nil
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", false, err
+		}
+		if stopDir != "" && filepath.Clean(stopDir) == filepath.Clean(dir) {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false, nil
+}
+
+func parseTicketJSON(path string) (ticketJSONSettings, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is discovered from local ancestor directories.
+	if err != nil {
+		return ticketJSONSettings{}, err
+	}
+	raw := map[string]any{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return ticketJSONSettings{}, fmt.Errorf("%s is not valid JSON: %w", path, err)
+	}
+	for _, key := range []string{"TICKET_PASSWORD", "ticket_password", "password", "token"} {
+		if value, ok := raw[key]; ok && strings.TrimSpace(fmt.Sprint(value)) != "" {
+			return ticketJSONSettings{}, fmt.Errorf("%s must not contain TICKET_PASSWORD; use environment variable TICKET_PASSWORD instead", path)
+		}
+	}
+	settings := ticketJSONSettings{
+		Path:      path,
+		URL:       firstNonEmpty(raw, "TICKET_URL", "ticket_url", "url"),
+		Username:  firstNonEmpty(raw, "TICKET_USERNAME", "ticket_username", "username"),
+		ProjectID: firstNonEmpty(raw, "TICKET_PROJECT", "ticket_project", "project", "project_id"),
+	}
+	return settings, nil
+}
+
+func firstNonEmpty(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := values[key]
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(fmt.Sprint(value))
+		if trimmed != "" && trimmed != "<nil>" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (username, password string, err error) {
@@ -157,6 +332,13 @@ func fallbackCommandUsername() string {
 func extractDBOverride(args []string) (out []string, override string, err error) {
 	if len(args) == 0 {
 		return args, "", nil
+	}
+	if len(args) > 0 {
+		switch args[0] {
+		case "add", "create", "new", "update":
+			// Ticket commands support -f for batch file input.
+			return args, "", nil
+		}
 	}
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-f" {

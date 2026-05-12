@@ -102,6 +102,8 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"dep",
 		"label",
 		"time",
+		"goal",
+		"document",
 		"config",
 		"init",
 		"server",
@@ -139,6 +141,8 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  label",
 		"  time",
 		"  story",
+		"  goal",
+		"  document",
 		"  decision",
 		"  doctor",
 		"  role",
@@ -928,6 +932,30 @@ func TestExtractDBOverride(t *testing.T) {
 	}
 	if got := strings.Join(args, " "); got != "status -nocolor" {
 		t.Fatalf("extractDBOverride() args = %q", got)
+	}
+}
+
+func TestExtractDBOverridePreservesCreateFileFlag(t *testing.T) {
+	args, override, err := extractDBOverride([]string{"new", "-f", "tickets.txt"})
+	if err != nil {
+		t.Fatalf("extractDBOverride() error = %v", err)
+	}
+	if override != "" {
+		t.Fatalf("extractDBOverride() override = %q, want empty", override)
+	}
+	if got := strings.Join(args, " "); got != "new -f tickets.txt" {
+		t.Fatalf("extractDBOverride() args = %q", got)
+	}
+
+	args, override, err = extractDBOverride([]string{"update", "-f", "tickets.txt"})
+	if err != nil {
+		t.Fatalf("extractDBOverride(update) error = %v", err)
+	}
+	if override != "" {
+		t.Fatalf("extractDBOverride(update) override = %q, want empty", override)
+	}
+	if got := strings.Join(args, " "); got != "update -f tickets.txt" {
+		t.Fatalf("extractDBOverride(update) args = %q", got)
 	}
 }
 
@@ -2767,6 +2795,368 @@ func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
 	}
 }
 
+func TestRunTicketCreateFromFileCreatesMultipleTickets(t *testing.T) {
+	setupLocalCLI(t)
+	content := strings.Join([]string{
+		"# API bug in login flow",
+		"type: bug",
+		"label: api, urgent",
+		"",
+		"Login fails with a 500 in production.",
+		"Investigate token refresh handling.",
+		"",
+		"# Follow-up docs task",
+		"label: docs",
+		"",
+		"Document the new login behavior.",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_ = captureStdout(t, func() {
+		if err := run([]string{"new", "-f", filePath, "-commit"}); err != nil {
+			t.Fatalf("new -f error = %v", err)
+		}
+	})
+
+	svc := localCLIService(t)
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	tickets, err := svc.ListTickets(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if len(tickets) != 2 {
+		t.Fatalf("ticket count = %d, want 2", len(tickets))
+	}
+
+	byTitle := make(map[string]store.Ticket, len(tickets))
+	for _, ticket := range tickets {
+		byTitle[ticket.Title] = ticket
+	}
+
+	bug, ok := byTitle["API bug in login flow"]
+	if !ok {
+		t.Fatalf("missing ticket %q", "API bug in login flow")
+	}
+	if bug.Type != "bug" {
+		t.Fatalf("bug ticket type = %q, want bug", bug.Type)
+	}
+	if strings.Contains(strings.ToLower(bug.Description), "label:") || strings.Contains(strings.ToLower(bug.Description), "type:") {
+		t.Fatalf("bug description still includes directives:\n%s", bug.Description)
+	}
+	bugLabels, err := svc.ListTicketLabels(context.Background(), bug.ID)
+	if err != nil {
+		t.Fatalf("ListTicketLabels(%s) error = %v", bug.ID, err)
+	}
+	gotBugLabels := map[string]bool{}
+	for _, label := range bugLabels {
+		gotBugLabels[strings.ToLower(label.Name)] = true
+	}
+	for _, want := range []string{"api", "urgent"} {
+		if !gotBugLabels[want] {
+			t.Fatalf("bug labels missing %q: %#v", want, gotBugLabels)
+		}
+	}
+
+	task, ok := byTitle["Follow-up docs task"]
+	if !ok {
+		t.Fatalf("missing ticket %q", "Follow-up docs task")
+	}
+	if task.Type != "task" {
+		t.Fatalf("task ticket type = %q, want task", task.Type)
+	}
+	taskLabels, err := svc.ListTicketLabels(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("ListTicketLabels(%s) error = %v", task.ID, err)
+	}
+	gotTaskLabels := map[string]bool{}
+	for _, label := range taskLabels {
+		gotTaskLabels[strings.ToLower(label.Name)] = true
+	}
+	if !gotTaskLabels["docs"] {
+		t.Fatalf("task labels missing docs: %#v", gotTaskLabels)
+	}
+
+	updatedFile, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile(updated) error = %v", err)
+	}
+	if !strings.Contains(string(updatedFile), "id:") {
+		t.Fatalf("updated file missing id entries:\n%s", string(updatedFile))
+	}
+}
+
+func TestRunTicketCreateFromFileCreatesHierarchy(t *testing.T) {
+	setupLocalCLI(t)
+	content := strings.Join([]string{
+		"# First epic",
+		"type: epic",
+		"",
+		"Top-level epic description.",
+		"",
+		"## Child task",
+		"type: task",
+		"",
+		"Child task description.",
+		"",
+		"### Grandchild bug",
+		"type: bug",
+		"",
+		"Nested bug description.",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "hierarchy_tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if err := run([]string{"new", "-f", filePath, "-commit"}); err != nil {
+		t.Fatalf("new -f -commit hierarchy error = %v", err)
+	}
+
+	svc := localCLIService(t)
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	tickets, err := svc.ListTickets(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	byTitle := make(map[string]store.Ticket, len(tickets))
+	for _, ticket := range tickets {
+		byTitle[ticket.Title] = ticket
+	}
+
+	epic := byTitle["First epic"]
+	child := byTitle["Child task"]
+	grandchild := byTitle["Grandchild bug"]
+	if epic.ID == "" || child.ID == "" || grandchild.ID == "" {
+		t.Fatalf("missing hierarchy tickets: %#v", byTitle)
+	}
+	if child.ParentID == nil || *child.ParentID != epic.ID {
+		t.Fatalf("child parent = %#v, want %s", child.ParentID, epic.ID)
+	}
+	if grandchild.ParentID == nil || *grandchild.ParentID != child.ID {
+		t.Fatalf("grandchild parent = %#v, want %s", grandchild.ParentID, child.ID)
+	}
+}
+
+func TestRunTicketCreateFromFilePreviewDoesNotWriteTickets(t *testing.T) {
+	setupLocalCLI(t)
+	content := strings.Join([]string{
+		"# Preview only ticket",
+		"labels: docs",
+		"",
+		"Just preview this ticket.",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "preview_tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := run([]string{"new", "-f", filePath}); err != nil {
+			t.Fatalf("new -f preview error = %v", err)
+		}
+	})
+	if !strings.Contains(out, "Preview only ticket") {
+		t.Fatalf("preview output missing ticket title:\n%s", out)
+	}
+	if !strings.Contains(out, "Tip: `use -commit` to write back to tk") {
+		t.Fatalf("preview output missing commit tip:\n%s", out)
+	}
+	svc := localCLIService(t)
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	tickets, err := svc.ListTickets(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListTickets() error = %v", err)
+	}
+	if len(tickets) != 0 {
+		t.Fatalf("preview mode created tickets: %d", len(tickets))
+	}
+}
+
+func TestRunTicketCreateFromFileFailsAtomicallyOnParseError(t *testing.T) {
+	setupLocalCLI(t)
+	content := strings.Join([]string{
+		"this line appears before a heading and should fail parsing",
+		"# Valid ticket title",
+		"Description",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "bad_tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	svc := localCLIService(t)
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("GetProject(1) error = %v", err)
+	}
+	before, err := svc.ListTickets(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListTickets(before) error = %v", err)
+	}
+
+	err = run([]string{"new", "-f", filePath})
+	if err == nil {
+		t.Fatal("new -f parse error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "cannot parse") {
+		t.Fatalf("error = %v, want cannot parse", err)
+	}
+
+	after, err := svc.ListTickets(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListTickets(after) error = %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("ticket count changed after parse failure: before=%d after=%d", len(before), len(after))
+	}
+}
+
+func TestRunTicketCreateFromFileFailsOnInvalidHeadingHierarchy(t *testing.T) {
+	setupLocalCLI(t)
+	content := strings.Join([]string{
+		"# Valid root",
+		"",
+		"### Missing middle parent",
+		"Description",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "bad_hierarchy_tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	err := run([]string{"new", "-f", filePath})
+	if err == nil {
+		t.Fatal("new -f invalid hierarchy error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "heading level") {
+		t.Fatalf("error = %v, want heading level", err)
+	}
+}
+
+func TestRunUpdateFromFilePreviewAndCommit(t *testing.T) {
+	setupLocalCLI(t)
+	ticketID := createLocalTask(t, []string{"add", "Original Title"})
+	svc := localCLIService(t)
+	ticket, err := svc.GetTicket(context.Background(), ticketID)
+	if err != nil {
+		t.Fatalf("GetTicket(%s) error = %v", ticketID, err)
+	}
+	if _, err := svc.CreateLabel(context.Background(), ticket.ProjectID, libticket.LabelRequest{Name: "legacy"}); err != nil {
+		t.Fatalf("CreateLabel(legacy) error = %v", err)
+	}
+	labels, err := svc.ListLabels(context.Background(), ticket.ProjectID)
+	if err != nil {
+		t.Fatalf("ListLabels() error = %v", err)
+	}
+	var legacyID int64
+	for _, label := range labels {
+		if strings.EqualFold(label.Name, "legacy") {
+			legacyID = label.ID
+			break
+		}
+	}
+	if legacyID == 0 {
+		t.Fatal("legacy label not found")
+	}
+	if err := svc.AddTicketLabel(context.Background(), ticketID, legacyID); err != nil {
+		t.Fatalf("AddTicketLabel() error = %v", err)
+	}
+
+	content := strings.Join([]string{
+		"# Updated Title",
+		fmt.Sprintf("id: %s", ticketID),
+		"type: bug",
+		"labels: api, urgent",
+		"",
+		"Updated description line 1.",
+		"Updated description line 2.",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "update_tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	preview := captureStdout(t, func() {
+		if err := run([]string{"update", "-f", filePath}); err != nil {
+			t.Fatalf("update -f preview error = %v", err)
+		}
+	})
+	if !strings.Contains(preview, "Updated Title") {
+		t.Fatalf("preview output missing title:\n%s", preview)
+	}
+	if !strings.Contains(preview, "Tip: `use -commit` to write back to tk") {
+		t.Fatalf("preview output missing commit tip:\n%s", preview)
+	}
+	current, err := svc.GetTicket(context.Background(), ticketID)
+	if err != nil {
+		t.Fatalf("GetTicket(after preview) error = %v", err)
+	}
+	if current.Title != "Original Title" {
+		t.Fatalf("preview changed ticket title: %q", current.Title)
+	}
+
+	if err := run([]string{"update", "-f", filePath, "-commit"}); err != nil {
+		t.Fatalf("update -f -commit error = %v", err)
+	}
+	updated, err := svc.GetTicket(context.Background(), ticketID)
+	if err != nil {
+		t.Fatalf("GetTicket(updated) error = %v", err)
+	}
+	if updated.Title != "Updated Title" {
+		t.Fatalf("updated title = %q", updated.Title)
+	}
+	if updated.Type != "bug" {
+		t.Fatalf("updated type = %q, want bug", updated.Type)
+	}
+	if !strings.Contains(updated.Description, "Updated description line 1.") {
+		t.Fatalf("updated description = %q", updated.Description)
+	}
+	updatedLabels, err := svc.ListTicketLabels(context.Background(), ticketID)
+	if err != nil {
+		t.Fatalf("ListTicketLabels(updated) error = %v", err)
+	}
+	gotLabels := map[string]bool{}
+	for _, label := range updatedLabels {
+		gotLabels[strings.ToLower(label.Name)] = true
+	}
+	if !gotLabels["api"] || !gotLabels["urgent"] || gotLabels["legacy"] {
+		t.Fatalf("updated labels mismatch: %#v", gotLabels)
+	}
+}
+
+func TestRunUpdateFromFileRequiresID(t *testing.T) {
+	setupLocalCLI(t)
+	content := strings.Join([]string{
+		"# Missing ID update",
+		"type: bug",
+		"",
+		"Description",
+	}, "\n")
+	filePath := filepath.Join(t.TempDir(), "bad_update_tickets.txt")
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	err := run([]string{"update", "-f", filePath, "-commit"})
+	if err == nil {
+		t.Fatal("update -f -commit without id = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "missing id") {
+		t.Fatalf("error = %v, want missing id", err)
+	}
+}
+
 func TestRunSearchSupportsFreeFormAndFilters(t *testing.T) {
 	setupLocalCLI(t)
 
@@ -3003,7 +3393,7 @@ func TestRunUpdateAcceptsPositionalID(t *testing.T) {
 func TestRunUpdateRequiresID(t *testing.T) {
 	setupLocalCLI(t)
 
-	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update [-id <id>|<id>]") {
+	if err := run([]string{"update", "-title", "No ID Flag"}); err == nil || !strings.Contains(err.Error(), "usage: tk update [-f <filename>] [-commit] [-id <id>|<id>]") {
 		t.Fatalf("expected usage error for missing id, got %v", err)
 	}
 }
@@ -4654,11 +5044,15 @@ func localCLIService(t *testing.T) libticket.Service {
 	return svc
 }
 
-func TestResolveServiceUsesProvidedRemoteConfig(t *testing.T) {
+func TestResolveServiceUsesEnvRemoteConfig(t *testing.T) {
 	setupLocalCLI(t)
 
+	t.Setenv("TICKET_URL", "http://127.0.0.1:1")
+	t.Setenv("TICKET_USERNAME", "admin")
+	t.Setenv("TICKET_PASSWORD", "password")
+
 	cfg := config.Config{
-		Location: "http://127.0.0.1:1",
+		Location: "",
 	}
 	svc, err := resolveService(cfg)
 	if err != nil {
@@ -4671,6 +5065,78 @@ func TestResolveServiceUsesProvidedRemoteConfig(t *testing.T) {
 	}
 	if strings.Contains(loginErr.Error(), "configured server") {
 		t.Fatalf("expected remote HTTP login attempt, got server-binding error: %v", loginErr)
+	}
+}
+
+func TestResolveServiceUsesLocalModeWhenDBPresent(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
+	if err := runInitDB([]string{"-f", filepath.Join(tempDir, "ticket.db"), "-password", "secret12"}); err != nil {
+		t.Fatalf("runInitDB() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+	if _, ok := svc.(*libticket.LocalService); !ok {
+		t.Fatalf("resolveService() returned %T, want *libticket.LocalService", svc)
+	}
+}
+
+func TestResolveServiceUsesNearestTicketJSONAndEnvPassword(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("TICKET_HOME", homeDir)
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, ".ticket.json"), []byte(`{"TICKET_URL":"https://ticket.example.com","TICKET_USERNAME":"alice","TICKET_PROJECT":"42"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(.ticket.json) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+	t.Setenv("TICKET_PASSWORD", "secret12")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+	if _, ok := svc.(*libticket.HTTPService); !ok {
+		t.Fatalf("resolveService() returned %T, want *libticket.HTTPService", svc)
+	}
+}
+
+func TestResolveServiceRejectsTicketJSONPassword(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("TICKET_HOME", homeDir)
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, ".ticket.json"), []byte(`{"TICKET_URL":"https://ticket.example.com","TICKET_USERNAME":"alice","TICKET_PASSWORD":"bad"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(.ticket.json) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	_, err = resolveService(cfg)
+	if err == nil {
+		t.Fatal("resolveService() error = nil, want .ticket.json password rejection")
+	}
+	if !strings.Contains(err.Error(), "must not contain TICKET_PASSWORD") {
+		t.Fatalf("resolveService() error = %v, want .ticket.json password rejection", err)
 	}
 }
 
@@ -4953,10 +5419,10 @@ func TestRunStatusReturnsUpgradeDatabaseHintForLegacyDatabase(t *testing.T) {
 
 	err := run([]string{"status"})
 	if err == nil {
-		t.Fatal("run(status) error = nil, want missing remote configuration hint")
+		t.Fatal("run(status) error = nil, want legacy database hint")
 	}
-	if !strings.Contains(err.Error(), "missing required environment variable: TICKET_USERNAME") {
-		t.Fatalf("run(status) error = %v, want missing username hint", err)
+	if !strings.Contains(err.Error(), "run `tk upgrade-database`") {
+		t.Fatalf("run(status) error = %v, want upgrade-database hint", err)
 	}
 }
 

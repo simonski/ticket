@@ -33,8 +33,11 @@ tk server
 
 ```bash
 export TICKET_URL=http://localhost:8080
-export TICKET_USERNAME=alice
-export TICKET_PASSWORD=secret12
+export TICKET_USERNAME=admin
+export TICKET_PASSWORD=password
+export TICKET_PROJECT=1
+tk ls
+
 tk register -username alice -password secret12
 tk project use 1
 tk whoami
@@ -64,11 +67,11 @@ tk project create -prefix CUS -title "Customer Portal"
 tk project use CUS
 tk summary                            # daily overview
 tk ls                                 # list open tickets
-tk add "Fix login timeout"            # create a task
+TASK_ID=$(tk add -printid "Fix login timeout")   # create a task
 tk bug "Token expires too early"      # create a bug
 tk epic "Authentication"              # create an epic
 
-tk complete -id CUS-1               # mark ticket complete
+tk complete -id "$TASK_ID"            # mark the created task complete
 ```
 
 ---

@@ -1133,12 +1133,14 @@ func runUnsetParent(args []string, command string) error {
 }
 
 func runUpdate(args []string) error {
-	usage := "tk update [-id <id>|<id>]\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-dor <text>] [-dod <text>] [-ac <text>]\n  [-dor-map <stage=value,...>] [-dod-map <stage=value,...>] [-ac-map <stage=value,...>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
+	usage := "tk update [-f <filename>] [-commit] [-id <id>|<id>]\n  [-title <title>]\n  [-desc <description> | -description <description>]\n  [-dor <text>] [-dod <text>] [-ac <text>]\n  [-dor-map <stage=value,...>] [-dod-map <stage=value,...>] [-ac-map <stage=value,...>]\n  [-git-repository <repo>]\n  [-git-branch <branch>]\n  [-priority <n>]\n  [-order <n>]\n  [-stage <stage>]\n  [-state <state>]\n  [-status <stage/state>]\n  [-parent_id <id>]\n  [-estimate_effort <n>]\n  [-estimate_complete <rfc3339>]\n  [-t <type> | -type <type>]"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		args = append([]string{"-id", args[0]}, args[1:]...)
 	}
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
+	filePath := fs.String("f", "", "update tickets from a file")
+	commit := fs.Bool("commit", false, "apply updates to storage")
 	id := fs.String("id", "", "ticket id")
 	title := fs.String("title", "", "ticket title")
 	description := fs.String("description", "", "ticket description")
@@ -1164,6 +1166,13 @@ func runUpdate(args []string) error {
 	fs.StringVar(ticketType, "t", "", "ticket type (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	inputFile := strings.TrimSpace(*filePath)
+	if inputFile != "" {
+		if strings.TrimSpace(*id) != "" || fs.NArg() != 0 {
+			return errors.New("usage: tk update -f <filename> [-commit]")
+		}
+		return runUpdateFromFile(inputFile, *commit, strings.TrimSpace(*message))
 	}
 	if strings.TrimSpace(*id) == "" {
 		return errors.New("usage: " + usage)
@@ -1321,6 +1330,107 @@ func runUpdate(args []string) error {
 	}
 	printUpdateSummary(updated, current, svc)
 	return nil
+}
+
+func runUpdateFromFile(filePath string, commit bool, message string) error {
+	data, readErr := os.ReadFile(filePath) // #nosec G304 -- user-specified file path for ticket update
+	if readErr != nil {
+		return fmt.Errorf("cannot read %s: %w", filePath, readErr)
+	}
+	entries, parseErr := parseTicketBatchFile(string(data), "")
+	if parseErr != nil {
+		return fmt.Errorf("cannot parse %s: %w", filePath, parseErr)
+	}
+	for i, entry := range entries {
+		if strings.TrimSpace(entry.ID) == "" {
+			return fmt.Errorf("cannot parse %s: ticket %d (%s) is missing id", filePath, i+1, entry.Title)
+		}
+	}
+	if !commit {
+		printTicketBatchIntent(entries, "update")
+		return nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	for i := range entries {
+		var structuredParentID *string
+		if entries[i].ParentIndex >= 0 {
+			if entries[i].ParentIndex >= len(entries) {
+				return fmt.Errorf("cannot parse %s: invalid parent reference for %q", filePath, entries[i].Title)
+			}
+			parentID := strings.TrimSpace(entries[entries[i].ParentIndex].ID)
+			if parentID == "" {
+				return fmt.Errorf("cannot parse %s: parent id is missing for %q", filePath, entries[i].Title)
+			}
+			structuredParentID = &parentID
+		}
+		updated, updateErr := updateTicketFromBatchEntry(context.Background(), cfg, svc, entries[i], message, structuredParentID)
+		if updateErr != nil {
+			return updateErr
+		}
+		entries[i].ID = updated.ID
+		if outputJSON {
+			if err := printJSON(updated); err != nil {
+				return err
+			}
+			continue
+		}
+		fmt.Printf("%s\t%s\t%s\t%s\n", ticketLabel(updated), updated.Type, updated.Status, updated.Title)
+	}
+	if writeErr := os.WriteFile(filePath, []byte(serializeTicketBatchFile(entries)), 0o600); writeErr != nil {
+		return fmt.Errorf("cannot write %s: %w", filePath, writeErr)
+	}
+	return nil
+}
+
+func updateTicketFromBatchEntry(ctx context.Context, cfg config.Config, svc libticket.Service, entry ticketBatchEntry, message string, parentID *string) (store.Ticket, error) {
+	ticketRef := normalizeBareTicketRef(cfg, svc, strings.TrimSpace(entry.ID))
+	current, err := svc.GetTicket(ctx, ticketRef)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	next := libticket.TicketUpdateRequest{
+		Title:              entry.Title,
+		Description:        entry.Description,
+		AcceptanceCriteria: current.AcceptanceCriteria,
+		DORMap:             current.DORMap,
+		DODMap:             current.DODMap,
+		ACMap:              current.ACMap,
+		GitRepository:      current.GitRepository,
+		GitBranch:          current.GitBranch,
+		ParentID:           current.ParentID,
+		Assignee:           current.Assignee,
+		Priority:           current.Priority,
+		Order:              current.Order,
+		EstimateEffort:     current.EstimateEffort,
+		EstimateComplete:   current.EstimateComplete,
+		Type:               current.Type,
+		Message:            message,
+	}
+	if parentID != nil {
+		next.ParentID = parentID
+	}
+	if entry.TypeExplicit && strings.TrimSpace(entry.TicketType) != "" {
+		next.Type = strings.TrimSpace(entry.TicketType)
+	}
+	updated, err := svc.UpdateTicket(ctx, current.ID, next)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	if labelErr := syncTicketLabels(ctx, svc, current.ProjectID, updated.ID, entry.Labels); labelErr != nil {
+		return store.Ticket{}, labelErr
+	}
+	refreshed, err := svc.GetTicket(ctx, updated.ID)
+	if err != nil {
+		return store.Ticket{}, err
+	}
+	return refreshed, nil
 }
 
 func printUpdateSummary(updated, previous store.Ticket, svc libticket.Service) {
@@ -2151,6 +2261,7 @@ type ticketCreateOptions struct {
 	TicketType         string
 	Title              string
 	Description        string
+	Labels             []string
 	AcceptanceCriteria string
 	DORMap             store.GuidanceMap
 	DODMap             store.GuidanceMap
@@ -2176,6 +2287,8 @@ func runTicketCreate(args []string) error {
 	fs.SetOutput(os.Stderr)
 	taskType := fs.String("type", "task", "ticket type")
 	fs.StringVar(taskType, "t", "task", "ticket type")
+	filePath := fs.String("f", "", "create tickets from a file")
+	commit := fs.Bool("commit", false, "apply file entries to storage")
 	titleFlag := fs.String("title", "", "ticket title")
 	priority := fs.Int("priority", 1, "ticket priority")
 	fs.IntVar(priority, "p", 1, "ticket priority")
@@ -2200,9 +2313,114 @@ func runTicketCreate(args []string) error {
 	if parseErr := fs.Parse(normalizedArgs); parseErr != nil {
 		return parseErr
 	}
+	inputFile := strings.TrimSpace(*filePath)
 	title := strings.TrimSpace(*titleFlag)
 	if title == "" {
 		title = strings.Join(fs.Args(), " ")
+	}
+	if inputFile != "" {
+		if title != "" {
+			return errors.New("usage: tk add|create|new -f <filename> (title words are not allowed when -f is used)")
+		}
+		data, readErr := os.ReadFile(inputFile) // #nosec G304 -- user-specified file path for ticket creation
+		if readErr != nil {
+			return fmt.Errorf("cannot read %s: %w", inputFile, readErr)
+		}
+		entries, parseErr := parseTicketBatchFile(string(data), *taskType)
+		if parseErr != nil {
+			return fmt.Errorf("cannot parse %s: %w", inputFile, parseErr)
+		}
+		if !*commit {
+			printTicketBatchIntent(entries, "new")
+			return nil
+		}
+		cfg, svc, projectCtx, resolveErr := resolveCurrentProjectClient()
+		if resolveErr != nil {
+			return resolveErr
+		}
+		dorMap, mapErr := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(normalizedArgs, "-dor"), containsFlag(normalizedArgs, "-dor-map"))
+		if mapErr != nil {
+			return mapErr
+		}
+		dodMap, mapErr := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(normalizedArgs, "-dod"), containsFlag(normalizedArgs, "-dod-map"))
+		if mapErr != nil {
+			return mapErr
+		}
+		acMap, mapErr := mergeGuidanceMap(nil, *acceptanceCriteria, *acMapRaw, containsFlag(normalizedArgs, "-ac"), containsFlag(normalizedArgs, "-ac-map"))
+		if mapErr != nil {
+			return mapErr
+		}
+		for i, entry := range entries {
+			var structuredParentID *string
+			if entry.ParentIndex >= 0 {
+				if entry.ParentIndex >= len(entries) {
+					return fmt.Errorf("cannot parse %s: invalid parent reference for %q", inputFile, entry.Title)
+				}
+				parentID := strings.TrimSpace(entries[entry.ParentIndex].ID)
+				if parentID == "" {
+					return fmt.Errorf("cannot parse %s: parent id is missing for %q", inputFile, entry.Title)
+				}
+				structuredParentID = &parentID
+			}
+			if strings.TrimSpace(entry.ID) != "" {
+				updated, updateErr := updateTicketFromBatchEntry(context.Background(), cfg, svc, entry, strings.TrimSpace(*message), structuredParentID)
+				if updateErr != nil {
+					return updateErr
+				}
+				entries[i].ID = updated.ID
+				if outputJSON {
+					if printErr := printJSON(updated); printErr != nil {
+						return printErr
+					}
+					continue
+				}
+				fmt.Printf("%s\t%s\t%s\t%s\n", ticketLabel(updated), updated.Type, updated.Status, updated.Title)
+				continue
+			}
+			opts := ticketCreateOptions{
+				TicketType:         entry.TicketType,
+				Title:              entry.Title,
+				Description:        entry.Description,
+				Labels:             entry.Labels,
+				AcceptanceCriteria: *acceptanceCriteria,
+				DORMap:             dorMap,
+				DODMap:             dodMap,
+				ACMap:              acMap,
+				GitRepository:      strings.TrimSpace(*gitRepository),
+				GitBranch:          strings.TrimSpace(*gitBranch),
+				Priority:           *priority,
+				EstimateEffort:     *estimateEffort,
+				EstimateComplete:   *estimateComplete,
+				Assignee:           *assignee,
+				Project:            *project,
+				Message:            strings.TrimSpace(*message),
+				PrintID:            *printID,
+			}
+			if structuredParentID != nil {
+				opts.ParentID = structuredParentID
+			} else if *parent != "" {
+				opts.ParentID = parent
+			}
+			created, createErr := createTicketEntity(context.Background(), cfg, svc, projectCtx, opts)
+			if createErr != nil {
+				return createErr
+			}
+			entries[i].ID = created.ID
+			if outputJSON {
+				if printErr := printJSON(created); printErr != nil {
+					return printErr
+				}
+				continue
+			}
+			if printCreatedID(created.ID, opts.PrintID) {
+				continue
+			}
+			fmt.Println(ticketLabel(created))
+		}
+		if writeErr := os.WriteFile(inputFile, []byte(serializeTicketBatchFile(entries)), 0o600); writeErr != nil {
+			return fmt.Errorf("cannot write %s: %w", inputFile, writeErr)
+		}
+		return nil
 	}
 
 	// Support @filename: read markdown file, parse key-value headers and body as description.
@@ -2248,7 +2466,7 @@ func runTicketCreate(args []string) error {
 	}
 
 	if title == "" {
-		return errors.New("usage: tk add|create|new [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
+		return errors.New("usage: tk add|create|new [-f filename] [-commit] [-title title] [-t type] [-p priority] [-a assignee] [-d description] [-dor text] [-dod text] [-ac text] [-dor-map stage=value,...] [-dod-map stage=value,...] [-ac-map stage=value,...] [-parent id] [-project project] [-estimate_effort n] [-estimate_complete rfc3339] [title words | @filename]")
 	}
 	dorMap, err := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(normalizedArgs, "-dor"), containsFlag(normalizedArgs, "-dor-map"))
 	if err != nil {
@@ -2288,6 +2506,7 @@ func runTicketCreate(args []string) error {
 
 func normalizeTicketCreateArgs(args []string) ([]string, error) {
 	knownValueFlags := map[string]bool{
+		"-f":                 true,
 		"-type":              true,
 		"-t":                 true,
 		"-title":             true,
@@ -2312,6 +2531,7 @@ func normalizeTicketCreateArgs(args []string) ([]string, error) {
 		"-m":                 true,
 	}
 	knownBoolFlags := map[string]bool{
+		"-commit":  true,
 		"-printid": true,
 	}
 
@@ -2347,28 +2567,44 @@ func createTicket(opts ticketCreateOptions) error {
 	if err != nil {
 		return err
 	}
+	ticket, err := createTicketEntity(context.Background(), cfg, api, project, opts)
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(ticket)
+	}
+	if printCreatedID(ticket.ID, opts.PrintID) {
+		return nil
+	}
+	fmt.Println(ticketLabel(ticket))
+	return nil
+}
+
+func createTicketEntity(ctx context.Context, cfg config.Config, api libticket.Service, project store.Project, opts ticketCreateOptions) (store.Ticket, error) {
 	if strings.TrimSpace(opts.Project) != "" {
-		project, err = api.GetProject(context.Background(), opts.Project)
+		resolvedProject, err := api.GetProject(ctx, opts.Project)
 		if err != nil {
-			return err
+			return store.Ticket{}, err
 		}
+		project = resolvedProject
 	}
 	parentID := opts.ParentID
 	ticketType := strings.TrimSpace(strings.ToLower(opts.TicketType))
 	if parentID == nil && cfg.CurrentEpicID != "" && (ticketType == "task" || ticketType == "bug" || ticketType == "chore") {
-		epic, epicErr := api.GetTicket(context.Background(), cfg.CurrentEpicID)
+		epic, epicErr := api.GetTicket(ctx, cfg.CurrentEpicID)
 		if epicErr != nil {
-			return fmt.Errorf("current epic id %s is invalid: %w", cfg.CurrentEpicID, epicErr)
+			return store.Ticket{}, fmt.Errorf("current epic id %s is invalid: %w", cfg.CurrentEpicID, epicErr)
 		}
 		if strings.TrimSpace(strings.ToLower(epic.Type)) != "epic" {
-			return fmt.Errorf("current epic id %s is not an epic", cfg.CurrentEpicID)
+			return store.Ticket{}, fmt.Errorf("current epic id %s is not an epic", cfg.CurrentEpicID)
 		}
 		if epic.ProjectID != project.ID {
-			return fmt.Errorf("current epic id %s belongs to project %d, active project is %d", cfg.CurrentEpicID, epic.ProjectID, project.ID)
+			return store.Ticket{}, fmt.Errorf("current epic id %s belongs to project %d, active project is %d", cfg.CurrentEpicID, epic.ProjectID, project.ID)
 		}
 		parentID = &epic.ID
 	}
-	ticket, err := api.CreateTicket(context.Background(), libticket.TicketCreateRequest{
+	ticket, err := api.CreateTicket(ctx, libticket.TicketCreateRequest{
 		ProjectID:          project.ID,
 		ParentID:           parentID,
 		Type:               opts.TicketType,
@@ -2387,22 +2623,326 @@ func createTicket(opts ticketCreateOptions) error {
 		Message:            opts.Message,
 	})
 	if err != nil {
-		return err
+		return store.Ticket{}, err
 	}
-	if outputJSON {
-		return printJSON(ticket)
-	}
-	if printCreatedID(ticket.ID, opts.PrintID) {
-		return nil
+	if err := applyTicketLabels(ctx, api, project.ID, ticket.ID, opts.Labels); err != nil {
+		return store.Ticket{}, err
 	}
 	if ticket.Type == "epic" {
 		cfg.CurrentEpicID = ticket.ID
 		if err := config.Save(cfg); err != nil {
+			return store.Ticket{}, err
+		}
+	}
+	return ticket, nil
+}
+
+func applyTicketLabels(ctx context.Context, svc libticket.Service, projectID int64, ticketID string, labels []string) error {
+	labelNames := normalizeLabelNames(labels)
+	if len(labelNames) == 0 {
+		return nil
+	}
+	existing, err := svc.ListLabels(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	labelsByName := make(map[string]store.Label, len(existing))
+	for _, label := range existing {
+		key := strings.ToLower(strings.TrimSpace(label.Name))
+		if key != "" {
+			labelsByName[key] = label
+		}
+	}
+	for _, name := range labelNames {
+		key := strings.ToLower(name)
+		label, ok := labelsByName[key]
+		if !ok {
+			created, createErr := svc.CreateLabel(ctx, projectID, libticket.LabelRequest{Name: name})
+			if createErr != nil {
+				return createErr
+			}
+			label = created
+			labelsByName[key] = created
+		}
+		if err := svc.AddTicketLabel(ctx, ticketID, label.ID); err != nil {
 			return err
 		}
 	}
-	fmt.Println(ticketLabel(ticket))
 	return nil
+}
+
+func syncTicketLabels(ctx context.Context, svc libticket.Service, projectID int64, ticketID string, labels []string) error {
+	desiredNames := normalizeLabelNames(labels)
+	desired := make(map[string]string, len(desiredNames))
+	for _, name := range desiredNames {
+		desired[strings.ToLower(name)] = name
+	}
+	projectLabels, err := svc.ListLabels(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	labelByName := make(map[string]store.Label, len(projectLabels))
+	for _, label := range projectLabels {
+		key := strings.ToLower(strings.TrimSpace(label.Name))
+		if key != "" {
+			labelByName[key] = label
+		}
+	}
+	for key, canonical := range desired {
+		if _, ok := labelByName[key]; ok {
+			continue
+		}
+		created, createErr := svc.CreateLabel(ctx, projectID, libticket.LabelRequest{Name: canonical})
+		if createErr != nil {
+			return createErr
+		}
+		labelByName[key] = created
+	}
+	currentLabels, err := svc.ListTicketLabels(ctx, ticketID)
+	if err != nil {
+		return err
+	}
+	current := make(map[string]store.Label, len(currentLabels))
+	for _, label := range currentLabels {
+		key := strings.ToLower(strings.TrimSpace(label.Name))
+		if key != "" {
+			current[key] = label
+		}
+	}
+	for key, label := range current {
+		if _, ok := desired[key]; ok {
+			continue
+		}
+		if err := svc.RemoveTicketLabel(ctx, ticketID, label.ID); err != nil {
+			return err
+		}
+	}
+	for key := range desired {
+		if _, ok := current[key]; ok {
+			continue
+		}
+		if err := svc.AddTicketLabel(ctx, ticketID, labelByName[key].ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeLabelNames(labels []string) []string {
+	if len(labels) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(labels))
+	out := make([]string, 0, len(labels))
+	for _, raw := range labels {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+type ticketBatchEntry struct {
+	ID           string
+	Title        string
+	Description  string
+	TicketType   string
+	TypeExplicit bool
+	Labels       []string
+	Level        int
+	ParentIndex  int
+}
+
+func printTicketBatchIntent(entries []ticketBatchEntry, mode string) {
+	for _, entry := range entries {
+		idPrefix := "(new)"
+		if strings.TrimSpace(entry.ID) != "" {
+			idPrefix = strings.TrimSpace(entry.ID)
+		}
+		typeVal := strings.TrimSpace(entry.TicketType)
+		if typeVal == "" {
+			typeVal = "-"
+		}
+		statusVal := "design/idle"
+		if mode == "update" || strings.TrimSpace(entry.ID) != "" {
+			statusVal = "update/preview"
+		}
+		fmt.Printf("%s\t%s\t%s\t%s\n", idPrefix, typeVal, statusVal, entry.Title)
+		descLines := strings.Split(strings.TrimSpace(entry.Description), "\n")
+		preview := 2
+		if len(descLines) < preview {
+			preview = len(descLines)
+		}
+		for i := 0; i < preview; i++ {
+			fmt.Printf("  %s\n", strings.TrimSpace(descLines[i]))
+		}
+		if len(entry.Labels) > 0 {
+			fmt.Printf("  labels: %s\n", strings.Join(normalizeLabelNames(entry.Labels), ", "))
+		}
+	}
+	fmt.Println("Tip: `use -commit` to write back to tk")
+}
+
+func serializeTicketBatchFile(entries []ticketBatchEntry) string {
+	var b strings.Builder
+	for i, entry := range entries {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		level := entry.Level
+		if level <= 0 {
+			level = 1
+		}
+		b.WriteString(strings.Repeat("#", level))
+		b.WriteString(" ")
+		b.WriteString(strings.TrimSpace(entry.Title))
+		b.WriteString("\n")
+		if strings.TrimSpace(entry.ID) != "" {
+			b.WriteString("id: ")
+			b.WriteString(strings.TrimSpace(entry.ID))
+			b.WriteString("\n")
+		}
+		if entry.TypeExplicit || strings.TrimSpace(entry.ID) == "" {
+			if strings.TrimSpace(entry.TicketType) != "" {
+				b.WriteString("type: ")
+				b.WriteString(strings.TrimSpace(entry.TicketType))
+				b.WriteString("\n")
+			}
+		}
+		labelNames := normalizeLabelNames(entry.Labels)
+		if len(labelNames) > 0 {
+			b.WriteString("labels: ")
+			b.WriteString(strings.Join(labelNames, ", "))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(entry.Description) != "" {
+			b.WriteString("\n")
+			b.WriteString(strings.TrimSpace(entry.Description))
+		}
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func parseTicketBatchFile(content, defaultType string) ([]ticketBatchEntry, error) {
+	lines := strings.Split(content, "\n")
+	type workingEntry struct {
+		id           string
+		title        string
+		ticketType   string
+		typeExplicit bool
+		labels       []string
+		description  []string
+		level        int
+		parentIndex  int
+	}
+	var (
+		entries []ticketBatchEntry
+		current *workingEntry
+		stack   = map[int]int{}
+	)
+	flushCurrent := func() {
+		if current == nil {
+			return
+		}
+		entries = append(entries, ticketBatchEntry{
+			ID:           strings.TrimSpace(current.id),
+			Title:        current.title,
+			Description:  strings.TrimSpace(strings.Join(current.description, "\n")),
+			TicketType:   current.ticketType,
+			TypeExplicit: current.typeExplicit,
+			Labels:       normalizeLabelNames(current.labels),
+			Level:        current.level,
+			ParentIndex:  current.parentIndex,
+		})
+		idx := len(entries) - 1
+		stack[current.level] = idx
+		for level := range stack {
+			if level > current.level {
+				delete(stack, level)
+			}
+		}
+	}
+	for i, rawLine := range lines {
+		line := strings.TrimRight(rawLine, "\r")
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			headingLevel := 0
+			for headingLevel < len(trimmed) && trimmed[headingLevel] == '#' {
+				headingLevel++
+			}
+			if headingLevel == 0 {
+				return nil, fmt.Errorf("line %d: invalid heading", i+1)
+			}
+			title := strings.TrimSpace(trimmed[headingLevel:])
+			if title == "" {
+				return nil, fmt.Errorf("line %d: ticket heading is missing a title", i+1)
+			}
+			flushCurrent()
+			parentIndex := -1
+			if headingLevel > 1 {
+				parent, ok := stack[headingLevel-1]
+				if !ok {
+					return nil, fmt.Errorf("line %d: heading level %d has no parent level %d", i+1, headingLevel, headingLevel-1)
+				}
+				parentIndex = parent
+			}
+			current = &workingEntry{
+				title:       title,
+				ticketType:  strings.TrimSpace(defaultType),
+				level:       headingLevel,
+				parentIndex: parentIndex,
+			}
+			continue
+		}
+		if current == nil {
+			if trimmed == "" {
+				continue
+			}
+			return nil, fmt.Errorf("line %d: expected a ticket heading starting with '#'", i+1)
+		}
+		lower := strings.ToLower(trimmed)
+		switch {
+		case strings.HasPrefix(lower, "label:") || strings.HasPrefix(lower, "labels:"):
+			idx := strings.Index(trimmed, ":")
+			labelNames := splitCSV(trimmed[idx+1:])
+			if len(labelNames) == 0 {
+				return nil, fmt.Errorf("line %d: label directive requires at least one label", i+1)
+			}
+			current.labels = append(current.labels, labelNames...)
+		case strings.HasPrefix(lower, "type:"):
+			idx := strings.Index(trimmed, ":")
+			ticketType := strings.TrimSpace(trimmed[idx+1:])
+			if ticketType == "" {
+				return nil, fmt.Errorf("line %d: type directive requires a value", i+1)
+			}
+			current.ticketType = ticketType
+			current.typeExplicit = true
+		case strings.HasPrefix(lower, "id:"):
+			idx := strings.Index(trimmed, ":")
+			ticketID := strings.TrimSpace(trimmed[idx+1:])
+			if ticketID == "" {
+				return nil, fmt.Errorf("line %d: id directive requires a value", i+1)
+			}
+			current.id = ticketID
+		default:
+			current.description = append(current.description, line)
+		}
+	}
+	flushCurrent()
+	if len(entries) == 0 {
+		return nil, errors.New("no tickets found: add headings like '# Title'")
+	}
+	return entries, nil
 }
 
 // parseTicketFile parses a markdown file into ticket fields. Lines at the top

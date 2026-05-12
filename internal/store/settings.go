@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 )
 
 const (
@@ -16,10 +17,12 @@ const (
 	DefaultAgentModelURL           = ""
 	DefaultAgentModelAPIKey        = ""
 	DefaultAgentModelProvidersJSON = `[
-  {"id":"openai","label":"OpenAI","base_url":"https://api.openai.com/v1","default_model":"gpt-5.3-codex"},
-  {"id":"anthropic","label":"Anthropic","base_url":"https://api.anthropic.com","default_model":"claude-sonnet-4.5"},
-  {"id":"google","label":"Google Gemini","base_url":"https://generativelanguage.googleapis.com","default_model":"gemini-2.5-pro"},
-  {"id":"openrouter","label":"OpenRouter","base_url":"https://openrouter.ai/api/v1","default_model":"openai/gpt-5"}
+  {"id":"openai","label":"OpenAI","base_url":"https://api.openai.com/v1","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","o3"],"auth_type":"api_key","requires_url":false},
+  {"id":"anthropic","label":"Anthropic","base_url":"https://api.anthropic.com","default_model":"claude-sonnet-4.5","models":["claude-sonnet-4.5","claude-opus-4.7","claude-haiku-4.5"],"auth_type":"api_key","requires_url":false},
+  {"id":"google","label":"Google Gemini","base_url":"https://generativelanguage.googleapis.com","default_model":"gemini-2.5-pro","models":["gemini-2.5-pro","gemini-2.5-flash"],"auth_type":"api_key","requires_url":false},
+  {"id":"openrouter","label":"OpenRouter","base_url":"https://openrouter.ai/api/v1","default_model":"openai/gpt-5","models":["openai/gpt-5","anthropic/claude-sonnet-4.5","google/gemini-2.5-pro"],"auth_type":"api_key","requires_url":false},
+  {"id":"github-copilot","label":"GitHub Copilot","base_url":"https://api.githubcopilot.com","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","claude-sonnet-4.6","gemini-2.5-pro"],"auth_type":"api_key","requires_url":false},
+  {"id":"github-copilot-enterprise","label":"GitHub Copilot Enterprise","base_url":"https://api.githubcopilot.com","default_model":"gpt-5.3-codex","models":["gpt-5.3-codex","gpt-5","claude-sonnet-4.6","gemini-2.5-pro"],"auth_type":"api_key","requires_url":false}
 ]`
 )
 
@@ -29,10 +32,14 @@ type ChatLimits struct {
 }
 
 type AgentModelProvider struct {
-	ID           string `json:"id"`
-	Label        string `json:"label"`
-	BaseURL      string `json:"base_url"`
-	DefaultModel string `json:"default_model"`
+	ID           string   `json:"id"`
+	Label        string   `json:"label"`
+	BaseURL      string   `json:"base_url"`
+	DefaultModel string   `json:"default_model"`
+	Models       []string `json:"models,omitempty"`
+	AuthType     string   `json:"auth_type,omitempty"`
+	RequiresURL  bool     `json:"requires_url,omitempty"`
+	APIKey       string   `json:"api_key,omitempty"`
 }
 
 type AgentModelConfig struct {
@@ -41,6 +48,102 @@ type AgentModelConfig struct {
 	URL       string               `json:"url"`
 	APIKey    string               `json:"api_key"`
 	Providers []AgentModelProvider `json:"providers,omitempty"`
+}
+
+func defaultAgentModelProviders() []AgentModelProvider {
+	var providers []AgentModelProvider
+	if err := json.Unmarshal([]byte(DefaultAgentModelProvidersJSON), &providers); err != nil {
+		return nil
+	}
+	return providers
+}
+
+func normalizeAgentModelProvider(provider AgentModelProvider) AgentModelProvider {
+	provider.ID = strings.TrimSpace(provider.ID)
+	provider.Label = strings.TrimSpace(provider.Label)
+	provider.BaseURL = strings.TrimSpace(provider.BaseURL)
+	provider.DefaultModel = strings.TrimSpace(provider.DefaultModel)
+	provider.APIKey = strings.TrimSpace(provider.APIKey)
+	if provider.AuthType == "" {
+		provider.AuthType = "api_key"
+	}
+	nextModels := make([]string, 0, len(provider.Models))
+	seen := map[string]bool{}
+	for _, raw := range provider.Models {
+		model := strings.TrimSpace(raw)
+		if model == "" || seen[model] {
+			continue
+		}
+		seen[model] = true
+		nextModels = append(nextModels, model)
+	}
+	if provider.DefaultModel != "" && !seen[provider.DefaultModel] {
+		nextModels = append([]string{provider.DefaultModel}, nextModels...)
+	}
+	provider.Models = nextModels
+	return provider
+}
+
+func EnsureDefaultAgentModelProviders(ctx context.Context, db *sql.DB) error {
+	defaults := defaultAgentModelProviders()
+	if len(defaults) == 0 {
+		return nil
+	}
+	for index := range defaults {
+		defaults[index] = normalizeAgentModelProvider(defaults[index])
+	}
+	existing := make([]AgentModelProvider, 0)
+	var raw string
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'agent_model_providers'`).Scan(&raw); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+	} else if strings.TrimSpace(raw) != "" {
+		_ = json.Unmarshal([]byte(raw), &existing)
+	}
+	merged := make([]AgentModelProvider, 0, len(defaults))
+	existingByID := map[string]AgentModelProvider{}
+	for _, provider := range existing {
+		normalized := normalizeAgentModelProvider(provider)
+		if normalized.ID == "" {
+			continue
+		}
+		existingByID[normalized.ID] = normalized
+	}
+	for _, def := range defaults {
+		next := def
+		if current, ok := existingByID[def.ID]; ok {
+			if current.Label != "" {
+				next.Label = current.Label
+			}
+			if current.BaseURL != "" {
+				next.BaseURL = current.BaseURL
+			}
+			if current.DefaultModel != "" {
+				next.DefaultModel = current.DefaultModel
+			}
+			if len(current.Models) > 0 {
+				next.Models = current.Models
+			}
+			if current.AuthType != "" {
+				next.AuthType = current.AuthType
+			}
+			next.RequiresURL = current.RequiresURL
+			if current.APIKey != "" {
+				next.APIKey = current.APIKey
+			}
+		}
+		merged = append(merged, normalizeAgentModelProvider(next))
+	}
+	// #nosec G117 -- provider profiles intentionally persist optional per-profile API keys.
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO app_settings (key, value) VALUES ('agent_model_providers', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, string(encoded)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func SystemAgentModelConfig(ctx context.Context, db *sql.DB) (AgentModelConfig, error) {
@@ -73,6 +176,9 @@ func SystemAgentModelConfig(ctx context.Context, db *sql.DB) (AgentModelConfig, 
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return cfg, err
 	}
+	for index := range cfg.Providers {
+		cfg.Providers[index] = normalizeAgentModelProvider(cfg.Providers[index])
+	}
 	return cfg, nil
 }
 
@@ -96,6 +202,7 @@ func SetSystemAgentModelConfig(ctx context.Context, db *sql.DB, cfg AgentModelCo
 		return err
 	}
 	if len(cfg.Providers) > 0 {
+		// #nosec G117 -- provider profiles intentionally persist optional per-profile API keys.
 		encoded, err := json.Marshal(cfg.Providers)
 		if err != nil {
 			return err

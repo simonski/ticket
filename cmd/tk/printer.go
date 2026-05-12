@@ -705,10 +705,6 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 		if i+1 >= len(rawLines) {
 			break
 		}
-		// Insert a blank line before each root-level ticket group (except the first).
-		if i > 0 && treePfx[t.ID] == "" {
-			display = append(display, displayLine{isBlank: true})
-		}
 		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, draft: t.Draft})
 		chunks := wrapRunes(t.Title, titleW)
 		for _, chunk := range chunks[1:] {

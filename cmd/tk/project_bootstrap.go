@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/libticket"
 )
 
 func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
@@ -54,18 +55,71 @@ func defaultProjectPrefix(root string) string {
 	return string(letters[:2])
 }
 
-//nolint:unused // kept as explicit removal guard while callers are migrated
 func ensureLocalDatabase() (config.Config, error) {
-	return config.Config{}, errors.New("standalone database mode has been removed; configure a server and run tk init")
+	dbPath, err := config.LocalDBPath()
+	if err != nil {
+		return config.Config{}, err
+	}
+	if _, statErr := os.Stat(dbPath); statErr != nil {
+		if initErr := runInitDB([]string{"-f", dbPath}); initErr != nil {
+			return config.Config{}, initErr
+		}
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Config{}, err
+	}
+	if strings.TrimSpace(cfg.ProjectID) == "" {
+		cfg.ProjectID = "1"
+		if saveErr := config.Save(cfg); saveErr != nil {
+			return config.Config{}, saveErr
+		}
+	}
+	return cfg, nil
 }
 
-//nolint:unused // kept as explicit removal guard while callers are migrated
 func bindRootToLocalProject(root, titleOverride, prefixOverride, gitOverride string) error {
-	_ = root
-	_ = titleOverride
-	_ = prefixOverride
-	_ = gitOverride
-	return errors.New("standalone database mode has been removed; configure a server and run tk init")
+	dbPath, err := config.LocalDBPath()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(config.Config{Location: dbPath, ProjectID: "1"})
+	if err != nil {
+		return err
+	}
+	project, err := svc.GetProject(context.Background(), "1")
+	if err != nil {
+		return err
+	}
+	if title := strings.TrimSpace(titleOverride); title != "" || strings.TrimSpace(gitOverride) != "" {
+		update := libticket.ProjectUpdateRequest{}
+		if title != "" {
+			update.Title = title
+		}
+		if git := strings.TrimSpace(gitOverride); git != "" {
+			update.GitRepository = git
+		}
+		if _, updateErr := svc.UpdateProject(context.Background(), project.ID, update); updateErr != nil {
+			return updateErr
+		}
+	}
+	if prefix := strings.ToUpper(strings.TrimSpace(prefixOverride)); prefix != "" && prefix != project.Prefix {
+		if _, renameErr := svc.RenameProjectPrefix(context.Background(), project.ID, prefix); renameErr != nil {
+			return renameErr
+		}
+	}
+	if mkdirErr := os.MkdirAll(filepath.Join(root, ".ticket"), 0o750); mkdirErr != nil {
+		return mkdirErr
+	}
+	if saveProjectErr := config.SaveProjectConfigAt(root, config.Config{ProjectID: "1"}); saveProjectErr != nil {
+		return saveProjectErr
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	cfg.ProjectID = "1"
+	return config.Save(cfg)
 }
 
 func bindRootToRemoteProject(root, remoteName, projectID string) error {

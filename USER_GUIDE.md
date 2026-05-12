@@ -100,7 +100,9 @@ tk init
 
 `tk init` requires the current working directory to be inside a git repository.
 It writes `.ticket/config.json` in that repo root with the project binding.
-During interactive setup, the default server URL prompt is `https://ticket.localhost`.
+During interactive setup, Ticket shows detected values from environment variables
+and nearest `.ticket.json` (walking up from CWD until the git root), then lets
+you choose local or remote client mode.
 
 Configure server access with environment variables:
 
@@ -108,7 +110,15 @@ Configure server access with environment variables:
 export TICKET_URL=https://ticket.example.com
 export TICKET_USERNAME=alice
 export TICKET_PASSWORD=secret12
+export TICKET_PROJECT=1
 ```
+
+Remote mode uses OpenAPI/HTTP when `TICKET_URL`, `TICKET_USERNAME`, and
+`TICKET_PASSWORD` are set. Local mode is used when those credentials are absent
+and `~/.ticket/ticket.db` exists.
+
+You can also place `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PROJECT` in a
+repo `.ticket.json`; never include `TICKET_PASSWORD` in that file.
 
 For example:
 
@@ -1101,9 +1111,39 @@ tk update -id <key-or-id> -parent_id 12
 tk update -id <key-or-id> -estimate_effort 5
 tk update -id <key-or-id> -estimate_complete 2026-04-30T17:00:00Z
 tk update -id <key-or-id> -stage develop -state active -priority 2 -title "new title"
+tk new -f tickets.txt                    # preview file intent only (no writes)
+tk new -f tickets.txt -commit            # create/update from file and write back ids
+tk update -f tickets.txt                 # preview file update intent only
+tk update -f tickets.txt -commit         # apply file updates (id: required per entry)
 
 When you pass `-stage`, the value must be one of the stages in the ticket's current
 workflow. If it is invalid, `tk update` prints the valid stages for that ticket.
+
+File-driven ticket format (`tk new -f`, `tk update -f`) uses blocks:
+
+```text
+# Ticket title              # level 1 (root)
+## Child ticket title       # level 2 (child of nearest level 1)
+### Grandchild ticket title # level 3 (child of nearest level 2)
+id: CUS-12              # optional for tk new; required for tk update
+type: bug               # optional
+labels: api, urgent     # optional (comma-separated)
+
+Description line 1
+Description line 2
+```
+
+The parser enforces valid hierarchy transitions. For example, `###` without a
+preceding `##` parent is a parse error and the whole operation fails.
+
+`tk new -f` without `-commit` prints an intent preview in `tk ls`-style rows plus:
+`Tip: \`use -commit\` to write back to tk`; it does not call the server.
+With `-commit`, new entries are created, entries with `id:` are updated, and the file
+is rewritten with `id:` filled in for created tickets.
+
+`tk update -f` requires `id:` for every entry. Without `-commit` it previews only
+with the same tip message;
+with `-commit` it updates title/description/type/labels from the file.
 
 `tk reject -id <key-or-id>` sends a ticket back to the first stage in its current
 workflow, sets the state to `idle`, and marks it as draft.

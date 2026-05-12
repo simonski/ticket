@@ -195,3 +195,59 @@ func TestSetChatEnabledPersistsValues(t *testing.T) {
 		t.Fatalf("ChatEnabled() = false, want true")
 	}
 }
+
+func TestSystemAgentModelConfigIncludesProviderCatalogWithCopilot(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "ticket.db")
+	if err := Init(dbPath, "admin", "password"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	cfg, err := SystemAgentModelConfig(context.Background(), db)
+	if err != nil {
+		t.Fatalf("SystemAgentModelConfig() error = %v", err)
+	}
+	if len(cfg.Providers) == 0 {
+		t.Fatalf("SystemAgentModelConfig().Providers empty")
+	}
+
+	var foundCopilot bool
+	var foundCopilotEnterprise bool
+	for _, provider := range cfg.Providers {
+		switch provider.ID {
+		case "github-copilot":
+			foundCopilot = true
+			if provider.DefaultModel == "" {
+				t.Fatalf("GitHub Copilot provider missing default model")
+			}
+			if len(provider.Models) == 0 {
+				t.Fatalf("GitHub Copilot provider missing models catalog")
+			}
+			if provider.AuthType != "api_key" {
+				t.Fatalf("GitHub Copilot auth_type = %q, want %q", provider.AuthType, "api_key")
+			}
+		case "github-copilot-enterprise":
+			foundCopilotEnterprise = true
+			if provider.DefaultModel == "" {
+				t.Fatalf("GitHub Copilot Enterprise provider missing default model")
+			}
+			if len(provider.Models) == 0 {
+				t.Fatalf("GitHub Copilot Enterprise provider missing models catalog")
+			}
+			if provider.AuthType != "api_key" {
+				t.Fatalf("GitHub Copilot Enterprise auth_type = %q, want %q", provider.AuthType, "api_key")
+			}
+		}
+	}
+	if !foundCopilot {
+		t.Fatalf("GitHub Copilot provider missing from catalog")
+	}
+	if !foundCopilotEnterprise {
+		t.Fatalf("GitHub Copilot Enterprise provider missing from catalog")
+	}
+}

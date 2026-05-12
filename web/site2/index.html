@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ticket site2</title>
-    <link rel="stylesheet" href="/site2/site2.css">
+    <title>ticket</title>
+    <link rel="stylesheet" href="site2.css">
 </head>
 <body>
     <div id="login-screen" class="screen login-screen">
@@ -57,17 +57,7 @@
                 <div class="brand">
                     <div class="brand-mark" aria-hidden="true"></div>
                 </div>
-                <nav class="nav" id="main-nav">
-                    <button type="button" data-view="tickets" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path></svg></span><span>Board</span></button>
-                    <button type="button" data-view="goals"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.8 6.4 20.5l1.1-6.2L3 9.9 9 9z"></path></svg></span><span>Goals</span></button>
-                    <button type="button" data-view="documents"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M9 13h8"></path><path d="M9 17h8"></path></svg></span><span>Documents</span></button>
-                    <button type="button" data-view="interventions"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v8"></path><path d="M12 16h.01"></path><circle cx="12" cy="12" r="9"></circle></svg></span><span>Interventions</span></button>
-                    <button type="button" data-view="projects"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18"></path><path d="M6 7v10"></path><path d="M12 7v10"></path><path d="M18 7v10"></path><path d="M3 17h18"></path></svg></span><span>Projects</span></button>
-                    <button type="button" data-view="workflows"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14"></path><path d="M5 12h9"></path><path d="M5 18h14"></path><path d="M17 10l2 2-2 2"></path></svg></span><span>Workflows</span></button>
-                    <button type="button" data-view="roles"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0.001 0"></path><path d="M17 16a3 3 0 1 0 0.001 0"></path><path d="M9.5 10.5l5 3"></path></svg></span><span>Roles</span></button>
-                    <button type="button" data-view="agents"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4"></path><path d="M8 8a4 4 0 1 1 8 0"></path><path d="M7 13h10v7H7z"></path></svg></span><span>Agents</span></button>
-                    <button type="button" data-view="teams"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11a2.5 2.5 0 1 0 0.001 0"></path><path d="M16 9a2 2 0 1 0 0.001 0"></path><path d="M4 19a4 4 0 0 1 8 0"></path><path d="M14 19a3 3 0 0 1 6 0"></path></svg></span><span>Teams</span></button>
-                </nav>
+                <nav class="nav" id="main-nav"></nav>
                 <div></div>
             </aside>
 
@@ -165,9 +155,78 @@
                             </div>
                         </form>
                         <div class="panel panel-padded" style="margin-top: 16px;">
-                            <h3>Goal refinement chat</h3>
-                            <p class="meta">Use this to iterate with the agent before marking a goal ready.</p>
-                            <div id="goal-chat-log" class="history-list" style="min-height:160px;max-height:280px;overflow:auto;"></div>
+                            <div class="panel-head">
+                                <h3>Agent harness configuration</h3>
+                            </div>
+                            <p id="agent-harness-summary" class="meta">Hierarchy: goal → project → system.</p>
+
+                            <div class="agent-harness-grid">
+                                <div class="field">
+                                    <label for="system-agent-provider">System default configuration</label>
+                                    <select id="system-agent-provider"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="resolved-agent-model">Effective model for selected goal</label>
+                                    <input id="resolved-agent-model" readonly>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-system-agent-model" type="button">Save system default</button>
+                            </div>
+
+                            <div class="agent-harness-divider"></div>
+
+                            <div class="agent-harness-grid">
+                                <div class="field">
+                                    <label for="project-agent-provider">Project default configuration</label>
+                                    <select id="project-agent-provider"></select>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-project-agent-model" type="button">Save project override</button>
+                                <button id="clear-project-agent-model" type="button" class="btn-ghost">Clear project override</button>
+                            </div>
+
+                            <div class="agent-harness-divider"></div>
+
+                            <div class="agent-harness-grid">
+                                <div class="field">
+                                    <label for="goal-agent-provider">Goal configuration</label>
+                                    <select id="goal-agent-provider"></select>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-goal-agent-model" type="button">Save goal override</button>
+                                <button id="clear-goal-agent-model" type="button" class="btn-ghost">Clear goal override</button>
+                            </div>
+
+                            <div class="agent-harness-divider"></div>
+
+                            <div class="field">
+                                <label for="resolved-agent-provider">Effective configuration</label>
+                                <input id="resolved-agent-provider" readonly>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="resolved-agent-url">Effective base URL</label>
+                                    <input id="resolved-agent-url" readonly>
+                                </div>
+                                <div class="field">
+                                    <label for="resolved-agent-api-key">Effective API key</label>
+                                    <input id="resolved-agent-api-key" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel panel-padded" style="margin-top: 16px;">
+                            <div class="panel-head panel-head-spaced">
+                                <h3>Goal refinement chat</h3>
+                                <div id="goal-chat-status" class="goal-chat-status" aria-live="polite">
+                                    <span class="goal-chat-status-dot" aria-hidden="true"></span>
+                                    <span>idle</span>
+                                </div>
+                            </div>
+                            <p class="meta">Use this chat thread to iterate with the agent before marking a goal ready.</p>
+                            <div id="goal-chat-log" class="history-list goal-chat-log" style="min-height:160px;max-height:280px;overflow:auto;"></div>
                             <div class="row">
                                 <div class="field">
                                     <label for="goal-chat-input">Message</label>
@@ -206,7 +265,77 @@
                     </div>
                 </section>
 
+                <section id="view-providers" class="view">
+                    <div class="panel">
+                        <div class="panel-head panel-head-spaced">
+                            <h2>Agent provider configurations</h2>
+                            <button id="new-provider-config-button" type="button" class="btn-primary">New config</button>
+                        </div>
+                        <p class="meta">Define named configurations once, then select them for system/project/goal defaults.</p>
+                        <div class="field">
+                            <label for="provider-config-select">Configuration</label>
+                            <select id="provider-config-select"></select>
+                        </div>
+                        <form id="provider-config-form" class="stack" style="margin-top: 12px;">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="provider-config-id">Configuration name (id)</label>
+                                    <input id="provider-config-id" placeholder="copilot-default">
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-label">Label</label>
+                                    <input id="provider-config-label" placeholder="GitHub Copilot default">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="provider-config-model">Default model</label>
+                                    <input id="provider-config-model" placeholder="gpt-5.3-codex">
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-url">Base URL</label>
+                                    <input id="provider-config-url" placeholder="https://api.githubcopilot.com">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="provider-config-auth-type">Auth type</label>
+                                    <select id="provider-config-auth-type">
+                                        <option value="api_key">api_key</option>
+                                        <option value="none">none</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="provider-config-requires-url">Requires URL</label>
+                                    <select id="provider-config-requires-url">
+                                        <option value="false">false</option>
+                                        <option value="true">true</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="provider-config-api-key">API key</label>
+                                <input id="provider-config-api-key" type="password" placeholder="optional if auth_type=none">
+                            </div>
+                            <div class="field">
+                                <label for="provider-config-models">Model list (one per line)</label>
+                                <textarea id="provider-config-models" placeholder="gpt-5.3-codex&#10;gpt-5"></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-provider-config-button" type="submit">Save config</button>
+                                <button id="delete-provider-config-button" type="button" class="btn-danger">Delete config</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
                 <section id="view-documents" class="view split">
+                    <div id="document-drop-overlay" class="document-drop-overlay" aria-hidden="true">
+                        <div class="document-drop-overlay-card">
+                            <div class="document-drop-overlay-title">Drop text file to upload</div>
+                            <div class="meta">Release to attach it to the selected document.</div>
+                        </div>
+                    </div>
                     <div class="panel">
                         <div class="panel-head">
                             <div>
@@ -725,7 +854,7 @@
             </form>
         </div>
     </div>
-    <script src="/site2/api.js"></script>
-    <script src="/site2/app.js"></script>
+    <script src="api.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

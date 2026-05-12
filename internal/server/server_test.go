@@ -427,8 +427,21 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v", err)
 	}
-	if !strings.Contains(string(body), "<title>ticket site2</title>") {
-		t.Fatalf("root response missing site2 frontend")
+	if !strings.Contains(string(body), "<title>ticket</title>") {
+		t.Fatalf("root response missing ticket frontend")
+	}
+
+	assetReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/site2.css", http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(/site2.css) error = %v", err)
+	}
+	assetResp, err := http.DefaultClient.Do(assetReq)
+	if err != nil {
+		t.Fatalf("GET /site2.css error = %v", err)
+	}
+	defer assetResp.Body.Close()
+	if assetResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /site2.css status = %d, want 200", assetResp.StatusCode)
 	}
 }
 

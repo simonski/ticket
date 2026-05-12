@@ -245,6 +245,11 @@
             border: 1px solid transparent;
             box-shadow: none;
             font-size: 13px;
+            cursor: grab;
+        }
+
+        .nav button.dragging {
+            opacity: 0.55;
         }
 
         .nav-icon {
@@ -421,6 +426,83 @@
         .view.active {
             display: grid;
             gap: 14px;
+        }
+
+        #view-documents {
+            position: relative;
+        }
+
+        .document-drop-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 8;
+            pointer-events: none;
+            opacity: 0;
+            display: grid;
+            place-items: center;
+            transition: opacity 0.18s ease;
+        }
+
+        .document-drop-overlay-card {
+            width: min(560px, calc(100% - 28px));
+            border: 2px dashed rgba(255, 122, 26, 0.72);
+            border-radius: 14px;
+            background: rgba(255, 250, 244, 0.92);
+            box-shadow: 0 12px 32px rgba(31, 20, 12, 0.18);
+            text-align: center;
+            padding: 28px 18px;
+            transform: scale(0.985);
+            transition: transform 0.18s ease;
+        }
+
+        .document-drop-overlay-title {
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        #view-documents.document-drop-active .document-drop-overlay {
+            opacity: 1;
+        }
+
+        #view-documents.document-drop-active .document-drop-overlay-card {
+            transform: scale(1);
+            animation: documentDropPulse 0.9s ease-in-out infinite;
+        }
+
+        #view-documents.document-drop-uploading .document-drop-overlay {
+            opacity: 1;
+        }
+
+        #view-documents.document-drop-uploading .document-drop-overlay-card {
+            border-color: rgba(255, 122, 26, 0.9);
+            animation: documentDropUploading 0.9s linear infinite;
+        }
+
+        #view-documents.document-drop-success .document-drop-overlay {
+            opacity: 1;
+        }
+
+        #view-documents.document-drop-success .document-drop-overlay-card {
+            border-color: rgba(15, 159, 110, 0.88);
+            background: rgba(236, 252, 246, 0.95);
+            animation: documentDropSuccess 0.45s ease-out 1;
+        }
+
+        @keyframes documentDropPulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 122, 26, 0.28), 0 12px 32px rgba(31, 20, 12, 0.18); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 122, 26, 0), 0 12px 32px rgba(31, 20, 12, 0.18); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 122, 26, 0), 0 12px 32px rgba(31, 20, 12, 0.18); }
+        }
+
+        @keyframes documentDropUploading {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.012); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes documentDropSuccess {
+            0% { transform: scale(0.98); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         .split {
@@ -678,6 +760,114 @@
             border-color: rgba(29, 24, 20, 0.18);
         }
 
+        .goal-chat-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: lowercase;
+        }
+
+        .goal-chat-status.processing {
+            color: #8c3d00;
+            border-color: rgba(255, 122, 26, 0.35);
+            background: rgba(255, 236, 214, 0.9);
+        }
+
+        .goal-chat-status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: rgba(117, 106, 93, 0.65);
+        }
+
+        .goal-chat-status.processing .goal-chat-status-dot {
+            background: var(--accent);
+            animation: goal-chat-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes goal-chat-pulse {
+            0% { transform: scale(0.9); opacity: 0.55; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.55; }
+        }
+
+        .goal-chat-log {
+            padding: 6px 2px;
+        }
+
+        .goal-chat-log .history-item {
+            max-width: 88%;
+            width: fit-content;
+        }
+
+        .goal-chat-log .history-item-user {
+            justify-self: end;
+            background: #17120f;
+            color: #fffaf4;
+            border-color: #17120f;
+        }
+
+        .goal-chat-log .history-item-user .meta {
+            color: rgba(255, 250, 244, 0.82);
+        }
+
+        .goal-chat-log .history-item-agent,
+        .goal-chat-log .history-item-system {
+            justify-self: start;
+        }
+
+        .goal-chat-log .history-item-latest-agent {
+            position: relative;
+            padding-left: 22px;
+        }
+
+        .goal-chat-log .history-item-latest-agent .agent-live-dot {
+            position: absolute;
+            top: 9px;
+            left: 8px;
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: #d14343;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+        }
+
+        .goal-chat-log .history-item-latest-agent.agent-active .agent-live-dot {
+            background: #20b455;
+            animation: goal-chat-jitter 0.22s linear infinite;
+        }
+
+        .goal-chat-log .history-item-latest-agent.agent-stopped .agent-live-dot {
+            background: #d14343;
+            animation: none;
+        }
+
+        @keyframes goal-chat-jitter {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(0.6px, -0.4px); }
+            50% { transform: translate(-0.7px, 0.5px); }
+            75% { transform: translate(0.5px, 0.7px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        .agent-harness-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 10px;
+        }
+
+        .agent-harness-divider {
+            height: 1px;
+            margin: 14px 0;
+            background: var(--line);
+        }
+
         .goal-decomposition-item {
             display: flex;
             align-items: center;
@@ -725,6 +915,10 @@
             .topbar {
                 padding-left: 14px;
                 padding-right: 14px;
+            }
+
+            .agent-harness-grid {
+                grid-template-columns: 1fr;
             }
 
             .notice {

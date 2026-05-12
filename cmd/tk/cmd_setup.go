@@ -104,6 +104,13 @@ type initFlags struct {
 	git      string
 }
 
+type setupDetectedValues struct {
+	url       string
+	username  string
+	projectID string
+	source    string
+}
+
 func runSetup(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -166,11 +173,32 @@ func runSetup(args []string) error {
 	fmt.Printf("config dir : %s\n", filepath.Join(root, ".ticket"))
 	fmt.Println()
 
+	detected, detectErr := detectSetupValues(root)
+	if detectErr != nil {
+		return detectErr
+	}
+	if strings.TrimSpace(detected.url) != "" || strings.TrimSpace(detected.username) != "" || strings.TrimSpace(detected.projectID) != "" {
+		fmt.Println("detected settings")
+		if detected.source != "" {
+			fmt.Printf("source     : %s\n", detected.source)
+		}
+		if detected.url != "" {
+			fmt.Printf("url        : %s\n", detected.url)
+		}
+		if detected.username != "" {
+			fmt.Printf("username   : %s\n", detected.username)
+		}
+		if detected.projectID != "" {
+			fmt.Printf("project    : %s\n", detected.projectID)
+		}
+		fmt.Println()
+	}
+
 	if hasProject {
 		fmt.Printf("project is already initialised at %s\n", filepath.Join(root, ".ticket", "config.json"))
 		return nil
 	}
-	return runSetupNew(reader, flags)
+	return runSetupNew(reader, flags, detected)
 }
 
 func detectGitOrigin() string {
@@ -179,6 +207,36 @@ func detectGitOrigin() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func detectSetupValues(root string) (setupDetectedValues, error) {
+	values := setupDetectedValues{}
+	envURL := strings.TrimSpace(os.Getenv("TICKET_URL"))
+	envUser := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
+	envProject := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
+	if envURL != "" || envUser != "" || envProject != "" {
+		values.url = envURL
+		values.username = envUser
+		values.projectID = envProject
+		values.source = "environment"
+		return values, nil
+	}
+	path, ok, err := findTicketJSONPath(root)
+	if err != nil {
+		return setupDetectedValues{}, err
+	}
+	if !ok {
+		return values, nil
+	}
+	settings, err := parseTicketJSON(path)
+	if err != nil {
+		return setupDetectedValues{}, err
+	}
+	values.url = settings.URL
+	values.username = settings.Username
+	values.projectID = settings.ProjectID
+	values.source = settings.Path
+	return values, nil
 }
 
 func matchProjectByGitOrigin(projects []store.Project, gitOrigin string) *store.Project {
@@ -193,14 +251,18 @@ func matchProjectByGitOrigin(projects []store.Project, gitOrigin string) *store.
 	return nil
 }
 
-func runSetupNew(reader *bufio.Reader, flags ...initFlags) error {
-	var f initFlags
-	if len(flags) > 0 {
-		f = flags[0]
-	}
+func runSetupNew(reader *bufio.Reader, f initFlags, detected setupDetectedValues) error {
 	fmt.Println()
-	_ = f
-	return runSetupRemote(reader)
+	remoteDefault := strings.TrimSpace(detected.url) != ""
+	defaultChoice := 0
+	if remoteDefault {
+		defaultChoice = 1
+	}
+	choice := promptChoiceWithDefault(reader, "Choose setup mode:", []string{"local", "remote"}, defaultChoice)
+	if choice == 0 {
+		return runSetupLocal(reader, f)
+	}
+	return runSetupRemote(reader, detected)
 }
 
 //nolint:unused // retained temporarily during server-only migration cleanup
@@ -267,9 +329,12 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	return runSetupPostInit(reader, f.workflow)
 }
 
-func runSetupRemote(reader *bufio.Reader) error {
+func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 	// 1. Server URL
 	defaultURL := defaultTicketURL
+	if strings.TrimSpace(detected.url) != "" {
+		defaultURL = strings.TrimSpace(detected.url)
+	}
 	serverURL := prompt(reader, "server URL", defaultURL)
 	serverURL = strings.TrimRight(strings.TrimSpace(serverURL), "/")
 	if serverURL == "" {
@@ -312,6 +377,9 @@ func runSetupRemote(reader *bufio.Reader) error {
 	// 4. Authentication
 	fmt.Println()
 	defaultUsername := cfg.Username
+	if strings.TrimSpace(defaultUsername) == "" {
+		defaultUsername = strings.TrimSpace(detected.username)
+	}
 	defaultPassword := ""
 
 	hasAccount := promptYN(reader, "do you have an account on this server?", true)

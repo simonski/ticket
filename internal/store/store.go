@@ -1204,6 +1204,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent_model_providers', ?)`, DefaultAgentModelProvidersJSON); err != nil {
 		return err
 	}
+	if err := EnsureDefaultAgentModelProviders(ctx, db); err != nil {
+		return err
+	}
 	if _, err := db.ExecContext(ctx, `
 		INSERT OR IGNORE INTO project_members (project_id, user_id, role)
 		SELECT project_id, created_by, 'owner'
