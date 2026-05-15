@@ -1816,6 +1816,42 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	}
 }
 
+func TestRunRegisterDuplicateUsernameReturnsHelpfulError(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	testutil.CloneSeededDB(t, dbPath, "adminpass")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	setTestLocation(t, ts.URL)
+	if err := store.SetRegistrationEnabled(context.Background(), db, true); err != nil {
+		t.Fatalf("SetRegistrationEnabled() error = %v", err)
+	}
+
+	if err := run([]string{"register", "-username", "alice", "-password", "password123"}); err != nil {
+		t.Fatalf("first register error = %v", err)
+	}
+
+	err = run([]string{"register", "-username", "alice", "-password", "password123"})
+	if err == nil {
+		t.Fatal("second register error = nil")
+	}
+	if !strings.Contains(err.Error(), "username already exists") {
+		t.Fatalf("second register error = %v", err)
+	}
+}
+
 func TestRunStatusRemoteSuccess(t *testing.T) {
 	t.Setenv("TICKET_HOME", t.TempDir())
 	t.Setenv("AGENT_ID", "agent-123")

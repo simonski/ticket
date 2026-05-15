@@ -142,6 +142,11 @@ func CreateUserWithParams(ctx context.Context, db *sql.DB, params UserCreatePara
 	if !params.SkipPasswordValidation && len(plainPassword) < 8 {
 		return User{}, errors.New("password must be at least 8 characters")
 	}
+	if _, lookupErr := GetUserByUsername(ctx, db, username); lookupErr == nil {
+		return User{}, errors.New("username already exists")
+	} else if !errors.Is(lookupErr, sql.ErrNoRows) {
+		return User{}, lookupErr
+	}
 
 	hash, err := password.Hash(plainPassword)
 	if err != nil {

@@ -185,6 +185,31 @@ func TestRegisterAndCreateUserSupportEmailAndGeneratedPassword(t *testing.T) {
 	}
 }
 
+func TestRegisterDuplicateUsernameReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	firstResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "carol",
+		"password": "password123",
+	}, "")
+	if firstResp.Code != http.StatusCreated {
+		t.Fatalf("first register status = %d body=%s", firstResp.Code, firstResp.Body.String())
+	}
+
+	secondResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "carol",
+		"password": "password123",
+	}, "")
+	if secondResp.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate register status = %d body=%s", secondResp.Code, secondResp.Body.String())
+	}
+	if !strings.Contains(secondResp.Body.String(), "username already exists") {
+		t.Fatalf("duplicate register body = %s", secondResp.Body.String())
+	}
+}
+
 func TestPlanAdminAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
