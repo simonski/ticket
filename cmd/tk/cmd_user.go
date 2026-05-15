@@ -25,9 +25,6 @@ func runRegister(args []string) error {
 
 	username := strings.TrimSpace(*usernameFlag)
 	if username == "" {
-		username = currentOSUser()
-	}
-	if username == "" {
 		return errors.New("username is required")
 	}
 	password := strings.TrimSpace(*passwordFlag)

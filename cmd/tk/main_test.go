@@ -1852,6 +1852,19 @@ func TestRunRegisterDuplicateUsernameReturnsHelpfulError(t *testing.T) {
 	}
 }
 
+func TestRunRegisterRequiresExplicitUsername(t *testing.T) {
+	t.Setenv("USER", "simon")
+	t.Setenv("USERNAME", "simon")
+
+	err := run([]string{"register", "-password", "password123"})
+	if err == nil {
+		t.Fatal("register error = nil")
+	}
+	if !strings.Contains(err.Error(), "username is required") {
+		t.Fatalf("register error = %v", err)
+	}
+}
+
 func TestRunStatusRemoteSuccess(t *testing.T) {
 	t.Setenv("TICKET_HOME", t.TempDir())
 	t.Setenv("AGENT_ID", "agent-123")
