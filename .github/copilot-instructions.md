@@ -9,7 +9,11 @@ make setup              # Go modules + Node + Playwright
 make build-dev          # build ./bin/tk (does NOT bump cmd/tk/VERSION)
 make build              # build + bump patch version + sync openapi.yaml version
 make lint               # golangci-lint + gosec
-make test               # fast default: unit tests
+make test               # ultra-fast default: unit tests
+make test-fast          # recommended developer loop: unit + JS API + Go API smoke
+make test-api-smoke     # fast Go API smoke packages (internal/client + internal/server)
+make test-cli           # heavier CLI package tests
+make test-contract      # heavier libticket contract tests
 make test-all           # full suite: unit + api + browser + quickstart + docs/harness
 make test-api-js        # JavaScript API client-library tests (web/site2/api.test.js)
 make test-api-cli       # CLI/API interface tests (cmd + client + server + contract)
@@ -82,6 +86,7 @@ make validate-openapi     # structural OpenAPI check
 
 - **Use staged test gates to keep iteration fast**:
   - always run `make test` + `make lint` for normal edits
+  - prefer `make test-fast` for the normal developer loop before escalating to broader suites
   - run `make test-api` when API contract/surface changes (`openapi.yaml`, `internal/server`, `internal/client`, CLI API handlers)
   - run `make test-browser` for web UX changes
   - run `make test-all` before completion/PR

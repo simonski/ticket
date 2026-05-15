@@ -10,6 +10,7 @@ import (
 
 	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
+	"github.com/simonski/ticket/libticket"
 )
 
 func runWorkItem(args []string) error {
@@ -22,6 +23,10 @@ func runWorkItem(args []string) error {
 		return err
 	}
 	api := client.New(cfg)
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 
 	switch args[0] {
@@ -122,7 +127,7 @@ func runWorkItem(args []string) error {
 	case "queue":
 		fs := flag.NewFlagSet("work-item queue", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectID := fs.Int64("project_id", 0, "project id (default current)")
+		projectID := fs.String("project_id", "", "project id, prefix, or alias (default current)")
 		id := fs.String("id", "", "specific ticket id/ref")
 		dryRun := fs.Bool("dry-run", false, "preview without assignment")
 		explain := fs.Bool("explain", false, "print explanation for returned status")
@@ -134,7 +139,7 @@ func runWorkItem(args []string) error {
 		if len(fs.Args()) != 0 {
 			return errors.New("usage: tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain] [-strategy <priority|order|aging>] [-preview]")
 		}
-		resolvedProjectID, err := resolveWorkItemProjectID(cfg, *projectID)
+		resolvedProjectID, err := resolveWorkItemProjectID(ctx, cfg, svc, *projectID)
 		if err != nil {
 			return err
 		}
@@ -211,7 +216,7 @@ func runWorkItem(args []string) error {
 	case "create":
 		fs := flag.NewFlagSet("work-item create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectID := fs.Int64("project_id", 0, "project id (default current)")
+		projectID := fs.String("project_id", "", "project id, prefix, or alias (default current)")
 		title := fs.String("title", "", "title")
 		typ := fs.String("type", "task", "ticket type")
 		description := fs.String("description", "", "description")
@@ -222,7 +227,7 @@ func runWorkItem(args []string) error {
 		if len(fs.Args()) != 0 || strings.TrimSpace(*title) == "" {
 			return errors.New("usage: tk work-item create [-project_id <id>] -title <title> [-type <task|bug|story|chore>] [-description <text>] [-start]")
 		}
-		resolvedProjectID, err := resolveWorkItemProjectID(cfg, *projectID)
+		resolvedProjectID, err := resolveWorkItemProjectID(ctx, cfg, svc, *projectID)
 		if err != nil {
 			return err
 		}
@@ -255,13 +260,24 @@ func runWorkItem(args []string) error {
 	}
 }
 
-func resolveWorkItemProjectID(cfg config.Config, provided int64) (int64, error) {
-	if provided > 0 {
-		return provided, nil
+func resolveWorkItemProjectID(ctx context.Context, cfg config.Config, svc libticket.Service, provided string) (int64, error) {
+	project, err := resolveProjectFromFlagOrConfig(ctx, cfg, svc, provided)
+	if err != nil {
+		ref := firstNonEmpty(strings.TrimSpace(provided), strings.TrimSpace(cfg.ProjectID))
+		switch strings.ToLower(ref) {
+		case "public", "private":
+			if projects, listErr := svc.ListProjects(ctx); listErr == nil {
+				for _, candidate := range projects {
+					if strings.EqualFold(ref, candidate.Visibility) {
+						return candidate.ID, nil
+					}
+				}
+			}
+		}
+		if localProject, ok, localErr := resolveLocalAliasProject(ctx, cfg, ref); localErr == nil && ok {
+			return localProject.ID, nil
+		}
+		return 0, errors.New("project_id is required (set an active project or pass -project_id)")
 	}
-	var fromConfig int64
-	if _, err := fmt.Sscan(strings.TrimSpace(cfg.ProjectID), &fromConfig); err == nil && fromConfig > 0 {
-		return fromConfig, nil
-	}
-	return 0, errors.New("project_id is required (set an active project or pass -project_id)")
+	return project.ID, nil
 }

@@ -5,13 +5,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SEED_SCRIPT="$ROOT_DIR/scripts/populate_todo_example.sh"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
+source "$ROOT_DIR/scripts/lib/token_auth.sh"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-todo-example.XXXXXX")"
 TICKET_HOME_DIR="$WORK_DIR/home"
 REPO_DIR="$WORK_DIR/repo"
-SERVER_HOME="$WORK_DIR/server-home"
-SERVER_PORT=$((20000 + RANDOM % 20000))
-SERVER_ADDR="127.0.0.1:$SERVER_PORT"
-SERVER_URL="http://$SERVER_ADDR"
+SHARED_SERVER_URL="${TICKET_TEST_SERVER_URL:-}"
+SHARED_SERVER_PASSWORD="${TICKET_TEST_SERVER_PASSWORD:-adminpass}"
 SERVER_PID=""
 
 cleanup() {
@@ -28,24 +27,35 @@ cd "$REPO_DIR"
 export TICKET_HOME="$TICKET_HOME_DIR"
 unset AGENT_ID AGENT_PASSWORD
 
-mkdir -p "$SERVER_HOME"
-env TICKET_HOME="$SERVER_HOME" "$TK_BIN" initdb -password adminpass >/dev/null
-env TICKET_HOME="$SERVER_HOME" "$TK_BIN" server -f "$SERVER_HOME/ticket.db" -addr "$SERVER_ADDR" >/dev/null 2>&1 &
-SERVER_PID=$!
-for _ in {1..50}; do
-	if curl -fsS "$SERVER_URL/api/healthz" >/dev/null 2>&1; then
-		break
+if [[ -n "$SHARED_SERVER_URL" ]]; then
+	SERVER_URL="$SHARED_SERVER_URL"
+else
+	SERVER_HOME="$WORK_DIR/server-home"
+	SERVER_PORT=$((20000 + RANDOM % 20000))
+	SERVER_ADDR="127.0.0.1:$SERVER_PORT"
+	SERVER_URL="http://$SERVER_ADDR"
+
+	mkdir -p "$SERVER_HOME"
+	env TICKET_HOME="$SERVER_HOME" "$TK_BIN" initdb -password "$SHARED_SERVER_PASSWORD" >/dev/null
+	env TICKET_HOME="$SERVER_HOME" "$TK_BIN" server -f "$SERVER_HOME/ticket.db" -addr "$SERVER_ADDR" >/dev/null 2>&1 &
+	SERVER_PID=$!
+	for _ in {1..50}; do
+		if curl -fsS "$SERVER_URL/api/healthz" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 0.2
+	done
+	if ! curl -fsS "$SERVER_URL/api/healthz" >/dev/null 2>&1; then
+		echo "server startup timed out at $SERVER_URL" >&2
+		exit 1
 	fi
-	sleep 0.2
-done
-if ! curl -fsS "$SERVER_URL/api/healthz" >/dev/null 2>&1; then
-	echo "server startup timed out at $SERVER_URL" >&2
-	exit 1
 fi
 
 export TICKET_URL="$SERVER_URL"
 export TICKET_USERNAME="admin"
-export TICKET_PASSWORD="adminpass"
+unset TICKET_TOKEN
+export TICKET_PASSWORD="$SHARED_SERVER_PASSWORD"
+use_token_auth
 "$TK_BIN" whoami >/dev/null
 
 "$SEED_SCRIPT" >/dev/null
@@ -90,7 +100,7 @@ labels_output="$("$TK_BIN" label ls)"
 assert_contains "$labels_output" "frontend" "labels list frontend"
 assert_contains "$labels_output" "backend" "labels list backend"
 
-deps_output="$("$TK_BIN" get -id "$TASK_WEB_ID")"
+deps_output="$("$TK_BIN" get -id "$TASK_WEB_ID" -v)"
 assert_contains "$deps_output" "$TASK_API_ID" "web task dependency"
 
 time_output="$("$TK_BIN" time total -id "$TASK_API_ID")"

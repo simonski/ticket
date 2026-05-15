@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-all test-go test-go-race test-go-cover test-unit test-integration test-api test-api-js test-api-cli test-browser test-playwright test-quickstart test-tk-test test-todo-example testscripts lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -26,10 +26,15 @@ help:
 	@printf "  make setup-node      Install Node dependencies.\n"
 	@printf "  make setup-playwright Install Chromium for Playwright.\n"
 	@printf "  make test            Run fast default tests (unit).\n"
+	@printf "  make test-fast       Run the fast developer loop (unit + API smoke + JS API).\n"
 	@printf "  make test-all        Run all tests (unit + api + browser + docs/harness).\n"
 	@printf "  make test-go         Run Go tests.\n"
 	@printf "  make test-go-race    Run Go tests with the race detector.\n"
 	@printf "  make test-unit       Run unit-oriented Go test packages.\n"
+	@printf "  make test-api-smoke  Run fast Go API smoke packages (client + server).\n"
+	@printf "  make test-cli        Run CLI package tests.\n"
+	@printf "  make test-contract   Run libticket contract tests.\n"
+	@printf "  make test-store      Run store package tests.\n"
 	@printf "  make test-api-js     Run JavaScript API client-library tests.\n"
 	@printf "  make test-api-cli    Run CLI/API interface tests (cmd + client + server + contract).\n"
 	@printf "  make test-api        Run both API interface suites (js + cli).\n"
@@ -126,11 +131,16 @@ backup-db:
 	./scripts/backup_ticket_db.sh
 
 UNIT_TEST_PKGS := ./internal/config ./internal/password ./web
-INTEGRATION_TEST_PKGS := ./cmd/tk ./internal/client ./internal/server ./internal/store ./libticket
+API_SMOKE_TEST_PKGS := ./internal/client ./internal/server
+CLI_TEST_PKGS := ./cmd/tk
+CONTRACT_TEST_PKGS := ./libticket
+STORE_TEST_PKGS := ./internal/store
 
 test: test-unit
 
-test-all: test-unit test-api test-browser test-quickstart testscripts test-todo-example
+test-fast: test-unit test-api-js test-api-smoke
+
+test-all: test-unit test-api test-browser build-bin test-quickstart-bin test-final-shell-bin
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
@@ -141,11 +151,26 @@ test-go-race:
 test-unit:
 	TICKET_FAST_HASH=1 go test $(UNIT_TEST_PKGS)
 
+test-api-smoke:
+	TICKET_FAST_HASH=1 go test $(API_SMOKE_TEST_PKGS)
+
+test-cli:
+	TICKET_FAST_HASH=1 go test $(CLI_TEST_PKGS)
+
+test-contract:
+	TICKET_FAST_HASH=1 go test $(CONTRACT_TEST_PKGS)
+
+test-store:
+	TICKET_FAST_HASH=1 go test $(STORE_TEST_PKGS)
+
 test-integration:
-	TICKET_FAST_HASH=1 go test $(INTEGRATION_TEST_PKGS)
+	@$(MAKE) test-store
+	@$(MAKE) test-api-cli
 
 test-api-cli:
-	TICKET_FAST_HASH=1 go test ./cmd/tk ./internal/client ./internal/server ./libticket
+	@$(MAKE) test-api-smoke
+	@$(MAKE) test-cli
+	@$(MAKE) test-contract
 
 test-api-js:
 	node --test web/site2/api.test.js
@@ -178,22 +203,34 @@ test-go-cover:
 
 test-playwright:
 	@if [ ! -d node_modules ]; then npm install; fi
-	npx playwright install chromium
+	@if ! npx playwright install --list 2>/dev/null | grep -q '/chromium-'; then npx playwright install chromium; fi
 	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
 	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test
 
 test-browser: test-playwright
 
 test-quickstart: build-bin
+	@$(MAKE) test-quickstart-bin
+
+test-quickstart-bin:
 	go run ./cmd/tk-test QUICKSTART.md TUTORIAL.md
 
 test-tk-test: test-quickstart
 
 test-todo-example: build-bin
+	@$(MAKE) test-todo-example-bin
+
+test-todo-example-bin:
 	./scripts/verify_todo_example.sh
 
 testscripts: build-bin
+	@$(MAKE) testscripts-bin
+
+testscripts-bin:
 	./scripts/testharness.sh
+
+test-final-shell-bin:
+	./scripts/test_final_harnesses.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────
 # Produces cross-platform tarballs in ./dist, creates a GitHub release, and
@@ -317,6 +354,8 @@ clean:
 
 install: build
 	cp ./bin/tk $$(go env GOPATH)/bin/tk
+	alias act=tk
+	alias action=tk
 
 dev:
 	# prints out the commands needed to put this repo into local ticket dev mode

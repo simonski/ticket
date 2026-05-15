@@ -229,3 +229,139 @@ func TestHandleKeyBoardTransitionsAndSelection(t *testing.T) {
 		t.Fatalf("selected = %#v, want PRJ-2", updated.selected)
 	}
 }
+
+func TestNewEditFormDescriptionHeightIsLarger(t *testing.T) {
+	f := newEditForm(store.Ticket{})
+	if f.desc.Height() != 8 {
+		t.Fatalf("description height = %d, want 8", f.desc.Height())
+	}
+}
+
+func TestHandleKeyEditArrowNavigationForTextareas(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.width = 100
+	m.mode = modeEdit
+	m.form = newEditForm(store.Ticket{
+		Title:       "Example",
+		Description: "line1\nline2\nline3",
+	})
+	m.form.focus = efDesc
+	m.form.applyFocus(m.width - 2)
+
+	// Move cursor to first line in description.
+	for i := 0; i < 20 && !textareaAtFirstLine(m.form.desc); i++ {
+		m.form.desc, _ = m.form.desc.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+
+	// Down from first line should stay in description (move within field).
+	updatedAny, _ := m.handleKeyEdit(tea.KeyMsg{Type: tea.KeyDown})
+	updated, ok := updatedAny.(Model)
+	if !ok {
+		t.Fatalf("handleKeyEdit type = %T, want Model", updatedAny)
+	}
+	if updated.form.focus != efDesc {
+		t.Fatalf("focus after first down inside description = %d, want %d", updated.form.focus, efDesc)
+	}
+
+	// Move down until the last line while staying in description.
+	for i := 0; i < 20 && !textareaAtLastLine(updated.form.desc); i++ {
+		updatedAny, _ = updated.handleKeyEdit(tea.KeyMsg{Type: tea.KeyDown})
+		updated, ok = updatedAny.(Model)
+		if !ok {
+			t.Fatalf("handleKeyEdit type = %T, want Model", updatedAny)
+		}
+		if updated.form.focus != efDesc {
+			t.Fatalf("focus while moving within description = %d, want %d", updated.form.focus, efDesc)
+		}
+	}
+	if !textareaAtLastLine(updated.form.desc) {
+		t.Fatalf("description cursor did not reach last line")
+	}
+
+	// One more down at last line should move to next field.
+	updatedAny, _ = updated.handleKeyEdit(tea.KeyMsg{Type: tea.KeyDown})
+	updated, ok = updatedAny.(Model)
+	if !ok {
+		t.Fatalf("handleKeyEdit type = %T, want Model", updatedAny)
+	}
+	if updated.form.focus != efAC {
+		t.Fatalf("focus after down at last description line = %d, want %d", updated.form.focus, efAC)
+	}
+
+	// From the first line, up should jump to the previous field.
+	updated.form = newEditForm(store.Ticket{
+		Title:       "Example",
+		Description: "line1\nline2\nline3",
+	})
+	updated.form.focus = efDesc
+	updated.form.applyFocus(updated.width - 2)
+	for i := 0; i < 20 && !textareaAtFirstLine(updated.form.desc); i++ {
+		updated.form.desc, _ = updated.form.desc.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	updatedAny, _ = updated.handleKeyEdit(tea.KeyMsg{Type: tea.KeyUp})
+	updated, ok = updatedAny.(Model)
+	if !ok {
+		t.Fatalf("handleKeyEdit type = %T, want Model", updatedAny)
+	}
+	if updated.form.focus != efTitle {
+		t.Fatalf("focus after up at first description line = %d, want %d", updated.form.focus, efTitle)
+	}
+}
+
+func TestHandleKeyCtrlCQuitsImmediatelyInEditMode(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.mode = modeEdit
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatal("ctrl+c in edit mode should return a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("ctrl+c command result = %T, want tea.QuitMsg", cmd())
+	}
+}
+
+func TestEditDescriptionBlockHeightIsFixedAcrossFocus(t *testing.T) {
+	m := newModel(nil, config.Config{}, Themes[ThemeTheGrey])
+	m.width = 100
+	m.height = 40
+	m.form = newEditForm(store.Ticket{
+		Title:       "Example",
+		Description: "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9",
+	})
+
+	// Unfocused description
+	m.form.focus = efTitle
+	unfocusedLines := m.viewForm("Edit Ticket")
+	unfocusedGap := fieldGapLines(unfocusedLines, "description:", "acceptance:")
+	if unfocusedGap != m.form.desc.Height()+1 {
+		t.Fatalf("unfocused description span = %d, want %d", unfocusedGap, m.form.desc.Height()+1)
+	}
+
+	// Focused description
+	m.form.focus = efDesc
+	focusedLines := m.viewForm("Edit Ticket")
+	focusedGap := fieldGapLines(focusedLines, "description:", "acceptance:")
+	if focusedGap != m.form.desc.Height()+1 {
+		t.Fatalf("focused description span = %d, want %d", focusedGap, m.form.desc.Height()+1)
+	}
+}
+
+func fieldGapLines(lines []string, label, nextLabel string) int {
+	start := -1
+	end := -1
+	for i, line := range lines {
+		text := stripANSI(line)
+		if start == -1 && strings.Contains(text, label) {
+			start = i
+		}
+		if strings.Contains(text, nextLabel) {
+			end = i
+			break
+		}
+	}
+	if start == -1 || end == -1 || end <= start {
+		return 0
+	}
+	return end - start - 1
+}

@@ -12,8 +12,6 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite"
-
-	"github.com/simonski/ticket/internal/password"
 )
 
 const defaultProjectPrefix = "TK"
@@ -81,7 +79,7 @@ func Open(path string) (*sql.DB, error) {
 // The first Workflow found after seeding is assigned to the default project.
 type SeedFunc func(ctx context.Context, db *sql.DB) error
 
-// Init creates a new database at path with an admin user and a default project.
+// Init creates a new database at path with seeded plans/resources and an admin user.
 // The seedFn (if non-nil) is called to populate Workflows and roles from embedded
 // static files. If nil, no Workflows are created and the project has no lifecycle.
 func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
@@ -112,27 +110,12 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		return schemaErr
 	}
 
-	hash, err := password.Hash(adminPassword)
-	if err != nil {
-		return err
-	}
-
-	adminID := generateUserID()
-
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled)
-		VALUES (?, ?, ?, 'admin', ?, 1)
-	`, adminID, adminUsername, hash, adminUsername)
-	if err != nil {
-		return err
-	}
-
 	// Run the seed function to populate Workflows and roles.
 	// If no seed function is provided, create a minimal develop→done Workflow
 	// so tickets always have valid stages.
 	if len(seedFn) > 0 && seedFn[0] != nil {
-		if err := seedFn[0](ctx, db); err != nil {
-			return err
+		if seedErr := seedFn[0](ctx, db); seedErr != nil {
+			return seedErr
 		}
 	} else {
 		workflow, sErr := CreateWorkflow(ctx, db, "default", "Minimal bootstrap Workflow")
@@ -145,7 +128,23 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		}
 	}
 
-	// Assign the first Workflow (if any) to the default project.
+	if planErr := ensureDefaultPlans(ctx, db); planErr != nil {
+		return planErr
+	}
+	adminUser, err := CreateUserWithParams(ctx, db, UserCreateParams{
+		Username:               adminUsername,
+		PlainPassword:          adminPassword,
+		Role:                   "admin",
+		Enabled:                true,
+		PlanSlug:               EnterprisePlanSlug,
+		SkipPasswordValidation: true,
+	})
+	if err != nil {
+		return err
+	}
+	if _, _, err := ensurePublicResources(ctx, db, adminUser.ID); err != nil {
+		return err
+	}
 	var workflowID *int64
 	var id int64
 	if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows LIMIT 1`).Scan(&id); err == nil {
@@ -156,7 +155,7 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 		Title:              "Default Project",
 		Description:        "Bootstrap project created during init.",
 		AcceptanceCriteria: "",
-		CreatedBy:          adminID,
+		CreatedBy:          adminUser.ID,
 		WorkflowID:         workflowID,
 	}); err != nil {
 		return err
@@ -211,6 +210,7 @@ CREATE TABLE IF NOT EXISTS users (
 	username TEXT NOT NULL UNIQUE,
 	password_hash TEXT NOT NULL,
 	role TEXT NOT NULL,
+	plan_id INTEGER,
 	display_name TEXT NOT NULL,
 	enabled INTEGER NOT NULL DEFAULT 1,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -219,6 +219,23 @@ CREATE TABLE IF NOT EXISTS users (
 	description TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT '',
 	last_seen TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS plans (
+	plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	slug TEXT NOT NULL UNIQUE,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	max_projects INTEGER NOT NULL DEFAULT 0,
+	max_private_projects INTEGER NOT NULL DEFAULT 0,
+	max_tickets INTEGER NOT NULL DEFAULT 0,
+	max_tickets_per_project INTEGER NOT NULL DEFAULT 0,
+	max_team_memberships INTEGER NOT NULL DEFAULT 0,
+	max_api_calls_per_day INTEGER NOT NULL DEFAULT 0,
+	default_project_alias TEXT NOT NULL DEFAULT '',
+	registration_actions TEXT NOT NULL DEFAULT '{}',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -464,6 +481,17 @@ CREATE TABLE IF NOT EXISTS project_teams (
 	PRIMARY KEY(project_id, team_id),
 	FOREIGN KEY(project_id) REFERENCES projects(project_id),
 	FOREIGN KEY(team_id) REFERENCES teams(team_id)
+);
+
+CREATE TABLE IF NOT EXISTS project_aliases (
+	alias_name TEXT NOT NULL,
+	user_id TEXT,
+	project_id INTEGER NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(alias_name, user_id),
+	FOREIGN KEY(user_id) REFERENCES users(user_id),
+	FOREIGN KEY(project_id) REFERENCES projects(project_id)
 );
 
 CREATE TABLE IF NOT EXISTS workflows (
@@ -1180,6 +1208,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_enabled', '1')`); err != nil {
 		return err
 	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_auto_approve', '1')`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('default_plan_slug', ?)`, DefaultPlanSlug); err != nil {
+		return err
+	}
 	if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings (key, value) VALUES ('chat_max_connections', '2')`); err != nil {
 		return err
 	}
@@ -1240,6 +1274,69 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if !columnExists(ctx, db, "users", "uuid") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN uuid TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "users", "plan_id") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN plan_id INTEGER`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "projects", "default_draft") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE projects ADD COLUMN default_draft INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "plans") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS plans (
+				plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				slug TEXT NOT NULL UNIQUE,
+				name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				max_projects INTEGER NOT NULL DEFAULT 0,
+				max_private_projects INTEGER NOT NULL DEFAULT 0,
+				max_tickets INTEGER NOT NULL DEFAULT 0,
+				max_tickets_per_project INTEGER NOT NULL DEFAULT 0,
+				max_team_memberships INTEGER NOT NULL DEFAULT 0,
+				max_api_calls_per_day INTEGER NOT NULL DEFAULT 0,
+				default_project_alias TEXT NOT NULL DEFAULT '',
+				registration_actions TEXT NOT NULL DEFAULT '{}',
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)
+		`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "plans", "max_tickets_per_project") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE plans ADD COLUMN max_tickets_per_project INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "plans", "max_api_calls_per_day") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE plans ADD COLUMN max_api_calls_per_day INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "plans", "default_project_alias") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE plans ADD COLUMN default_project_alias TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !tableExists(ctx, db, "project_aliases") {
+		if _, err := db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS project_aliases (
+				alias_name TEXT NOT NULL,
+				user_id TEXT,
+				project_id INTEGER NOT NULL,
+				created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY(alias_name, user_id),
+				FOREIGN KEY(user_id) REFERENCES users(user_id),
+				FOREIGN KEY(project_id) REFERENCES projects(project_id)
+			)
+		`); err != nil {
 			return err
 		}
 	}
@@ -1359,6 +1456,15 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	if !columnExists(ctx, db, "users", "email_confirmed_at") {
 		if _, err := db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN email_confirmed_at TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
+		}
+	}
+	if err := ensureDefaultPlans(ctx, db); err != nil {
+		return err
+	}
+	var bootstrapAdminID string
+	if err := db.QueryRowContext(ctx, `SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1`).Scan(&bootstrapAdminID); err == nil {
+		if _, _, ensureErr := ensurePublicResources(ctx, db, bootstrapAdminID); ensureErr != nil {
+			return ensureErr
 		}
 	}
 	// Link epics to goals

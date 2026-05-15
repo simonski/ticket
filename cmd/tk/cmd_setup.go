@@ -107,6 +107,7 @@ type initFlags struct {
 type setupDetectedValues struct {
 	url       string
 	username  string
+	token     string
 	projectID string
 	source    string
 }
@@ -177,7 +178,7 @@ func runSetup(args []string) error {
 	if detectErr != nil {
 		return detectErr
 	}
-	if strings.TrimSpace(detected.url) != "" || strings.TrimSpace(detected.username) != "" || strings.TrimSpace(detected.projectID) != "" {
+	if strings.TrimSpace(detected.url) != "" || strings.TrimSpace(detected.username) != "" || strings.TrimSpace(detected.token) != "" || strings.TrimSpace(detected.projectID) != "" {
 		fmt.Println("detected settings")
 		if detected.source != "" {
 			fmt.Printf("source     : %s\n", detected.source)
@@ -187,6 +188,9 @@ func runSetup(args []string) error {
 		}
 		if detected.username != "" {
 			fmt.Printf("username   : %s\n", detected.username)
+		}
+		if detected.token != "" {
+			fmt.Println("token      : present")
 		}
 		if detected.projectID != "" {
 			fmt.Printf("project    : %s\n", detected.projectID)
@@ -213,10 +217,12 @@ func detectSetupValues(root string) (setupDetectedValues, error) {
 	values := setupDetectedValues{}
 	envURL := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	envUser := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
+	envToken := strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
 	envProject := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
-	if envURL != "" || envUser != "" || envProject != "" {
+	if envURL != "" || envUser != "" || envToken != "" || envProject != "" {
 		values.url = envURL
 		values.username = envUser
+		values.token = envToken
 		values.projectID = envProject
 		values.source = "environment"
 		return values, nil
@@ -381,13 +387,9 @@ func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 		defaultUsername = strings.TrimSpace(detected.username)
 	}
 	defaultPassword := ""
+	defaultToken := strings.TrimSpace(detected.token)
 
 	hasAccount := promptYN(reader, "do you have an account on this server?", true)
-
-	username, password, err := promptForCredentials(os.Stdin, os.Stdout, defaultUsername, defaultPassword)
-	if err != nil {
-		return err
-	}
 
 	cfg, err = config.Load()
 	if err != nil {
@@ -395,23 +397,43 @@ func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 	}
 	cfg.Remote = remoteName
 	cfg.Location = serverURL
-	svc, err := resolveService(cfg)
-	if err != nil {
-		return err
-	}
-
-	if !hasAccount {
-		if _, registerErr := svc.Register(context.Background(), username, password); registerErr != nil {
-			return fmt.Errorf("registration failed: %w", registerErr)
+	var svc libticket.Service
+	token := prompt(reader, "access token (leave blank to use password login)", defaultToken)
+	if token != "" {
+		tokenSvc := libticket.NewHTTP(config.Config{Location: serverURL, Token: token})
+		status, statusErr := tokenSvc.Status(context.Background())
+		if statusErr != nil {
+			return fmt.Errorf("token verification failed: %w", statusErr)
 		}
-		fmt.Printf("  registered user: %s\n", username)
+		if !status.Authenticated || status.User == nil {
+			return errors.New("token verification failed: invalid token")
+		}
+		cfg.Username = status.User.Username
+		cfg.Token = token
+		fmt.Printf("  user     : %s\n", cfg.Username)
+	} else {
+		username, password, credErr := promptForCredentials(os.Stdin, os.Stdout, defaultUsername, defaultPassword)
+		if credErr != nil {
+			return credErr
+		}
+		var resolveErr error
+		svc, resolveErr = resolveService(cfg)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		if !hasAccount {
+			if _, registerErr := svc.Register(context.Background(), username, password); registerErr != nil {
+				return fmt.Errorf("registration failed: %w", registerErr)
+			}
+			fmt.Printf("  registered user: %s\n", username)
+		}
+		loginUser, loginToken, loginErr := svc.Login(context.Background(), username, password)
+		if loginErr != nil {
+			return fmt.Errorf("login failed: %w", loginErr)
+		}
+		cfg.Username = loginUser.Username
+		cfg.Token = loginToken
 	}
-	_, token, err := svc.Login(context.Background(), username, password)
-	if err != nil {
-		return fmt.Errorf("login failed: %w", err)
-	}
-	cfg.Username = username
-	cfg.Token = token
 
 	// Save credentials
 	if saveCredsErr := config.SaveRemoteCredentials(serverURL, cfg.Username, cfg.Token); saveCredsErr != nil {

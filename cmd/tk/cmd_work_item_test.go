@@ -1,28 +1,41 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/simonski/ticket/internal/config"
 )
 
 func TestResolveWorkItemProjectID(t *testing.T) {
-	t.Parallel()
-	projectID, err := resolveWorkItemProjectID(config.Config{ProjectID: "7"}, 0)
+	setupLocalCLI(t)
+	cfg, err := config.Load()
 	if err != nil {
-		t.Fatalf("resolveWorkItemProjectID() error = %v", err)
+		t.Fatalf("config.Load() error = %v", err)
 	}
-	if projectID != 7 {
-		t.Fatalf("project id = %d, want 7", projectID)
-	}
-	projectID, err = resolveWorkItemProjectID(config.Config{ProjectID: ""}, 9)
+	svc, err := resolveService(cfg)
 	if err != nil {
-		t.Fatalf("resolveWorkItemProjectID(provided) error = %v", err)
+		t.Fatalf("resolveService() error = %v", err)
 	}
-	if projectID != 9 {
-		t.Fatalf("project id = %d, want 9", projectID)
+	projectID, err := resolveWorkItemProjectID(context.Background(), cfg, svc, "public")
+	if err != nil {
+		t.Fatalf("resolveWorkItemProjectID(public) error = %v", err)
 	}
-	if _, err := resolveWorkItemProjectID(config.Config{ProjectID: ""}, 0); err == nil {
-		t.Fatal("expected error when no project id is available")
+	if projectID == 0 {
+		t.Fatalf("project id = %d, want non-zero", projectID)
+	}
+	projectID, err = resolveWorkItemProjectID(context.Background(), cfg, svc, "private")
+	if err != nil {
+		t.Fatalf("resolveWorkItemProjectID(private) error = %v", err)
+	}
+	if projectID == 0 {
+		t.Fatalf("private project id = %d, want non-zero", projectID)
+	}
+	projectID, err = resolveWorkItemProjectID(context.Background(), config.Config{ProjectID: ""}, svc, "")
+	if err != nil {
+		t.Fatalf("resolveWorkItemProjectID(fallback) error = %v", err)
+	}
+	if projectID == 0 {
+		t.Fatal("fallback project id = 0, want non-zero")
 	}
 }

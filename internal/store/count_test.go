@@ -63,8 +63,8 @@ func TestCountEverything(t *testing.T) {
 	if all.Users != 1 {
 		t.Fatalf("CountEverything(all).Users = %d, want 1", all.Users)
 	}
-	if all.Projects != 3 {
-		t.Fatalf("CountEverything(all).Projects = %d, want 3", all.Projects)
+	if all.Projects != 5 {
+		t.Fatalf("CountEverything(all).Projects = %d, want 5", all.Projects)
 	}
 	if len(all.Types) != 3 {
 		t.Fatalf("CountEverything(all).Types len = %d, want 3", len(all.Types))

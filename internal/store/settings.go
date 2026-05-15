@@ -237,6 +237,29 @@ func SetRegistrationEnabled(ctx context.Context, db *sql.DB, enabled bool) error
 	return err
 }
 
+func RegistrationAutoApprove(ctx context.Context, db *sql.DB) (bool, error) {
+	var raw string
+	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'registration_auto_approve'`).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return true, nil
+		}
+		return false, err
+	}
+	return raw == "1" || raw == "true", nil
+}
+
+func SetRegistrationAutoApprove(ctx context.Context, db *sql.DB, enabled bool) error {
+	value := "0"
+	if enabled {
+		value = "1"
+	}
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO app_settings (key, value) VALUES ('registration_auto_approve', ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, value)
+	return err
+}
+
 func ChatEnabled(ctx context.Context, db *sql.DB) (bool, error) {
 	var raw string
 	if err := db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key = 'chat_enabled'`).Scan(&raw); err != nil {

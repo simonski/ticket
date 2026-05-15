@@ -12,13 +12,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/testutil"
 )
 
 type hijackableResponseWriter struct {
@@ -27,6 +26,11 @@ type hijackableResponseWriter struct {
 	status int
 	conn   net.Conn
 	rw     *bufio.ReadWriter
+}
+
+func seededServerDBPath(t *testing.T) string {
+	t.Helper()
+	return testutil.SeededDBPath(t, "password")
 }
 
 func (w *hijackableResponseWriter) Header() http.Header {
@@ -133,10 +137,7 @@ func TestRequestTimeoutFromEnv(t *testing.T) {
 func TestWriteThrottleMiddlewareUsesPerUserKeys(t *testing.T) {
 	t.Setenv("TICKET_WRITE_RATE_LIMIT", "1")
 
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -326,10 +327,7 @@ func TestRecoverMiddlewareReturnsInternalServerError(t *testing.T) {
 
 func TestServerServesHealthAndFrontend(t *testing.T) {
 	t.Parallel()
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -394,10 +392,7 @@ func TestServerServesHealthAndFrontend(t *testing.T) {
 
 func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	t.Parallel()
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -447,10 +442,7 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 
 func TestHandlerRejectsUnknownEmbeddedSite(t *testing.T) {
 	t.Parallel()
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -465,10 +457,7 @@ func TestHandlerRejectsUnknownEmbeddedSite(t *testing.T) {
 
 func TestServerVerboseLogging(t *testing.T) {
 	t.Parallel()
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -855,10 +844,7 @@ func TestWebSocketServeConnectsSubscribesPingsAndCloses(t *testing.T) {
 func TestWebSocketServeChatProcessesInputAndCloses(t *testing.T) {
 	t.Setenv("TICKET_CHAT_CMD", "cat")
 
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -986,10 +972,7 @@ func TestWebSocketServeChatProcessesInputAndCloses(t *testing.T) {
 }
 
 func TestWebSocketServeChatRejectsInputWhenDisabled(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -1022,10 +1005,7 @@ func TestWebSocketServeChatRejectsInputWhenDisabled(t *testing.T) {
 }
 
 func TestWebSocketServeChatReportsCapacityReached(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededServerDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)

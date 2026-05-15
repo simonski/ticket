@@ -80,7 +80,8 @@ so the current repo uses that database from then on.
 `tk initdb` creates:
 
 1. an `admin` account
-2. the default project, `Default Project`, with project id `1` and prefix `TK`
+2. the seeded `Public` project/team plus the default bootstrap project `Default Project`
+3. default onboarding policy so newly created users join the public team and receive a private-project alias
 
 Bootstrap resolution works like this:
 
@@ -110,12 +111,18 @@ Configure server access with environment variables:
 export TICKET_URL=https://ticket.example.com
 export TICKET_USERNAME=alice
 export TICKET_PASSWORD=secret12
-export TICKET_PROJECT=1
+export TICKET_PROJECT=public
 ```
 
 Remote mode uses OpenAPI/HTTP when `TICKET_URL`, `TICKET_USERNAME`, and
 `TICKET_PASSWORD` are set. Local mode is used when those credentials are absent
 and `~/.ticket/ticket.db` exists.
+
+`TICKET_PROJECT` may be a numeric id, a project prefix, or the aliases
+`public` / `private`. CLI flags such as `-project_id` override `TICKET_PROJECT`.
+If neither is supplied in remote mode, the CLI sends the nearest git remote URL
+and the server resolves the project by explicit ref first, then git-repository
+match, then the caller's private project alias.
 
 You can also place `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PROJECT` in a
 repo `.ticket.json`; never include `TICKET_PASSWORD` in that file.
@@ -215,9 +222,17 @@ minimum `1`, maximum `30`).
 As an admin create users:
 
 ```bash
-tk user create -username XXXX -password YYYY
+tk user create -username XXXX -email user@example.com
 created user xxxxx
+password: generated-password
 ```
+
+Server-side user creation and self-registration both provision users through the
+active plan policy. By default that means:
+
+1. the user is assigned to the `free` plan
+2. the user is added to the shared public team
+3. the user receives a private project alias named `private`
 
 As an admin enable/disable users:
 
@@ -274,8 +289,15 @@ The `-llm` flag selects the LLM: `claude` (default, uses Sonnet 4.5), `codex`, o
 Create an account:
 
 ```bash
-tk register -username name -password '*******'
+tk register -username name -email name@example.com
 ```
+
+If `-password` is omitted during registration, the server generates one and
+prints it in the response/output.
+
+If self-registration is configured with auto-approval disabled, the account is
+created in a disabled state and an admin must enable it before the user can log
+in.
 
 Set environment credentials for authenticated CLI use:
 
@@ -678,7 +700,7 @@ tk history CUS-42
 Each ticket now also tracks first-class execution work items in the API. Use
 `GET /api/tickets/{ticket_ref}/work-items` to inspect active/completed work-item
 records linked to lifecycle transitions. Access is restricted to project
-editors and owners. Optional query filters: `status=active|success|fail|stopped`
+members and admins. Optional query filters: `status=active|success|fail|stopped`
 and `assignee_type=human|agent`.
 
 Project documents are available via:
@@ -689,7 +711,7 @@ Project documents are available via:
 - `GET|POST /api/documents/{document_id}/files`
 - `GET|DELETE /api/documents/{document_id}/files/{file_id}`
 
-Work-item lifecycle operations are also available for editors/owners:
+Work-item lifecycle operations are also available for members/admins:
 
 - `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/reassign` (body: `assignee`, optional `message`)
 - `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/cancel` (optional `message`)
@@ -697,21 +719,21 @@ Work-item lifecycle operations are also available for editors/owners:
 - `POST /api/tickets/{ticket_ref}/work-items/{work_item_id}/feedback` (optional `message`, optional `commit_ref`, at least one required)
 
 Intervention decisions (`POST /api/tickets/{ticket_ref}/intervene`) are restricted
-to project owners.
+to project admins.
 
 Intervention mailbox state is available at
 `GET /api/tickets/{ticket_ref}/intervention-state` and
 `POST /api/tickets/{ticket_ref}/intervention-state` (body: `state`) for
-owner/editor triage workflows.
+admin/member triage workflows.
 
 Failure escalation inbox entries are available at:
 
 - `GET /api/tickets/{ticket_ref}/inbox` (optional `?status=open|resolved`)
-- `POST /api/tickets/{ticket_ref}/inbox/escalate` (owner decision queue entry; optional `message`)
+- `POST /api/tickets/{ticket_ref}/inbox/escalate` (admin decision queue entry; optional `message`)
 - `POST /api/tickets/{ticket_ref}/inbox/{inbox_id}/decide` (body: `decision=clarify_goal|start_again|refine_requirements`, optional `message`)
 
 The intervention queue endpoint (`GET /api/projects/{project_ref}/interventions`)
-is restricted to project editors and owners.
+is restricted to project members and admins.
 
 Intervention SLA reporting is available at
 `GET /api/projects/{project_ref}/interventions/report` (optional
@@ -747,6 +769,13 @@ Agent model configuration supports inheritance from system → project → goal:
 - `GET|PUT /api/projects/{project_ref}/agent-model` (project override)
 - `GET|PUT /api/goals/{goal_id}/agent-model` (goal override)
 - `GET /api/goals/{goal_id}/agent-model/resolved` (effective resolved config)
+
+Admin plan management is available via:
+
+- `GET|POST /api/plans`
+- `GET|PUT /api/plans/{plan_ref}`
+- `GET|POST /api/plans/default`
+- `POST /api/users/{username}/plan` with `plan_id` or `plan_slug`
 
 Execution packet visibility is available at
 `GET /api/tickets/{ticket_ref}/execution-packet`, returning the resolved
@@ -991,13 +1020,13 @@ tk upgrade-database -o ./new_database/ticket.db
 tk server -v
 tk version
 
-tk register -username <name> -password <password>
+tk register -username <name> [-email <email>] [-password <password>]
 tk status
 tk config ls
 tk config rm server
 tk logout
 
-tk user create -username <name> -password <password>
+tk user create -username <name> [-email <email>] [-password <password>]
 tk user ls
 tk user delete -username <name>
 tk user enable -username <name>
@@ -1195,21 +1224,21 @@ it can be used remotely
 ### 1. an admin user
 
 ```bash
-tk user create -username admin -role admin
+tk user create -username admin -email admin@example.com
 password: xxxx-xxxx-xxxx-xxxxx
 ```
 
 ### 2. a human user to interact with
 
 ```bash
-tk user create -username my-username -role user
+tk user create -username my-username -email me@example.com
 password: xxxx-xxxx-xxxx-xxxxx
 ```
 
 ### 3. Associate the user with the project you have been working on locally
 
 ```bash
-tk project add-user -username username -role owner,editor,viewer
+tk project add-user -username username -role admin,member,commenter,observer
 ```
 
 OR make the project public to any logged in user

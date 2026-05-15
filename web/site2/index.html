@@ -21,8 +21,31 @@
                 </div>
                 <div class="row">
                     <button class="btn-primary" type="submit">Sign in</button>
+                    <button id="show-register-button" type="button" class="hidden">Create account</button>
                 </div>
                 <div id="login-error" class="meta"></div>
+            </div>
+        </form>
+        <form id="register-form" class="login-card hidden" method="post" action="/api/register">
+            <h1>ticket</h1>
+            <div class="stack">
+                <div class="field">
+                    <label for="register-username">Username</label>
+                    <input id="register-username" name="username" autocomplete="username" required>
+                </div>
+                <div class="field">
+                    <label for="register-email">Email</label>
+                    <input id="register-email" name="email" type="email" autocomplete="email" placeholder="optional">
+                </div>
+                <div class="field">
+                    <label for="register-password">Password</label>
+                    <input id="register-password" name="password" type="password" autocomplete="new-password" placeholder="optional; leave blank to generate one">
+                </div>
+                <div class="row">
+                    <button class="btn-primary" type="submit">Create account</button>
+                    <button id="hide-register-button" type="button">Back to sign in</button>
+                </div>
+                <div id="register-help" class="meta">Leave password blank to let the server generate one.</div>
             </div>
         </form>
     </div>
@@ -476,6 +499,13 @@
                                 <input id="project-git-repository" placeholder="owner/repo or URL">
                             </div>
                             <div class="field">
+                                <label for="project-accepts-new-members">Membership requests</label>
+                                <select id="project-accepts-new-members">
+                                    <option value="false">closed</option>
+                                    <option value="true">allow requests</option>
+                                </select>
+                            </div>
+                            <div class="field">
                                 <label for="project-description">Description</label>
                                 <textarea id="project-description"></textarea>
                             </div>
@@ -489,6 +519,38 @@
                                 <button id="reset-project-button" type="button" class="btn-ghost">Clear</button>
                             </div>
                         </form>
+                        <div id="plan-admin-panel" class="panel panel-padded hidden" style="margin-top: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>Onboarding policy</h3>
+                                    <p class="meta">Default plan and registration behavior for new users.</p>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="default-plan-select">Default plan</label>
+                                    <select id="default-plan-select"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="registration-enabled-select">Registration</label>
+                                    <select id="registration-enabled-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="registration-auto-approve-select">Auto-approve</label>
+                                    <select id="registration-auto-approve-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">manual approval</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-plan-admin-button" type="button">Save onboarding policy</button>
+                            </div>
+                            <div id="plan-admin-list" class="entity-list" style="margin-top: 12px;"></div>
+                        </div>
                     </div>
                 </section>
 

@@ -86,12 +86,15 @@ func effectiveConfigPath() string {
 
 func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (projectID, projectTitle, source, workflowName string, defaultDraft *bool) {
 	projectID, source = resolveCurrentProject(cfg)
-	if projectID == "" || svc == nil {
+	if svc == nil {
 		return projectID, "", source, "", nil
 	}
-	currentProject, err := svc.GetProject(context.Background(), projectID)
+	currentProject, resolvedRef, err := resolveProjectContext(context.Background(), cfg, svc, statusProjectReference(cfg))
 	if err != nil {
 		return projectID, "", source, "", nil
+	}
+	if strings.TrimSpace(projectID) == "" {
+		projectID = resolvedRef
 	}
 	if currentProject.WorkflowID != nil {
 		if wf, err := svc.GetWorkflow(context.Background(), *currentProject.WorkflowID); err == nil {
@@ -100,6 +103,21 @@ func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (pro
 	}
 	defaultDraft = &currentProject.DefaultDraft
 	return projectID, currentProject.Title, source, workflowName, defaultDraft
+}
+
+func statusProjectReference(cfg config.Config) string {
+	if ref := strings.TrimSpace(os.Getenv("TICKET_PROJECT")); ref != "" {
+		return ref
+	}
+	if fileSettings, err := loadNearestTicketJSONSettings(); err == nil {
+		if ref := strings.TrimSpace(fileSettings.ProjectID); ref != "" {
+			return ref
+		}
+	}
+	if nearestGitRemoteFromCLI() != "" {
+		return ""
+	}
+	return cfg.ProjectID
 }
 
 // statusLine is a key/value row for the status box.

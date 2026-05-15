@@ -59,6 +59,88 @@ func TestRegisterUserRejectsInvalidUsernameCharacters(t *testing.T) {
 	}
 }
 
+func TestRegisterUserProvisioningCreatesExpectedMemberships(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	user, err := CreateUserWithParams(context.Background(), db, UserCreateParams{
+		Username:      "provisioned",
+		PlainPassword: "password123",
+		Email:         "provisioned@example.com",
+		Role:          "user",
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUserWithParams() error = %v", err)
+	}
+	if user.Email != "provisioned@example.com" {
+		t.Fatalf("CreateUserWithParams().Email = %q, want %q", user.Email, "provisioned@example.com")
+	}
+
+	publicTeam, err := getTeamByName(context.Background(), db, publicTeamName)
+	if err != nil {
+		t.Fatalf("getTeamByName(public) error = %v", err)
+	}
+	teamMember, err := GetTeamMember(context.Background(), db, publicTeam.ID, user.ID)
+	if err != nil {
+		t.Fatalf("GetTeamMember(public) error = %v", err)
+	}
+	if teamMember.Role != TeamRoleMember {
+		t.Fatalf("public team role = %q, want %q", teamMember.Role, TeamRoleMember)
+	}
+
+	publicProject, err := GetProjectByAlias(context.Background(), db, "public", "")
+	if err != nil {
+		t.Fatalf("GetProjectByAlias(public) error = %v", err)
+	}
+	teamIDs, err := TeamIDsForUserWithAncestors(context.Background(), db, user.ID)
+	if err != nil {
+		t.Fatalf("TeamIDsForUserWithAncestors(public) error = %v", err)
+	}
+	role, ok, err := HighestProjectRoleForTeams(context.Background(), db, publicProject.ID, teamIDs)
+	if err != nil {
+		t.Fatalf("HighestProjectRoleForTeams(public) error = %v", err)
+	}
+	if !ok || role != ProjectRoleMember {
+		t.Fatalf("HighestProjectRoleForTeams(public) = (%q,%v), want (%q,true)", role, ok, ProjectRoleMember)
+	}
+
+	privateProject, err := GetProjectByAlias(context.Background(), db, "private", user.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByAlias(private) error = %v", err)
+	}
+	if err := validateProjectPrefix(privateProject.Prefix); err != nil {
+		t.Fatalf("private project prefix %q should be valid: %v", privateProject.Prefix, err)
+	}
+	privateRole, privateOK, err := ProjectRoleForUser(context.Background(), db, privateProject.ID, user.ID)
+	if err != nil {
+		t.Fatalf("ProjectRoleForUser(private) error = %v", err)
+	}
+	if !privateOK || privateRole != ProjectRoleAdmin {
+		t.Fatalf("ProjectRoleForUser(private) = (%q,%v), want (%q,true)", privateRole, privateOK, ProjectRoleAdmin)
+	}
+
+	secondUser, err := CreateUserWithParams(context.Background(), db, UserCreateParams{
+		Username:      "seconduser",
+		PlainPassword: "password123",
+		Role:          "user",
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUserWithParams(second user) error = %v", err)
+	}
+	secondPrivateProject, err := GetProjectByAlias(context.Background(), db, "private", secondUser.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByAlias(private second user) error = %v", err)
+	}
+	if err := validateProjectPrefix(secondPrivateProject.Prefix); err != nil {
+		t.Fatalf("second private project prefix %q should be valid: %v", secondPrivateProject.Prefix, err)
+	}
+	if secondPrivateProject.Prefix == privateProject.Prefix {
+		t.Fatalf("second private project prefix = %q, want unique prefix", secondPrivateProject.Prefix)
+	}
+}
+
 func TestAdminUserManagement(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

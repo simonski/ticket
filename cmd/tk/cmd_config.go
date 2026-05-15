@@ -44,6 +44,32 @@ func runConfig(args []string) error {
 		}
 		fmt.Println("registration_enabled=false")
 		return nil
+	case "registration-autoapprove-enable":
+		if len(args) != 1 {
+			return errors.New("usage: tk config registration-autoapprove-enable")
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		if err := svc.SetRegistrationAutoApprove(context.Background(), true); err != nil {
+			return err
+		}
+		fmt.Println("registration_auto_approve=true")
+		return nil
+	case "registration-autoapprove-disable":
+		if len(args) != 1 {
+			return errors.New("usage: tk config registration-autoapprove-disable")
+		}
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		if err := svc.SetRegistrationAutoApprove(context.Background(), false); err != nil {
+			return err
+		}
+		fmt.Println("registration_auto_approve=false")
+		return nil
 	case "set":
 		if len(args) != 3 {
 			return errors.New("usage: tk config set <key> <value>")
@@ -80,6 +106,17 @@ func runConfig(args []string) error {
 				return err
 			}
 			fmt.Println(status.RegistrationEnabled)
+			return nil
+		case "registration_auto_approve":
+			svc, err := resolveService(cfg)
+			if err != nil {
+				return err
+			}
+			status, err := svc.Status(context.Background())
+			if err != nil {
+				return err
+			}
+			fmt.Println(status.RegistrationAutoApprove)
 			return nil
 		default:
 			return fmt.Errorf("unknown config key %q", args[1])

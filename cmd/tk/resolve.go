@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,17 +51,7 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 	}
 
 	projectID = strings.TrimSpace(cfg.ProjectID)
-	if projectID == "" {
-		projectID = "1"
-	}
-
-	project, err := svc.GetProject(context.Background(), projectID)
-	if err != nil && projectID != "1" {
-		project, err = svc.GetProject(context.Background(), "1")
-		if err == nil {
-			projectID = "1"
-		}
-	}
+	project, projectRef, err := resolveProjectContext(context.Background(), cfg, svc, projectID)
 	if err != nil {
 		if strings.TrimSpace(cfg.ProjectID) == "" {
 			return config.Config{}, nil, store.Project{}, errors.New("no active project; use `ticket project create` or `ticket project use <id>` first")
@@ -68,8 +59,8 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 		return config.Config{}, nil, store.Project{}, err
 	}
 
-	if cfg.ProjectID != projectID {
-		cfg.ProjectID = projectID
+	if cfg.ProjectID != projectRef {
+		cfg.ProjectID = projectRef
 		if !config.HasLocationOverride() && strings.TrimSpace(os.Getenv("TICKET_URL")) == "" {
 			if saveErr := config.Save(cfg); saveErr != nil {
 				return config.Config{}, nil, store.Project{}, saveErr
@@ -79,10 +70,152 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 	return cfg, svc, project, nil
 }
 
+func resolveProjectContext(ctx context.Context, cfg config.Config, svc libticket.Service, configuredRef string) (store.Project, string, error) {
+	if ref := strings.TrimSpace(configuredRef); ref != "" {
+		project, err := svc.GetProject(ctx, ref)
+		if err == nil {
+			return project, ref, nil
+		}
+		if localProject, ok, localErr := resolveLocalAliasProject(ctx, cfg, ref); localErr == nil && ok {
+			return localProject, ref, nil
+		}
+		return project, ref, err
+	}
+	if repo := nearestGitRemoteFromCLI(); repo != "" {
+		projects, err := svc.ListProjects(ctx)
+		if err == nil {
+			for _, project := range projects {
+				if strings.TrimSpace(project.GitRepository) == repo {
+					return project, project.Prefix, nil
+				}
+			}
+		}
+	}
+	if project, err := svc.GetProject(ctx, "private"); err == nil {
+		return project, project.Prefix, nil
+	}
+	if project, ok, err := resolveLocalAliasProject(ctx, cfg, "private"); err == nil && ok {
+		return project, project.Prefix, nil
+	}
+	project, err := svc.GetProject(ctx, "1")
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	return project, "1", nil
+}
+
+func resolveProjectFromFlagOrConfig(ctx context.Context, cfg config.Config, svc libticket.Service, explicitRef string) (store.Project, error) {
+	project, _, err := resolveProjectContext(ctx, cfg, svc, firstNonEmpty(strings.TrimSpace(explicitRef), strings.TrimSpace(cfg.ProjectID)))
+	return project, err
+}
+
+func resolveLocalAliasProject(ctx context.Context, cfg config.Config, ref string) (store.Project, bool, error) {
+	ref = strings.TrimSpace(ref)
+	if ref != "public" && ref != "private" {
+		return store.Project{}, false, nil
+	}
+	dbPath, ok, err := localDBPathForConfig(cfg)
+	if err != nil || !ok {
+		return store.Project{}, false, err
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return store.Project{}, false, err
+	}
+	defer db.Close()
+	if ref == "public" {
+		project, projectErr := store.GetProjectByAlias(ctx, db, "public", "")
+		if projectErr != nil {
+			return store.Project{}, false, projectErr
+		}
+		return project, true, nil
+	}
+	username := firstNonEmpty(strings.TrimSpace(os.Getenv("TICKET_USERNAME")), strings.TrimSpace(cfg.Username), "admin")
+	user, err := store.GetUserByUsername(ctx, db, username)
+	if err != nil {
+		return store.Project{}, false, err
+	}
+	project, err := store.GetProjectByAlias(ctx, db, "private", user.ID)
+	if err != nil {
+		return store.Project{}, false, err
+	}
+	return project, true, nil
+}
+
+func localDBPathForConfig(cfg config.Config) (dbPath string, ok bool, err error) {
+	location := strings.TrimSpace(cfg.Location)
+	if location != "" {
+		resolved, resolveErr := config.ResolveLocation(location)
+		if resolveErr != nil {
+			return "", false, resolveErr
+		}
+		if resolved.Mode != config.ModeRemote && strings.TrimSpace(resolved.DBPath) != "" {
+			return strings.TrimSpace(resolved.DBPath), true, nil
+		}
+	}
+	localPath, localPathErr := config.LocalDBPath()
+	if localPathErr != nil {
+		return "", false, localPathErr
+	}
+	if config.HasLocationOverride() {
+		if resolved, resolveErr := config.ResolveURL(); resolveErr == nil {
+			if resolved.Mode == config.ModeRemote {
+				return "", false, nil
+			}
+			if strings.TrimSpace(resolved.DBPath) != "" {
+				localPath = strings.TrimSpace(resolved.DBPath)
+			}
+		}
+	}
+	if _, statErr := os.Stat(localPath); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, statErr
+	}
+	return localPath, true, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func nearestGitRemoteFromCLI() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = ""
+	}
+	dir := filepath.Clean(cwd)
+	for {
+		if remote := detectGitOriginAt(dir); remote != "" {
+			return remote
+		}
+		if homeDir != "" && filepath.Clean(homeDir) == dir {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
+}
+
 func resolveService(cfg config.Config) (libticket.Service, error) {
 	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
+	token := strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
 	projectID := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
 
 	fileSettings, err := loadNearestTicketJSONSettings()
@@ -99,16 +232,18 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		projectID = strings.TrimSpace(fileSettings.ProjectID)
 	}
 
-	remoteHintProvided := location != "" || username != "" || password != ""
+	remoteHintProvided := location != "" || username != "" || password != "" || token != ""
 	if remoteHintProvided {
 		if location == "" {
 			return nil, errors.New("missing required environment variable: TICKET_URL")
 		}
-		if username == "" {
-			return nil, errors.New("missing required environment variable: TICKET_USERNAME")
-		}
-		if password == "" {
-			return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
+		if token == "" {
+			if username == "" {
+				return nil, errors.New("missing required environment variable: TICKET_USERNAME")
+			}
+			if password == "" {
+				return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
+			}
 		}
 		resolved, resolveErr := config.ResolveLocation(location)
 		if resolveErr != nil {
@@ -119,8 +254,14 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		}
 		effectiveCfg := cfg
 		effectiveCfg.Location = resolved.ServerURL
-		effectiveCfg.Username = username
-		effectiveCfg.Token = password
+		if token != "" {
+			effectiveCfg.Username = ""
+			effectiveCfg.Token = token
+		} else {
+			effectiveCfg.Username = username
+			effectiveCfg.Token = password
+			effectiveCfg.UseBasicAuth = true
+		}
 		if projectID != "" {
 			effectiveCfg.ProjectID = projectID
 		}
@@ -147,6 +288,9 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		if resolvedCfgLocation.Mode == config.ModeRemote {
 			effectiveCfg := cfg
 			effectiveCfg.Location = resolvedCfgLocation.ServerURL
+			if strings.TrimSpace(effectiveCfg.Token) != "" {
+				effectiveCfg.Username = ""
+			}
 			if projectID != "" {
 				effectiveCfg.ProjectID = projectID
 			}
@@ -191,6 +335,10 @@ func hasCompleteRemoteRuntimeConfig() (bool, error) {
 	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
+	token := strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
+	if location != "" && token != "" {
+		return true, nil
+	}
 	if location != "" && username != "" && password != "" {
 		return true, nil
 	}
@@ -200,6 +348,9 @@ func hasCompleteRemoteRuntimeConfig() (bool, error) {
 	}
 	if strings.TrimSpace(location) == "" {
 		location = strings.TrimSpace(fileSettings.URL)
+	}
+	if strings.TrimSpace(token) != "" {
+		return strings.TrimSpace(location) != "" && strings.TrimSpace(token) != "", nil
 	}
 	if strings.TrimSpace(username) == "" {
 		username = strings.TrimSpace(fileSettings.Username)
@@ -273,14 +424,14 @@ func parseTicketJSON(path string) (ticketJSONSettings, error) {
 	}
 	settings := ticketJSONSettings{
 		Path:      path,
-		URL:       firstNonEmpty(raw, "TICKET_URL", "ticket_url", "url"),
-		Username:  firstNonEmpty(raw, "TICKET_USERNAME", "ticket_username", "username"),
-		ProjectID: firstNonEmpty(raw, "TICKET_PROJECT", "ticket_project", "project", "project_id"),
+		URL:       firstNonEmptyMap(raw, "TICKET_URL", "ticket_url", "url"),
+		Username:  firstNonEmptyMap(raw, "TICKET_USERNAME", "ticket_username", "username"),
+		ProjectID: firstNonEmptyMap(raw, "TICKET_PROJECT", "ticket_project", "project", "project_id"),
 	}
 	return settings, nil
 }
 
-func firstNonEmpty(values map[string]any, keys ...string) string {
+func firstNonEmptyMap(values map[string]any, keys ...string) string {
 	for _, key := range keys {
 		value, ok := values[key]
 		if !ok {

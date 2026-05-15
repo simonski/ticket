@@ -29,6 +29,12 @@ uses that root for repo-local routing. The steady-state model is:
 - repo-local `.ticket/config.json` stores `remote` plus `project_id`
 - `~/.ticket/credentials.json` stores credentials per canonical remote URL
 
+In remote mode the CLI also sends the nearest git `origin` URL from the current
+working tree (walking upward until `$HOME`). Server-side project resolution uses
+explicit project refs first, then aliases (`public`, `private`), then git
+repository matching, then the caller's private project fallback when the request
+omits a concrete project.
+
 ## Product Principles
 
 1. The server defines the single system of record and the shared data model used by both remote and local workflows.
@@ -65,6 +71,7 @@ The first release must support these workflows end to end:
 - `email_confirmed_at`
 - `password_hash`
 - `role`
+- `plan_id`
 - `display_name`
 - `enabled`
 - `user_type` (`user` or `agent`)
@@ -83,6 +90,32 @@ Notes:
 
 - administrators can create, enable, and disable users
 - regular users can log in and manage project work according to API permissions
+- users are provisioned through a plan that controls registration-time team and project assignment
+
+### Plan
+
+- `plan_id`
+- `slug`
+- `name`
+- `description`
+- `max_projects`
+- `max_private_projects`
+- `max_tickets`
+- `max_tickets_per_project`
+- `max_team_memberships`
+- `max_api_calls_per_day`
+- `default_project_alias`
+- `registration_actions`
+- `created_at`
+- `updated_at`
+
+Plans define onboarding and quota policy. The seeded plans are `free`, `pro`,
+`pro+`, and `enterprise`. Registration actions can automatically assign users to
+shared teams, create a private team, create a private project alias, and attach
+users to explicit seeded teams or projects. The `free` plan now defaults users
+to the `public` project alias, caps total tickets at 100, caps per-project
+tickets at 100, and exposes a daily API-call quota field for plan-level
+enforcement.
 
 ### Agent
 
@@ -137,6 +170,10 @@ Notes:
 - `status`
 
 Projects are the top-level container for work items.
+
+Projects can also be addressed by aliases. The server seeds a global `public`
+alias for the shared public project and per-user `private` aliases for personal
+projects created during onboarding.
 
 ### Ticket
 

@@ -4,19 +4,24 @@
 
 | Target                | What it covers                                      | Duration |
 |-----------------------|-----------------------------------------------------|----------|
-| `make test`           | Fast default (unit tests only)                      | ~1s      |
-| `make test-unit`      | Config, password hashing, web package                | ~1s      |
+| `make test`           | Ultra-fast default unit packages (`config`, `password`, `web`) | ~1s |
+| `make test-fast`      | Recommended developer loop: unit + JS API + Go API smoke | ~15s |
+| `make test-unit`      | Config, password hashing, web package               | ~1s      |
+| `make test-api-smoke` | Fast Go API smoke packages (`internal/client`, `internal/server`) | ~15s |
+| `make test-cli`       | CLI package tests (`cmd/tk`)                        | ~65s     |
+| `make test-contract`  | Shared service contract tests (`libticket`)         | ~25s     |
+| `make test-store`     | Store package tests (`internal/store`)              | ~20s     |
 | `make test-api-js`    | JavaScript API client-library tests (`web/site2/api.test.js`) | ~2s |
-| `make test-api-cli`   | CLI/API contract path (`cmd/tk`, client, server, libticket) | ~25s |
-| `make test-api`       | Both API suites (`test-api-js` + `test-api-cli`)    | ~35s     |
+| `make test-api-cli`   | Full CLI/API contract path (`cmd/tk`, client, server, libticket) | ~70s |
+| `make test-api`       | Both API suites (`test-api-js` + `test-api-cli`)    | ~70s+    |
 | `make test-browser`   | Browser E2E Playwright suite                         | ~20s     |
-| `make test-integration` | CLI, internal/client, server, store, libticket | ~25s     |
-| `make test-go-cover`  | All Go tests with per-package coverage thresholds    | ~30s     |
-| `make test-playwright`| Browser tests against the web UI (12 spec files)     | ~20s     |
-| `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)     | ~15s     |
-| `make test-todo-example` | Reproducible todo tutorial seed + verification     | ~5s      |
-| `make testscripts`    | Shell-based CLI harness scenarios                    | ~5s      |
-| `make test-all`       | Unit + api + browser + quickstart + shell harnesses + todo example | ~80s |
+| `make test-integration` | Store + CLI/API Go suites                        | ~90s     |
+| `make test-go-cover`  | All Go tests with per-package coverage thresholds   | ~30s     |
+| `make test-playwright`| Browser tests against the web UI (12 spec files)    | ~20s     |
+| `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)    | ~15s     |
+| `make test-todo-example` | Reproducible todo tutorial seed + verification  | ~5s      |
+| `make testscripts`    | Shell-based CLI harness scenarios                   | ~5s      |
+| `make test-all`       | Unit + api + browser + quickstart + shell harnesses + todo example | ~80s+ |
 
 Run a single Go test:
 
@@ -26,10 +31,11 @@ go test ./internal/store/ -run TestTicketLifecycle
 
 ## Recommended staged workflow
 
-1. Fast local loop: `make test` + targeted tests.
-2. If API contracts/surface changed: `make test-api`.
-3. If web UI behavior changed: `make test-browser`.
-4. Before completion/PR: `make test-all` and `make lint`.
+1. Ultra-fast sanity check: `make test`.
+2. Normal developer loop: `make test-fast`.
+3. If CLI or service contract behavior changed: `make test-api`.
+4. If web UI behavior changed: `make test-browser`.
+5. Before completion/PR: `make test-all` and `make lint`.
 
 ## tk-test: executable documentation
 
@@ -158,7 +164,11 @@ make test-playwright
 
 Requires Node and Chromium (`make setup-playwright` installs both).
 
-The Playwright configs now auto-select a free localhost port by default. If you
-need a fixed port for debugging, set `PLAYWRIGHT_PORT` or
-`PLAYWRIGHT_SITE2_PORT` before running the tests. The main suite defaults to two
-workers for stability; override that with `PLAYWRIGHT_WORKERS` if needed.
+`make test-playwright` now skips browser installation when Chromium is already
+present in the local Playwright cache, so repeated browser runs stay focused on
+test execution instead of setup.
+
+The Playwright configs auto-select a free localhost port by default. If you need
+a fixed port for debugging, set `PLAYWRIGHT_PORT` or `PLAYWRIGHT_SITE2_PORT`
+before running the tests. Override `PLAYWRIGHT_WORKERS` when you want a
+different worker count.

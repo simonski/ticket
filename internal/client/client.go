@@ -90,15 +90,17 @@ func remoteTimeoutFromEnv() time.Duration {
 }
 
 func (c *Client) Register(ctx context.Context, username, password string) (store.User, error) {
-	if c.mode == config.ModeLocal {
-		return store.User{}, errors.New("ticket register requires a configured server (run tk init and tk login)")
-	}
-	var user store.User
-	err := c.doJSON(ctx, http.MethodPost, "/api/register", map[string]string{
-		"username": username,
-		"password": password,
-	}, &user)
+	user, _, err := c.RegisterWithParams(ctx, RegisterRequest{Username: username, Password: password})
 	return user, err
+}
+
+func (c *Client) RegisterWithParams(ctx context.Context, req RegisterRequest) (store.User, string, error) {
+	if c.mode == config.ModeLocal {
+		return store.User{}, "", errors.New("ticket register requires a configured server (run tk init and tk login)")
+	}
+	var response RegisterResponse
+	err := c.doJSON(ctx, http.MethodPost, "/api/register", req, &response)
+	return response.User, response.Password, err
 }
 
 func (c *Client) Login(ctx context.Context, username, password string) (AuthResponse, error) {
@@ -135,19 +137,24 @@ func (c *Client) Status(ctx context.Context) (StatusResponse, error) {
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
+		registrationAutoApprove, regApproveErr := store.RegistrationAutoApprove(ctx, db)
+		if regApproveErr != nil {
+			return StatusResponse{}, regApproveErr
+		}
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: registrationEnabled}, nil
+			return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: registrationEnabled, RegistrationAutoApprove: registrationAutoApprove}, nil
 		case err != nil:
 			return StatusResponse{}, err
 		case !user.Enabled:
-			return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: registrationEnabled}, nil
+			return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: registrationEnabled, RegistrationAutoApprove: registrationAutoApprove}, nil
 		}
 		return StatusResponse{
-			Status:              "ok",
-			Authenticated:       true,
-			RegistrationEnabled: registrationEnabled,
-			User:                &user,
+			Status:                  "ok",
+			Authenticated:           true,
+			RegistrationEnabled:     registrationEnabled,
+			RegistrationAutoApprove: registrationAutoApprove,
+			User:                    &user,
 		}, nil
 	}
 	var status StatusResponse
@@ -183,20 +190,90 @@ func (c *Client) SetRegistrationEnabled(ctx context.Context, enabled bool) error
 	return c.doJSON(ctx, http.MethodPost, "/api/config/registration", map[string]any{"enabled": enabled}, nil)
 }
 
-func (c *Client) CreateUser(ctx context.Context, username, password string) (store.User, error) {
+func (c *Client) SetRegistrationAutoApprove(ctx context.Context, enabled bool) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
 		if err != nil {
-			return store.User{}, err
+			return err
 		}
-		return store.CreateUser(ctx, db, username, password, "user")
+		return store.SetRegistrationAutoApprove(ctx, db, enabled)
 	}
-	var user store.User
-	err := c.doJSON(ctx, http.MethodPost, "/api/users", map[string]string{
-		"username": username,
-		"password": password,
-	}, &user)
+	return c.doJSON(ctx, http.MethodPost, "/api/config/registration", map[string]any{
+		"enabled":      true,
+		"auto_approve": enabled,
+	}, nil)
+}
+
+func (c *Client) ListPlans(ctx context.Context) ([]store.Plan, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		return store.ListPlans(ctx, db)
+	}
+	var plans []store.Plan
+	err := c.doJSON(ctx, http.MethodGet, "/api/plans", nil, &plans)
+	return plans, err
+}
+
+func (c *Client) DefaultPlan(ctx context.Context) (store.Plan, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Plan{}, err
+		}
+		return store.DefaultPlan(ctx, db)
+	}
+	var plan store.Plan
+	err := c.doJSON(ctx, http.MethodGet, "/api/plans/default", nil, &plan)
+	return plan, err
+}
+
+func (c *Client) SetDefaultPlan(ctx context.Context, slug string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		return store.SetDefaultPlanSlug(ctx, db, slug)
+	}
+	return c.doJSON(ctx, http.MethodPost, "/api/plans/default", map[string]any{"slug": strings.TrimSpace(slug)}, nil)
+}
+
+func (c *Client) CreateUser(ctx context.Context, username, password string) (store.User, error) {
+	user, _, err := c.CreateUserWithParams(ctx, UserCreateRequest{Username: username, Password: password})
 	return user, err
+}
+
+func (c *Client) CreateUserWithParams(ctx context.Context, req UserCreateRequest) (store.User, string, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.User{}, "", err
+		}
+		password := strings.TrimSpace(req.Password)
+		generatedPassword := ""
+		if password == "" {
+			generatedPassword, err = store.GeneratePassword(24)
+			if err != nil {
+				return store.User{}, "", err
+			}
+			password = generatedPassword
+		}
+		user, err := store.CreateUserWithParams(ctx, db, store.UserCreateParams{
+			Username:      req.Username,
+			PlainPassword: password,
+			Email:         req.Email,
+			Role:          req.Role,
+			Enabled:       req.Enabled == nil || *req.Enabled,
+			PlanSlug:      req.PlanSlug,
+		})
+		return user, generatedPassword, err
+	}
+	var response UserCreateResponse
+	err := c.doJSON(ctx, http.MethodPost, "/api/users", req, &response)
+	return response.User, response.Password, err
 }
 
 func (c *Client) SetUserEnabled(ctx context.Context, username string, enabled bool) error {
@@ -606,6 +683,7 @@ func (c *Client) CreateProject(ctx context.Context, request ProjectCreateRequest
 			GitRepository:      request.GitRepository,
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
+			AcceptsNewMembers:  request.AcceptsNewMembers,
 			CreatedBy:          user.ID,
 			WorkflowID:         request.WorkflowID,
 		})
@@ -654,6 +732,7 @@ func (c *Client) UpdateProject(ctx context.Context, id int64, request ProjectUpd
 			GitRepository:      request.GitRepository,
 			Notes:              request.Notes,
 			Visibility:         request.Visibility,
+			AcceptsNewMembers:  request.AcceptsNewMembers,
 			WorkflowID:         request.WorkflowID,
 		})
 	}
@@ -1571,6 +1650,7 @@ func (c *Client) RequestTicket(ctx context.Context, request TicketRequest) (Tick
 	} else if c.token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.token)
 	}
+	setRequestContextHeaders(httpReq)
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -2482,6 +2562,7 @@ func (c *Client) GetDocumentFile(ctx context.Context, documentID, fileID int64) 
 	} else if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
+	setRequestContextHeaders(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return store.DocumentFile{}, friendlyConnectionError(err, c.baseURL)

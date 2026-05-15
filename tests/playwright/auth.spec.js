@@ -104,6 +104,24 @@ test.describe("authentication", () => {
     await expect(page.locator("#login-form")).not.toHaveClass(/hidden/);
   });
 
+  test("register shows pending approval message when auto-approve is disabled", async ({ page }) => {
+    await mockAPI(page, [
+      ["**/api/register", { approved: false }],
+      ["**/api/status", { authenticated: false, server_version: "1.0.0", registration_enabled: true, registration_auto_approve: false, chat_enabled: false }],
+    ]);
+
+    await page.goto("/");
+    await page.evaluate(() => canRegister(true));
+    await page.click("#show-register");
+
+    await page.fill("#register-user", "pending-user");
+    await page.fill("#register-pass", "newpass");
+    await page.click('#register-form button[type="submit"]');
+
+    await expect(page.locator("#login-status")).toContainText("Wait for an admin to approve");
+    await expect(page.locator("#register-form")).toHaveClass(/hidden/);
+  });
+
   test("hide register button returns to login form", async ({ page }) => {
     await page.goto("/");
 
@@ -200,5 +218,36 @@ test.describe("authentication", () => {
     expect(result.teamVisible).toBe(true);
     expect(result.workflowVisible).toBe(true);
     expect(result.settingsVisible).toBe(true);
+  });
+
+  test("admin settings save registration auto-approve", async ({ page }) => {
+    let registrationPayload = null;
+    await mockAPI(page, [
+      ["**/api/status", { authenticated: false, server_version: "1.0.0", registration_enabled: true, registration_auto_approve: true, chat_enabled: false }],
+      ["**/api/config/registration", async (route) => {
+        registrationPayload = JSON.parse(route.request().postData() || "{}");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ registration_enabled: true, registration_auto_approve: false }),
+        });
+      }],
+      ["**/api/config/chat_enabled", { chat_enabled: false }],
+      ["**/api/config/chat_limits", { chat_max_connections: 2, chat_max_duration_minutes: 3 }],
+    ]);
+
+    await page.goto("/");
+    await page.evaluate(() => {
+      showApp("admin", "admin");
+      token = "fake-token";
+      switchPerspective("settings");
+      populateSettingsPanel();
+    });
+
+    await page.uncheck("#settings-registration-auto-approve");
+    await page.click("#settings-save");
+
+    expect(registrationPayload).toEqual({ enabled: true, auto_approve: false });
+    await expect(page.locator("#settings-status")).toContainText("Settings saved");
   });
 });

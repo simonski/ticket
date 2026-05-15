@@ -23,6 +23,7 @@ func TestTicketTypeCode(t *testing.T) {
 		{"question", "Q"},
 		{"requirement", "R"},
 		{"decision", "D"},
+		{"action", "A"},
 	}
 	for _, tc := range cases {
 		got, err := ticketTypeCode(tc.input)
@@ -112,9 +113,11 @@ func TestNextUniqueProjectPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("nextUniqueProjectPrefix(TK) error = %v", err)
 	}
-	// Should get TK1 or similar since TK is taken
-	if prefix == "TK" {
-		t.Fatal("nextUniqueProjectPrefix(TK) should not return TK since it is taken")
+	if prefix != "TKA" {
+		t.Fatalf("nextUniqueProjectPrefix(TK) = %q, want TKA", prefix)
+	}
+	if err := validateProjectPrefix(prefix); err != nil {
+		t.Fatalf("validateProjectPrefix(%q) error = %v", prefix, err)
 	}
 
 	// ABC should be available

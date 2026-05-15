@@ -38,17 +38,17 @@ func (r *router) registerTicketHandlers() {
 			writeStoreError(w, err)
 			return
 		}
-		role, err := projectRoleForUser(r.Context(), db, ticketPayload.ProjectID, user)
+		project, _, err := resolveProjectForWriteRequest(r.Context(), db, r, user, ticketPayload.ProjectID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if !canWriteProject(role) {
-			writeAuthError(w, store.ErrForbidden)
+			if errors.Is(err, store.ErrForbidden) || errors.Is(err, store.ErrUnauthorized) {
+				writeAuthError(w, err)
+			} else {
+				writeStoreError(w, err)
+			}
 			return
 		}
 		ticket, err := store.CreateTicket(r.Context(), db, store.TicketCreateParams{
-			ProjectID:          ticketPayload.ProjectID,
+			ProjectID:          project.ID,
 			ParentID:           ticketPayload.ParentID,
 			Type:               ticketPayload.Type,
 			Title:              ticketPayload.Title,
@@ -95,18 +95,18 @@ func (r *router) registerTicketHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			role, err := projectRoleForUser(r.Context(), db, payload.ProjectID, user)
+			project, _, err := resolveProjectForWriteRequest(r.Context(), db, r, user, payload.ProjectID)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			if !canWriteProject(role) {
-				writeAuthError(w, store.ErrForbidden)
+				if errors.Is(err, store.ErrForbidden) || errors.Is(err, store.ErrUnauthorized) {
+					writeAuthError(w, err)
+				} else {
+					writeStoreError(w, err)
+				}
 				return
 			}
 			story, err := store.CreateStoryWithParams(r.Context(), db, store.StoryCreateParams{
 				ID:          payload.ID,
-				ProjectID:   payload.ProjectID,
+				ProjectID:   project.ID,
 				Title:       payload.Title,
 				Description: payload.Description,
 				CreatedBy:   user.ID,
@@ -685,7 +685,7 @@ func (r *router) registerTicketHandlers() {
 					}
 					writeJSON(w, http.StatusOK, labels)
 				case http.MethodPost:
-					if !canWriteProject(role) {
+					if !canCommentProject(role) {
 						writeAuthError(w, store.ErrForbidden)
 						return
 					}
@@ -734,7 +734,7 @@ func (r *router) registerTicketHandlers() {
 					}
 					writeJSON(w, http.StatusOK, entries)
 				case http.MethodPost:
-					if !canWriteProject(role) {
+					if !canCommentProject(role) {
 						writeAuthError(w, store.ErrForbidden)
 						return
 					}
@@ -772,7 +772,7 @@ func (r *router) registerTicketHandlers() {
 					}
 					writeJSON(w, http.StatusOK, comments)
 				case http.MethodPost:
-					if !canWriteProject(role) {
+					if !canCommentProject(role) {
 						writeAuthError(w, store.ErrForbidden)
 						return
 					}
@@ -1583,27 +1583,26 @@ func (r *router) registerTicketHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			role, err := projectRoleForUser(r.Context(), db, dependencyPayload.ProjectID, user)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			if !canWriteProject(role) {
-				writeAuthError(w, store.ErrForbidden)
-				return
-			}
-			dependency, err := store.AddDependency(r.Context(), db, dependencyPayload.ProjectID, dependencyPayload.TicketID, dependencyPayload.DependsOn, user.ID)
+			project, _, err := resolveProjectForDependencyRequest(r.Context(), db, r, user, dependencyPayload.ProjectID, dependencyPayload.TicketID, dependencyPayload.DependsOn)
 			if err != nil {
 				writeStoreError(w, err)
 				return
 			}
-			notify("ticket_updated", dependencyPayload.ProjectID, dependencyPayload.TicketID)
+			dependency, err := store.AddDependency(r.Context(), db, project.ID, dependencyPayload.TicketID, dependencyPayload.DependsOn, user.ID)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			notify("ticket_updated", project.ID, dependencyPayload.TicketID)
 			writeJSON(w, http.StatusCreated, dependency)
 		case http.MethodDelete:
+			projectIDRaw := strings.TrimSpace(r.URL.Query().Get("project_id"))
 			var projectID int64
-			if _, err := fmt.Sscan(strings.TrimSpace(r.URL.Query().Get("project_id")), &projectID); err != nil {
-				writeError(w, http.StatusBadRequest, "project_id must be numeric")
-				return
+			if projectIDRaw != "" {
+				if _, err := fmt.Sscan(projectIDRaw, &projectID); err != nil {
+					writeError(w, http.StatusBadRequest, "project_id must be numeric")
+					return
+				}
 			}
 			ticketID := strings.TrimSpace(r.URL.Query().Get("ticket_id"))
 			if ticketID == "" {
@@ -1615,16 +1614,12 @@ func (r *router) registerTicketHandlers() {
 				writeError(w, http.StatusBadRequest, "depends_on is required")
 				return
 			}
-			role, err := projectRoleForUser(r.Context(), db, projectID, user)
+			project, _, err := resolveProjectForDependencyRequest(r.Context(), db, r, user, projectID, ticketID, dependsOn)
 			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
+				writeStoreError(w, err)
 				return
 			}
-			if !canWriteProject(role) {
-				writeAuthError(w, store.ErrForbidden)
-				return
-			}
-			if err := store.DeleteDependency(r.Context(), db, projectID, ticketID, dependsOn); err != nil {
+			if err := store.DeleteDependency(r.Context(), db, project.ID, ticketID, dependsOn); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					writeError(w, http.StatusNotFound, "dependency not found")
 					return
@@ -1632,7 +1627,7 @@ func (r *router) registerTicketHandlers() {
 				writeStoreError(w, err)
 				return
 			}
-			notify("ticket_updated", projectID, ticketID)
+			notify("ticket_updated", project.ID, ticketID)
 			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")

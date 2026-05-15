@@ -9,9 +9,15 @@ import (
 )
 
 const (
-	ProjectRoleViewer = "viewer"
-	ProjectRoleEditor = "editor"
-	ProjectRoleOwner  = "owner"
+	ProjectRoleObserver  = "observer"
+	ProjectRoleCommenter = "commenter"
+	ProjectRoleMember    = "member"
+	ProjectRoleAdmin     = "admin"
+
+	// Backward-compatible aliases for older persisted values and tests.
+	ProjectRoleViewer = ProjectRoleObserver
+	ProjectRoleEditor = ProjectRoleMember
+	ProjectRoleOwner  = ProjectRoleAdmin
 )
 
 var ErrProjectMembershipNotFound = errors.New("project membership not found")
@@ -24,12 +30,21 @@ type ProjectMember struct {
 }
 
 func normalizeProjectRole(role string) string {
-	return strings.TrimSpace(strings.ToLower(role))
+	switch strings.TrimSpace(strings.ToLower(role)) {
+	case "viewer":
+		return ProjectRoleObserver
+	case "editor":
+		return ProjectRoleMember
+	case "owner":
+		return ProjectRoleAdmin
+	default:
+		return strings.TrimSpace(strings.ToLower(role))
+	}
 }
 
 func validProjectRole(role string) bool {
 	switch normalizeProjectRole(role) {
-	case ProjectRoleViewer, ProjectRoleEditor, ProjectRoleOwner:
+	case ProjectRoleObserver, ProjectRoleCommenter, ProjectRoleMember, ProjectRoleAdmin:
 		return true
 	default:
 		return false

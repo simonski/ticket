@@ -86,6 +86,9 @@ func run(args []string) error {
 	if guiTheme != "" || (len(trimmedArgs) > 0 && (trimmedArgs[0] == "-g" || trimmedArgs[0] == "gui")) {
 		return runGUI(guiTheme)
 	}
+	if shouldRouteToActionNamespace(trimmedArgs) {
+		return runAction(trimmedArgs)
+	}
 
 	if len(trimmedArgs) == 0 {
 		fmt.Print(renderRootUsage())
@@ -324,6 +327,8 @@ func run(args []string) error {
 		return runTypedTicketCreate("note", trimmedArgs[1:])
 	case "question":
 		return runTypedTicketCreate("question", trimmedArgs[1:])
+	case "action", "act":
+		return runAction(trimmedArgs[1:])
 	case "bug":
 		return runTypedTicketCreate("bug", trimmedArgs[1:])
 	case "epic":
@@ -333,6 +338,38 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("no such command %q", trimmedArgs[0])
 	}
+}
+
+func shouldRouteToActionNamespace(args []string) bool {
+	if !invokedAsActionBinary() {
+		return false
+	}
+	if len(args) == 0 {
+		return true
+	}
+	command := strings.ToLower(strings.TrimSpace(args[0]))
+	// Preserve explicit namespace and core/system commands.
+	if command == "action" || command == "act" {
+		return false
+	}
+	switch command {
+	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
+		"login", "logout", "register", "init", "initdb", "server", "remote",
+		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
+		"story", "goal", "document", "label", "dep", "time", "doctor", "summary",
+		"agent", "work-item", "onboard", "skill", "docker-compose":
+		return false
+	default:
+		return true
+	}
+}
+
+func invokedAsActionBinary() bool {
+	if isTestBinary() || len(os.Args) == 0 {
+		return false
+	}
+	base := strings.ToLower(strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"))
+	return base == "act" || base == "action"
 }
 
 func isTestBinary() bool {

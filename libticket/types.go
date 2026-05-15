@@ -5,12 +5,13 @@ import "github.com/simonski/ticket/internal/store"
 // StatusResponse is returned by Service.Status and describes server health,
 // authentication state, and the currently authenticated user if applicable.
 type StatusResponse struct {
-	Status              string      `json:"status"`
-	Authenticated       bool        `json:"authenticated"`
-	RegistrationEnabled bool        `json:"registration_enabled,omitempty"`
-	ChatEnabled         bool        `json:"chat_enabled,omitempty"`
-	ServerVersion       string      `json:"server_version,omitempty"`
-	User                *store.User `json:"user,omitempty"`
+	Status                  string      `json:"status"`
+	Authenticated           bool        `json:"authenticated"`
+	RegistrationEnabled     bool        `json:"registration_enabled,omitempty"`
+	RegistrationAutoApprove bool        `json:"registration_auto_approve,omitempty"`
+	ChatEnabled             bool        `json:"chat_enabled,omitempty"`
+	ServerVersion           string      `json:"server_version,omitempty"`
+	User                    *store.User `json:"user,omitempty"`
 }
 
 type CountSummary = store.CountSummary
@@ -27,6 +28,7 @@ type ProjectCreateRequest struct {
 	GitRepository      string            `json:"git_repository"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
+	AcceptsNewMembers  bool              `json:"accepts_new_members"`
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
@@ -41,6 +43,7 @@ type ProjectUpdateRequest struct {
 	Notes              string            `json:"notes"`
 	Status             string            `json:"status"`
 	Visibility         string            `json:"visibility"`
+	AcceptsNewMembers  bool              `json:"accepts_new_members"`
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 

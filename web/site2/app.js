@@ -7,6 +7,8 @@
             viewScrollByPanel: {},
             scrollPersistenceReady: false,
             status: null,
+            plans: [],
+            defaultPlan: null,
             projects: [],
             goals: [],
             documents: [],
@@ -113,7 +115,11 @@
         const els = {
             loginScreen: document.getElementById("login-screen"),
             loginForm: document.getElementById("login-form"),
+            registerForm: document.getElementById("register-form"),
+            registerHelp: document.getElementById("register-help"),
             loginError: document.getElementById("login-error"),
+            showRegisterButton: document.getElementById("show-register-button"),
+            hideRegisterButton: document.getElementById("hide-register-button"),
             appShell: document.getElementById("app-shell"),
             appNotice: document.getElementById("app-notice"),
             projectMenuButton: document.getElementById("project-menu-button"),
@@ -121,6 +127,12 @@
             projectMenuList: document.getElementById("project-menu-list"),
             projectCreateLink: document.getElementById("project-create-link"),
             mainNav: document.getElementById("main-nav"),
+            planAdminPanel: document.getElementById("plan-admin-panel"),
+            defaultPlanSelect: document.getElementById("default-plan-select"),
+            registrationEnabledSelect: document.getElementById("registration-enabled-select"),
+            registrationAutoApproveSelect: document.getElementById("registration-auto-approve-select"),
+            savePlanAdminButton: document.getElementById("save-plan-admin-button"),
+            planAdminList: document.getElementById("plan-admin-list"),
             accountMenuButton: document.getElementById("account-menu-button"),
             accountMenuDropdown: document.getElementById("account-menu-dropdown"),
             accountMenuName: document.getElementById("account-menu-name"),
@@ -203,6 +215,7 @@
                 acceptance_criteria: "",
                 git_repository: "",
                 visibility: "public",
+                accepts_new_members: false,
                 workflow_id: null,
                 default_draft: false,
             };
@@ -316,7 +329,12 @@
             return Object.assign({}, project, {
                 id: project.id !== undefined ? project.id : project.project_id,
                 workflow_id: toNullableNumber(project.workflow_id),
+                accepts_new_members: Boolean(project.accepts_new_members),
             });
+        }
+
+        function isAdmin() {
+            return Boolean(state.status && state.status.user && state.status.user.role === "admin");
         }
 
         function emptyAgentModelConfig() {
@@ -601,6 +619,15 @@
             });
         }
 
+        function focusRegisterUsername() {
+            requestAnimationFrame(() => {
+                const input = document.getElementById("register-username");
+                if (input && !els.loginScreen.classList.contains("hidden") && !els.registerForm.classList.contains("hidden")) {
+                    input.focus();
+                }
+            });
+        }
+
         function normalizeBool(value) {
             return value === true || value === "true";
         }
@@ -825,9 +852,32 @@
 
         async function loadStatus() {
             state.status = await api("/api/status");
-            const username = state.status.username || "user";
+            const username = (state.status.user && state.status.user.username) || "user";
             els.accountMenuButton.textContent = username.charAt(0).toUpperCase();
             els.accountMenuName.textContent = username;
+        }
+
+        async function loadPlans() {
+            if (!isAdmin()) {
+                state.plans = [];
+                state.defaultPlan = null;
+                return;
+            }
+            const [plans, defaultPlan] = await Promise.all([
+                apiClient.listPlans(),
+                apiClient.getDefaultPlan(),
+            ]);
+            state.plans = Array.isArray(plans) ? plans : [];
+            state.defaultPlan = defaultPlan || null;
+        }
+
+        async function loadPublicStatus() {
+            try {
+                state.status = await api("/api/status", { method: "GET", auth: false });
+            } catch (error) {
+                state.status = null;
+            }
+            syncRegistrationUI();
         }
 
         async function loadSystemAgentModelConfig() {
@@ -1148,7 +1198,7 @@
 
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams()]);
+            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans()]);
             renderProjectMenu();
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
@@ -1165,11 +1215,42 @@
             restoreCurrentViewScroll();
         }
 
+        function showRegisterForm() {
+            if (!state.status || !state.status.registration_enabled) {
+                return;
+            }
+            els.loginForm.classList.add("hidden");
+            els.registerForm.classList.remove("hidden");
+            els.loginError.textContent = "";
+            focusRegisterUsername();
+        }
+
+        function showLoginForm() {
+            els.registerForm.classList.add("hidden");
+            els.loginForm.classList.remove("hidden");
+            focusLoginUsername();
+        }
+
+        function syncRegistrationUI() {
+            const enabled = Boolean(state.status && state.status.registration_enabled);
+            els.showRegisterButton.classList.toggle("hidden", !enabled);
+            if (els.registerHelp) {
+                els.registerHelp.textContent = state.status && state.status.registration_auto_approve === false
+                    ? "Leave password blank to let the server generate one. New accounts require admin approval before sign-in."
+                    : "Leave password blank to let the server generate one.";
+            }
+            if (!enabled) {
+                els.registerForm.classList.add("hidden");
+                els.loginForm.classList.remove("hidden");
+            }
+        }
+
         function showLoginScreen() {
             state.scrollPersistenceReady = false;
             els.appShell.classList.add("hidden");
             els.loginScreen.classList.remove("hidden");
-            focusLoginUsername();
+            syncRegistrationUI();
+            showLoginForm();
         }
 
         function disconnectLiveUpdates() {
@@ -1242,6 +1323,7 @@
             renderPredictedNextWork();
             renderInterventions();
             renderEditors();
+            renderPlanAdminPanel();
             restoreCurrentViewScroll();
         }
 
@@ -1257,8 +1339,49 @@
                     "<p>" + escapeHTML(project.description || "No description") + "</p>" +
                     "<div class=\"tag-row tag-row-spaced\">" +
                     "<span class=\"chip\">" + escapeHTML(project.visibility || "public") + "</span>" +
+                    "<span class=\"chip\">requests " + (project.accepts_new_members ? "open" : "closed") + "</span>" +
                     "<span class=\"chip\">draft " + String(Boolean(project.default_draft)) + "</span>" +
                     "</div></div>";
+            }).join("");
+        }
+
+        function renderPlanAdminPanel() {
+            if (!els.planAdminPanel) {
+                return;
+            }
+            const admin = isAdmin();
+            els.planAdminPanel.classList.toggle("hidden", !admin);
+            if (!admin) {
+                return;
+            }
+            const plans = Array.isArray(state.plans) ? state.plans : [];
+            const defaultSlug = state.defaultPlan && state.defaultPlan.slug ? state.defaultPlan.slug : "";
+            els.defaultPlanSelect.innerHTML = plans.map((plan) => {
+                const selected = plan.slug === defaultSlug ? " selected" : "";
+                return "<option value=\"" + escapeHTML(plan.slug) + "\"" + selected + ">" + escapeHTML(plan.name || plan.slug) + "</option>";
+            }).join("");
+            els.registrationEnabledSelect.value = String(!(state.status && state.status.registration_enabled === false));
+            els.registrationAutoApproveSelect.value = String(!(state.status && state.status.registration_auto_approve === false));
+            if (!plans.length) {
+                els.planAdminList.innerHTML = "<div class=\"empty\">No plans available.</div>";
+                return;
+            }
+            els.planAdminList.innerHTML = plans.map((plan) => {
+                const actions = plan.registration_actions || {};
+                const badges = [
+                    "projects " + String(plan.max_projects),
+                    "private " + String(plan.max_private_projects),
+                    "tickets/project " + String(plan.max_tickets_per_project),
+                    "default " + String(plan.default_project_alias || ""),
+                    actions.auto_assign_public_team ? "public team" : "",
+                    actions.auto_create_private_project ? "private project" : "",
+                    actions.auto_create_private_team ? "private team" : "",
+                ].filter(Boolean).map((label) => "<span class=\"chip\">" + escapeHTML(label) + "</span>").join("");
+                const active = plan.slug === defaultSlug ? " active" : "";
+                return "<div class=\"entity-card" + active + "\">" +
+                    "<h4>" + escapeHTML(plan.name || plan.slug) + " <small>(" + escapeHTML(plan.slug) + ")</small></h4>" +
+                    "<p>" + escapeHTML(plan.description || "No description") + "</p>" +
+                    "<div class=\"tag-row tag-row-spaced\">" + badges + "</div></div>";
             }).join("");
         }
 
@@ -2048,6 +2171,7 @@
             document.getElementById("project-ac").value = project.acceptance_criteria || "";
             document.getElementById("project-git-repository").value = project.git_repository || "";
             document.getElementById("project-visibility").value = project.visibility || "public";
+            document.getElementById("project-accepts-new-members").value = String(Boolean(project.accepts_new_members));
             document.getElementById("project-default-draft").value = String(Boolean(project.default_draft));
             document.getElementById("project-workflow").value = project.workflow_id || "";
             document.getElementById("delete-project-button").disabled = !project.id;
@@ -2218,6 +2342,35 @@
             }
         }
 
+        async function handleRegister(event) {
+            event.preventDefault();
+            const formData = new FormData(els.registerForm);
+            const username = String(formData.get("username") || "").trim();
+            const email = String(formData.get("email") || "").trim();
+            const password = String(formData.get("password") || "");
+            try {
+                const response = await apiClient.register(username, password, email);
+                const generatedPassword = String(response.password || "");
+                document.getElementById("login-username").value = username;
+                document.getElementById("login-password").value = generatedPassword || password;
+                els.registerForm.reset();
+                showLoginForm();
+                if (response.approved === false) {
+                    if (generatedPassword) {
+                        els.loginError.textContent = "Registered. Save the generated password and wait for an admin to approve your account.";
+                    } else {
+                        els.loginError.textContent = "Registered. Wait for an admin to approve your account before signing in.";
+                    }
+                } else if (generatedPassword) {
+                    els.loginError.textContent = "Registered. A generated password has been filled into the sign-in form.";
+                } else {
+                    els.loginError.textContent = "Registered. You can now sign in.";
+                }
+            } catch (error) {
+                els.loginError.textContent = error.message;
+            }
+        }
+
         function bindProjectHandlers() {
             els.projectList.addEventListener("click", (event) => {
                 const card = event.target.closest("[data-project-id]");
@@ -2265,6 +2418,7 @@
                     acceptance_criteria: document.getElementById("project-ac").value.trim(),
                     git_repository: document.getElementById("project-git-repository").value.trim(),
                     visibility: document.getElementById("project-visibility").value,
+                    accepts_new_members: normalizeBool(document.getElementById("project-accepts-new-members").value),
                     workflow_id: document.getElementById("project-workflow").value ? Number(document.getElementById("project-workflow").value) : null,
                 };
                 try {
@@ -2285,6 +2439,26 @@
                     setNotice(error.message, true);
                 }
             });
+
+            if (els.savePlanAdminButton) {
+                els.savePlanAdminButton.addEventListener("click", async () => {
+                    try {
+                        await apiClient.setRegistrationPolicy(
+                            normalizeBool(els.registrationEnabledSelect.value),
+                            normalizeBool(els.registrationAutoApproveSelect.value),
+                        );
+                        if (els.defaultPlanSelect.value) {
+                            await apiClient.setDefaultPlan(els.defaultPlanSelect.value);
+                        }
+                        await Promise.all([loadStatus(), loadPlans()]);
+                        syncRegistrationUI();
+                        renderPlanAdminPanel();
+                        setNotice("Onboarding policy saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
 
             document.getElementById("delete-project-button").addEventListener("click", async () => {
                 const draft = state.selectedProjectDraft;
@@ -4438,6 +4612,9 @@
         bindTicketsHandlers();
         bindMiscHandlers();
         els.loginForm.addEventListener("submit", handleLogin);
+        els.registerForm.addEventListener("submit", handleRegister);
+        els.showRegisterButton.addEventListener("click", showRegisterForm);
+        els.hideRegisterButton.addEventListener("click", showLoginForm);
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });
@@ -4446,6 +4623,7 @@
         (async function restoreSession() {
             const auth = loadStoredAuth();
             if (!auth) {
+                await loadPublicStatus();
                 showLoginScreen();
                 return;
             }

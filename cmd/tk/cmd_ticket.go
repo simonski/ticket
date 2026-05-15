@@ -173,7 +173,7 @@ Commands:
   orphans                                     Tickets with no parent
 
   add     "title" [-type T] [-d desc] [-ac criteria]   Create a ticket
-  get     -id <id> [-json]                    View ticket detail
+  get     -id <id> [-v] [-json]               View ticket detail
   edit    [-id] <id>                          Open TUI editor for ticket
   update  -id <id> [field flags]              Update ticket fields
 
@@ -726,10 +726,11 @@ func runOrphans(args []string) error {
 }
 
 func runGet(args []string) error {
-	usage := "tk get [-id] <id>"
+	usage := "tk get [-id] <id> [-v]"
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
+	verbose := fs.Bool("v", false, "show full ticket detail")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -766,11 +767,15 @@ func runGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	dependencies, _ := svc.ListDependencies(context.Background(), ticket.ID)
-	history, _ := svc.ListHistory(context.Background(), ticket.ID)
 	if outputJSON {
 		return printJSON(ticket)
 	}
+	if !*verbose {
+		printTicketSummary(ticket)
+		return nil
+	}
+	dependencies, _ := svc.ListDependencies(context.Background(), ticket.ID)
+	history, _ := svc.ListHistory(context.Background(), ticket.ID)
 	// Look up workflow stages for progress display
 	var workflowStages []store.WorkflowStage
 	project, projectErr := svc.GetProject(context.Background(), fmt.Sprintf("%d", ticket.ProjectID))
@@ -1162,7 +1167,7 @@ func runUpdate(args []string) error {
 	state := fs.String("state", "", "ticket state")
 	parentIDRaw := fs.String("parent_id", "", "ticket parent id")
 	message := fs.String("m", "", "comment to attach")
-	ticketType := fs.String("type", "", "ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision)")
+	ticketType := fs.String("type", "", "ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision, action)")
 	fs.StringVar(ticketType, "t", "", "ticket type (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -2129,7 +2134,7 @@ func runClone(args []string) error {
 }
 
 func runDeleteTicket(args []string) error {
-	usage := "tk rm|delete [-id] <id> [--confirm <token>]"
+	usage := "tk rm|delete [-id <id[,id...]>|<id[,id...]>] [--confirm <token>]"
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
@@ -2137,8 +2142,8 @@ func runDeleteTicket(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	idVal, rest, err := resolveIDFlag(*id, fs.Args())
-	if err != nil || len(rest) != 0 {
+	refs, err := resolveDeleteTicketRefs(*id, fs.Args())
+	if err != nil {
 		return errors.New("usage: " + usage)
 	}
 	cfg, err := config.Load()
@@ -2149,31 +2154,41 @@ func runDeleteTicket(args []string) error {
 	if err != nil {
 		return err
 	}
-	ticket, err := svc.GetTicket(context.Background(), idVal)
-	if err != nil {
-		return err
+	tickets := make([]store.Ticket, 0, len(refs))
+	for _, ref := range refs {
+		resolved := normalizeBareTicketRef(cfg, svc, ref)
+		ticket, getErr := svc.GetTicket(context.Background(), resolved)
+		if getErr != nil {
+			return getErr
+		}
+		tickets = append(tickets, ticket)
 	}
+	confirmTarget := joinDeleteConfirmTicketIDs(tickets)
 	if strings.TrimSpace(*confirm) == "" {
 		// Phase 1: generate confirmation token
 		token, err := generateConfirmToken()
 		if err != nil {
 			return err
 		}
-		fmt.Printf("ticket   : %s — %s\n", ticket.ID, ticket.Title)
-		fmt.Printf("type     : %s\n", ticket.Type)
+		for _, ticket := range tickets {
+			fmt.Printf("ticket   : %s — %s\n", ticket.ID, ticket.Title)
+			fmt.Printf("type     : %s\n", ticket.Type)
+		}
 		fmt.Printf("\nThis will permanently delete the ticket and all associated data.\n")
 		fmt.Printf("To confirm, run:\n\n")
-		fmt.Printf("  tk rm -id %s --confirm %s\n\n", ticket.ID, token)
+		fmt.Printf("  tk rm -id %s --confirm %s\n\n", confirmTarget, token)
 		cfg.DeleteConfirmToken = token
-		cfg.DeleteConfirmTicket = ticket.ID
+		cfg.DeleteConfirmTicket = confirmTarget
 		return config.Save(cfg)
 	}
 	// Phase 2: verify token and delete
-	if *confirm != cfg.DeleteConfirmToken || ticket.ID != cfg.DeleteConfirmTicket {
+	if *confirm != cfg.DeleteConfirmToken || confirmTarget != cfg.DeleteConfirmTicket {
 		return errors.New("invalid confirmation token")
 	}
-	if err := svc.DeleteTicket(context.Background(), ticket.ID); err != nil {
-		return err
+	for _, ticket := range tickets {
+		if err := svc.DeleteTicket(context.Background(), ticket.ID); err != nil {
+			return err
+		}
 	}
 	cfg.DeleteConfirmToken = ""
 	cfg.DeleteConfirmTicket = ""
@@ -2181,10 +2196,48 @@ func runDeleteTicket(args []string) error {
 		return err
 	}
 	if outputJSON {
-		return printJSON(map[string]any{"status": "deleted", "ticket_id": ticket.ID})
+		ticketIDs := make([]string, 0, len(tickets))
+		for _, ticket := range tickets {
+			ticketIDs = append(ticketIDs, ticket.ID)
+		}
+		return printJSON(map[string]any{"status": "deleted", "ticket_ids": ticketIDs})
 	}
-	fmt.Printf("deleted ticket %s\n", ticketLabel(ticket))
+	for _, ticket := range tickets {
+		fmt.Printf("deleted ticket %s\n", ticketLabel(ticket))
+	}
 	return nil
+}
+
+func resolveDeleteTicketRefs(idFlag string, positional []string) ([]string, error) {
+	var rawParts []string
+	if strings.TrimSpace(idFlag) != "" {
+		rawParts = append(rawParts, strings.Split(idFlag, ",")...)
+	}
+	for _, arg := range positional {
+		rawParts = append(rawParts, strings.Split(arg, ",")...)
+	}
+	refs := make([]string, 0, len(rawParts))
+	seen := map[string]bool{}
+	for _, part := range rawParts {
+		ref := strings.TrimSpace(part)
+		if ref == "" || seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		refs = append(refs, ref)
+	}
+	if len(refs) == 0 {
+		return nil, errors.New("missing ticket id")
+	}
+	return refs, nil
+}
+
+func joinDeleteConfirmTicketIDs(tickets []store.Ticket) string {
+	ids := make([]string, 0, len(tickets))
+	for _, ticket := range tickets {
+		ids = append(ids, ticket.ID)
+	}
+	return strings.Join(ids, ",")
 }
 
 func runTypedTicketCreate(ticketType string, args []string) error {
@@ -2849,6 +2902,9 @@ func parseTicketBatchFile(content, defaultType string) ([]ticketBatchEntry, erro
 		entries []ticketBatchEntry
 		current *workingEntry
 		stack   = map[int]int{}
+		inFence bool
+		fenceCh byte
+		fenceN  int
 	)
 	flushCurrent := func() {
 		if current == nil {
@@ -2875,7 +2931,25 @@ func parseTicketBatchFile(content, defaultType string) ([]ticketBatchEntry, erro
 	for i, rawLine := range lines {
 		line := strings.TrimRight(rawLine, "\r")
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") {
+		if current != nil {
+			if inFence {
+				if ch, n, rest, ok := parseFenceMarker(trimmed); ok && ch == fenceCh && n >= fenceN && rest == "" {
+					inFence = false
+					fenceCh = 0
+					fenceN = 0
+				}
+				current.description = append(current.description, line)
+				continue
+			}
+			if ch, n, _, ok := parseFenceMarker(trimmed); ok {
+				inFence = true
+				fenceCh = ch
+				fenceN = n
+				current.description = append(current.description, line)
+				continue
+			}
+		}
+		if strings.HasPrefix(trimmed, "#") && !inFence {
 			headingLevel := 0
 			for headingLevel < len(trimmed) && trimmed[headingLevel] == '#' {
 				headingLevel++
@@ -2943,6 +3017,24 @@ func parseTicketBatchFile(content, defaultType string) ([]ticketBatchEntry, erro
 		return nil, errors.New("no tickets found: add headings like '# Title'")
 	}
 	return entries, nil
+}
+
+func parseFenceMarker(trimmed string) (ch byte, n int, rest string, ok bool) {
+	if trimmed == "" {
+		return 0, 0, "", false
+	}
+	ch = trimmed[0]
+	if ch != '`' && ch != '~' {
+		return 0, 0, "", false
+	}
+	n = 0
+	for n < len(trimmed) && trimmed[n] == ch {
+		n++
+	}
+	if n < 3 {
+		return 0, 0, "", false
+	}
+	return ch, n, strings.TrimSpace(trimmed[n:]), true
 }
 
 // parseTicketFile parses a markdown file into ticket fields. Lines at the top

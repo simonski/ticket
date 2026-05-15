@@ -14,8 +14,8 @@ import (
 	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
-	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/testutil"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -350,13 +350,8 @@ type remoteFixture struct {
 
 func newRemoteFixture(t *testing.T) (*remoteFixture, *libticket.HTTPService) {
 	t.Helper()
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
-
-	dbPath := filepath.Join(tempDir, "ticket.db")
-	if err := store.Init(dbPath, "admin", "secret12", static.SeedDatabase); err != nil {
-		t.Fatalf("store.Init(, static.SeedDatabase) error = %v", err)
-	}
+	dbPath := testutil.SeededDBPath(t, "secret12")
+	t.Setenv("TICKET_HOME", filepath.Dir(dbPath))
 
 	db, err := store.Open(dbPath)
 	if err != nil {

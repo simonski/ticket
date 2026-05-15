@@ -5,6 +5,35 @@ import "github.com/simonski/ticket/internal/store"
 type credentialsRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Email    string `json:"email,omitempty"`
+}
+
+type userCreateRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Email    string `json:"email,omitempty"`
+	Role     string `json:"role,omitempty"`
+	PlanSlug string `json:"plan_slug,omitempty"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+}
+
+type userPlanAssignmentRequest struct {
+	PlanID   int64  `json:"plan_id,omitempty"`
+	PlanSlug string `json:"plan_slug,omitempty"`
+}
+
+type planRequest struct {
+	Slug                 string                    `json:"slug"`
+	Name                 string                    `json:"name"`
+	Description          string                    `json:"description"`
+	MaxProjects          int                       `json:"max_projects"`
+	MaxPrivateProjects   int                       `json:"max_private_projects"`
+	MaxTickets           int                       `json:"max_tickets"`
+	MaxTicketsPerProject int                       `json:"max_tickets_per_project"`
+	MaxTeamMemberships   int                       `json:"max_team_memberships"`
+	MaxAPICallsPerDay    int                       `json:"max_api_calls_per_day"`
+	DefaultProjectAlias  string                    `json:"default_project_alias"`
+	RegistrationActions  store.RegistrationActions `json:"registration_actions"`
 }
 
 type agentRequest struct {
@@ -23,6 +52,7 @@ type projectRequest struct {
 	GitRepository      string            `json:"git_repository"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
+	AcceptsNewMembers  bool              `json:"accepts_new_members"`
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 	AgentModelProvider string            `json:"agent_model_provider"`
 	AgentModelName     string            `json:"agent_model_name"`

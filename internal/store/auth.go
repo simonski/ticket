@@ -38,6 +38,8 @@ type User struct {
 	Email            string `json:"email"`
 	EmailConfirmedAt string `json:"email_confirmed_at,omitempty"`
 	Role             string `json:"role"`
+	PlanID           int64  `json:"plan_id,omitempty"`
+	PlanSlug         string `json:"plan_slug,omitempty"`
 	DisplayName      string `json:"display_name"`
 	Enabled          bool   `json:"enabled"`
 	CreatedAt        string `json:"created_at"`
@@ -72,26 +74,72 @@ func generateUserID() string {
 	return uuid.NewString()
 }
 
+type UserCreateParams struct {
+	Username               string
+	PlainPassword          string
+	Email                  string
+	Role                   string
+	Enabled                bool
+	PlanSlug               string
+	SkipProvisioning       bool
+	SkipPasswordValidation bool
+}
+
+func normalizeUserEmail(raw string) (string, error) {
+	email := strings.TrimSpace(raw)
+	if email == "" {
+		return "", nil
+	}
+	if strings.ContainsAny(email, " \t\r\n") {
+		return "", errors.New("email must not contain spaces")
+	}
+	at := strings.Index(email, "@")
+	if at <= 0 || at != strings.LastIndex(email, "@") || at == len(email)-1 {
+		return "", errors.New("email must be valid")
+	}
+	return email, nil
+}
+
 func RegisterUser(ctx context.Context, db *sql.DB, username, plainPassword string) (User, error) {
-	return createUser(ctx, db, username, plainPassword, "user", true)
+	return CreateUserWithParams(ctx, db, UserCreateParams{
+		Username:      username,
+		PlainPassword: plainPassword,
+		Role:          "user",
+		Enabled:       true,
+	})
+}
+
+func GeneratePassword(length int) (string, error) {
+	return randomSecret(length)
 }
 
 func CreateUser(ctx context.Context, db *sql.DB, username, plainPassword, role string) (User, error) {
+	return CreateUserWithParams(ctx, db, UserCreateParams{
+		Username:      username,
+		PlainPassword: plainPassword,
+		Role:          role,
+		Enabled:       true,
+	})
+}
+
+func CreateUserWithParams(ctx context.Context, db *sql.DB, params UserCreateParams) (User, error) {
+	username := strings.TrimSpace(params.Username)
+	plainPassword := params.PlainPassword
+	email, err := normalizeUserEmail(params.Email)
+	if err != nil {
+		return User{}, err
+	}
+	role := strings.TrimSpace(params.Role)
 	if role == "" {
 		role = "user"
 	}
-	return createUser(ctx, db, username, plainPassword, role, true)
-}
-
-func createUser(ctx context.Context, db *sql.DB, username, plainPassword, role string, enabled bool) (User, error) {
-	username = strings.TrimSpace(username)
 	if username == "" || plainPassword == "" {
 		return User{}, errors.New("username and password are required")
 	}
 	if !usernamePattern.MatchString(username) {
 		return User{}, errors.New("username contains invalid characters")
 	}
-	if len(plainPassword) < 8 {
+	if !params.SkipPasswordValidation && len(plainPassword) < 8 {
 		return User{}, errors.New("password must be at least 8 characters")
 	}
 
@@ -102,14 +150,33 @@ func createUser(ctx context.Context, db *sql.DB, username, plainPassword, role s
 
 	id := generateUserID()
 
+	plan, err := DefaultPlan(ctx, db)
+	if err != nil {
+		return User{}, err
+	}
+	if strings.TrimSpace(params.PlanSlug) != "" {
+		plan, err = GetPlanBySlug(ctx, db, params.PlanSlug)
+		if err != nil {
+			return User{}, err
+		}
+	}
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO users (user_id, username, password_hash, role, display_name, enabled, user_type)
-		VALUES (?, ?, ?, ?, ?, ?, 'user')
-	`, id, username, hash, role, username, boolToInt(enabled))
+		INSERT INTO users (user_id, username, email, password_hash, role, plan_id, display_name, enabled, user_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'user')
+	`, id, username, email, hash, role, plan.ID, username, boolToInt(params.Enabled))
 	if err != nil {
 		return User{}, err
 	}
 
+	user, err := getUserByIDQuerier(ctx, db, id)
+	if err != nil {
+		return User{}, err
+	}
+	if !params.SkipProvisioning {
+		if err := ensurePersonalResources(ctx, db, user, plan); err != nil {
+			return User{}, err
+		}
+	}
 	return GetUserByID(ctx, db, id)
 }
 
@@ -247,7 +314,13 @@ func GetUserByToken(ctx context.Context, db *sql.DB, token string) (User, error)
 }
 
 func GetUserByID(ctx context.Context, db *sql.DB, id string) (User, error) {
-	row := db.QueryRowContext(ctx, `
+	return getUserByIDQuerier(ctx, db, id)
+}
+
+func getUserByIDQuerier(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, id string) (User, error) {
+	row := q.QueryRowContext(ctx, `
 		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE user_id = ?
@@ -335,6 +408,9 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 	if _, execErr := tx.ExecContext(ctx, `UPDATE tickets SET created_by = NULL WHERE created_by = ?`, userID); execErr != nil {
 		return execErr
 	}
+	if _, execErr := tx.ExecContext(ctx, `UPDATE projects SET created_by = NULL WHERE created_by = ?`, userID); execErr != nil {
+		return execErr
+	}
 	// Clear free-text assignee field that stores the username.
 	if _, execErr := tx.ExecContext(ctx, `UPDATE tickets SET assignee = '' WHERE assignee = (SELECT username FROM users WHERE user_id = ?)`, userID); execErr != nil {
 		return execErr
@@ -346,6 +422,7 @@ func DeleteUser(ctx context.Context, db *sql.DB, username string) error {
 	}{
 		{"sessions", "user_id"},
 		{"project_members", "user_id"},
+		{"project_aliases", "user_id"},
 		{"team_members", "user_id"},
 		{"team_agents", "user_id"},
 		{"time_entries", "user_id"},

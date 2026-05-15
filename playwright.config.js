@@ -2,7 +2,7 @@ const { defineConfig } = require("@playwright/test");
 const { resolvePort } = require("./playwright.port");
 
 const port = resolvePort("PLAYWRIGHT_PORT", 4173);
-const workers = Number(process.env.PLAYWRIGHT_WORKERS || 1);
+const workers = Number(process.env.PLAYWRIGHT_WORKERS || 4);
 const retries = Number(process.env.PLAYWRIGHT_RETRIES || 1);
 
 module.exports = defineConfig({

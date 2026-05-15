@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -77,10 +76,10 @@ func nextUniqueProjectPrefix(ctx context.Context, db *sql.DB, desired string) (s
 	if err := validateProjectPrefix(desired); err != nil {
 		return "", err
 	}
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 16384; i++ {
 		candidate := desired
 		if i > 0 {
-			suffix := strconv.Itoa(i)
+			suffix := alphabeticProjectPrefixSuffix(i)
 			base := desired
 			if len(base)+len(suffix) > 5 {
 				base = base[:5-len(suffix)]
@@ -96,6 +95,19 @@ func nextUniqueProjectPrefix(ctx context.Context, db *sql.DB, desired string) (s
 		}
 	}
 	return "", fmt.Errorf("could not allocate unique prefix for %q", desired)
+}
+
+func alphabeticProjectPrefixSuffix(index int) string {
+	if index <= 0 {
+		return ""
+	}
+	buf := make([]byte, 0, 4)
+	for index > 0 {
+		index--
+		buf = append([]byte{byte('A' + (index % 26))}, buf...)
+		index /= 26
+	}
+	return string(buf)
 }
 
 func ticketTypeCode(ticketType string) (string, error) {
@@ -124,6 +136,8 @@ func ticketTypeCode(ticketType string) (string, error) {
 		return "R", nil
 	case "decision":
 		return "D", nil
+	case "action":
+		return "A", nil
 	default:
 		return "", fmt.Errorf("invalid ticket type %q", ticketType)
 	}

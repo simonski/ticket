@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
+source "$ROOT_DIR/scripts/lib/token_auth.sh"
 
 if [[ ! -x "$TK_BIN" ]]; then
 	echo "tk binary not found at $TK_BIN" >&2
@@ -13,13 +14,17 @@ fi
 
 unset AGENT_ID AGENT_PASSWORD
 
-if [[ -z "${TICKET_URL:-}" || -z "${TICKET_USERNAME:-}" || -z "${TICKET_PASSWORD:-}" ]]; then
+if [[ -z "${TICKET_URL:-}" || -z "${TICKET_TOKEN:-}" && ( -z "${TICKET_USERNAME:-}" || -z "${TICKET_PASSWORD:-}" ) ]]; then
 	echo "server auth environment variables are required. Set:" >&2
 	echo "  TICKET_URL" >&2
+	echo "  TICKET_TOKEN" >&2
+	echo "    or" >&2
 	echo "  TICKET_USERNAME" >&2
 	echo "  TICKET_PASSWORD" >&2
 	exit 1
 fi
+
+use_token_auth
 
 if ! "$TK_BIN" project use DEMO >/dev/null 2>&1; then
 	project_id="$("$TK_BIN" project create -prefix DEMO -title "demo" -description "Example todo application planning workspace" -git-repository https://github.com/example/todo-app -printid)"

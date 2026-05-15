@@ -507,14 +507,21 @@ func HighestProjectRoleForTeams(ctx context.Context, db *sql.DB, projectID int64
 			return "", false, err
 		}
 		role = normalizeProjectRole(role)
-		if role == ProjectRoleOwner {
-			return ProjectRoleOwner, true, nil
-		}
-		if role == ProjectRoleEditor {
-			best = ProjectRoleEditor
-		}
-		if role == ProjectRoleViewer && best == "" {
-			best = ProjectRoleViewer
+		switch role {
+		case ProjectRoleAdmin:
+			return ProjectRoleAdmin, true, nil
+		case ProjectRoleMember:
+			if best != ProjectRoleAdmin {
+				best = ProjectRoleMember
+			}
+		case ProjectRoleCommenter:
+			if best == "" || best == ProjectRoleObserver {
+				best = ProjectRoleCommenter
+			}
+		case ProjectRoleObserver:
+			if best == "" {
+				best = ProjectRoleObserver
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {

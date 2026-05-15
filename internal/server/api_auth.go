@@ -9,6 +9,12 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
+type registrationResponse struct {
+	store.User
+	Password string `json:"password,omitempty"`
+	Approved bool   `json:"approved"`
+}
+
 func (r *router) registerAuthHandlers() {
 	db := r.db
 	mux := r.mux
@@ -91,17 +97,42 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusForbidden, "registration is disabled")
 			return
 		}
+		autoApprove, err := store.RegistrationAutoApprove(r.Context(), db)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		var credentials credentialsRequest
 		if decodeErr := json.NewDecoder(r.Body).Decode(&credentials); decodeErr != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body")
 			return
 		}
-		user, err := store.RegisterUser(r.Context(), db, credentials.Username, credentials.Password)
+		password := strings.TrimSpace(credentials.Password)
+		generatedPassword := ""
+		if password == "" {
+			generatedPassword, err = store.GeneratePassword(24)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			password = generatedPassword
+		}
+		user, err := store.CreateUserWithParams(r.Context(), db, store.UserCreateParams{
+			Username:      credentials.Username,
+			PlainPassword: password,
+			Email:         credentials.Email,
+			Role:          "user",
+			Enabled:       autoApprove,
+		})
 		if err != nil {
 			writeStoreError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, user)
+		statusCode := http.StatusCreated
+		if !autoApprove {
+			statusCode = http.StatusAccepted
+		}
+		writeJSON(w, statusCode, registrationResponse{User: user, Password: generatedPassword, Approved: autoApprove})
 	})
 
 	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
@@ -183,6 +214,11 @@ func (r *router) registerAuthHandlers() {
 			writeError(w, http.StatusInternalServerError, regErr.Error())
 			return
 		}
+		registrationAutoApprove, regApproveErr := store.RegistrationAutoApprove(r.Context(), db)
+		if regApproveErr != nil {
+			writeError(w, http.StatusInternalServerError, regApproveErr.Error())
+			return
+		}
 		chatLimits, chatErr := store.ChatLimitsConfig(r.Context(), db)
 		if chatErr != nil {
 			writeError(w, http.StatusInternalServerError, chatErr.Error())
@@ -201,6 +237,7 @@ func (r *router) registerAuthHandlers() {
 					"status":                    "ok",
 					"authenticated":             false,
 					"registration_enabled":      registrationEnabled,
+					"registration_auto_approve": registrationAutoApprove,
 					"chat_enabled":              chatEnabled,
 					"chat_max_connections":      chatLimits.MaxConnections,
 					"chat_max_duration_minutes": chatLimits.MaxDurationMin,
@@ -216,6 +253,7 @@ func (r *router) registerAuthHandlers() {
 			"status":                    "ok",
 			"authenticated":             true,
 			"registration_enabled":      registrationEnabled,
+			"registration_auto_approve": registrationAutoApprove,
 			"chat_enabled":              chatEnabled,
 			"chat_max_connections":      chatLimits.MaxConnections,
 			"chat_max_duration_minutes": chatLimits.MaxDurationMin,

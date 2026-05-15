@@ -229,7 +229,7 @@ func runProject(args []string) error {
 	case "set-draft":
 		fs := flag.NewFlagSet("project set-draft", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectID := fs.Int64("project_id", 0, "project id (default: current project)")
+		projectID := fs.String("project_id", "", "project id, prefix, or alias (default: current project)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -241,18 +241,11 @@ func runProject(args []string) error {
 			return fmt.Errorf("expected true or false, got %q", val)
 		}
 		draft := val == "true"
-		pid := *projectID
-		if pid == 0 {
-			if cfg.ProjectID == "" {
-				return errors.New("no current project set; use: tk project use <id>")
-			}
-			project, err := svc.GetProject(context.Background(), cfg.ProjectID)
-			if err != nil {
-				return err
-			}
-			pid = project.ID
+		project, err := resolveProjectFromFlagOrConfig(context.Background(), cfg, svc, *projectID)
+		if err != nil {
+			return err
 		}
-		if err := svc.SetProjectDefaultDraft(context.Background(), pid, draft); err != nil {
+		if err := svc.SetProjectDefaultDraft(context.Background(), project.ID, draft); err != nil {
 			return err
 		}
 		fmt.Printf("default_draft set to %v\n", draft)
@@ -494,15 +487,19 @@ func runProjectAddUser(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project add-user", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	userID := fs.String("user_id", "", "user id")
-	projectID := fs.Int64("project_id", 0, "project id")
-	role := fs.String("role", "", "project role [viewer,editor,owner]")
+	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	role := fs.String("role", "", "project role [observer,commenter,member,admin]")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *userID == "" || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-		return errors.New("usage: tk project add-user -user_id <id> -project_id <id> -role <viewer|editor|owner>")
+	if *userID == "" || strings.TrimSpace(*projectID) == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+		return errors.New("usage: tk project add-user -user_id <id> -project_id <id|prefix|public|private> -role <observer|commenter|member|admin>")
 	}
-	member, err := svc.AddProjectMember(context.Background(), *projectID, libticket.ProjectMemberRequest{
+	project, err := svc.GetProject(context.Background(), strings.TrimSpace(*projectID))
+	if err != nil {
+		return err
+	}
+	member, err := svc.AddProjectMember(context.Background(), project.ID, libticket.ProjectMemberRequest{
 		UserID: *userID,
 		Role:   strings.TrimSpace(*role),
 	})
@@ -520,20 +517,24 @@ func runProjectRemoveUser(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project remove-user", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	userID := fs.String("user_id", "", "user id")
-	projectID := fs.Int64("project_id", 0, "project id")
+	projectID := fs.String("project_id", "", "project id, prefix, or alias")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *userID == "" || *projectID == 0 || fs.NArg() != 0 {
-		return errors.New("usage: tk project remove-user -user_id <id> -project_id <id>")
+	if *userID == "" || strings.TrimSpace(*projectID) == "" || fs.NArg() != 0 {
+		return errors.New("usage: tk project remove-user -user_id <id> -project_id <id|prefix|public|private>")
 	}
-	if err := svc.RemoveProjectMember(context.Background(), *projectID, *userID); err != nil {
+	project, err := svc.GetProject(context.Background(), strings.TrimSpace(*projectID))
+	if err != nil {
+		return err
+	}
+	if err := svc.RemoveProjectMember(context.Background(), project.ID, *userID); err != nil {
 		return err
 	}
 	if outputJSON {
-		return printJSON(map[string]any{"status": "deleted", "project_id": *projectID, "user_id": *userID})
+		return printJSON(map[string]any{"status": "deleted", "project_id": project.ID, "user_id": *userID})
 	}
-	fmt.Printf("removed project user: project_id=%d user_id=%s\n", *projectID, *userID)
+	fmt.Printf("removed project user: project_id=%d user_id=%s\n", project.ID, *userID)
 	return nil
 }
 
@@ -541,15 +542,19 @@ func runProjectAddTeam(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project add-team", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	teamID := fs.Int64("team_id", 0, "team id")
-	projectID := fs.Int64("project_id", 0, "project id")
-	role := fs.String("role", "", "project role [viewer,editor,owner]")
+	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	role := fs.String("role", "", "project role [observer,commenter,member,admin]")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *teamID == 0 || *projectID == 0 || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
-		return errors.New("usage: tk project add-team -team_id <id> -project_id <id> -role <viewer|editor|owner>")
+	if *teamID == 0 || strings.TrimSpace(*projectID) == "" || strings.TrimSpace(*role) == "" || fs.NArg() != 0 {
+		return errors.New("usage: tk project add-team -team_id <id> -project_id <id|prefix|public|private> -role <observer|commenter|member|admin>")
 	}
-	member, err := svc.AddProjectTeamMember(context.Background(), *projectID, libticket.ProjectTeamMemberRequest{
+	project, err := svc.GetProject(context.Background(), strings.TrimSpace(*projectID))
+	if err != nil {
+		return err
+	}
+	member, err := svc.AddProjectTeamMember(context.Background(), project.ID, libticket.ProjectTeamMemberRequest{
 		TeamID: *teamID,
 		Role:   strings.TrimSpace(*role),
 	})
@@ -567,20 +572,24 @@ func runProjectRemoveTeam(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project remove-team", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	teamID := fs.Int64("team_id", 0, "team id")
-	projectID := fs.Int64("project_id", 0, "project id")
+	projectID := fs.String("project_id", "", "project id, prefix, or alias")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *teamID == 0 || *projectID == 0 || fs.NArg() != 0 {
-		return errors.New("usage: tk project remove-team -team_id <id> -project_id <id>")
+	if *teamID == 0 || strings.TrimSpace(*projectID) == "" || fs.NArg() != 0 {
+		return errors.New("usage: tk project remove-team -team_id <id> -project_id <id|prefix|public|private>")
 	}
-	if err := svc.RemoveProjectTeamMember(context.Background(), *projectID, *teamID); err != nil {
+	project, err := svc.GetProject(context.Background(), strings.TrimSpace(*projectID))
+	if err != nil {
+		return err
+	}
+	if err := svc.RemoveProjectTeamMember(context.Background(), project.ID, *teamID); err != nil {
 		return err
 	}
 	if outputJSON {
-		return printJSON(map[string]any{"status": "deleted", "project_id": *projectID, "team_id": *teamID})
+		return printJSON(map[string]any{"status": "deleted", "project_id": project.ID, "team_id": *teamID})
 	}
-	fmt.Printf("removed project team: project_id=%d team_id=%d\n", *projectID, *teamID)
+	fmt.Printf("removed project team: project_id=%d team_id=%d\n", project.ID, *teamID)
 	return nil
 }
 

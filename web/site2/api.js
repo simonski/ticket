@@ -128,6 +128,40 @@
             });
         }
 
+        async function register(username, password, email) {
+            const payload = { username: username };
+            if (password) {
+                payload.password = password;
+            }
+            if (email) {
+                payload.email = email;
+            }
+            return request("/api/register", {
+                method: "POST",
+                body: JSON.stringify(payload),
+                auth: false,
+            });
+        }
+
+        function listPlans() {
+            return get("/api/plans");
+        }
+
+        function getDefaultPlan() {
+            return get("/api/plans/default");
+        }
+
+        function setDefaultPlan(slug) {
+            return post("/api/plans/default", { slug: slug });
+        }
+
+        function setRegistrationPolicy(enabled, autoApprove) {
+            return post("/api/config/registration", {
+                enabled: Boolean(enabled),
+                auto_approve: Boolean(autoApprove),
+            });
+        }
+
         async function fetchDocumentFile(documentID, fileID) {
             const response = await requestRaw("/api/documents/" + documentID + "/files/" + fileID, {
                 method: "GET",
@@ -153,6 +187,11 @@
             put: put,
             del: del,
             login: login,
+            register: register,
+            listPlans: listPlans,
+            getDefaultPlan: getDefaultPlan,
+            setDefaultPlan: setDefaultPlan,
+            setRegistrationPolicy: setRegistrationPolicy,
             fetchDocumentFile: fetchDocumentFile,
         };
     }

@@ -12,6 +12,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -53,13 +54,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	if _, err := os.Stat(bin); err != nil {
+	if _, statErr := os.Stat(bin); statErr != nil {
 		fmt.Fprintf(os.Stderr, "error: ticket binary not found at %s (run 'make build-dev' first)\n", bin)
 		os.Exit(1)
 	}
 
 	totalPass, totalFail, totalSkip := 0, 0, 0
-
 	for _, file := range flag.Args() {
 		pass, fail, skip, runErr := runFile(file, bin, *verbose)
 		totalPass += pass
@@ -250,6 +250,12 @@ func runFile(file, ticketBin string, verbose bool) (pass, fail, skip int, err er
 		for k, v := range newExports {
 			blockEnv[k] = v
 		}
+		if _, ok := newExports["TICKET_PASSWORD"]; ok {
+			delete(blockEnv, "TICKET_TOKEN")
+		}
+		if _, ok := newExports["TICKET_TOKEN"]; ok {
+			delete(blockEnv, "TICKET_PASSWORD")
+		}
 		out, runErr := execBlock(code, repoDir, blockEnv)
 
 		// Apply exports after successful execution.
@@ -257,6 +263,13 @@ func runFile(file, ticketBin string, verbose bool) (pass, fail, skip int, err er
 			for k, v := range newExports {
 				env[k] = v
 			}
+			if _, ok := newExports["TICKET_PASSWORD"]; ok {
+				delete(env, "TICKET_TOKEN")
+			}
+			if _, ok := newExports["TICKET_TOKEN"]; ok {
+				delete(env, "TICKET_PASSWORD")
+			}
+			promoteTokenAuth(ticketBin, repoDir, env)
 		}
 
 		if runErr != nil {
@@ -443,11 +456,15 @@ func containsInit(code string) bool {
 	for _, line := range strings.Split(code, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "tk init" || line == "ticket init" ||
-			strings.HasPrefix(line, "tk init ") || strings.HasPrefix(line, "ticket init ") {
+			line == "tk initdb" || line == "ticket initdb" ||
+			strings.HasPrefix(line, "tk init ") || strings.HasPrefix(line, "ticket init ") ||
+			strings.HasPrefix(line, "tk initdb ") || strings.HasPrefix(line, "ticket initdb ") {
 			return true
 		}
 		// Also match the rewritten form.
-		if strings.HasSuffix(line, "/ticket init") || strings.Contains(line, "/ticket init ") {
+		if strings.HasSuffix(line, "/ticket init") || strings.Contains(line, "/ticket init ") ||
+			strings.HasSuffix(line, "/tk initdb") || strings.Contains(line, "/tk initdb ") ||
+			strings.HasSuffix(line, "/ticket initdb") || strings.Contains(line, "/ticket initdb ") {
 			return true
 		}
 	}
@@ -508,19 +525,54 @@ func rewriteInitCommands(code, replacement string) string {
 	for _, line := range strings.Split(code, "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch {
-		case trimmed == "tk init", trimmed == "ticket init":
+		case trimmed == "tk init", trimmed == "ticket init", trimmed == "tk initdb", trimmed == "ticket initdb":
 			lines = append(lines, replacement)
-		case strings.HasPrefix(trimmed, "tk init "), strings.HasPrefix(trimmed, "ticket init "):
+		case strings.HasPrefix(trimmed, "tk init "), strings.HasPrefix(trimmed, "ticket init "),
+			strings.HasPrefix(trimmed, "tk initdb "), strings.HasPrefix(trimmed, "ticket initdb "):
 			lines = append(lines, replacement)
-		case strings.HasSuffix(trimmed, "/tk init"), strings.HasSuffix(trimmed, "/ticket init"):
+		case strings.HasSuffix(trimmed, "/tk init"), strings.HasSuffix(trimmed, "/ticket init"),
+			strings.HasSuffix(trimmed, "/tk initdb"), strings.HasSuffix(trimmed, "/ticket initdb"):
 			lines = append(lines, replacement)
-		case strings.Contains(trimmed, "/tk init "), strings.Contains(trimmed, "/ticket init "):
+		case strings.Contains(trimmed, "/tk init "), strings.Contains(trimmed, "/ticket init "),
+			strings.Contains(trimmed, "/tk initdb "), strings.Contains(trimmed, "/ticket initdb "):
 			lines = append(lines, replacement)
 		default:
 			lines = append(lines, line)
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func promoteTokenAuth(ticketBin, workDir string, env map[string]string) {
+	if strings.TrimSpace(env["TICKET_TOKEN"]) != "" {
+		return
+	}
+	if strings.TrimSpace(env["TICKET_URL"]) == "" {
+		return
+	}
+	username := strings.TrimSpace(env["TICKET_USERNAME"])
+	password := strings.TrimSpace(env["TICKET_PASSWORD"])
+	if username == "" || password == "" {
+		return
+	}
+	cmd := exec.Command(ticketBin, "-json", "login", "-username", username, "-password", password) // #nosec G204 -- ticketBin is a resolved binary path from the build
+	cmd.Dir = workDir
+	cmd.Env = buildEnv(env)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return
+	}
+	var response struct {
+		Token string `json:"token"`
+	}
+	if jsonErr := json.Unmarshal(out, &response); jsonErr != nil {
+		return
+	}
+	if strings.TrimSpace(response.Token) == "" {
+		return
+	}
+	env["TICKET_TOKEN"] = strings.TrimSpace(response.Token)
+	delete(env, "TICKET_PASSWORD")
 }
 
 // extractExports pulls out `export KEY=VALUE` lines and returns them as a map.

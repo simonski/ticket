@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -147,6 +149,7 @@ func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, pa
 		httpRequest.Header.Set("Content-Type", "application/json")
 	}
 	httpRequest.SetBasicAuth(username, password)
+	setRequestContextHeaders(httpRequest)
 
 	resp, err := c.http.Do(httpRequest)
 	if err != nil {
@@ -187,6 +190,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		} else if token != "" {
 			httpRequest.Header.Set("Authorization", "Bearer "+token)
 		}
+		setRequestContextHeaders(httpRequest)
 		resp, err := c.http.Do(httpRequest)
 		if err != nil {
 			return nil, friendlyConnectionError(err, c.baseURL)
@@ -208,4 +212,39 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func setRequestContextHeaders(req *http.Request) {
+	if repo := nearestGitRemoteFromCWD(); repo != "" {
+		req.Header.Set("X-Ticket-Git-Repository", repo)
+	}
+}
+
+func nearestGitRemoteFromCWD() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = ""
+	}
+	dir := filepath.Clean(cwd)
+	for {
+		if info, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil && info.IsDir() {
+			out, cmdErr := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output() // #nosec G204 -- command and arguments are fixed
+			if cmdErr == nil {
+				return strings.TrimSpace(string(out))
+			}
+		}
+		if homeDir != "" && filepath.Clean(homeDir) == dir {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
 }

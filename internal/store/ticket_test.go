@@ -595,6 +595,7 @@ func TestCreateTicketAcceptsCanonicalTypes(t *testing.T) {
 		"question",
 		"requirement",
 		"decision",
+		"action",
 	}
 	for _, ticketType := range types {
 		ticket, err := CreateTicket(context.Background(), db, TicketCreateParams{

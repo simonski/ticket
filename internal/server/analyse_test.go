@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/testutil"
 )
 
 func TestResolveAnalyseCommandArgsDefaultsToCodexExec(t *testing.T) {
@@ -23,6 +23,11 @@ func TestResolveAnalyseCommandArgsDefaultsToCodexExec(t *testing.T) {
 			t.Fatalf("resolveAnalyseCommandArgs()[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
+}
+
+func seededAnalyseDBPath(t *testing.T) string {
+	t.Helper()
+	return testutil.SeededDBPath(t, "password")
 }
 
 func TestResolveAnalyseCommandArgsInjectsExecForCodexFlags(t *testing.T) {
@@ -80,10 +85,7 @@ func TestRunStoryBreakdownViaTicketCLIUsesConfiguredCommand(t *testing.T) {
 	}
 	t.Setenv("TICKET_ANALYSE_CMD", scriptPath)
 
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededAnalyseDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -118,10 +120,7 @@ printf 'noise before {"tickets":[{"title":"Implement checkout","description":"Bu
 	}
 	t.Setenv("TICKET_ANALYSE_CMD", scriptPath)
 
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededAnalyseDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -141,10 +140,7 @@ printf 'noise before {"tickets":[{"title":"Implement checkout","description":"Bu
 }
 
 func TestRunRoleJSONAnalysisReturnsCommandAndJSONErrors(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := seededAnalyseDBPath(t)
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)

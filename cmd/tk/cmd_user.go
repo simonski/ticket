@@ -18,14 +18,19 @@ func runRegister(args []string) error {
 	fs.SetOutput(os.Stderr)
 	usernameFlag := fs.String("username", "", "username")
 	passwordFlag := fs.String("password", "", "password")
+	emailFlag := fs.String("email", "", "email")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	username, password, err := resolveCredentials(*usernameFlag, *passwordFlag, true)
-	if err != nil {
-		return err
+	username := strings.TrimSpace(*usernameFlag)
+	if username == "" {
+		username = currentOSUser()
 	}
+	if username == "" {
+		return errors.New("username is required")
+	}
+	password := strings.TrimSpace(*passwordFlag)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -35,8 +40,12 @@ func runRegister(args []string) error {
 	if err != nil {
 		return err
 	}
-	svc := libticket.NewHTTP(config.Config{Location: serverURL, Username: cfg.Username, Token: cfg.Token})
-	user, err := svc.Register(context.Background(), username, password)
+	svc := libticket.NewHTTP(config.Config{Location: serverURL, Token: cfg.Token})
+	user, generatedPassword, err := svc.RegisterWithParams(context.Background(), libticket.RegisterParams{
+		Username: username,
+		Password: password,
+		Email:    strings.TrimSpace(*emailFlag),
+	})
 	if err != nil {
 		return err
 	}
@@ -45,9 +54,15 @@ func runRegister(args []string) error {
 		return err
 	}
 	if outputJSON {
+		if generatedPassword != "" {
+			return printJSON(map[string]any{"user": user, "password": generatedPassword})
+		}
 		return printJSON(user)
 	}
 	fmt.Printf("registered user %s\n", user.Username)
+	if generatedPassword != "" {
+		fmt.Printf("password: %s\n", generatedPassword)
+	}
 	return nil
 }
 
@@ -56,13 +71,23 @@ func runLogin(args []string) error {
 	fs.SetOutput(os.Stderr)
 	usernameFlag := fs.String("username", "", "username")
 	passwordFlag := fs.String("password", "", "password")
+	tokenFlag := fs.String("token", "", "bearer token")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	_, resolvedPassword, err := resolveCredentials(*usernameFlag, *passwordFlag, true)
-	if err != nil {
-		return err
+	token := strings.TrimSpace(*tokenFlag)
+	if token != "" && strings.TrimSpace(*passwordFlag) != "" {
+		return errors.New("use either -password or -token, not both")
+	}
+
+	resolvedPassword := ""
+	var err error
+	if token == "" {
+		_, resolvedPassword, err = resolveCredentials(*usernameFlag, *passwordFlag, true)
+		if err != nil {
+			return err
+		}
 	}
 
 	cfg, err := config.Load()
@@ -74,6 +99,18 @@ func runLogin(args []string) error {
 		return err
 	}
 	svc := libticket.NewHTTP(config.Config{Location: serverURL, Username: cfg.Username, Token: cfg.Token})
+
+	if token != "" {
+		tokenSvc := libticket.NewHTTP(config.Config{Location: serverURL, Token: token})
+		status, statusErr := tokenSvc.Status(context.Background())
+		if statusErr != nil {
+			return statusErr
+		}
+		if !status.Authenticated || status.User == nil {
+			return errors.New("invalid token")
+		}
+		return finishLogin(cfg, *status.User, token)
+	}
 
 	if cfg.Token != "" {
 		status, statusErr := svc.Status(context.Background())
@@ -97,9 +134,9 @@ func runLogin(args []string) error {
 	}
 
 	if username != "" && password != "" {
-		user, _, loginErr := svc.Login(context.Background(), username, password)
+		user, sessionToken, loginErr := svc.Login(context.Background(), username, password)
 		if loginErr == nil {
-			return finishLogin(cfg, user, password)
+			return finishLogin(cfg, user, sessionToken)
 		}
 		if loginErr.Error() != "invalid credentials" {
 			return loginErr
@@ -111,11 +148,11 @@ func runLogin(args []string) error {
 	if err != nil {
 		return err
 	}
-	user, _, err := svc.Login(context.Background(), username, password)
+	user, sessionToken, err := svc.Login(context.Background(), username, password)
 	if err != nil {
 		return err
 	}
-	return finishLogin(cfg, user, password)
+	return finishLogin(cfg, user, sessionToken)
 }
 
 func resolveServerURLForAuth(cfg config.Config) (string, error) {
@@ -207,7 +244,7 @@ func runStatusWithSummaryStyle(statusUnicode bool) error {
 func runCount(args []string) error {
 	fs := flag.NewFlagSet("count", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	projectID := fs.Int64("project_id", 0, "limit counts to a project id")
+	projectRef := fs.String("project_id", "", "limit counts to a project id, prefix, or alias")
 	taskType := fs.String("type", "", "filter ticket count by ticket type")
 	stage := fs.String("stage", "", "filter ticket count by stage")
 	state := fs.String("state", "", "filter ticket count by state")
@@ -233,12 +270,16 @@ func runCount(args []string) error {
 	if err != nil {
 		return err
 	}
-	var projectFilter *int64
-	if *projectID != 0 {
-		projectFilter = projectID
-		if _, getErr := svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectID)); getErr != nil {
-			return getErr
+	var (
+		projectFilter *int64
+		filterProject store.Project
+	)
+	if strings.TrimSpace(*projectRef) != "" {
+		filterProject, err = svc.GetProject(context.Background(), strings.TrimSpace(*projectRef))
+		if err != nil {
+			return err
 		}
+		projectFilter = &filterProject.ID
 	}
 	hasTicketFilters := strings.TrimSpace(*taskType) != "" ||
 		strings.TrimSpace(*stage) != "" ||
@@ -257,10 +298,7 @@ func runCount(args []string) error {
 	if hasTicketFilters || hasExpectEquals || hasExpectNotEquals {
 		var project store.Project
 		if projectFilter != nil {
-			project, err = svc.GetProject(context.Background(), fmt.Sprintf("%d", *projectFilter))
-			if err != nil {
-				return err
-			}
+			project = filterProject
 		} else {
 			_, resolvedSvc, currentProject, resolveErr := resolveCurrentProjectClient()
 			if resolveErr != nil {
@@ -431,25 +469,57 @@ func runUser(args []string) error {
 		fs.SetOutput(os.Stderr)
 		usernameFlag := fs.String("username", "", "username")
 		passwordFlag := fs.String("password", "", "password")
+		emailFlag := fs.String("email", "", "email")
 		printID := fs.Bool("printid", false, "print only the created user id")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
+		if parseErr := fs.Parse(args[1:]); parseErr != nil {
+			return parseErr
 		}
-		username, password, err := resolveCredentials(*usernameFlag, *passwordFlag, true)
-		if err != nil {
-			return err
+		username := strings.TrimSpace(*usernameFlag)
+		if username == "" {
+			username = currentOSUser()
 		}
-		user, err := svc.CreateUser(context.Background(), username, password)
+		if username == "" {
+			return errors.New("username is required")
+		}
+		password := strings.TrimSpace(*passwordFlag)
+		var (
+			user              store.User
+			generatedPassword string
+		)
+		if svcWithParams, ok := svc.(interface {
+			CreateUserWithParams(context.Context, libticket.UserCreateParams) (store.User, string, error)
+		}); ok {
+			user, generatedPassword, err = svcWithParams.CreateUserWithParams(context.Background(), libticket.UserCreateParams{
+				Username: username,
+				Password: password,
+				Email:    strings.TrimSpace(*emailFlag),
+			})
+		} else {
+			if password == "" {
+				password, err = generatePassword(24)
+				if err != nil {
+					return err
+				}
+				generatedPassword = password
+			}
+			user, err = svc.CreateUser(context.Background(), username, password)
+		}
 		if err != nil {
 			return err
 		}
 		if outputJSON {
+			if generatedPassword != "" {
+				return printJSON(map[string]any{"user": user, "password": generatedPassword})
+			}
 			return printJSON(user)
 		}
 		if printCreatedID(user.ID, *printID) {
 			return nil
 		}
 		fmt.Printf("created user %s\n", user.Username)
+		if generatedPassword != "" {
+			fmt.Printf("password: %s\n", generatedPassword)
+		}
 		return nil
 	case "rm", "delete", "del":
 		fs := flag.NewFlagSet("user "+args[0], flag.ContinueOnError)

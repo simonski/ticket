@@ -2,18 +2,45 @@ package client
 
 import "github.com/simonski/ticket/internal/store"
 
+type RegisterRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	Email    string `json:"email,omitempty"`
+}
+
+type RegisterResponse struct {
+	store.User
+	Password string `json:"password,omitempty"`
+	Approved bool   `json:"approved"`
+}
+
+type UserCreateRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Role     string `json:"role,omitempty"`
+	PlanSlug string `json:"plan_slug,omitempty"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+}
+
+type UserCreateResponse struct {
+	store.User
+	Password string `json:"password,omitempty"`
+}
+
 type AuthResponse struct {
 	Token string     `json:"token"`
 	User  store.User `json:"user"`
 }
 
 type StatusResponse struct {
-	Status              string      `json:"status"`
-	Authenticated       bool        `json:"authenticated"`
-	RegistrationEnabled bool        `json:"registration_enabled,omitempty"`
-	ChatEnabled         bool        `json:"chat_enabled,omitempty"`
-	ServerVersion       string      `json:"server_version"`
-	User                *store.User `json:"user,omitempty"`
+	Status                  string      `json:"status"`
+	Authenticated           bool        `json:"authenticated"`
+	RegistrationEnabled     bool        `json:"registration_enabled,omitempty"`
+	RegistrationAutoApprove bool        `json:"registration_auto_approve,omitempty"`
+	ChatEnabled             bool        `json:"chat_enabled,omitempty"`
+	ServerVersion           string      `json:"server_version"`
+	User                    *store.User `json:"user,omitempty"`
 }
 
 type CountSummary = store.CountSummary
@@ -30,6 +57,7 @@ type ProjectCreateRequest struct {
 	GitRepository      string            `json:"git_repository"`
 	Notes              string            `json:"notes"`
 	Visibility         string            `json:"visibility"`
+	AcceptsNewMembers  bool              `json:"accepts_new_members"`
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 
@@ -44,6 +72,7 @@ type ProjectUpdateRequest struct {
 	Notes              string            `json:"notes"`
 	Status             string            `json:"status"`
 	Visibility         string            `json:"visibility"`
+	AcceptsNewMembers  bool              `json:"accepts_new_members"`
 	WorkflowID         *int64            `json:"workflow_id,omitempty"`
 }
 

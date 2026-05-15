@@ -70,14 +70,14 @@ var helpIndex = map[string]commandHelp{
 		example: "tk -f old_ticket/ticket.db upgrade-database -o new_database/ticket.db",
 	},
 	"login": {
-		usage:   "tk login [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, then prompts.", "If prompting is needed, discovered values are used as editable defaults."},
-		example: "tk login -username simon -password secret -url https://ticket.localhost",
+		usage:   "tk login [-username <name>] [-password <password> | -token <token>] [-url <server-url>]",
+		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password` or `-token`, then prompts.", "If prompting is needed, discovered values are used as editable defaults. Bearer tokens are preferred when you already have one."},
+		example: "tk login -token tk_abc123 -url https://ticket.localhost",
 	},
 	"register": {
-		usage:   "tk register [-username <name>] [-password <password>] [-url <server-url>]",
-		details: []string{"Creates a user account on the configured server but does not log the user in.", "Credential resolution: `-username`, then stored username, then OS `whoami`; `-password`, then the supplied flag, then `password`."},
-		example: "tk register -username simon -password secret",
+		usage:   "tk register [-username <name>] [-email <address>] [-password <password>] [-url <server-url>]",
+		details: []string{"Creates a user account on the configured server but does not log the user in.", "Username resolution: `-username`, then the OS `whoami` fallback.", "If `-password` is omitted, the server generates one and returns it in the response/output."},
+		example: "tk register -username simon -email simon@example.com",
 	},
 	"logout": {
 		usage:   "tk logout [-url <server-url>]",
@@ -86,7 +86,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"status": {
 		usage:   "tk status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration and connectivity details.", "Mode is auto-detected: remote when `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD` are set; otherwise local when `~/.ticket/ticket.db` is available.", "Output includes the active project, its current Workflow name, and whether new tickets default to draft mode."},
+		details: []string{"Prints the current effective configuration and connectivity details.", "Mode is auto-detected: remote when `TICKET_URL` is paired with either `TICKET_TOKEN` or `TICKET_USERNAME` and `TICKET_PASSWORD`; otherwise local when `~/.ticket/ticket.db` is available.", "Output includes the active project, its current Workflow name, and whether new tickets default to draft mode."},
 		example: "tk status",
 	},
 	"help": {
@@ -155,8 +155,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk orphans",
 	},
 	"get": {
-		usage:   "tk get -id <id> [-url <server-url>]",
-		details: []string{"Shows a single ticket with comments and history.", "Output uses subtle color unless `-nocolor` is supplied."},
+		usage:   "tk get -id <id> [-v] [-url <server-url>]",
+		details: []string{"Shows a concise ticket summary by default.", "Use `-v` for full detail including comments, history, and child rows.", "Output uses subtle color unless `-nocolor` is supplied."},
 		example: "tk get -id 42",
 	},
 	"show": {
@@ -192,7 +192,7 @@ var helpIndex = map[string]commandHelp{
 			"-parent_id <id>: set parent ticket id",
 			"-estimate_effort <n>: set numeric estimate effort",
 			"-estimate_complete <rfc3339>: set completion timestamp (example 2026-03-31T17:00:00Z)",
-			"-t <type> / -type <type>: change the ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision)",
+			"-t <type> / -type <type>: change the ticket type (task, bug, epic, spike, chore, story, note, question, requirement, decision, action)",
 		},
 		example: "tk update -id 42 -stage develop -state active -priority 2 -estimate_effort 5",
 	},
@@ -282,8 +282,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk notready TK-42",
 	},
 	"delete": {
-		usage:   "tk rm|delete [-id] <id>",
-		details: []string{"Deletes a ticket permanently.", "Fails if the ticket still has child tickets."},
+		usage:   "tk rm|delete [-id <id[,id...]>|<id[,id...]>] [--confirm <token>]",
+		details: []string{"Deletes one or more tickets permanently.", "Deletion uses a two-step confirmation token flow.", "Fails if any target ticket still has child tickets.", "Ticket ids can be comma-separated in positional or `-id` form."},
 		example: "tk delete TK-42",
 	},
 	"assign": {
@@ -338,8 +338,8 @@ var helpIndex = map[string]commandHelp{
 	},
 	"user": {
 		usage:   "tk user <create|new|ls|list|rm|delete|enable|disable>",
-		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`."},
-		example: "tk user create -username alice -password secret",
+		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`.", "`tk user create` accepts optional `-email`; if `-password` is omitted, a password is generated and printed."},
+		example: "tk user create -username alice -email alice@example.com",
 	},
 	"agent": {
 		usage:   "tk agent <request|run> (agent) | <create|ls|list|update|rm|delete|enable|disable|reset-password|config-*> (admin)",
@@ -362,7 +362,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk document create -title \"Architecture notes\" -content \"...\"",
 	},
 	"config": {
-		usage:   "tk config <set|get|ls|list|rm|delete|registration-enable|registration-disable> [key] [value]",
+		usage:   "tk config <set|get|ls|list|rm|delete|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key] [value]",
 		details: []string{"Config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges."},
 		example: "tk config ls",
 	},
@@ -410,6 +410,11 @@ var helpIndex = map[string]commandHelp{
 		usage:   "tk bug \"title\" [flags]",
 		details: []string{"Shortcut for `tk add -type bug`. Accepts the same flags as `tk add`.", "Use `tk bug get <id>` to fetch an existing bug without creating a new ticket."},
 		example: "tk bug \"Reset token expires immediately\"",
+	},
+	"action": {
+		usage:   "tk act|action <title>|<new|ls|get|update|complete|done|reject|cancel|comment|edit|assign|unassign> ...",
+		details: []string{"Action tickets are human-centric follow-ups (`type=action`).", "Create with `tk act \"follow up with vendor\"` or `tk action new \"follow up with vendor\"`.", "`tk act update <id> -due <yyyy-mm-dd>` maps to `-estimate_complete` (RFC3339 midnight UTC).", "Use `tk act comment <id> -m \"...\"`, `tk act assign <id> <name>`, and `tk act unassign <id>` for ownership and conversation updates."},
+		example: "tk act update TI-5 -due 2026-05-31",
 	},
 	"epic": {
 		usage:   "tk epic \"title\" [flags]",
@@ -493,6 +498,7 @@ func renderRootUsage() string {
 	b.WriteString("  Verbs: ls, new, get, update, rm (consistent across commands)\n\n")
 	commandRows := [][2]string{
 		{"ticket", "Manage tickets (ls, new, get, update, rm, state, assign, close)"},
+		{"action", "Manage action tickets (create, update, comment, complete, assign)"},
 		{"idea", "Capture and refine requirements (ls, new, get, shape, accept, reject)"},
 		{"project", "Manage projects (ls, new, get, use, rm, init)"},
 		{"dep", "Manage dependency links (add, remove)"},
@@ -519,6 +525,7 @@ func renderRootUsage() string {
 	shortcutRows := [][2]string{
 		{"tk", "Show this usage guide"},
 		{"tk add", "Create a ticket (alias: tk ticket add)"},
+		{"tk act", "Create/manage action tickets (alias: tk action)"},
 		{"tk bug", "Create a bug (alias: tk ticket add -type bug)"},
 		{"tk epic", "Create an epic (alias: tk ticket add -type epic)"},
 		{"tk idea new", "Capture a requirement"},
@@ -686,8 +693,10 @@ Commands:
   rm       <key>                        Remove a config value
   registration-enable                   Enable user registration (server)
   registration-disable                  Disable user registration (server)
+  registration-autoapprove-enable       Auto-approve new registrations
+  registration-autoapprove-disable      Require admin approval for new registrations
 
-Keys: server, username, current_project, current_epic_id, registration_enabled`
+Keys: server, username, current_project, current_epic_id, registration_enabled, registration_auto_approve`
 
 const agentUsage = `Usage: tk agent <command> [flags]
 
@@ -835,6 +844,8 @@ func hasCommandHelp(command string) bool {
 
 func normalizeHelpCommand(command string) string {
 	switch command {
+	case "act":
+		return "action"
 	case "show":
 		return "get"
 	case "create", "new":

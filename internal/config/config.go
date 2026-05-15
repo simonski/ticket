@@ -32,6 +32,7 @@ type Config struct {
 	Location      string   `json:"location"`
 	Token         string   `json:"token"`
 	Username      string   `json:"username"`
+	UseBasicAuth  bool     `json:"-"`
 	Remote        string   `json:"remote,omitempty"`
 	DefaultRemote string   `json:"default_remote,omitempty"`
 	Remotes       []Remote `json:"remotes,omitempty"`
@@ -205,6 +206,12 @@ func Load() (Config, error) {
 		} else {
 			cfg.Token = creds.Token
 		}
+	}
+	if envUsername := envValue("TICKET_USERNAME"); envUsername != "" {
+		cfg.Username = envUsername
+	}
+	if envToken := envValue("TICKET_TOKEN"); envToken != "" {
+		cfg.Token = envToken
 	}
 
 	return cfg, nil

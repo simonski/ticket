@@ -155,7 +155,8 @@ func (r *router) registerSystemHandlers() {
 			return
 		}
 		var payload struct {
-			Enabled bool `json:"enabled"`
+			Enabled     bool  `json:"enabled"`
+			AutoApprove *bool `json:"auto_approve,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body")
@@ -165,8 +166,24 @@ func (r *router) registerSystemHandlers() {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		var autoApprove bool
+		if payload.AutoApprove == nil {
+			currentAutoApprove, err := store.RegistrationAutoApprove(r.Context(), db)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			autoApprove = currentAutoApprove
+		} else {
+			autoApprove = *payload.AutoApprove
+			if err := store.SetRegistrationAutoApprove(r.Context(), db, autoApprove); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"registration_enabled": payload.Enabled,
+			"registration_enabled":      payload.Enabled,
+			"registration_auto_approve": autoApprove,
 		})
 	})
 	mux.HandleFunc("/api/config/chat_limits", func(w http.ResponseWriter, r *http.Request) {

@@ -1117,7 +1117,23 @@ func TestRemoteClientRegistrationAndPasswordReset(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/users/alice/reset-password":
 			_, _ = w.Write([]byte(`{"user_id":"u1","username":"alice","role":"user","enabled":true}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/register":
-			_, _ = w.Write([]byte(`{"user_id":"u1","username":"alice","role":"user","enabled":true}`))
+			var payload RegisterRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode register payload error = %v", err)
+			}
+			if payload.Email != "alice@example.com" {
+				t.Fatalf("register email = %q, want %q", payload.Email, "alice@example.com")
+			}
+			_, _ = w.Write([]byte(`{"user_id":"u1","username":"alice","email":"alice@example.com","role":"user","enabled":true,"password":"generated-secret"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/users":
+			var payload UserCreateRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode create-user payload error = %v", err)
+			}
+			if payload.Email != "bob@example.com" {
+				t.Fatalf("create-user email = %q, want %q", payload.Email, "bob@example.com")
+			}
+			_, _ = w.Write([]byte(`{"user_id":"u2","username":"bob","email":"bob@example.com","role":"user","enabled":true,"password":"managed-secret"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/login":
 			_, _ = w.Write([]byte(`{"token":"tok","user":{"user_id":"u1","username":"alice","role":"user","enabled":true}}`))
 		default:
@@ -1134,8 +1150,25 @@ func TestRemoteClientRegistrationAndPasswordReset(t *testing.T) {
 	if _, err := api.ResetUserPassword(context.Background(), "alice", "newpassword1"); err != nil {
 		t.Fatalf("ResetUserPassword() error = %v", err)
 	}
-	if _, err := api.Register(context.Background(), "alice", "secret"); err != nil {
-		t.Fatalf("Register() error = %v", err)
+	user, password, err := api.RegisterWithParams(context.Background(), RegisterRequest{
+		Username: "alice",
+		Email:    "alice@example.com",
+	})
+	if err != nil {
+		t.Fatalf("RegisterWithParams() error = %v", err)
+	}
+	if user.Email != "alice@example.com" || password != "generated-secret" {
+		t.Fatalf("RegisterWithParams() = %#v password=%q", user, password)
+	}
+	created, createdPassword, err := api.CreateUserWithParams(context.Background(), UserCreateRequest{
+		Username: "bob",
+		Email:    "bob@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateUserWithParams() error = %v", err)
+	}
+	if created.Email != "bob@example.com" || createdPassword != "managed-secret" {
+		t.Fatalf("CreateUserWithParams() = %#v password=%q", created, createdPassword)
 	}
 	if resp, err := api.Login(context.Background(), "alice", "secret"); err != nil {
 		t.Fatalf("Login() error = %v", err)

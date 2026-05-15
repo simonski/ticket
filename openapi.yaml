@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.907
+  version: 0.1.918
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -83,6 +83,8 @@ components:
         user_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         username: "alice"
         role: "user"
+        plan_id: 1
+        plan_slug: "free"
         display_name: "Alice Smith"
         enabled: true
         user_type: "user"
@@ -95,6 +97,11 @@ components:
         role:
           type: string
           enum: [admin, user]
+        plan_id:
+          type: integer
+          format: int64
+        plan_slug:
+          type: string
         display_name:
           type: string
         enabled:
@@ -126,6 +133,68 @@ components:
             uuid:
               type: string
               format: uuid
+
+    Plan:
+      type: object
+      properties:
+        plan_id:
+          type: integer
+          format: int64
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        max_projects:
+          type: integer
+        max_private_projects:
+          type: integer
+        max_tickets:
+          type: integer
+        max_tickets_per_project:
+          type: integer
+        max_team_memberships:
+          type: integer
+        max_api_calls_per_day:
+          type: integer
+        default_project_alias:
+          type: string
+        registration_actions:
+          type: object
+          properties:
+            auto_assign_public_team:
+              type: boolean
+            auto_create_private_team:
+              type: boolean
+            auto_create_private_project:
+              type: boolean
+            teams:
+              type: array
+              items:
+                type: object
+                properties:
+                  team_id:
+                    type: integer
+                    format: int64
+                  role:
+                    type: string
+            projects:
+              type: array
+              items:
+                type: object
+                properties:
+                  project_id:
+                    type: integer
+                    format: int64
+                  role:
+                    type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     Project:
       type: object
@@ -185,7 +254,7 @@ components:
           nullable: true
         type:
           type: string
-          enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision]
+          enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision, action]
         title:
           type: string
         description:
@@ -934,7 +1003,7 @@ components:
           type: string
         role:
           type: string
-          enum: [viewer, editor, owner]
+          enum: [observer, commenter, member, admin]
         created_at:
           type: string
           format: date-time
@@ -966,6 +1035,8 @@ components:
         authenticated:
           type: boolean
         registration_enabled:
+          type: boolean
+        registration_auto_approve:
           type: boolean
         chat_enabled:
           type: boolean
@@ -1305,19 +1376,47 @@ paths:
           application/json:
             schema:
               type: object
-              required: [username, password]
+              required: [username]
               properties:
                 username:
                   type: string
                 password:
                   type: string
+                  description: Optional; generated if omitted.
+                email:
+                  type: string
+                  format: email
       responses:
         '201':
-          description: User created
+          description: User created and immediately approved
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                allOf:
+                  - $ref: '#/components/schemas/User'
+                  - type: object
+                    properties:
+                      password:
+                        type: string
+                        description: Returned when the server generated a password.
+                      approved:
+                        type: boolean
+                        description: Whether the account can sign in immediately.
+        '202':
+          description: User created and awaiting admin approval
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/User'
+                  - type: object
+                    properties:
+                      password:
+                        type: string
+                        description: Returned when the server generated a password.
+                      approved:
+                        type: boolean
+                        description: Whether the account can sign in immediately.
         '400':
           description: Invalid input
           content:
@@ -1423,6 +1522,9 @@ paths:
               properties:
                 enabled:
                   type: boolean
+                auto_approve:
+                  type: boolean
+                  description: When false, self-registration creates disabled users pending admin approval.
       responses:
         '200':
           description: Registration setting updated
@@ -1432,6 +1534,8 @@ paths:
                 type: object
                 properties:
                   registration_enabled:
+                    type: boolean
+                  registration_auto_approve:
                     type: boolean
         '403':
           description: Admin access required
@@ -1556,20 +1660,78 @@ paths:
           application/json:
             schema:
               type: object
-              required: [username, password]
+              required: [username]
               properties:
                 username:
                   type: string
                 password:
                   type: string
+                  description: Optional; generated if omitted.
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                plan_slug:
+                  type: string
+                enabled:
+                  type: boolean
       responses:
         '201':
           description: User created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                allOf:
+                  - $ref: '#/components/schemas/User'
+                  - type: object
+                    properties:
+                      password:
+                        type: string
+                        description: Returned when the server generated a password.
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/{username}/plan:
+    post:
+      tags: [Users]
+      summary: Assign a plan to a user
+      operationId: assignUserPlan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan_id:
+                  type: integer
+                  format: int64
+                plan_slug:
+                  type: string
+      responses:
+        '200':
+          description: Assigned plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1712,6 +1874,172 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  # ── Plans ───────────────────────────────────────────────────────────
+  /api/plans:
+    get:
+      tags: [Users]
+      summary: List available plans
+      operationId: listPlans
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Plan list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Users]
+      summary: Create a plan
+      operationId: createPlan
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Plan'
+      responses:
+        '201':
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/plans/default:
+    get:
+      tags: [Users]
+      summary: Get default registration plan
+      operationId: getDefaultPlan
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Default plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Users]
+      summary: Set default registration plan
+      operationId: setDefaultPlan
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug]
+              properties:
+                slug:
+                  type: string
+      responses:
+        '200':
+          description: Updated default plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/plans/{plan_ref}:
+    get:
+      tags: [Users]
+      summary: Get a plan by id or slug
+      operationId: getPlan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: plan_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Users]
+      summary: Update a plan by id or slug
+      operationId: updatePlan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: plan_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Plan'
+      responses:
+        '200':
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3841,7 +4169,7 @@ paths:
     get:
       tags: [Projects]
       summary: List failed tickets needing intervention
-      description: Restricted to project editors and owners.
+      description: Restricted to project members and admins.
       operationId: listProjectInterventions
       security:
         - BearerAuth: []
@@ -3890,7 +4218,7 @@ paths:
     get:
       tags: [Projects]
       summary: Get intervention SLA/escalation report
-      description: Aggregated fail-state intervention metrics and aging details. Restricted to project editors and owners.
+      description: Aggregated fail-state intervention metrics and aging details. Restricted to project members and admins.
       operationId: getProjectInterventionReport
       security:
         - BearerAuth: []
@@ -4269,7 +4597,7 @@ paths:
                   type: string
                 role:
                   type: string
-                  enum: [viewer, editor, owner]
+                  enum: [observer, commenter, member, admin]
       responses:
         '200':
           description: Member added
@@ -4583,23 +4911,31 @@ paths:
       operationId: createTicket
       security:
         - BearerAuth: []
+      parameters:
+        - name: X-Ticket-Git-Repository
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional git remote context used when `project_id` is omitted.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [project_id, type, title]
+              required: [type, title]
               properties:
                 project_id:
                   type: integer
                   format: int64
+                  description: Optional explicit project. If omitted, the server resolves the project from the git header first, then the caller's private alias.
                 parent_id:
                   type: string
                   nullable: true
                 type:
                   type: string
-                  enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision]
+                  enum: [epic, story, task, bug, feature, idea, spike, chore, note, question, requirement, decision, action]
                 title:
                   type: string
                 description:
@@ -5133,7 +5469,7 @@ paths:
     get:
       tags: [Tickets]
       summary: Get ticket work-item executions
-      description: Restricted to project editors and owners.
+      description: Restricted to project members and admins.
       operationId: listTicketWorkItems
       security:
         - BearerAuth: []
@@ -5188,7 +5524,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Reassign an active work-item
-      description: Restricted to project editors and owners.
+      description: Restricted to project members and admins.
       operationId: reassignTicketWorkItem
       security:
         - BearerAuth: []
@@ -5236,7 +5572,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Cancel an active work-item
-      description: Restricted to project editors and owners.
+      description: Restricted to project members and admins.
       operationId: cancelTicketWorkItem
       security:
         - BearerAuth: []
@@ -5281,7 +5617,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Retry a non-active work-item
-      description: Restricted to project editors and owners.
+      description: Restricted to project members and admins.
       operationId: retryTicketWorkItem
       security:
         - BearerAuth: []
@@ -5326,7 +5662,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Add feedback (and optional commit reference) to a work-item
-      description: Restricted to project editors and owners.
+      description: Restricted to project members and admins.
       operationId: feedbackTicketWorkItem
       security:
         - BearerAuth: []
@@ -5373,7 +5709,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Decide intervention outcome for a failed ticket
-      description: Project owner only.
+      description: Project admin only.
       operationId: interveneTicket
       security:
         - BearerAuth: []

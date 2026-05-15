@@ -35,8 +35,32 @@ func (s *HTTPService) SetRegistrationEnabled(ctx context.Context, enabled bool) 
 	return s.client.SetRegistrationEnabled(ctx, enabled)
 }
 
+func (s *HTTPService) SetRegistrationAutoApprove(ctx context.Context, enabled bool) error {
+	return s.client.SetRegistrationAutoApprove(ctx, enabled)
+}
+
+func (s *HTTPService) ListPlans(ctx context.Context) ([]store.Plan, error) {
+	return s.client.ListPlans(ctx)
+}
+
+func (s *HTTPService) DefaultPlan(ctx context.Context) (store.Plan, error) {
+	return s.client.DefaultPlan(ctx)
+}
+
+func (s *HTTPService) SetDefaultPlan(ctx context.Context, slug string) error {
+	return s.client.SetDefaultPlan(ctx, slug)
+}
+
 func (s *HTTPService) Register(ctx context.Context, username, password string) (store.User, error) {
 	return s.client.Register(ctx, username, password)
+}
+
+func (s *HTTPService) RegisterWithParams(ctx context.Context, params RegisterParams) (store.User, string, error) {
+	return s.client.RegisterWithParams(ctx, client.RegisterRequest{
+		Username: params.Username,
+		Password: params.Password,
+		Email:    params.Email,
+	})
 }
 
 func (s *HTTPService) Login(ctx context.Context, username, password string) (store.User, string, error) {
@@ -57,6 +81,17 @@ func (s *HTTPService) Count(ctx context.Context, projectID *int64) (CountSummary
 
 func (s *HTTPService) CreateUser(ctx context.Context, username, password string) (store.User, error) {
 	return s.client.CreateUser(ctx, username, password)
+}
+
+func (s *HTTPService) CreateUserWithParams(ctx context.Context, params UserCreateParams) (store.User, string, error) {
+	return s.client.CreateUserWithParams(ctx, client.UserCreateRequest{
+		Username: params.Username,
+		Password: params.Password,
+		Email:    params.Email,
+		Role:     params.Role,
+		PlanSlug: params.PlanSlug,
+		Enabled:  params.Enabled,
+	})
 }
 
 func (s *HTTPService) SetUserEnabled(ctx context.Context, username string, enabled bool) error {

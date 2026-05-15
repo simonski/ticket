@@ -56,6 +56,13 @@ type errMsg struct{ err error }
 type projectsLoadedMsg []store.Project
 type workflowLoadedMsg []store.WorkflowWithStages
 type rolesLoadedMsg []store.Role
+type onboardingLoadedMsg struct {
+	plans                []store.Plan
+	defaultPlanSlug      string
+	registrationEnabled  bool
+	registrationApproved bool
+	canManage            bool
+}
 type projectSwitchedMsg struct {
 	project store.Project
 	tickets treeLoadedMsg
@@ -109,6 +116,11 @@ type Model struct {
 
 	// settings / theme picker
 	settingsCursor int
+	plans          []store.Plan
+	defaultPlan    string
+	regEnabled     bool
+	regAutoApprove bool
+	canManagePlans bool
 
 	// project picker
 	projects      []store.Project
@@ -273,6 +285,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case rolesLoadedMsg:
 		m.roles = []store.Role(msg)
 
+	case onboardingLoadedMsg:
+		m.plans = msg.plans
+		m.defaultPlan = msg.defaultPlanSlug
+		m.regEnabled = msg.registrationEnabled
+		m.regAutoApprove = msg.registrationApproved
+		m.canManagePlans = msg.canManage
+
 	case projectSavedMsg:
 		m.projectForm = nil
 		m.mode = modeProjects
@@ -340,7 +359,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Double ctrl+c to quit
+	// In direct edit/new flows, single ctrl+c should quit immediately.
+	if key == "ctrl+c" && (m.mode == modeEdit || m.mode == modeNew) {
+		return m, tea.Quit
+	}
+
+	// Double ctrl+c to quit in browsing modes.
 	if key == "ctrl+c" {
 		if time.Since(m.lastCtrlC) < 500*time.Millisecond {
 			return m, tea.Quit
@@ -608,6 +632,36 @@ func (m Model) handleKeySettings(key string) (tea.Model, tea.Cmd) {
 		if err := config.Save(m.cfg); err != nil {
 			m.statusMsg = "error saving config"
 		}
+	case "]":
+		if !m.canManagePlans || len(m.plans) == 0 {
+			break
+		}
+		next := nextPlanSlug(m.plans, m.defaultPlan, 1)
+		m.defaultPlan = next
+		m.statusMsg = "saving default plan..."
+		return m, saveDefaultPlan(m.svc, next)
+	case "[":
+		if !m.canManagePlans || len(m.plans) == 0 {
+			break
+		}
+		next := nextPlanSlug(m.plans, m.defaultPlan, -1)
+		m.defaultPlan = next
+		m.statusMsg = "saving default plan..."
+		return m, saveDefaultPlan(m.svc, next)
+	case "R":
+		if !m.canManagePlans {
+			break
+		}
+		m.regEnabled = !m.regEnabled
+		m.statusMsg = "saving registration policy..."
+		return m, saveRegistrationEnabled(m.svc, m.regEnabled)
+	case "A":
+		if !m.canManagePlans {
+			break
+		}
+		m.regAutoApprove = !m.regAutoApprove
+		m.statusMsg = "saving registration policy..."
+		return m, saveRegistrationAutoApprove(m.svc, m.regAutoApprove)
 	case "right", "d":
 		return m.nextPanel()
 	case "left", "a":
@@ -913,6 +967,79 @@ func loadProjects(svc libticket.Service) tea.Cmd {
 	}
 }
 
+func loadOnboardingSettings(svc libticket.Service) tea.Cmd {
+	return func() tea.Msg {
+		status, err := svc.Status(context.Background())
+		if err != nil {
+			return errMsg{err}
+		}
+		if status.User == nil || status.User.Role != "admin" {
+			return onboardingLoadedMsg{
+				registrationEnabled:  status.RegistrationEnabled,
+				registrationApproved: status.RegistrationAutoApprove,
+				canManage:            false,
+			}
+		}
+		plans, err := svc.ListPlans(context.Background())
+		if err != nil {
+			return errMsg{err}
+		}
+		defaultPlan, err := svc.DefaultPlan(context.Background())
+		if err != nil {
+			return errMsg{err}
+		}
+		return onboardingLoadedMsg{
+			plans:                plans,
+			defaultPlanSlug:      defaultPlan.Slug,
+			registrationEnabled:  status.RegistrationEnabled,
+			registrationApproved: status.RegistrationAutoApprove,
+			canManage:            true,
+		}
+	}
+}
+
+func saveDefaultPlan(svc libticket.Service, slug string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.SetDefaultPlan(context.Background(), slug); err != nil {
+			return errMsg{err}
+		}
+		return loadOnboardingSettings(svc)()
+	}
+}
+
+func saveRegistrationEnabled(svc libticket.Service, enabled bool) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.SetRegistrationEnabled(context.Background(), enabled); err != nil {
+			return errMsg{err}
+		}
+		return loadOnboardingSettings(svc)()
+	}
+}
+
+func saveRegistrationAutoApprove(svc libticket.Service, enabled bool) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.SetRegistrationAutoApprove(context.Background(), enabled); err != nil {
+			return errMsg{err}
+		}
+		return loadOnboardingSettings(svc)()
+	}
+}
+
+func nextPlanSlug(plans []store.Plan, current string, delta int) string {
+	if len(plans) == 0 {
+		return current
+	}
+	index := 0
+	for i, plan := range plans {
+		if strings.EqualFold(strings.TrimSpace(plan.Slug), strings.TrimSpace(current)) {
+			index = i
+			break
+		}
+	}
+	index = (index + delta + len(plans)) % len(plans)
+	return plans[index].Slug
+}
+
 func loadRoles(svc libticket.Service) tea.Cmd {
 	return func() tea.Msg {
 		roles, err := svc.ListRoles(context.Background())
@@ -1101,8 +1228,8 @@ func (m Model) statusBar(w int) string {
 			modeSummary:       "tab cycle · e edit · n new · p project · t theme · ? settings · qq quit",
 			modeList:          "↑↓/wasd · enter · e edit · n new · p project · / cmd · t theme · ? settings · qq quit",
 			modeDetail:        "↑↓/ws nav · e edit · esc back",
-			modeEdit:          "tab next · enter pick/save · ctrl+s save · esc cancel",
-			modeNew:           "tab next · ctrl+s create · esc cancel",
+			modeEdit:          "↑↓ move/within text · tab next · enter pick/save · ctrl+s save · esc cancel · ctrl+c quit",
+			modeNew:           "tab next · ctrl+s create · esc cancel · ctrl+c quit",
 			modeSettings:      "↑↓ nav · enter apply theme · esc close",
 			modeProjectPicker: "↑↓ nav · enter switch · esc cancel",
 			modeProjects:      "↑↓ nav · space switch · enter/e edit · esc back",
@@ -1522,6 +1649,32 @@ func (m Model) viewSettings() []string {
 	lines = append(lines, valStyle.Render(fmt.Sprintf("  %s  persist session state  (P to toggle)", persistMark)))
 	lines = append(lines, "")
 
+	lines = append(lines, labelStyle.Render(padRight(" onboarding", inner)))
+	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
+	if !m.canManagePlans {
+		lines = append(lines, valStyle.Render(padRight("  admin account required to manage onboarding policy", inner)))
+	} else {
+		regMark := "○"
+		if m.regEnabled {
+			regMark = "●"
+		}
+		autoMark := "○"
+		if m.regAutoApprove {
+			autoMark = "●"
+		}
+		lines = append(lines, valStyle.Render(padRight(fmt.Sprintf("  %s  registration enabled  (R to toggle)", regMark), inner)))
+		lines = append(lines, valStyle.Render(padRight(fmt.Sprintf("  %s  auto-approve signups  (A to toggle)", autoMark), inner)))
+		lines = append(lines, valStyle.Render(padRight(fmt.Sprintf("  ●  default plan: %s  ([ and ] to change)", strings.TrimSpace(m.defaultPlan)), inner)))
+		for _, plan := range m.plans {
+			marker := "  "
+			if strings.EqualFold(strings.TrimSpace(plan.Slug), strings.TrimSpace(m.defaultPlan)) {
+				marker = "● "
+			}
+			lines = append(lines, valStyle.Render(padRight("  "+marker+plan.Name+" ("+plan.Slug+")", inner)))
+		}
+	}
+	lines = append(lines, "")
+
 	// Key shortcuts section
 	lines = append(lines, labelStyle.Render(padRight(" shortcuts", inner)))
 	lines = append(lines, sepStyle.Render(strings.Repeat("─", inner)))
@@ -1534,6 +1687,8 @@ func (m Model) viewSettings() []string {
 		{"e", "edit  · n  new  · r  reload"},
 		{"p", "project picker"},
 		{"t", "cycle theme  · T  this panel"},
+		{"[ ]", "change default plan"},
+		{"R / A", "toggle registration / auto-approve"},
 		{"/", "command input"},
 		{"shift×2", "context popup"},
 		{"qq  ctrl+c×2", "quit"},
@@ -2080,6 +2235,9 @@ func (m Model) panelEntryCmd() tea.Cmd {
 	}
 	if m.mode == modeProjects && len(m.projects) == 0 {
 		cmds = append(cmds, loadProjects(m.svc))
+	}
+	if m.mode == modeSettings {
+		cmds = append(cmds, loadOnboardingSettings(m.svc))
 	}
 	return tea.Batch(cmds...)
 }

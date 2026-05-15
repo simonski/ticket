@@ -69,7 +69,11 @@ func (s *LocalService) Status(ctx context.Context) (StatusResponse, error) {
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
-		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
+		autoApprove, autoApproveErr := store.RegistrationAutoApprove(ctx, db)
+		if autoApproveErr != nil {
+			return StatusResponse{}, autoApproveErr
+		}
+		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled, RegistrationAutoApprove: autoApprove}, nil
 	case err != nil:
 		return StatusResponse{}, err
 	case !user.Enabled:
@@ -77,17 +81,26 @@ func (s *LocalService) Status(ctx context.Context) (StatusResponse, error) {
 		if regErr != nil {
 			return StatusResponse{}, regErr
 		}
-		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled}, nil
+		autoApprove, autoApproveErr := store.RegistrationAutoApprove(ctx, db)
+		if autoApproveErr != nil {
+			return StatusResponse{}, autoApproveErr
+		}
+		return StatusResponse{Status: "ok", Authenticated: false, RegistrationEnabled: enabled, RegistrationAutoApprove: autoApprove}, nil
 	}
 	enabled, err := store.RegistrationEnabled(ctx, db)
 	if err != nil {
 		return StatusResponse{}, err
 	}
+	autoApprove, autoApproveErr := store.RegistrationAutoApprove(ctx, db)
+	if autoApproveErr != nil {
+		return StatusResponse{}, autoApproveErr
+	}
 	return StatusResponse{
-		Status:              "ok",
-		Authenticated:       true,
-		RegistrationEnabled: enabled,
-		User:                &user,
+		Status:                  "ok",
+		Authenticated:           true,
+		RegistrationEnabled:     enabled,
+		RegistrationAutoApprove: autoApprove,
+		User:                    &user,
 	}, nil
 }
 
@@ -99,8 +112,44 @@ func (s *LocalService) SetRegistrationEnabled(ctx context.Context, enabled bool)
 	return store.SetRegistrationEnabled(ctx, db, enabled)
 }
 
+func (s *LocalService) SetRegistrationAutoApprove(ctx context.Context, enabled bool) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.SetRegistrationAutoApprove(ctx, db, enabled)
+}
+
+func (s *LocalService) ListPlans(ctx context.Context) ([]store.Plan, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	return store.ListPlans(ctx, db)
+}
+
+func (s *LocalService) DefaultPlan(ctx context.Context) (store.Plan, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Plan{}, err
+	}
+	return store.DefaultPlan(ctx, db)
+}
+
+func (s *LocalService) SetDefaultPlan(ctx context.Context, slug string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	return store.SetDefaultPlanSlug(ctx, db, slug)
+}
+
 func (s *LocalService) Register(ctx context.Context, username, password string) (store.User, error) {
 	return store.User{}, errors.New("ticket register requires a configured server (run tk init and tk login)")
+}
+
+func (s *LocalService) RegisterWithParams(ctx context.Context, params RegisterParams) (store.User, string, error) {
+	return store.User{}, "", errors.New("ticket register requires a configured server (run tk init and tk login)")
 }
 
 func (s *LocalService) Login(ctx context.Context, username, password string) (store.User, string, error) {
@@ -125,6 +174,32 @@ func (s *LocalService) CreateUser(ctx context.Context, username, password string
 		return store.User{}, err
 	}
 	return store.CreateUser(ctx, db, username, password, "user")
+}
+
+func (s *LocalService) CreateUserWithParams(ctx context.Context, params UserCreateParams) (store.User, string, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.User{}, "", err
+	}
+	password := params.Password
+	generatedPassword := ""
+	if strings.TrimSpace(password) == "" {
+		generatedPassword, err = store.GeneratePassword(24)
+		if err != nil {
+			return store.User{}, "", err
+		}
+		password = generatedPassword
+	}
+	enabled := params.Enabled == nil || *params.Enabled
+	user, err := store.CreateUserWithParams(ctx, db, store.UserCreateParams{
+		Username:      params.Username,
+		PlainPassword: password,
+		Email:         params.Email,
+		Role:          params.Role,
+		Enabled:       enabled,
+		PlanSlug:      params.PlanSlug,
+	})
+	return user, generatedPassword, err
 }
 
 func (s *LocalService) SetUserEnabled(ctx context.Context, username string, enabled bool) error {
@@ -446,6 +521,7 @@ func (s *LocalService) CreateProject(ctx context.Context, request ProjectCreateR
 		GitRepository:      request.GitRepository,
 		Notes:              request.Notes,
 		Visibility:         request.Visibility,
+		AcceptsNewMembers:  request.AcceptsNewMembers,
 		CreatedBy:          user.ID,
 		WorkflowID:         request.WorkflowID,
 	})
@@ -483,6 +559,7 @@ func (s *LocalService) UpdateProject(ctx context.Context, id int64, request Proj
 		Notes:              request.Notes,
 		Status:             request.Status,
 		Visibility:         request.Visibility,
+		AcceptsNewMembers:  request.AcceptsNewMembers,
 		WorkflowID:         request.WorkflowID,
 	})
 }

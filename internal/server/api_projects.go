@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -54,6 +55,7 @@ func (r *router) registerProjectHandlers() {
 				GitRepository:      projectPayload.GitRepository,
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
+				AcceptsNewMembers:  projectPayload.AcceptsNewMembers,
 				CreatedBy:          user.ID,
 				WorkflowID:         projectPayload.WorkflowID,
 				AgentModelProvider: projectPayload.AgentModelProvider,
@@ -94,6 +96,106 @@ func (r *router) registerProjectHandlers() {
 			if handled := handleProjectDocuments(w, r, db, parts[0]); handled {
 				return
 			}
+		}
+		if len(parts) == 2 && parts[1] == "access-requests" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			switch r.Method {
+			case http.MethodPost:
+				if !project.AcceptsNewMembers {
+					writeAuthError(w, fmt.Errorf("%w: project is not accepting new members", store.ErrUnauthorized))
+					return
+				}
+				var payload struct {
+					Message string `json:"message"`
+				}
+				if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil && !errors.Is(decodeErr, io.EOF) {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				request, err := store.CreateProjectAccessRequest(r.Context(), db, project.ID, user.ID, payload.Message)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusCreated, request)
+				return
+			case http.MethodGet:
+				role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				if !canAdminProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				requests, err := store.ListProjectAccessRequests(r.Context(), db, project.ID, strings.TrimSpace(r.URL.Query().Get("status")))
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, requests)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+		}
+		if len(parts) == 4 && parts[1] == "access-requests" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			if !canAdminProject(role) {
+				writeAuthError(w, store.ErrForbidden)
+				return
+			}
+			var requestID int64
+			if _, scanErr := fmt.Sscan(parts[2], &requestID); scanErr != nil {
+				writeError(w, http.StatusBadRequest, "request id must be numeric")
+				return
+			}
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			status := ""
+			switch parts[3] {
+			case "approve":
+				status = "approved"
+			case "reject":
+				status = "rejected"
+			default:
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			request, err := store.SetProjectAccessRequestStatus(r.Context(), db, requestID, status)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, request)
+			return
 		}
 		if len(parts) == 2 && parts[1] == "tickets" && r.Method == http.MethodGet {
 			project, err := store.GetProject(r.Context(), db, parts[0])
@@ -897,7 +999,7 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			if !canWriteProject(role) {
+			if !canManageProjectUsers(role) {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
@@ -946,7 +1048,7 @@ func (r *router) registerProjectHandlers() {
 				})
 				return
 			case http.MethodPut:
-				if !canWriteProject(role) {
+				if !canManageProjectUsers(role) {
 					writeAuthError(w, store.ErrForbidden)
 					return
 				}
@@ -1029,22 +1131,13 @@ func (r *router) registerProjectHandlers() {
 				writeAuthError(w, err)
 				return
 			}
-			project, err := store.GetProject(r.Context(), db, parts[0])
+			project, _, err := resolveProjectRefForUser(r.Context(), db, parts[0], user)
 			if err != nil {
 				if errors.Is(err, store.ErrProjectNotFound) {
 					writeError(w, http.StatusNotFound, err.Error())
 					return
 				}
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			if !canReadProject(role) {
-				writeAuthError(w, store.ErrForbidden)
+				writeAuthError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, project)
@@ -1059,17 +1152,16 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			currentProject, err := store.GetProject(r.Context(), db, parts[0])
+			currentProject, role, err := resolveProjectRefForUser(r.Context(), db, parts[0], user)
 			if err != nil {
-				writeError(w, http.StatusNotFound, "project not found")
+				if errors.Is(err, store.ErrProjectNotFound) {
+					writeError(w, http.StatusNotFound, "project not found")
+					return
+				}
+				writeAuthError(w, err)
 				return
 			}
-			role, err := projectRoleForUser(r.Context(), db, currentProject.ID, user)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			if !canWriteProject(role) {
+			if !canManageProjectUsers(role) {
 				writeAuthError(w, store.ErrForbidden)
 				return
 			}
@@ -1083,6 +1175,7 @@ func (r *router) registerProjectHandlers() {
 				GitRepository:      projectPayload.GitRepository,
 				Notes:              projectPayload.Notes,
 				Visibility:         projectPayload.Visibility,
+				AcceptsNewMembers:  projectPayload.AcceptsNewMembers,
 				WorkflowID:         projectPayload.WorkflowID,
 				AgentModelProvider: projectPayload.AgentModelProvider,
 				AgentModelName:     projectPayload.AgentModelName,

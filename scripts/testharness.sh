@@ -4,9 +4,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
+source "$ROOT_DIR/scripts/lib/token_auth.sh"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-testharness.XXXXXX")"
-TICKET_HOME_DIR="$WORK_DIR/home"
 REPO_DIR="$WORK_DIR/repo"
+TICKET_HOME_DIR="$WORK_DIR/home"
+SHARED_SERVER_URL="${TICKET_TEST_SERVER_URL:-}"
+SHARED_SERVER_PASSWORD="${TICKET_TEST_SERVER_PASSWORD:-adminpass}"
 SERVER_PID=""
 
 cleanup() {
@@ -25,7 +28,8 @@ fi
 
 export TICKET_HOME="$TICKET_HOME_DIR"
 mkdir -p "$TICKET_HOME"
-mkdir -p "$REPO_DIR/.git"
+mkdir -p "$REPO_DIR"
+git -C "$REPO_DIR" init -q
 cd "$REPO_DIR"
 unset AGENT_ID AGENT_PASSWORD
 
@@ -109,33 +113,39 @@ wait_for_http() {
 }
 
 log "scenario: remote multi-project and agent request flow"
-SERVER_DB="$WORK_DIR/server.db"
-SERVER_HOME="$WORK_DIR/server-home"
-SERVER_PORT=$((20000 + RANDOM % 20000))
-SERVER_ADDR="127.0.0.1:$SERVER_PORT"
-SERVER_URL="http://$SERVER_ADDR"
-SERVER_LOG="$WORK_DIR/server.log"
+if [[ -n "$SHARED_SERVER_URL" ]]; then
+	SERVER_URL="$SHARED_SERVER_URL"
+else
+	SERVER_HOME="$WORK_DIR/server-home"
+	SERVER_PORT=$((20000 + RANDOM % 20000))
+	SERVER_ADDR="127.0.0.1:$SERVER_PORT"
+	SERVER_URL="http://$SERVER_ADDR"
+	SERVER_LOG="$WORK_DIR/server.log"
 
-mkdir -p "$SERVER_HOME"
-run env TICKET_HOME="$SERVER_HOME" "$TK_BIN" initdb -password adminpass >/dev/null
-SERVER_DB="$SERVER_HOME/ticket.db"
-env TICKET_HOME="$SERVER_HOME" "$TK_BIN" server -f "$SERVER_DB" -addr "$SERVER_ADDR" >"$SERVER_LOG" 2>&1 &
-SERVER_PID=$!
-wait_for_http "$SERVER_URL/api/healthz" "server startup"
+	mkdir -p "$SERVER_HOME"
+	run env TICKET_HOME="$SERVER_HOME" "$TK_BIN" initdb -password "$SHARED_SERVER_PASSWORD" >/dev/null
+	env TICKET_HOME="$SERVER_HOME" "$TK_BIN" server -f "$SERVER_HOME/ticket.db" -addr "$SERVER_ADDR" >"$SERVER_LOG" 2>&1 &
+	SERVER_PID=$!
+	wait_for_http "$SERVER_URL/api/healthz" "server startup"
+fi
 
 export TICKET_HOME="$WORK_DIR/remote-client-home"
 mkdir -p "$TICKET_HOME"
 rm -rf "$REPO_DIR/.ticket"
-mkdir -p "$REPO_DIR/.git"
 
 unset AGENT_ID AGENT_PASSWORD
 
 export TICKET_URL="$SERVER_URL"
 export TICKET_USERNAME="admin"
-export TICKET_PASSWORD="adminpass"
+unset TICKET_TOKEN
+export TICKET_PASSWORD="$SHARED_SERVER_PASSWORD"
+use_token_auth
 run "$TK_BIN" whoami >/dev/null
+repo_remote="git@example.com:example/harness.git"
+run git remote add origin "$repo_remote" >/dev/null
 srv_project_id="$("$TK_BIN" project create -prefix SRV -title "Server Harness" -printid)"
 ops_project_id="$("$TK_BIN" project create -prefix OPS -title "Ops Harness" -printid)"
+repo_project_id="$("$TK_BIN" project create -prefix REP -title "Repo Harness" -git-repository "$repo_remote" -printid)"
 run "$TK_BIN" project use SRV >/dev/null
 
 remote_ticket_id="$("$TK_BIN" add -project "$srv_project_id" "Remote agent ticket" -printid)"
@@ -162,5 +172,36 @@ run "$TK_BIN" add "Ops project ticket" >/dev/null
 run "$TK_BIN" ls -count -expect_equals 1
 run "$TK_BIN" project use SRV >/dev/null
 run "$TK_BIN" ls -count -expect_equals 1
+run "$TK_BIN" count -project_id "$repo_project_id" -expect_equals 0
+run "$TK_BIN" config rm project_id >/dev/null
+run "$TK_BIN" add "Repo inferred ticket" >/dev/null
+run "$TK_BIN" count -project_id "$repo_project_id" -expect_equals 1
+run "$TK_BIN" count -project_id "$srv_project_id" -expect_equals 1
+
+log "scenario: self-registration with public/private aliases"
+export TICKET_HOME="$WORK_DIR/self-register-home"
+mkdir -p "$TICKET_HOME"
+unset TICKET_USERNAME TICKET_PASSWORD TICKET_PROJECT TICKET_TOKEN
+register_output="$("$TK_BIN" register -username harness-user -email harness@example.com)"
+expect_contains "$register_output" "registered user harness-user" "register output"
+registered_password="$(printf '%s\n' "$register_output" | sed -n 's/^password: //p' | head -n1)"
+if [[ -z "$registered_password" ]]; then
+	printf 'register output missing generated password:\n%s\n' "$register_output" >&2
+	exit 1
+fi
+
+export TICKET_USERNAME="harness-user"
+export TICKET_PASSWORD="$registered_password"
+use_token_auth
+run "$TK_BIN" project use private >/dev/null
+run "$TK_BIN" count -project_id private -expect_equals 0
+run "$TK_BIN" add "Private alias ticket" >/dev/null
+run "$TK_BIN" count -project_id private -expect_equals 1
+export TICKET_PROJECT="private"
+run "$TK_BIN" count -expect_equals 1
+run "$TK_BIN" count -project_id public -type story -expect_equals 0
+run "$TK_BIN" add -project public -type story "Public alias story" >/dev/null
+run "$TK_BIN" count -project_id public -type story -expect_equals 1
+unset TICKET_PROJECT
 
 log "all script harness scenarios passed"

@@ -1982,6 +1982,10 @@
             <input id="settings-registration-enabled" type="checkbox" />
           </label>
           <label class="row" style="justify-content:space-between;">
+            <span>Auto-approve new registrations</span>
+            <input id="settings-registration-auto-approve" type="checkbox" />
+          </label>
+          <label class="row" style="justify-content:space-between;">
             <span>Enable chat</span>
             <input id="settings-chat-enabled" type="checkbox" />
           </label>
@@ -2074,6 +2078,7 @@
       const teamModalOverlay = document.getElementById("team-modal-overlay");
       const settingsModalOverlay = document.getElementById("settings-modal-overlay");
       const settingsRegistrationEnabled = document.getElementById("settings-registration-enabled");
+      const settingsRegistrationAutoApprove = document.getElementById("settings-registration-auto-approve");
       const settingsChatEnabled = document.getElementById("settings-chat-enabled");
       const settingsChatMaxConnections = document.getElementById("settings-chat-max-connections");
       const settingsChatMaxDuration = document.getElementById("settings-chat-max-duration");
@@ -2193,6 +2198,7 @@
 
       function populateSettingsPanel() {
         settingsRegistrationEnabled.checked = Boolean(registrationEnabled);
+        settingsRegistrationAutoApprove.checked = Boolean(registrationAutoApprove);
         settingsChatEnabled.checked = Boolean(chatEnabled);
         settingsChatMaxConnections.value = String(chatMaxConnections || 2);
         settingsChatMaxDuration.value = String(chatMaxDurationMinutes || 3);
@@ -3381,6 +3387,7 @@
       let currentUsername = "";
       let currentUserRole = "";
       let registrationEnabled = true;
+      let registrationAutoApprove = true;
       let chatEnabled = true;
       let chatMaxConnections = 2;
       let chatMaxDurationMinutes = 3;
@@ -3555,13 +3562,14 @@
         settingsStatusEl.textContent = "";
         try {
           const enabled = Boolean(settingsRegistrationEnabled.checked);
+          const autoApprove = Boolean(settingsRegistrationAutoApprove.checked);
           const chatFeatureEnabled = Boolean(settingsChatEnabled.checked);
           const maxConnections = parsePositiveInt(settingsChatMaxConnections.value, 2);
           const maxDuration = parsePositiveInt(settingsChatMaxDuration.value, 3);
           const registrationRes = await call("/api/config/registration", {
             method: "POST",
             headers: headers(true),
-            body: JSON.stringify({ enabled }),
+            body: JSON.stringify({ enabled, auto_approve: autoApprove }),
           });
           const chatEnabledRes = await call("/api/config/chat_enabled", {
             method: "POST",
@@ -3577,9 +3585,11 @@
             }),
           });
           registrationEnabled = Boolean(registrationRes.registration_enabled);
+          registrationAutoApprove = registrationRes.registration_auto_approve !== false;
           chatEnabled = Boolean(chatEnabledRes.chat_enabled);
           chatMaxConnections = parsePositiveInt(limitsRes.chat_max_connections, 2);
           chatMaxDurationMinutes = parsePositiveInt(limitsRes.chat_max_duration_minutes, 3);
+          settingsRegistrationAutoApprove.checked = registrationAutoApprove;
           settingsChatEnabled.checked = chatEnabled;
           settingsChatMaxConnections.value = String(chatMaxConnections);
           settingsChatMaxDuration.value = String(chatMaxDurationMinutes);
@@ -5576,6 +5586,7 @@
           const status = await call("/api/status", { headers: headers() });
           setServerVersion(status.server_version);
           registrationEnabled = Boolean(status.registration_enabled);
+          registrationAutoApprove = status.registration_auto_approve !== false;
           chatEnabled = status.chat_enabled !== false;
           chatMaxConnections = parsePositiveInt(status.chat_max_connections, 2);
           chatMaxDurationMinutes = parsePositiveInt(status.chat_max_duration_minutes, 3);
@@ -7256,7 +7267,7 @@
       registerForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         try {
-          await call("/api/register", {
+          const response = await call("/api/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -7264,7 +7275,11 @@
               password: document.getElementById("register-pass").value,
             }),
           });
-          loginStatus.textContent = "Registered. You can now login.";
+          if (response.approved === false) {
+            loginStatus.textContent = "Registered. Wait for an admin to approve your account before logging in.";
+          } else {
+            loginStatus.textContent = "Registered. You can now login.";
+          }
           registerForm.reset();
           registerForm.classList.add("hidden");
           document.getElementById("login-form").classList.remove("hidden");

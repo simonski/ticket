@@ -29,6 +29,7 @@ type Project struct {
 	Notes              string      `json:"notes"`
 	Status             string      `json:"status"`
 	Visibility         string      `json:"visibility"`
+	AcceptsNewMembers  bool        `json:"accepts_new_members"`
 	DefaultDraft       bool        `json:"default_draft"`
 	CreatedBy          string      `json:"created_by"`
 	CreatedAt          string      `json:"created_at"`
@@ -56,6 +57,7 @@ type ProjectCreateParams struct {
 	GitRepository      string
 	Notes              string
 	Visibility         string
+	AcceptsNewMembers  bool
 	CreatedBy          string
 	WorkflowID         *int64
 	AgentModelProvider string
@@ -75,6 +77,7 @@ type ProjectUpdateParams struct {
 	Notes              string
 	Status             string
 	Visibility         string
+	AcceptsNewMembers  bool
 	WorkflowID         *int64
 	AgentModelProvider string
 	AgentModelName     string
@@ -176,6 +179,9 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 			return Project{}, err
 		}
 	}
+	if err := SetProjectAcceptsNewMembers(ctx, db, id, params.AcceptsNewMembers); err != nil {
+		return Project{}, err
+	}
 	return GetProjectByID(ctx, db, id)
 }
 
@@ -212,6 +218,9 @@ func scanProject(s scanner) (Project, error) {
 }
 
 func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error) {
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 1000
 	}
@@ -234,10 +243,23 @@ func ListProjects(ctx context.Context, db *sql.DB, limit int) ([]Project, error)
 		}
 		projects = append(projects, project)
 	}
-	return projects, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range projects {
+		enabled, err := AcceptsNewMembers(ctx, db, projects[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		projects[i].AcceptsNewMembers = enabled
+	}
+	return projects, nil
 }
 
 func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Project, error) {
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return nil, err
+	}
 	if user.Role == "admin" {
 		return ListProjects(ctx, db, 0)
 	}
@@ -272,10 +294,23 @@ func ListProjectsVisibleToUser(ctx context.Context, db *sql.DB, user User) ([]Pr
 		}
 		projects = append(projects, project)
 	}
-	return projects, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range projects {
+		enabled, err := AcceptsNewMembers(ctx, db, projects[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		projects[i].AcceptsNewMembers = enabled
+	}
+	return projects, nil
 }
 
 func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) {
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return Project{}, err
+	}
 	rawID = strings.TrimSpace(rawID)
 	if rawID == "" {
 		return Project{}, ErrProjectNotFound
@@ -296,10 +331,17 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 		}
 		return Project{}, err
 	}
+	project.AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, project.ID)
+	if err != nil {
+		return Project{}, err
+	}
 	return project, nil
 }
 
 func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) {
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return Project{}, err
+	}
 	row := db.QueryRowContext(ctx, `
 		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
 		FROM projects
@@ -310,6 +352,35 @@ func GetProjectByID(ctx context.Context, db *sql.DB, id int64) (Project, error) 
 		if errors.Is(err, sql.ErrNoRows) {
 			return Project{}, ErrProjectNotFound
 		}
+		return Project{}, err
+	}
+	project.AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, project.ID)
+	if err != nil {
+		return Project{}, err
+	}
+	return project, nil
+}
+
+func GetProjectByGitRepository(ctx context.Context, db *sql.DB, gitRepository string) (Project, error) {
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return Project{}, err
+	}
+	row := db.QueryRowContext(ctx, `
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
+		FROM projects
+		WHERE git_repository = ?
+		ORDER BY project_id
+		LIMIT 1
+	`, strings.TrimSpace(gitRepository))
+	project, err := scanProject(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Project{}, ErrProjectNotFound
+		}
+		return Project{}, err
+	}
+	project.AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, project.ID)
+	if err != nil {
 		return Project{}, err
 	}
 	return project, nil
@@ -415,6 +486,9 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 		WHERE project_id = ?
 	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextNotes, nextStatus, nextVisibility, nextWorkflowID, nextAgentModelProvider, nextAgentModelName, nextAgentModelURL, nextAgentModelAPIKey, id)
 	if err != nil {
+		return Project{}, err
+	}
+	if err := SetProjectAcceptsNewMembers(ctx, db, id, params.AcceptsNewMembers); err != nil {
 		return Project{}, err
 	}
 	return GetProjectByID(ctx, db, id)
@@ -535,6 +609,9 @@ func DeleteProject(ctx context.Context, db *sql.DB, id int64) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM project_teams WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM project_aliases WHERE project_id = ?`, id); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE project_id = ?`, id); err != nil {

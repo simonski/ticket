@@ -501,19 +501,14 @@ func handleProjectGoalInbox(w http.ResponseWriter, req *http.Request, db *sql.DB
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return true
 	}
-	project, err := store.GetProject(req.Context(), db, projectRef)
-	if err != nil {
-		writeStoreError(w, err)
-		return true
-	}
 	user, err := requireUser(db, req)
 	if err != nil {
 		writeAuthError(w, err)
 		return true
 	}
-	role, err := projectRoleForUser(req.Context(), db, project.ID, user)
+	project, role, err := resolveProjectPathForUser(req.Context(), db, user, projectRef, false)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStoreError(w, err)
 		return true
 	}
 	if !canReadProject(role) {
@@ -535,19 +530,14 @@ func handleProjectGoals(w http.ResponseWriter, req *http.Request, db *sql.DB, pr
 	if !strings.HasPrefix(req.URL.Path, "/api/projects/") {
 		return false
 	}
-	project, err := store.GetProject(req.Context(), db, projectRef)
-	if err != nil {
-		writeStoreError(w, err)
-		return true
-	}
 	user, err := requireUser(db, req)
 	if err != nil {
 		writeAuthError(w, err)
 		return true
 	}
-	role, err := projectRoleForUser(req.Context(), db, project.ID, user)
+	project, role, err := resolveProjectPathForUser(req.Context(), db, user, projectRef, req.Method == http.MethodPost)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeStoreError(w, err)
 		return true
 	}
 	switch req.Method {

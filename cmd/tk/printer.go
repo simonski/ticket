@@ -354,6 +354,45 @@ func printTicketDetails(ticket store.Ticket, dependencies []store.Dependency, hi
 	fmt.Printf("%-*s : total=%d open=%d closed=%d\n", maxLabelWidth, "ChildCounts", childTotal, childOpen, childClosed)
 }
 
+func printTicketSummary(ticket store.Ticket) {
+	fields := []struct {
+		label string
+		value string
+	}{
+		{label: "id/type", value: fmt.Sprintf("%s/%s", ticket.ID, ticket.Type)},
+		{label: "title", value: ticket.Title},
+		{label: "description", value: ticket.Description},
+		{label: "a/c", value: ticket.AcceptanceCriteria},
+	}
+	maxLabelWidth := 0
+	for _, field := range fields {
+		if len(field.label) > maxLabelWidth {
+			maxLabelWidth = len(field.label)
+		}
+	}
+	for _, field := range fields {
+		printSummaryField(maxLabelWidth, field.label, field.value)
+	}
+	fmt.Println()
+	fmt.Println("(use `tk get XXX -v` for more information)")
+}
+
+func printSummaryField(width int, label, rawValue string) {
+	value := strings.ReplaceAll(strings.ReplaceAll(rawValue, "\r\n", "\n"), "\r", "\n")
+	lines := strings.Split(value, "\n")
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	fmt.Printf("%-*s : %s\n", width, label, lines[0])
+	if len(lines) == 1 {
+		return
+	}
+	indent := strings.Repeat(" ", width+3)
+	for _, line := range lines[1:] {
+		fmt.Printf("%s%s\n", indent, line)
+	}
+}
+
 func printTicketChildren(children []store.Ticket) {
 	fmt.Println("Children     :")
 	var buf bytes.Buffer

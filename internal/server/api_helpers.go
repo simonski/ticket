@@ -20,6 +20,7 @@ const (
 	hostSessionCookieName   = "__Host-session"
 	legacyCSRFCookieName    = "_csrf"
 	hostCSRFCookieName      = "__Host-_csrf"
+	gitRepositoryHeader     = "X-Ticket-Git-Repository"
 )
 
 func resolveLifecycleRequest(status, stage, state string) (resolvedStage, resolvedState string, err error) {
@@ -228,7 +229,7 @@ func queryInt(r *http.Request, key string, defaultValue int) (int, error) {
 
 func projectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, user store.User) (string, error) {
 	if user.Role == "admin" {
-		return store.ProjectRoleOwner, nil
+		return store.ProjectRoleAdmin, nil
 	}
 	project, err := store.GetProjectByID(ctx, db, projectID)
 	if err != nil {
@@ -253,14 +254,151 @@ func projectRoleForUser(ctx context.Context, db *sql.DB, projectID int64, user s
 		return teamRole, nil
 	}
 	if project.Visibility == store.ProjectVisibilityPublic {
-		return store.ProjectRoleViewer, nil
+		return store.ProjectRoleObserver, nil
 	}
 	return "", nil
 }
 
+func resolveProjectRefForUser(ctx context.Context, db *sql.DB, ref string, user store.User) (store.Project, string, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return store.Project{}, "", store.ErrProjectNotFound
+	}
+	var (
+		project store.Project
+		err     error
+	)
+	switch strings.ToLower(ref) {
+	case "public":
+		project, err = store.GetProjectByAlias(ctx, db, "public", "")
+	case "private":
+		project, err = store.GetProjectByAlias(ctx, db, "private", user.ID)
+	default:
+		project, err = store.GetProject(ctx, db, ref)
+	}
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	role, err := projectRoleForUser(ctx, db, project.ID, user)
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	if !canReadProject(role) {
+		// #nosec G706 -- log fields are stripped of control characters by sanitizeLogField.
+		log.Printf("security: project access denied user=%s ref=%s project_id=%d", sanitizeLogField(user.Username), sanitizeLogField(ref), project.ID)
+		if project.AcceptsNewMembers {
+			return store.Project{}, "", fmt.Errorf("%w: access denied for project %s; request access via POST /api/projects/%s/access-requests", store.ErrUnauthorized, project.Prefix, sanitizeLogField(ref))
+		}
+		return store.Project{}, "", store.ErrUnauthorized
+	}
+	return project, role, nil
+}
+
+func sanitizeLogField(value string) string {
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', '\t':
+			return -1
+		default:
+			return r
+		}
+	}, value)
+}
+
+func resolveProjectForWriteRequest(ctx context.Context, db *sql.DB, r *http.Request, user store.User, explicitProjectID int64) (store.Project, string, error) {
+	if explicitProjectID > 0 {
+		project, role, err := resolveProjectRefForUser(ctx, db, strconv.FormatInt(explicitProjectID, 10), user)
+		if err != nil {
+			return store.Project{}, "", err
+		}
+		if !canWriteProject(role) {
+			return store.Project{}, "", store.ErrForbidden
+		}
+		return project, role, nil
+	}
+	repo := strings.TrimSpace(r.Header.Get(gitRepositoryHeader))
+	if repo != "" {
+		project, err := store.GetProjectByGitRepository(ctx, db, repo)
+		switch {
+		case err == nil:
+			role, roleErr := projectRoleForUser(ctx, db, project.ID, user)
+			if roleErr != nil {
+				return store.Project{}, "", roleErr
+			}
+			if !canWriteProject(role) {
+				// #nosec G706 -- log fields are stripped of control characters by sanitizeLogField.
+				log.Printf("security: project write denied user=%s ref=%s project_id=%d", sanitizeLogField(user.Username), sanitizeLogField(repo), project.ID)
+				return store.Project{}, "", store.ErrUnauthorized
+			}
+			return project, role, nil
+		case !errors.Is(err, store.ErrProjectNotFound):
+			return store.Project{}, "", err
+		}
+	}
+	project, err := store.GetProjectByAlias(ctx, db, "private", user.ID)
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	role, err := projectRoleForUser(ctx, db, project.ID, user)
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	if !canWriteProject(role) {
+		return store.Project{}, "", store.ErrUnauthorized
+	}
+	return project, role, nil
+}
+
+func resolveProjectPathForUser(ctx context.Context, db *sql.DB, user store.User, ref string, requireWrite bool) (store.Project, string, error) {
+	project, role, err := resolveProjectRefForUser(ctx, db, ref, user)
+	if err != nil {
+		return store.Project{}, "", err
+	}
+	if requireWrite && !canWriteProject(role) {
+		return store.Project{}, "", store.ErrForbidden
+	}
+	return project, role, nil
+}
+
+func resolveProjectForDependencyRequest(ctx context.Context, db *sql.DB, r *http.Request, user store.User, explicitProjectID int64, ticketID, dependsOn string) (store.Project, string, error) {
+	if explicitProjectID > 0 {
+		return resolveProjectForWriteRequest(ctx, db, r, user, explicitProjectID)
+	}
+	ticketID = strings.TrimSpace(ticketID)
+	dependsOn = strings.TrimSpace(dependsOn)
+	if ticketID != "" {
+		ticket, err := store.GetTicketByRef(ctx, db, ticketID)
+		if err != nil {
+			return store.Project{}, "", err
+		}
+		if dependsOn != "" {
+			blocker, blockerErr := store.GetTicketByRef(ctx, db, dependsOn)
+			if blockerErr != nil {
+				return store.Project{}, "", blockerErr
+			}
+			if blocker.ProjectID != ticket.ProjectID {
+				return store.Project{}, "", errors.New("ticket_id and depends_on must belong to the same project")
+			}
+		}
+		project, err := store.GetProjectByID(ctx, db, ticket.ProjectID)
+		if err != nil {
+			return store.Project{}, "", err
+		}
+		role, err := projectRoleForUser(ctx, db, project.ID, user)
+		if err != nil {
+			return store.Project{}, "", err
+		}
+		if !canWriteProject(role) {
+			return store.Project{}, "", store.ErrForbidden
+		}
+		return project, role, nil
+	}
+	return resolveProjectForWriteRequest(ctx, db, r, user, 0)
+}
+
 func canReadProject(role string) bool {
 	switch role {
-	case store.ProjectRoleViewer, store.ProjectRoleEditor, store.ProjectRoleOwner:
+	case store.ProjectRoleObserver, store.ProjectRoleCommenter, store.ProjectRoleMember, store.ProjectRoleAdmin:
 		return true
 	default:
 		return false
@@ -269,7 +407,20 @@ func canReadProject(role string) bool {
 
 func canWriteProject(role string) bool {
 	switch role {
-	case store.ProjectRoleEditor, store.ProjectRoleOwner:
+	case store.ProjectRoleMember, store.ProjectRoleAdmin:
+		return true
+	default:
+		return false
+	}
+}
+
+func canAdminProject(role string) bool {
+	return role == store.ProjectRoleAdmin
+}
+
+func canCommentProject(role string) bool {
+	switch role {
+	case store.ProjectRoleCommenter, store.ProjectRoleMember, store.ProjectRoleAdmin:
 		return true
 	default:
 		return false
@@ -298,12 +449,12 @@ func isDatabaseError(err error) bool {
 }
 
 func canManageProjectUsers(role string) bool {
-	return role == store.ProjectRoleOwner
+	return role == store.ProjectRoleAdmin
 }
 
 func canViewInterventions(role string) bool {
 	switch role {
-	case store.ProjectRoleEditor, store.ProjectRoleOwner:
+	case store.ProjectRoleMember, store.ProjectRoleAdmin:
 		return true
 	default:
 		return false
@@ -312,7 +463,7 @@ func canViewInterventions(role string) bool {
 
 func canViewWorkItems(role string) bool {
 	switch role {
-	case store.ProjectRoleEditor, store.ProjectRoleOwner:
+	case store.ProjectRoleMember, store.ProjectRoleAdmin:
 		return true
 	default:
 		return false
@@ -320,7 +471,7 @@ func canViewWorkItems(role string) bool {
 }
 
 func canManageInterventions(role string) bool {
-	return role == store.ProjectRoleOwner
+	return role == store.ProjectRoleAdmin
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, payload any) {

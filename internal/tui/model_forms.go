@@ -48,7 +48,7 @@ func newEditForm(t store.Ticket) editForm {
 	desc := textarea.New()
 	desc.SetValue(t.Description)
 	desc.Placeholder = "describe the ticket..."
-	desc.SetHeight(4)
+	desc.SetHeight(8)
 	desc.ShowLineNumbers = false
 	desc.CharLimit = 2000
 
@@ -381,6 +381,36 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.goBack()
 	case "ctrl+s", "ctrl+d":
 		return m, m.saveTicket()
+	case "up", "k", "w":
+		switch f.focus {
+		case efDesc:
+			if !textareaAtFirstLine(f.desc) {
+				f.desc, _ = f.desc.Update(msg)
+				return m, nil
+			}
+		case efAC:
+			if !textareaAtFirstLine(f.acceptCrit) {
+				f.acceptCrit, _ = f.acceptCrit.Update(msg)
+				return m, nil
+			}
+		}
+		f.prevField()
+		f.applyFocus(m.width - 2)
+	case "down", "j", "s":
+		switch f.focus {
+		case efDesc:
+			if !textareaAtLastLine(f.desc) {
+				f.desc, _ = f.desc.Update(msg)
+				return m, nil
+			}
+		case efAC:
+			if !textareaAtLastLine(f.acceptCrit) {
+				f.acceptCrit, _ = f.acceptCrit.Update(msg)
+				return m, nil
+			}
+		}
+		f.nextField()
+		f.applyFocus(m.width - 2)
 	case "tab":
 		f.nextField()
 		f.applyFocus(m.width - 2)
@@ -414,6 +444,32 @@ func (m Model) handleKeyEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func textareaAtFirstLine(t textarea.Model) bool {
+	return t.Line() <= 0
+}
+
+func textareaAtLastLine(t textarea.Model) bool {
+	return t.Line() >= t.LineCount()-1
+}
+
+func fixedBlockLines(lines []string, height int) []string {
+	if height < 1 {
+		height = 1
+	}
+	if len(lines) > height {
+		return lines[:height]
+	}
+	if len(lines) < height {
+		padded := make([]string, len(lines), height)
+		copy(padded, lines)
+		for len(padded) < height {
+			padded = append(padded, "")
+		}
+		return padded
+	}
+	return lines
 }
 
 func (m Model) handleKeyNew(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -820,18 +876,25 @@ func (m Model) viewForm(title string) []string {
 
 	// Description textarea
 	descLbl := fmt.Sprintf("  %-14s", "description:")
-	if f.focus == efDesc {
+	focusedDesc := f.focus == efDesc
+	if focusedDesc {
 		lines = append(lines, activeLabel.Render(descLbl))
-		for _, tl := range strings.Split(f.desc.View(), "\n") {
-			lines = append(lines, "  "+tl)
-		}
 	} else {
 		lines = append(lines, labelStyle.Render(descLbl))
+	}
+	descLines := strings.Split(f.desc.View(), "\n")
+	if !focusedDesc {
 		descVal := f.desc.Value()
 		if descVal == "" {
 			descVal = "(empty)"
 		}
-		for _, dl := range wordWrap(descVal, inner-4) {
+		descLines = wordWrap(descVal, inner-4)
+	}
+	descLines = fixedBlockLines(descLines, f.desc.Height())
+	for _, dl := range descLines {
+		if focusedDesc {
+			lines = append(lines, "  "+dl)
+		} else {
 			lines = append(lines, valStyle.Render("  "+dl))
 		}
 	}

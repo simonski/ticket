@@ -9,10 +9,29 @@ import (
 	"github.com/simonski/ticket/internal/store"
 )
 
+type RegisterParams struct {
+	Username string
+	Password string
+	Email    string
+}
+
+type UserCreateParams struct {
+	Username string
+	Password string
+	Email    string
+	Role     string
+	PlanSlug string
+	Enabled  *bool
+}
+
 // AuthService covers user registration, login, logout, and session management.
 type AuthService interface {
 	Status(ctx context.Context) (StatusResponse, error)
 	SetRegistrationEnabled(ctx context.Context, enabled bool) error
+	SetRegistrationAutoApprove(ctx context.Context, enabled bool) error
+	ListPlans(ctx context.Context) ([]store.Plan, error)
+	DefaultPlan(ctx context.Context) (store.Plan, error)
+	SetDefaultPlan(ctx context.Context, slug string) error
 	Register(ctx context.Context, username, password string) (store.User, error)
 	Login(ctx context.Context, username, password string) (store.User, string, error)
 	Logout(ctx context.Context) error

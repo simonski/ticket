@@ -143,10 +143,10 @@ func printProjectSummaryBox(svc libticket.Service, project store.Project, status
 }
 
 func currentProjectSummaryCoreLines(cfg config.Config, svc libticket.Service, statusUnicode bool) []statusLine {
-	if svc == nil || strings.TrimSpace(cfg.ProjectID) == "" {
+	if svc == nil {
 		return nil
 	}
-	project, err := svc.GetProject(context.Background(), cfg.ProjectID)
+	project, _, err := resolveProjectContext(context.Background(), cfg, svc, statusProjectReference(cfg))
 	if err != nil {
 		return nil
 	}

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/simonski/ticket/internal/static"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/testutil"
 )
 
 func TestAuthAndAdminAPI(t *testing.T) {
@@ -134,6 +134,160 @@ func TestAuthAndAdminAPI(t *testing.T) {
 	logoutResp := doJSONRequest(t, handler, http.MethodPost, "/api/logout", nil, carolLoginPayload.Token)
 	if logoutResp.Code != http.StatusOK {
 		t.Fatalf("logout status = %d, want %d", logoutResp.Code, http.StatusOK)
+	}
+}
+
+func TestRegisterAndCreateUserSupportEmailAndGeneratedPassword(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "emailed",
+		"email":    "emailed@example.com",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d body=%s", registerResp.Code, registerResp.Body.String())
+	}
+	var registerPayload map[string]any
+	decodeResponse(t, registerResp, &registerPayload)
+	if registerPayload["email"] != "emailed@example.com" {
+		t.Fatalf("register email = %#v", registerPayload["email"])
+	}
+	generatedPassword, _ := registerPayload["password"].(string)
+	if strings.TrimSpace(generatedPassword) == "" {
+		t.Fatalf("register password missing from payload: %#v", registerPayload)
+	}
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "emailed",
+		"password": generatedPassword,
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login with generated password status = %d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+
+	adminToken := loginAdmin(t, handler)
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]any{
+		"username": "managed",
+		"email":    "managed@example.com",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create user status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	var createdPayload map[string]any
+	decodeResponse(t, createUserResp, &createdPayload)
+	if createdPayload["email"] != "managed@example.com" {
+		t.Fatalf("created email = %#v", createdPayload["email"])
+	}
+	if password, _ := createdPayload["password"].(string); strings.TrimSpace(password) == "" {
+		t.Fatalf("create user generated password missing: %#v", createdPayload)
+	}
+}
+
+func TestPlanAdminAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/plans", nil, adminToken)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list plans status = %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var plans []store.Plan
+	decodeResponse(t, listResp, &plans)
+	if len(plans) < 4 {
+		t.Fatalf("expected seeded plans, got %#v", plans)
+	}
+
+	defaultResp := doJSONRequest(t, handler, http.MethodGet, "/api/plans/default", nil, adminToken)
+	if defaultResp.Code != http.StatusOK {
+		t.Fatalf("default plan status = %d body=%s", defaultResp.Code, defaultResp.Body.String())
+	}
+	var defaultPlan store.Plan
+	decodeResponse(t, defaultResp, &defaultPlan)
+	if defaultPlan.Slug != store.DefaultPlanSlug {
+		t.Fatalf("default plan = %#v", defaultPlan)
+	}
+
+	updateDefaultResp := doJSONRequest(t, handler, http.MethodPost, "/api/plans/default", map[string]string{
+		"slug": "pro",
+	}, adminToken)
+	if updateDefaultResp.Code != http.StatusOK {
+		t.Fatalf("set default plan status = %d body=%s", updateDefaultResp.Code, updateDefaultResp.Body.String())
+	}
+
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]any{
+		"username":  "planuser",
+		"password":  "password123",
+		"plan_slug": "pro+",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create plan user status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+
+	var createdPlanID int64
+	if err := db.QueryRow(`SELECT plan_id FROM users WHERE username = ?`, "planuser").Scan(&createdPlanID); err != nil {
+		t.Fatalf("query created user plan_id error = %v", err)
+	}
+	proPlus, err := store.GetPlanBySlug(context.Background(), db, "pro+")
+	if err != nil {
+		t.Fatalf("GetPlanBySlug(pro+) error = %v", err)
+	}
+	if createdPlanID != proPlus.ID {
+		t.Fatalf("created user plan_id = %d, want %d", createdPlanID, proPlus.ID)
+	}
+
+	assignPlanResp := doJSONRequest(t, handler, http.MethodPost, "/api/users/planuser/plan", map[string]any{
+		"plan_slug": "enterprise",
+	}, adminToken)
+	if assignPlanResp.Code != http.StatusOK {
+		t.Fatalf("assign plan status = %d body=%s", assignPlanResp.Code, assignPlanResp.Body.String())
+	}
+
+	var reassignedPlanID int64
+	if err := db.QueryRow(`SELECT plan_id FROM users WHERE username = ?`, "planuser").Scan(&reassignedPlanID); err != nil {
+		t.Fatalf("query reassigned user plan_id error = %v", err)
+	}
+	enterprise, err := store.GetPlanBySlug(context.Background(), db, store.EnterprisePlanSlug)
+	if err != nil {
+		t.Fatalf("GetPlanBySlug(enterprise) error = %v", err)
+	}
+	if reassignedPlanID != enterprise.ID {
+		t.Fatalf("reassigned user plan_id = %d, want %d", reassignedPlanID, enterprise.ID)
+	}
+}
+
+func TestTicketCreateUsesGitRepositoryHeuristicWhenProjectOmitted(t *testing.T) {
+	t.Parallel()
+	handler, _ := testHandler(t)
+
+	adminToken := loginAdmin(t, handler)
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":          "Repo Routed Project",
+		"git_repository": "https://github.com/example/repo-routed.git",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+	var project store.Project
+	decodeResponse(t, projectResp, &project)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/tickets", strings.NewReader(`{"type":"task","title":"Repo Routed Ticket"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+adminToken)
+	request.Header.Set(gitRepositoryHeader, "https://github.com/example/repo-routed.git")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("create ticket without project_id status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var ticket store.Ticket
+	decodeResponse(t, recorder, &ticket)
+	if ticket.ProjectID != project.ID {
+		t.Fatalf("ticket project_id = %d, want %d", ticket.ProjectID, project.ID)
 	}
 }
 
@@ -759,6 +913,37 @@ func TestGoalEndpoints(t *testing.T) {
 	decodeResponse(t, listStoriesResp, &linkedStories)
 	if len(linkedStories) != 1 || linkedStories[0].ID != story.ID {
 		t.Fatalf("linked stories=%#v, want story %d", linkedStories, story.ID)
+	}
+}
+
+func TestProjectAliasGoalEndpoints(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	adminToken := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/private/goals", map[string]any{
+		"title":       "Private roadmap",
+		"description": "Only visible in private workspace",
+		"notes":       "registration-driven private project",
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create private goal status=%d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var created store.Goal
+	decodeResponse(t, createResp, &created)
+	if created.ProjectID == 0 {
+		t.Fatalf("created private goal project_id=%d", created.ProjectID)
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/private/goals", nil, adminToken)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list private goals status=%d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var goals []store.Goal
+	decodeResponse(t, listResp, &goals)
+	if len(goals) != 1 || goals[0].ID != created.ID {
+		t.Fatalf("private goals=%#v, want created goal %d", goals, created.ID)
 	}
 }
 
@@ -1715,16 +1900,17 @@ func TestProjectAPI(t *testing.T) {
 	}
 	var projects []store.Project
 	decodeResponse(t, listResp, &projects)
-	if len(projects) != 2 || projects[1].Title != "Customer Portal" {
+	if len(projects) < 3 || projects[len(projects)-1].Title != "Customer Portal" {
 		t.Fatalf("projects = %#v", projects)
 	}
 
-	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(projects[1].ID, 10), nil, auth.Token)
+	customerPortalID := projects[len(projects)-1].ID
+	getResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(customerPortalID, 10), nil, auth.Token)
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("get project status = %d, want %d", getResp.Code, http.StatusOK)
 	}
 
-	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/projects/"+strconv.FormatInt(projects[1].ID, 10), map[string]string{
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/projects/"+strconv.FormatInt(customerPortalID, 10), map[string]string{
 		"title":               "Customer Portal 2",
 		"description":         "Updated",
 		"acceptance_criteria": "AC",
@@ -3719,68 +3905,101 @@ func TestProjectVisibilityAndRolePermissions(t *testing.T) {
 	}
 
 	aliceGetPrivate := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), nil, aliceAuth.Token)
-	if aliceGetPrivate.Code != http.StatusForbidden {
-		t.Fatalf("alice get private project status=%d want=%d body=%s", aliceGetPrivate.Code, http.StatusForbidden, aliceGetPrivate.Body.String())
+	if aliceGetPrivate.Code != http.StatusUnauthorized {
+		t.Fatalf("alice get private project status=%d want=%d body=%s", aliceGetPrivate.Code, http.StatusUnauthorized, aliceGetPrivate.Body.String())
 	}
 
 	aliceUser, err := store.GetUserByUsername(context.Background(), db, "alice")
 	if err != nil {
 		t.Fatalf("GetUserByUsername(alice) error=%v", err)
 	}
+	commentTargetResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": privateProject.ID,
+		"type":       "task",
+		"title":      "comment target",
+	}, adminAuth.Token)
+	if commentTargetResp.Code != http.StatusCreated {
+		t.Fatalf("create comment target status=%d body=%s", commentTargetResp.Code, commentTargetResp.Body.String())
+	}
+	var commentTarget store.Ticket
+	decodeResponse(t, commentTargetResp, &commentTarget)
+
 	setViewerResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10)+"/users", map[string]any{
 		"user_id": aliceUser.ID,
-		"role":    store.ProjectRoleViewer,
+		"role":    store.ProjectRoleObserver,
 	}, adminAuth.Token)
 	if setViewerResp.Code != http.StatusOK {
-		t.Fatalf("set viewer status=%d body=%s", setViewerResp.Code, setViewerResp.Body.String())
+		t.Fatalf("set observer status=%d body=%s", setViewerResp.Code, setViewerResp.Body.String())
 	}
 
 	aliceGetPrivate = doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), nil, aliceAuth.Token)
 	if aliceGetPrivate.Code != http.StatusOK {
-		t.Fatalf("alice get private as viewer status=%d body=%s", aliceGetPrivate.Code, aliceGetPrivate.Body.String())
+		t.Fatalf("alice get private as observer status=%d body=%s", aliceGetPrivate.Code, aliceGetPrivate.Body.String())
 	}
 
 	aliceWriteAsViewer := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": privateProject.ID,
 		"type":       "task",
-		"title":      "viewer should not write",
+		"title":      "observer should not write",
 	}, aliceAuth.Token)
 	if aliceWriteAsViewer.Code != http.StatusForbidden {
-		t.Fatalf("viewer create ticket status=%d want=%d body=%s", aliceWriteAsViewer.Code, http.StatusForbidden, aliceWriteAsViewer.Body.String())
+		t.Fatalf("observer create ticket status=%d want=%d body=%s", aliceWriteAsViewer.Code, http.StatusForbidden, aliceWriteAsViewer.Body.String())
 	}
 	aliceProjectUpdateAsViewer := doJSONRequest(t, handler, http.MethodPut, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), map[string]any{
-		"title": "Viewer update blocked",
+		"title": "Observer update blocked",
 	}, aliceAuth.Token)
 	if aliceProjectUpdateAsViewer.Code != http.StatusForbidden {
-		t.Fatalf("viewer update project status=%d want=%d body=%s", aliceProjectUpdateAsViewer.Code, http.StatusForbidden, aliceProjectUpdateAsViewer.Body.String())
+		t.Fatalf("observer update project status=%d want=%d body=%s", aliceProjectUpdateAsViewer.Code, http.StatusForbidden, aliceProjectUpdateAsViewer.Body.String())
+	}
+
+	setCommenterResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10)+"/users", map[string]any{
+		"user_id": aliceUser.ID,
+		"role":    store.ProjectRoleCommenter,
+	}, adminAuth.Token)
+	if setCommenterResp.Code != http.StatusOK {
+		t.Fatalf("set commenter status=%d body=%s", setCommenterResp.Code, setCommenterResp.Body.String())
+	}
+	aliceCommentResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+commentTarget.ID+"/comments", map[string]any{
+		"comment": "commenter can comment",
+	}, aliceAuth.Token)
+	if aliceCommentResp.Code != http.StatusCreated {
+		t.Fatalf("commenter comment status=%d body=%s", aliceCommentResp.Code, aliceCommentResp.Body.String())
+	}
+	aliceWriteAsCommenter := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id": privateProject.ID,
+		"type":       "task",
+		"title":      "commenter should not write",
+	}, aliceAuth.Token)
+	if aliceWriteAsCommenter.Code != http.StatusForbidden {
+		t.Fatalf("commenter create ticket status=%d want=%d body=%s", aliceWriteAsCommenter.Code, http.StatusForbidden, aliceWriteAsCommenter.Body.String())
 	}
 
 	setEditorResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10)+"/users", map[string]any{
 		"user_id": aliceUser.ID,
-		"role":    store.ProjectRoleEditor,
+		"role":    store.ProjectRoleMember,
 	}, adminAuth.Token)
 	if setEditorResp.Code != http.StatusOK {
-		t.Fatalf("set editor status=%d body=%s", setEditorResp.Code, setEditorResp.Body.String())
+		t.Fatalf("set member status=%d body=%s", setEditorResp.Code, setEditorResp.Body.String())
 	}
 
 	aliceWriteAsEditor := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
 		"project_id": privateProject.ID,
 		"type":       "task",
-		"title":      "editor can write",
+		"title":      "member can write",
 	}, aliceAuth.Token)
 	if aliceWriteAsEditor.Code != http.StatusCreated {
-		t.Fatalf("editor create ticket status=%d body=%s", aliceWriteAsEditor.Code, aliceWriteAsEditor.Body.String())
+		t.Fatalf("member create ticket status=%d body=%s", aliceWriteAsEditor.Code, aliceWriteAsEditor.Body.String())
 	}
 	aliceProjectUpdateAsEditor := doJSONRequest(t, handler, http.MethodPut, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), map[string]any{
 		"title": "Private Program Updated",
 	}, aliceAuth.Token)
-	if aliceProjectUpdateAsEditor.Code != http.StatusOK {
-		t.Fatalf("editor update project status=%d body=%s", aliceProjectUpdateAsEditor.Code, aliceProjectUpdateAsEditor.Body.String())
+	if aliceProjectUpdateAsEditor.Code != http.StatusForbidden {
+		t.Fatalf("member update project status=%d want=%d body=%s", aliceProjectUpdateAsEditor.Code, http.StatusForbidden, aliceProjectUpdateAsEditor.Body.String())
 	}
 
 	bobGetPrivate := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(privateProject.ID, 10), nil, bobAuth.Token)
-	if bobGetPrivate.Code != http.StatusForbidden {
-		t.Fatalf("bob get private project status=%d want=%d body=%s", bobGetPrivate.Code, http.StatusForbidden, bobGetPrivate.Body.String())
+	if bobGetPrivate.Code != http.StatusUnauthorized {
+		t.Fatalf("bob get private project status=%d want=%d body=%s", bobGetPrivate.Code, http.StatusUnauthorized, bobGetPrivate.Body.String())
 	}
 
 	publicProjectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
@@ -4036,10 +4255,14 @@ func TestRegistrationConfigAPI(t *testing.T) {
 	if got, ok := disablePayload["registration_enabled"].(bool); !ok || got {
 		t.Fatalf("registration_enabled = %v, want false", disablePayload["registration_enabled"])
 	}
+	if got, ok := disablePayload["registration_auto_approve"].(bool); !ok || !got {
+		t.Fatalf("registration_auto_approve = %v, want true", disablePayload["registration_auto_approve"])
+	}
 
-	// Enable registration
-	enableResp := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]bool{
-		"enabled": true,
+	// Enable registration and disable auto-approve
+	enableResp := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]any{
+		"enabled":      true,
+		"auto_approve": false,
 	}, token)
 	if enableResp.Code != http.StatusOK {
 		t.Fatalf("enable registration status = %d body=%s", enableResp.Code, enableResp.Body.String())
@@ -4048,6 +4271,56 @@ func TestRegistrationConfigAPI(t *testing.T) {
 	decodeResponse(t, enableResp, &enablePayload)
 	if got, ok := enablePayload["registration_enabled"].(bool); !ok || !got {
 		t.Fatalf("registration_enabled = %v, want true", enablePayload["registration_enabled"])
+	}
+	if got, ok := enablePayload["registration_auto_approve"].(bool); !ok || got {
+		t.Fatalf("registration_auto_approve = %v, want false", enablePayload["registration_auto_approve"])
+	}
+
+	statusResp := doJSONRequest(t, handler, http.MethodGet, "/api/status", nil, "")
+	if statusResp.Code != http.StatusOK {
+		t.Fatalf("status code = %d body=%s", statusResp.Code, statusResp.Body.String())
+	}
+	var statusPayload map[string]any
+	decodeResponse(t, statusResp, &statusPayload)
+	if got, ok := statusPayload["registration_auto_approve"].(bool); !ok || got {
+		t.Fatalf("status registration_auto_approve = %v, want false", statusPayload["registration_auto_approve"])
+	}
+}
+
+func TestRegisterPendingApprovalWhenAutoApproveDisabled(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	configResp := doJSONRequest(t, handler, http.MethodPost, "/api/config/registration", map[string]any{
+		"enabled":      true,
+		"auto_approve": false,
+	}, token)
+	if configResp.Code != http.StatusOK {
+		t.Fatalf("configure registration status = %d body=%s", configResp.Code, configResp.Body.String())
+	}
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "pending",
+		"password": "password123",
+	}, "")
+	if registerResp.Code != http.StatusAccepted {
+		t.Fatalf("register status = %d, want %d body=%s", registerResp.Code, http.StatusAccepted, registerResp.Body.String())
+	}
+
+	var registerPayload map[string]any
+	decodeResponse(t, registerResp, &registerPayload)
+	if got, ok := registerPayload["approved"].(bool); !ok || got {
+		t.Fatalf("approved = %v, want false", registerPayload["approved"])
+	}
+
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "pending",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusForbidden {
+		t.Fatalf("login status = %d, want %d body=%s", loginResp.Code, http.StatusForbidden, loginResp.Body.String())
 	}
 }
 
@@ -4680,6 +4953,38 @@ func TestDocumentCRUDAPI(t *testing.T) {
 	}
 }
 
+func TestProjectAliasDocumentEndpoints(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/private/documents", map[string]any{
+		"title":       "Private architecture",
+		"description": "private document",
+		"notes":       "only for me",
+		"content":     "private markdown",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create private document status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	var document store.Document
+	decodeResponse(t, createResp, &document)
+	if document.ProjectID == 0 {
+		t.Fatalf("private document project_id=%d", document.ProjectID)
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/private/documents", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list private documents status = %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var documents []store.Document
+	decodeResponse(t, listResp, &documents)
+	if len(documents) != 1 || documents[0].ID != document.ID {
+		t.Fatalf("private documents = %#v, want document %d", documents, document.ID)
+	}
+}
+
 func TestDeleteLabelByIDAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)
@@ -4761,10 +5066,7 @@ func TestUpdateTicketRejectsInvalidLifecycleCombinationAPI(t *testing.T) {
 func testHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 
-	dbPath := filepath.Join(t.TempDir(), "ticket.db")
-	if err := store.Init(dbPath, "admin", "password", static.SeedDatabase); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
+	dbPath := testutil.SeededDBPath(t, "password")
 	db, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -5191,7 +5493,6 @@ func TestDependencyAPI(t *testing.T) {
 
 	// Add dependency: A depends on B
 	addResp := doJSONRequest(t, handler, http.MethodPost, "/api/dependencies", map[string]any{
-		"project_id": 1,
 		"ticket_id":  ticketA.ID,
 		"depends_on": ticketB.ID,
 	}, token)
@@ -5214,7 +5515,7 @@ func TestDependencyAPI(t *testing.T) {
 	}
 
 	// Remove dependency (DELETE uses query params)
-	delPath := "/api/dependencies?project_id=1&ticket_id=" + ticketA.ID + "&depends_on=" + ticketB.ID
+	delPath := "/api/dependencies?ticket_id=" + ticketA.ID + "&depends_on=" + ticketB.ID
 	delResp := doJSONRequest(t, handler, http.MethodDelete, delPath, nil, token)
 	if delResp.Code != http.StatusOK {
 		t.Fatalf("remove dependency status = %d, body=%s", delResp.Code, delResp.Body.String())

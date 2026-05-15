@@ -51,6 +51,21 @@ test("login does not send auth header", async () => {
     assert.equal(captured.options.headers.Authorization, undefined);
 });
 
+test("register does not send auth header and omits empty optional fields", async () => {
+    let captured;
+    const client = createClient({
+        fetch: async (url, options) => {
+            captured = { url, options };
+            return jsonResponse(201, { user: { username: "newuser" }, password: "generated-pass" });
+        },
+    });
+    const body = await client.register("newuser", "", "");
+    assert.equal(captured.url, "/api/register");
+    assert.equal(captured.options.headers.Authorization, undefined);
+    assert.deepEqual(JSON.parse(captured.options.body), { username: "newuser" });
+    assert.equal(body.password, "generated-pass");
+});
+
 test("requestWithFallback returns fallback on error", async () => {
     const client = createClient({
         fetch: async () => jsonResponse(500, { error: "boom" }),
