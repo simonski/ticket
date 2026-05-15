@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
 source "$ROOT_DIR/scripts/lib/token_auth.sh"
+export TICKET_FAST_HASH="${TICKET_FAST_HASH:-1}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-testharness.XXXXXX")"
 REPO_DIR="$WORK_DIR/repo"
 TICKET_HOME_DIR="$WORK_DIR/home"

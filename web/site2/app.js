@@ -9,7 +9,14 @@
             status: null,
             plans: [],
             defaultPlan: null,
+            planAdminEditSlug: "",
             projects: [],
+            projectAccessRequests: [],
+            projectAccessReviewEnabled: false,
+            projectHistory: [],
+            projectHistoryError: "",
+            myProjectAccessRequests: [],
+            myNotifications: [],
             goals: [],
             documents: [],
             tickets: [],
@@ -129,10 +136,31 @@
             mainNav: document.getElementById("main-nav"),
             planAdminPanel: document.getElementById("plan-admin-panel"),
             defaultPlanSelect: document.getElementById("default-plan-select"),
+            planAdminEditSelect: document.getElementById("plan-admin-edit-select"),
+            planAdminAliasSelect: document.getElementById("plan-admin-alias-select"),
+            planAdminPublicTeamSelect: document.getElementById("plan-admin-public-team-select"),
+            planAdminPrivateProjectSelect: document.getElementById("plan-admin-private-project-select"),
+            planAdminPrivateTeamSelect: document.getElementById("plan-admin-private-team-select"),
             registrationEnabledSelect: document.getElementById("registration-enabled-select"),
             registrationAutoApproveSelect: document.getElementById("registration-auto-approve-select"),
             savePlanAdminButton: document.getElementById("save-plan-admin-button"),
             planAdminList: document.getElementById("plan-admin-list"),
+            projectAccessRequestsPanel: document.getElementById("project-access-requests-panel"),
+            projectAccessRequestsSummary: document.getElementById("project-access-requests-summary"),
+            projectAccessRequestsList: document.getElementById("project-access-requests-list"),
+            projectHistoryPanel: document.getElementById("project-history-panel"),
+            projectHistorySummary: document.getElementById("project-history-summary"),
+            projectHistoryList: document.getElementById("project-history-list"),
+            projectRequestAccessPanel: document.getElementById("project-request-access-panel"),
+            projectRequestAccessForm: document.getElementById("project-request-access-form"),
+            projectRequestAccessRef: document.getElementById("project-request-access-ref"),
+            projectRequestAccessMessage: document.getElementById("project-request-access-message"),
+            projectMyAccessRequestsPanel: document.getElementById("project-my-access-requests-panel"),
+            projectMyAccessRequestsSummary: document.getElementById("project-my-access-requests-summary"),
+            projectMyAccessRequestsList: document.getElementById("project-my-access-requests-list"),
+            projectNotificationsPanel: document.getElementById("project-notifications-panel"),
+            projectNotificationsSummary: document.getElementById("project-notifications-summary"),
+            projectNotificationsList: document.getElementById("project-notifications-list"),
             accountMenuButton: document.getElementById("account-menu-button"),
             accountMenuDropdown: document.getElementById("account-menu-dropdown"),
             accountMenuName: document.getElementById("account-menu-name"),
@@ -333,8 +361,99 @@
             });
         }
 
+        function normalizeProjectAccessRequest(request) {
+            return Object.assign({}, request, {
+                id: request.id !== undefined ? request.id : request.request_id,
+                project_id: Number(request.project_id || 0),
+                project_prefix: String(request.project_prefix || ""),
+                project_title: String(request.project_title || ""),
+                decision_message: String(request.decision_message || ""),
+                decided_by: String(request.decided_by || ""),
+                decided_at: String(request.decided_at || ""),
+            });
+        }
+
+        function parseHistoryPayload(payload) {
+            if (!payload) {
+                return {};
+            }
+            if (typeof payload === "object") {
+                return payload;
+            }
+            if (typeof payload !== "string") {
+                return {};
+            }
+            try {
+                const parsed = JSON.parse(payload);
+                return parsed && typeof parsed === "object" ? parsed : {};
+            } catch (_error) {
+                return {};
+            }
+        }
+
+        function humanizeHistoryEventType(eventType) {
+            return String(eventType || "event")
+                .replace(/^project_/, "")
+                .replace(/^ticket_/, "")
+                .replace(/_/g, " ");
+        }
+
+        function formatHistoryPayloadSummary(payload) {
+            const entries = Object.entries(payload || {}).filter((entry) => {
+                const value = entry[1];
+                return value !== undefined && value !== null && value !== "" && typeof value !== "object";
+            });
+            if (!entries.length) {
+                return "";
+            }
+            return entries.slice(0, 3).map((entry) => entry[0] + ": " + String(entry[1])).join(" · ");
+        }
+
+        function formatProjectHistorySummary(event) {
+            const payload = parseHistoryPayload(event && event.payload);
+            const eventType = String(event && event.event_type || "");
+            if (eventType === "project_access_request_created") {
+                const username = String(payload.username || payload.user_id || "user");
+                const projectPrefix = String(payload.project_prefix || "");
+                const message = String(payload.message || "").trim();
+                let summary = username + " requested access";
+                if (projectPrefix) {
+                    summary += " to " + projectPrefix;
+                }
+                if (message) {
+                    summary += ": " + message;
+                }
+                return summary;
+            }
+            if (eventType === "project_access_request_approved" || eventType === "project_access_request_rejected") {
+                const username = String(payload.username || payload.user_id || "user");
+                const projectPrefix = String(payload.project_prefix || "");
+                const requestID = Number(payload.request_id || 0);
+                const verb = eventType === "project_access_request_rejected" ? "rejected" : "approved";
+                const decisionMessage = String(payload.decision_message || "");
+                let summary = verb + " access request";
+                if (requestID) {
+                    summary += " #" + String(requestID);
+                }
+                summary += " for " + username;
+                if (projectPrefix) {
+                    summary += " on " + projectPrefix;
+                }
+                if (decisionMessage) {
+                    summary += ": " + decisionMessage;
+                }
+                return summary;
+            }
+            const payloadSummary = formatHistoryPayloadSummary(payload);
+            return payloadSummary ? (humanizeHistoryEventType(eventType) + " · " + payloadSummary) : humanizeHistoryEventType(eventType);
+        }
+
         function isAdmin() {
             return Boolean(state.status && state.status.user && state.status.user.role === "admin");
+        }
+
+        function isPermissionErrorMessage(message) {
+            return /forbidden|unauthorized|access denied/i.test(String(message || ""));
         }
 
         function emptyAgentModelConfig() {
@@ -824,7 +943,7 @@
             state.selectedProjectDraft = getCurrentProject() ? structuredClone(getCurrentProject()) : emptyProject();
             populateTicketTypeAndStageSelects();
             await loadProjectAgentModelConfig();
-            await Promise.all([loadTickets(), loadGoals(), loadDocuments()]);
+            await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
             renderAll();
         }
 
@@ -869,6 +988,9 @@
             ]);
             state.plans = Array.isArray(plans) ? plans : [];
             state.defaultPlan = defaultPlan || null;
+            const selectedSlug = state.planAdminEditSlug;
+            const fallbackSlug = (state.defaultPlan && state.defaultPlan.slug) || (state.plans[0] && state.plans[0].slug) || "";
+            state.planAdminEditSlug = state.plans.some((plan) => plan.slug === selectedSlug) ? selectedSlug : fallbackSlug;
         }
 
         async function loadPublicStatus() {
@@ -946,6 +1068,61 @@
             await loadProjectAgentModelConfig();
         }
 
+        async function loadProjectAccessRequests() {
+            const project = getCurrentProject();
+            state.projectAccessRequests = [];
+            state.projectAccessReviewEnabled = false;
+            if (!project || !project.id) {
+                return;
+            }
+            try {
+                const requests = await apiClient.listProjectAccessRequests(project.prefix || project.id, "");
+                state.projectAccessRequests = Array.isArray(requests) ? requests.map(normalizeProjectAccessRequest) : [];
+                state.projectAccessReviewEnabled = true;
+            } catch (error) {
+                if (isPermissionErrorMessage(error && error.message)) {
+                    return;
+                }
+                console.warn("failed to load project access requests", error);
+            }
+        }
+
+        async function loadProjectHistory() {
+            const project = getCurrentProject();
+            state.projectHistory = [];
+            state.projectHistoryError = "";
+            if (!project || !project.id) {
+                return;
+            }
+            try {
+                const events = await apiClient.listProjectHistory(project.prefix || project.id, { limit: 10 });
+                state.projectHistory = Array.isArray(events) ? events : [];
+            } catch (error) {
+                state.projectHistoryError = String(error && error.message || "Failed to load project history.");
+                console.warn("failed to load project history", error);
+            }
+        }
+
+        async function loadMyProjectAccessRequests() {
+            state.myProjectAccessRequests = [];
+            try {
+                const requests = await apiClient.listMyProjectAccessRequests("");
+                state.myProjectAccessRequests = Array.isArray(requests) ? requests.map(normalizeProjectAccessRequest) : [];
+            } catch (error) {
+                console.warn("failed to load my project access requests", error);
+            }
+        }
+
+        async function loadMyNotifications() {
+            state.myNotifications = [];
+            try {
+                const notifications = await apiClient.listMyNotifications("", 20);
+                state.myNotifications = Array.isArray(notifications) ? notifications : [];
+            } catch (error) {
+                console.warn("failed to load notifications", error);
+            }
+        }
+
         async function loadTickets() {
             if (!state.selectedProjectID) {
                 state.tickets = [];
@@ -976,56 +1153,39 @@
             state.projectForecast = Array.isArray(projectForecast) ? projectForecast : [];
             state.forecastCalibration = forecastCalibration;
             state.forecastBacktest = forecastBacktest;
-            const dependencyEntries = await Promise.all(state.tickets.map(async (ticket) => {
-                try {
-                    const dependencies = await api("/api/tickets/" + ticket.id + "/dependencies");
-                    const ids = Array.isArray(dependencies) ? dependencies.map((entry) => String(entry.depends_on || "")).filter(Boolean) : [];
-                    return [String(ticket.id), ids];
-                } catch (error) {
-                    return [String(ticket.id), []];
-                }
-            }));
-            const workItemEntries = await Promise.all(state.interventions.map(async (ticket) => {
-                try {
-                    const workItems = await api("/api/tickets/" + ticket.id + "/work-items?limit=1");
-                    return [String(ticket.id), Array.isArray(workItems) ? workItems : []];
-                } catch (error) {
-                    return [String(ticket.id), []];
-                }
-            }));
-            const interventionStateEntries = await Promise.all(state.interventions.map(async (ticket) => {
-                const nested = ticket.intervention_state;
-                if (nested && typeof nested === "object" && nested.state) {
-                    return [String(ticket.id), nested];
-                }
-                try {
-                    const interventionState = await api("/api/tickets/" + ticket.id + "/intervention-state");
-                    return [String(ticket.id), interventionState];
-                } catch (error) {
-                    return [String(ticket.id), { ticket_id: ticket.id, state: "open", owner_name: "" }];
-                }
-            }));
-            const historyEntries = await Promise.all(state.interventions.map(async (ticket) => {
-                try {
-                    const history = await api("/api/tickets/" + ticket.id + "/history?limit=3");
-                    return [String(ticket.id), Array.isArray(history) ? history : []];
-                } catch (error) {
-                    return [String(ticket.id), []];
-                }
-            }));
-            const commentEntries = await Promise.all(state.interventions.map(async (ticket) => {
-                try {
-                    const comments = await api("/api/tickets/" + ticket.id + "/comments");
-                    return [String(ticket.id), Array.isArray(comments) ? comments.slice(-3).reverse() : []];
-                } catch (error) {
-                    return [String(ticket.id), []];
-                }
-            }));
+            const [dependencyEntries, interventionDetailEntries] = await Promise.all([
+                Promise.all(state.tickets.map(async (ticket) => {
+                    try {
+                        const dependencies = await api("/api/tickets/" + ticket.id + "/dependencies");
+                        const ids = Array.isArray(dependencies) ? dependencies.map((entry) => String(entry.depends_on || "")).filter(Boolean) : [];
+                        return [String(ticket.id), ids];
+                    } catch (error) {
+                        return [String(ticket.id), []];
+                    }
+                })),
+                Promise.all(state.interventions.map(async (ticket) => {
+                    const nested = ticket.intervention_state;
+                    const [workItems, interventionState, history, comments] = await Promise.all([
+                        api("/api/tickets/" + ticket.id + "/work-items?limit=1").catch(() => []),
+                        nested && typeof nested === "object" && nested.state
+                            ? Promise.resolve(nested)
+                            : api("/api/tickets/" + ticket.id + "/intervention-state").catch(() => ({ ticket_id: ticket.id, state: "open", owner_name: "" })),
+                        api("/api/tickets/" + ticket.id + "/history?limit=3").catch(() => []),
+                        api("/api/tickets/" + ticket.id + "/comments").catch(() => []),
+                    ]);
+                    return [String(ticket.id), {
+                        workItems: Array.isArray(workItems) ? workItems : [],
+                        interventionState,
+                        history: Array.isArray(history) ? history : [],
+                        comments: Array.isArray(comments) ? comments.slice(-3).reverse() : [],
+                    }];
+                })),
+            ]);
             state.dependencyIndex = Object.fromEntries(dependencyEntries);
-            state.interventionWorkItems = Object.fromEntries(workItemEntries);
-            state.interventionStates = Object.fromEntries(interventionStateEntries);
-            state.interventionHistory = Object.fromEntries(historyEntries);
-            state.interventionComments = Object.fromEntries(commentEntries);
+            state.interventionWorkItems = Object.fromEntries(interventionDetailEntries.map(([ticketID, detail]) => [ticketID, detail.workItems]));
+            state.interventionStates = Object.fromEntries(interventionDetailEntries.map(([ticketID, detail]) => [ticketID, detail.interventionState]));
+            state.interventionHistory = Object.fromEntries(interventionDetailEntries.map(([ticketID, detail]) => [ticketID, detail.history]));
+            state.interventionComments = Object.fromEntries(interventionDetailEntries.map(([ticketID, detail]) => [ticketID, detail.comments]));
         }
 
         async function loadGoals() {
@@ -1203,7 +1363,7 @@
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
-            await Promise.all([loadTickets(), loadGoals(), loadDocuments()]);
+            await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
             renderAll();
         }
 
@@ -1356,12 +1516,30 @@
             }
             const plans = Array.isArray(state.plans) ? state.plans : [];
             const defaultSlug = state.defaultPlan && state.defaultPlan.slug ? state.defaultPlan.slug : "";
+            const editSlug = plans.some((plan) => plan.slug === state.planAdminEditSlug)
+                ? state.planAdminEditSlug
+                : (defaultSlug || (plans[0] && plans[0].slug) || "");
+            state.planAdminEditSlug = editSlug;
             els.defaultPlanSelect.innerHTML = plans.map((plan) => {
                 const selected = plan.slug === defaultSlug ? " selected" : "";
                 return "<option value=\"" + escapeHTML(plan.slug) + "\"" + selected + ">" + escapeHTML(plan.name || plan.slug) + "</option>";
             }).join("");
+            if (els.planAdminEditSelect) {
+                els.planAdminEditSelect.innerHTML = plans.map((plan) => {
+                    const selected = plan.slug === editSlug ? " selected" : "";
+                    return "<option value=\"" + escapeHTML(plan.slug) + "\"" + selected + ">" + escapeHTML(plan.name || plan.slug) + "</option>";
+                }).join("");
+            }
             els.registrationEnabledSelect.value = String(!(state.status && state.status.registration_enabled === false));
             els.registrationAutoApproveSelect.value = String(!(state.status && state.status.registration_auto_approve === false));
+            const editablePlan = plans.find((plan) => plan.slug === editSlug) || null;
+            if (editablePlan && els.planAdminAliasSelect) {
+                const actions = editablePlan.registration_actions || {};
+                els.planAdminAliasSelect.value = editablePlan.default_project_alias || "public";
+                els.planAdminPublicTeamSelect.value = String(Boolean(actions.auto_assign_public_team));
+                els.planAdminPrivateProjectSelect.value = String(Boolean(actions.auto_create_private_project));
+                els.planAdminPrivateTeamSelect.value = String(Boolean(actions.auto_create_private_team));
+            }
             if (!plans.length) {
                 els.planAdminList.innerHTML = "<div class=\"empty\">No plans available.</div>";
                 return;
@@ -1369,6 +1547,8 @@
             els.planAdminList.innerHTML = plans.map((plan) => {
                 const actions = plan.registration_actions || {};
                 const badges = [
+                    plan.slug === defaultSlug ? "default plan" : "",
+                    plan.slug === editSlug ? "editing" : "",
                     "projects " + String(plan.max_projects),
                     "private " + String(plan.max_private_projects),
                     "tickets/project " + String(plan.max_tickets_per_project),
@@ -1376,8 +1556,10 @@
                     actions.auto_assign_public_team ? "public team" : "",
                     actions.auto_create_private_project ? "private project" : "",
                     actions.auto_create_private_team ? "private team" : "",
+                    Array.isArray(actions.teams) && actions.teams.length ? "extra teams " + String(actions.teams.length) : "",
+                    Array.isArray(actions.projects) && actions.projects.length ? "extra projects " + String(actions.projects.length) : "",
                 ].filter(Boolean).map((label) => "<span class=\"chip\">" + escapeHTML(label) + "</span>").join("");
-                const active = plan.slug === defaultSlug ? " active" : "";
+                const active = plan.slug === editSlug ? " active" : "";
                 return "<div class=\"entity-card" + active + "\">" +
                     "<h4>" + escapeHTML(plan.name || plan.slug) + " <small>(" + escapeHTML(plan.slug) + ")</small></h4>" +
                     "<p>" + escapeHTML(plan.description || "No description") + "</p>" +
@@ -2175,6 +2357,160 @@
             document.getElementById("project-default-draft").value = String(Boolean(project.default_draft));
             document.getElementById("project-workflow").value = project.workflow_id || "";
             document.getElementById("delete-project-button").disabled = !project.id;
+            renderProjectAccessRequestsPanel();
+            renderProjectHistoryPanel();
+            renderProjectRequestAccessPanel();
+            renderMyProjectAccessRequestsPanel();
+            renderMyNotificationsPanel();
+        }
+
+        function renderProjectRequestAccessPanel() {
+            if (!els.projectRequestAccessPanel || !els.projectRequestAccessRef) {
+                return;
+            }
+            const project = getCurrentProject();
+            if (!String(els.projectRequestAccessRef.value || "").trim() && project && (project.prefix || project.id)) {
+                els.projectRequestAccessRef.value = String(project.prefix || project.id);
+            }
+        }
+
+        function renderProjectAccessRequestsPanel() {
+            if (!els.projectAccessRequestsPanel || !els.projectAccessRequestsList) {
+                return;
+            }
+            const project = getCurrentProject();
+            const visible = Boolean(project && project.id && state.projectAccessReviewEnabled);
+            els.projectAccessRequestsPanel.classList.toggle("hidden", !visible);
+            if (!visible) {
+                return;
+            }
+            if (els.projectAccessRequestsSummary) {
+                const count = Array.isArray(state.projectAccessRequests) ? state.projectAccessRequests.length : 0;
+                els.projectAccessRequestsSummary.textContent =
+                    "Membership requests are " + (project.accepts_new_members ? "open" : "closed") +
+                    " · " + (count ? String(count) + " request(s)" : "no requests");
+            }
+            if (!state.projectAccessRequests.length) {
+                els.projectAccessRequestsList.innerHTML = "<div class=\"empty\">No access requests for this project.</div>";
+                return;
+            }
+            els.projectAccessRequestsList.innerHTML = state.projectAccessRequests.map((request) => {
+                const actions = request.status === "pending"
+                    ? "<div class=\"entity-actions\">" +
+                        "<button type=\"button\" class=\"btn-primary\" data-project-access-request-action=\"approve\" data-project-access-request-id=\"" + request.id + "\">Approve</button>" +
+                        "<button type=\"button\" class=\"btn-danger\" data-project-access-request-action=\"reject\" data-project-access-request-id=\"" + request.id + "\">Reject</button>" +
+                        "</div>"
+                    : "";
+                return "<div class=\"history-item\">" +
+                    "<div><strong>" + escapeHTML(request.username || request.user_id || "user") + "</strong></div>" +
+                    "<div class=\"meta\">request #" + escapeHTML(String(request.id || "")) + " · " + escapeHTML(request.status || "pending") + " · " + escapeHTML(request.created_at || "") + "</div>" +
+                    "<div>" + escapeHTML(request.message || "(no message)") + "</div>" +
+                    (request.decision_message
+                        ? "<div class=\"meta\">Decision: " + escapeHTML(request.decision_message) +
+                            (request.decided_by ? " · by " + escapeHTML(request.decided_by) : "") +
+                            (request.decided_at ? " · " + escapeHTML(request.decided_at) : "") +
+                            "</div>"
+                        : "") +
+                    actions +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderProjectHistoryPanel() {
+            if (!els.projectHistoryPanel || !els.projectHistoryList) {
+                return;
+            }
+            const project = getCurrentProject();
+            const visible = Boolean(project && project.id);
+            els.projectHistoryPanel.classList.toggle("hidden", !visible);
+            if (!visible) {
+                return;
+            }
+            if (els.projectHistorySummary) {
+                if (state.projectHistoryError) {
+                    els.projectHistorySummary.textContent = state.projectHistoryError;
+                } else {
+                    const count = Array.isArray(state.projectHistory) ? state.projectHistory.length : 0;
+                    els.projectHistorySummary.textContent = count
+                        ? "Showing the latest " + String(count) + " project event(s)."
+                        : "No project history yet.";
+                }
+            }
+            if (state.projectHistoryError) {
+                els.projectHistoryList.innerHTML = "<div class=\"empty\">" + escapeHTML(state.projectHistoryError) + "</div>";
+                return;
+            }
+            if (!state.projectHistory.length) {
+                els.projectHistoryList.innerHTML = "<div class=\"empty\">No history yet for this project.</div>";
+                return;
+            }
+            els.projectHistoryList.innerHTML = state.projectHistory.map((event) => {
+                const label = event.ticket_key || event.ticket_id || "project";
+                const actor = event.created_by || "system";
+                return "<div class=\"history-item\">" +
+                    "<div><strong>" + escapeHTML(label) + "</strong> — " + escapeHTML(formatProjectHistorySummary(event)) + "</div>" +
+                    "<div class=\"meta\">" + escapeHTML(actor) + " · " + escapeHTML(event.created_at || "") + "</div>" +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderMyProjectAccessRequestsPanel() {
+            if (!els.projectMyAccessRequestsPanel || !els.projectMyAccessRequestsList) {
+                return;
+            }
+            if (els.projectMyAccessRequestsSummary) {
+                const count = Array.isArray(state.myProjectAccessRequests) ? state.myProjectAccessRequests.length : 0;
+                els.projectMyAccessRequestsSummary.textContent = count
+                    ? String(count) + " request(s) across your pending and decided project access history."
+                    : "You have not submitted any project access requests yet.";
+            }
+            if (!state.myProjectAccessRequests.length) {
+                els.projectMyAccessRequestsList.innerHTML = "<div class=\"empty\">No access requests yet.</div>";
+                return;
+            }
+            els.projectMyAccessRequestsList.innerHTML = state.myProjectAccessRequests.map((request) => {
+                const projectRef = request.project_prefix || String(request.project_id || "");
+                const projectLabel = projectRef + (request.project_title ? " (" + request.project_title + ")" : "");
+                return "<div class=\"history-item\">" +
+                    "<div><strong>" + escapeHTML(projectLabel) + "</strong></div>" +
+                    "<div class=\"meta\">request #" + escapeHTML(String(request.id || "")) + " · " + escapeHTML(request.status || "pending") + " · updated " + escapeHTML(request.updated_at || "") + "</div>" +
+                    "<div>" + escapeHTML(request.message || "(no message)") + "</div>" +
+                    (request.decision_message
+                        ? "<div class=\"meta\">Decision: " + escapeHTML(request.decision_message) +
+                            (request.decided_by ? " · by " + escapeHTML(request.decided_by) : "") +
+                            (request.decided_at ? " · " + escapeHTML(request.decided_at) : "") +
+                            "</div>"
+                        : "") +
+                    "</div>";
+            }).join("");
+        }
+
+        function renderMyNotificationsPanel() {
+            if (!els.projectNotificationsPanel || !els.projectNotificationsList) {
+                return;
+            }
+            const unreadCount = state.myNotifications.filter((notification) => notification.status !== "read").length;
+            if (els.projectNotificationsSummary) {
+                els.projectNotificationsSummary.textContent = state.myNotifications.length
+                    ? String(unreadCount) + " unread notification(s) across your latest " + String(state.myNotifications.length) + " update(s)."
+                    : "No notifications yet.";
+            }
+            if (!state.myNotifications.length) {
+                els.projectNotificationsList.innerHTML = "<div class=\"empty\">No notifications yet.</div>";
+                return;
+            }
+            els.projectNotificationsList.innerHTML = state.myNotifications.map((notification) => {
+                const notificationID = notification.notification_id || notification.id || "";
+                const action = notification.status === "read"
+                    ? ""
+                    : "<div class=\"entity-actions\"><button type=\"button\" data-notification-read=\"" + escapeHTML(String(notificationID)) + "\">Mark read</button></div>";
+                return "<div class=\"history-item\">" +
+                    "<div><strong>" + escapeHTML(notification.title || notification.kind || "notification") + "</strong></div>" +
+                    "<div class=\"meta\">" + escapeHTML(notification.status || "unread") + " · " + escapeHTML(notification.created_at || "") + "</div>" +
+                    "<div>" + escapeHTML(notification.message || "") + "</div>" +
+                    action +
+                    "</div>";
+            }).join("");
         }
 
         function renderWorkflowEditor() {
@@ -2383,7 +2719,7 @@
                 state.selectedProjectDraft = project ? structuredClone(project) : emptyProject();
                 renderProjectMenu();
                 populateTicketTypeAndStageSelects();
-                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadDocuments()]).then(renderAll).catch((error) => setNotice(error.message, true));
+                Promise.all([loadProjectAgentModelConfig(), loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]).then(renderAll).catch((error) => setNotice(error.message, true));
             });
 
             document.getElementById("new-project-button").addEventListener("click", () => {
@@ -2432,7 +2768,7 @@
                     state.selectedProjectID = project.id;
                     storeSelectedProjectID(state.selectedProjectID);
                     await Promise.all([loadProjects(), loadWorkflows()]);
-                    await Promise.all([loadTickets(), loadGoals(), loadDocuments()]);
+                    await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
                     renderAll();
                     setNotice("Project saved.");
                 } catch (error) {
@@ -2450,6 +2786,30 @@
                         if (els.defaultPlanSelect.value) {
                             await apiClient.setDefaultPlan(els.defaultPlanSelect.value);
                         }
+                        const planRef = els.planAdminEditSelect ? els.planAdminEditSelect.value : "";
+                        const selectedPlan = Array.isArray(state.plans) ? state.plans.find((plan) => plan.slug === planRef) : null;
+                        if (planRef && selectedPlan) {
+                            const actions = selectedPlan.registration_actions || {};
+                            await apiClient.updatePlan(planRef, {
+                                slug: selectedPlan.slug,
+                                name: selectedPlan.name || "",
+                                description: selectedPlan.description || "",
+                                max_projects: selectedPlan.max_projects || 0,
+                                max_private_projects: selectedPlan.max_private_projects || 0,
+                                max_tickets: selectedPlan.max_tickets || 0,
+                                max_tickets_per_project: selectedPlan.max_tickets_per_project || 0,
+                                max_team_memberships: selectedPlan.max_team_memberships || 0,
+                                max_api_calls_per_day: selectedPlan.max_api_calls_per_day || 0,
+                                default_project_alias: els.planAdminAliasSelect ? els.planAdminAliasSelect.value : (selectedPlan.default_project_alias || ""),
+                                registration_actions: {
+                                    auto_assign_public_team: normalizeBool(els.planAdminPublicTeamSelect && els.planAdminPublicTeamSelect.value),
+                                    auto_create_private_project: normalizeBool(els.planAdminPrivateProjectSelect && els.planAdminPrivateProjectSelect.value),
+                                    auto_create_private_team: normalizeBool(els.planAdminPrivateTeamSelect && els.planAdminPrivateTeamSelect.value),
+                                    teams: Array.isArray(actions.teams) ? actions.teams : [],
+                                    projects: Array.isArray(actions.projects) ? actions.projects : [],
+                                },
+                            });
+                        }
                         await Promise.all([loadStatus(), loadPlans()]);
                         syncRegistrationUI();
                         renderPlanAdminPanel();
@@ -2457,6 +2817,12 @@
                     } catch (error) {
                         setNotice(error.message, true);
                     }
+                });
+            }
+            if (els.planAdminEditSelect) {
+                els.planAdminEditSelect.addEventListener("change", () => {
+                    state.planAdminEditSlug = els.planAdminEditSelect.value || "";
+                    renderPlanAdminPanel();
                 });
             }
 
@@ -2470,17 +2836,93 @@
                     state.selectedProjectID = null;
                     storeSelectedProjectID(state.selectedProjectID);
                     state.selectedProjectDraft = emptyProject();
+                    state.projectAccessRequests = [];
+                    state.projectAccessReviewEnabled = false;
                     state.projectAgentModelConfig = emptyAgentModelConfig();
                     state.goalAgentModelConfig = emptyAgentModelConfig();
                     state.resolvedGoalAgentModelConfig = null;
                     await loadProjects();
-                    await Promise.all([loadTickets(), loadGoals(), loadDocuments()]);
+                    await Promise.all([loadTickets(), loadGoals(), loadDocuments(), loadProjectAccessRequests(), loadProjectHistory(), loadMyProjectAccessRequests(), loadMyNotifications()]);
                     renderAll();
                     setNotice("Project deleted.");
                 } catch (error) {
                     setNotice(error.message, true);
                 }
             });
+
+            if (els.projectRequestAccessForm) {
+                els.projectRequestAccessForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const projectRef = String(els.projectRequestAccessRef && els.projectRequestAccessRef.value || "").trim();
+                    const message = String(els.projectRequestAccessMessage && els.projectRequestAccessMessage.value || "").trim();
+                    if (!projectRef) {
+                        setNotice("Enter a project ref first.", true);
+                        return;
+                    }
+                    try {
+                        await apiClient.createProjectAccessRequest(projectRef, message);
+                        await Promise.all([loadMyProjectAccessRequests(), loadProjectHistory(), loadMyNotifications()]);
+                        if (els.projectRequestAccessMessage) {
+                            els.projectRequestAccessMessage.value = "";
+                        }
+                        renderProjectHistoryPanel();
+                        renderMyProjectAccessRequestsPanel();
+                        renderMyNotificationsPanel();
+                        setNotice("Access request submitted.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            if (els.projectAccessRequestsList) {
+                els.projectAccessRequestsList.addEventListener("click", async (event) => {
+                    const button = event.target.closest("[data-project-access-request-action]");
+                    if (!button) {
+                        return;
+                    }
+                    const project = getCurrentProject();
+                    if (!project || !project.id) {
+                        return;
+                    }
+                    const requestID = Number(button.dataset.projectAccessRequestId || 0);
+                    const action = String(button.dataset.projectAccessRequestAction || "");
+                    const status = action === "reject" ? "rejected" : "approved";
+                    const decisionMessage = prompt("Optional decision message", "") || "";
+                    if (!requestID) {
+                        return;
+                    }
+                    try {
+                        await apiClient.setProjectAccessRequestStatus(project.prefix || project.id, requestID, status, decisionMessage);
+                        await Promise.all([loadProjectAccessRequests(), loadProjectHistory()]);
+                        renderProjectAccessRequestsPanel();
+                        renderProjectHistoryPanel();
+                        setNotice("Access request " + (status === "approved" ? "approved." : "rejected."));
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+            if (els.projectNotificationsList) {
+                els.projectNotificationsList.addEventListener("click", async (event) => {
+                    const button = event.target.closest("[data-notification-read]");
+                    if (!button) {
+                        return;
+                    }
+                    const notificationID = Number(button.dataset.notificationRead || 0);
+                    if (!notificationID) {
+                        return;
+                    }
+                    try {
+                        await apiClient.markNotificationRead(notificationID);
+                        await loadMyNotifications();
+                        renderMyNotificationsPanel();
+                        setNotice("Notification marked as read.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
         }
 
         function ensureGoalChatConnected() {

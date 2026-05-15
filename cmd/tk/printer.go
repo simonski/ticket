@@ -112,6 +112,52 @@ func printProjectTable(projects []store.Project, currentProjectID string, workfl
 	printBoxTable(" \tID\tPREFIX\tTITLE\tSTATUS\tWorkflow\tGIT\tDESCRIPTION", rows)
 }
 
+func printProjectAccessRequestTable(requests []store.ProjectAccessRequest) {
+	if len(requests) == 0 {
+		printNoEntitiesAvailable("project access requests")
+		return
+	}
+	rows := make([]string, 0, len(requests))
+	for _, request := range requests {
+		message := request.Message
+		if strings.TrimSpace(request.DecisionMessage) != "" {
+			if strings.TrimSpace(message) != "" {
+				message += " | decision: " + request.DecisionMessage
+			} else {
+				message = "decision: " + request.DecisionMessage
+			}
+		}
+		if len(message) > 60 {
+			message = message[:57] + "..."
+		}
+		project := strings.TrimSpace(request.ProjectPrefix)
+		if project == "" {
+			project = strconv.FormatInt(request.ProjectID, 10)
+		}
+		if title := strings.TrimSpace(request.ProjectTitle); title != "" {
+			project += " (" + title + ")"
+		}
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s\t%s\t%s\t%s\t%s", request.ID, project, request.Username, request.UserID, request.Status, request.CreatedAt, message))
+	}
+	printBoxTable("REQUEST_ID\tPROJECT\tUSERNAME\tUSER_ID\tSTATUS\tCREATED\tMESSAGE", rows)
+}
+
+func printUserNotificationTable(notifications []store.UserNotification) {
+	if len(notifications) == 0 {
+		printNoEntitiesAvailable("notifications")
+		return
+	}
+	rows := make([]string, 0, len(notifications))
+	for _, notification := range notifications {
+		message := notification.Message
+		if len(message) > 72 {
+			message = message[:69] + "..."
+		}
+		rows = append(rows, fmt.Sprintf("%d\t%s\t%s\t%s\t%s\t%s", notification.ID, notification.Status, notification.Kind, notification.Title, notification.CreatedAt, message))
+	}
+	printBoxTable("NOTIFICATION_ID\tSTATUS\tKIND\tTITLE\tCREATED\tMESSAGE", rows)
+}
+
 func ticketLabel(ticket store.Ticket) string {
 	return ticket.ID
 }
@@ -1110,6 +1156,37 @@ func formatHistoryEvent(event store.HistoryEvent) string {
 
 	case "ticket_parent_cleared":
 		return "parent removed"
+
+	case "project_access_request_created":
+		username, _ := data["username"].(string)
+		projectPrefix, _ := data["project_prefix"].(string)
+		message, _ := data["message"].(string)
+		summary := fmt.Sprintf("%s requested access to %s", username, projectPrefix)
+		if strings.TrimSpace(message) != "" {
+			summary += ": " + message
+		}
+		return summary
+
+	case "project_access_request_approved", "project_access_request_rejected":
+		username, _ := data["username"].(string)
+		projectPrefix, _ := data["project_prefix"].(string)
+		requestID, _ := data["request_id"].(float64)
+		decisionMessage, _ := data["decision_message"].(string)
+		verb := "approved"
+		if event.EventType == "project_access_request_rejected" {
+			verb = "rejected"
+		}
+		summary := ""
+		switch {
+		case requestID > 0:
+			summary = fmt.Sprintf("%s access request #%d for %s on %s", verb, int64(requestID), username, projectPrefix)
+		default:
+			summary = fmt.Sprintf("%s access request for %s on %s", verb, username, projectPrefix)
+		}
+		if strings.TrimSpace(decisionMessage) != "" {
+			summary += ": " + decisionMessage
+		}
+		return summary
 
 	default:
 		return event.EventType + ": " + formatPayloadKeyValues(data)

@@ -275,6 +275,27 @@ func TestFormatRuntimeErrorRemote401ExplainsCredentials(t *testing.T) {
 	}
 }
 
+func TestFormatRuntimeErrorRemote401PreservesHelpfulAPIMessage(t *testing.T) {
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+	t.Setenv("TICKET_HOME", t.TempDir())
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{Location: "https://ticket.example", ProjectID: "1"}); err != nil {
+		t.Fatalf("SaveProjectConfigAt() error = %v", err)
+	}
+
+	err := &client.HTTPStatusError{
+		StatusCode: http.StatusUnauthorized,
+		Status:     "401 Unauthorized",
+		APIError:   "access denied for project GATE; request access via POST /api/projects/GATE/access-requests",
+	}
+	if got := formatRuntimeError(err); got != err {
+		t.Fatalf("formatRuntimeError() should preserve helpful 401 API error, got %v", got)
+	}
+}
+
 func TestFormatRuntimeErrorRemote404GenericExplainsWrongServer(t *testing.T) {
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
@@ -708,8 +729,11 @@ func TestRenderServerHelpIncludesTaskHomeDefault(t *testing.T) {
 func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
 	help := renderCommandHelp("project")
 	for _, want := range []string{
-		"tk project <create|list|get|use|set-draft|workflow|add-user|remove-user|add-team|remove-team>",
+		"tk project <create|list|get|use|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>",
 		"`set-draft` controls whether new tickets default to draft mode for the project.",
+		"`request-access` submits an access request for a gated project that accepts new members.",
+		"`my-access-requests` lets the current user review their own pending and decided membership requests.",
+		"`access-requests`, `approve-access-request`, and `reject-access-request` let project admins review and decide pending membership requests, optionally with a decision note.",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("project help missing %q:\n%s", want, help)
@@ -721,15 +745,267 @@ func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
 			t.Fatalf("project help error = %v", err)
 		}
 	})
-	if !strings.Contains(output, "set-draft [-project_id <id>] <true|false>") {
-		t.Fatalf("project usage missing set-draft command:\n%s", output)
+	for _, want := range []string{
+		"set-draft [-project_id <id>] <true|false>",
+		"request-access [-project_id <id>]",
+		"my-access-requests",
+		"access-requests [-project_id <id>]",
+		"approve-access-request",
+		"reject-access-request",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("project usage missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunProjectRequestAccessRemote(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	dbPath := filepath.Join(tempDir, "ticket.db")
+	testutil.CloneSeededDB(t, dbPath, "adminpass")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	setTestLocation(t, ts.URL)
+
+	alice, err := store.CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "admin", "-password", "adminpass"}); err != nil {
+			t.Fatalf("admin login error = %v", err)
+		}
+	})
+
+	projectIDText := strings.TrimSpace(captureStdout(t, func() {
+		if err := run([]string{"project", "create", "-prefix", "GATE", "-title", "Gated Project", "-printid"}); err != nil {
+			t.Fatalf("project create error = %v", err)
+		}
+	}))
+	projectID, err := strconv.ParseInt(projectIDText, 10, 64)
+	if err != nil {
+		t.Fatalf("ParseInt(project id) error = %v", err)
+	}
+	if err := store.SetProjectAcceptsNewMembers(context.Background(), db, projectID, true); err != nil {
+		t.Fatalf("SetProjectAcceptsNewMembers() error = %v", err)
+	}
+
+	if err := config.ClearCredentials(); err != nil {
+		t.Fatalf("ClearCredentials() error = %v", err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	cfg.Username = ""
+	cfg.Token = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "alice", "-password", "password123"}); err != nil {
+			t.Fatalf("alice login error = %v", err)
+		}
+	})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"project", "request-access", "-project_id", "GATE", "-message", "please add me"}); err != nil {
+			t.Fatalf("project request-access error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"requested access:",
+		fmt.Sprintf("project_id=%d", projectID),
+		"status=pending",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("request-access output missing %q:\n%s", want, output)
+		}
+	}
+
+	requests, err := store.ListProjectAccessRequests(context.Background(), db, projectID, "")
+	if err != nil {
+		t.Fatalf("ListProjectAccessRequests() error = %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("ListProjectAccessRequests() len = %d, want 1", len(requests))
+	}
+	if requests[0].UserID != alice.ID {
+		t.Fatalf("request user_id = %q, want %q", requests[0].UserID, alice.ID)
+	}
+	if requests[0].Message != "please add me" {
+		t.Fatalf("request message = %q, want %q", requests[0].Message, "please add me")
+	}
+	if requests[0].Status != "pending" {
+		t.Fatalf("request status = %q, want pending", requests[0].Status)
+	}
+
+	if err := config.ClearCredentials(); err != nil {
+		t.Fatalf("ClearCredentials(second) error = %v", err)
+	}
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("config.Load(second) error = %v", err)
+	}
+	cfg.Username = ""
+	cfg.Token = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save(second) error = %v", err)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "admin", "-password", "adminpass"}); err != nil {
+			t.Fatalf("admin re-login error = %v", err)
+		}
+	})
+
+	listOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "access-requests", "-project_id", "GATE", "-status", "pending"}); err != nil {
+			t.Fatalf("project access-requests error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"REQUEST_ID",
+		"GATE (Gated Project)",
+		"alice",
+		"please add me",
+		"pending",
+	} {
+		if !strings.Contains(listOutput, want) {
+			t.Fatalf("access-requests output missing %q:\n%s", want, listOutput)
+		}
+	}
+
+	approveOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "approve-access-request", "-project_id", "GATE", "-request_id", strconv.FormatInt(requests[0].ID, 10), "-message", "Approved for sprint work"}); err != nil {
+			t.Fatalf("approve-access-request error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"approved access request:",
+		fmt.Sprintf("request_id=%d", requests[0].ID),
+		"status=approved",
+		"user=alice",
+		"message=Approved for sprint work",
+	} {
+		if !strings.Contains(approveOutput, want) {
+			t.Fatalf("approve-access-request output missing %q:\n%s", want, approveOutput)
+		}
+	}
+
+	members, err := store.ListProjectMembers(context.Background(), db, projectID)
+	if err != nil {
+		t.Fatalf("ListProjectMembers() error = %v", err)
+	}
+	found := false
+	for _, member := range members {
+		if member.UserID == alice.ID && member.Role == store.ProjectRoleObserver {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("alice not added as observer after approval: %#v", members)
+	}
+
+	if err := config.ClearCredentials(); err != nil {
+		t.Fatalf("ClearCredentials(third) error = %v", err)
+	}
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("config.Load(third) error = %v", err)
+	}
+	cfg.Username = ""
+	cfg.Token = ""
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("config.Save(third) error = %v", err)
+	}
+
+	captureStdout(t, func() {
+		if err := run([]string{"login", "-username", "alice", "-password", "password123"}); err != nil {
+			t.Fatalf("alice re-login error = %v", err)
+		}
+	})
+
+	myRequestsOutput := captureStdout(t, func() {
+		if err := run([]string{"project", "my-access-requests"}); err != nil {
+			t.Fatalf("project my-access-requests error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"REQUEST_ID",
+		"GATE (Gated Project)",
+		"alice",
+		"approved",
+		"decision: Approved for sprint work",
+	} {
+		if !strings.Contains(myRequestsOutput, want) {
+			t.Fatalf("my-access-requests output missing %q:\n%s", want, myRequestsOutput)
+		}
+	}
+
+	notificationsOutput := captureStdout(t, func() {
+		if err := run([]string{"user", "notifications", "-status", "unread"}); err != nil {
+			t.Fatalf("user notifications error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"NOTIFICATION_ID",
+		"Project access approved",
+		"project_access_approved",
+		"unread",
+	} {
+		if !strings.Contains(notificationsOutput, want) {
+			t.Fatalf("user notifications output missing %q:\n%s", want, notificationsOutput)
+		}
+	}
+
+	notifications, err := store.ListUserNotifications(context.Background(), db, alice.ID, store.UserNotificationStatusUnread, 10)
+	if err != nil {
+		t.Fatalf("ListUserNotifications() error = %v", err)
+	}
+	if len(notifications) != 1 {
+		t.Fatalf("ListUserNotifications() len = %d, want 1", len(notifications))
+	}
+	if !strings.Contains(notifications[0].Message, "Approved for sprint work") {
+		t.Fatalf("notification message = %q", notifications[0].Message)
+	}
+
+	readOutput := captureStdout(t, func() {
+		if err := run([]string{"user", "read-notification", "-id", strconv.FormatInt(notifications[0].ID, 10)}); err != nil {
+			t.Fatalf("user read-notification error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"marked notification as read:",
+		fmt.Sprintf("notification_id=%d", notifications[0].ID),
+		"status=read",
+	} {
+		if !strings.Contains(readOutput, want) {
+			t.Fatalf("read-notification output missing %q:\n%s", want, readOutput)
+		}
 	}
 }
 
 func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 	help := renderCommandHelp("user")
 	for _, want := range []string{
-		"tk user <create|new|ls|list|rm|delete|enable|disable>",
+		"tk user <create|new|ls|list|rm|delete|enable|disable|notifications|read-notification|reset-password>",
 		"user is not an admin",
 		"tk user create -username alice -email alice@example.com",
 	} {
@@ -4332,6 +4608,66 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 	}
 }
 
+func TestRunHistoryShowsProjectAccessRequestAuditEvents(t *testing.T) {
+	setupLocalCLI(t)
+
+	db, err := store.Open(testDBPath(t))
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	requester, err := store.CreateUser(context.Background(), db, "alice", "password123", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(alice) error = %v", err)
+	}
+	req, err := store.CreateProjectAccessRequest(context.Background(), db, 1, requester.ID, "please add me")
+	if err != nil {
+		t.Fatalf("CreateProjectAccessRequest() error = %v", err)
+	}
+	if err := store.AddHistoryEvent(context.Background(), db, 1, "", "project_access_request_created", map[string]any{
+		"request_id":     req.ID,
+		"user_id":        requester.ID,
+		"username":       "alice",
+		"project_id":     1,
+		"project_prefix": "PRJ",
+		"project_title":  "Sample Project",
+		"status":         "pending",
+		"message":        "please add me",
+		"requested_by":   "alice",
+	}, requester.ID); err != nil {
+		t.Fatalf("AddHistoryEvent(created) error = %v", err)
+	}
+	if err := store.AddHistoryEvent(context.Background(), db, 1, "", "project_access_request_approved", map[string]any{
+		"request_id":     req.ID,
+		"user_id":        requester.ID,
+		"username":       "alice",
+		"project_id":     1,
+		"project_prefix": "PRJ",
+		"project_title":  "Sample Project",
+		"status":         "approved",
+		"message":        "please add me",
+		"decided_by":     "admin",
+	}, testAdminUserID(t)); err != nil {
+		t.Fatalf("AddHistoryEvent(approved) error = %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"history", "-n", "5"}); err != nil {
+			t.Fatalf("history(project) error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"project",
+		"alice requested access to PRJ: please add me",
+		"approved access request #",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("project history output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestRunOrphansExcludesEpicRoots(t *testing.T) {
 	setupLocalCLI(t)
 	epicID := createLocalTask(t, []string{"epic", "Orphan Epic"})
@@ -4932,7 +5268,11 @@ func TestRunProjectSetDraftSupportsPrivateAlias(t *testing.T) {
 	if err := run([]string{"project", "set-draft", "-project_id", "private", "true"}); err != nil {
 		t.Fatalf("project set-draft private error = %v", err)
 	}
-	project, err := svc.GetProject(context.Background(), "private")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	project, _, err := resolveProjectContext(context.Background(), cfg, svc, "private")
 	if err != nil {
 		t.Fatalf("GetProject(private) error = %v", err)
 	}
@@ -5015,6 +5355,13 @@ func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 	cfg.ProjectID = ""
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(cwd, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(clear) error = %v", err)
 	}
 
 	noProjectOutput := captureStdout(t, func() {
@@ -5208,8 +5555,12 @@ func TestRunRoleCRUD(t *testing.T) {
 
 func setupLocalCLI(t *testing.T) {
 	t.Helper()
-	globalHome := t.TempDir()
-	repoDir := filepath.Join(t.TempDir(), "repo")
+	rootDir := t.TempDir()
+	globalHome := filepath.Join(rootDir, "home")
+	repoDir := filepath.Join(rootDir, "repo")
+	if err := os.MkdirAll(globalHome, 0o755); err != nil {
+		t.Fatalf("MkdirAll(home) error = %v", err)
+	}
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.git) error = %v", err)
 	}
@@ -5219,35 +5570,22 @@ func setupLocalCLI(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	t.Setenv("TICKET_HOME", globalHome)
+	t.Setenv("TICKET_USERNAME", "admin")
 	dbPath := filepath.Join(globalHome, "ticket.db")
 	testutil.CloneSeededDB(t, dbPath, "secret12")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("store.Open() error = %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	handler, err := server.Handler(db, "test", false, nil, "", "")
-	if err != nil {
-		t.Fatalf("server.Handler() error = %v", err)
-	}
-	ts := httptest.NewServer(handler)
-	t.Cleanup(ts.Close)
-	setTestLocation(t, ts.URL)
-	captureStdout(t, func() {
-		if runErr := run([]string{"login", "-username", "admin", "-password", "secret12"}); runErr != nil {
-			t.Fatalf("run(login) error = %v", runErr)
-		}
-	})
 	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "1"}); err != nil {
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
+	cfg := config.Config{
+		DefaultRemote: "test",
+		Remotes:       []config.Remote{{Name: "test", URL: dbPath}},
 	}
-	cfg.ProjectID = "1"
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("json.MarshalIndent(config) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(globalHome, "config.json"), data, 0o600); err != nil {
+		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
 }
 
@@ -6907,6 +7245,11 @@ func TestRunTeamCreateListUpdateDelete(t *testing.T) {
 	}
 
 	adminUserID := testAdminUserID(t)
+	captureStdout(t, func() {
+		if err := run([]string{"team", "add-user", "-team_id", teamID, "-user_id", adminUserID, "-role", "owner"}); err != nil {
+			t.Fatalf("team add-user before delete error = %v", err)
+		}
+	})
 	captureStdout(t, func() {
 		if err := run([]string{"team", "remove-user", "-team_id", teamID, "-user_id", adminUserID}); err != nil {
 			t.Fatalf("team remove-user before delete error = %v", err)

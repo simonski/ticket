@@ -34,8 +34,7 @@ func statusHomeLines(home string) []statusLine {
 	return []statusLine{{key: "TICKET_HOME", value: home}}
 }
 
-func mergeStatusHeaderLines(cfg config.Config, svc libticket.Service, statusUnicode bool, configFile string, details []statusLine) []statusLine {
-	summary := currentProjectSummaryCoreLines(cfg, svc, statusUnicode)
+func mergeStatusHeaderLines(summary []statusLine, configFile string, details []statusLine) []statusLine {
 	if len(summary) == 0 {
 		if strings.TrimSpace(configFile) != "" {
 			details = append(details, statusLine{key: "config_file", value: configFile})
@@ -76,6 +75,15 @@ func resolveCurrentProject(cfg config.Config) (projectID, source string) {
 	return "", ""
 }
 
+type currentProjectContext struct {
+	project      store.Project
+	projectID    string
+	source       string
+	workflowName string
+	defaultDraft *bool
+	ok           bool
+}
+
 func effectiveConfigPath() string {
 	if projectPath, ok, _ := config.ProjectPath(); ok {
 		return projectPath
@@ -84,25 +92,32 @@ func effectiveConfigPath() string {
 	return cfgPath
 }
 
-func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) (projectID, projectTitle, source, workflowName string, defaultDraft *bool) {
-	projectID, source = resolveCurrentProject(cfg)
+func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) currentProjectContext {
+	projectID, source := resolveCurrentProject(cfg)
 	if svc == nil {
-		return projectID, "", source, "", nil
+		return currentProjectContext{projectID: projectID, source: source}
 	}
 	currentProject, resolvedRef, err := resolveProjectContext(context.Background(), cfg, svc, statusProjectReference(cfg))
 	if err != nil {
-		return projectID, "", source, "", nil
+		return currentProjectContext{projectID: projectID, source: source}
 	}
 	if strings.TrimSpace(projectID) == "" {
 		projectID = resolvedRef
 	}
+	workflowName := ""
 	if currentProject.WorkflowID != nil {
 		if wf, err := svc.GetWorkflow(context.Background(), *currentProject.WorkflowID); err == nil {
 			workflowName = wf.Name
 		}
 	}
-	defaultDraft = &currentProject.DefaultDraft
-	return projectID, currentProject.Title, source, workflowName, defaultDraft
+	return currentProjectContext{
+		project:      currentProject,
+		projectID:    projectID,
+		source:       source,
+		workflowName: workflowName,
+		defaultDraft: &currentProject.DefaultDraft,
+		ok:           true,
+	}
 }
 
 func statusProjectReference(cfg config.Config) string {
@@ -235,7 +250,15 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	}
 	cfgPath := effectiveConfigPath()
 	ticketHome, _ := config.Home()
-	projectID, _, projectSource, workflowName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectSvc := svc
+	if err != nil || !authenticated {
+		projectSvc = nil
+	}
+	projectContext := resolveCurrentProjectContext(cfg, projectSvc)
+	var summary []statusLine
+	if projectContext.ok {
+		summary = buildProjectSummaryCoreLines(projectSvc, projectContext.project, statusUnicode, false)
+	}
 	if outputJSON {
 		payload := map[string]any{
 			"location":       cfg.Location,
@@ -243,8 +266,8 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 			"AGENT_ID":       statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD": statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":    cfgPath,
-			"project_id":     projectID,
-			"project_source": projectSource,
+			"project_id":     projectContext.projectID,
+			"project_source": projectContext.source,
 			"username":       username,
 			"authenticated":  authenticated,
 			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
@@ -252,11 +275,11 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
 			payload["server_version"] = serverVersion
 		}
-		if workflowName != "" {
-			payload["project_workflow"] = workflowName
+		if projectContext.workflowName != "" {
+			payload["project_workflow"] = projectContext.workflowName
 		}
-		if defaultDraft != nil {
-			payload["project_default_draft"] = *defaultDraft
+		if projectContext.defaultDraft != nil {
+			payload["project_default_draft"] = *projectContext.defaultDraft
 		}
 		return printJSON(payload)
 	}
@@ -265,7 +288,7 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
 	}...)
-	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, cfgPath, lines))
+	printStatusBox(mergeStatusHeaderLines(summary, cfgPath, lines))
 	return err
 }
 
@@ -284,7 +307,11 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	if svcErr != nil {
 		svc = nil
 	}
-	projectID, _, projectSource, workflowName, defaultDraft := resolveCurrentProjectContext(cfg, svc)
+	projectContext := resolveCurrentProjectContext(cfg, svc)
+	var summary []statusLine
+	if projectContext.ok {
+		summary = buildProjectSummaryCoreLines(svc, projectContext.project, statusUnicode, false)
+	}
 	connErr := localStatusCheck(dbPath)
 	if outputJSON {
 		payload := map[string]any{
@@ -293,23 +320,23 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 			"AGENT_ID":        statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD":  statusEnvValue("AGENT_PASSWORD", true),
 			"config_file":     cfgPath,
-			"current_project": projectID,
-			"project_source":  projectSource,
+			"current_project": projectContext.projectID,
+			"project_source":  projectContext.source,
 			"db_exists":       dbExists,
 			"connection":      map[bool]string{true: "success", false: "failure"}[connErr == nil],
 		}
-		if workflowName != "" {
-			payload["project_workflow"] = workflowName
+		if projectContext.workflowName != "" {
+			payload["project_workflow"] = projectContext.workflowName
 		}
-		if defaultDraft != nil {
-			payload["project_default_draft"] = *defaultDraft
+		if projectContext.defaultDraft != nil {
+			payload["project_default_draft"] = *projectContext.defaultDraft
 		}
 		return printJSON(payload)
 	}
 	lines := append(statusHomeLines(filepath.Dir(dbPath)), []statusLine{
 		{key: "db_exists", value: fmt.Sprintf("%t", dbExists)},
 	}...)
-	printStatusBox(mergeStatusHeaderLines(cfg, svc, statusUnicode, cfgPath, lines))
+	printStatusBox(mergeStatusHeaderLines(summary, cfgPath, lines))
 	if !dbExists {
 		fmt.Println("hint: run tk init")
 	}

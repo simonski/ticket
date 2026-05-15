@@ -36,6 +36,20 @@ type planRequest struct {
 	RegistrationActions  store.RegistrationActions `json:"registration_actions"`
 }
 
+type planUpdateRequest struct {
+	Slug                 string                     `json:"slug"`
+	Name                 string                     `json:"name"`
+	Description          string                     `json:"description"`
+	MaxProjects          int                        `json:"max_projects"`
+	MaxPrivateProjects   int                        `json:"max_private_projects"`
+	MaxTickets           int                        `json:"max_tickets"`
+	MaxTicketsPerProject int                        `json:"max_tickets_per_project"`
+	MaxTeamMemberships   int                        `json:"max_team_memberships"`
+	MaxAPICallsPerDay    int                        `json:"max_api_calls_per_day"`
+	DefaultProjectAlias  string                     `json:"default_project_alias"`
+	RegistrationActions  *store.RegistrationActions `json:"registration_actions,omitempty"`
+}
+
 type agentRequest struct {
 	Password string `json:"password,omitempty"`
 }

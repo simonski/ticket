@@ -38,6 +38,121 @@ func runProject(args []string) error {
 	}
 
 	switch args[0] {
+	case "request-access":
+		fs := flag.NewFlagSet("project request-access", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, prefix, or alias")
+		message := fs.String("message", "", "request message")
+		if parseErr := fs.Parse(args[1:]); parseErr != nil {
+			return parseErr
+		}
+		if fs.NArg() > 0 {
+			joined := strings.TrimSpace(strings.Join(fs.Args(), " "))
+			if joined != "" {
+				if strings.TrimSpace(*message) != "" {
+					return errors.New("usage: tk project request-access [-project_id <id|prefix|alias>] [-message <text>] [message words]")
+				}
+				*message = joined
+			}
+		}
+		if strings.TrimSpace(*projectRef) == "" {
+			return errors.New("project_id is required (set an active project or pass -project_id)")
+		}
+		request, requestErr := svc.CreateProjectAccessRequest(context.Background(), strings.TrimSpace(*projectRef), strings.TrimSpace(*message))
+		if requestErr != nil {
+			return requestErr
+		}
+		if outputJSON {
+			return printJSON(request)
+		}
+		fmt.Printf("requested access: request_id=%d project_id=%d status=%s\n", request.ID, request.ProjectID, request.Status)
+		return nil
+	case "access-requests":
+		fs := flag.NewFlagSet("project access-requests", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, prefix, or alias")
+		status := fs.String("status", "", "filter by status")
+		if parseErr := fs.Parse(args[1:]); parseErr != nil {
+			return parseErr
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: tk project access-requests [-project_id <id|prefix|alias>] [-status <pending|approved|rejected>]")
+		}
+		if strings.TrimSpace(*projectRef) == "" {
+			return errors.New("project_id is required (set an active project or pass -project_id)")
+		}
+		requests, listErr := svc.ListProjectAccessRequests(context.Background(), strings.TrimSpace(*projectRef), strings.TrimSpace(*status))
+		if listErr != nil {
+			return listErr
+		}
+		if outputJSON {
+			return printJSON(requests)
+		}
+		printProjectAccessRequestTable(requests)
+		return nil
+	case "my-access-requests":
+		fs := flag.NewFlagSet("project my-access-requests", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		status := fs.String("status", "", "filter by status")
+		if parseErr := fs.Parse(args[1:]); parseErr != nil {
+			return parseErr
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: tk project my-access-requests [-status <pending|approved|rejected>]")
+		}
+		requests, listErr := svc.ListMyProjectAccessRequests(context.Background(), strings.TrimSpace(*status))
+		if listErr != nil {
+			return listErr
+		}
+		if outputJSON {
+			return printJSON(requests)
+		}
+		printProjectAccessRequestTable(requests)
+		return nil
+	case "approve-access-request", "reject-access-request":
+		action := args[0]
+		fs := flag.NewFlagSet("project "+action, flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, prefix, or alias")
+		requestID := fs.Int64("request_id", 0, "project access request id")
+		message := fs.String("message", "", "optional decision message")
+		if parseErr := fs.Parse(args[1:]); parseErr != nil {
+			return parseErr
+		}
+		if fs.NArg() > 0 {
+			joined := strings.TrimSpace(strings.Join(fs.Args(), " "))
+			if joined != "" {
+				if strings.TrimSpace(*message) != "" {
+					return fmt.Errorf("usage: tk project %s [-project_id <id|prefix|alias>] -request_id <id> [-message <text>] [message words]", action)
+				}
+				*message = joined
+			}
+		}
+		if strings.TrimSpace(*projectRef) == "" {
+			return errors.New("project_id is required (set an active project or pass -project_id)")
+		}
+		if *requestID <= 0 {
+			return errors.New("request_id must be greater than zero")
+		}
+		status := "approved"
+		verb := "approved"
+		if action == "reject-access-request" {
+			status = "rejected"
+			verb = "rejected"
+		}
+		request, statusErr := svc.SetProjectAccessRequestStatus(context.Background(), strings.TrimSpace(*projectRef), *requestID, status, strings.TrimSpace(*message))
+		if statusErr != nil {
+			return statusErr
+		}
+		if outputJSON {
+			return printJSON(request)
+		}
+		fmt.Printf("%s access request: request_id=%d project_id=%d status=%s user=%s", verb, request.ID, request.ProjectID, request.Status, request.Username)
+		if strings.TrimSpace(request.DecisionMessage) != "" {
+			fmt.Printf(" message=%s", request.DecisionMessage)
+		}
+		fmt.Println()
+		return nil
 	case "add-user":
 		return runProjectAddUser(svc, args[1:])
 	case "remove-user":
@@ -182,7 +297,7 @@ func runProject(args []string) error {
 			fmt.Printf("%s — %s\n", project.Prefix, project.Title)
 			return nil
 		}
-		project, err := svc.GetProject(context.Background(), args[1])
+		project, _, err := resolveProjectContext(context.Background(), cfg, svc, args[1])
 		if err != nil {
 			return err
 		}

@@ -219,6 +219,32 @@ func TestPlanAdminAPI(t *testing.T) {
 		t.Fatalf("set default plan status = %d body=%s", updateDefaultResp.Code, updateDefaultResp.Body.String())
 	}
 
+	updatePlanResp := doJSONRequest(t, handler, http.MethodPut, "/api/plans/pro", map[string]any{
+		"default_project_alias": "private",
+		"registration_actions": map[string]any{
+			"auto_assign_public_team":     false,
+			"auto_create_private_project": true,
+			"auto_create_private_team":    false,
+		},
+	}, adminToken)
+	if updatePlanResp.Code != http.StatusOK {
+		t.Fatalf("update plan status = %d body=%s", updatePlanResp.Code, updatePlanResp.Body.String())
+	}
+	var updatedPlan store.Plan
+	decodeResponse(t, updatePlanResp, &updatedPlan)
+	if updatedPlan.DefaultProjectAlias != "private" {
+		t.Fatalf("updated default project alias = %q, want private", updatedPlan.DefaultProjectAlias)
+	}
+	if updatedPlan.RegistrationActions.AutoAssignPublicTeam {
+		t.Fatalf("updated plan should allow disabling auto_assign_public_team: %#v", updatedPlan.RegistrationActions)
+	}
+	if !updatedPlan.RegistrationActions.AutoCreatePrivateProject {
+		t.Fatalf("updated plan should preserve auto_create_private_project: %#v", updatedPlan.RegistrationActions)
+	}
+	if updatedPlan.RegistrationActions.AutoCreatePrivateTeam {
+		t.Fatalf("updated plan should allow disabling auto_create_private_team: %#v", updatedPlan.RegistrationActions)
+	}
+
 	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]any{
 		"username":  "planuser",
 		"password":  "password123",
@@ -288,6 +314,255 @@ func TestTicketCreateUsesGitRepositoryHeuristicWhenProjectOmitted(t *testing.T) 
 	decodeResponse(t, recorder, &ticket)
 	if ticket.ProjectID != project.ID {
 		t.Fatalf("ticket project_id = %d, want %d", ticket.ProjectID, project.ID)
+	}
+}
+
+func TestTicketCreateGitRepositoryHeuristicSuggestsAccessRequestForPrivateProject(t *testing.T) {
+	t.Parallel()
+	handler, _ := testHandler(t)
+
+	adminToken := loginAdmin(t, handler)
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]any{
+		"username": "alice",
+		"password": "password123",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create alice status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login alice status = %d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &aliceAuth)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":               "Gated Repo Routed Project",
+		"prefix":              "GATE",
+		"visibility":          "private",
+		"accepts_new_members": true,
+		"git_repository":      "https://github.com/example/gated-repo.git",
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/tickets", strings.NewReader(`{"type":"task","title":"Should be denied"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+aliceAuth.Token)
+	request.Header.Set(gitRepositoryHeader, "https://github.com/example/gated-repo.git")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("create ticket without project_id status = %d, want %d body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+	}
+	var denied map[string]string
+	decodeResponse(t, recorder, &denied)
+	if !strings.Contains(denied["error"], "request access via POST /api/projects/GATE/access-requests") {
+		t.Fatalf("denied error = %#v", denied)
+	}
+
+	accessReqResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/GATE/access-requests", map[string]string{
+		"message": "please let me in",
+	}, aliceAuth.Token)
+	if accessReqResp.Code != http.StatusCreated {
+		t.Fatalf("access request status = %d body=%s", accessReqResp.Code, accessReqResp.Body.String())
+	}
+	var accessReq store.ProjectAccessRequest
+	decodeResponse(t, accessReqResp, &accessReq)
+	if accessReq.Status != "pending" || accessReq.ProjectID == 0 || accessReq.UserID == "" {
+		t.Fatalf("access request payload = %#v", accessReq)
+	}
+}
+
+func TestUserCanListOwnProjectAccessRequests(t *testing.T) {
+	t.Parallel()
+	handler, _ := testHandler(t)
+
+	adminToken := loginAdmin(t, handler)
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]any{
+		"username": "alice",
+		"password": "password123",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create alice status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login alice status = %d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &aliceAuth)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":               "Gated Project",
+		"prefix":              "GATE",
+		"visibility":          "private",
+		"accepts_new_members": true,
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+
+	createReqResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/GATE/access-requests", map[string]string{
+		"message": "please let me in",
+	}, aliceAuth.Token)
+	if createReqResp.Code != http.StatusCreated {
+		t.Fatalf("create access request status = %d body=%s", createReqResp.Code, createReqResp.Body.String())
+	}
+	var created store.ProjectAccessRequest
+	decodeResponse(t, createReqResp, &created)
+
+	listPendingResp := doJSONRequest(t, handler, http.MethodGet, "/api/users/me/access-requests?status=pending", nil, aliceAuth.Token)
+	if listPendingResp.Code != http.StatusOK {
+		t.Fatalf("list pending access requests status = %d body=%s", listPendingResp.Code, listPendingResp.Body.String())
+	}
+	var pending []store.ProjectAccessRequest
+	decodeResponse(t, listPendingResp, &pending)
+	if len(pending) != 1 {
+		t.Fatalf("pending access requests len = %d, want 1", len(pending))
+	}
+	if pending[0].ID != created.ID || pending[0].ProjectPrefix != "GATE" || pending[0].ProjectTitle != "Gated Project" || pending[0].Status != "pending" {
+		t.Fatalf("pending access request = %#v", pending[0])
+	}
+
+	approveResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/GATE/access-requests/"+strconv.FormatInt(created.ID, 10)+"/approve", map[string]any{
+		"message": "Approved for onboarding",
+	}, adminToken)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("approve access request status = %d body=%s", approveResp.Code, approveResp.Body.String())
+	}
+
+	listApprovedResp := doJSONRequest(t, handler, http.MethodGet, "/api/users/me/access-requests?status=approved", nil, aliceAuth.Token)
+	if listApprovedResp.Code != http.StatusOK {
+		t.Fatalf("list approved access requests status = %d body=%s", listApprovedResp.Code, listApprovedResp.Body.String())
+	}
+	var approved []store.ProjectAccessRequest
+	decodeResponse(t, listApprovedResp, &approved)
+	if len(approved) != 1 {
+		t.Fatalf("approved access requests len = %d, want 1", len(approved))
+	}
+	if approved[0].ID != created.ID || approved[0].Status != "approved" || approved[0].ProjectPrefix != "GATE" {
+		t.Fatalf("approved access request = %#v", approved[0])
+	}
+	if approved[0].DecisionMessage != "Approved for onboarding" || approved[0].DecidedBy != "admin" {
+		t.Fatalf("approved access request decision fields = %#v", approved[0])
+	}
+
+	notificationResp := doJSONRequest(t, handler, http.MethodGet, "/api/users/me/notifications?status=unread&limit=5", nil, aliceAuth.Token)
+	if notificationResp.Code != http.StatusOK {
+		t.Fatalf("list notifications status = %d body=%s", notificationResp.Code, notificationResp.Body.String())
+	}
+	var notifications []store.UserNotification
+	decodeResponse(t, notificationResp, &notifications)
+	if len(notifications) != 1 || notifications[0].Kind != store.UserNotificationKindProjectAccessApproved {
+		t.Fatalf("notifications payload = %#v", notifications)
+	}
+	if notifications[0].Status != store.UserNotificationStatusUnread {
+		t.Fatalf("notification status = %q, want unread", notifications[0].Status)
+	}
+	if !strings.Contains(notifications[0].Message, "Approved for onboarding") {
+		t.Fatalf("notification message = %q", notifications[0].Message)
+	}
+
+	readResp := doJSONRequest(t, handler, http.MethodPost, "/api/users/me/notifications/"+strconv.FormatInt(notifications[0].ID, 10)+"/read", map[string]any{}, aliceAuth.Token)
+	if readResp.Code != http.StatusOK {
+		t.Fatalf("read notification status = %d body=%s", readResp.Code, readResp.Body.String())
+	}
+	var readNotification store.UserNotification
+	decodeResponse(t, readResp, &readNotification)
+	if readNotification.Status != store.UserNotificationStatusRead {
+		t.Fatalf("read notification = %#v", readNotification)
+	}
+}
+
+func TestProjectAccessRequestEventsAppearInProjectHistory(t *testing.T) {
+	t.Parallel()
+	handler, _ := testHandler(t)
+
+	adminToken := loginAdmin(t, handler)
+	createUserResp := doJSONRequest(t, handler, http.MethodPost, "/api/users", map[string]any{
+		"username": "alice",
+		"password": "password123",
+	}, adminToken)
+	if createUserResp.Code != http.StatusCreated {
+		t.Fatalf("create alice status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
+	}
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "alice",
+		"password": "password123",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login alice status = %d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+	var aliceAuth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &aliceAuth)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":               "Gated Project",
+		"prefix":              "GATE",
+		"visibility":          "private",
+		"accepts_new_members": true,
+	}, adminToken)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body=%s", projectResp.Code, projectResp.Body.String())
+	}
+
+	createReqResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/GATE/access-requests", map[string]string{
+		"message": "please let me in",
+	}, aliceAuth.Token)
+	if createReqResp.Code != http.StatusCreated {
+		t.Fatalf("create access request status = %d body=%s", createReqResp.Code, createReqResp.Body.String())
+	}
+	var created store.ProjectAccessRequest
+	decodeResponse(t, createReqResp, &created)
+
+	approveResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/GATE/access-requests/"+strconv.FormatInt(created.ID, 10)+"/approve", map[string]any{
+		"message": "Approved after review",
+	}, adminToken)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("approve access request status = %d body=%s", approveResp.Code, approveResp.Body.String())
+	}
+
+	historyResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/GATE/history?limit=10", nil, adminToken)
+	if historyResp.Code != http.StatusOK {
+		t.Fatalf("project history status = %d body=%s", historyResp.Code, historyResp.Body.String())
+	}
+	var events []store.HistoryEvent
+	decodeResponse(t, historyResp, &events)
+	if len(events) < 2 {
+		t.Fatalf("project history events = %#v, want at least access-request create+approve", events)
+	}
+
+	foundCreated := false
+	foundApproved := false
+	for _, event := range events {
+		if event.EventType == "project_access_request_created" {
+			foundCreated = strings.Contains(event.Payload, "\"request_id\":"+strconv.FormatInt(created.ID, 10)) &&
+				strings.Contains(event.Payload, "\"username\":\"alice\"") &&
+				strings.Contains(event.Payload, "\"project_prefix\":\"GATE\"")
+		}
+		if event.EventType == "project_access_request_approved" {
+			foundApproved = strings.Contains(event.Payload, "\"request_id\":"+strconv.FormatInt(created.ID, 10)) &&
+				strings.Contains(event.Payload, "\"decided_by\":\"admin\"") &&
+				strings.Contains(event.Payload, "\"decision_message\":\"Approved after review\"") &&
+				strings.Contains(event.Payload, "\"status\":\"approved\"")
+		}
+	}
+	if !foundCreated || !foundApproved {
+		t.Fatalf("project history missing access-request audit events: %#v", events)
 	}
 }
 

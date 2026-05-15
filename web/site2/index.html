@@ -546,10 +546,103 @@
                                     </select>
                                 </div>
                             </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-admin-edit-select">Plan policy</label>
+                                    <select id="plan-admin-edit-select"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-admin-alias-select">Default project alias</label>
+                                    <select id="plan-admin-alias-select">
+                                        <option value="public">public</option>
+                                        <option value="private">private</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-admin-public-team-select">Auto-assign public team</label>
+                                    <select id="plan-admin-public-team-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-admin-private-project-select">Auto-create private project</label>
+                                    <select id="plan-admin-private-project-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-admin-private-team-select">Auto-create private team</label>
+                                    <select id="plan-admin-private-team-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="editor-actions">
                                 <button id="save-plan-admin-button" type="button">Save onboarding policy</button>
                             </div>
                             <div id="plan-admin-list" class="entity-list" style="margin-top: 12px;"></div>
+                        </div>
+                        <div id="project-access-requests-panel" class="panel panel-padded hidden" style="margin-top: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>Access requests</h3>
+                                    <p id="project-access-requests-summary" class="meta">Pending membership requests for this project.</p>
+                                </div>
+                            </div>
+                            <div id="project-access-requests-list" class="history-list"></div>
+                        </div>
+                        <div id="project-history-panel" class="panel panel-padded" style="margin-top: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>Recent project history</h3>
+                                    <p id="project-history-summary" class="meta">Latest lifecycle and access events for the selected project.</p>
+                                </div>
+                            </div>
+                            <div id="project-history-list" class="history-list"></div>
+                        </div>
+                        <div id="project-request-access-panel" class="panel panel-padded" style="margin-top: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>Request project access</h3>
+                                    <p class="meta">Use a project prefix, numeric id, or the aliases <code>public</code> / <code>private</code>.</p>
+                                </div>
+                            </div>
+                            <form id="project-request-access-form" class="stack">
+                                <div class="field">
+                                    <label for="project-request-access-ref">Project ref</label>
+                                    <input id="project-request-access-ref" placeholder="GATE or 12" required>
+                                </div>
+                                <div class="field">
+                                    <label for="project-request-access-message">Message</label>
+                                    <textarea id="project-request-access-message" placeholder="Optional context for the project admins."></textarea>
+                                </div>
+                                <div class="editor-actions">
+                                    <button id="project-request-access-button" type="submit">Request access</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div id="project-my-access-requests-panel" class="panel panel-padded" style="margin-top: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>My access requests</h3>
+                                    <p id="project-my-access-requests-summary" class="meta">View your pending and decided project access requests.</p>
+                                </div>
+                            </div>
+                            <div id="project-my-access-requests-list" class="history-list"></div>
+                        </div>
+                        <div id="project-notifications-panel" class="panel panel-padded" style="margin-top: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>Notifications</h3>
+                                    <p id="project-notifications-summary" class="meta">Unread updates about your access requests and related actions.</p>
+                                </div>
+                            </div>
+                            <div id="project-notifications-list" class="history-list"></div>
                         </div>
                     </div>
                 </section>

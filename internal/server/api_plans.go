@@ -116,12 +116,12 @@ func (r *router) registerPlanHandlers() {
 		case http.MethodGet:
 			writeJSON(w, http.StatusOK, plan)
 		case http.MethodPut:
-			var payload planRequest
+			var payload planUpdateRequest
 			if err := decodeJSONBody(r, &payload); err != nil {
 				writeError(w, http.StatusBadRequest, "invalid json body")
 				return
 			}
-			updated, err := store.UpdatePlan(r.Context(), db, plan.ID, store.PlanUpdateParams{
+			params := store.PlanUpdateParams{
 				Slug:                 payload.Slug,
 				Name:                 payload.Name,
 				Description:          payload.Description,
@@ -132,8 +132,12 @@ func (r *router) registerPlanHandlers() {
 				MaxTeamMemberships:   payload.MaxTeamMemberships,
 				MaxAPICallsPerDay:    payload.MaxAPICallsPerDay,
 				DefaultProjectAlias:  payload.DefaultProjectAlias,
-				RegistrationActions:  payload.RegistrationActions,
-			})
+			}
+			if payload.RegistrationActions != nil {
+				params.RegistrationActions = *payload.RegistrationActions
+				params.ReplaceRegistrationAction = true
+			}
+			updated, err := store.UpdatePlan(r.Context(), db, plan.ID, params)
 			if err != nil {
 				writeStoreError(w, err)
 				return

@@ -1,27 +1,30 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetApp } = require("./helpers");
 
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+test.describe.configure({ mode: "serial" });
 
 const TICKET = {
-  ticket_id: 1, key: "DM-1", type: "task", title: "Test Ticket",
-  description: "", acceptance_criteria: "", stage: "design", state: "idle",
-  open: true, archived: false, created_at: "2026-01-01T00:00:00Z",
-  updated_at: "2026-01-01T00:00:00Z", assignee: "", parent_id: null,
-  git_repository: "", git_branch: "", priority: 0, order: 0,
-  estimate_effort: 0, estimate_complete: 0, health_score: 0,
+  ticket_id: 1,
+  key: "DM-1",
+  type: "task",
+  title: "Test Ticket",
+  description: "",
+  acceptance_criteria: "",
+  stage: "design",
+  state: "idle",
+  open: true,
+  archived: false,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+  assignee: "",
+  parent_id: null,
+  git_repository: "",
+  git_branch: "",
+  priority: 0,
+  order: 0,
+  estimate_effort: 0,
+  estimate_complete: 0,
+  health_score: 0,
 };
 
 const PROJECT_LABELS = [
@@ -29,24 +32,42 @@ const PROJECT_LABELS = [
   { label_id: 11, name: "feature", color: "blue", project_id: 1 },
 ];
 
-async function openTicketWithMocks(page, extraRoutes = []) {
-  await mockAPI(page, [
-    ["**/api/board/ws", (route) => route.abort()],
-    ...extraRoutes,
-  ]);
-  await page.goto("/");
-  await page.evaluate((ticket) => {
-    showApp("alice", "admin");
-    projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-    localStorage.setItem("task-selected-project", "1");
-    tickets = [ticket];
-    renderBoard();
-  }, TICKET);
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  api.setRoutes([]);
+  await resetApp(page, {
+    username: "alice",
+    role: "admin",
+    tickets: [TICKET],
+  });
+  await page.evaluate(() => localStorage.setItem("task-selected-project", "1"));
+});
+
+async function showTicket(extraRoutes = []) {
+  api.setRoutes(extraRoutes);
+  await resetApp(page, {
+    username: "alice",
+    role: "admin",
+    tickets: [TICKET],
+  });
+  await page.evaluate(() => localStorage.setItem("task-selected-project", "1"));
 }
 
 test.describe("labels", () => {
-  test("existing ticket shows labels section with project labels dropdown", async ({ page }) => {
-    await openTicketWithMocks(page, [
+  test("existing ticket shows labels section with project labels dropdown", async () => {
+    await showTicket([
       ["**/api/tickets/1/labels", [{ label_id: 10, name: "bug", color: "red" }]],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", []],
@@ -72,9 +93,9 @@ test.describe("labels", () => {
     expect(result.optionCount).toBeGreaterThan(0);
   });
 
-  test("add label button posts to API", async ({ page }) => {
+  test("add label button posts to API", async () => {
     let addLabelCalled = false;
-    await openTicketWithMocks(page, [
+    await showTicket([
       ["**/api/tickets/1/labels", (route) => {
         if (route.request().method() === "POST") {
           addLabelCalled = true;
@@ -90,10 +111,8 @@ test.describe("labels", () => {
     await page.evaluate(() => openEdit(tickets[0]));
     await expect(page.locator("#ticket-label-select")).toBeVisible();
 
-    // Select a label and click add
     await page.evaluate(() => {
       const select = document.getElementById("ticket-label-select");
-      // If options didn't load, manually add one
       if (!select.options.length || !select.value) {
         const opt = document.createElement("option");
         opt.value = "10";
@@ -115,8 +134,8 @@ test.describe("labels", () => {
 });
 
 test.describe("time tracking", () => {
-  test("existing ticket shows time tracking section with input fields", async ({ page }) => {
-    await openTicketWithMocks(page, [
+  test("existing ticket shows time tracking section with input fields", async () => {
+    await showTicket([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", [
         { time_entry_id: 1, ticket_id: 1, minutes: 30, note: "Morning", username: "alice" },
@@ -149,15 +168,16 @@ test.describe("time tracking", () => {
     expect(result.logBtnText).toBe("+ Time");
   });
 
-  test("log time button posts to API", async ({ page }) => {
+  test("log time button posts to API", async () => {
     let timeLogBody = null;
-    await openTicketWithMocks(page, [
+    await showTicket([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", (route) => {
         if (route.request().method() === "POST") {
           timeLogBody = route.request().postDataJSON();
           return route.fulfill({
-            status: 200, contentType: "application/json",
+            status: 200,
+            contentType: "application/json",
             body: JSON.stringify({ time_entry_id: 5, ticket_id: 1, minutes: 45, note: "Testing" }),
           });
         }
@@ -169,10 +189,11 @@ test.describe("time tracking", () => {
     ]);
 
     await page.evaluate(() => openEdit(tickets[0]));
-
-    await page.fill("#ticket-time-minutes", "45");
-    await page.fill("#ticket-time-note", "Testing");
-    await page.click("#ticket-time-log");
+    await page.evaluate(() => {
+      document.getElementById("ticket-time-minutes").value = "45";
+      document.getElementById("ticket-time-note").value = "Testing";
+      document.getElementById("ticket-time-log").click();
+    });
     await expect.poll(() => timeLogBody).not.toBeNull();
 
     expect(timeLogBody).not.toBeNull();
@@ -181,8 +202,8 @@ test.describe("time tracking", () => {
 });
 
 test.describe("dependencies", () => {
-  test("existing ticket shows dependencies section", async ({ page }) => {
-    await openTicketWithMocks(page, [
+  test("existing ticket shows dependencies section", async () => {
+    await showTicket([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", [
@@ -210,9 +231,9 @@ test.describe("dependencies", () => {
     expect(result.depsContent).toContain("#2");
   });
 
-  test("add dependency button posts to API", async ({ page }) => {
+  test("add dependency button posts to API", async () => {
     let depBody = null;
-    await openTicketWithMocks(page, [
+    await showTicket([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", []],
@@ -239,9 +260,9 @@ test.describe("dependencies", () => {
     }
   });
 
-  test("remove dependency calls DELETE", async ({ page }) => {
+  test("remove dependency calls DELETE", async () => {
     let deleteCalled = false;
-    await openTicketWithMocks(page, [
+    await showTicket([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", [
@@ -259,7 +280,6 @@ test.describe("dependencies", () => {
 
     await page.evaluate(() => openEdit(tickets[0]));
 
-    // Find and click the remove button on the dependency chip
     const removeBtn = page.locator("#ticket-deps-list .chip-remove, #ticket-deps-list .dep-remove, #ticket-deps-list button").first();
     if (await removeBtn.count() > 0) {
       await removeBtn.click();

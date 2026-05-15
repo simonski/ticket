@@ -51,6 +51,10 @@ func seededSnapshotPath(adminPassword string) (string, error) {
 	}
 	actual, loaded := seededDBSnapshots.LoadOrStore(adminPassword, snapshotPath)
 	if loaded {
+		_ = os.Remove(filepath.Join(snapshotDir, "ticket.db-shm"))
+		_ = os.Remove(filepath.Join(snapshotDir, "ticket.db-wal"))
+		_ = os.Remove(snapshotPath)
+		_ = os.Remove(snapshotDir)
 		return actual.(string), nil
 	}
 	return snapshotPath, nil

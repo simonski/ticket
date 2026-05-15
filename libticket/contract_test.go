@@ -21,9 +21,9 @@ type ContractOptions struct {
 
 func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions) {
 	t.Helper()
+	svc := factory(t)
 
 	t.Run("project-task-request-clone-comment-dependency", func(t *testing.T) {
-		svc := factory(t)
 
 		projects, err := svc.ListProjects(context.Background())
 		if err != nil {
@@ -162,7 +162,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("project-update-and-enable-disable", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:              "Project A",
@@ -203,7 +202,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("task-filter-history-and-closed-ticket-rules", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Tasks"})
 		if err != nil {
@@ -319,7 +317,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("negative-paths", func(t *testing.T) {
-		svc := factory(t)
 
 		if _, err := svc.GetProject(context.Background(), "999999"); err == nil {
 			t.Fatal("GetProject(missing) error = nil")
@@ -386,8 +383,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			t.Skip("service does not enforce status ownership")
 		}
 
-		svc := factory(t)
-
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Assign Rules"})
 		if err != nil {
 			t.Fatalf("CreateProject() error = %v", err)
@@ -416,7 +411,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("labels", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Labels"})
 		if err != nil {
@@ -492,7 +486,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("time-tracking", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Time"})
 		if err != nil {
@@ -551,7 +544,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("user-management-and-request-no-work", func(t *testing.T) {
-		svc := factory(t)
 
 		user, err := svc.CreateUser(context.Background(), "alice", "secret12")
 		if err != nil {
@@ -600,7 +592,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("ticket-lifecycle-close-open-archive-delete", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Lifecycle"})
 		if err != nil {
@@ -704,7 +695,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("workflow-crud-and-stages", func(t *testing.T) {
-		svc := factory(t)
 
 		wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
 			Name:        "test-workflow",
@@ -806,7 +796,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("role-crud", func(t *testing.T) {
-		svc := factory(t)
 
 		role, err := svc.CreateRole(context.Background(), libticket.RoleRequest{
 			Title:              "Tester",
@@ -852,7 +841,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("stage-role-crud", func(t *testing.T) {
-		svc := factory(t)
 
 		// Create an Workflow
 		wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
@@ -973,7 +961,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("team-crud-and-membership", func(t *testing.T) {
-		svc := factory(t)
 
 		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{Name: "Platform"})
 		if err != nil {
@@ -1051,7 +1038,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("count", func(t *testing.T) {
-		svc := factory(t)
 
 		summary, err := svc.Count(context.Background(), nil)
 		if err != nil {
@@ -1083,7 +1069,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("agent-crud", func(t *testing.T) {
-		svc := factory(t)
 
 		// Create agent
 		agent, password, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{})
@@ -1146,7 +1131,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("agent-register-and-request-work", func(t *testing.T) {
-		svc := factory(t)
 
 		// Create an agent with known password
 		agent, _, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{
@@ -1185,7 +1169,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("project-member-management", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:       "Member Test Project",
@@ -1247,7 +1230,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("project-team-member-management", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:       "Team Member Test Project",
@@ -1300,7 +1282,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("team-agent-management", func(t *testing.T) {
-		svc := factory(t)
 
 		team, err := svc.CreateTeam(context.Background(), libticket.TeamRequest{Name: "agent-team"})
 		if err != nil {
@@ -1341,7 +1322,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("registration-toggle", func(t *testing.T) {
-		svc := factory(t)
 
 		// Toggle registration
 		if err := svc.SetRegistrationEnabled(context.Background(), false); err != nil {
@@ -1353,7 +1333,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("list-tickets-unfiltered", func(t *testing.T) {
-		svc := factory(t)
 
 		projects, err := svc.ListProjects(context.Background())
 		if err != nil {
@@ -1372,7 +1351,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("story-crud", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Stories"})
 		if err != nil {
@@ -1430,7 +1408,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("delete-project", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 			Title:       "To Delete",
@@ -1450,7 +1427,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("not-ready-ticket", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "NotReady"})
 		if err != nil {
@@ -1484,7 +1460,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("set-unset-ticket-workflow", func(t *testing.T) {
-		svc := factory(t)
 
 		wf, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
 			Name:        "ticket-wf",
@@ -1529,7 +1504,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("agent-config", func(t *testing.T) {
-		svc := factory(t)
 
 		agent, _, err := svc.CreateAgent(context.Background(), libticket.AgentCreateRequest{})
 		if err != nil {
@@ -1569,7 +1543,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("agent-statuses", func(t *testing.T) {
-		svc := factory(t)
 
 		statuses, err := svc.ListAgentStatuses(context.Background())
 		if err != nil {
@@ -1579,7 +1552,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("project-history", func(t *testing.T) {
-		svc := factory(t)
 
 		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "History"})
 		if err != nil {
@@ -1615,7 +1587,6 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 	})
 
 	t.Run("reset-user-password", func(t *testing.T) {
-		svc := factory(t)
 
 		user, err := svc.CreateUser(context.Background(), "resetme", "oldpass1")
 		if err != nil {

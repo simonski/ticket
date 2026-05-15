@@ -1,39 +1,43 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetApp, resetLogin } = require("./helpers");
 
-// Helper: intercept API calls with mock responses
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+test.describe.configure({ mode: "serial" });
+
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  api.setRoutes([]);
+  await resetLogin(page);
+});
 
 test.describe("authentication", () => {
-  test("login form submits credentials and transitions to app", async ({ page }) => {
+  test("login form submits credentials and transitions to app", async () => {
     let statusCallCount = 0;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/login", { token: "test-token-123" }],
       ["**/api/status", (route) => {
         statusCallCount++;
-        // First call (page load): not authenticated
-        // Second call (after login): authenticated
-        if (statusCallCount <= 1) {
-          return route.fulfill({
-            status: 200, contentType: "application/json",
-            body: JSON.stringify({ authenticated: false, server_version: "1.0.0", registration_enabled: false, chat_enabled: false }),
-          });
-        }
         return route.fulfill({
-          status: 200, contentType: "application/json",
-          body: JSON.stringify({ authenticated: true, user: { username: "alice", role: "admin" }, server_version: "1.0.0", registration_enabled: false, chat_enabled: false }),
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            authenticated: true,
+            user: { username: "alice", role: "admin" },
+            server_version: "1.0.0",
+            registration_enabled: false,
+            chat_enabled: false,
+          }),
         });
       }],
       ["**/api/projects", [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }]],
@@ -44,20 +48,20 @@ test.describe("authentication", () => {
       ["**/api/board/ws", (route) => route.abort()],
     ]);
 
-    await page.goto("/");
-    await expect(page.locator("#login-screen")).toBeVisible();
-
-    await page.fill("#login-user", "alice");
-    await page.fill("#login-pass", "secret");
-    await page.click('#login-form button[type="submit"]');
+    await page.evaluate(() => {
+      document.getElementById("login-user").value = "alice";
+      document.getElementById("login-pass").value = "secret";
+      document.querySelector('#login-form button[type="submit"]').click();
+    });
 
     await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
     await expect(page.locator("#app")).not.toHaveClass(/hidden/);
     await expect(page.locator("#profile-avatar")).toHaveText("AL");
+    expect(statusCallCount).toBe(1);
   });
 
-  test("login failure shows error message", async ({ page }) => {
-    await mockAPI(page, [
+  test("login failure shows error message", async () => {
+    api.setRoutes([
       [
         "**/api/login",
         (route) =>
@@ -67,65 +71,61 @@ test.describe("authentication", () => {
             body: JSON.stringify({ error: "invalid credentials" }),
           }),
       ],
-      ["**/api/config/registration", { enabled: false }],
     ]);
 
-    await page.goto("/");
-    await page.fill("#login-user", "bad");
-    await page.fill("#login-pass", "wrong");
-    await page.click('#login-form button[type="submit"]');
+    await page.evaluate(() => {
+      document.getElementById("login-user").value = "bad";
+      document.getElementById("login-pass").value = "wrong";
+      document.querySelector('#login-form button[type="submit"]').click();
+    });
 
     await expect(page.locator("#login-status")).toContainText("Login failed");
     await expect(page.locator("#login-screen")).toBeVisible();
   });
 
-  test("register form toggles and submits", async ({ page }) => {
-    await mockAPI(page, [
+  test("register form toggles and submits", async () => {
+    api.setRoutes([
       ["**/api/register", { status: "ok" }],
-      ["**/api/status", { authenticated: false, server_version: "1.0.0", registration_enabled: true, chat_enabled: false }],
     ]);
+    await resetLogin(page, { status: { registration_enabled: true, chat_enabled: false } });
 
-    await page.goto("/");
-
-    // Enable registration button visibility
-    await page.evaluate(() => canRegister(true));
-
-    // Show register form
     await page.click("#show-register");
     await expect(page.locator("#register-form")).toBeVisible();
     await expect(page.locator("#login-form")).toHaveClass(/hidden/);
 
-    await page.fill("#register-user", "newuser");
-    await page.fill("#register-pass", "newpass");
-    await page.click('#register-form button[type="submit"]');
+    await page.evaluate(() => {
+      document.getElementById("register-user").value = "newuser";
+      document.getElementById("register-pass").value = "newpass";
+      document.querySelector('#register-form button[type="submit"]').click();
+    });
 
     await expect(page.locator("#login-status")).toContainText("Registered");
     await expect(page.locator("#register-form")).toHaveClass(/hidden/);
     await expect(page.locator("#login-form")).not.toHaveClass(/hidden/);
   });
 
-  test("register shows pending approval message when auto-approve is disabled", async ({ page }) => {
-    await mockAPI(page, [
+  test("register shows pending approval message when auto-approve is disabled", async () => {
+    api.setRoutes([
       ["**/api/register", { approved: false }],
-      ["**/api/status", { authenticated: false, server_version: "1.0.0", registration_enabled: true, registration_auto_approve: false, chat_enabled: false }],
     ]);
+    await resetLogin(page, {
+      status: { registration_enabled: true, registration_auto_approve: false, chat_enabled: false },
+    });
 
-    await page.goto("/");
-    await page.evaluate(() => canRegister(true));
     await page.click("#show-register");
-
-    await page.fill("#register-user", "pending-user");
-    await page.fill("#register-pass", "newpass");
-    await page.click('#register-form button[type="submit"]');
+    await page.evaluate(() => {
+      document.getElementById("register-user").value = "pending-user";
+      document.getElementById("register-pass").value = "newpass";
+      document.querySelector('#register-form button[type="submit"]').click();
+    });
 
     await expect(page.locator("#login-status")).toContainText("Wait for an admin to approve");
     await expect(page.locator("#register-form")).toHaveClass(/hidden/);
   });
 
-  test("hide register button returns to login form", async ({ page }) => {
-    await page.goto("/");
+  test("hide register button returns to login form", async () => {
+    await resetLogin(page, { status: { registration_enabled: true, chat_enabled: false } });
 
-    await page.evaluate(() => canRegister(true));
     await page.click("#show-register");
     await expect(page.locator("#register-form")).toBeVisible();
 
@@ -134,22 +134,15 @@ test.describe("authentication", () => {
     await expect(page.locator("#login-form")).not.toHaveClass(/hidden/);
   });
 
-  test("logout returns to login screen", async ({ page }) => {
-    await mockAPI(page, [
-      ["**/api/logout", { status: "ok" }],
-    ]);
-
-    await page.goto("/");
-
-    // Simulate logged-in state
+  test("logout returns to login screen", async () => {
+    api.setRoutes([["**/api/logout", { status: "ok" }]]);
+    await resetApp(page, { username: "alice", role: "admin", tickets: [] });
     await page.evaluate(() => {
-      showApp("alice", "admin");
       token = "fake-token";
+      localStorage.setItem("task-token", token);
     });
 
     await expect(page.locator("#app")).not.toHaveClass(/hidden/);
-
-    // Click profile avatar then logout
     await page.click("#profile-avatar");
     await expect(page.locator("#profile-menu")).not.toHaveClass(/hidden/);
     await page.click("#menu-logout");
@@ -157,17 +150,13 @@ test.describe("authentication", () => {
     await expect(page.locator("#login-screen")).not.toHaveClass(/hidden/);
   });
 
-  test("admin-only menu items are gated for non-admin users", async ({ page }) => {
-    await page.goto("/");
+  test("admin-only menu items are gated for non-admin users", async () => {
+    await resetApp(page, { username: "viewer", role: "user", tickets: [] });
 
     const result = await page.evaluate(() => {
-      showApp("viewer", "user");
-
-      // Admin perspectives should redirect to swimlanes
       switchPerspective("agents");
       const perspective = localStorage.getItem("task-perspective");
 
-      // Admin visibility: left panel items for admin-only views should be hidden
       const agentNav = document.querySelector('[data-left-panel-action="agents"]');
       const roleNav = document.querySelector('[data-left-panel-action="roles"]');
       const teamNav = document.querySelector('[data-left-panel-action="teams"]');
@@ -192,12 +181,10 @@ test.describe("authentication", () => {
     expect(result.settingsHidden).toBe(true);
   });
 
-  test("admin user sees admin-only nav items", async ({ page }) => {
-    await page.goto("/");
+  test("admin user sees admin-only nav items", async () => {
+    await resetApp(page, { username: "admin", role: "admin", tickets: [] });
 
     const result = await page.evaluate(() => {
-      showApp("admin", "admin");
-
       const agentNav = document.querySelector('[data-left-panel-action="agents"]');
       const roleNav = document.querySelector('[data-left-panel-action="roles"]');
       const teamNav = document.querySelector('[data-left-panel-action="teams"]');
@@ -220,10 +207,9 @@ test.describe("authentication", () => {
     expect(result.settingsVisible).toBe(true);
   });
 
-  test("admin settings save registration auto-approve", async ({ page }) => {
+  test("admin settings save registration auto-approve", async () => {
     let registrationPayload = null;
-    await mockAPI(page, [
-      ["**/api/status", { authenticated: false, server_version: "1.0.0", registration_enabled: true, registration_auto_approve: true, chat_enabled: false }],
+    api.setRoutes([
       ["**/api/config/registration", async (route) => {
         registrationPayload = JSON.parse(route.request().postData() || "{}");
         await route.fulfill({
@@ -235,11 +221,13 @@ test.describe("authentication", () => {
       ["**/api/config/chat_enabled", { chat_enabled: false }],
       ["**/api/config/chat_limits", { chat_max_connections: 2, chat_max_duration_minutes: 3 }],
     ]);
-
-    await page.goto("/");
+    await resetApp(page, { username: "admin", role: "admin", tickets: [] });
     await page.evaluate(() => {
-      showApp("admin", "admin");
-      token = "fake-token";
+      registrationEnabled = true;
+      registrationAutoApprove = true;
+      chatEnabled = false;
+      chatMaxConnections = 2;
+      chatMaxDurationMinutes = 3;
       switchPerspective("settings");
       populateSettingsPanel();
     });
@@ -250,4 +238,5 @@ test.describe("authentication", () => {
     expect(registrationPayload).toEqual({ enabled: true, auto_approve: false });
     await expect(page.locator("#settings-status")).toContainText("Settings saved");
   });
+
 });

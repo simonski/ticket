@@ -18,7 +18,8 @@ make test-all           # full suite: unit + api + browser + quickstart + docs/h
 make test-api-js        # JavaScript API client-library tests (web/site2/api.test.js)
 make test-api-cli       # CLI/API interface tests (cmd + client + server + contract)
 make test-api           # both API interface suites (js + cli)
-make test-browser       # browser E2E suite (Playwright)
+make test-browser       # fast browser smoke suite (Playwright)
+make test-browser-full  # full browser E2E suite (Playwright)
 make test-quickstart    # executable QUICKSTART/TUTORIAL docs tests
 make test-go            # all Go tests
 make test-go-cover      # package coverage gates (cmd/tk, libticket, client, store, server, config)
@@ -88,7 +89,7 @@ make validate-openapi     # structural OpenAPI check
   - always run `make test` + `make lint` for normal edits
   - prefer `make test-fast` for the normal developer loop before escalating to broader suites
   - run `make test-api` when API contract/surface changes (`openapi.yaml`, `internal/server`, `internal/client`, CLI API handlers)
-  - run `make test-browser` for web UX changes
+  - run `make test-browser` while iterating on web UX, then `make test-browser-full`
   - run `make test-all` before completion/PR
 
 - `tk server` serves **site2 by default**; use `tk server -site default` only when explicitly testing the legacy site.

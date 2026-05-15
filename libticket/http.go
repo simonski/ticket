@@ -102,6 +102,14 @@ func (s *HTTPService) ListUsers(ctx context.Context) ([]store.User, error) {
 	return s.client.ListUsers(ctx)
 }
 
+func (s *HTTPService) ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error) {
+	return s.client.ListMyNotifications(ctx, status, limit)
+}
+
+func (s *HTTPService) MarkNotificationRead(ctx context.Context, notificationID int64) (store.UserNotification, error) {
+	return s.client.MarkNotificationRead(ctx, notificationID)
+}
+
 func (s *HTTPService) DeleteUser(ctx context.Context, username string) error {
 	return s.client.DeleteUser(ctx, username)
 }
@@ -192,6 +200,22 @@ func (s *HTTPService) ListProjects(ctx context.Context) ([]store.Project, error)
 
 func (s *HTTPService) GetProject(ctx context.Context, id string) (store.Project, error) {
 	return s.client.GetProject(ctx, id)
+}
+
+func (s *HTTPService) CreateProjectAccessRequest(ctx context.Context, projectRef, message string) (store.ProjectAccessRequest, error) {
+	return s.client.CreateProjectAccessRequest(ctx, projectRef, message)
+}
+
+func (s *HTTPService) ListProjectAccessRequests(ctx context.Context, projectRef, status string) ([]store.ProjectAccessRequest, error) {
+	return s.client.ListProjectAccessRequests(ctx, projectRef, status)
+}
+
+func (s *HTTPService) ListMyProjectAccessRequests(ctx context.Context, status string) ([]store.ProjectAccessRequest, error) {
+	return s.client.ListMyProjectAccessRequests(ctx, status)
+}
+
+func (s *HTTPService) SetProjectAccessRequestStatus(ctx context.Context, projectRef string, requestID int64, status, message string) (store.ProjectAccessRequest, error) {
+	return s.client.SetProjectAccessRequestStatus(ctx, projectRef, requestID, status, message)
 }
 
 func (s *HTTPService) UpdateProject(ctx context.Context, id int64, request ProjectUpdateRequest) (store.Project, error) {

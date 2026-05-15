@@ -23,7 +23,8 @@ make test-contract        # Heavier libticket contract tests
 make test-api-js          # JavaScript API client-library tests (web/site2/api.test.js)
 make test-api-cli         # CLI/API interface tests (cmd + client + server + contract)
 make test-api             # API interface suites: test-api-js + test-api-cli
-make test-browser         # Browser end-to-end Playwright suite
+make test-browser         # Fast browser smoke Playwright suite
+make test-browser-full    # Full browser end-to-end Playwright suite
 make test-quickstart      # Executable QUICKSTART/TUTORIAL docs tests
 make test-all             # Full suite: unit + api + browser + docs/harness
 make test-go              # Run all Go tests (unit + integration)
@@ -50,7 +51,7 @@ Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `m
 
 - Default inner loop: `make test` + `make test-fast` + targeted package tests.
 - If API contract/surface changes (`openapi.yaml`, `internal/server`, `internal/client`, `cmd/tk` handlers), run `make test-api`.
-- If web/site2 UX changes, run `make test-browser` (or targeted Playwright specs while iterating).
+- If web/site2 UX changes, run `make test-browser` while iterating, then `make test-browser-full`.
 - Before finishing a feature or opening a PR, run `make test-all` and `make lint`.
 
 ## Architecture

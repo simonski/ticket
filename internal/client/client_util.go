@@ -13,11 +13,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
+	"sync"
 
+	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 )
+
+var gitRemoteByRoot sync.Map
 
 func resolveRequestLifecycle(status, stage, state string) (resolvedStage, resolvedState string, err error) {
 	if strings.TrimSpace(stage) != "" || strings.TrimSpace(state) != "" {
@@ -225,26 +228,20 @@ func nearestGitRemoteFromCWD() string {
 	if err != nil {
 		return ""
 	}
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = ""
+	gitRoot, ok := config.FindGitRoot(cwd)
+	if !ok {
+		return ""
 	}
-	dir := filepath.Clean(cwd)
-	for {
-		if info, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil && info.IsDir() {
-			out, cmdErr := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output() // #nosec G204 -- command and arguments are fixed
-			if cmdErr == nil {
-				return strings.TrimSpace(string(out))
-			}
-		}
-		if homeDir != "" && filepath.Clean(homeDir) == dir {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
+	if cached, ok := gitRemoteByRoot.Load(gitRoot); ok {
+		return cached.(string)
 	}
-	return ""
+	out, cmdErr := exec.Command("git", "-C", gitRoot, "remote", "get-url", "origin").Output() // #nosec G204 -- command and arguments are fixed
+	if cmdErr != nil {
+		return ""
+	}
+	remote := strings.TrimSpace(string(out))
+	if remote != "" {
+		gitRemoteByRoot.Store(gitRoot, remote)
+	}
+	return remote
 }

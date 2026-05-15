@@ -5,23 +5,24 @@
 | Target                | What it covers                                      | Duration |
 |-----------------------|-----------------------------------------------------|----------|
 | `make test`           | Ultra-fast default unit packages (`config`, `password`, `web`) | ~1s |
-| `make test-fast`      | Recommended developer loop: unit + JS API + Go API smoke | ~15s |
+| `make test-fast`      | Recommended developer loop: unit + JS API + Go API smoke | ~7s |
 | `make test-unit`      | Config, password hashing, web package               | ~1s      |
-| `make test-api-smoke` | Fast Go API smoke packages (`internal/client`, `internal/server`) | ~15s |
-| `make test-cli`       | CLI package tests (`cmd/tk`)                        | ~65s     |
-| `make test-contract`  | Shared service contract tests (`libticket`)         | ~25s     |
+| `make test-api-smoke` | Fast Go API smoke packages (`internal/client`, `internal/server`) | ~2s |
+| `make test-cli`       | CLI package tests (`cmd/tk`)                        | ~10s     |
+| `make test-contract`  | Shared service contract tests (`libticket`)         | ~2s      |
 | `make test-store`     | Store package tests (`internal/store`)              | ~20s     |
 | `make test-api-js`    | JavaScript API client-library tests (`web/site2/api.test.js`) | ~2s |
-| `make test-api-cli`   | Full CLI/API contract path (`cmd/tk`, client, server, libticket) | ~70s |
-| `make test-api`       | Both API suites (`test-api-js` + `test-api-cli`)    | ~70s+    |
-| `make test-browser`   | Browser E2E Playwright suite                         | ~20s     |
+| `make test-api-cli`   | Full CLI/API contract path (`cmd/tk`, client, server, libticket) | ~14s |
+| `make test-api`       | Both API suites (`test-api-js` + `test-api-cli`)    | ~14s     |
+| `make test-browser`   | Fast browser smoke suite (`auth`, `home`, `navigation`, `tickets`) | ~13s |
+| `make test-browser-full` | Full browser E2E Playwright suite                | ~12s     |
 | `make test-integration` | Store + CLI/API Go suites                        | ~90s     |
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds   | ~30s     |
-| `make test-playwright`| Browser tests against the web UI (12 spec files)    | ~20s     |
-| `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)    | ~15s     |
-| `make test-todo-example` | Reproducible todo tutorial seed + verification  | ~5s      |
-| `make testscripts`    | Shell-based CLI harness scenarios                   | ~5s      |
-| `make test-all`       | Unit + api + browser + quickstart + shell harnesses + todo example | ~80s+ |
+| `make test-playwright`| Full browser tests against the web UI               | ~12s     |
+| `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)    | ~6s      |
+| `make test-todo-example` | Reproducible todo tutorial seed + verification  | ~6s      |
+| `make testscripts`    | Shell-based CLI harness scenarios                   | ~3s      |
+| `make test-all`       | Unit + api + browser + quickstart + shell harnesses + todo example | ~40s |
 
 Run a single Go test:
 
@@ -34,8 +35,12 @@ go test ./internal/store/ -run TestTicketLifecycle
 1. Ultra-fast sanity check: `make test`.
 2. Normal developer loop: `make test-fast`.
 3. If CLI or service contract behavior changed: `make test-api`.
-4. If web UI behavior changed: `make test-browser`.
+4. If web UI behavior changed: `make test-browser` while iterating, then `make test-browser-full`.
 5. Before completion/PR: `make test-all` and `make lint`.
+
+All Make-based test targets enable `TICKET_FAST_HASH=1`, so auth-heavy Go tests
+and executable shell/docs harnesses avoid production-cost password hashing during
+test runs.
 
 ## tk-test: executable documentation
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
@@ -77,6 +78,11 @@ type projectDiskConfig struct {
 }
 
 var locationOverride string
+
+var (
+	gitRootCache    sync.Map
+	ticketRootCache sync.Map
+)
 
 func envValue(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
@@ -580,15 +586,27 @@ func sortUniqueRemotes(remotes []Remote) []Remote {
 // FindTicketRoot walks up the directory tree from startDir looking for a
 // project-local .ticket/config.json. Returns the parent of .ticket/.
 func FindTicketRoot(startDir string) (string, bool) {
+	startDir = filepath.Clean(strings.TrimSpace(startDir))
+	if startDir == "" {
+		return "", false
+	}
+	if cached, ok := ticketRootCache.Load(startDir); ok {
+		return cached.(string), true
+	}
 	globalHome, err := Home()
 	if err != nil {
 		globalHome = ""
 	}
 	dir := startDir
+	visited := make([]string, 0, 8)
 	for {
+		visited = append(visited, dir)
 		ticketDir := filepath.Join(dir, ".ticket")
 		candidate := filepath.Join(ticketDir, "config.json")
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && !samePath(ticketDir, globalHome) {
+			for _, path := range visited {
+				ticketRootCache.Store(path, dir)
+			}
 			return dir, true
 		}
 		parent := filepath.Dir(dir)
@@ -622,10 +640,22 @@ func samePath(a, b string) bool {
 // directory. Returns the parent of .git/ (the project root). Stops at the
 // filesystem root.
 func FindGitRoot(startDir string) (string, bool) {
+	startDir = filepath.Clean(strings.TrimSpace(startDir))
+	if startDir == "" {
+		return "", false
+	}
+	if cached, ok := gitRootCache.Load(startDir); ok {
+		return cached.(string), true
+	}
 	dir := startDir
+	visited := make([]string, 0, 8)
 	for {
+		visited = append(visited, dir)
 		candidate := filepath.Join(dir, ".git")
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			for _, path := range visited {
+				gitRootCache.Store(path, dir)
+			}
 			return dir, true
 		}
 		parent := filepath.Dir(dir)

@@ -1,19 +1,5 @@
 const { test, expect } = require("@playwright/test");
-
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+const { createMockAPI, gotoRoot, resetApp } = require("./helpers");
 
 const SAMPLE_TICKETS = [
   {
@@ -45,27 +31,41 @@ const SAMPLE_TICKETS = [
   },
 ];
 
-async function setupApp(page, extraRoutes = []) {
-  await mockAPI(page, [
-    ["**/api/board/ws", (route) => route.abort()],
-    ...extraRoutes,
-  ]);
-  await page.goto("/");
-  await page.evaluate((tix) => {
-    showApp("alice", "admin");
-    projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-    if (typeof renderProjMenu === "function") renderProjMenu();
-    const ps = document.getElementById("project-select");
-    if (ps) ps.value = "1";
-    localStorage.setItem("task-project", "1");
-    tickets = tix;
-    renderBoard();
-  }, SAMPLE_TICKETS);
+test.describe.configure({ mode: "serial" });
+
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  api.setRoutes([]);
+  await resetApp(page, {
+    username: "alice",
+    role: "admin",
+    tickets: SAMPLE_TICKETS,
+  });
+});
+
+async function showBoard(tickets = SAMPLE_TICKETS, overrides = {}) {
+  await resetApp(page, {
+    username: "alice",
+    role: "admin",
+    tickets,
+    ...overrides,
+  });
 }
 
 test.describe("ticket lifecycle", () => {
-  test("board renders tickets in correct lanes", async ({ page }) => {
-    await setupApp(page);
+  test("board renders tickets in correct lanes", async () => {
 
     const result = await page.evaluate(() => {
       const lanes = {};
@@ -82,22 +82,14 @@ test.describe("ticket lifecycle", () => {
     expect(result.test).toContain("3");
   });
 
-  test("clicking a ticket card opens the edit modal", async ({ page }) => {
-    await mockAPI(page, [
+  test("clicking a ticket card opens the edit modal", async () => {
+    api.setRoutes([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", []],
       ["**/api/projects/*/labels", []],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((tix) => {
-      showApp("alice", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = tix;
-      renderBoard();
-    }, SAMPLE_TICKETS);
+    await showBoard(SAMPLE_TICKETS);
 
     await page.click('article.ticket[data-ticket-id="1"]');
 
@@ -110,8 +102,7 @@ test.describe("ticket lifecycle", () => {
     await expect(page.locator("#ticket-ac")).toHaveValue("Green builds");
   });
 
-  test("opening a new ticket modal sets defaults", async ({ page }) => {
-    await setupApp(page);
+  test("opening a new ticket modal sets defaults", async () => {
 
     await page.evaluate(() => openNew());
 
@@ -122,9 +113,9 @@ test.describe("ticket lifecycle", () => {
     await expect(page.locator("#ticket-state")).toHaveValue("idle");
   });
 
-  test("new ticket creation calls POST /api/tickets", async ({ page }) => {
+  test("new ticket creation calls POST /api/tickets", async () => {
     let capturedBody = null;
-    await mockAPI(page, [
+    api.setRoutes([
       [
         "**/api/tickets",
         (route) => {
@@ -161,22 +152,12 @@ test.describe("ticket lifecycle", () => {
           updated_at: "2026-01-01T00:00:00Z",
         },
       ],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-
-    await page.goto("/");
-    await page.evaluate((tix) => {
-      showApp("alice", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = tix;
-      renderBoard();
-    }, SAMPLE_TICKETS);
+    await showBoard(SAMPLE_TICKETS);
 
     await page.evaluate(() => openNew());
+    await expect(page.locator("#ticket-title")).toBeVisible();
     await page.fill("#ticket-title", "Brand new ticket");
-
-    // Trigger persistModal
     await page.evaluate(() => persistModal());
 
     expect(capturedBody).not.toBeNull();
@@ -184,9 +165,9 @@ test.describe("ticket lifecycle", () => {
     expect(capturedBody.project_id).toBe(1);
   });
 
-  test("ticket update calls PUT /api/tickets/:id", async ({ page }) => {
+  test("ticket update calls PUT /api/tickets/:id", async () => {
     let capturedPut = null;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", []],
@@ -205,17 +186,8 @@ test.describe("ticket lifecycle", () => {
           return route.continue();
         },
       ],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-
-    await page.goto("/");
-    await page.evaluate((tix) => {
-      showApp("alice", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = structuredClone(tix);
-      renderBoard();
-    }, SAMPLE_TICKETS);
+    await showBoard(structuredClone(SAMPLE_TICKETS));
 
     // Open edit for ticket 1
     await page.evaluate(() => {
@@ -223,6 +195,7 @@ test.describe("ticket lifecycle", () => {
       openEdit(t);
     });
 
+    await expect(page.locator("#ticket-title")).toBeVisible();
     await page.fill("#ticket-title", "Updated CI Title");
     await page.evaluate(() => persistModal());
 
@@ -230,9 +203,9 @@ test.describe("ticket lifecycle", () => {
     expect(capturedPut.title).toBe("Updated CI Title");
   });
 
-  test("ticket delete calls DELETE /api/tickets/:id", async ({ page }) => {
+  test("ticket delete calls DELETE /api/tickets/:id", async () => {
     let deleteCalled = false;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/tickets/1/labels", []],
       ["**/api/tickets/1/time", []],
       ["**/api/tickets/1/dependencies", []],
@@ -253,17 +226,8 @@ test.describe("ticket lifecycle", () => {
           return route.continue();
         },
       ],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-
-    await page.goto("/");
-    await page.evaluate((tix) => {
-      showApp("alice", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = structuredClone(tix);
-      renderBoard();
-    }, SAMPLE_TICKETS);
+    await showBoard(structuredClone(SAMPLE_TICKETS));
 
     // Open ticket and trigger delete via the delete button
     await page.evaluate(() => {
@@ -289,8 +253,7 @@ test.describe("ticket lifecycle", () => {
     }
   });
 
-  test("closing the modal hides the overlay", async ({ page }) => {
-    await setupApp(page);
+  test("closing the modal hides the overlay", async () => {
 
     await page.evaluate(() => {
       openEdit(tickets[0]);
@@ -301,8 +264,7 @@ test.describe("ticket lifecycle", () => {
     await expect(page.locator("#modal-overlay")).toHaveClass(/hidden/);
   });
 
-  test("drag-drop data attributes are set on ticket cards", async ({ page }) => {
-    await setupApp(page);
+  test("drag-drop data attributes are set on ticket cards", async () => {
 
     const result = await page.evaluate(() => {
       const card = document.querySelector('article.ticket[data-ticket-id="1"]');
@@ -316,8 +278,8 @@ test.describe("ticket lifecycle", () => {
     expect(result.hasTicketId).toBe(true);
   });
 
-  test("moveTicketToStage updates local ticket and re-renders", async ({ page }) => {
-    await mockAPI(page, [
+  test("moveTicketToStage updates local ticket and re-renders", async () => {
+    api.setRoutes([
       [
         "**/api/tickets/1",
         (route) => {
@@ -333,17 +295,8 @@ test.describe("ticket lifecycle", () => {
         },
       ],
       ["**/api/projects/*/tickets", SAMPLE_TICKETS],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-
-    await page.goto("/");
-    await page.evaluate((tix) => {
-      showApp("alice", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = structuredClone(tix);
-      renderBoard();
-    }, SAMPLE_TICKETS);
+    await showBoard(structuredClone(SAMPLE_TICKETS));
 
     await page.evaluate(() => moveTicketToStage(1, "develop"));
 
@@ -355,8 +308,7 @@ test.describe("ticket lifecycle", () => {
     expect(result.stage).toBe("develop");
   });
 
-  test("ticket state and stage selects contain expected options", async ({ page }) => {
-    await setupApp(page);
+  test("ticket state and stage selects contain expected options", async () => {
 
     await page.evaluate(() => openEdit(tickets[0]));
 
@@ -373,23 +325,14 @@ test.describe("ticket lifecycle", () => {
 });
 
 test.describe("search", () => {
-  test("search overlay opens, filters tickets, and clicking result opens edit", async ({ page }) => {
-    await mockAPI(page, [
+  test("search overlay opens, filters tickets, and clicking result opens edit", async () => {
+    api.setRoutes([
       ["**/api/tickets/2/labels", []],
       ["**/api/tickets/2/time", []],
       ["**/api/tickets/2/dependencies", []],
       ["**/api/projects/*/labels", []],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-
-    await page.goto("/");
-    await page.evaluate((tix) => {
-      showApp("alice", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = tix;
-      renderBoard();
-    }, SAMPLE_TICKETS);
+    await showBoard(SAMPLE_TICKETS);
 
     await page.evaluate(() => openSearch());
     await expect(page.locator("#search-overlay")).not.toHaveClass(/hidden/);
@@ -414,8 +357,7 @@ test.describe("search", () => {
     await expect(page.locator("#ticket-title")).toHaveValue("Fix login bug");
   });
 
-  test("search shows all tickets when query is empty", async ({ page }) => {
-    await setupApp(page);
+  test("search shows all tickets when query is empty", async () => {
 
     await page.evaluate(() => openSearch());
     await page.evaluate(() => renderSearchResults(""));
@@ -427,8 +369,7 @@ test.describe("search", () => {
     expect(count).toBe(3);
   });
 
-  test("closing search hides the overlay", async ({ page }) => {
-    await setupApp(page);
+  test("closing search hides the overlay", async () => {
 
     await page.evaluate(() => openSearch());
     await expect(page.locator("#search-overlay")).not.toHaveClass(/hidden/);

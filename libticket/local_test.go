@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/simonski/ticket/internal/config"
@@ -130,6 +131,121 @@ func TestLocalServiceSetTicketParent(t *testing.T) {
 	}
 	if detached.ParentID != nil {
 		t.Fatalf("UnsetTicketParent() = %#v", detached)
+	}
+}
+
+func TestLocalServiceProjectAccessRequestManagement(t *testing.T) {
+	dbPath := seededLocalDBPath(t)
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+
+	adminSvc := libticket.NewLocal(localServiceConfig(dbPath))
+	project, err := adminSvc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:            "GATE",
+		Title:             "Gated Project",
+		Visibility:        "private",
+		AcceptsNewMembers: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	requester, err := store.CreateUser(context.Background(), db, "requester", "pass1234!", "user")
+	if err != nil {
+		t.Fatalf("CreateUser(requester) error = %v", err)
+	}
+	request, err := store.CreateProjectAccessRequest(context.Background(), db, project.ID, requester.ID, "please let me in")
+	if err != nil {
+		t.Fatalf("CreateProjectAccessRequest(store) error = %v", err)
+	}
+
+	requests, err := adminSvc.ListProjectAccessRequests(context.Background(), project.Prefix, "pending")
+	if err != nil {
+		t.Fatalf("ListProjectAccessRequests() error = %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("ListProjectAccessRequests() len = %d, want 1", len(requests))
+	}
+
+	approved, err := adminSvc.SetProjectAccessRequestStatus(context.Background(), project.Prefix, request.ID, "approved", "Approved for design review")
+	if err != nil {
+		t.Fatalf("SetProjectAccessRequestStatus() error = %v", err)
+	}
+	if approved.Status != "approved" {
+		t.Fatalf("SetProjectAccessRequestStatus().Status = %q, want approved", approved.Status)
+	}
+	if approved.DecisionMessage != "Approved for design review" {
+		t.Fatalf("SetProjectAccessRequestStatus().DecisionMessage = %q", approved.DecisionMessage)
+	}
+
+	members, err := adminSvc.ListProjectMembers(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListProjectMembers() error = %v", err)
+	}
+	found := false
+	for _, member := range members {
+		if member.UserID == requester.ID && member.Role == store.ProjectRoleObserver {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("approved requester %q not added as observer: %#v", requester.ID, members)
+	}
+
+	adminUser, err := store.GetUserByUsername(context.Background(), db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	adminRequest, err := store.CreateProjectAccessRequest(context.Background(), db, project.ID, adminUser.ID, "admin needs access history")
+	if err != nil {
+		t.Fatalf("CreateProjectAccessRequest(admin) error = %v", err)
+	}
+	myRequests, err := adminSvc.ListMyProjectAccessRequests(context.Background(), "pending")
+	if err != nil {
+		t.Fatalf("ListMyProjectAccessRequests() error = %v", err)
+	}
+	found = false
+	for _, item := range myRequests {
+		if item.ID == adminRequest.ID && item.ProjectPrefix == "GATE" && item.ProjectTitle == "Gated Project" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("ListMyProjectAccessRequests() missing admin request: %#v", myRequests)
+	}
+
+	rejectedRequest, err := adminSvc.SetProjectAccessRequestStatus(context.Background(), project.Prefix, adminRequest.ID, "rejected", "Need more context first")
+	if err != nil {
+		t.Fatalf("SetProjectAccessRequestStatus(admin request) error = %v", err)
+	}
+	if rejectedRequest.Status != "rejected" {
+		t.Fatalf("SetProjectAccessRequestStatus(admin request).Status = %q, want rejected", rejectedRequest.Status)
+	}
+	if rejectedRequest.DecisionMessage != "Need more context first" {
+		t.Fatalf("SetProjectAccessRequestStatus(admin request).DecisionMessage = %q", rejectedRequest.DecisionMessage)
+	}
+
+	notifications, err := adminSvc.ListMyNotifications(context.Background(), store.UserNotificationStatusUnread, 10)
+	if err != nil {
+		t.Fatalf("ListMyNotifications() error = %v", err)
+	}
+	if len(notifications) != 1 || notifications[0].Kind != store.UserNotificationKindProjectAccessRejected {
+		t.Fatalf("ListMyNotifications() = %#v", notifications)
+	}
+	if !strings.Contains(notifications[0].Message, "Need more context first") {
+		t.Fatalf("notification message = %q", notifications[0].Message)
+	}
+	readNotification, err := adminSvc.MarkNotificationRead(context.Background(), notifications[0].ID)
+	if err != nil {
+		t.Fatalf("MarkNotificationRead() error = %v", err)
+	}
+	if readNotification.Status != store.UserNotificationStatusRead {
+		t.Fatalf("MarkNotificationRead() = %#v", readNotification)
 	}
 }
 

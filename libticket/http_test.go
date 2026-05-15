@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
@@ -126,6 +125,107 @@ func TestHTTPServiceDeleteTicket(t *testing.T) {
 	}
 	if _, err := svc.GetTicketByID(context.Background(), ticket.ID); !errors.Is(err, store.ErrTicketNotFound) && (err == nil || err.Error() != "ticket not found") {
 		t.Fatalf("GetTicket(deleted) error = %v, want ticket not found", err)
+	}
+}
+
+func TestHTTPServiceProjectAccessRequestManagement(t *testing.T) {
+	fixture, adminSvc := newRemoteFixture(t)
+
+	project, err := adminSvc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:            "GATE",
+		Title:             "Gated Project",
+		Visibility:        "private",
+		AcceptsNewMembers: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if _, err := store.CreateUser(context.Background(), fixture.db, "requester", "pass1234!", "user"); err != nil {
+		t.Fatalf("CreateUser(requester) error = %v", err)
+	}
+
+	requesterSvc := libticket.NewHTTP(config.Config{
+		Location: fixture.server.URL,
+		Username: "requester",
+		Token:    "pass1234!",
+	})
+	request, err := requesterSvc.CreateProjectAccessRequest(context.Background(), project.Prefix, "please let me in")
+	if err != nil {
+		t.Fatalf("CreateProjectAccessRequest() error = %v", err)
+	}
+	if request.Status != "pending" {
+		t.Fatalf("CreateProjectAccessRequest().Status = %q, want pending", request.Status)
+	}
+	if request.ProjectPrefix != "GATE" || request.ProjectTitle != "Gated Project" {
+		t.Fatalf("CreateProjectAccessRequest() project metadata = %#v", request)
+	}
+
+	myRequests, err := requesterSvc.ListMyProjectAccessRequests(context.Background(), "pending")
+	if err != nil {
+		t.Fatalf("ListMyProjectAccessRequests() error = %v", err)
+	}
+	if len(myRequests) != 1 || myRequests[0].ID != request.ID || myRequests[0].ProjectPrefix != "GATE" {
+		t.Fatalf("ListMyProjectAccessRequests() = %#v", myRequests)
+	}
+
+	requests, err := adminSvc.ListProjectAccessRequests(context.Background(), project.Prefix, "pending")
+	if err != nil {
+		t.Fatalf("ListProjectAccessRequests() error = %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("ListProjectAccessRequests() len = %d, want 1", len(requests))
+	}
+
+	approved, err := adminSvc.SetProjectAccessRequestStatus(context.Background(), project.Prefix, request.ID, "approved", "Approved for design review")
+	if err != nil {
+		t.Fatalf("SetProjectAccessRequestStatus() error = %v", err)
+	}
+	if approved.Status != "approved" {
+		t.Fatalf("SetProjectAccessRequestStatus().Status = %q, want approved", approved.Status)
+	}
+	if approved.DecisionMessage != "Approved for design review" {
+		t.Fatalf("SetProjectAccessRequestStatus().DecisionMessage = %q", approved.DecisionMessage)
+	}
+
+	approvedRequests, err := requesterSvc.ListMyProjectAccessRequests(context.Background(), "approved")
+	if err != nil {
+		t.Fatalf("ListMyProjectAccessRequests(approved) error = %v", err)
+	}
+	if len(approvedRequests) != 1 || approvedRequests[0].ID != request.ID || approvedRequests[0].Status != "approved" {
+		t.Fatalf("ListMyProjectAccessRequests(approved) = %#v", approvedRequests)
+	}
+	if approvedRequests[0].DecisionMessage != "Approved for design review" {
+		t.Fatalf("ListMyProjectAccessRequests(approved).DecisionMessage = %q", approvedRequests[0].DecisionMessage)
+	}
+
+	members, err := adminSvc.ListProjectMembers(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("ListProjectMembers() error = %v", err)
+	}
+	found := false
+	for _, member := range members {
+		if member.UserID == request.UserID && member.Role == store.ProjectRoleObserver {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("approved requester %q not added as observer: %#v", request.UserID, members)
+	}
+
+	notifications, err := requesterSvc.ListMyNotifications(context.Background(), store.UserNotificationStatusUnread, 10)
+	if err != nil {
+		t.Fatalf("ListMyNotifications() error = %v", err)
+	}
+	if len(notifications) != 1 || notifications[0].Kind != store.UserNotificationKindProjectAccessApproved {
+		t.Fatalf("ListMyNotifications() = %#v", notifications)
+	}
+	readNotification, err := requesterSvc.MarkNotificationRead(context.Background(), notifications[0].ID)
+	if err != nil {
+		t.Fatalf("MarkNotificationRead() error = %v", err)
+	}
+	if readNotification.Status != store.UserNotificationStatusRead {
+		t.Fatalf("MarkNotificationRead() = %#v", readNotification)
 	}
 }
 
@@ -352,6 +452,7 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *libticket.HTTPService) {
 	t.Helper()
 	dbPath := testutil.SeededDBPath(t, "secret12")
 	t.Setenv("TICKET_HOME", filepath.Dir(dbPath))
+	t.Setenv("TICKET_WRITE_RATE_LIMIT", "100000")
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -366,16 +467,10 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *libticket.HTTPService) {
 	httpServer := httptest.NewServer(handler)
 	t.Cleanup(httpServer.Close)
 
-	raw := client.New(config.Config{Location: httpServer.URL})
-	auth, err := raw.Login(context.Background(), "admin", "secret12")
-	if err != nil {
-		t.Fatalf("raw Login() error = %v", err)
-	}
-
 	svc := libticket.NewHTTP(config.Config{
 		Location: httpServer.URL,
+		Username: "admin",
 		Token:    "secret12",
-		Username: auth.User.Username,
 	})
 	return &remoteFixture{server: httpServer, db: db}, svc
 }

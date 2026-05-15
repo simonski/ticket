@@ -10,14 +10,19 @@ import (
 var ErrProjectAccessRequestNotFound = errors.New("project access request not found")
 
 type ProjectAccessRequest struct {
-	ID        int64  `json:"request_id"`
-	ProjectID int64  `json:"project_id"`
-	UserID    string `json:"user_id"`
-	Username  string `json:"username"`
-	Message   string `json:"message"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID              int64  `json:"request_id"`
+	ProjectID       int64  `json:"project_id"`
+	ProjectPrefix   string `json:"project_prefix"`
+	ProjectTitle    string `json:"project_title"`
+	UserID          string `json:"user_id"`
+	Username        string `json:"username"`
+	Message         string `json:"message"`
+	DecisionMessage string `json:"decision_message"`
+	DecidedBy       string `json:"decided_by"`
+	DecidedAt       string `json:"decided_at"`
+	Status          string `json:"status"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
 }
 
 func ensureProjectAccessTables(ctx context.Context, db *sql.DB) error {
@@ -32,6 +37,9 @@ CREATE TABLE IF NOT EXISTS project_access_requests (
 	project_id INTEGER NOT NULL,
 	user_id TEXT NOT NULL,
 	message TEXT NOT NULL DEFAULT '',
+	decision_message TEXT NOT NULL DEFAULT '',
+	decided_by TEXT NOT NULL DEFAULT '',
+	decided_at TEXT NOT NULL DEFAULT '',
 	status TEXT NOT NULL DEFAULT 'pending',
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -40,6 +48,21 @@ CREATE TABLE IF NOT EXISTS project_access_requests (
 	FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );`); err != nil {
 		return err
+	}
+	if !columnExists(ctx, db, "project_access_requests", "decision_message") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE project_access_requests ADD COLUMN decision_message TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "project_access_requests", "decided_by") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE project_access_requests ADD COLUMN decided_by TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !columnExists(ctx, db, "project_access_requests", "decided_at") {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE project_access_requests ADD COLUMN decided_at TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -101,11 +124,14 @@ func GetProjectAccessRequestByID(ctx context.Context, db *sql.DB, id int64) (Pro
 	}
 	var req ProjectAccessRequest
 	err := db.QueryRowContext(ctx, `
-		SELECT r.request_id, r.project_id, r.user_id, u.username, r.message, r.status, r.created_at, r.updated_at
+		SELECT r.request_id, r.project_id, p.prefix, p.title, r.user_id, u.username, r.message,
+		       COALESCE(r.decision_message, ''), COALESCE(r.decided_by, ''), COALESCE(r.decided_at, ''),
+		       r.status, r.created_at, r.updated_at
 		FROM project_access_requests r
+		JOIN projects p ON p.project_id = r.project_id
 		JOIN users u ON u.user_id = r.user_id
 		WHERE r.request_id = ?
-	`, id).Scan(&req.ID, &req.ProjectID, &req.UserID, &req.Username, &req.Message, &req.Status, &req.CreatedAt, &req.UpdatedAt)
+	`, id).Scan(&req.ID, &req.ProjectID, &req.ProjectPrefix, &req.ProjectTitle, &req.UserID, &req.Username, &req.Message, &req.DecisionMessage, &req.DecidedBy, &req.DecidedAt, &req.Status, &req.CreatedAt, &req.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ProjectAccessRequest{}, ErrProjectAccessRequestNotFound
 	}
@@ -117,8 +143,11 @@ func ListProjectAccessRequests(ctx context.Context, db *sql.DB, projectID int64,
 		return nil, err
 	}
 	query := `
-		SELECT r.request_id, r.project_id, r.user_id, u.username, r.message, r.status, r.created_at, r.updated_at
+		SELECT r.request_id, r.project_id, p.prefix, p.title, r.user_id, u.username, r.message,
+		       COALESCE(r.decision_message, ''), COALESCE(r.decided_by, ''), COALESCE(r.decided_at, ''),
+		       r.status, r.created_at, r.updated_at
 		FROM project_access_requests r
+		JOIN projects p ON p.project_id = r.project_id
 		JOIN users u ON u.user_id = r.user_id
 		WHERE r.project_id = ?
 	`
@@ -136,7 +165,7 @@ func ListProjectAccessRequests(ctx context.Context, db *sql.DB, projectID int64,
 	var requests []ProjectAccessRequest
 	for rows.Next() {
 		var req ProjectAccessRequest
-		if err := rows.Scan(&req.ID, &req.ProjectID, &req.UserID, &req.Username, &req.Message, &req.Status, &req.CreatedAt, &req.UpdatedAt); err != nil {
+		if err := rows.Scan(&req.ID, &req.ProjectID, &req.ProjectPrefix, &req.ProjectTitle, &req.UserID, &req.Username, &req.Message, &req.DecisionMessage, &req.DecidedBy, &req.DecidedAt, &req.Status, &req.CreatedAt, &req.UpdatedAt); err != nil {
 			return nil, err
 		}
 		requests = append(requests, req)
@@ -144,7 +173,42 @@ func ListProjectAccessRequests(ctx context.Context, db *sql.DB, projectID int64,
 	return requests, rows.Err()
 }
 
-func SetProjectAccessRequestStatus(ctx context.Context, db *sql.DB, requestID int64, status string) (ProjectAccessRequest, error) {
+func ListUserProjectAccessRequests(ctx context.Context, db *sql.DB, userID, status string) ([]ProjectAccessRequest, error) {
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return nil, err
+	}
+	query := `
+		SELECT r.request_id, r.project_id, p.prefix, p.title, r.user_id, u.username, r.message,
+		       COALESCE(r.decision_message, ''), COALESCE(r.decided_by, ''), COALESCE(r.decided_at, ''),
+		       r.status, r.created_at, r.updated_at
+		FROM project_access_requests r
+		JOIN projects p ON p.project_id = r.project_id
+		JOIN users u ON u.user_id = r.user_id
+		WHERE r.user_id = ?
+	`
+	args := []any{strings.TrimSpace(userID)}
+	if strings.TrimSpace(status) != "" {
+		query += ` AND r.status = ?`
+		args = append(args, strings.TrimSpace(status))
+	}
+	query += ` ORDER BY r.updated_at DESC, r.request_id DESC`
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var requests []ProjectAccessRequest
+	for rows.Next() {
+		var req ProjectAccessRequest
+		if err := rows.Scan(&req.ID, &req.ProjectID, &req.ProjectPrefix, &req.ProjectTitle, &req.UserID, &req.Username, &req.Message, &req.DecisionMessage, &req.DecidedBy, &req.DecidedAt, &req.Status, &req.CreatedAt, &req.UpdatedAt); err != nil {
+			return nil, err
+		}
+		requests = append(requests, req)
+	}
+	return requests, rows.Err()
+}
+
+func SetProjectAccessRequestStatus(ctx context.Context, db *sql.DB, requestID int64, status, decisionMessage, decidedBy string) (ProjectAccessRequest, error) {
 	if err := ensureProjectAccessTables(ctx, db); err != nil {
 		return ProjectAccessRequest{}, err
 	}
@@ -154,9 +218,9 @@ func SetProjectAccessRequestStatus(ctx context.Context, db *sql.DB, requestID in
 	}
 	result, err := db.ExecContext(ctx, `
 		UPDATE project_access_requests
-		SET status = ?, updated_at = CURRENT_TIMESTAMP
+		SET status = ?, decision_message = ?, decided_by = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
 		WHERE request_id = ?
-	`, status, requestID)
+	`, status, strings.TrimSpace(decisionMessage), strings.TrimSpace(decidedBy), requestID)
 	if err != nil {
 		return ProjectAccessRequest{}, err
 	}

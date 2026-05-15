@@ -1,44 +1,48 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetApp } = require("./helpers");
 
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+test.describe.configure({ mode: "serial" });
 
 const PROJECTS = [
   { project_id: 1, title: "Alpha", prefix: "AL", status: "open", visibility: "private" },
   { project_id: 2, title: "Beta", prefix: "BT", status: "open", visibility: "public" },
 ];
 
-async function setupWithProjects(page) {
-  await mockAPI(page, [
-    ["**/api/board/ws", (route) => route.abort()],
-  ]);
-  await page.goto("/");
-  await page.evaluate((projs) => {
-    showApp("admin", "admin");
-    projects = projs;
-    localStorage.setItem("task-project", "1");
-    tickets = [];
-    renderProjMenu();
-    renderBoard();
-  }, PROJECTS);
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  api.setRoutes([]);
+  await resetApp(page, {
+    username: "admin",
+    role: "admin",
+    projects: PROJECTS,
+    tickets: [],
+  });
+});
+
+async function showProjects(overrides = {}) {
+  await resetApp(page, {
+    username: "admin",
+    role: "admin",
+    projects: PROJECTS,
+    tickets: [],
+    ...overrides,
+  });
 }
 
 test.describe("project management", () => {
-  test("project dropdown shows available projects", async ({ page }) => {
-    await setupWithProjects(page);
-
+  test("project dropdown shows available projects", async () => {
     await page.evaluate(() => openProjMenu());
 
     const result = await page.evaluate(() => {
@@ -54,9 +58,7 @@ test.describe("project management", () => {
     expect(result.content).toContain("Beta");
   });
 
-  test("selecting a project updates localStorage", async ({ page }) => {
-    await setupWithProjects(page);
-
+  test("selecting a project updates localStorage", async () => {
     await page.evaluate(() => {
       setSelectedProjectID(2);
     });
@@ -65,44 +67,36 @@ test.describe("project management", () => {
     expect(selected).toBe("2");
   });
 
-  test("create project modal opens with empty fields", async ({ page }) => {
-    await setupWithProjects(page);
-
+  test("create project modal opens with empty fields", async () => {
     await page.evaluate(() => openProjModal());
 
     await expect(page.locator("#proj-modal-overlay")).not.toHaveClass(/hidden/);
     await expect(page.locator("#proj-modal-title")).toHaveValue("");
   });
 
-  test("create project posts to API", async ({ page }) => {
+  test("create project posts to API", async () => {
     let postBody = null;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/projects", (route) => {
         if (route.request().method() === "POST") {
           postBody = route.request().postDataJSON();
           return route.fulfill({
-            status: 200, contentType: "application/json",
+            status: 200,
+            contentType: "application/json",
             body: JSON.stringify({ project_id: 99, title: postBody?.title, prefix: postBody?.prefix, status: "open" }),
           });
         }
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(PROJECTS) });
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((projs) => {
-      showApp("admin", "admin");
-      projects = projs;
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      renderBoard();
-      openProjModal();
-    }, PROJECTS);
+    await showProjects();
+    await page.evaluate(() => openProjModal());
 
-    await page.fill("#proj-modal-title", "Gamma");
-    await page.fill("#proj-modal-prefix", "GM");
-
-    await page.click("#proj-modal-create");
+    await page.evaluate(() => {
+      document.getElementById("proj-modal-title").value = "Gamma";
+      document.getElementById("proj-modal-prefix").value = "GM";
+      document.getElementById("proj-modal-create").click();
+    });
     await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
@@ -110,9 +104,7 @@ test.describe("project management", () => {
     expect(postBody.prefix).toBe("GM");
   });
 
-  test("close project modal hides overlay", async ({ page }) => {
-    await setupWithProjects(page);
-
+  test("close project modal hides overlay", async () => {
     await page.evaluate(() => openProjModal());
     await expect(page.locator("#proj-modal-overlay")).not.toHaveClass(/hidden/);
 
@@ -120,8 +112,8 @@ test.describe("project management", () => {
     await expect(page.locator("#proj-modal-overlay")).toHaveClass(/hidden/);
   });
 
-  test("project members view loads user and team lists", async ({ page }) => {
-    await mockAPI(page, [
+  test("project members view loads user and team lists", async () => {
+    api.setRoutes([
       ["**/api/projects/1/users", [
         { user_id: 1, username: "alice", role: "owner" },
         { user_id: 2, username: "bob", role: "editor" },
@@ -129,21 +121,10 @@ test.describe("project management", () => {
       ["**/api/projects/1/teams", [
         { team_id: 1, team_name: "Platform", role: "editor" },
       ]],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((projs) => {
-      showApp("admin", "admin");
-      projects = projs;
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      renderBoard();
-    }, PROJECTS);
+    await showProjects({ perspective: "members" });
 
-    await page.evaluate(() => {
-      activatePerspective("members");
-      loadProjectMembers();
-    });
+    await page.evaluate(() => loadProjectMembers());
     await expect.poll(async () => {
       const members = await page.evaluate(() => document.getElementById("project-members-list")?.textContent || "");
       return members.includes("alice") && members.includes("bob");
@@ -163,9 +144,9 @@ test.describe("project management", () => {
     expect(result.teamsContent).toContain("Platform");
   });
 
-  test("add project member posts to API", async ({ page }) => {
+  test("add project member posts to API", async () => {
     let postBody = null;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/projects/1/users", (route) => {
         if (route.request().method() === "POST") {
           postBody = route.request().postDataJSON();
@@ -174,28 +155,16 @@ test.describe("project management", () => {
         return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
       }],
       ["**/api/projects/1/teams", []],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((projs) => {
-      showApp("admin", "admin");
-      projects = projs;
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      renderBoard();
-      activatePerspective("members");
-    }, PROJECTS);
+    await showProjects({ perspective: "members" });
     await page.evaluate(() => loadProjectMembers());
     await expect.poll(async () => {
       const input = await page.locator("#project-member-user-id").count();
       return input > 0;
     }).toBe(true);
 
-    // Fill user ID and click add via evaluate (element may not be in viewport)
     await page.evaluate(() => {
       document.getElementById("project-member-user-id").value = "3";
-    });
-    await page.evaluate(() => {
       document.getElementById("project-member-add").click();
     });
     await expect.poll(() => postBody).not.toBeNull();

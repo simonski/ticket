@@ -1747,7 +1747,9 @@ func runHistory(args []string) error {
 		}
 		for _, event := range events {
 			key := event.TicketKey
-			if key == "" {
+			if key == "" && event.TicketID == "" {
+				key = "project"
+			} else if key == "" {
 				key = "#" + event.TicketID
 			}
 			fmt.Printf("[%s] %-10s %s\n", event.CreatedAt, key, formatHistoryEvent(event))

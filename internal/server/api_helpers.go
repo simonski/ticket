@@ -325,10 +325,18 @@ func resolveProjectForWriteRequest(ctx context.Context, db *sql.DB, r *http.Requ
 			if roleErr != nil {
 				return store.Project{}, "", roleErr
 			}
-			if !canWriteProject(role) {
+			if role == "" {
 				// #nosec G706 -- log fields are stripped of control characters by sanitizeLogField.
 				log.Printf("security: project write denied user=%s ref=%s project_id=%d", sanitizeLogField(user.Username), sanitizeLogField(repo), project.ID)
+				if project.AcceptsNewMembers {
+					return store.Project{}, "", fmt.Errorf("%w: access denied for project %s; request access via POST /api/projects/%s/access-requests", store.ErrUnauthorized, project.Prefix, sanitizeLogField(project.Prefix))
+				}
 				return store.Project{}, "", store.ErrUnauthorized
+			}
+			if !canWriteProject(role) {
+				// #nosec G706 -- log fields are stripped of control characters by sanitizeLogField.
+				log.Printf("security: project write forbidden user=%s ref=%s project_id=%d role=%s", sanitizeLogField(user.Username), sanitizeLogField(repo), project.ID, sanitizeLogField(role))
+				return store.Project{}, "", store.ErrForbidden
 			}
 			return project, role, nil
 		case !errors.Is(err, store.ErrProjectNotFound):

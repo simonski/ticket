@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -71,17 +72,77 @@ func (r *router) registerUserHandlers() {
 	})
 
 	mux.HandleFunc("/api/users/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		if r.Method != http.MethodPost && r.Method != http.MethodDelete && r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		if _, err := requireAdmin(db, r); err != nil {
-			writeAuthError(w, err)
 			return
 		}
 
 		trimmed := strings.TrimPrefix(r.URL.Path, "/api/users/")
 		parts := strings.Split(trimmed, "/")
+		if r.Method == http.MethodGet {
+			if len(parts) == 2 && parts[0] == "me" && parts[1] == "access-requests" {
+				user, err := requireUser(db, r)
+				if err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				requests, err := store.ListUserProjectAccessRequests(r.Context(), db, user.ID, strings.TrimSpace(r.URL.Query().Get("status")))
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, requests)
+				return
+			}
+			if len(parts) == 2 && parts[0] == "me" && parts[1] == "notifications" {
+				user, err := requireUser(db, r)
+				if err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				limit := 20
+				if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+					if _, scanErr := fmt.Sscan(raw, &limit); scanErr != nil {
+						writeError(w, http.StatusBadRequest, "limit must be numeric")
+						return
+					}
+				}
+				notifications, err := store.ListUserNotifications(r.Context(), db, user.ID, strings.TrimSpace(r.URL.Query().Get("status")), limit)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, notifications)
+				return
+			}
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+
+		if r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "me" && parts[1] == "notifications" && parts[3] == "read" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			var notificationID int64
+			if _, scanErr := fmt.Sscan(strings.TrimSpace(parts[2]), &notificationID); scanErr != nil {
+				writeError(w, http.StatusBadRequest, "notification id must be numeric")
+				return
+			}
+			notification, err := store.MarkUserNotificationRead(r.Context(), db, notificationID, user.ID)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, notification)
+			return
+		}
+
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
 		if r.Method == http.MethodDelete {
 			if len(parts) != 1 || strings.TrimSpace(parts[0]) == "" {
 				writeError(w, http.StatusNotFound, "not found")

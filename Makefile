@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -38,7 +38,9 @@ help:
 	@printf "  make test-api-js     Run JavaScript API client-library tests.\n"
 	@printf "  make test-api-cli    Run CLI/API interface tests (cmd + client + server + contract).\n"
 	@printf "  make test-api        Run both API interface suites (js + cli).\n"
-	@printf "  make test-browser    Run browser end-to-end tests.\n"
+	@printf "  make test-browser    Run the fast browser smoke suite.\n"
+	@printf "  make test-browser-full Run the full browser end-to-end suite.\n"
+	@printf "  make test-browser-smoke Alias for make test-browser.\n"
 	@printf "  make test-integration Run integration-oriented Go test packages.\n"
 	@printf "  make test-go-cover   Run Go tests with package coverage thresholds.\n"
 	@printf "  make test-playwright Run browser/frontend smoke checks.\n"
@@ -103,7 +105,7 @@ lint:
 	gosec ./...
 
 setup-node:
-	npm install
+	npm ci
 
 setup-playwright:
 	npx playwright install chromium
@@ -135,12 +137,13 @@ API_SMOKE_TEST_PKGS := ./internal/client ./internal/server
 CLI_TEST_PKGS := ./cmd/tk
 CONTRACT_TEST_PKGS := ./libticket
 STORE_TEST_PKGS := ./internal/store
+PLAYWRIGHT_SMOKE_SPECS := tests/playwright/auth.spec.js tests/playwright/home.spec.js tests/playwright/navigation.spec.js tests/playwright/tickets.spec.js
 
 test: test-unit
 
 test-fast: test-unit test-api-js test-api-smoke
 
-test-all: test-unit test-api test-browser build-bin test-quickstart-bin test-final-shell-bin
+test-all: test-unit test-api test-browser-full build-bin test-quickstart-bin test-final-shell-bin
 
 test-go:
 	TICKET_FAST_HASH=1 go test ./...
@@ -201,19 +204,27 @@ test-go-cover:
 		}; \
 	done
 
-test-playwright:
-	@if [ ! -d node_modules ]; then npm install; fi
+playwright-ready:
+	@if [ ! -d node_modules ]; then $(MAKE) setup-node; fi
 	@if ! npx playwright install --list 2>/dev/null | grep -q '/chromium-'; then npx playwright install chromium; fi
+
+test-playwright: playwright-ready
 	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
 	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test
 
-test-browser: test-playwright
+test-browser-smoke: playwright-ready
+	@PLAYWRIGHT_PORT=$$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()"); \
+	PLAYWRIGHT_PORT=$$PLAYWRIGHT_PORT npx playwright test $(PLAYWRIGHT_SMOKE_SPECS)
+
+test-browser-full: test-playwright
+
+test-browser: test-browser-smoke
 
 test-quickstart: build-bin
 	@$(MAKE) test-quickstart-bin
 
 test-quickstart-bin:
-	go run ./cmd/tk-test QUICKSTART.md TUTORIAL.md
+	TICKET_FAST_HASH=1 go run ./cmd/tk-test QUICKSTART.md TUTORIAL.md
 
 test-tk-test: test-quickstart
 
@@ -227,10 +238,10 @@ testscripts: build-bin
 	@$(MAKE) testscripts-bin
 
 testscripts-bin:
-	./scripts/testharness.sh
+	TICKET_FAST_HASH=1 ./scripts/testharness.sh
 
 test-final-shell-bin:
-	./scripts/test_final_harnesses.sh
+	TICKET_FAST_HASH=1 ./scripts/test_final_harnesses.sh
 
 # ─── release ──────────────────────────────────────────────────────────────────
 # Produces cross-platform tarballs in ./dist, creates a GitHub release, and

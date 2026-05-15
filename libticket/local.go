@@ -218,6 +218,30 @@ func (s *LocalService) ListUsers(ctx context.Context) ([]store.User, error) {
 	return store.ListUsers(ctx, db, 0)
 }
 
+func (s *LocalService) ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListUserNotifications(ctx, db, user.ID, strings.TrimSpace(status), limit)
+}
+
+func (s *LocalService) MarkNotificationRead(ctx context.Context, notificationID int64) (store.UserNotification, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.UserNotification{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.UserNotification{}, err
+	}
+	return store.MarkUserNotificationRead(ctx, db, notificationID, user.ID)
+}
+
 func (s *LocalService) DeleteUser(ctx context.Context, username string) error {
 	db, err := s.openDB()
 	if err != nil {
@@ -541,6 +565,76 @@ func (s *LocalService) GetProject(ctx context.Context, id string) (store.Project
 		return store.Project{}, err
 	}
 	return store.GetProject(ctx, db, id)
+}
+
+func (s *LocalService) CreateProjectAccessRequest(ctx context.Context, projectRef, message string) (store.ProjectAccessRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	return store.CreateProjectAccessRequest(ctx, db, project.ID, user.ID, message)
+}
+
+func (s *LocalService) ListProjectAccessRequests(ctx context.Context, projectRef, status string) ([]store.ProjectAccessRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListProjectAccessRequests(ctx, db, project.ID, strings.TrimSpace(status))
+}
+
+func (s *LocalService) ListMyProjectAccessRequests(ctx context.Context, status string) ([]store.ProjectAccessRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListUserProjectAccessRequests(ctx, db, user.ID, strings.TrimSpace(status))
+}
+
+func (s *LocalService) SetProjectAccessRequestStatus(ctx context.Context, projectRef string, requestID int64, status, message string) (store.ProjectAccessRequest, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	user, err := s.localUser(ctx, db)
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	request, err := store.GetProjectAccessRequestByID(ctx, db, requestID)
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	if request.ProjectID != project.ID {
+		return store.ProjectAccessRequest{}, store.ErrProjectAccessRequestNotFound
+	}
+	request, err = store.SetProjectAccessRequestStatus(ctx, db, requestID, status, message, user.Username)
+	if err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	if _, err := store.CreateUserNotification(ctx, db, store.BuildProjectAccessDecisionNotification(request, user.Username)); err != nil {
+		return store.ProjectAccessRequest{}, err
+	}
+	return request, nil
 }
 
 func (s *LocalService) UpdateProject(ctx context.Context, id int64, request ProjectUpdateRequest) (store.Project, error) {

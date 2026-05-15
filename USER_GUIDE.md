@@ -122,7 +122,34 @@ and `~/.ticket/ticket.db` exists.
 `public` / `private`. CLI flags such as `-project_id` override `TICKET_PROJECT`.
 If neither is supplied in remote mode, the CLI sends the nearest git remote URL
 and the server resolves the project by explicit ref first, then git-repository
-match, then the caller's private project alias.
+match, then the caller's private project alias. If the git-repository heuristic
+lands on a private project that accepts new members, Ticket returns an access
+denied error that points at `POST /api/projects/<prefix>/access-requests`.
+You can submit that request directly from the CLI with
+`tk project request-access -project_id <prefix|id|public|private> [-message "..."]`.
+Project admins can review those requests with
+`tk project access-requests -project_id <prefix|id|public|private>` and decide
+them with `tk project approve-access-request ... [-message "..."]` or
+`tk project reject-access-request ... [-message "..."]`. Requesters can review their own pending
+and decided requests with
+`tk project my-access-requests [-status pending|approved|rejected]`.
+The site2 Projects view now also shows an Access requests panel for project
+admins on the selected project, with approve/reject actions for pending
+requests.
+Signed-in site2 users can also submit a project access request from the
+Projects view by entering a project prefix or id plus an optional message, and
+the same view now shows a "My access requests" panel with the caller's pending,
+approved, and rejected requests, including any decision note an admin supplied.
+Decision notifications now also appear in `tk user notifications` and in the
+site2 Projects view's "Notifications" panel. Marking one as handled is
+available through `tk user read-notification -id <notification-id>` or the web
+UI's "Mark read" action.
+The Projects view also shows recent project history for the selected project,
+including access-request audit events, so the same audit trail is visible in the
+web UI without dropping to the CLI.
+Access-request creation and approval/rejection decisions are also recorded in
+project history, so `tk history` without a ticket id shows the audit trail for
+the active project.
 
 You can also place `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PROJECT` in a
 repo `.ticket.json`; never include `TICKET_PASSWORD` in that file.
@@ -233,6 +260,14 @@ active plan policy. By default that means:
 1. the user is assigned to the `free` plan
 2. the user is added to the shared public team
 3. the user receives a private project alias named `private`
+
+Admins can change the default plan, registration approval settings, and the
+per-plan onboarding policy from the Projects view. Each plan can now control:
+
+1. the default project alias handed to new users (`public` or `private`)
+2. whether registration auto-assigns the shared public team
+3. whether registration auto-creates a private project
+4. whether registration auto-creates a private team
 
 As an admin enable/disable users:
 

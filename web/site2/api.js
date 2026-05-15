@@ -155,6 +155,80 @@
             return post("/api/plans/default", { slug: slug });
         }
 
+        function updatePlan(planRef, payload) {
+            return put("/api/plans/" + encodeURIComponent(planRef), payload);
+        }
+
+        function listProjectAccessRequests(projectRef, status) {
+            let path = "/api/projects/" + encodeURIComponent(projectRef) + "/access-requests";
+            if (status) {
+                path += "?status=" + encodeURIComponent(status);
+            }
+            return get(path);
+        }
+
+        function createProjectAccessRequest(projectRef, message) {
+            return post("/api/projects/" + encodeURIComponent(projectRef) + "/access-requests", {
+                message: String(message || ""),
+            });
+        }
+
+        function listMyProjectAccessRequests(status) {
+            let path = "/api/users/me/access-requests";
+            if (status) {
+                path += "?status=" + encodeURIComponent(status);
+            }
+            return get(path);
+        }
+
+        function listMyNotifications(status, limit) {
+            let path = "/api/users/me/notifications";
+            const query = [];
+            if (status) {
+                query.push("status=" + encodeURIComponent(status));
+            }
+            if (limit !== undefined && limit !== null && limit !== "") {
+                query.push("limit=" + encodeURIComponent(limit));
+            }
+            if (query.length) {
+                path += "?" + query.join("&");
+            }
+            return get(path);
+        }
+
+        function markNotificationRead(notificationID) {
+            return post("/api/users/me/notifications/" + encodeURIComponent(notificationID) + "/read", {});
+        }
+
+        function listProjectHistory(projectRef, options) {
+            const opts = options || {};
+            const query = [];
+            if (opts.limit !== undefined && opts.limit !== null && opts.limit !== "") {
+                query.push("limit=" + encodeURIComponent(opts.limit));
+            }
+            if (opts.userID) {
+                query.push("user_id=" + encodeURIComponent(opts.userID));
+            }
+            if (opts.agentID) {
+                query.push("agent_id=" + encodeURIComponent(opts.agentID));
+            }
+            if (opts.teamID !== undefined && opts.teamID !== null && opts.teamID !== "") {
+                query.push("team_id=" + encodeURIComponent(opts.teamID));
+            }
+            let path = "/api/projects/" + encodeURIComponent(projectRef) + "/history";
+            if (query.length) {
+                path += "?" + query.join("&");
+            }
+            return get(path);
+        }
+
+        function setProjectAccessRequestStatus(projectRef, requestID, status, message) {
+            const action = status === "rejected" ? "reject" : "approve";
+            return post("/api/projects/" + encodeURIComponent(projectRef) + "/access-requests/" + encodeURIComponent(requestID) + "/" + action, {
+                message: String(message || ""),
+            });
+        }
+
         function setRegistrationPolicy(enabled, autoApprove) {
             return post("/api/config/registration", {
                 enabled: Boolean(enabled),
@@ -191,6 +265,14 @@
             listPlans: listPlans,
             getDefaultPlan: getDefaultPlan,
             setDefaultPlan: setDefaultPlan,
+            updatePlan: updatePlan,
+            listProjectAccessRequests: listProjectAccessRequests,
+            createProjectAccessRequest: createProjectAccessRequest,
+            listMyProjectAccessRequests: listMyProjectAccessRequests,
+            listMyNotifications: listMyNotifications,
+            markNotificationRead: markNotificationRead,
+            listProjectHistory: listProjectHistory,
+            setProjectAccessRequestStatus: setProjectAccessRequestStatus,
             setRegistrationPolicy: setRegistrationPolicy,
             fetchDocumentFile: fetchDocumentFile,
         };

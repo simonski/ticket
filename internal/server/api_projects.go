@@ -126,6 +126,20 @@ func (r *router) registerProjectHandlers() {
 					writeStoreError(w, err)
 					return
 				}
+				if err := store.AddHistoryEvent(r.Context(), db, project.ID, "", "project_access_request_created", map[string]any{
+					"request_id":     request.ID,
+					"user_id":        request.UserID,
+					"username":       request.Username,
+					"project_id":     request.ProjectID,
+					"project_prefix": request.ProjectPrefix,
+					"project_title":  request.ProjectTitle,
+					"status":         request.Status,
+					"message":        request.Message,
+					"requested_by":   user.Username,
+				}, user.ID); err != nil {
+					writeStoreError(w, err)
+					return
+				}
 				writeJSON(w, http.StatusCreated, request)
 				return
 			case http.MethodGet:
@@ -179,6 +193,13 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
+			var payload struct {
+				Message string `json:"message"`
+			}
+			if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil && !errors.Is(decodeErr, io.EOF) {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
 			status := ""
 			switch parts[3] {
 			case "approve":
@@ -189,8 +210,27 @@ func (r *router) registerProjectHandlers() {
 				writeError(w, http.StatusNotFound, "not found")
 				return
 			}
-			request, err := store.SetProjectAccessRequestStatus(r.Context(), db, requestID, status)
+			request, err := store.SetProjectAccessRequestStatus(r.Context(), db, requestID, status, payload.Message, user.Username)
 			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			if err := store.AddHistoryEvent(r.Context(), db, project.ID, "", "project_access_request_"+status, map[string]any{
+				"request_id":       request.ID,
+				"user_id":          request.UserID,
+				"username":         request.Username,
+				"project_id":       request.ProjectID,
+				"project_prefix":   request.ProjectPrefix,
+				"project_title":    request.ProjectTitle,
+				"status":           request.Status,
+				"message":          request.Message,
+				"decision_message": request.DecisionMessage,
+				"decided_by":       user.Username,
+			}, user.ID); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			if _, err := store.CreateUserNotification(r.Context(), db, store.BuildProjectAccessDecisionNotification(request, user.Username)); err != nil {
 				writeStoreError(w, err)
 				return
 			}

@@ -232,7 +232,7 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		projectID = strings.TrimSpace(fileSettings.ProjectID)
 	}
 
-	remoteHintProvided := location != "" || username != "" || password != "" || token != ""
+	remoteHintProvided := location != "" || password != "" || token != ""
 	if remoteHintProvided {
 		if location == "" {
 			return nil, errors.New("missing required environment variable: TICKET_URL")

@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TK_BIN="${TK_BIN:-$ROOT_DIR/bin/tk}"
+export TICKET_FAST_HASH="${TICKET_FAST_HASH:-1}"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ticket-final-shell.XXXXXX")"
 SERVER_HOME="$WORK_DIR/server-home"
 SERVER_PORT=$((20000 + RANDOM % 20000))

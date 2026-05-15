@@ -20,6 +20,25 @@ func projectGitRepoValue(project store.Project) string {
 }
 
 func buildProjectSummaryCoreLines(svc libticket.Service, project store.Project, statusUnicode, includeOpenTickets bool) []statusLine {
+	var lines []statusLine
+	lines = append(lines, statusLine{key: "project", value: project.Prefix + " — " + project.Title})
+	if strings.TrimSpace(project.Description) != "" {
+		lines = append(lines, statusLine{key: "description", value: strings.TrimSpace(project.Description)})
+	}
+	lines = append(lines, statusLine{key: "git", value: projectGitRepoValue(project)})
+	workflowName := "(none)"
+	if project.WorkflowID != nil {
+		if wf, err := svc.GetWorkflow(context.Background(), *project.WorkflowID); err == nil && strings.TrimSpace(wf.Name) != "" {
+			workflowName = strings.TrimSpace(wf.Name)
+		}
+	}
+	lines = append(lines, statusLine{key: "workflow", value: workflowName})
+	lines = append(lines, statusLine{key: "draft", value: fmt.Sprintf("%t", project.DefaultDraft)})
+
+	if !includeOpenTickets {
+		return lines
+	}
+
 	all, _ := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, false)
 	var allTickets []store.Ticket
 	var activeTickets []store.Ticket
@@ -46,41 +65,24 @@ func buildProjectSummaryCoreLines(svc libticket.Service, project store.Project, 
 		recent = recent[:5]
 	}
 
-	var lines []statusLine
-	lines = append(lines, statusLine{key: "project", value: project.Prefix + " — " + project.Title})
-	if strings.TrimSpace(project.Description) != "" {
-		lines = append(lines, statusLine{key: "description", value: strings.TrimSpace(project.Description)})
-	}
-	lines = append(lines, statusLine{key: "git", value: projectGitRepoValue(project)})
-	workflowName := "(none)"
-	if project.WorkflowID != nil {
-		if wf, err := svc.GetWorkflow(context.Background(), *project.WorkflowID); err == nil && strings.TrimSpace(wf.Name) != "" {
-			workflowName = strings.TrimSpace(wf.Name)
-		}
-	}
-	lines = append(lines, statusLine{key: "workflow", value: workflowName})
-	lines = append(lines, statusLine{key: "draft", value: fmt.Sprintf("%t", project.DefaultDraft)})
-
-	if includeOpenTickets {
-		lines = append(lines, statusLine{})
-		total := len(allTickets)
-		typeOrder := []string{"task", "epic", "bug", "story", "requirement", "decision", "question", "note"}
-		var typeBreakdown []string
-		for _, t := range typeOrder {
-			if n := typeCounts[t]; n > 0 {
-				label := t + "s"
-				if t == "story" {
-					label = "stories"
-				}
-				typeBreakdown = append(typeBreakdown, fmt.Sprintf("%d %s", n, label))
+	lines = append(lines, statusLine{})
+	total := len(allTickets)
+	typeOrder := []string{"task", "epic", "bug", "story", "requirement", "decision", "question", "note"}
+	var typeBreakdown []string
+	for _, t := range typeOrder {
+		if n := typeCounts[t]; n > 0 {
+			label := t + "s"
+			if t == "story" {
+				label = "stories"
 			}
+			typeBreakdown = append(typeBreakdown, fmt.Sprintf("%d %s", n, label))
 		}
-		ticketVal := fmt.Sprintf("%d open", total)
-		if len(typeBreakdown) > 0 {
-			ticketVal += "  (" + strings.Join(typeBreakdown, ", ") + ")"
-		}
-		lines = append(lines, statusLine{key: "open tickets", value: ticketVal})
 	}
+	ticketVal := fmt.Sprintf("%d open", total)
+	if len(typeBreakdown) > 0 {
+		ticketVal += "  (" + strings.Join(typeBreakdown, ", ") + ")"
+	}
+	lines = append(lines, statusLine{key: "open tickets", value: ticketVal})
 
 	if len(activeTickets) > 0 {
 		lines = append(lines, statusLine{})
@@ -140,15 +142,4 @@ func buildProjectSummaryLines(svc libticket.Service, project store.Project, stat
 
 func printProjectSummaryBox(svc libticket.Service, project store.Project, statusUnicode bool) {
 	printStatusBox(buildProjectSummaryLines(svc, project, statusUnicode))
-}
-
-func currentProjectSummaryCoreLines(cfg config.Config, svc libticket.Service, statusUnicode bool) []statusLine {
-	if svc == nil {
-		return nil
-	}
-	project, _, err := resolveProjectContext(context.Background(), cfg, svc, statusProjectReference(cfg))
-	if err != nil {
-		return nil
-	}
-	return buildProjectSummaryCoreLines(svc, project, statusUnicode, false)
 }

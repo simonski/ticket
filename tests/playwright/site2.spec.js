@@ -86,7 +86,14 @@ function installSite2Mock(page, seed = {}) {
               refined_goal: "",
               decomposition: "",
             },
-          ],
+      ],
+      myProjectAccessRequests: Array.isArray(mockSeed.myProjectAccessRequests)
+        ? mockSeed.myProjectAccessRequests.map((request) => ({ ...request }))
+        : [],
+      myNotifications: Array.isArray(mockSeed.myNotifications)
+        ? mockSeed.myNotifications.map((notification) => ({ ...notification }))
+        : [],
+      projectHistoryByProject: Object.assign({}, mockSeed.projectHistoryByProject || {}),
       goalChatByGoal: {},
       nextDocumentID: 2,
       nextDocumentFileID: 2,
@@ -188,6 +195,42 @@ function installSite2Mock(page, seed = {}) {
         const project = db.projects.find((item) => item.project_id === id);
         project.default_draft = Boolean(body.draft);
         return json(project);
+      }
+      if (path.match(/^\/api\/projects\/[^/]+\/access-requests$/) && method === "POST") {
+        const ref = path.split("/")[3];
+        const request = {
+          request_id: db.myProjectAccessRequests.length + 1,
+          project_id: 0,
+          project_prefix: ref,
+          project_title: "",
+          user_id: "user-1",
+          username: "admin",
+          message: body.message || "",
+          status: "pending",
+          created_at: "now",
+          updated_at: "now",
+        };
+        db.myProjectAccessRequests.unshift(request);
+        return json(request, 201);
+      }
+      if (path === "/api/users/me/access-requests" && method === "GET") {
+        return json(db.myProjectAccessRequests);
+      }
+      if (path === "/api/users/me/notifications" && method === "GET") {
+        return json(db.myNotifications);
+      }
+      if (path.match(/^\/api\/users\/me\/notifications\/\d+\/read$/) && method === "POST") {
+        const notificationID = Number(path.split("/")[5]);
+        const notification = db.myNotifications.find((item) => item.notification_id === notificationID);
+        if (!notification) {
+          return json({ error: "not found" }, 404);
+        }
+        notification.status = "read";
+        return json(notification);
+      }
+      if (path.match(/^\/api\/projects\/[^/]+\/history$/) && method === "GET") {
+        const ref = path.split("/")[3];
+        return json(db.projectHistoryByProject[String(ref)] || []);
       }
       if (path.match(/^\/api\/projects\/\d+\/goals$/) && method === "GET") {
         const id = Number(path.split("/")[3]);
@@ -887,6 +930,133 @@ test("creates a project and persists default draft settings through the existing
     expect.arrayContaining([
       expect.objectContaining({ method: "POST", path: "/api/projects", body: expect.objectContaining({ prefix: "WEB", title: "Website" }) }),
       expect.objectContaining({ method: "PUT", path: "/api/projects/2/set-draft", body: { draft: true } }),
+    ]),
+  );
+});
+
+test("submits a project access request from the Projects view", async ({ page }) => {
+  await page.getByRole("button", { name: "Projects" }).click();
+  await page.locator("#project-request-access-ref").fill("GATE");
+  await page.locator("#project-request-access-message").fill("please add me");
+  await page.getByRole("button", { name: "Request access" }).click();
+  await expect(page.locator("#project-my-access-requests-list")).toContainText("GATE");
+  await expect(page.locator("#project-my-access-requests-list")).toContainText("please add me");
+  await expect(page.locator("#project-my-access-requests-list")).toContainText("pending");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        method: "POST",
+        path: "/api/projects/GATE/access-requests",
+        body: { message: "please add me" },
+      }),
+      expect.objectContaining({
+        method: "GET",
+        path: "/api/users/me/access-requests",
+      }),
+    ]),
+  );
+});
+
+test("shows recent project history in the Projects view", async ({ page }) => {
+  await installSite2Mock(page, {
+    projectHistoryByProject: {
+      OPS: [
+        {
+          id: 11,
+          project_id: 1,
+          ticket_id: "",
+          ticket_key: "",
+          event_type: "project_access_request_created",
+          payload: JSON.stringify({
+            request_id: 7,
+            username: "alice",
+            project_prefix: "OPS",
+            message: "Need access to help with support",
+          }),
+          created_by: "alice-id",
+          created_at: "2026-05-15T21:00:00Z",
+        },
+        {
+          id: 12,
+          project_id: 1,
+          ticket_id: "",
+          ticket_key: "",
+          event_type: "project_access_request_approved",
+          payload: JSON.stringify({
+            request_id: 7,
+            username: "alice",
+            project_prefix: "OPS",
+            decided_by: "admin",
+          }),
+          created_by: "admin-id",
+          created_at: "2026-05-15T21:05:00Z",
+        },
+      ],
+    },
+  });
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+  await page.getByRole("button", { name: "Projects" }).click();
+
+  await expect(page.locator("#project-history-list")).toContainText("alice requested access to OPS");
+  await expect(page.locator("#project-history-list")).toContainText("approved access request #7 for alice on OPS");
+  await expect(page.locator("#project-history-list")).toContainText("project");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        method: "GET",
+        path: "/api/projects/OPS/history",
+      }),
+    ]),
+  );
+});
+
+test("marks notifications as read from the Projects view", async ({ page }) => {
+  await installSite2Mock(page, {
+    myNotifications: [
+      {
+        notification_id: 9,
+        status: "unread",
+        kind: "project_access_approved",
+        title: "Project access approved",
+        message: "Your request for OPS (Operations) was approved by admin.",
+        created_at: "2026-05-15T21:05:00Z",
+      },
+    ],
+  });
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+  await page.getByRole("button", { name: "Projects" }).click();
+
+  await expect(page.locator("#project-notifications-list")).toContainText("Project access approved");
+  await page.getByRole("button", { name: "Mark read" }).click();
+  await expect(page.locator("#project-notifications-list")).toContainText("read");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ method: "GET", path: "/api/users/me/notifications" }),
+      expect.objectContaining({ method: "POST", path: "/api/users/me/notifications/9/read" }),
     ]),
   );
 });

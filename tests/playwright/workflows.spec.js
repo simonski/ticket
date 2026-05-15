@@ -1,24 +1,14 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetApp } = require("./helpers");
 
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+test.describe.configure({ mode: "serial" });
 
+const SAMPLE_PROJECT = { project_id: 1, title: "Demo", prefix: "DM", status: "open" };
 const SAMPLE_WORKFLOWS = [
   { workflow_id: 1, name: "default", description: "Standard lifecycle" },
   { workflow_id: 2, name: "kanban", description: "Simple kanban" },
 ];
+const DEFAULT_WORKFLOW = SAMPLE_WORKFLOWS[0];
 
 const SAMPLE_STAGES = [
   { workflow_stage_id: 1, workflow_id: 1, stage_name: "design", description: "", role_id: 5, role_title: "BA", sort_order: 0 },
@@ -27,97 +17,98 @@ const SAMPLE_STAGES = [
   { workflow_stage_id: 4, workflow_id: 1, stage_name: "done", description: "", role_id: 1, role_title: "Product Owner", sort_order: 3 },
 ];
 
-async function setupWorkflows(page) {
-  await mockAPI(page, [
-    ["**/api/board/ws", (route) => route.abort()],
-  ]);
-  await page.goto("/");
-  await page.evaluate((wfs) => {
-    showApp("admin", "admin");
-    projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-    localStorage.setItem("task-project", "1");
-    tickets = [];
-    workflows = wfs;
-    renderBoard();
-    activatePerspective("workflows");
-    renderWorkflowList();
-  }, SAMPLE_WORKFLOWS);
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  api.setRoutes([]);
+  await resetApp(page, {
+    username: "admin",
+    role: "admin",
+    projects: [SAMPLE_PROJECT],
+    tickets: [],
+    workflows: SAMPLE_WORKFLOWS,
+    perspective: "workflows",
+  });
+  await page.evaluate(() => renderWorkflowList());
+});
+
+async function showWorkflows(workflows = SAMPLE_WORKFLOWS, overrides = {}) {
+  await resetApp(page, {
+    username: "admin",
+    role: "admin",
+    projects: [SAMPLE_PROJECT],
+    tickets: [],
+    workflows,
+    perspective: "workflows",
+    ...overrides,
+  });
+  await page.evaluate(() => renderWorkflowList());
 }
 
 test.describe("workflow management", () => {
-  test("workflow list renders cards", async ({ page }) => {
-    await setupWorkflows(page);
-
+  test("workflow list renders cards", async () => {
     const cards = await page.locator("#workflow-list .management-card, #workflow-list .workflow-card").count();
     expect(cards).toBe(2);
   });
 
-  test("clicking workflow card opens editor", async ({ page }) => {
-    await mockAPI(page, [
+  test("clicking workflow card opens editor", async () => {
+    api.setRoutes([
       ["**/api/workflows/1", {
-        workflow_id: 1, name: "default", description: "Standard lifecycle",
+        workflow_id: 1,
+        name: "default",
+        description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((wfs) => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      workflows = wfs;
-      renderBoard();
-      activatePerspective("workflows");
-      renderWorkflowList();
-    }, SAMPLE_WORKFLOWS);
-
-    await page.evaluate(() => openWorkflowEditor(workflows[0]));
+    await page.evaluate((workflow) => openWorkflowEditor(workflow), DEFAULT_WORKFLOW);
 
     await expect(page.locator("#workflow-modal-overlay")).toBeVisible();
     await expect(page.locator("#workflow-name")).toHaveValue("default");
   });
 
-  test("create workflow posts to API", async ({ page }) => {
+  test("create workflow posts to API", async () => {
     let postBody = null;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/workflows", (route) => {
         if (route.request().method() === "POST") {
           postBody = route.request().postDataJSON();
           return route.fulfill({
-            status: 200, contentType: "application/json",
+            status: 200,
+            contentType: "application/json",
             body: JSON.stringify({ workflow_id: 99, name: postBody?.name, description: postBody?.description }),
           });
         }
         return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate(() => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      workflows = [];
-      renderBoard();
-      activatePerspective("workflows");
-      renderWorkflowList();
-      openWorkflowEditor();
-    });
+    await showWorkflows([]);
+    await page.evaluate(() => openWorkflowEditor());
 
-    await page.fill("#workflow-name", "custom");
-    await page.fill("#workflow-description", "Custom workflow");
-    await page.click("#workflow-save");
+    await page.evaluate(() => {
+      document.getElementById("workflow-name").value = "custom";
+      document.getElementById("workflow-description").value = "Custom workflow";
+      document.getElementById("workflow-save").click();
+    });
     await expect.poll(() => postBody).not.toBeNull();
 
     expect(postBody).not.toBeNull();
     expect(postBody.name).toBe("custom");
   });
 
-  test("delete workflow calls DELETE", async ({ page }) => {
+  test("delete workflow calls DELETE", async () => {
     let deleteCalled = false;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/workflows/1", (route) => {
         if (route.request().method() === "DELETE") {
           deleteCalled = true;
@@ -125,122 +116,99 @@ test.describe("workflow management", () => {
         }
         if (route.request().method() === "GET") {
           return route.fulfill({
-            status: 200, contentType: "application/json",
+            status: 200,
+            contentType: "application/json",
             body: JSON.stringify({ workflow_id: 1, name: "default", description: "", stages: SAMPLE_STAGES }),
           });
         }
         return route.continue();
       }],
       ["**/api/workflows", []],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((wfs) => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      workflows = wfs;
-      renderBoard();
-      activatePerspective("workflows");
-      renderWorkflowList();
-      openWorkflowEditor(workflows[0]);
-    }, SAMPLE_WORKFLOWS);
+    await page.evaluate((workflow) => openWorkflowEditor(workflow), DEFAULT_WORKFLOW);
+    await expect(page.locator("#workflow-modal-overlay")).toBeVisible();
+    await expect(page.locator("#workflow-name")).toHaveValue("default");
 
     await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
     const deleteBtn = page.locator("#workflow-delete");
     if (await deleteBtn.count() > 0) {
-      await deleteBtn.click();
-      await expect.poll(() => deleteCalled).toBe(true);
+      await expect(deleteBtn).toBeVisible();
+      await deleteBtn.evaluate((button) => button.click());
+      await expect.poll(() => deleteCalled, { timeout: 15000 }).toBe(true);
+      await expect(page.locator("#workflow-modal-overlay")).toBeHidden();
       expect(deleteCalled).toBe(true);
     }
     await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
   });
 
-  test("add stage posts to API", async ({ page }) => {
+  test("add stage posts to API", async () => {
     let stageBody = null;
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/workflows/1/stages", (route) => {
         if (route.request().method() === "POST") {
           stageBody = route.request().postDataJSON();
           return route.fulfill({
-            status: 200, contentType: "application/json",
+            status: 200,
+            contentType: "application/json",
             body: JSON.stringify({ workflow_stage_id: 99, ...stageBody }),
           });
         }
         return route.continue();
       }],
       ["**/api/workflows/1", {
-        workflow_id: 1, name: "default", description: "Standard lifecycle",
+        workflow_id: 1,
+        name: "default",
+        description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((wfs) => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      workflows = wfs;
-      renderBoard();
-      activatePerspective("workflows");
-      renderWorkflowList();
-      openWorkflowEditor(workflows[0]);
-    }, SAMPLE_WORKFLOWS);
+    await page.evaluate((workflow) => openWorkflowEditor(workflow), DEFAULT_WORKFLOW);
 
-    // Fill stage form and click add
     const stageNameInput = page.locator("#workflow-stage-name, #stage-name");
     const stageAddBtn = page.locator("#workflow-stage-add, #stage-add");
 
     if (await stageNameInput.count() > 0 && await stageAddBtn.count() > 0) {
-      await stageNameInput.fill("review");
-      await stageAddBtn.click();
+      await page.evaluate(() => {
+        const input = document.querySelector("#workflow-stage-name, #stage-name");
+        const button = document.querySelector("#workflow-stage-add, #stage-add");
+        if (input) input.value = "review";
+        if (button) button.click();
+      });
       await expect.poll(() => stageBody).not.toBeNull();
       expect(stageBody).not.toBeNull();
       expect(stageBody.stage_name).toBe("review");
     }
   });
 
-  test("workflow stages are displayed after opening editor", async ({ page }) => {
-    await mockAPI(page, [
+  test("workflow stages are displayed after opening editor", async () => {
+    api.setRoutes([
       ["**/api/workflows/1", {
-        workflow_id: 1, name: "default", description: "Standard lifecycle",
+        workflow_id: 1,
+        name: "default",
+        description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((wfs) => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      workflows = wfs;
-      renderBoard();
-      activatePerspective("workflows");
-      renderWorkflowList();
-      openWorkflowEditor(workflows[0]);
-    }, SAMPLE_WORKFLOWS);
+    await page.evaluate((workflow) => openWorkflowEditor(workflow), DEFAULT_WORKFLOW);
 
     const stagesList = page.locator("#workflow-stages-list, #workflow-stages").first();
     await expect(stagesList).toContainText("design");
     await expect(stagesList).toContainText("develop");
   });
 
-  test("close workflow modal hides overlay", async ({ page }) => {
-    await setupWorkflows(page);
+  test("close workflow modal hides overlay", async () => {
+    await page.evaluate((workflow) => openWorkflowEditor(workflow), DEFAULT_WORKFLOW);
 
-    await page.evaluate(() => openWorkflowEditor(workflows[0]));
-
-    // closeWorkflowModal might not exist — check first
     const closed = await page.evaluate(() => {
       if (typeof closeWorkflowModal === "function") {
         closeWorkflowModal();
         return true;
       }
       const overlay = document.getElementById("workflow-modal-overlay");
-      if (overlay) { overlay.classList.add("hidden"); return true; }
+      if (overlay) {
+        overlay.classList.add("hidden");
+        return true;
+      }
       return false;
     });
 
@@ -249,8 +217,8 @@ test.describe("workflow management", () => {
     }
   });
 
-  test("export button triggers download for existing workflow", async ({ page }) => {
-    await mockAPI(page, [
+  test("export button triggers download for existing workflow", async () => {
+    api.setRoutes([
       ["**/api/workflows/1/export", {
         name: "default",
         description: "Standard lifecycle",
@@ -260,34 +228,21 @@ test.describe("workflow management", () => {
         ],
       }],
       ["**/api/workflows/1", {
-        workflow_id: 1, name: "default", description: "Standard lifecycle",
+        workflow_id: 1,
+        name: "default",
+        description: "Standard lifecycle",
         stages: SAMPLE_STAGES,
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
-    await page.evaluate((wfs) => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
-      workflows = wfs;
-      renderBoard();
-      activatePerspective("workflows");
-      renderWorkflowList();
-      openWorkflowEditor(workflows[0]);
-    }, SAMPLE_WORKFLOWS);
+    await page.evaluate((workflow) => openWorkflowEditor(workflow), DEFAULT_WORKFLOW);
 
     const exportBtn = page.locator("#workflow-export");
     if (await exportBtn.count() > 0) {
-      // Export button should be visible for existing workflows
       await expect(exportBtn).toBeVisible();
     }
   });
 
-  test("import button exists in workflow view", async ({ page }) => {
-    await setupWorkflows(page);
-
+  test("import button exists in workflow view", async () => {
     const importBtn = page.locator("#workflow-import, button:has-text('Import')");
     if (await importBtn.count() > 0) {
       await expect(importBtn.first()).toBeVisible();

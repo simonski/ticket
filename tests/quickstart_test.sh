@@ -12,6 +12,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TICKET_BIN="$ROOT_DIR/bin/tk"
+export TICKET_FAST_HASH="${TICKET_FAST_HASH:-1}"
 
 if [[ ! -x "$TICKET_BIN" ]]; then
   echo "FAIL: tk binary not found at $TICKET_BIN (run 'make build-dev' first)" >&2

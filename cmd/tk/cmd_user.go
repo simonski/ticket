@@ -275,7 +275,7 @@ func runCount(args []string) error {
 		filterProject store.Project
 	)
 	if strings.TrimSpace(*projectRef) != "" {
-		filterProject, err = svc.GetProject(context.Background(), strings.TrimSpace(*projectRef))
+		filterProject, err = resolveProjectFromFlagOrConfig(context.Background(), cfg, svc, strings.TrimSpace(*projectRef))
 		if err != nil {
 			return err
 		}
@@ -566,6 +566,48 @@ func runUser(args []string) error {
 			return printJSON(users)
 		}
 		printUserTable(users)
+		return nil
+	case "notifications":
+		fs := flag.NewFlagSet("user notifications", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		status := fs.String("status", "", "filter by status")
+		limit := fs.Int("limit", 20, "max notifications to return")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: tk user notifications [-status <unread|read>] [-limit <n>]")
+		}
+		notifications, err := svc.ListMyNotifications(context.Background(), strings.TrimSpace(*status), *limit)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(notifications)
+		}
+		printUserNotificationTable(notifications)
+		return nil
+	case "read-notification":
+		fs := flag.NewFlagSet("user read-notification", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		notificationID := fs.Int64("id", 0, "notification id")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: tk user read-notification -id <notification-id>")
+		}
+		if *notificationID <= 0 {
+			return errors.New("notification id must be greater than zero")
+		}
+		notification, err := svc.MarkNotificationRead(context.Background(), *notificationID)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(notification)
+		}
+		fmt.Printf("marked notification as read: notification_id=%d status=%s title=%s\n", notification.ID, notification.Status, notification.Title)
 		return nil
 	case "reset-password":
 		fs := flag.NewFlagSet("user reset-password", flag.ContinueOnError)

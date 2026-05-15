@@ -43,6 +43,8 @@ type UserService interface {
 	CreateUser(ctx context.Context, username, password string) (store.User, error)
 	SetUserEnabled(ctx context.Context, username string, enabled bool) error
 	ListUsers(ctx context.Context) ([]store.User, error)
+	ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error)
+	MarkNotificationRead(ctx context.Context, notificationID int64) (store.UserNotification, error)
 	DeleteUser(ctx context.Context, username string) error
 	ResetUserPassword(ctx context.Context, username, newPassword string) (store.User, error)
 	CreateRole(ctx context.Context, request RoleRequest) (store.Role, error)
@@ -73,6 +75,10 @@ type ProjectService interface {
 	CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error)
 	ListProjects(ctx context.Context) ([]store.Project, error)
 	GetProject(ctx context.Context, id string) (store.Project, error)
+	CreateProjectAccessRequest(ctx context.Context, projectRef, message string) (store.ProjectAccessRequest, error)
+	ListProjectAccessRequests(ctx context.Context, projectRef, status string) ([]store.ProjectAccessRequest, error)
+	ListMyProjectAccessRequests(ctx context.Context, status string) ([]store.ProjectAccessRequest, error)
+	SetProjectAccessRequestStatus(ctx context.Context, projectRef string, requestID int64, status, message string) (store.ProjectAccessRequest, error)
 	UpdateProject(ctx context.Context, id int64, request ProjectUpdateRequest) (store.Project, error)
 	DeleteProject(ctx context.Context, id int64) error
 	RenameProjectPrefix(ctx context.Context, id int64, newPrefix string) (int, error)

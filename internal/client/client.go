@@ -304,6 +304,54 @@ func (c *Client) ListUsers(ctx context.Context) ([]store.User, error) {
 	return users, err
 }
 
+func (c *Client) ListMyNotifications(ctx context.Context, status string, limit int) ([]store.UserNotification, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		return store.ListUserNotifications(ctx, db, user.ID, strings.TrimSpace(status), limit)
+	}
+	path := "/api/users/me/notifications"
+	var query []string
+	if trimmed := strings.TrimSpace(status); trimmed != "" {
+		query = append(query, "status="+url.QueryEscape(trimmed))
+	}
+	if limit > 0 {
+		query = append(query, fmt.Sprintf("limit=%d", limit))
+	}
+	if len(query) > 0 {
+		path += "?" + strings.Join(query, "&")
+	}
+	var notifications []store.UserNotification
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &notifications)
+	return notifications, err
+}
+
+func (c *Client) MarkNotificationRead(ctx context.Context, notificationID int64) (store.UserNotification, error) {
+	if notificationID <= 0 {
+		return store.UserNotification{}, errors.New("notification id must be greater than zero")
+	}
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.UserNotification{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.UserNotification{}, err
+		}
+		return store.MarkUserNotificationRead(ctx, db, notificationID, user.ID)
+	}
+	var notification store.UserNotification
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/users/me/notifications/%d/read", notificationID), map[string]any{}, &notification)
+	return notification, err
+}
+
 func (c *Client) DeleteUser(ctx context.Context, username string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
@@ -717,6 +765,128 @@ func (c *Client) GetProject(ctx context.Context, id string) (store.Project, erro
 	var project store.Project
 	err := c.doJSON(ctx, http.MethodGet, "/api/projects/"+id, nil, &project)
 	return project, err
+}
+
+func (c *Client) CreateProjectAccessRequest(ctx context.Context, projectRef, message string) (store.ProjectAccessRequest, error) {
+	projectRef = strings.TrimSpace(projectRef)
+	if projectRef == "" {
+		return store.ProjectAccessRequest{}, errors.New("project reference is required")
+	}
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		return store.CreateProjectAccessRequest(ctx, db, project.ID, user.ID, message)
+	}
+	var request store.ProjectAccessRequest
+	err := c.doJSON(ctx, http.MethodPost, "/api/projects/"+url.PathEscape(projectRef)+"/access-requests", map[string]string{
+		"message": strings.TrimSpace(message),
+	}, &request)
+	return request, err
+}
+
+func (c *Client) ListProjectAccessRequests(ctx context.Context, projectRef, status string) ([]store.ProjectAccessRequest, error) {
+	projectRef = strings.TrimSpace(projectRef)
+	if projectRef == "" {
+		return nil, errors.New("project reference is required")
+	}
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return nil, err
+		}
+		return store.ListProjectAccessRequests(ctx, db, project.ID, strings.TrimSpace(status))
+	}
+	path := "/api/projects/" + url.PathEscape(projectRef) + "/access-requests"
+	if trimmed := strings.TrimSpace(status); trimmed != "" {
+		path += "?status=" + url.QueryEscape(trimmed)
+	}
+	var requests []store.ProjectAccessRequest
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &requests)
+	return requests, err
+}
+
+func (c *Client) ListMyProjectAccessRequests(ctx context.Context, status string) ([]store.ProjectAccessRequest, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		return store.ListUserProjectAccessRequests(ctx, db, user.ID, strings.TrimSpace(status))
+	}
+	path := "/api/users/me/access-requests"
+	if trimmed := strings.TrimSpace(status); trimmed != "" {
+		path += "?status=" + url.QueryEscape(trimmed)
+	}
+	var requests []store.ProjectAccessRequest
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &requests)
+	return requests, err
+}
+
+func (c *Client) SetProjectAccessRequestStatus(ctx context.Context, projectRef string, requestID int64, status, message string) (store.ProjectAccessRequest, error) {
+	projectRef = strings.TrimSpace(projectRef)
+	if projectRef == "" {
+		return store.ProjectAccessRequest{}, errors.New("project reference is required")
+	}
+	status = strings.TrimSpace(strings.ToLower(status))
+	if status != "approved" && status != "rejected" {
+		return store.ProjectAccessRequest{}, errors.New("invalid project access request status")
+	}
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		request, err := store.GetProjectAccessRequestByID(ctx, db, requestID)
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		if request.ProjectID != project.ID {
+			return store.ProjectAccessRequest{}, store.ErrProjectAccessRequestNotFound
+		}
+		request, err = store.SetProjectAccessRequestStatus(ctx, db, requestID, status, message, user.Username)
+		if err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		if _, err := store.CreateUserNotification(ctx, db, store.BuildProjectAccessDecisionNotification(request, user.Username)); err != nil {
+			return store.ProjectAccessRequest{}, err
+		}
+		return request, nil
+	}
+	action := "approve"
+	if status == "rejected" {
+		action = "reject"
+	}
+	var request store.ProjectAccessRequest
+	err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%s/access-requests/%d/%s", url.PathEscape(projectRef), requestID, action), map[string]any{
+		"message": strings.TrimSpace(message),
+	}, &request)
+	return request, err
 }
 
 func (c *Client) UpdateProject(ctx context.Context, id int64, request ProjectUpdateRequest) (store.Project, error) {

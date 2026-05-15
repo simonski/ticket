@@ -1,42 +1,37 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetApp } = require("./helpers");
 
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+test.describe.configure({ mode: "serial" });
 
-async function setupAdmin(page) {
-  await mockAPI(page, [
-    ["**/api/board/ws", (route) => route.abort()],
-  ]);
-  await page.goto("/");
-  await page.evaluate(() => {
-    showApp("admin", "admin");
-    projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-    localStorage.setItem("task-project", "1");
-    tickets = [];
-    agents = [];
-    roles = [];
-    teams = [];
-    workflows = [];
-    stories = [];
-    renderBoard();
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  api.setRoutes([]);
+  await resetApp(page, {
+    username: "admin",
+    role: "admin",
+    tickets: [],
+    agents: [],
+    roles: [],
+    teams: [],
+    workflows: [],
+    stories: [],
   });
-}
+});
 
 test.describe("perspective switching", () => {
-  test("switching perspectives activates the correct view section", async ({ page }) => {
-    await setupAdmin(page);
+  test("switching perspectives activates the correct view section", async () => {
 
     const perspectives = ["swimlanes", "stories", "agents", "roles", "teams", "settings"];
 
@@ -52,8 +47,7 @@ test.describe("perspective switching", () => {
     }
   });
 
-  test("perspective picker opens and closes", async ({ page }) => {
-    await setupAdmin(page);
+  test("perspective picker opens and closes", async () => {
 
     await page.evaluate(() => openPerspectivePicker());
     await expect(page.locator("#perspective-overlay")).not.toHaveClass(/hidden/);
@@ -62,8 +56,7 @@ test.describe("perspective switching", () => {
     await expect(page.locator("#perspective-overlay")).toHaveClass(/hidden/);
   });
 
-  test("perspective picker shows available items for admin", async ({ page }) => {
-    await setupAdmin(page);
+  test("perspective picker shows available items for admin", async () => {
 
     const items = await page.evaluate(() => {
       openPerspectivePicker();
@@ -73,15 +66,8 @@ test.describe("perspective switching", () => {
     expect(items.length).toBeGreaterThan(3);
   });
 
-  test("non-admin perspective picker hides admin items", async ({ page }) => {
-    await mockAPI(page, [["**/api/board/ws", (route) => route.abort()]]);
-    await page.goto("/");
-    await page.evaluate(() => {
-      showApp("viewer", "user");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      tickets = [];
-      renderBoard();
-    });
+  test("non-admin perspective picker hides admin items", async () => {
+    await resetApp(page, { username: "viewer", role: "user", tickets: [] });
 
     const items = await page.evaluate(() => {
       openPerspectivePicker();
@@ -95,8 +81,7 @@ test.describe("perspective switching", () => {
     expect(items).not.toContain("settings");
   });
 
-  test("switchPerspective saves to localStorage", async ({ page }) => {
-    await setupAdmin(page);
+  test("switchPerspective saves to localStorage", async () => {
 
     await page.evaluate(() => activatePerspective("stories"));
 
@@ -106,8 +91,7 @@ test.describe("perspective switching", () => {
 });
 
 test.describe("left panel", () => {
-  test("left panel toggles open and closed", async ({ page }) => {
-    await setupAdmin(page);
+  test("left panel toggles open and closed", async () => {
 
     // Panel should start open after showApp
     const initiallyOpen = await page.evaluate(() =>
@@ -130,8 +114,7 @@ test.describe("left panel", () => {
     expect(reopened).toBe(true);
   });
 
-  test("left panel items trigger correct perspective", async ({ page }) => {
-    await setupAdmin(page);
+  test("left panel items trigger correct perspective", async () => {
 
     // Click swimlanes
     await page.evaluate(() => setLeftPanelActive("swimlanes"));
@@ -142,8 +125,7 @@ test.describe("left panel", () => {
     expect(active).toBe(true);
   });
 
-  test("left panel active state highlights correct item", async ({ page }) => {
-    await setupAdmin(page);
+  test("left panel active state highlights correct item", async () => {
 
     const actions = ["swimlanes", "stories", "agents", "roles", "teams"];
 
@@ -165,22 +147,19 @@ test.describe("left panel", () => {
 });
 
 test.describe("profile menu", () => {
-  test("profile avatar click opens menu", async ({ page }) => {
-    await setupAdmin(page);
+  test("profile avatar click opens menu", async () => {
 
     await page.click("#profile-avatar");
     await expect(page.locator("#profile-menu")).not.toHaveClass(/hidden/);
   });
 
-  test("profile menu shows user initials", async ({ page }) => {
-    await setupAdmin(page);
+  test("profile menu shows user initials", async () => {
 
     const text = await page.locator("#profile-avatar").textContent();
     expect(text).toBe("AD");
   });
 
-  test("profile menu contains settings, agents, roles, teams, logout", async ({ page }) => {
-    await setupAdmin(page);
+  test("profile menu contains settings, agents, roles, teams, logout", async () => {
 
     await page.click("#profile-avatar");
 
@@ -196,8 +175,7 @@ test.describe("profile menu", () => {
     expect(items).toContain("Logout");
   });
 
-  test("clicking outside profile menu closes it", async ({ page }) => {
-    await setupAdmin(page);
+  test("clicking outside profile menu closes it", async () => {
 
     await page.click("#profile-avatar");
     await expect(page.locator("#profile-menu")).not.toHaveClass(/hidden/);
@@ -208,8 +186,7 @@ test.describe("profile menu", () => {
 });
 
 test.describe("settings", () => {
-  test("settings panel populates admin fields", async ({ page }) => {
-    await setupAdmin(page);
+  test("settings panel populates admin fields", async () => {
 
     await page.evaluate(() => {
       registrationEnabled = true;
@@ -239,26 +216,19 @@ test.describe("settings", () => {
     expect(result.maxDur).toBe("60");
   });
 
-  test("save settings posts config changes", async ({ page }) => {
+  test("save settings posts config changes", async () => {
     const configCalls = [];
-    await mockAPI(page, [
+    api.setRoutes([
       ["**/api/config/**", (route) => {
         if (route.request().method() === "PUT" || route.request().method() === "POST") {
           configCalls.push({ url: route.request().url(), body: route.request().postDataJSON() });
         }
         return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
       }],
-      ["**/api/board/ws", (route) => route.abort()],
     ]);
-    await page.goto("/");
     await page.evaluate(() => {
-      showApp("admin", "admin");
-      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-      localStorage.setItem("task-project", "1");
-      tickets = [];
       registrationEnabled = false;
       chatEnabled = false;
-      renderBoard();
       populateSettingsPanel();
       activatePerspective("settings");
     });
@@ -271,8 +241,7 @@ test.describe("settings", () => {
 });
 
 test.describe("dialog system", () => {
-  test("uiAlert shows dialog and resolves on OK", async ({ page }) => {
-    await setupAdmin(page);
+  test("uiAlert shows dialog and resolves on OK", async () => {
 
     const result = await page.evaluate(() => {
       let resolved = false;
@@ -294,8 +263,7 @@ test.describe("dialog system", () => {
     await expect(page.locator("#dialog-overlay")).toHaveClass(/hidden/);
   });
 
-  test("uiConfirm shows dialog with custom OK text", async ({ page }) => {
-    await setupAdmin(page);
+  test("uiConfirm shows dialog with custom OK text", async () => {
 
     const result = await page.evaluate(() => {
       uiConfirm("Are you sure?", "Yes, delete");
@@ -315,14 +283,13 @@ test.describe("dialog system", () => {
 });
 
 test.describe("new ticket FAB", () => {
-  test("new ticket button is visible when logged in", async ({ page }) => {
-    await setupAdmin(page);
+  test("new ticket button is visible when logged in", async () => {
 
     await expect(page.locator("#new-ticket")).toBeVisible();
   });
 
-  test("new ticket button is hidden on login screen", async ({ page }) => {
-    await page.goto("/");
+  test("new ticket button is hidden on login screen", async () => {
+    await page.evaluate(() => showLogin());
 
     const result = await page.evaluate(() => {
       const btn = document.getElementById("new-ticket");
@@ -332,11 +299,12 @@ test.describe("new ticket FAB", () => {
     expect(result).toBe(true);
   });
 
-  test("clicking new ticket button opens new ticket modal", async ({ page }) => {
-    await setupAdmin(page);
-
-    // Ensure project is selected and close panel to avoid click interception
+  test("clicking new ticket button opens new ticket modal", async () => {
     await page.evaluate(() => {
+      showApp("admin", "admin");
+      projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
+      tickets = [];
+      renderBoard();
       localStorage.setItem("task-project", "1");
       setLeftPanelOpen(false);
     });

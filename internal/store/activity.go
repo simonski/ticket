@@ -36,10 +36,11 @@ func AddHistoryEvent(ctx context.Context, db *sql.DB, projectID int64, ticketID,
 	if err != nil {
 		return err
 	}
+	ticketRef := nullableTicketID(ticketID)
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO ticket_history (project_id, ticket_id, event_type, payload, created_by)
 		VALUES (?, ?, ?, ?, ?)
-	`, projectID, ticketID, eventType, string(data), nullableUserID(createdBy))
+	`, projectID, ticketRef, eventType, string(data), nullableUserID(createdBy))
 	return err
 }
 
@@ -111,7 +112,7 @@ func ListProjectHistoryFiltered(ctx context.Context, db *sql.DB, projectID int64
 	}
 
 	query := fmt.Sprintf( // #nosec G201 -- clauses are built from hardcoded predicates, not raw user input
-		`SELECT h.id, h.project_id, h.ticket_id, COALESCE(h.ticket_id, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
+		`SELECT h.id, h.project_id, COALESCE(h.ticket_id, ''), COALESCE(h.ticket_id, ''), h.event_type, h.payload, COALESCE(h.created_by, ''), h.created_at
 		FROM ticket_history h
 		WHERE %s
 		ORDER BY h.id DESC
@@ -202,6 +203,13 @@ func nullableUserID(userID string) any {
 		return nil
 	}
 	return userID
+}
+
+func nullableTicketID(ticketID string) any {
+	if strings.TrimSpace(ticketID) == "" {
+		return nil
+	}
+	return ticketID
 }
 
 // PurgeExpiredSessions deletes sessions whose expires_at is in the past.

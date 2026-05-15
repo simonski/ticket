@@ -1,12 +1,32 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetLogin } = require("./helpers");
 
-test("landing page exposes ticket-first UI controls", async ({ page }) => {
-  const pageErrors = [];
+test.describe.configure({ mode: "serial" });
+
+let page;
+let api;
+let pageErrors = [];
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
   page.on("pageerror", (err) => {
     pageErrors.push(String(err && err.message ? err.message : err));
   });
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
 
-  await page.goto("/");
+test.afterAll(async () => {
+  await page.close();
+});
+
+test.beforeEach(async () => {
+  pageErrors = [];
+  api.setRoutes([]);
+  await resetLogin(page);
+});
+
+test("landing page exposes ticket-first UI controls", async () => {
 
   await expect(page.locator("#login-screen")).toBeVisible();
   await expect(page.locator("#login-form")).toBeVisible();
@@ -116,9 +136,7 @@ test("landing page exposes ticket-first UI controls", async ({ page }) => {
   expect(pageErrors, `unexpected page errors: ${pageErrors.join("\n")}`).toEqual([]);
 });
 
-test("authenticated app opens the channel selector by default", async ({ page }) => {
-  await page.goto("/");
-
+test("authenticated app opens the channel selector by default", async () => {
   const state = await page.evaluate(() => {
     localStorage.setItem("left-panel-open", "0");
     if (typeof showApp !== "function") return null;
@@ -147,9 +165,7 @@ test("authenticated app opens the channel selector by default", async ({ page })
   expect(state.logoMaxWidth).toBe(state.selectorWidth);
 });
 
-test("project modal no longer exposes a git branch field", async ({ page }) => {
-  await page.goto("/");
-
+test("project modal no longer exposes a git branch field", async () => {
   const state = await page.evaluate(() => {
     if (typeof showApp !== "function" || typeof openProjModal !== "function") return null;
     showApp("alice", "user");
@@ -167,9 +183,7 @@ test("project modal no longer exposes a git branch field", async ({ page }) => {
   expect(state.hasProjectDefaultDraft).toBe(true);
 });
 
-test("management panels support card mode with popup editing", async ({ page }) => {
-  await page.goto("/");
-
+test("management panels support card mode with popup editing", async () => {
   const cardCount = await page.evaluate(() => {
     if (typeof showApp !== "function") return -1;
     showApp("admin", "admin");
@@ -205,9 +219,7 @@ test("management panels support card mode with popup editing", async ({ page }) 
   await expect(page.locator("#team-name")).toHaveValue("Platform");
 });
 
-test("ticket modal scroll stays inside the popup", async ({ page }) => {
-  await page.goto("/");
-
+test("ticket modal scroll stays inside the popup", async () => {
   const scrollState = await page.evaluate(() => {
     if (typeof showApp !== "function" || typeof openEdit !== "function") return null;
     showApp("alice", "user");
@@ -266,9 +278,7 @@ test("ticket modal scroll stays inside the popup", async ({ page }) => {
   expect(scrollState.modalScrollTop).toBeGreaterThan(0);
 });
 
-test("ticket modal shows labels and time tracking sections for existing tickets", async ({ page }) => {
-  await page.goto("/");
-
+test("ticket modal shows labels and time tracking sections for existing tickets", async () => {
   const result = await page.evaluate(() => {
     if (typeof showApp !== "function" || typeof openEdit !== "function") return null;
     showApp("alice", "user");
@@ -319,9 +329,7 @@ test("ticket modal shows labels and time tracking sections for existing tickets"
   expect(result.timeLogText).toBe("+ Time");
 });
 
-test("new ticket modal hides labels and time sections", async ({ page }) => {
-  await page.goto("/");
-
+test("new ticket modal hides labels and time sections", async () => {
   const result = await page.evaluate(() => {
     if (typeof showApp !== "function" || typeof openNew !== "function") return null;
     showApp("alice", "user");
@@ -356,9 +364,7 @@ test("new ticket modal hides labels and time sections", async ({ page }) => {
   expect(result.hasWorkflowField).toBe(true);
 });
 
-test("board lanes expose quick new-ticket actions", async ({ page }) => {
-  await page.goto("/");
-
+test("board lanes expose quick new-ticket actions", async () => {
   const result = await page.evaluate(() => {
     if (typeof showApp !== "function" || typeof renderBoard !== "function") return null;
     showApp("alice", "user");
@@ -386,9 +392,7 @@ test("board lanes expose quick new-ticket actions", async ({ page }) => {
   expect(result.selectedStage).toBe("develop");
 });
 
-test("workflow editor renders draggable stage cards with inline role controls", async ({ page }) => {
-  await page.goto("/");
-
+test("workflow editor renders draggable stage cards with inline role controls", async () => {
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof openWorkflowEditor !== "function") return null;
     showApp("admin", "admin");
@@ -438,9 +442,7 @@ test("workflow editor renders draggable stage cards with inline role controls", 
   expect(result.hasDorField).toBe(true);
 });
 
-test("workflow role reordering sends the updated role order", async ({ page }) => {
-  await page.goto("/");
-
+test("workflow role reordering sends the updated role order", async () => {
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof openWorkflowEditor !== "function" || typeof reorderStageRoles !== "function") return null;
     showApp("admin", "admin");
@@ -479,9 +481,7 @@ test("workflow role reordering sends the updated role order", async ({ page }) =
   expect(result.role_ids).toEqual([3, 2]);
 });
 
-test("workflow editor keyboard shortcuts focus the new stage input and selected stage field", async ({ page }) => {
-  await page.goto("/");
-
+test("workflow editor keyboard shortcuts focus the new stage input and selected stage field", async () => {
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof openWorkflowEditor !== "function") return null;
     showApp("admin", "admin");
@@ -529,9 +529,7 @@ test("workflow editor keyboard shortcuts focus the new stage input and selected 
   expect(result.selectedStageId).toBe("41");
 });
 
-test("backlog perspective groups tickets by effective workflow and filters by role", async ({ page }) => {
-  await page.goto("/");
-
+test("backlog perspective groups tickets by effective workflow and filters by role", async () => {
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof activatePerspective !== "function") return null;
     showApp("admin", "admin");
@@ -636,9 +634,7 @@ test("backlog perspective groups tickets by effective workflow and filters by ro
   expect(result.filteredTitles).toEqual(["Build rollout"]);
 });
 
-test("ticket history modal renders a staged replay and filters project history to the ticket", async ({ page }) => {
-  await page.goto("/");
-
+test("ticket history modal renders a staged replay and filters project history to the ticket", async () => {
   const result = await page.evaluate(async () => {
     if (typeof showApp !== "function" || typeof openTicketHistoryModal !== "function") return null;
     showApp("admin", "admin");
@@ -738,9 +734,7 @@ test("ticket history modal renders a staged replay and filters project history t
   expect(result.projectTimeline).toEqual(["1. comment added"]);
 });
 
-test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async ({ page }) => {
-  await page.goto("/");
-
+test("websocket event compatibility keeps board refresh for legacy and normalized payloads", async () => {
   const result = await page.evaluate(() => {
     const cases = [
       { msg: { type: "ticket_created" }, wantType: "ticket_created", wantRefresh: true },

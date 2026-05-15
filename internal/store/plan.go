@@ -68,7 +68,20 @@ type PlanCreateParams struct {
 	RegistrationActions  RegistrationActions
 }
 
-type PlanUpdateParams = PlanCreateParams
+type PlanUpdateParams struct {
+	Slug                      string
+	Name                      string
+	Description               string
+	MaxProjects               int
+	MaxPrivateProjects        int
+	MaxTickets                int
+	MaxTicketsPerProject      int
+	MaxTeamMemberships        int
+	MaxAPICallsPerDay         int
+	DefaultProjectAlias       string
+	RegistrationActions       RegistrationActions
+	ReplaceRegistrationAction bool
+}
 
 func normalizePlanSlug(raw string) string {
 	return strings.ToLower(strings.TrimSpace(raw))
@@ -256,11 +269,7 @@ func UpdatePlan(ctx context.Context, db *sql.DB, id int64, params PlanUpdatePara
 		description = current.Description
 	}
 	actions := current.RegistrationActions
-	if params.RegistrationActions.AutoAssignPublicTeam ||
-		params.RegistrationActions.AutoCreatePrivateTeam ||
-		params.RegistrationActions.AutoCreatePrivateProject ||
-		len(params.RegistrationActions.Teams) > 0 ||
-		len(params.RegistrationActions.Projects) > 0 {
+	if params.ReplaceRegistrationAction {
 		actions = params.RegistrationActions
 	}
 	actionsJSON, err := registrationActionsJSON(actions)
@@ -421,7 +430,20 @@ func ensureDefaultPlans(ctx context.Context, db *sql.DB) error {
 		current, err := GetPlanBySlug(ctx, db, def.Slug)
 		switch {
 		case err == nil:
-			if _, updateErr := UpdatePlan(ctx, db, current.ID, def); updateErr != nil {
+			if _, updateErr := UpdatePlan(ctx, db, current.ID, PlanUpdateParams{
+				Slug:                      def.Slug,
+				Name:                      def.Name,
+				Description:               def.Description,
+				MaxProjects:               def.MaxProjects,
+				MaxPrivateProjects:        def.MaxPrivateProjects,
+				MaxTickets:                def.MaxTickets,
+				MaxTicketsPerProject:      def.MaxTicketsPerProject,
+				MaxTeamMemberships:        def.MaxTeamMemberships,
+				MaxAPICallsPerDay:         def.MaxAPICallsPerDay,
+				DefaultProjectAlias:       def.DefaultProjectAlias,
+				RegistrationActions:       def.RegistrationActions,
+				ReplaceRegistrationAction: true,
+			}); updateErr != nil {
 				return updateErr
 			}
 		case errors.Is(err, ErrPlanNotFound):
@@ -490,17 +512,18 @@ func ensurePublicResources(ctx context.Context, db *sql.DB, adminUserID string) 
 			if !found {
 				actions.Teams = append(actions.Teams, RegistrationTeamAssignment{TeamID: team.ID, Role: TeamRoleMember})
 				if _, err := UpdatePlan(ctx, db, plan.ID, PlanUpdateParams{
-					Slug:                 plan.Slug,
-					Name:                 plan.Name,
-					Description:          plan.Description,
-					MaxProjects:          plan.MaxProjects,
-					MaxPrivateProjects:   plan.MaxPrivateProjects,
-					MaxTickets:           plan.MaxTickets,
-					MaxTicketsPerProject: plan.MaxTicketsPerProject,
-					MaxTeamMemberships:   plan.MaxTeamMemberships,
-					MaxAPICallsPerDay:    plan.MaxAPICallsPerDay,
-					DefaultProjectAlias:  plan.DefaultProjectAlias,
-					RegistrationActions:  actions,
+					Slug:                      plan.Slug,
+					Name:                      plan.Name,
+					Description:               plan.Description,
+					MaxProjects:               plan.MaxProjects,
+					MaxPrivateProjects:        plan.MaxPrivateProjects,
+					MaxTickets:                plan.MaxTickets,
+					MaxTicketsPerProject:      plan.MaxTicketsPerProject,
+					MaxTeamMemberships:        plan.MaxTeamMemberships,
+					MaxAPICallsPerDay:         plan.MaxAPICallsPerDay,
+					DefaultProjectAlias:       plan.DefaultProjectAlias,
+					RegistrationActions:       actions,
+					ReplaceRegistrationAction: true,
 				}); err != nil {
 					return Team{}, Project{}, err
 				}

@@ -7,10 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/libticket"
 )
+
+var gitOriginByRoot sync.Map
 
 func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
 	cwd, err := os.Getwd()
@@ -27,11 +30,18 @@ func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
 }
 
 func detectGitOriginAt(root string) string {
+	if cached, ok := gitOriginByRoot.Load(root); ok {
+		return cached.(string)
+	}
 	out, err := exec.Command("git", "-C", root, "remote", "get-url", "origin").Output() // #nosec G204 -- command and arguments are fixed; root is a trusted local path
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	remote := strings.TrimSpace(string(out))
+	if remote != "" {
+		gitOriginByRoot.Store(root, remote)
+	}
+	return remote
 }
 
 func defaultProjectTitle(root string) string {

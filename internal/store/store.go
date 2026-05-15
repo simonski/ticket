@@ -370,7 +370,7 @@ CREATE TABLE IF NOT EXISTS history_events (
 CREATE TABLE IF NOT EXISTS ticket_history (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	project_id INTEGER NOT NULL,
-	ticket_id TEXT NOT NULL,
+	ticket_id TEXT,
 	event_type TEXT NOT NULL,
 	payload TEXT NOT NULL DEFAULT '{}',
 	created_by TEXT,
@@ -696,6 +696,20 @@ CREATE TABLE IF NOT EXISTS inbox_entries (
 	FOREIGN KEY(decided_by) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_notifications (
+	notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'unread',
+	title TEXT NOT NULL,
+	message TEXT NOT NULL DEFAULT '',
+	payload_json TEXT NOT NULL DEFAULT '{}',
+	read_at TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 
@@ -747,6 +761,8 @@ CREATE INDEX IF NOT EXISTS idx_ticket_phase_signoffs_phase ON ticket_phase_signo
 CREATE INDEX IF NOT EXISTS idx_inbox_entries_project_id ON inbox_entries(project_id);
 CREATE INDEX IF NOT EXISTS idx_inbox_entries_ticket_id ON inbox_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_inbox_entries_status ON inbox_entries(status);
+CREATE INDEX IF NOT EXISTS idx_user_notifications_user_id ON user_notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_notifications_status ON user_notifications(status);
 
 CREATE INDEX IF NOT EXISTS idx_time_entries_ticket_id ON time_entries(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_id ON time_entries(user_id);
@@ -1031,6 +1047,30 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 	if err := ensureCascadeTicketChildren(ctx, db); err != nil {
 		return err
+	}
+	if err := ensureProjectHistoryAllowsNullTicketID(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureProjectAccessTables(ctx, db); err != nil {
+		return err
+	}
+	if !tableExists(ctx, db, "user_notifications") {
+		if _, err := db.ExecContext(ctx, `
+CREATE TABLE user_notifications (
+	notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'unread',
+	title TEXT NOT NULL,
+	message TEXT NOT NULL DEFAULT '',
+	payload_json TEXT NOT NULL DEFAULT '{}',
+	read_at TEXT,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+)`); err != nil {
+			return err
+		}
 	}
 
 	if !columnExists(ctx, db, "tickets", "sort_order") {
@@ -1842,7 +1882,7 @@ func fixStaleFKsAfterTicketIDMigration(ctx context.Context, db *sql.DB) error {
 	}
 	migrations := []tableMigration{
 		{name: "history_events", create: `CREATE TABLE history_events (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
-		{name: "ticket_history", create: `CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
+		{name: "ticket_history", create: `CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
 		{name: "comments", create: `CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL, user_id TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(item_id) REFERENCES tickets(ticket_id), FOREIGN KEY(user_id) REFERENCES users(user_id))`},
 		{name: "dependencies", create: `CREATE TABLE dependencies (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, depends_on TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY(depends_on) REFERENCES tickets(ticket_id), FOREIGN KEY(created_by) REFERENCES users(user_id))`},
 		{name: "story_ticket_links", create: `CREATE TABLE story_ticket_links (story_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(story_id, ticket_id), FOREIGN KEY(story_id) REFERENCES stories(story_id), FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id))`},
@@ -1888,7 +1928,7 @@ func ensureCascadeTicketChildren(ctx context.Context, db *sql.DB) error {
 		{
 			name:     "ticket_history",
 			refTable: "tickets",
-			create:   `CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT NOT NULL, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(created_by) REFERENCES users(user_id))`,
+			create:   `CREATE TABLE ticket_history (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ticket_id TEXT, event_type TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', created_by TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE, FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE, FOREIGN KEY(created_by) REFERENCES users(user_id))`,
 		},
 		{
 			name:     "comments",
@@ -1937,6 +1977,45 @@ func ensureCascadeTicketChildren(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+func ensureProjectHistoryAllowsNullTicketID(ctx context.Context, db *sql.DB) error {
+	if !tableExists(ctx, db, "ticket_history") || !columnIsNotNull(ctx, db, "ticket_history", "ticket_id") {
+		return nil
+	}
+	tmp := "ticket_history_nullable_tmp"
+	if _, err := db.ExecContext(ctx, `ALTER TABLE ticket_history RENAME TO `+tmp); err != nil {
+		return fmt.Errorf("rename ticket_history: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE ticket_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		project_id INTEGER NOT NULL,
+		ticket_id TEXT,
+		event_type TEXT NOT NULL,
+		payload TEXT NOT NULL DEFAULT '{}',
+		created_by TEXT,
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+		FOREIGN KEY(ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
+		FOREIGN KEY(created_by) REFERENCES users(user_id)
+	)`); err != nil {
+		return fmt.Errorf("create ticket_history: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO ticket_history (id, project_id, ticket_id, event_type, payload, created_by, created_at)
+		SELECT id, project_id, NULLIF(ticket_id, ''), event_type, payload, created_by, created_at
+		FROM `+tmp); err != nil {
+		return fmt.Errorf("copy ticket_history: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `DROP TABLE `+tmp); err != nil {
+		return fmt.Errorf("drop ticket_history temp: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_ticket_history_project_id ON ticket_history(project_id)`); err != nil {
+		return fmt.Errorf("index ticket_history project_id: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_ticket_history_ticket_id ON ticket_history(ticket_id)`); err != nil {
+		return fmt.Errorf("index ticket_history ticket_id: %w", err)
+	}
+	return nil
+}
+
 func parseTicketSequence(key string) int64 {
 	parts := strings.Split(strings.TrimSpace(key), "-")
 	switch len(parts) {
@@ -1981,7 +2060,7 @@ func fixStaleForeignKeys(ctx context.Context, db *sql.DB) error {
 			create: `CREATE TABLE history_events (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				project_id INTEGER NOT NULL,
-				ticket_id TEXT NOT NULL,
+				ticket_id TEXT,
 				event_type TEXT NOT NULL,
 				payload TEXT NOT NULL DEFAULT '{}',
 				created_by TEXT,
@@ -2130,6 +2209,29 @@ func columnExists(ctx context.Context, db *sql.DB, tableName, columnName string)
 		}
 		if name == columnName {
 			return true
+		}
+	}
+	return false
+}
+
+func columnIsNotNull(ctx context.Context, db *sql.DB, tableName, columnName string) bool {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+quoteIdentifier(tableName)+`)`)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return false
+		}
+		if name == columnName {
+			return notNull != 0
 		}
 	}
 	return false

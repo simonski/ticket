@@ -1,41 +1,50 @@
 const { test, expect } = require("@playwright/test");
+const { createMockAPI, gotoRoot, resetApp } = require("./helpers");
 
-function mockAPI(page, routes) {
-  return Promise.all(
-    routes.map(([pattern, handler]) =>
-      page.route(pattern, async (route) => {
-        if (typeof handler === "function") return handler(route);
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(handler),
-        });
-      })
-    )
-  );
-}
+test.describe.configure({ mode: "serial" });
 
-async function setupWithChat(page, chatEnabledValue = true) {
-  await mockAPI(page, [
+let page;
+let api;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  api = await createMockAPI(page);
+  await gotoRoot(page, api);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
+
+async function setupWithChat(chatEnabledValue = true) {
+  api.setRoutes([
     ["**/api/board/ws", (route) => route.abort()],
+    ["**/api/chat/ws", (route) => route.abort()],
   ]);
-  await page.goto("/");
-  await page.evaluate((enabled) => {
-    showApp("admin", "admin");
-    projects = [{ project_id: 1, title: "Demo", prefix: "DM", status: "open" }];
-    localStorage.setItem("task-project", "1");
-    tickets = [];
-    chatEnabled = enabled;
-    chatMaxConnections = 2;
-    chatMaxDurationMinutes = 3;
-    renderBoard();
+  await resetApp(page, {
+    username: "admin",
+    role: "admin",
+    tickets: [],
+    chatEnabled: chatEnabledValue,
+    chatMaxConnections: 2,
+    chatMaxDurationMinutes: 3,
+  });
+  await page.evaluate(() => {
+    closeChatWS();
+    chatRunningProcesses = 0;
+    chatCapacityBlocked = false;
+    activeAssistantBubble = null;
+    const thread = document.getElementById("chat-thread");
+    if (thread) thread.innerHTML = "";
+    const input = document.getElementById("chat-input");
+    if (input) input.value = "";
     applyChatFeatureAvailability();
-  }, chatEnabledValue);
+  });
 }
 
 test.describe("chat perspective", () => {
-  test("chat view section exists and activates", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("chat view section exists and activates", async () => {
+    await setupWithChat(true);
 
     await page.evaluate(() => activatePerspective("chat"));
 
@@ -47,8 +56,8 @@ test.describe("chat perspective", () => {
     expect(result).toBe(true);
   });
 
-  test("chat thread and composer elements present", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("chat thread and composer elements present", async () => {
+    await setupWithChat(true);
 
     await page.evaluate(() => activatePerspective("chat"));
 
@@ -70,12 +79,11 @@ test.describe("chat perspective", () => {
     expect(result.placeholder).toContain("Codex");
   });
 
-  test("appendChatBubble adds bubble to thread", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("appendChatBubble adds bubble to thread", async () => {
+    await setupWithChat(true);
 
     await page.evaluate(() => {
       activatePerspective("chat");
-      // Clear the initial system bubble added by showApp
       document.getElementById("chat-thread").innerHTML = "";
       appendChatBubble("user", "Hello world");
     });
@@ -95,8 +103,8 @@ test.describe("chat perspective", () => {
     expect(result.hasUserClass).toBe(true);
   });
 
-  test("multiple bubble roles render correctly", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("multiple bubble roles render correctly", async () => {
+    await setupWithChat(true);
 
     await page.evaluate(() => {
       activatePerspective("chat");
@@ -121,20 +129,16 @@ test.describe("chat perspective", () => {
     expect(result[2].role).toContain("system");
   });
 
-  test("send button adds user bubble when text entered", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("send button adds user bubble when text entered", async () => {
+    await setupWithChat(true);
 
-    // Mock chat WS to avoid real connection
     await page.evaluate(() => {
       activatePerspective("chat");
-      // Override connectChatWS to prevent real websocket
       connectChatWS = () => {};
       chatSocket = null;
+      document.getElementById("chat-input").value = "Test message";
+      sendChatInput();
     });
-
-    await page.fill("#chat-input", "Test message");
-
-    await page.evaluate(() => sendChatInput());
 
     const result = await page.evaluate(() => {
       const thread = document.getElementById("chat-thread");
@@ -151,8 +155,8 @@ test.describe("chat perspective", () => {
     expect(result.inputEmpty).toBe(true);
   });
 
-  test("send with empty input does nothing", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("send with empty input does nothing", async () => {
+    await setupWithChat(true);
 
     await page.evaluate(() => {
       activatePerspective("chat");
@@ -162,17 +166,14 @@ test.describe("chat perspective", () => {
 
     await page.evaluate(() => sendChatInput());
 
-    const count = await page.evaluate(() => {
-      return document.getElementById("chat-thread").querySelectorAll(".chat-bubble").length;
-    });
-
+    const count = await page.evaluate(() => document.getElementById("chat-thread").querySelectorAll(".chat-bubble").length);
     expect(count).toBe(0);
   });
 });
 
 test.describe("chat disabled", () => {
-  test("chat input disabled when chatEnabled is false", async ({ page }) => {
-    await setupWithChat(page, false);
+  test("chat input disabled when chatEnabled is false", async () => {
+    await setupWithChat(false);
 
     await page.evaluate(() => {
       activatePerspective("chat");
@@ -194,11 +195,10 @@ test.describe("chat disabled", () => {
     expect(result.placeholder).toContain("disabled");
   });
 
-  test("sendChatInput when disabled shows system message", async ({ page }) => {
-    await setupWithChat(page, false);
+  test("sendChatInput when disabled shows system message", async () => {
+    await setupWithChat(false);
 
     await page.evaluate(() => {
-      // Clear any existing bubbles, then send
       document.getElementById("chat-thread").innerHTML = "";
       sendChatInput();
     });
@@ -216,8 +216,8 @@ test.describe("chat disabled", () => {
     expect(result.text).toContain("disabled");
   });
 
-  test("chat left panel item hidden when disabled", async ({ page }) => {
-    await setupWithChat(page, false);
+  test("chat left panel item hidden when disabled", async () => {
+    await setupWithChat(false);
 
     const hidden = await page.evaluate(() => {
       const item = document.querySelector('[data-left-panel-action="chat"]');
@@ -227,8 +227,8 @@ test.describe("chat disabled", () => {
     expect(hidden).toBe(true);
   });
 
-  test("chat perspective item hidden when disabled", async ({ page }) => {
-    await setupWithChat(page, false);
+  test("chat perspective item hidden when disabled", async () => {
+    await setupWithChat(false);
 
     const hidden = await page.evaluate(() => {
       const item = document.querySelector('[data-perspective="chat"]');
@@ -240,8 +240,8 @@ test.describe("chat disabled", () => {
 });
 
 test.describe("chat settings", () => {
-  test("settings panel shows chat controls", async ({ page }) => {
-    await setupWithChat(page, true);
+  test("settings panel shows chat controls", async () => {
+    await setupWithChat(true);
 
     await page.evaluate(() => {
       populateSettingsPanel();

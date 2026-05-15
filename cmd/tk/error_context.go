@@ -163,13 +163,20 @@ func remoteHTTPStatusMessage(subject, serverURL string, err *client.HTTPStatusEr
 	if err == nil {
 		return "", false
 	}
+	apiMessage := strings.TrimSpace(err.APIError)
 	switch err.StatusCode {
 	case 401:
+		if apiMessage != "" && apiMessage != "unauthorized" {
+			return "", false
+		}
 		return fmt.Sprintf("%s is configured for %s, but the server rejected the saved credentials (%s).\nRun `tk login` for that server, or check whether this remote is the right one.", subject, serverURL, err.Status), true
 	case 403:
+		if apiMessage != "" && apiMessage != "forbidden" {
+			return "", false
+		}
 		return fmt.Sprintf("%s is configured for %s, but that server refused this request (%s).\nYour account is authenticated but does not have permission for this operation.", subject, serverURL, err.Status), true
 	case 404:
-		if strings.TrimSpace(err.APIError) != "" {
+		if apiMessage != "" {
 			return "", false
 		}
 		return fmt.Sprintf("%s is configured for %s, but that server does not expose the expected Ticket API (%s).\nCheck that the remote URL points to the Ticket server, not a different site or path.", subject, serverURL, err.Status), true

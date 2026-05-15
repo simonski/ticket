@@ -135,8 +135,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk health TK-1",
 	},
 	"project": {
-		usage:   "tk project <create|list|get|use|set-draft|workflow|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
-		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project."},
+		usage:   "tk project <create|list|get|use|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
+		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project.", "`request-access` submits an access request for a gated project that accepts new members.", "`my-access-requests` lets the current user review their own pending and decided membership requests.", "`access-requests`, `approve-access-request`, and `reject-access-request` let project admins review and decide pending membership requests, optionally with a decision note."},
 		example: "tk project CUS update -title \"Customer Portal\"",
 	},
 	"team": {
@@ -337,8 +337,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk intervene TK-42 -outcome retry-stage -m \"send back for redesign\"",
 	},
 	"user": {
-		usage:   "tk user <create|new|ls|list|rm|delete|enable|disable>",
-		details: []string{"Admin-only user management commands.", "If a non-admin user calls these commands, the server returns 403 with `user is not an admin`.", "`tk user create` accepts optional `-email`; if `-password` is omitted, a password is generated and printed."},
+		usage:   "tk user <create|new|ls|list|rm|delete|enable|disable|notifications|read-notification|reset-password>",
+		details: []string{"Admin-only user management commands plus self-service notification commands.", "If a non-admin user calls admin commands, the server returns 403 with `user is not an admin`.", "`tk user create` accepts optional `-email`; if `-password` is omitted, a password is generated and printed.", "`tk user notifications` lists your notification inbox, and `tk user read-notification` marks a notification as read."},
 		example: "tk user create -username alice -email alice@example.com",
 	},
 	"agent": {
@@ -615,6 +615,11 @@ Commands:
   new      -title <name>              Create a project
   get      <id>                       Show project details
   use      [<id>]                     Switch active project (or show current)
+  request-access [-project_id <id>]   Request access to a project
+  my-access-requests                  List your project access requests
+  access-requests [-project_id <id>]  List project access requests
+  approve-access-request              Approve a project access request
+  reject-access-request               Reject a project access request
   rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
   rename-prefix <new-prefix>          Rename prefix and re-key all tickets
   set-draft [-project_id <id>] <true|false>  Set project default draft mode
@@ -743,8 +748,10 @@ Commands:
   rm -id <id>                             Delete a user
   enable -id <id>                         Enable a user
   disable -id <id>                        Disable a user
+  notifications [-status <state>]         List your notifications
+  read-notification -id <notification-id> Mark a notification as read
   reset-password -username <u> [-password]
-                                          Reset password and invalidate sessions`
+                                           Reset password and invalidate sessions`
 
 const storyUsage = `Usage: tk story <command> [flags]
 

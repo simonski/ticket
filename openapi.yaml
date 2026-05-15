@@ -237,6 +237,80 @@ components:
           type: string
           format: date-time
 
+    ProjectAccessRequest:
+      type: object
+      properties:
+        request_id:
+          type: integer
+          format: int64
+        project_id:
+          type: integer
+          format: int64
+        project_prefix:
+          type: string
+        project_title:
+          type: string
+        user_id:
+          type: string
+        username:
+          type: string
+        message:
+          type: string
+        decision_message:
+          type: string
+        decided_by:
+          type: string
+        decided_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectAccessRequestMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Optional note from the requester or approving admin.
+
+    UserNotification:
+      type: object
+      properties:
+        notification_id:
+          type: integer
+          format: int64
+        user_id:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+          enum: [unread, read]
+        title:
+          type: string
+        message:
+          type: string
+        payload:
+          type: string
+          description: JSON string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+
     Ticket:
       type: object
       properties:
@@ -1690,6 +1764,268 @@ paths:
                         type: string
                         description: Returned when the server generated a password.
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/me/access-requests:
+    get:
+      tags: [Users]
+      summary: List the authenticated user's project access requests
+      operationId: listMyProjectAccessRequests
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: Project access requests created by the authenticated user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectAccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/access-requests:
+    get:
+      tags: [Projects]
+      summary: List access requests for a project
+      operationId: listProjectAccessRequests
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id, prefix, or alias such as `public` or `private`
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: Project access requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectAccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Projects]
+      summary: Create a project access request
+      operationId: createProjectAccessRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id, prefix, or alias such as `public` or `private`
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectAccessRequestMessage'
+      responses:
+        '201':
+          description: Created access request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/access-requests/{request_id}/approve:
+    post:
+      tags: [Projects]
+      summary: Approve a project access request
+      operationId: approveProjectAccessRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectAccessRequestMessage'
+      responses:
+        '200':
+          description: Updated access request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/access-requests/{request_id}/reject:
+    post:
+      tags: [Projects]
+      summary: Reject a project access request
+      operationId: rejectProjectAccessRequest
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectAccessRequestMessage'
+      responses:
+        '200':
+          description: Updated access request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccessRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/me/notifications:
+    get:
+      tags: [Users]
+      summary: List the authenticated user's notifications
+      operationId: listMyNotifications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [unread, read]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Notifications for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserNotification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/me/notifications/{notification_id}/read:
+    post:
+      tags: [Users]
+      summary: Mark a user notification as read
+      operationId: markMyNotificationRead
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserNotification'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4111,7 +4447,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /api/projects/{project_id}/history:
+  /api/projects/{project_ref}/history:
     get:
       tags: [Projects]
       summary: List project history events
@@ -4119,12 +4455,12 @@ paths:
       security:
         - BearerAuth: []
       parameters:
-        - name: project_id
+        - name: project_ref
           in: path
           required: true
           schema:
-            type: integer
-            format: int64
+            type: string
+          description: Project id, prefix, or alias such as `public` or `private`
         - name: limit
           in: query
           schema:
