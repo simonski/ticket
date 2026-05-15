@@ -17,6 +17,8 @@ const (
 	publicTeamName      = "public"
 	publicProjectPrefix = "PUB"
 	publicProjectTitle  = "Public"
+	publicProjectDesc   = "A project visible to everyone."
+	privateProjectDesc  = "Your private project."
 )
 
 type RegistrationTeamAssignment struct {
@@ -479,6 +481,7 @@ func ensurePublicResources(ctx context.Context, db *sql.DB, adminUserID string) 
 		project, err = CreateProjectWithParams(ctx, db, ProjectCreateParams{
 			Prefix:        publicProjectPrefix,
 			Title:         publicProjectTitle,
+			Description:   publicProjectDesc,
 			Visibility:    ProjectVisibilityPublic,
 			CreatedBy:     adminUserID,
 			GitRepository: "",
@@ -588,7 +591,7 @@ func ensurePersonalResources(ctx context.Context, db *sql.DB, user User, plan Pl
 		project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
 			Prefix:      "PRIV",
 			Title:       "Private",
-			Description: "Private workspace created during registration.",
+			Description: privateProjectDesc,
 			Visibility:  ProjectVisibilityPrivate,
 			CreatedBy:   user.ID,
 		})

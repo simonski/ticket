@@ -1505,6 +1505,21 @@ func TestRunInitDBUsesDefaultPathWhenFIsOmitted(t *testing.T) {
 	}
 }
 
+func TestRunInitDBDoesNotWarnAboutMissingDefaults(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	setTestWorkingDir(t, tempDir)
+
+	output := captureStdout(t, func() {
+		if err := runInitDB([]string{"-password", "secret12"}); err != nil {
+			t.Fatalf("runInitDB() error = %v", err)
+		}
+	})
+	if strings.Contains(output, "warning: could not check defaults") {
+		t.Fatalf("runInitDB() unexpected defaults warning:\n%s", output)
+	}
+}
+
 func TestRunInitDBCommandRespectsExplicitFPath(t *testing.T) {
 	tempDir := t.TempDir()
 	homeDir := filepath.Join(tempDir, "home")

@@ -112,6 +112,12 @@ func TestRegisterUserProvisioningCreatesExpectedMemberships(t *testing.T) {
 	if err := validateProjectPrefix(privateProject.Prefix); err != nil {
 		t.Fatalf("private project prefix %q should be valid: %v", privateProject.Prefix, err)
 	}
+	if privateProject.Title != "Private" {
+		t.Fatalf("private project title = %q, want %q", privateProject.Title, "Private")
+	}
+	if privateProject.Description != privateProjectDesc {
+		t.Fatalf("private project description = %q, want %q", privateProject.Description, privateProjectDesc)
+	}
 	privateRole, privateOK, err := ProjectRoleForUser(context.Background(), db, privateProject.ID, user.ID)
 	if err != nil {
 		t.Fatalf("ProjectRoleForUser(private) error = %v", err)

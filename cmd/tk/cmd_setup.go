@@ -794,7 +794,7 @@ func runInitDB(args []string) error {
 
 	cfg := config.Config{
 		Location:  "file://" + dbPath,
-		ProjectID: "TK",
+		ProjectID: "PUB",
 	}
 
 	fmt.Printf("initialized database at %s\n", dbPath)
@@ -834,6 +834,11 @@ func runInitDB(args []string) error {
 	if *prefixFlag != "" || *nameFlag != "" || *gitFlag != "" {
 		svc, svcErr := resolveService(cfg)
 		if svcErr == nil {
+			project, getErr := svc.GetProject(context.Background(), cfg.ProjectID)
+			if getErr != nil {
+				fmt.Printf("warning: could not resolve project for initdb updates: %v\n", getErr)
+				return nil
+			}
 			update := libticket.ProjectUpdateRequest{}
 			if *nameFlag != "" {
 				update.Title = *nameFlag
@@ -841,12 +846,12 @@ func runInitDB(args []string) error {
 			if *gitFlag != "" {
 				update.GitRepository = *gitFlag
 			}
-			if _, err := svc.UpdateProject(context.Background(), 1, update); err != nil {
+			if _, err := svc.UpdateProject(context.Background(), project.ID, update); err != nil {
 				fmt.Printf("warning: could not update project: %v\n", err)
 			}
 			if *prefixFlag != "" {
 				prefix := strings.ToUpper(strings.TrimSpace(*prefixFlag))
-				if _, err := svc.RenameProjectPrefix(context.Background(), 1, prefix); err != nil {
+				if _, err := svc.RenameProjectPrefix(context.Background(), project.ID, prefix); err != nil {
 					fmt.Printf("warning: could not set prefix: %v\n", err)
 				}
 			}
