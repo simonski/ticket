@@ -202,18 +202,38 @@ func runLogout(args []string) error {
 	if err != nil {
 		return err
 	}
-	svc, err := resolveService(cfg)
+	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
+	if location == "" {
+		return errors.New("ticket logout only works in remote mode; set TICKET_URL and try again")
+	}
+	resolved, err := config.ResolveLocation(location)
 	if err != nil {
 		return err
 	}
+	if resolved.Mode != config.ModeRemote || strings.TrimSpace(resolved.ServerURL) == "" {
+		return errors.New("ticket logout requires a remote server URL; set TICKET_URL to http:// or https://")
+	}
+	creds, err := config.LoadCredentials()
+	if err != nil {
+		return err
+	}
+	remoteCreds, ok := creds.Remote(resolved.ServerURL)
+	if !ok || strings.TrimSpace(remoteCreds.Token) == "" {
+		return fmt.Errorf("no stored login session for %s; nothing to log out", resolved.ServerURL)
+	}
+	svc := libticket.NewHTTP(config.Config{
+		Location: resolved.ServerURL,
+		Username: remoteCreds.Username,
+		Token:    remoteCreds.Token,
+	})
 	if err := svc.Logout(context.Background()); err != nil {
-		if clearErr := config.ClearRemoteCredentials(cfg.Location); clearErr != nil {
+		if clearErr := config.ClearRemoteCredentials(resolved.ServerURL); clearErr != nil {
 			return clearErr
 		}
 		cfg.Token = ""
 		return err
 	}
-	if err := config.ClearRemoteCredentials(cfg.Location); err != nil {
+	if err := config.ClearRemoteCredentials(resolved.ServerURL); err != nil {
 		return err
 	}
 	cfg.Token = ""

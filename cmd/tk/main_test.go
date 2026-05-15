@@ -1674,6 +1674,7 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 	}))
 	defer server.Close()
 	setTestLocation(t, server.URL)
+	t.Setenv("TICKET_URL", server.URL)
 
 	oldIn := loginPromptInput
 	oldOut := loginPromptOutput
@@ -1719,6 +1720,34 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 	}
 	if _, err := os.Stat(credsPath); !os.IsNotExist(err) {
 		t.Fatalf("credentials.json should be removed after logout, err=%v", err)
+	}
+}
+
+func TestRunLogoutRequiresRemoteMode(t *testing.T) {
+	t.Setenv("TICKET_HOME", t.TempDir())
+	setTestLocation(t, "")
+
+	err := runLogout(nil)
+	if err == nil {
+		t.Fatal("runLogout() error = nil")
+	}
+	if !strings.Contains(err.Error(), "ticket logout only works in remote mode") {
+		t.Fatalf("runLogout() error = %v", err)
+	}
+}
+
+func TestRunLogoutRequiresStoredCredentials(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
+	setTestLocation(t, "https://tickets.example.com")
+
+	err := runLogout(nil)
+	if err == nil {
+		t.Fatal("runLogout() error = nil")
+	}
+	if !strings.Contains(err.Error(), "no stored login session for https://tickets.example.com") {
+		t.Fatalf("runLogout() error = %v", err)
 	}
 }
 
