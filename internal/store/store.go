@@ -145,21 +145,6 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	if _, _, err := ensurePublicResources(ctx, db, adminUser.ID); err != nil {
 		return err
 	}
-	var workflowID *int64
-	var id int64
-	if err := db.QueryRowContext(ctx, `SELECT workflow_id FROM workflows LIMIT 1`).Scan(&id); err == nil {
-		workflowID = &id
-	}
-	if _, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
-		Prefix:             defaultProjectPrefix,
-		Title:              "Default Project",
-		Description:        "Bootstrap project created during init.",
-		AcceptanceCriteria: "",
-		CreatedBy:          adminUser.ID,
-		WorkflowID:         workflowID,
-	}); err != nil {
-		return err
-	}
 	return nil
 }
 

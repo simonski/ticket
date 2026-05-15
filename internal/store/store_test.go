@@ -55,20 +55,28 @@ func TestInitCreatesDatabaseAndAdminUser(t *testing.T) {
 		t.Fatalf("user count = %d, want 1", users)
 	}
 
-	var projects int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE title = 'Default Project'`).Scan(&projects); err != nil {
-		t.Fatalf("QueryRow(projects) error = %v", err)
+	var publicCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE title = 'Public' AND prefix = 'PUB'`).Scan(&publicCount); err != nil {
+		t.Fatalf("QueryRow(public project) error = %v", err)
 	}
-	if projects != 1 {
-		t.Fatalf("default project count = %d, want 1", projects)
+	if publicCount != 1 {
+		t.Fatalf("public project count = %d, want 1", publicCount)
 	}
 
-	var prefix string
-	if err := db.QueryRow(`SELECT prefix FROM projects WHERE title = 'Default Project'`).Scan(&prefix); err != nil {
-		t.Fatalf("QueryRow(default project prefix) error = %v", err)
+	var privateCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE title = 'Private' AND prefix = 'PRIV'`).Scan(&privateCount); err != nil {
+		t.Fatalf("QueryRow(private project) error = %v", err)
 	}
-	if prefix != "TK" {
-		t.Fatalf("default project prefix = %q, want TK", prefix)
+	if privateCount != 1 {
+		t.Fatalf("private project count = %d, want 1", privateCount)
+	}
+
+	var defaultCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE title = 'Default Project'`).Scan(&defaultCount); err != nil {
+		t.Fatalf("QueryRow(default project) error = %v", err)
+	}
+	if defaultCount != 0 {
+		t.Fatalf("default project count = %d, want 0", defaultCount)
 	}
 }
 

@@ -23,19 +23,19 @@ func TestCreateListAndGetProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
-	if len(projects) != 4 {
-		t.Fatalf("ListProjects() len = %d, want 4", len(projects))
+	if len(projects) != 3 {
+		t.Fatalf("ListProjects() len = %d, want 3", len(projects))
 	}
 
-	foundDefault := false
+	foundPrivate := false
 	for _, listed := range projects {
-		if listed.Title == "Default Project" {
-			foundDefault = true
+		if listed.Title == "Private" && listed.Prefix == "PRIV" {
+			foundPrivate = true
 			break
 		}
 	}
-	if !foundDefault {
-		t.Fatalf("ListProjects() missing Default Project: %#v", projects)
+	if !foundPrivate {
+		t.Fatalf("ListProjects() missing seeded Private project: %#v", projects)
 	}
 
 	byID, err := GetProject(context.Background(), db, strconv.FormatInt(project.ID, 10))
@@ -257,8 +257,8 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjectsVisibleToUser(alice) error = %v", err)
 	}
-	if len(visible) != 4 {
-		t.Fatalf("ListProjectsVisibleToUser(alice) len = %d, want 4 (default + public projects + private alias)", len(visible))
+	if len(visible) != 3 {
+		t.Fatalf("ListProjectsVisibleToUser(alice) len = %d, want 3 (seeded public + alice private alias + public project)", len(visible))
 	}
 	for _, project := range visible {
 		if project.ID == privateProject.ID {
@@ -273,8 +273,8 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjectsVisibleToUser(alice, member) error = %v", err)
 	}
-	if len(visible) != 5 {
-		t.Fatalf("ListProjectsVisibleToUser(alice, member) len = %d, want 5", len(visible))
+	if len(visible) != 4 {
+		t.Fatalf("ListProjectsVisibleToUser(alice, member) len = %d, want 4", len(visible))
 	}
 	foundPrivate := false
 	for _, project := range visible {

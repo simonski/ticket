@@ -15,7 +15,7 @@ const (
 	DefaultPlanSlug     = "free"
 	EnterprisePlanSlug  = "enterprise"
 	publicTeamName      = "public"
-	publicProjectPrefix = "PUBLIC"
+	publicProjectPrefix = "PUB"
 	publicProjectTitle  = "Public"
 )
 
@@ -586,8 +586,8 @@ func ensurePersonalResources(ctx context.Context, db *sql.DB, user User, plan Pl
 			return err
 		}
 		project, err := CreateProjectWithParams(ctx, db, ProjectCreateParams{
-			Prefix:      "PRV",
-			Title:       fmt.Sprintf("%s Private", user.Username),
+			Prefix:      "PRIV",
+			Title:       "Private",
 			Description: "Private workspace created during registration.",
 			Visibility:  ProjectVisibilityPrivate,
 			CreatedBy:   user.ID,

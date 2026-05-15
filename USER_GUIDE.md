@@ -80,7 +80,7 @@ so the current repo uses that database from then on.
 `tk initdb` creates:
 
 1. an `admin` account
-2. the seeded `Public` project/team plus the default bootstrap project `Default Project`
+2. the seeded `Public`/`PUB` project/team plus the seeded `Private`/`PRIV` project
 3. default onboarding policy so newly created users join the public team and receive a private-project alias
 
 Bootstrap resolution works like this:

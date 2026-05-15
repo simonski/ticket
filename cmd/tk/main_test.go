@@ -5323,7 +5323,7 @@ func TestResolveGUIProjectSupportsPrivateAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveGUIProject(private) error = %v", err)
 	}
-	if project.ID == 0 || project.Prefix != "PRV" {
+	if project.ID == 0 || project.Prefix != "PRIV" {
 		t.Fatalf("resolveGUIProject(private) project = %#v", project)
 	}
 	if resolvedCfg.ProjectID == "" || resolvedCfg.ProjectID == "private" {
@@ -5416,7 +5416,7 @@ func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 			t.Fatalf("project use current error = %v", err)
 		}
 	})
-	if !strings.Contains(currentOutput, "PRV") {
+	if !strings.Contains(currentOutput, "PRIV") {
 		t.Fatalf("unexpected current project output:\n%s", currentOutput)
 	}
 
