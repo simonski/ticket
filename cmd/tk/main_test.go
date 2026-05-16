@@ -232,13 +232,8 @@ func TestFormatRuntimeErrorCannotConnectUsesEnvTicketURL(t *testing.T) {
 	err := formatRuntimeError(errors.New("cannot connect to http://localhost:8080"))
 	got := err.Error()
 
-	for _, want := range []string{
-		"your ticket CLI is configured for http://localhost:8080, but that server could not be reached.",
-		"Check that the server, port, and any proxy or tunnel are running.",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("env remote runtime error missing %q:\n%s", want, got)
-		}
+	if got != "Unable to access http://localhost:8080." {
+		t.Fatalf("env remote runtime error = %q", got)
 	}
 }
 

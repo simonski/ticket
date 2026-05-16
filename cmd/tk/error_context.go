@@ -33,9 +33,9 @@ func conciseRuntimeError(err error) error {
 	if resolveErr != nil || strings.TrimSpace(serverURL) == "" {
 		return nil
 	}
-	subject := remoteConfigSubject()
 	var statusErr *client.HTTPStatusError
 	if errors.As(err, &statusErr) {
+		subject := remoteConfigSubject()
 		if msg, ok := remoteHTTPStatusMessage(subject, serverURL, statusErr); ok {
 			return errors.New(msg)
 		}
@@ -43,7 +43,7 @@ func conciseRuntimeError(err error) error {
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	if strings.Contains(msg, "cannot connect to ") {
-		return fmt.Errorf("%s is configured for %s, but that server could not be reached.\nCheck that the server, port, and any proxy or tunnel are running.", subject, serverURL)
+		return fmt.Errorf("Unable to access %s.", serverURL)
 	}
 	return nil
 }
