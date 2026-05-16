@@ -5854,6 +5854,48 @@ func TestResolveServiceUsesNearestTicketJSONAndEnvPassword(t *testing.T) {
 	}
 }
 
+func TestResolveServiceUsesStoredTokenForEnvURLWithoutPassword(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("TICKET_HOME", homeDir)
+
+	var authHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/status" {
+			t.Fatalf("path = %q, want /api/status", r.URL.Path)
+		}
+		authHeader = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"server_version":"test"}`))
+	}))
+	defer server.Close()
+
+	setTestLocation(t, server.URL)
+	if err := config.SaveRemoteCredentials(server.URL, "admin", "stored-token"); err != nil {
+		t.Fatalf("SaveRemoteCredentials() error = %v", err)
+	}
+
+	t.Setenv("TICKET_URL", server.URL)
+	t.Setenv("TICKET_USERNAME", "admin")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
+	}
+	if _, ok := svc.(*libticket.HTTPService); !ok {
+		t.Fatalf("resolveService() returned %T, want *libticket.HTTPService", svc)
+	}
+	if _, err := svc.Status(context.Background()); err != nil {
+		t.Fatalf("svc.Status() error = %v", err)
+	}
+	if authHeader != "Bearer stored-token" {
+		t.Fatalf("Authorization header = %q, want %q", authHeader, "Bearer stored-token")
+	}
+}
+
 func TestResolveServiceRejectsTicketJSONPassword(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("TICKET_HOME", homeDir)

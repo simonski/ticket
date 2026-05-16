@@ -416,11 +416,7 @@ func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 		if credErr != nil {
 			return credErr
 		}
-		var resolveErr error
-		svc, resolveErr = resolveService(cfg)
-		if resolveErr != nil {
-			return resolveErr
-		}
+		svc = libticket.NewHTTP(config.Config{Location: serverURL})
 		if !hasAccount {
 			if _, registerErr := svc.Register(context.Background(), username, password); registerErr != nil {
 				return fmt.Errorf("registration failed: %w", registerErr)
@@ -451,10 +447,7 @@ func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 	if err != nil {
 		return err
 	}
-	svc, err = resolveService(cfg)
-	if err != nil {
-		return err
-	}
+	svc = libticket.NewHTTP(config.Config{Location: serverURL, Token: cfg.Token})
 
 	projects, err := svc.ListProjects(context.Background())
 	if err != nil {

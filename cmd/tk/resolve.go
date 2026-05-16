@@ -237,13 +237,8 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		if location == "" {
 			return nil, errors.New("missing required environment variable: TICKET_URL")
 		}
-		if token == "" {
-			if username == "" {
-				return nil, errors.New("missing required environment variable: TICKET_USERNAME")
-			}
-			if password == "" {
-				return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
-			}
+		if token == "" && password != "" && username == "" {
+			return nil, errors.New("missing required environment variable: TICKET_USERNAME")
 		}
 		resolved, resolveErr := config.ResolveLocation(location)
 		if resolveErr != nil {
@@ -254,13 +249,32 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		}
 		effectiveCfg := cfg
 		effectiveCfg.Location = resolved.ServerURL
-		if token != "" {
+		if !sameRemoteLocation(cfg.Location, resolved.ServerURL) {
+			effectiveCfg.Username = ""
+			effectiveCfg.Token = ""
+		}
+		switch {
+		case token != "":
 			effectiveCfg.Username = ""
 			effectiveCfg.Token = token
-		} else {
+		case password != "":
 			effectiveCfg.Username = username
 			effectiveCfg.Token = password
 			effectiveCfg.UseBasicAuth = true
+		default:
+			creds, credsErr := config.LoadCredentials()
+			if credsErr != nil {
+				return nil, credsErr
+			}
+			if remoteCreds, ok := creds.Remote(resolved.ServerURL); ok && strings.TrimSpace(remoteCreds.Token) != "" {
+				effectiveCfg.Username = ""
+				effectiveCfg.Token = remoteCreds.Token
+			} else if strings.TrimSpace(effectiveCfg.Token) != "" {
+				effectiveCfg.Username = ""
+			}
+			if username != "" && strings.TrimSpace(effectiveCfg.Token) == "" {
+				return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
+			}
 		}
 		if projectID != "" {
 			effectiveCfg.ProjectID = projectID
@@ -329,6 +343,20 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		localCfg.ProjectID = projectID
 	}
 	return libticket.NewLocal(localCfg), nil
+}
+
+func sameRemoteLocation(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" {
+		return false
+	}
+	leftCanonical, leftErr := config.CanonicalizeRemoteURL(left)
+	rightCanonical, rightErr := config.CanonicalizeRemoteURL(right)
+	if leftErr != nil || rightErr != nil {
+		return left == right
+	}
+	return leftCanonical == rightCanonical
 }
 
 func hasCompleteRemoteRuntimeConfig() (bool, error) {
