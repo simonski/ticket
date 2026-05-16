@@ -75,8 +75,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk login -token tk_abc123 -url https://ticket.localhost",
 	},
 	"register": {
-		usage:   "tk register -username <name> [-email <address>] [-password <password>] [-url <server-url>]",
-		details: []string{"Creates a user account on the configured server but does not log the user in.", "A username must be provided explicitly with `-username`.", "If `-password` is omitted, the server generates one and returns it in the response/output."},
+		usage:   "tk register -username <name> -email <address> [-password <password>] [-url <server-url>]",
+		details: []string{"Creates a user account on the configured server but does not log the user in.", "Both `-username` and `-email` are required.", "If `-password` is omitted, the server generates one and returns it in the response/output.", "If auto-approval is disabled, registration is accepted but the account must be approved before it can sign in."},
 		example: "tk register -username simon -email simon@example.com",
 	},
 	"logout": {

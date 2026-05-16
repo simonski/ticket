@@ -1298,6 +1298,8 @@ func TestRunWhoamiWithGlobalRemoteConfigDoesNotRequireProjectBinding(t *testing.
 
 	t.Setenv("TICKET_HOME", t.TempDir())
 	setTestLocation(t, ts.URL)
+	t.Setenv("TICKET_USERNAME", "admin")
+	t.Setenv("TICKET_PASSWORD", "adminpass")
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"whoami"}); err != nil {
@@ -1814,6 +1816,59 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	}
 }
 
+func TestRunRegisterPendingApprovalPrintsHelpfulMessage(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/register" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"username":"pending","email":"pending@example.com","approved":false}`))
+	}))
+	defer server.Close()
+	setTestLocation(t, server.URL)
+
+	output := captureStdout(t, func() {
+		if err := runRegister([]string{"-username", "pending", "-email", "pending@example.com"}); err != nil {
+			t.Fatalf("runRegister() error = %v", err)
+		}
+	})
+	for _, want := range []string{"registered user pending", "wait for approval or check your email"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("runRegister() output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunRegisterDisabledReturnsHelpfulError(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("TICKET_HOME", tempDir)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/register" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"registration is disabled"}`))
+	}))
+	defer server.Close()
+	setTestLocation(t, server.URL)
+
+	err := runRegister([]string{"-username", "pending", "-email", "pending@example.com"})
+	if err == nil {
+		t.Fatal("runRegister() error = nil")
+	}
+	if !strings.Contains(err.Error(), "server is not accepting registrations right now") {
+		t.Fatalf("runRegister() error = %v", err)
+	}
+}
+
 func TestRunRegisterDuplicateUsernameReturnsHelpfulError(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
@@ -1837,11 +1892,11 @@ func TestRunRegisterDuplicateUsernameReturnsHelpfulError(t *testing.T) {
 		t.Fatalf("SetRegistrationEnabled() error = %v", err)
 	}
 
-	if err := run([]string{"register", "-username", "alice", "-password", "password123"}); err != nil {
+	if err := run([]string{"register", "-username", "alice", "-email", "alice@example.com", "-password", "password123"}); err != nil {
 		t.Fatalf("first register error = %v", err)
 	}
 
-	err = run([]string{"register", "-username", "alice", "-password", "password123"})
+	err = run([]string{"register", "-username", "alice", "-email", "alice@example.com", "-password", "password123"})
 	if err == nil {
 		t.Fatal("second register error = nil")
 	}
@@ -1854,11 +1909,21 @@ func TestRunRegisterRequiresExplicitUsername(t *testing.T) {
 	t.Setenv("USER", "simon")
 	t.Setenv("USERNAME", "simon")
 
-	err := run([]string{"register", "-password", "password123"})
+	err := run([]string{"register", "-email", "simon@example.com", "-password", "password123"})
 	if err == nil {
 		t.Fatal("register error = nil")
 	}
 	if !strings.Contains(err.Error(), "username is required") {
+		t.Fatalf("register error = %v", err)
+	}
+}
+
+func TestRunRegisterRequiresEmail(t *testing.T) {
+	err := run([]string{"register", "-username", "alice"})
+	if err == nil {
+		t.Fatal("register error = nil")
+	}
+	if !strings.Contains(err.Error(), "email is required") {
 		t.Fatalf("register error = %v", err)
 	}
 }
@@ -1870,10 +1935,10 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/login":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"token":"env-token","user":{"username":"alice","role":"user"}}`))
 		case "/api/status":
+			if r.Header.Get("Authorization") != "Bearer env-token" {
+				t.Fatalf("status auth header = %q", r.Header.Get("Authorization"))
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"ok","authenticated":true,"server_version":"9.8.7","user":{"username":"alice","role":"user"}}`))
 		default:
@@ -1882,6 +1947,7 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 	setTestLocation(t, server.URL)
+	t.Setenv("TICKET_TOKEN", "env-token")
 
 	output := captureStdout(t, func() {
 		if err := runStatus(nil); err != nil {
@@ -1975,18 +2041,6 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 	setTestWorkingDir(t, tempDir)
 	dbPath := filepath.Join(tempDir, "ticket.db")
 	testutil.CloneSeededDB(t, dbPath, "secret12")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("store.Open() error = %v", err)
-	}
-	defer db.Close()
-	handler, err := server.Handler(db, "test", false, nil, "", "")
-	if err != nil {
-		t.Fatalf("server.Handler() error = %v", err)
-	}
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-	setTestLocation(t, ts.URL)
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"status", "-nocolor"}); err != nil {
@@ -1995,11 +2049,13 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 	})
 	for _, want := range []string{
 		"TICKET_HOME      : " + tempDir,
-		"server_version   : test",
-		"authenticated    : false",
+		"server_version   : (unknown)",
+		"username         : admin",
+		"authenticated    : true",
+		"project          : PRIV — Private",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("runStatus(server) missing %q:\n%s", want, output)
+			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
 		}
 	}
 }
@@ -4571,6 +4627,7 @@ func TestRunRemoteOnlyCommandsFailInLocalMode(t *testing.T) {
 func TestRunRemoteModeStatusFailure(t *testing.T) {
 	t.Setenv("TICKET_HOME", t.TempDir())
 	setTestLocation(t, "http://127.0.0.1:1")
+	t.Setenv("TICKET_TOKEN", "test-token")
 
 	var runErr error
 	output := captureStdout(t, func() {
@@ -5875,6 +5932,30 @@ func TestResolveServiceUsesStoredTokenForEnvURLWithoutPassword(t *testing.T) {
 	}
 	if authHeader != "Bearer stored-token" {
 		t.Fatalf("Authorization header = %q, want %q", authHeader, "Bearer stored-token")
+	}
+}
+
+func TestResolveServiceRequiresLoginForRemoteCommands(t *testing.T) {
+	setupLocalCLI(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	t.Setenv("TICKET_URL", server.URL)
+	t.Setenv("TICKET_USERNAME", "")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	_, err = resolveService(cfg)
+	if err == nil {
+		t.Fatal("resolveService() error = nil")
+	}
+	if !strings.Contains(err.Error(), "Run `tk login`") {
+		t.Fatalf("resolveService() error = %v", err)
 	}
 }
 

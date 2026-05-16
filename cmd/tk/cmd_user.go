@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/simonski/ticket/internal/client"
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/libticket"
@@ -27,6 +28,10 @@ func runRegister(args []string) error {
 	if username == "" {
 		return errors.New("username is required")
 	}
+	email := strings.TrimSpace(*emailFlag)
+	if email == "" {
+		return errors.New("email is required")
+	}
 	password := strings.TrimSpace(*passwordFlag)
 
 	cfg, err := config.Load()
@@ -37,28 +42,28 @@ func runRegister(args []string) error {
 	if err != nil {
 		return err
 	}
-	svc := libticket.NewHTTP(config.Config{Location: serverURL, Token: cfg.Token})
-	user, generatedPassword, err := svc.RegisterWithParams(context.Background(), libticket.RegisterParams{
+	api := client.New(config.Config{Location: serverURL})
+	response, err := api.RegisterDetailed(context.Background(), client.RegisterRequest{
 		Username: username,
 		Password: password,
-		Email:    strings.TrimSpace(*emailFlag),
+		Email:    email,
 	})
 	if err != nil {
-		return err
-	}
-	cfg.Username = user.Username
-	if err := config.Save(cfg); err != nil {
+		var statusErr *client.HTTPStatusError
+		if errors.As(err, &statusErr) && statusErr.StatusCode == 403 && strings.TrimSpace(statusErr.APIError) == "registration is disabled" {
+			return errors.New("server is not accepting registrations right now")
+		}
 		return err
 	}
 	if outputJSON {
-		if generatedPassword != "" {
-			return printJSON(map[string]any{"user": user, "password": generatedPassword})
-		}
-		return printJSON(user)
+		return printJSON(response)
 	}
-	fmt.Printf("registered user %s\n", user.Username)
-	if generatedPassword != "" {
-		fmt.Printf("password: %s\n", generatedPassword)
+	fmt.Printf("registered user %s\n", response.Username)
+	if response.Password != "" {
+		fmt.Printf("password: %s\n", response.Password)
+	}
+	if !response.Approved {
+		fmt.Println("registration submitted; wait for approval or check your email for next steps.")
 	}
 	return nil
 }

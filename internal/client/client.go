@@ -94,12 +94,17 @@ func (c *Client) Register(ctx context.Context, username, password string) (store
 	return user, err
 }
 
-func (c *Client) RegisterWithParams(ctx context.Context, req RegisterRequest) (store.User, string, error) {
+func (c *Client) RegisterDetailed(ctx context.Context, req RegisterRequest) (RegisterResponse, error) {
 	if c.mode == config.ModeLocal {
-		return store.User{}, "", errors.New("ticket register requires remote mode with a configured server and login")
+		return RegisterResponse{}, errors.New("ticket register requires remote mode with a configured server")
 	}
 	var response RegisterResponse
 	err := c.doJSON(ctx, http.MethodPost, "/api/register", req, &response)
+	return response, err
+}
+
+func (c *Client) RegisterWithParams(ctx context.Context, req RegisterRequest) (store.User, string, error) {
+	response, err := c.RegisterDetailed(ctx, req)
 	return response.User, response.Password, err
 }
 

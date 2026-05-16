@@ -217,6 +217,9 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	remoteHintProvided := location != "" || password != "" || token != ""
 	if remoteHintProvided {
 		if location == "" {
+			location = configuredServiceLocation(cfg)
+		}
+		if location == "" {
 			return nil, errors.New("missing required environment variable: TICKET_URL")
 		}
 		if token == "" && password != "" && username == "" {
@@ -258,6 +261,9 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 				return nil, errors.New("missing required environment variable: TICKET_PASSWORD")
 			}
 		}
+		if !effectiveCfg.UseBasicAuth && strings.TrimSpace(effectiveCfg.Token) == "" {
+			return nil, missingRemoteAuthError(resolved.ServerURL)
+		}
 		if projectID != "" {
 			effectiveCfg.ProjectID = projectID
 		}
@@ -265,17 +271,7 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	}
 
 	// Compatibility fallback for explicit remote config.
-	location = strings.TrimSpace(cfg.Location)
-	if location == "" {
-		if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.Remote)); ok {
-			location = strings.TrimSpace(remote.URL)
-		}
-	}
-	if location == "" {
-		if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.DefaultRemote)); ok {
-			location = strings.TrimSpace(remote.URL)
-		}
-	}
+	location = configuredServiceLocation(cfg)
 	if location != "" {
 		resolvedCfgLocation, resolveErr := config.ResolveLocation(location)
 		if resolveErr != nil {
@@ -284,8 +280,19 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		if resolvedCfgLocation.Mode == config.ModeRemote {
 			effectiveCfg := cfg
 			effectiveCfg.Location = resolvedCfgLocation.ServerURL
-			if strings.TrimSpace(effectiveCfg.Token) != "" {
+			if strings.TrimSpace(os.Getenv("TICKET_USERNAME")) != "" && strings.TrimSpace(os.Getenv("TICKET_PASSWORD")) != "" {
+				effectiveCfg.Username = strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
+				effectiveCfg.Token = strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
+				effectiveCfg.UseBasicAuth = true
+			} else if strings.TrimSpace(os.Getenv("TICKET_TOKEN")) != "" {
 				effectiveCfg.Username = ""
+				effectiveCfg.Token = strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
+			}
+			if !effectiveCfg.UseBasicAuth && strings.TrimSpace(effectiveCfg.Token) != "" {
+				effectiveCfg.Username = ""
+			}
+			if !effectiveCfg.UseBasicAuth && strings.TrimSpace(effectiveCfg.Token) == "" {
+				return nil, missingRemoteAuthError(resolvedCfgLocation.ServerURL)
 			}
 			if projectID != "" {
 				effectiveCfg.ProjectID = projectID
@@ -325,6 +332,29 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		localCfg.ProjectID = projectID
 	}
 	return libticket.NewLocal(localCfg), nil
+}
+
+func configuredServiceLocation(cfg config.Config) string {
+	location := strings.TrimSpace(cfg.Location)
+	if location == "" {
+		if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.Remote)); ok {
+			location = strings.TrimSpace(remote.URL)
+		}
+	}
+	if location == "" {
+		if remote, ok := cfg.RemoteByName(strings.TrimSpace(cfg.DefaultRemote)); ok {
+			location = strings.TrimSpace(remote.URL)
+		}
+	}
+	return location
+}
+
+func missingRemoteAuthError(serverURL string) error {
+	serverURL = strings.TrimSpace(serverURL)
+	if serverURL == "" {
+		return errors.New("not logged in.\nRun `tk login`, or set TICKET_URL plus TICKET_USERNAME/TICKET_PASSWORD, or set TICKET_TOKEN.")
+	}
+	return fmt.Errorf("not logged in to %s.\nRun `tk login`, or set TICKET_URL plus TICKET_USERNAME/TICKET_PASSWORD, or set TICKET_TOKEN.", serverURL)
 }
 
 func resolveConfiguredProjectReference(cfg config.Config) string {

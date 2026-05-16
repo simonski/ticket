@@ -20,7 +20,7 @@ tk server
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=alice
 export TICKET_PASSWORD=secret12
-tk register -username alice -password secret12
+tk register -username alice -email alice@example.com -password secret12
 tk whoami
 ```
 

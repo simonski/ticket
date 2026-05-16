@@ -38,7 +38,7 @@ export TICKET_PASSWORD=password
 export TICKET_PROJECT=1
 tk ls
 
-tk register -username alice -password secret12
+tk register -username alice -email alice@example.com -password secret12
 tk project use 1
 tk whoami
 ```

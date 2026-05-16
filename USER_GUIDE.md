@@ -326,8 +326,8 @@ If `-password` is omitted during registration, the server generates one and
 prints it in the response/output.
 
 If self-registration is configured with auto-approval disabled, the account is
-created in a disabled state and an admin must enable it before the user can log
-in.
+created in a disabled state. The CLI reports that registration was submitted
+and tells the user to wait for approval or check email for next steps.
 
 Set environment credentials for authenticated CLI use:
 
@@ -337,10 +337,11 @@ export TICKET_USERNAME=name
 export TICKET_PASSWORD='*******'
 ```
 
-`tk login` remains available for server-side account verification workflows, but
-normal CLI command authentication is now driven by `TICKET_URL`
-(defaults to `https://ticket.localhost` when unset),
-`TICKET_USERNAME`, and `TICKET_PASSWORD`.
+`tk login` stores a bearer token in `$TICKET_HOME/credentials.json`. Normal
+remote CLI commands reuse that stored token until the server rejects or expires
+it. If no stored token is available, remote commands fail fast and tell the
+user to run `tk login` or set `TICKET_URL` plus `TICKET_USERNAME` /
+`TICKET_PASSWORD` (or `TICKET_TOKEN`).
 
 Check the current mode and connection state:
 
@@ -1035,7 +1036,7 @@ tk upgrade-database -o ./new_database/ticket.db
 tk server -v
 tk version
 
-tk register -username <name> [-email <email>] [-password <password>]
+tk register -username <name> -email <email> [-password <password>]
 tk status
 tk config ls
 tk config rm server
