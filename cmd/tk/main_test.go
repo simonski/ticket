@@ -366,9 +366,9 @@ func TestFormatRuntimeErrorLocalDBIssueIncludesSetup(t *testing.T) {
 	for _, want := range []string{
 		"unable to open database file",
 		"setup:",
-		"mode             : server",
+		"mode             : local",
 		"configured via   : default local database path",
-		"this directory is configured for a remote server",
+		"this command is currently using local mode",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("local runtime error missing %q:\n%s", want, got)
@@ -1977,10 +1977,14 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"TICKET_URL       : " + server.URL,
-		"server_version   : 9.8.7",
-		"username         : alice",
-		"authenticated    : true",
+		"TICKET_URL",
+		server.URL,
+		"server_version",
+		"9.8.7",
+		"username",
+		"alice",
+		"authenticated",
+		"true",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
@@ -1989,6 +1993,11 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 	for _, unwanted := range []string{"TICKET_HOME", "config_file"} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("runStatus(remote) should not show %q:\n%s", unwanted, output)
+		}
+	}
+	for _, want := range []string{"password", "TICKET_TOKEN", "connection", "connected"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
 	}
 	if strings.Contains(output, "env-pass") || strings.Contains(output, "agent-secret") {
@@ -4663,9 +4672,16 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
-		"server_version   : (unknown)",
-		"authenticated    : false",
+		"server_version",
+		"(unknown)",
+		"authenticated",
+		"false",
 	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("runStatus(remote failure) missing %q:\n%s", want, output)
+		}
+	}
+	for _, want := range []string{"TICKET_URL", "http://127.0.0.1:1", "password", "TICKET_TOKEN", "connection", "unreachable"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote failure) missing %q:\n%s", want, output)
 		}

@@ -232,30 +232,82 @@ func printStatusBoxWidth(lines []statusLine, fixedWidth int) {
 }
 
 func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) error {
-	var err error
-	svc, err := resolveService(cfg)
+	serverURL, _, err := currentConfiguredRemoteServer()
 	if err != nil {
 		return err
 	}
-	status, err := svc.Status(context.Background())
-	authenticated := err == nil && status.Authenticated
-	username := strings.TrimSpace(cfg.Username)
-	if status.User != nil {
-		username = status.User.Username
+	if strings.TrimSpace(serverURL) == "" {
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		status, err := svc.Status(context.Background())
+		authenticated := err == nil && status.Authenticated
+		username := strings.TrimSpace(cfg.Username)
+		if status.User != nil {
+			username = status.User.Username
+		}
+		cfgPath := effectiveConfigPath()
+		ticketHome, _ := config.Home()
+		projectSvc := svc
+		if err != nil || !authenticated {
+			projectSvc = nil
+		}
+		projectContext := resolveCurrentProjectContext(cfg, projectSvc)
+		var summary []statusLine
+		if projectContext.ok {
+			summary = buildProjectSummaryCoreLines(projectSvc, projectContext.project, statusUnicode, false)
+		}
+		if outputJSON {
+			payload := map[string]any{
+				"location":       cfg.Location,
+				"TICKET_HOME":    statusEnvValue("TICKET_HOME", false),
+				"project_id":     projectContext.projectID,
+				"project_source": projectContext.source,
+				"username":       username,
+				"authenticated":  authenticated,
+				"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
+				"config_file":    cfgPath,
+			}
+			if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
+				payload["server_version"] = serverVersion
+			}
+			if projectContext.workflowName != "" {
+				payload["project_workflow"] = projectContext.workflowName
+			}
+			if projectContext.defaultDraft != nil {
+				payload["project_default_draft"] = *projectContext.defaultDraft
+			}
+			return printJSON(payload)
+		}
+		lines := append(statusHomeLines(ticketHome), []statusLine{
+			{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
+			{key: "username", value: username},
+			{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
+		}...)
+		printStatusBox(mergeStatusHeaderLines(summary, cfgPath, lines))
+		return err
 	}
-	cfgPath := effectiveConfigPath()
-	ticketHome, _ := config.Home()
-	resolved, _ := currentRemoteResolution()
-	serverURL := strings.TrimSpace(cfg.Location)
-	if strings.TrimSpace(resolved.ServerURL) != "" {
-		serverURL = strings.TrimSpace(resolved.ServerURL)
+	statusCfg, username, passwordDisplay, passwordColor := remoteStatusConfig(cfg, serverURL)
+	svc := libticket.NewHTTP(statusCfg)
+	status, statusErr := svc.Status(context.Background())
+	connected := statusErr == nil
+	authenticated := connected && status.Authenticated
+	if status.User != nil && strings.TrimSpace(status.User.Username) != "" {
+		username = strings.TrimSpace(status.User.Username)
 	}
-	isRemote := resolved.Mode == config.ModeRemote && serverURL != ""
-	projectSvc := svc
-	if err != nil || !authenticated {
-		projectSvc = nil
+	connectionValue := "unreachable"
+	connectionColor := "\x1b[31m"
+	if connected {
+		connectionValue = "connected"
+		connectionColor = "\x1b[32m"
 	}
-	projectContext := resolveCurrentProjectContext(cfg, projectSvc)
+	var projectSvc libticket.Service
+	var projectContext currentProjectContext
+	if authenticated {
+		projectSvc = svc
+		projectContext = resolveCurrentProjectContext(cfg, projectSvc)
+	}
 	var summary []statusLine
 	if projectContext.ok {
 		summary = buildProjectSummaryCoreLines(projectSvc, projectContext.project, statusUnicode, false)
@@ -263,19 +315,13 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	if outputJSON {
 		payload := map[string]any{
 			"location":       serverURL,
-			"AGENT_ID":       statusEnvValue("AGENT_ID", false),
-			"AGENT_PASSWORD": statusEnvValue("AGENT_PASSWORD", true),
+			"TICKET_URL":     serverURL,
 			"project_id":     projectContext.projectID,
 			"project_source": projectContext.source,
-			"username":       username,
+			"username":       valueOrDefault(username, "UNSET"),
+			"password":       passwordDisplay,
+			"connection":     connectionValue,
 			"authenticated":  authenticated,
-			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
-		}
-		if isRemote {
-			payload["TICKET_URL"] = serverURL
-		} else {
-			payload["TICKET_HOME"] = statusEnvValue("TICKET_HOME", false)
-			payload["config_file"] = cfgPath
 		}
 		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
 			payload["server_version"] = serverVersion
@@ -289,18 +335,15 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		return printJSON(payload)
 	}
 	lines := []statusLine{
+		{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET")},
+		{key: "username", value: valueOrDefault(username, "UNSET")},
+		{key: "password", value: passwordDisplay, color: passwordColor},
+		{key: "connection", value: connectionValue, color: connectionColor},
 		{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
-		{key: "username", value: username},
-		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
+		{key: "authenticated", value: fmt.Sprintf("%t", authenticated), color: boolStatusColor(authenticated)},
 	}
-	if isRemote {
-		lines = append([]statusLine{{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET")}}, lines...)
-		printStatusBox(mergeStatusHeaderLines(summary, "", lines))
-		return err
-	}
-	lines = append(statusHomeLines(ticketHome), lines...)
-	printStatusBox(mergeStatusHeaderLines(summary, cfgPath, lines))
-	return err
+	printStatusBox(mergeStatusHeaderLines(summary, "", lines))
+	return statusErr
 }
 
 //nolint:unused // retained temporarily during server-only migration cleanup
@@ -359,6 +402,36 @@ func valueOrDefault(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func remoteStatusConfig(cfg config.Config, serverURL string) (statusCfg config.Config, username, passwordDisplay, passwordColor string) {
+	statusCfg = config.Config{Location: strings.TrimSpace(serverURL)}
+	username = strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
+	token := strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
+	switch {
+	case token != "":
+		statusCfg.Token = token
+		return statusCfg, valueOrDefault(username, strings.TrimSpace(cfg.Username)), "(using TICKET_TOKEN)", "\x1b[32m"
+	case username != "" && password != "":
+		statusCfg.Username = username
+		statusCfg.Token = password
+		statusCfg.UseBasicAuth = true
+		return statusCfg, username, "configured", "\x1b[32m"
+	case strings.TrimSpace(cfg.Token) != "":
+		statusCfg.Username = strings.TrimSpace(cfg.Username)
+		statusCfg.Token = strings.TrimSpace(cfg.Token)
+		return statusCfg, strings.TrimSpace(cfg.Username), "(stored session)", "\x1b[32m"
+	default:
+		return statusCfg, valueOrDefault(username, strings.TrimSpace(cfg.Username)), "missing", "\x1b[31m"
+	}
+}
+
+func boolStatusColor(v bool) string {
+	if v {
+		return "\x1b[32m"
+	}
+	return "\x1b[31m"
 }
 
 //nolint:unused // retained temporarily during server-only migration cleanup

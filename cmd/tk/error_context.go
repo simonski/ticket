@@ -29,21 +29,21 @@ func formatRuntimeError(err error) error {
 }
 
 func conciseRuntimeError(err error) error {
-	resolved, resolveErr := config.ResolveURL()
-	if resolveErr != nil {
+	serverURL, _, resolveErr := currentConfiguredRemoteServer()
+	if resolveErr != nil || strings.TrimSpace(serverURL) == "" {
 		return nil
 	}
 	subject := remoteConfigSubject()
 	var statusErr *client.HTTPStatusError
 	if errors.As(err, &statusErr) {
-		if msg, ok := remoteHTTPStatusMessage(subject, resolved.ServerURL, statusErr); ok {
+		if msg, ok := remoteHTTPStatusMessage(subject, serverURL, statusErr); ok {
 			return errors.New(msg)
 		}
 		return nil
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	if strings.Contains(msg, "cannot connect to ") {
-		return fmt.Errorf("%s is configured for %s, but that server could not be reached.\nCheck that the server, port, and any proxy or tunnel are running.", subject, resolved.ServerURL)
+		return fmt.Errorf("%s is configured for %s, but that server could not be reached.\nCheck that the server, port, and any proxy or tunnel are running.", subject, serverURL)
 	}
 	return nil
 }
@@ -79,28 +79,40 @@ func shouldExplainSetup(err error) bool {
 }
 
 func currentSetupDetails(err error) (string, error) {
-	resolved, resolveErr := config.ResolveURL()
+	globalPath, _ := config.Path()
+	projectPath, hasProject, _ := config.ProjectPath()
+	if serverURL, source, resolveErr := currentConfiguredRemoteServer(); resolveErr == nil && strings.TrimSpace(serverURL) != "" {
+		lines := []string{
+			"setup:",
+			"  mode             : server",
+			fmt.Sprintf("  configured via   : %s", remoteConfiguredVia(serverURL, source)),
+			fmt.Sprintf("  explanation      : %s", remoteIssueExplanation(err)),
+		}
+		return strings.Join(lines, "\n"), nil
+	}
+	resolved, resolveErr := currentRemoteResolution()
 	if resolveErr != nil {
 		return "", resolveErr
 	}
-	globalPath, _ := config.Path()
-	projectPath, hasProject, _ := config.ProjectPath()
-	locationSource := locationSource(globalPath, projectPath, hasProject)
 
 	lines := []string{
 		"setup:",
+		fmt.Sprintf("  mode             : %s", valueOrDefault(strings.TrimSpace(resolved.Mode), "local")),
+		fmt.Sprintf("  configured via   : %s", locationSource(globalPath, projectPath, hasProject)),
 	}
-	lines = append(lines,
-		"  mode             : server",
-		fmt.Sprintf("  configured via   : %s", remoteConfiguredVia(resolved.ServerURL, locationSource)),
-		fmt.Sprintf("  explanation      : %s", remoteIssueExplanation(err)),
-	)
+	if strings.TrimSpace(resolved.DBPath) != "" {
+		lines = append(lines, fmt.Sprintf("  database         : %s", resolved.DBPath))
+	}
+	lines = append(lines, fmt.Sprintf("  explanation      : %s", localIssueExplanation(err)))
 	return strings.Join(lines, "\n"), nil
 }
 
 func locationSource(globalPath, projectPath string, hasProject bool) string {
 	if config.HasLocationOverride() {
 		return "-f command-line override"
+	}
+	if strings.TrimSpace(os.Getenv("TICKET_URL")) != "" {
+		return "TICKET_URL"
 	}
 	if hasProject {
 		if projectCfg, ok := loadSetupConfig(projectPath); ok && (strings.TrimSpace(projectCfg.Remote) != "" || strings.TrimSpace(projectCfg.Location) != "") {
@@ -111,6 +123,72 @@ func locationSource(globalPath, projectPath string, hasProject bool) string {
 		return globalPath
 	}
 	return "default local database path"
+}
+
+func currentRemoteResolution() (config.Resolved, error) {
+	if config.HasLocationOverride() {
+		return config.ResolveURL()
+	}
+	if envURL := strings.TrimSpace(os.Getenv("TICKET_URL")); envURL != "" {
+		return config.ResolveLocation(envURL)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Resolved{}, err
+	}
+	location := configuredServiceLocation(cfg)
+	if location == "" {
+		location = strings.TrimSpace(cfg.Location)
+	}
+	return config.ResolveLocation(location)
+}
+
+func currentConfiguredRemoteServer() (serverURL, source string, err error) {
+	globalPath, _ := config.Path()
+	projectPath, hasProject, _ := config.ProjectPath()
+	source = locationSource(globalPath, projectPath, hasProject)
+	if config.HasLocationOverride() {
+		var resolved config.Resolved
+		resolved, err = config.ResolveURL()
+		if err != nil {
+			return "", source, err
+		}
+		if resolved.Mode == config.ModeRemote {
+			return strings.TrimSpace(resolved.ServerURL), source, nil
+		}
+		return "", source, nil
+	}
+	if envURL := strings.TrimSpace(os.Getenv("TICKET_URL")); envURL != "" {
+		resolved, resolveErr := config.ResolveLocation(envURL)
+		if resolveErr != nil {
+			return "", source, resolveErr
+		}
+		if resolved.Mode == config.ModeRemote {
+			return strings.TrimSpace(resolved.ServerURL), source, nil
+		}
+		return "", source, nil
+	}
+	var cfg config.Config
+	cfg, err = config.Load()
+	if err != nil {
+		return "", source, err
+	}
+	location := configuredServiceLocation(cfg)
+	if location == "" {
+		location = strings.TrimSpace(cfg.Location)
+	}
+	if strings.TrimSpace(location) == "" {
+		return "", source, nil
+	}
+	var resolved config.Resolved
+	resolved, err = config.ResolveLocation(location)
+	if err != nil {
+		return "", source, err
+	}
+	if resolved.Mode == config.ModeRemote {
+		return strings.TrimSpace(resolved.ServerURL), source, nil
+	}
+	return "", source, nil
 }
 
 func loadSetupConfig(path string) (config.Config, bool) {
@@ -147,6 +225,19 @@ func remoteIssueExplanation(err error) string {
 		return "this command is using an explicit server override; check that host, port, credentials, and any proxy or tunnel are the ones you expect"
 	}
 	return "this directory is configured for a remote server, so check the repo or global config that selected that remote"
+}
+
+func localIssueExplanation(err error) string {
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(msg, "no such file or directory"),
+		strings.Contains(msg, "unable to open database file"):
+		return "this command is currently using local mode, but the local ticket database is missing or unreadable"
+	case strings.Contains(msg, "permission denied"):
+		return "this command is currently using local mode, but the local ticket database is not readable with the current permissions"
+	default:
+		return "this command is currently using local mode, so check the local ticket database path and permissions"
+	}
 }
 
 func remoteConfigSubject() string {
