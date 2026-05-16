@@ -23,19 +23,25 @@ func TestCreateListAndGetProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
-	if len(projects) != 3 {
-		t.Fatalf("ListProjects() len = %d, want 3", len(projects))
+	if len(projects) != 4 {
+		t.Fatalf("ListProjects() len = %d, want 4", len(projects))
 	}
 
 	foundPrivate := false
+	foundTicket := false
 	for _, listed := range projects {
 		if listed.Title == "Private" && listed.Prefix == "PRIV" {
 			foundPrivate = true
-			break
+		}
+		if listed.Title == ticketProjectTitle && listed.Prefix == ticketProjectPrefix && listed.GitRepository == ticketProjectRepo {
+			foundTicket = true
 		}
 	}
 	if !foundPrivate {
 		t.Fatalf("ListProjects() missing seeded Private project: %#v", projects)
+	}
+	if !foundTicket {
+		t.Fatalf("ListProjects() missing seeded ticket project: %#v", projects)
 	}
 
 	byID, err := GetProject(context.Background(), db, strconv.FormatInt(project.ID, 10))

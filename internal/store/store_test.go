@@ -85,6 +85,30 @@ func TestInitCreatesDatabaseAndAdminUser(t *testing.T) {
 		t.Fatalf("private project description = %q, want %q", privateDescription, privateProjectDesc)
 	}
 
+	var ticketProjectCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE title = 'ticket' AND prefix = 'TK' AND git_repository = ?`, ticketProjectRepo).Scan(&ticketProjectCount); err != nil {
+		t.Fatalf("QueryRow(ticket project) error = %v", err)
+	}
+	if ticketProjectCount != 1 {
+		t.Fatalf("ticket project count = %d, want 1", ticketProjectCount)
+	}
+
+	adminUser, err := GetUserByUsername(context.Background(), db, "admin")
+	if err != nil {
+		t.Fatalf("GetUserByUsername(admin) error = %v", err)
+	}
+	ticketProject, err := GetProjectByGitRepository(context.Background(), db, ticketProjectRepo)
+	if err != nil {
+		t.Fatalf("GetProjectByGitRepository(ticket) error = %v", err)
+	}
+	adminRole, adminOK, err := ProjectRoleForUser(context.Background(), db, ticketProject.ID, adminUser.ID)
+	if err != nil {
+		t.Fatalf("ProjectRoleForUser(ticket) error = %v", err)
+	}
+	if !adminOK || adminRole != ProjectRoleAdmin {
+		t.Fatalf("ProjectRoleForUser(ticket) = (%q,%v), want (%q,true)", adminRole, adminOK, ProjectRoleAdmin)
+	}
+
 	var defaultCount int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE title = 'Default Project'`).Scan(&defaultCount); err != nil {
 		t.Fatalf("QueryRow(default project) error = %v", err)

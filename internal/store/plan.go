@@ -18,6 +18,9 @@ const (
 	publicProjectPrefix = "PUB"
 	publicProjectTitle  = "Public"
 	publicProjectDesc   = "A project visible to everyone."
+	ticketProjectPrefix = "TK"
+	ticketProjectTitle  = "ticket"
+	ticketProjectRepo   = "github.com/simonski/ticket.git"
 	privateProjectDesc  = "Your private project."
 )
 
@@ -608,4 +611,28 @@ func ensurePersonalResources(ctx context.Context, db *sql.DB, user User, plan Pl
 		}
 	}
 	return nil
+}
+
+func ensureBootstrapTicketProject(ctx context.Context, db *sql.DB, adminUserID string) (Project, error) {
+	project, err := GetProjectByGitRepository(ctx, db, ticketProjectRepo)
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrProjectNotFound):
+		project, err = CreateProjectWithParams(ctx, db, ProjectCreateParams{
+			Prefix:        ticketProjectPrefix,
+			Title:         ticketProjectTitle,
+			Visibility:    ProjectVisibilityPrivate,
+			CreatedBy:     adminUserID,
+			GitRepository: ticketProjectRepo,
+		})
+		if err != nil {
+			return Project{}, err
+		}
+	default:
+		return Project{}, err
+	}
+	if _, err := AddProjectMember(ctx, db, project.ID, adminUserID, ProjectRoleAdmin); err != nil {
+		return Project{}, err
+	}
+	return project, nil
 }

@@ -145,6 +145,9 @@ func Init(path, adminUsername, adminPassword string, seedFn ...SeedFunc) error {
 	if _, _, err := ensurePublicResources(ctx, db, adminUser.ID); err != nil {
 		return err
 	}
+	if _, err := ensureBootstrapTicketProject(ctx, db, adminUser.ID); err != nil {
+		return err
+	}
 	return nil
 }
 
