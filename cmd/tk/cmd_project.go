@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -261,7 +260,7 @@ func runProject(args []string) error {
 		if len(args) > 2 {
 			return errors.New("usage: tk project get <id>")
 		}
-		projectRef := strings.TrimSpace(cfg.ProjectID)
+		projectRef := resolveConfiguredProjectReference(cfg)
 		if len(args) == 2 {
 			projectRef = strings.TrimSpace(args[1])
 		}
@@ -284,14 +283,9 @@ func runProject(args []string) error {
 		return nil
 	case "use", "default":
 		if len(args) < 2 {
-			// No ID: print the current project
-			if cfg.ProjectID == "" {
-				fmt.Println("no project set")
-				return nil
-			}
-			project, err := svc.GetProject(context.Background(), cfg.ProjectID)
+			project, _, err := resolveProjectContext(context.Background(), cfg, svc, resolveConfiguredProjectReference(cfg))
 			if err != nil {
-				fmt.Println(cfg.ProjectID)
+				fmt.Println("no project set")
 				return nil
 			}
 			fmt.Printf("%s — %s\n", project.Prefix, project.Title)
@@ -329,18 +323,15 @@ func runProject(args []string) error {
 				return runProjectByID(svc, *idFlag, args)
 			}
 		}
-		if cfg.ProjectID == "" {
-			return errors.New("no current project set; use: tk project use <id>")
-		}
-		project, err := svc.GetProject(context.Background(), cfg.ProjectID)
+		project, err := requireCurrentProject(cfg, svc)
 		if err != nil {
 			return err
 		}
 		return runProjectByID(svc, project.ID, args)
-	case "init":
-		return runProjectInit(cfg, svc, args[1:])
 	case "remote":
 		return runProjectRemote(cfg, args[1:])
+	case "repo", "repos", "repository", "repositories":
+		return runProjectRepository(cfg, svc, args[1:])
 	case "set-draft":
 		fs := flag.NewFlagSet("project set-draft", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
@@ -375,10 +366,7 @@ func runProject(args []string) error {
 		if newPrefix == "" {
 			return errors.New("new prefix is required")
 		}
-		if cfg.ProjectID == "" {
-			return errors.New("no current project set; use: tk project use <id>")
-		}
-		project, err := svc.GetProject(context.Background(), cfg.ProjectID)
+		project, err := requireCurrentProject(cfg, svc)
 		if err != nil {
 			return err
 		}
@@ -457,75 +445,6 @@ func runProject(args []string) error {
 	}
 }
 
-func runProjectInit(cfg config.Config, svc libticket.Service, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	dirName := filepath.Base(cwd)
-
-	fs := flag.NewFlagSet("project init", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	prefix := fs.String("prefix", defaultProjectPrefix(cwd), "project prefix (default: derived from directory name)")
-	title := fs.String("title", dirName, "project title (default: directory name)")
-	description := fs.String("description", dirName, "project description (default: directory name)")
-	dor := fs.String("dor", "", "definition of ready")
-	dod := fs.String("dod", "", "definition of done")
-	ac := fs.String("ac", "", "acceptance criteria")
-	dorMapRaw := fs.String("dor-map", "", "stage-specific DoR entries (stage=value,...)")
-	dodMapRaw := fs.String("dod-map", "", "stage-specific DoD entries (stage=value,...)")
-	acMapRaw := fs.String("ac-map", "", "stage-specific acceptance criteria entries (stage=value,...)")
-	if parseErr := fs.Parse(args); parseErr != nil {
-		return parseErr
-	}
-
-	// Check if a project is already initialised
-	if cfg.ProjectID != "" {
-		cfgPath, _, _ := config.ProjectPath()
-		return fmt.Errorf("project already initialised: %s (in %s)", cfg.ProjectID, cfgPath)
-	}
-
-	// Try to find existing project by prefix
-	project, err := svc.GetProject(context.Background(), *prefix)
-	if err != nil {
-		dorMap, mergeErr := mergeGuidanceMap(nil, *dor, *dorMapRaw, containsFlag(args, "-dor"), containsFlag(args, "-dor-map"))
-		if mergeErr != nil {
-			return mergeErr
-		}
-		dodMap, mergeErr := mergeGuidanceMap(nil, *dod, *dodMapRaw, containsFlag(args, "-dod"), containsFlag(args, "-dod-map"))
-		if mergeErr != nil {
-			return mergeErr
-		}
-		acMap, mergeErr := mergeGuidanceMap(nil, *ac, *acMapRaw, containsFlag(args, "-ac"), containsFlag(args, "-ac-map"))
-		if mergeErr != nil {
-			return mergeErr
-		}
-		// Project doesn't exist — create it
-		project, err = svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
-			Prefix:             *prefix,
-			Title:              *title,
-			Description:        *description,
-			AcceptanceCriteria: strings.TrimSpace(*ac),
-			DORMap:             dorMap,
-			DODMap:             dodMap,
-			ACMap:              acMap,
-			Notes:              strings.TrimSpace(*dod),
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("created project %s (%s)\n", project.Prefix, project.Title)
-	} else {
-		fmt.Printf("found existing project %s (%s)\n", project.Prefix, project.Title)
-	}
-
-	remoteName := strings.TrimSpace(cfg.Remote)
-	if remoteName == "" {
-		remoteName = strings.TrimSpace(cfg.DefaultRemote)
-	}
-	return bindRootToRemoteProject(cwd, remoteName, project.Prefix)
-}
-
 func runProjectRemote(cfg config.Config, args []string) error {
 	if len(args) == 0 {
 		if strings.TrimSpace(cfg.Remote) == "" {
@@ -557,16 +476,70 @@ func runProjectRemote(cfg config.Config, args []string) error {
 	return nil
 }
 
+func runProjectRepository(cfg config.Config, svc libticket.Service, args []string) error {
+	usage := "tk project repo <ls|add|rm> [-project_id <id|prefix|public|private>] [repository]"
+	if len(args) == 0 {
+		return errors.New(usage)
+	}
+	fs := flag.NewFlagSet("project repo", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	projectRef := strings.TrimSpace(*projectID)
+	if projectRef == "" {
+		project, err := requireCurrentProject(cfg, svc)
+		if err != nil {
+			return err
+		}
+		projectRef = project.Prefix
+	}
+	switch strings.TrimSpace(args[0]) {
+	case "ls", "list":
+		repositories, err := svc.ListProjectGitRepositories(context.Background(), projectRef)
+		if err != nil {
+			return err
+		}
+		if outputJSON {
+			return printJSON(repositories)
+		}
+		for _, repository := range repositories {
+			fmt.Println(repository)
+		}
+		return nil
+	case "add":
+		if fs.NArg() != 1 {
+			return errors.New(usage)
+		}
+		repository := fs.Arg(0)
+		if err := svc.AddProjectGitRepository(context.Background(), projectRef, repository); err != nil {
+			return err
+		}
+		fmt.Printf("added repository %s to project %s\n", repository, projectRef)
+		return nil
+	case "rm", "remove", "delete":
+		if fs.NArg() != 1 {
+			return errors.New(usage)
+		}
+		repository := fs.Arg(0)
+		if err := svc.RemoveProjectGitRepository(context.Background(), projectRef, repository); err != nil {
+			return err
+		}
+		fmt.Printf("removed repository %s from project %s\n", repository, projectRef)
+		return nil
+	default:
+		return errors.New(usage)
+	}
+}
+
 func runProjectWorkflow(cfg config.Config, svc libticket.Service, args []string) error {
 	usage := "tk project workflow <workflow-id>   (use 0 to clear)"
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		fmt.Println(usage)
 		return nil
 	}
-	if cfg.ProjectID == "" {
-		return errors.New("no current project set; use: tk project use <id>")
-	}
-	current, err := svc.GetProject(context.Background(), cfg.ProjectID)
+	current, err := requireCurrentProject(cfg, svc)
 	if err != nil {
 		return err
 	}

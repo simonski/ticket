@@ -179,6 +179,11 @@ func CreateProjectWithParams(ctx context.Context, db *sql.DB, params ProjectCrea
 			return Project{}, err
 		}
 	}
+	if repo := strings.TrimSpace(params.GitRepository); repo != "" {
+		if err := AddProjectGitRepository(ctx, db, id, repo); err != nil {
+			return Project{}, err
+		}
+	}
 	if err := SetProjectAcceptsNewMembers(ctx, db, id, params.AcceptsNewMembers); err != nil {
 		return Project{}, err
 	}
@@ -365,10 +370,17 @@ func GetProjectByGitRepository(ctx context.Context, db *sql.DB, gitRepository st
 	if err := ensureProjectAccessTables(ctx, db); err != nil {
 		return Project{}, err
 	}
+	if err := ensureProjectRepositoryTable(ctx, db); err != nil {
+		return Project{}, err
+	}
 	row := db.QueryRowContext(ctx, `
 		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
 		FROM projects
-		WHERE git_repository = ?
+		WHERE project_id IN (
+			SELECT project_id
+			FROM project_git_repositories
+			WHERE repository = ?
+		)
 		ORDER BY project_id
 		LIMIT 1
 	`, strings.TrimSpace(gitRepository))
@@ -487,6 +499,11 @@ func UpdateProjectWithParams(ctx context.Context, db *sql.DB, id int64, params P
 	`, nextTitle, nextDescription, nextAC, dorJSON, dodJSON, acJSON, nextRepo, nextNotes, nextStatus, nextVisibility, nextWorkflowID, nextAgentModelProvider, nextAgentModelName, nextAgentModelURL, nextAgentModelAPIKey, id)
 	if err != nil {
 		return Project{}, err
+	}
+	if nextRepo != "" {
+		if err := AddProjectGitRepository(ctx, db, id, nextRepo); err != nil {
+			return Project{}, err
+		}
 	}
 	if err := SetProjectAcceptsNewMembers(ctx, db, id, params.AcceptsNewMembers); err != nil {
 		return Project{}, err

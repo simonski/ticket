@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -857,6 +858,91 @@ func (r *router) registerProjectHandlers() {
 					return
 				}
 				writeJSON(w, http.StatusOK, members)
+				return
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+		}
+
+		if (len(parts) == 2 && parts[1] == "repositories") || (len(parts) >= 3 && parts[1] == "repositories") {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			project, err := store.GetProject(r.Context(), db, parts[0])
+			if err != nil {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+			role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/repositories")
+					return
+				}
+				if !canReadProject(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				repositories, err := store.ListProjectGitRepositories(r.Context(), db, project.ID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, repositories)
+				return
+			case http.MethodPost:
+				if len(parts) != 2 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/repositories")
+					return
+				}
+				if !canManageProjectUsers(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				var payload struct {
+					Repository string `json:"repository"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid json body")
+					return
+				}
+				if err := store.AddProjectGitRepository(r.Context(), db, project.ID, payload.Repository); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
+				return
+			case http.MethodDelete:
+				if len(parts) < 3 {
+					writeError(w, http.StatusBadRequest, "usage: /api/projects/{id}/repositories/{repository}")
+					return
+				}
+				if !canManageProjectUsers(role) {
+					writeAuthError(w, store.ErrForbidden)
+					return
+				}
+				repository, err := url.PathUnescape(strings.Join(parts[2:], "/"))
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "invalid repository path")
+					return
+				}
+				if err := store.RemoveProjectGitRepository(r.Context(), db, project.ID, repository); err != nil {
+					if errors.Is(err, store.ErrProjectGitRepositoryNotFound) {
+						writeError(w, http.StatusNotFound, err.Error())
+						return
+					}
+					writeStoreError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 				return
 			default:
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")

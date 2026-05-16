@@ -68,6 +68,7 @@ var tkSkillContent string
 
 const defaultAdminPassword = "password"
 
+//nolint:unused // Legacy setup prompt retained until the deprecated interactive setup code is fully removed.
 func prompt(reader *bufio.Reader, question, defaultVal string) string {
 	if defaultVal != "" {
 		fmt.Printf("%s [%s]: ", question, defaultVal)
@@ -96,7 +97,9 @@ func promptYN(reader *bufio.Reader, question string, defaultYes bool) bool {
 	return line == "y" || line == "yes"
 }
 
-// initFlags holds optional flags passed to tk init that override interactive prompts.
+// setupFlags holds optional flags passed to the removed interactive setup flow.
+//
+//nolint:unused // Legacy interactive setup type retained until the deprecated setup flow is fully removed.
 type initFlags struct {
 	workflow string
 	prefix   string
@@ -104,6 +107,7 @@ type initFlags struct {
 	git      string
 }
 
+//nolint:unused // Legacy interactive setup type retained until the deprecated setup flow is fully removed.
 type setupDetectedValues struct {
 	url       string
 	username  string
@@ -112,6 +116,7 @@ type setupDetectedValues struct {
 	source    string
 }
 
+//nolint:unused // Deprecated interactive setup command has been unrouted but not fully deleted yet.
 func runSetup(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -162,13 +167,13 @@ func runSetup(args []string) error {
 	}
 	gitRoot, ok := config.FindGitRoot(root)
 	if !ok {
-		return errors.New("tk init requires a git repository; run git init or clone a repo first")
+		return errors.New("interactive setup requires a git repository; run git init or clone a repo first")
 	}
 	root = gitRoot
 
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Println("tk init")
+	fmt.Println("tk setup")
 	fmt.Println()
 	fmt.Printf("git root   : %s\n", root)
 	fmt.Printf("config dir : %s\n", filepath.Join(root, ".ticket"))
@@ -205,6 +210,7 @@ func runSetup(args []string) error {
 	return runSetupNew(reader, flags, detected)
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func detectGitOrigin() string {
 	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
 	if err != nil {
@@ -213,7 +219,9 @@ func detectGitOrigin() string {
 	return strings.TrimSpace(string(out))
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func detectSetupValues(root string) (setupDetectedValues, error) {
+	_ = root
 	values := setupDetectedValues{}
 	envURL := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	envUser := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
@@ -227,24 +235,10 @@ func detectSetupValues(root string) (setupDetectedValues, error) {
 		values.source = "environment"
 		return values, nil
 	}
-	path, ok, err := findTicketJSONPath(root)
-	if err != nil {
-		return setupDetectedValues{}, err
-	}
-	if !ok {
-		return values, nil
-	}
-	settings, err := parseTicketJSON(path)
-	if err != nil {
-		return setupDetectedValues{}, err
-	}
-	values.url = settings.URL
-	values.username = settings.Username
-	values.projectID = settings.ProjectID
-	values.source = settings.Path
 	return values, nil
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func matchProjectByGitOrigin(projects []store.Project, gitOrigin string) *store.Project {
 	if gitOrigin == "" {
 		return nil
@@ -257,6 +251,7 @@ func matchProjectByGitOrigin(projects []store.Project, gitOrigin string) *store.
 	return nil
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func runSetupNew(reader *bufio.Reader, f initFlags, detected setupDetectedValues) error {
 	fmt.Println()
 	remoteDefault := strings.TrimSpace(detected.url) != ""
@@ -271,7 +266,7 @@ func runSetupNew(reader *bufio.Reader, f initFlags, detected setupDetectedValues
 	return runSetupRemote(reader, detected)
 }
 
-//nolint:unused // retained temporarily during server-only migration cleanup
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	var f initFlags
 	if len(flags) > 0 {
@@ -335,6 +330,7 @@ func runSetupLocal(reader *bufio.Reader, flags ...initFlags) error {
 	return runSetupPostInit(reader, f.workflow)
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 	// 1. Server URL
 	defaultURL := defaultTicketURL
@@ -518,6 +514,7 @@ func runSetupRemote(reader *bufio.Reader, detected setupDetectedValues) error {
 	return runSetupPostInit(reader)
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg config.Config) error {
 	root, _, err := currentOrAncestorProjectRoot()
 	if err != nil {
@@ -552,6 +549,7 @@ func setupCreateRemoteProject(reader *bufio.Reader, svc libticket.Service, cfg c
 	return runSetupPostInit(reader)
 }
 
+//nolint:unused // Deprecated interactive setup helper has been unrouted but not fully deleted yet.
 func runSetupPostInit(reader *bufio.Reader, workflowName ...string) error {
 	workflow := ""
 	if len(workflowName) > 0 {

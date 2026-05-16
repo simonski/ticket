@@ -36,7 +36,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"initdb": {
 		usage:   "tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]",
-		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded.", "`tk init` is the interactive client setup command."},
+		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
 		example: "tk initdb . --force -password secret -populate",
 	},
 	"export": {
@@ -451,11 +451,6 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Alias for `tk list`. Lists open tickets in the active project or prints just the count when `-count` or an expectation flag is used.", "Filter by type, stage, state, rendered status, or assignee."},
 		example: "tk ls -t bug -count -expect_equals 2",
 	},
-	"init": {
-		usage:   "tk init [-prefix <prefix>] [-name <name>] [-git <repository-url>] [-workflow <name>]",
-		details: []string{"Interactive client setup for local or remote mode.", "`tk init` requires the current working directory to be inside a git repository.", "It detects current settings from environment variables and nearest `.ticket.json` (up to git root), then lets you review/amend them."},
-		example: "tk init",
-	},
 	"curate": {
 		usage:   "tk curate",
 		details: []string{"Merges and curates requirements by finding near-duplicate ideas and presenting them for consolidation.", "Runs an AI-assisted grouping step to identify overlapping requirements."},
@@ -500,7 +495,7 @@ func renderRootUsage() string {
 		{"ticket", "Manage tickets (ls, new, get, update, rm, state, assign, close)"},
 		{"action", "Manage action tickets (create, update, comment, complete, assign)"},
 		{"idea", "Capture and refine requirements (ls, new, get, shape, accept, reject)"},
-		{"project", "Manage projects (ls, new, get, use, rm, init)"},
+		{"project", "Manage projects (ls, new, get, use, rm, repo)"},
 		{"dep", "Manage dependency links (add, remove)"},
 		{"label", "Manage labels (ls, new, rm, add, remove, show)"},
 		{"time", "Log and view time entries (log, ls, total, rm)"},
@@ -543,7 +538,6 @@ func renderRootUsage() string {
 		{"register", "Create a user account on the server"},
 		{"remote", "Manage named remotes"},
 		{"config", "Manage local config keys"},
-		{"init", "Interactive project setup"},
 		{"initdb", "Initialize the database"},
 		{"export", "Export entities to a JSON snapshot"},
 		{"import", "Import entities from a JSON snapshot"},
@@ -624,7 +618,7 @@ Commands:
   rename-prefix <new-prefix>          Rename prefix and re-key all tickets
   set-draft [-project_id <id>] <true|false>  Set project default draft mode
   workflow     <id>                          Set workflow on current project (use 0 to clear)
-  init                                Init project in current directory
+  repo         <ls|add|rm>                  Manage project git repositories
   add-user                            Add a user to a project
   remove-user                         Remove a user from a project
   add-team                            Add a team to a project

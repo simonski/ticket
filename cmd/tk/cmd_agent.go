@@ -171,7 +171,7 @@ func runAgent(args []string) error {
 		}
 		resolved, rErr := config.ResolveURL()
 		if rErr != nil || resolved.Mode != config.ModeRemote {
-			return errors.New("agent run requires a configured server remote (run tk init to configure)")
+			return errors.New("agent run requires a configured server remote")
 		}
 		missing := make([]string, 0, 2)
 		if agentIDVal == "" {

@@ -82,6 +82,7 @@ func uniqueRemoteName(cfg config.Config, preferred string) string {
 	}
 }
 
+//nolint:unused // Legacy setup helper retained until the removed interactive setup flow is fully deleted.
 func ensureNamedRemote(preferredName, rawURL string) (config.Config, string, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -105,6 +106,7 @@ func ensureNamedRemote(preferredName, rawURL string) (config.Config, string, err
 	return cfg, name, nil
 }
 
+//nolint:unused // Legacy setup helper retained until the removed interactive setup flow is fully deleted.
 func defaultRemoteNameForURL(rawURL string) string {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {

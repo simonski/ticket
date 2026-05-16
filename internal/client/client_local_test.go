@@ -765,6 +765,19 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	if removeProjectMemberErr := api.RemoveProjectMember(context.Background(), 1, userID); removeProjectMemberErr != nil {
 		t.Fatalf("RemoveProjectMember() error = %v", removeProjectMemberErr)
 	}
+	if err := api.AddProjectGitRepository(context.Background(), "1", "github.com/acme/extra.git"); err != nil {
+		t.Fatalf("AddProjectGitRepository() error = %v", err)
+	}
+	repositories, err := api.ListProjectGitRepositories(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("ListProjectGitRepositories() error = %v", err)
+	}
+	if len(repositories) == 0 {
+		t.Fatal("ListProjectGitRepositories() returned empty")
+	}
+	if err := api.RemoveProjectGitRepository(context.Background(), "1", "github.com/acme/extra.git"); err != nil {
+		t.Fatalf("RemoveProjectGitRepository() error = %v", err)
+	}
 
 	// Project team members
 	ptm, err := api.AddProjectTeamMember(context.Background(), 1, ProjectTeamMemberRequest{TeamID: team.ID, Role: "viewer"})

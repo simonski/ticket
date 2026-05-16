@@ -238,6 +238,18 @@ func (s *HTTPService) SetProjectDefaultDraft(ctx context.Context, projectID int6
 	return s.client.SetProjectDefaultDraft(ctx, projectID, draft)
 }
 
+func (s *HTTPService) ListProjectGitRepositories(ctx context.Context, projectRef string) ([]string, error) {
+	return s.client.ListProjectGitRepositories(ctx, projectRef)
+}
+
+func (s *HTTPService) AddProjectGitRepository(ctx context.Context, projectRef, repository string) error {
+	return s.client.AddProjectGitRepository(ctx, projectRef, repository)
+}
+
+func (s *HTTPService) RemoveProjectGitRepository(ctx context.Context, projectRef, repository string) error {
+	return s.client.RemoveProjectGitRepository(ctx, projectRef, repository)
+}
+
 func (s *HTTPService) AddProjectMember(ctx context.Context, projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
 	return s.client.AddProjectMember(ctx, projectID, client.ProjectMemberRequest(request))
 }

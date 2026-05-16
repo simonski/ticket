@@ -81,6 +81,10 @@ type ProjectMemberRequest struct {
 	Role   string `json:"role"`
 }
 
+type ProjectRepositoryRequest struct {
+	Repository string `json:"repository"`
+}
+
 type ProjectTeamMemberRequest struct {
 	TeamID int64  `json:"team_id"`
 	Role   string `json:"role"`

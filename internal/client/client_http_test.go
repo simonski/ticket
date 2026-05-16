@@ -632,6 +632,12 @@ func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/7/users":
 			_, _ = w.Write([]byte(`[{"project_id":7,"user_id":"u1","role":"member"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/REP/repositories":
+			_, _ = w.Write([]byte(`["github.com/acme/repo.git"]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/projects/REP/repositories":
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodDelete && (r.URL.Path == "/api/projects/REP/repositories/github.com/acme/repo.git" || r.URL.EscapedPath() == "/api/projects/REP/repositories/github.com%2Facme%2Frepo.git"):
+			_, _ = w.Write([]byte(`{"status":"deleted"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/projects/7/teams":
 			_, _ = w.Write([]byte(`{"project_id":7,"team_id":1,"role":"member"}`))
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/projects/7/teams/1":
@@ -677,6 +683,15 @@ func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
 	}
 	if _, err := api.ListProjectMembers(context.Background(), 7); err != nil {
 		t.Fatalf("ListProjectMembers() error = %v", err)
+	}
+	if _, err := api.ListProjectGitRepositories(context.Background(), "REP"); err != nil {
+		t.Fatalf("ListProjectGitRepositories() error = %v", err)
+	}
+	if err := api.AddProjectGitRepository(context.Background(), "REP", "github.com/acme/repo.git"); err != nil {
+		t.Fatalf("AddProjectGitRepository() error = %v", err)
+	}
+	if err := api.RemoveProjectGitRepository(context.Background(), "REP", "github.com/acme/repo.git"); err != nil {
+		t.Fatalf("RemoveProjectGitRepository() error = %v", err)
 	}
 	if _, err := api.AddProjectTeamMember(context.Background(), 7, ProjectTeamMemberRequest{TeamID: 1, Role: "member"}); err != nil {
 		t.Fatalf("AddProjectTeamMember() error = %v", err)

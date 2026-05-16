@@ -69,8 +69,8 @@ func injectConfigFileIntoSummary(summary []statusLine, configFile string) []stat
 
 // resolveCurrentProject returns the active project key and where it came from.
 func resolveCurrentProject(cfg config.Config) (projectID, source string) {
-	if cfg.ProjectID != "" {
-		return cfg.ProjectID, effectiveConfigPath()
+	if projectRef := resolveConfiguredProjectReference(cfg); projectRef != "" {
+		return projectRef, effectiveConfigPath()
 	}
 	return "", ""
 }
@@ -121,13 +121,8 @@ func resolveCurrentProjectContext(cfg config.Config, svc libticket.Service) curr
 }
 
 func statusProjectReference(cfg config.Config) string {
-	if ref := strings.TrimSpace(os.Getenv("TICKET_PROJECT")); ref != "" {
+	if ref := resolveConfiguredProjectReference(cfg); ref != "" {
 		return ref
-	}
-	if fileSettings, err := loadNearestTicketJSONSettings(); err == nil {
-		if ref := strings.TrimSpace(fileSettings.ProjectID); ref != "" {
-			return ref
-		}
 	}
 	if nearestGitRemoteFromCLI() != "" {
 		return ""
@@ -338,7 +333,7 @@ func runLocalStatusWithSummaryStyle(statusUnicode bool) error {
 	}...)
 	printStatusBox(mergeStatusHeaderLines(summary, cfgPath, lines))
 	if !dbExists {
-		fmt.Println("hint: run tk init")
+		fmt.Println("hint: run tk initdb")
 	}
 	return connErr
 }

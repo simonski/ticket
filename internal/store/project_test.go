@@ -87,6 +87,58 @@ func TestUpdateAndEnableDisableProject(t *testing.T) {
 	}
 }
 
+func TestProjectGitRepositories(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
+		Title:         "Repo Project",
+		Prefix:        "REP",
+		GitRepository: "github.com/acme/one.git",
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+
+	repositories, err := ListProjectGitRepositories(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("ListProjectGitRepositories() error = %v", err)
+	}
+	if !reflect.DeepEqual(repositories, []string{"github.com/acme/one.git"}) {
+		t.Fatalf("ListProjectGitRepositories() = %#v", repositories)
+	}
+
+	if err := AddProjectGitRepository(context.Background(), db, project.ID, "github.com/acme/two.git"); err != nil {
+		t.Fatalf("AddProjectGitRepository() error = %v", err)
+	}
+	repositories, err = ListProjectGitRepositories(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("ListProjectGitRepositories(second) error = %v", err)
+	}
+	if !reflect.DeepEqual(repositories, []string{"github.com/acme/one.git", "github.com/acme/two.git"}) {
+		t.Fatalf("ListProjectGitRepositories(second) = %#v", repositories)
+	}
+
+	byRepo, err := GetProjectByGitRepository(context.Background(), db, "github.com/acme/two.git")
+	if err != nil {
+		t.Fatalf("GetProjectByGitRepository() error = %v", err)
+	}
+	if byRepo.ID != project.ID {
+		t.Fatalf("GetProjectByGitRepository().ID = %d, want %d", byRepo.ID, project.ID)
+	}
+
+	if err := RemoveProjectGitRepository(context.Background(), db, project.ID, "github.com/acme/one.git"); err != nil {
+		t.Fatalf("RemoveProjectGitRepository() error = %v", err)
+	}
+	updated, err := GetProjectByID(context.Background(), db, project.ID)
+	if err != nil {
+		t.Fatalf("GetProjectByID() error = %v", err)
+	}
+	if updated.GitRepository != "github.com/acme/two.git" {
+		t.Fatalf("GetProjectByID().GitRepository = %q", updated.GitRepository)
+	}
+}
+
 func TestSetProjectDefaultDraft(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

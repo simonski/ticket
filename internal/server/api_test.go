@@ -5462,6 +5462,52 @@ func loginAdmin(t *testing.T, handler http.Handler) string {
 	return auth.Token
 }
 
+func TestProjectRepositoryCRUDAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	projectResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":          "Repo Project",
+		"prefix":         "REP",
+		"git_repository": "github.com/acme/primary.git",
+	}, token)
+	if projectResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, want %d body=%s", projectResp.Code, http.StatusCreated, projectResp.Body.String())
+	}
+
+	addResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects/REP/repositories", map[string]string{
+		"repository": "github.com/acme/secondary.git",
+	}, token)
+	if addResp.Code != http.StatusCreated {
+		t.Fatalf("add repository status = %d, want %d body=%s", addResp.Code, http.StatusCreated, addResp.Body.String())
+	}
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/REP/repositories", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list repositories status = %d, want %d body=%s", listResp.Code, http.StatusOK, listResp.Body.String())
+	}
+	var repositories []string
+	decodeResponse(t, listResp, &repositories)
+	if len(repositories) != 2 {
+		t.Fatalf("list repositories len = %d, want 2", len(repositories))
+	}
+
+	removeResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/REP/repositories/github.com%2Facme%2Fprimary.git", nil, token)
+	if removeResp.Code != http.StatusOK {
+		t.Fatalf("remove repository status = %d, want %d body=%s", removeResp.Code, http.StatusOK, removeResp.Body.String())
+	}
+
+	project, err := store.GetProjectByGitRepository(context.Background(), db, "github.com/acme/secondary.git")
+	if err != nil {
+		t.Fatalf("GetProjectByGitRepository() error = %v", err)
+	}
+	if project.Prefix != "REP" {
+		t.Fatalf("GetProjectByGitRepository().Prefix = %q, want REP", project.Prefix)
+	}
+}
+
 func TestHealthzAPI(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

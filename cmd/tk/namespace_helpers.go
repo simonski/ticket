@@ -34,11 +34,11 @@ func entityPlural(name string) string {
 }
 
 func requireCurrentProject(cfg config.Config, svc libticket.Service) (store.Project, error) {
-	projectRef := strings.TrimSpace(cfg.ProjectID)
-	if projectRef == "" {
-		return store.Project{}, errors.New("no current project set; use: tk project use <id>")
+	project, _, err := resolveProjectContext(context.Background(), cfg, svc, resolveConfiguredProjectReference(cfg))
+	if err != nil {
+		return store.Project{}, err
 	}
-	return svc.GetProject(context.Background(), projectRef)
+	return project, nil
 }
 
 func mostRecentProject(svc libticket.Service) (store.Project, error) {

@@ -44,10 +44,12 @@ func detectGitOriginAt(root string) string {
 	return remote
 }
 
+//nolint:unused // Legacy bootstrap helper retained until the old local bootstrap flow is fully deleted.
 func defaultProjectTitle(root string) string {
 	return filepath.Base(root)
 }
 
+//nolint:unused // Legacy bootstrap helper retained until the old local bootstrap flow is fully deleted.
 func defaultProjectPrefix(root string) string {
 	title := strings.ToUpper(strings.TrimSpace(filepath.Base(root)))
 	letters := make([]rune, 0, len(title))
@@ -65,6 +67,7 @@ func defaultProjectPrefix(root string) string {
 	return string(letters[:2])
 }
 
+//nolint:unused // Legacy bootstrap helper retained until the old local bootstrap flow is fully deleted.
 func ensureLocalDatabase() (config.Config, error) {
 	dbPath, err := config.LocalDBPath()
 	if err != nil {
@@ -88,6 +91,7 @@ func ensureLocalDatabase() (config.Config, error) {
 	return cfg, nil
 }
 
+//nolint:unused // Legacy bootstrap helper retained until the old local bootstrap flow is fully deleted.
 func bindRootToLocalProject(root, titleOverride, prefixOverride, gitOverride string) error {
 	dbPath, err := config.LocalDBPath()
 	if err != nil {
@@ -159,6 +163,7 @@ func bindRootToRemoteProject(root, remoteName, projectID string) error {
 	return config.Save(cfg)
 }
 
+//nolint:unused // Legacy bootstrap helper retained until the old local bootstrap flow is fully deleted.
 func maybeBootstrapMutableCommand(args []string) error {
 	if len(args) == 0 || !isMutableCommand(args) {
 		return nil
@@ -166,6 +171,7 @@ func maybeBootstrapMutableCommand(args []string) error {
 	return nil
 }
 
+//nolint:unused // Legacy bootstrap helper retained until the old local bootstrap flow is fully deleted.
 func isMutableCommand(args []string) bool {
 	if len(args) == 0 {
 		return false
@@ -182,21 +188,10 @@ func isMutableCommand(args []string) bool {
 			return false
 		}
 		switch args[1] {
-		case "create", "add", "new", "update", "use", "default", "init", "set-draft", "rename-prefix", "rm", "delete",
+		case "create", "add", "new", "update", "use", "default", "set-draft", "rename-prefix", "rm", "delete",
 			"attach", "detach", "link", "unlink", "log":
 			return true
 		}
 	}
 	return false
-}
-
-func advisoryNotManagedProject() error {
-	root, _, err := currentOrAncestorProjectRoot()
-	if err != nil {
-		return err
-	}
-	if gitRoot, ok := config.FindGitRoot(root); ok {
-		return fmt.Errorf("not a ticket project — run `tk init` in %s or use a mutable command like `tk new` to bootstrap it", gitRoot)
-	}
-	return fmt.Errorf("not a ticket project — run `tk init` here or use a mutable command like `tk new` to bootstrap it")
 }

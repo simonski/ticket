@@ -690,6 +690,42 @@ func (s *LocalService) SetProjectDefaultDraft(ctx context.Context, projectID int
 	return store.SetProjectDefaultDraft(ctx, db, projectID, draft)
 }
 
+func (s *LocalService) ListProjectGitRepositories(ctx context.Context, projectRef string) ([]string, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return nil, err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListProjectGitRepositories(ctx, db, project.ID)
+}
+
+func (s *LocalService) AddProjectGitRepository(ctx context.Context, projectRef, repository string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return err
+	}
+	return store.AddProjectGitRepository(ctx, db, project.ID, repository)
+}
+
+func (s *LocalService) RemoveProjectGitRepository(ctx context.Context, projectRef, repository string) error {
+	db, err := s.openDB()
+	if err != nil {
+		return err
+	}
+	project, err := store.GetProject(ctx, db, projectRef)
+	if err != nil {
+		return err
+	}
+	return store.RemoveProjectGitRepository(ctx, db, project.ID, repository)
+}
+
 func (s *LocalService) AddProjectMember(ctx context.Context, projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
 	db, err := s.openDB()
 	if err != nil {

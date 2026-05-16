@@ -93,17 +93,13 @@ Bootstrap resolution works like this:
 - initial workflow selection: use `-workflow <name>` to assign one of the built-in Workflows during bootstrap
 - project prefixes must be 1-5 uppercase ASCII letters
 
-Bind the current git repo to a project:
+Project selection is automatic. For remote commands, Ticket resolves the project
+in this order:
 
-```bash
-tk init
-```
-
-`tk init` requires the current working directory to be inside a git repository.
-It writes `.ticket/config.json` in that repo root with the project binding.
-During interactive setup, Ticket shows detected values from environment variables
-and nearest `.ticket.json` (walking up from CWD until the git root), then lets
-you choose local or remote client mode.
+1. `-project_id`
+2. `TICKET_PROJECT`
+3. nearest git remote from the current working directory (walking up until `$HOME`)
+4. the caller's default/private project on the server
 
 Configure server access with environment variables:
 
@@ -151,13 +147,12 @@ Access-request creation and approval/rejection decisions are also recorded in
 project history, so `tk history` without a ticket id shows the audit trail for
 the active project.
 
-You can also place `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PROJECT` in a
-repo `.ticket.json`; never include `TICKET_PASSWORD` in that file.
-
-For example:
+Project admins can manage multiple git repositories on a project:
 
 ```bash
-tk init -prefix CUS -name "Customer Portal" -git https://github.com/acme/customer-portal.git -workflow agile
+tk project repo ls -project_id CUS
+tk project repo add -project_id CUS github.com/acme/customer-portal.git
+tk project repo rm -project_id CUS github.com/acme/customer-portal.git
 ```
 
 Snapshot export/import are removed from client mode. Run these as server-side
@@ -470,27 +465,13 @@ This changes every ticket key in the active project (e.g. `CUS-1` → `NEW-T-1`)
 including parent references, dependencies, comments, history, and time entries.
 The config is updated automatically.
 
-### Per-directory project binding
+### Repository-aware project routing
 
-`tk` automatically locates the right workspace by walking up the directory tree
-from the current working directory looking for a `.git` directory. The first Git
-root found gets a `.ticket/` workspace. If there is no Git root, `tk` falls back
-to `.ticket/` in the current directory. This means different repositories can
-have separate databases and configs:
-
-```bash
-cd ~/code/project-1/
-tk init                     # creates ~/code/project-1/.ticket/
-tk add "A new ticket"       # uses project-1's database
-
-cd ~/code/project-2/
-tk init                     # creates ~/code/project-2/.ticket/
-tk add "A new ticket"       # uses project-2's database
-```
-
-The workspace lookup order is:
-1. Walk up from CWD looking for a `.git` directory and use `.ticket/` at that repository root
-2. `.ticket/` in the current directory (default if no Git root is found)
+`tk` walks up from the current working directory to find the nearest `.git`
+directory, sends that repository's `origin` URL to the server, and lets the
+server resolve the matching project. If there is no matching repository and no
+explicit project override, the server falls back to the caller's default/private
+project.
 
 Show project usage:
 
@@ -1048,7 +1029,6 @@ Security notes:
 ## Command Reference
 
 ```bash
-tk init
 tk export -o ./ticket-snapshot.json
 tk import -i ./ticket-snapshot.json
 tk upgrade-database -o ./new_database/ticket.db
@@ -1086,13 +1066,14 @@ tk agent config-rm -id <uuid> <key>
 tk project create -prefix ABC -title "..."
 tk project create -prefix ABC -title "..." -wow "Ways of working" -dor "Default definition of ready" -dod "Default definition of done" -ac "Default acceptance criteria"
 tk project create -prefix ABC -title "..." -dor-map "develop=Implementation ready" -ac-map "qa=Sign-off complete"
-tk init
-tk project init -prefix ABC -title "..."    # non-interactive project bind/create helper
 tk project list
 tk project ls
 tk project use <prefix-or-id>
 tk project
 tk project get <prefix-or-id>
+tk project repo ls -project_id <prefix-or-id>
+tk project repo add -project_id <prefix-or-id> <git-repository>
+tk project repo rm -project_id <prefix-or-id> <git-repository>
 tk project <prefix-or-id>
 tk project <prefix-or-id> update -title "..."
 tk project <prefix-or-id> update -description "..."

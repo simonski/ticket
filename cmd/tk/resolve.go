@@ -18,30 +18,29 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
-type ticketJSONSettings struct {
-	Path      string
-	URL       string
-	Username  string
-	ProjectID string
-}
-
 const defaultTicketURL = "https://ticket.localhost"
 
 var localModeWarningOnce sync.Once
+var runtimeProjectOverride string
+
+func setProjectOverride(projectRef string) {
+	runtimeProjectOverride = strings.TrimSpace(projectRef)
+}
+
+func clearProjectOverride() {
+	runtimeProjectOverride = ""
+}
+
+func currentProjectOverride() string {
+	return strings.TrimSpace(runtimeProjectOverride)
+}
 
 func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
-	projectID := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
-	if projectID == "" {
-		if fileSettings, settingsErr := loadNearestTicketJSONSettings(); settingsErr != nil {
-			return config.Config{}, nil, store.Project{}, settingsErr
-		} else if strings.TrimSpace(fileSettings.ProjectID) != "" {
-			projectID = strings.TrimSpace(fileSettings.ProjectID)
-		}
-	}
+	projectID := resolveConfiguredProjectReference(cfg)
 	if projectID != "" {
 		cfg.ProjectID = projectID
 	}
@@ -53,9 +52,6 @@ func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Proj
 	projectID = strings.TrimSpace(cfg.ProjectID)
 	project, projectRef, err := resolveProjectContext(context.Background(), cfg, svc, projectID)
 	if err != nil {
-		if strings.TrimSpace(cfg.ProjectID) == "" {
-			return config.Config{}, nil, store.Project{}, errors.New("no active project; use `ticket project create` or `ticket project use <id>` first")
-		}
 		return config.Config{}, nil, store.Project{}, err
 	}
 
@@ -97,15 +93,15 @@ func resolveProjectContext(ctx context.Context, cfg config.Config, svc libticket
 	if project, ok, err := resolveLocalAliasProject(ctx, cfg, "private"); err == nil && ok {
 		return project, project.Prefix, nil
 	}
-	project, err := svc.GetProject(ctx, "1")
+	project, err := mostRecentProject(svc)
 	if err != nil {
 		return store.Project{}, "", err
 	}
-	return project, "1", nil
+	return project, project.Prefix, nil
 }
 
 func resolveProjectFromFlagOrConfig(ctx context.Context, cfg config.Config, svc libticket.Service, explicitRef string) (store.Project, error) {
-	project, _, err := resolveProjectContext(ctx, cfg, svc, firstNonEmpty(strings.TrimSpace(explicitRef), strings.TrimSpace(cfg.ProjectID)))
+	project, _, err := resolveProjectContext(ctx, cfg, svc, firstNonEmpty(strings.TrimSpace(explicitRef), resolveConfiguredProjectReference(cfg)))
 	return project, err
 }
 
@@ -216,21 +212,7 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
 	password := strings.TrimSpace(os.Getenv("TICKET_PASSWORD"))
 	token := strings.TrimSpace(os.Getenv("TICKET_TOKEN"))
-	projectID := strings.TrimSpace(os.Getenv("TICKET_PROJECT"))
-
-	fileSettings, err := loadNearestTicketJSONSettings()
-	if err != nil {
-		return nil, err
-	}
-	if location == "" {
-		location = strings.TrimSpace(fileSettings.URL)
-	}
-	if username == "" {
-		username = strings.TrimSpace(fileSettings.Username)
-	}
-	if projectID == "" {
-		projectID = strings.TrimSpace(fileSettings.ProjectID)
-	}
+	projectID := firstNonEmpty(currentProjectOverride(), strings.TrimSpace(os.Getenv("TICKET_PROJECT")), strings.TrimSpace(cfg.ProjectID))
 
 	remoteHintProvided := location != "" || password != "" || token != ""
 	if remoteHintProvided {
@@ -345,6 +327,10 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 	return libticket.NewLocal(localCfg), nil
 }
 
+func resolveConfiguredProjectReference(cfg config.Config) string {
+	return firstNonEmpty(currentProjectOverride(), strings.TrimSpace(os.Getenv("TICKET_PROJECT")), strings.TrimSpace(cfg.ProjectID))
+}
+
 func sameRemoteLocation(left, right string) bool {
 	left = strings.TrimSpace(left)
 	right = strings.TrimSpace(right)
@@ -370,19 +356,6 @@ func hasCompleteRemoteRuntimeConfig() (bool, error) {
 	if location != "" && username != "" && password != "" {
 		return true, nil
 	}
-	fileSettings, err := loadNearestTicketJSONSettings()
-	if err != nil {
-		return false, err
-	}
-	if strings.TrimSpace(location) == "" {
-		location = strings.TrimSpace(fileSettings.URL)
-	}
-	if strings.TrimSpace(token) != "" {
-		return strings.TrimSpace(location) != "" && strings.TrimSpace(token) != "", nil
-	}
-	if strings.TrimSpace(username) == "" {
-		username = strings.TrimSpace(fileSettings.Username)
-	}
 	return strings.TrimSpace(location) != "" && strings.TrimSpace(username) != "" && strings.TrimSpace(password) != "", nil
 }
 
@@ -390,87 +363,6 @@ func warnLocalMode(dbPath string) {
 	localModeWarningOnce.Do(func() {
 		fmt.Fprintf(os.Stderr, "Warning: you are in local-mode under %s\n", dbPath)
 	})
-}
-
-func loadNearestTicketJSONSettings() (ticketJSONSettings, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return ticketJSONSettings{}, err
-	}
-	path, ok, err := findTicketJSONPath(cwd)
-	if err != nil {
-		return ticketJSONSettings{}, err
-	}
-	if !ok {
-		return ticketJSONSettings{}, nil
-	}
-	return parseTicketJSON(path)
-}
-
-func findTicketJSONPath(startDir string) (path string, ok bool, err error) {
-	startDir = strings.TrimSpace(startDir)
-	if startDir == "" {
-		return "", false, nil
-	}
-	stopDir := ""
-	if gitRoot, ok := config.FindGitRoot(startDir); ok {
-		stopDir = gitRoot
-	}
-	dir := startDir
-	for {
-		candidate := filepath.Join(dir, ".ticket.json")
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate, true, nil
-		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return "", false, err
-		}
-		if stopDir != "" && filepath.Clean(stopDir) == filepath.Clean(dir) {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", false, nil
-}
-
-func parseTicketJSON(path string) (ticketJSONSettings, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- path is discovered from local ancestor directories.
-	if err != nil {
-		return ticketJSONSettings{}, err
-	}
-	raw := map[string]any{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return ticketJSONSettings{}, fmt.Errorf("%s is not valid JSON: %w", path, err)
-	}
-	for _, key := range []string{"TICKET_PASSWORD", "ticket_password", "password", "token"} {
-		if value, ok := raw[key]; ok && strings.TrimSpace(fmt.Sprint(value)) != "" {
-			return ticketJSONSettings{}, fmt.Errorf("%s must not contain TICKET_PASSWORD; use environment variable TICKET_PASSWORD instead", path)
-		}
-	}
-	settings := ticketJSONSettings{
-		Path:      path,
-		URL:       firstNonEmptyMap(raw, "TICKET_URL", "ticket_url", "url"),
-		Username:  firstNonEmptyMap(raw, "TICKET_USERNAME", "ticket_username", "username"),
-		ProjectID: firstNonEmptyMap(raw, "TICKET_PROJECT", "ticket_project", "project", "project_id"),
-	}
-	return settings, nil
-}
-
-func firstNonEmptyMap(values map[string]any, keys ...string) string {
-	for _, key := range keys {
-		value, ok := values[key]
-		if !ok {
-			continue
-		}
-		trimmed := strings.TrimSpace(fmt.Sprint(value))
-		if trimmed != "" && trimmed != "<nil>" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func resolveCredentials(usernameFlag, passwordFlag string, useEnv bool) (username, password string, err error) {
@@ -529,6 +421,27 @@ func extractDBOverride(args []string) (out []string, override string, err error)
 			continue
 		}
 		out = append(out, args[i])
+	}
+	return out, override, nil
+}
+
+func extractProjectOverride(args []string) (out []string, override string, err error) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-project_id" || arg == "-project":
+			if i+1 >= len(args) {
+				return nil, "", fmt.Errorf("missing value for %s", arg)
+			}
+			override = strings.TrimSpace(args[i+1])
+			i++
+		case strings.HasPrefix(arg, "-project_id="):
+			override = strings.TrimSpace(strings.TrimPrefix(arg, "-project_id="))
+		case strings.HasPrefix(arg, "-project="):
+			override = strings.TrimSpace(strings.TrimPrefix(arg, "-project="))
+		default:
+			out = append(out, arg)
+		}
 	}
 	return out, override, nil
 }

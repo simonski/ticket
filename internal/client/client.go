@@ -950,6 +950,53 @@ func (c *Client) DeleteProject(ctx context.Context, id int64) error {
 	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/projects/%d", id), nil, nil)
 }
 
+func (c *Client) ListProjectGitRepositories(ctx context.Context, projectRef string) ([]string, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return nil, err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return nil, err
+		}
+		return store.ListProjectGitRepositories(ctx, db, project.ID)
+	}
+	var repositories []string
+	err := c.doJSON(ctx, http.MethodGet, fmt.Sprintf("/api/projects/%s/repositories", url.PathEscape(projectRef)), nil, &repositories)
+	return repositories, err
+}
+
+func (c *Client) AddProjectGitRepository(ctx context.Context, projectRef, repository string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return err
+		}
+		return store.AddProjectGitRepository(ctx, db, project.ID, repository)
+	}
+	return c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/projects/%s/repositories", url.PathEscape(projectRef)), ProjectRepositoryRequest{Repository: repository}, nil)
+}
+
+func (c *Client) RemoveProjectGitRepository(ctx context.Context, projectRef, repository string) error {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return err
+		}
+		project, err := store.GetProject(ctx, db, projectRef)
+		if err != nil {
+			return err
+		}
+		return store.RemoveProjectGitRepository(ctx, db, project.ID, repository)
+	}
+	return c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/projects/%s/repositories/%s", url.PathEscape(projectRef), url.PathEscape(repository)), nil, nil)
+}
+
 func (c *Client) AddProjectMember(ctx context.Context, projectID int64, request ProjectMemberRequest) (store.ProjectMember, error) {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()

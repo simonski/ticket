@@ -84,6 +84,9 @@ type ProjectService interface {
 	RenameProjectPrefix(ctx context.Context, id int64, newPrefix string) (int, error)
 	SetProjectEnabled(ctx context.Context, id int64, enabled bool) (store.Project, error)
 	SetProjectDefaultDraft(ctx context.Context, projectID int64, draft bool) error
+	ListProjectGitRepositories(ctx context.Context, projectRef string) ([]string, error)
+	AddProjectGitRepository(ctx context.Context, projectRef, repository string) error
+	RemoveProjectGitRepository(ctx context.Context, projectRef, repository string) error
 	AddProjectMember(ctx context.Context, projectID int64, request ProjectMemberRequest) (store.ProjectMember, error)
 	RemoveProjectMember(ctx context.Context, projectID int64, userID string) error
 	ListProjectMembers(ctx context.Context, projectID int64) ([]store.ProjectMember, error)

@@ -109,7 +109,5 @@ tk time log -id <ticket-id> -m <minutes> -note "note"
 ```bash
 tk project ls
 tk project use <id-or-prefix>
-tk init
 tk initdb
 ```
-

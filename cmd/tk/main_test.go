@@ -119,7 +119,6 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"goal",
 		"document",
 		"config",
-		"init",
 		"server",
 		"version",
 		"upgrade",
@@ -178,7 +177,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	// Verify SYSTEM section ordering
-	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  init", "  export", "  import", "  upgrade-database", "  version", "  upgrade", "  skill", "  docker-compose", "  help"}
+	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  initdb", "  export", "  import", "  upgrade-database", "  version", "  upgrade", "  skill", "  docker-compose", "  help"}
 	last = -1
 	for _, item := range systemOrder {
 		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
@@ -580,11 +579,10 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 	}
 }
 
-func TestRenderCommandHelpInitMentionsGitRepositoryRequirement(t *testing.T) {
+func TestRenderCommandHelpNoLongerIncludesInit(t *testing.T) {
 	help := renderCommandHelp("init")
-
-	if !strings.Contains(help, "requires the current working directory to be inside a git repository") {
-		t.Fatalf("init help should mention git repository requirement:\n%s", help)
+	if strings.Contains(help, "requires the current working directory to be inside a git repository") || strings.Contains(help, "tk init") {
+		t.Fatalf("init help should be removed:\n%s", help)
 	}
 }
 
@@ -1935,10 +1933,10 @@ func TestRunInitRequiresGitRepository(t *testing.T) {
 
 	err := run([]string{"init"})
 	if err == nil {
-		t.Fatal("run(init) error = nil, want git repository requirement")
+		t.Fatal("run(init) error = nil, want unknown command")
 	}
-	if !strings.Contains(err.Error(), "tk init requires a git repository") {
-		t.Fatalf("run(init) error = %v, want git repository requirement", err)
+	if !strings.Contains(err.Error(), `no such command "init"`) {
+		t.Fatalf("run(init) error = %v, want unknown command", err)
 	}
 }
 
@@ -1962,12 +1960,12 @@ func TestRunInitDoesNotTreatAncestorTicketHomeAsProjectRoot(t *testing.T) {
 	setTestWorkingDir(t, repoDir)
 
 	output := captureStdout(t, func() {
-		if err := run([]string{"init"}); err != nil {
+		if err := run([]string{"init"}); err == nil || !strings.Contains(err.Error(), `no such command "init"`) {
 			t.Fatalf("run(init) error = %v", err)
 		}
 	})
-	if !strings.Contains(output, "project is already initialised") {
-		t.Fatalf("run(init) output = %q, want already initialised message", output)
+	if strings.Contains(output, "project is already initialised") {
+		t.Fatalf("run(init) output = %q, want no init output", output)
 	}
 }
 
@@ -2723,48 +2721,34 @@ func TestRunPromptBuildsPlaintextSections(t *testing.T) {
 	}
 }
 
-func TestRunProjectInit(t *testing.T) {
+func TestRunProjectRepo(t *testing.T) {
 	setupLocalCLI(t)
 
-	// Clear CurrentProject so project init is not blocked by the default set
-	// during setupLocalCLI.
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	cfg.ProjectID = ""
-	if saveErr := config.Save(cfg); saveErr != nil {
-		t.Fatalf("config.Save() error = %v", saveErr)
-	}
-
-	projDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	if chdirErr := os.Chdir(projDir); chdirErr != nil {
-		t.Fatal(chdirErr)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
-
-	initOutput := captureStdout(t, func() {
-		if runErr := run([]string{"project", "init", "-prefix", "INI", "-title", "Init Test"}); runErr != nil {
-			t.Fatalf("project init error = %v", runErr)
+	addOutput := captureStdout(t, func() {
+		if runErr := run([]string{"project", "repo", "add", "-project_id", "PRIV", "github.com/acme/repo.git"}); runErr != nil {
+			t.Fatalf("project repo add error = %v", runErr)
 		}
 	})
-	if !strings.Contains(initOutput, "created project INI") {
-		t.Fatalf("project init output missing created: %s", initOutput)
+	if !strings.Contains(addOutput, "added repository github.com/acme/repo.git to project PRIV") {
+		t.Fatalf("project repo add output = %q", addOutput)
 	}
 
-	// Verify config.json was updated with the correct project
-	cfg, err = config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if cfg.ProjectID != "INI" {
-		t.Fatalf("config.ProjectID = %q, want INI", cfg.ProjectID)
+	listOutput := captureStdout(t, func() {
+		if runErr := run([]string{"project", "repo", "ls", "-project_id", "PRIV"}); runErr != nil {
+			t.Fatalf("project repo ls error = %v", runErr)
+		}
+	})
+	if !strings.Contains(listOutput, "github.com/acme/repo.git") {
+		t.Fatalf("project repo ls output = %q", listOutput)
 	}
 
-	// Running init again should fail (already initialised)
-	if err := run([]string{"project", "init", "-prefix", "INI"}); err == nil {
-		t.Fatal("expected error on second init, got nil")
+	removeOutput := captureStdout(t, func() {
+		if runErr := run([]string{"project", "repo", "rm", "-project_id", "PRIV", "github.com/acme/repo.git"}); runErr != nil {
+			t.Fatalf("project repo rm error = %v", runErr)
+		}
+	})
+	if !strings.Contains(removeOutput, "removed repository github.com/acme/repo.git from project PRIV") {
+		t.Fatalf("project repo rm output = %q", removeOutput)
 	}
 }
 
@@ -5462,7 +5446,7 @@ func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 			t.Fatalf("project use with no current project error = %v", err)
 		}
 	})
-	if !strings.Contains(noProjectOutput, "no project set") {
+	if !strings.Contains(noProjectOutput, "PRIV — Private") {
 		t.Fatalf("unexpected project use output:\n%s", noProjectOutput)
 	}
 
@@ -5828,19 +5812,17 @@ func TestResolveServiceUsesLocalModeWhenDBPresent(t *testing.T) {
 	}
 }
 
-func TestResolveServiceUsesNearestTicketJSONAndEnvPassword(t *testing.T) {
+func TestResolveServiceIgnoresRepoConfigFile(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("TICKET_HOME", homeDir)
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.git) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoDir, ".ticket.json"), []byte(`{"TICKET_URL":"https://ticket.example.com","TICKET_USERNAME":"alice","TICKET_PROJECT":"42"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(.ticket.json) error = %v", err)
+	if err := os.WriteFile(filepath.Join(repoDir, "ticket-config.json"), []byte(`{"TICKET_URL":"https://ticket.example.com","TICKET_USERNAME":"alice","TICKET_PROJECT":"42"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(ticket-config.json) error = %v", err)
 	}
 	setTestWorkingDir(t, repoDir)
-	t.Setenv("TICKET_PASSWORD", "secret12")
-
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
@@ -5849,8 +5831,8 @@ func TestResolveServiceUsesNearestTicketJSONAndEnvPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveService() error = %v", err)
 	}
-	if _, ok := svc.(*libticket.HTTPService); !ok {
-		t.Fatalf("resolveService() returned %T, want *libticket.HTTPService", svc)
+	if _, ok := svc.(*libticket.HTTPService); ok {
+		t.Fatalf("resolveService() returned %T, want local service when repo config file is ignored", svc)
 	}
 }
 
@@ -5896,15 +5878,15 @@ func TestResolveServiceUsesStoredTokenForEnvURLWithoutPassword(t *testing.T) {
 	}
 }
 
-func TestResolveServiceRejectsTicketJSONPassword(t *testing.T) {
+func TestResolveServiceIgnoresRepoConfigPassword(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("TICKET_HOME", homeDir)
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.git) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoDir, ".ticket.json"), []byte(`{"TICKET_URL":"https://ticket.example.com","TICKET_USERNAME":"alice","TICKET_PASSWORD":"bad"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(.ticket.json) error = %v", err)
+	if err := os.WriteFile(filepath.Join(repoDir, "ticket-config.json"), []byte(`{"TICKET_URL":"https://ticket.example.com","TICKET_USERNAME":"alice","TICKET_PASSWORD":"bad"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(ticket-config.json) error = %v", err)
 	}
 	setTestWorkingDir(t, repoDir)
 
@@ -5912,12 +5894,12 @@ func TestResolveServiceRejectsTicketJSONPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	_, err = resolveService(cfg)
-	if err == nil {
-		t.Fatal("resolveService() error = nil, want .ticket.json password rejection")
+	svc, err := resolveService(cfg)
+	if err != nil {
+		t.Fatalf("resolveService() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "must not contain TICKET_PASSWORD") {
-		t.Fatalf("resolveService() error = %v, want .ticket.json password rejection", err)
+	if _, ok := svc.(*libticket.HTTPService); ok {
+		t.Fatalf("resolveService() returned %T, want local service when repo config file is ignored", svc)
 	}
 }
 

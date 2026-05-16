@@ -52,6 +52,7 @@ func main() {
 
 func run(args []string) error {
 	config.ClearLocationOverride()
+	clearProjectOverride()
 	trimmedArgs, dbOverride, err := extractDBOverride(args)
 	if err != nil {
 		return err
@@ -60,6 +61,11 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	trimmedArgs, projectOverride, err := extractProjectOverride(trimmedArgs)
+	if err != nil {
+		return err
+	}
+	setProjectOverride(projectOverride)
 	var guiTheme string
 	trimmedArgs, guiTheme = extractGUIFlag(trimmedArgs)
 	explicitServerDB := len(trimmedArgs) > 0 && trimmedArgs[0] == "server" && dbOverride != ""
@@ -94,55 +100,6 @@ func run(args []string) error {
 		fmt.Print(renderRootUsage())
 		return nil
 	}
-	// Commands that don't require an initialised project binding.
-	noInitRequired := map[string]bool{
-		"init": true, "initdb": true, "setup": true, "server": true, "help": true, "version": true, "upgrade": true, "upgrade-database": true, "skill": true, "docker-compose": true, "remote": true,
-		"login": true, "logout": true, "register": true, "status": true, "whoami": true, "project": true,
-	}
-	if len(trimmedArgs) == 1 {
-		switch trimmedArgs[0] {
-		case "project", "workflow", "team", "story", "goal", "document", "user", "label", "dep", "decision", "agent", "role", "idea":
-			noInitRequired[trimmedArgs[0]] = true
-		}
-	}
-	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "init" {
-		noInitRequired["project"] = true
-	}
-	if len(trimmedArgs) > 1 && trimmedArgs[0] == "project" && trimmedArgs[1] == "remote" {
-		noInitRequired["project"] = true
-	}
-	if len(trimmedArgs) > 1 {
-		switch trimmedArgs[1] {
-		case "help", "-h", "--help":
-			noInitRequired[trimmedArgs[0]] = true
-		}
-	}
-	remoteConfigured, remoteConfigErr := hasCompleteRemoteRuntimeConfig()
-	if remoteConfigErr != nil {
-		return remoteConfigErr
-	}
-	if !noInitRequired[trimmedArgs[0]] && !explicitServerDB && !config.HasLocationOverride() && !remoteConfigured {
-		if _, ok, pathErr := config.ProjectPath(); pathErr != nil {
-			return pathErr
-		} else if !ok {
-			if err := maybeBootstrapMutableCommand(trimmedArgs); err != nil {
-				return err
-			}
-			if _, ok, pathErr = config.ProjectPath(); pathErr != nil {
-				return pathErr
-			}
-			if !ok {
-				cfg, cfgErr := config.Load()
-				if cfgErr != nil {
-					return cfgErr
-				}
-				if strings.TrimSpace(cfg.ProjectID) == "" {
-					return advisoryNotManagedProject()
-				}
-			}
-		}
-	}
-
 	switch trimmedArgs[0] {
 	case "help", "-h", "--help":
 		return runHelp(trimmedArgs[1:])
@@ -154,8 +111,6 @@ func run(args []string) error {
 		return runSkill(trimmedArgs[1:])
 	case "docker-compose":
 		return runDockerCompose(trimmedArgs[1:])
-	case "init":
-		return runSetup(trimmedArgs[1:])
 	case "initdb":
 		return runInitDB(trimmedArgs[1:])
 	case "server":
@@ -354,7 +309,7 @@ func shouldRouteToActionNamespace(args []string) bool {
 	}
 	switch command {
 	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
-		"login", "logout", "register", "init", "initdb", "server", "remote",
+		"login", "logout", "register", "initdb", "server", "remote",
 		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
 		"story", "goal", "document", "label", "dep", "time", "doctor", "summary",
 		"agent", "work-item", "onboard", "skill", "docker-compose":

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.918
+  version: 0.1.926
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -4982,6 +4982,121 @@ paths:
                   status:
                     type: string
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/repositories:
+    get:
+      tags: [Projects]
+      summary: List git repositories for a project
+      operationId: listProjectRepositories
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id, prefix, or alias such as `public` or `private`
+      responses:
+        '200':
+          description: Project git repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Projects]
+      summary: Add a git repository to a project
+      operationId: addProjectRepository
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id, prefix, or alias such as `public` or `private`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repository]
+              properties:
+                repository:
+                  type: string
+      responses:
+        '201':
+          description: Repository added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/{project_ref}/repositories/{repository}:
+    delete:
+      tags: [Projects]
+      summary: Remove a git repository from a project
+      operationId: removeProjectRepository
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: project_ref
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project id, prefix, or alias such as `public` or `private`
+        - name: repository
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repository removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
