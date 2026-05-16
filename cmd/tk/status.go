@@ -292,57 +292,31 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	svc := libticket.NewHTTP(statusCfg)
 	status, statusErr := svc.Status(context.Background())
 	connected := statusErr == nil
-	authenticated := connected && status.Authenticated
-	if status.User != nil && strings.TrimSpace(status.User.Username) != "" {
+	if connected && status.User != nil && strings.TrimSpace(status.User.Username) != "" {
 		username = strings.TrimSpace(status.User.Username)
 	}
-	connectionValue := "unreachable"
-	connectionColor := "\x1b[31m"
+	urlColor := "\x1b[31m"
 	if connected {
-		connectionValue = "connected"
-		connectionColor = "\x1b[32m"
+		urlColor = "\x1b[32m"
 	}
-	var projectSvc libticket.Service
-	var projectContext currentProjectContext
-	if authenticated {
-		projectSvc = svc
-		projectContext = resolveCurrentProjectContext(cfg, projectSvc)
-	}
-	var summary []statusLine
-	if projectContext.ok {
-		summary = buildProjectSummaryCoreLines(projectSvc, projectContext.project, statusUnicode, false)
+	usernameColor := "\x1b[31m"
+	if strings.TrimSpace(username) != "" && strings.TrimSpace(username) != "UNSET" {
+		usernameColor = "\x1b[32m"
 	}
 	if outputJSON {
 		payload := map[string]any{
-			"location":       serverURL,
-			"TICKET_URL":     serverURL,
-			"project_id":     projectContext.projectID,
-			"project_source": projectContext.source,
-			"username":       valueOrDefault(username, "UNSET"),
-			"password":       passwordDisplay,
-			"connection":     connectionValue,
-			"authenticated":  authenticated,
-		}
-		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
-			payload["server_version"] = serverVersion
-		}
-		if projectContext.workflowName != "" {
-			payload["project_workflow"] = projectContext.workflowName
-		}
-		if projectContext.defaultDraft != nil {
-			payload["project_default_draft"] = *projectContext.defaultDraft
+			"TICKET_URL":      serverURL,
+			"TICKET_USERNAME": valueOrDefault(username, "UNSET"),
+			"TICKET_PASSWORD": passwordDisplay,
 		}
 		return printJSON(payload)
 	}
 	lines := []statusLine{
-		{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET")},
-		{key: "username", value: valueOrDefault(username, "UNSET")},
-		{key: "password", value: passwordDisplay, color: passwordColor},
-		{key: "connection", value: connectionValue, color: connectionColor},
-		{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
-		{key: "authenticated", value: fmt.Sprintf("%t", authenticated), color: boolStatusColor(authenticated)},
+		{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET"), color: urlColor},
+		{key: "TICKET_USERNAME", value: valueOrDefault(username, "UNSET"), color: usernameColor},
+		{key: "TICKET_PASSWORD", value: passwordDisplay, color: passwordColor},
 	}
-	printStatusBox(mergeStatusHeaderLines(summary, "", lines))
+	printStatusBox(lines)
 	return statusErr
 }
 
@@ -412,26 +386,19 @@ func remoteStatusConfig(cfg config.Config, serverURL string) (statusCfg config.C
 	switch {
 	case token != "":
 		statusCfg.Token = token
-		return statusCfg, valueOrDefault(username, strings.TrimSpace(cfg.Username)), "(using TICKET_TOKEN)", "\x1b[32m"
+		return statusCfg, valueOrDefault(username, strings.TrimSpace(cfg.Username)), "********", "\x1b[32m"
 	case username != "" && password != "":
 		statusCfg.Username = username
 		statusCfg.Token = password
 		statusCfg.UseBasicAuth = true
-		return statusCfg, username, "configured", "\x1b[32m"
+		return statusCfg, username, "********", "\x1b[32m"
 	case strings.TrimSpace(cfg.Token) != "":
 		statusCfg.Username = strings.TrimSpace(cfg.Username)
 		statusCfg.Token = strings.TrimSpace(cfg.Token)
-		return statusCfg, strings.TrimSpace(cfg.Username), "(stored session)", "\x1b[32m"
+		return statusCfg, strings.TrimSpace(cfg.Username), "********", "\x1b[32m"
 	default:
-		return statusCfg, valueOrDefault(username, strings.TrimSpace(cfg.Username)), "missing", "\x1b[31m"
+		return statusCfg, valueOrDefault(username, strings.TrimSpace(cfg.Username)), "UNSET", "\x1b[31m"
 	}
-}
-
-func boolStatusColor(v bool) string {
-	if v {
-		return "\x1b[32m"
-	}
-	return "\x1b[31m"
 }
 
 //nolint:unused // retained temporarily during server-only migration cleanup

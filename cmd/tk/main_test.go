@@ -1979,25 +1979,18 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 	for _, want := range []string{
 		"TICKET_URL",
 		server.URL,
-		"server_version",
-		"9.8.7",
-		"username",
+		"TICKET_USERNAME",
 		"alice",
-		"authenticated",
-		"true",
+		"TICKET_PASSWORD",
+		"********",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"TICKET_HOME", "config_file"} {
+	for _, unwanted := range []string{"TICKET_HOME", "config_file", "server_version", "authenticated", "connection", "password         : (using TICKET_TOKEN)"} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("runStatus(remote) should not show %q:\n%s", unwanted, output)
-		}
-	}
-	for _, want := range []string{"password", "TICKET_TOKEN", "connection", "connected"} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
 	}
 	if strings.Contains(output, "env-pass") || strings.Contains(output, "agent-secret") {
@@ -4672,18 +4665,20 @@ func TestRunRemoteModeStatusFailure(t *testing.T) {
 		t.Fatal("runStatus(remote failure) error = nil")
 	}
 	for _, want := range []string{
-		"server_version",
-		"(unknown)",
-		"authenticated",
-		"false",
+		"TICKET_URL",
+		"http://127.0.0.1:1",
+		"TICKET_USERNAME",
+		"UNSET",
+		"TICKET_PASSWORD",
+		"********",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote failure) missing %q:\n%s", want, output)
 		}
 	}
-	for _, want := range []string{"TICKET_URL", "http://127.0.0.1:1", "password", "TICKET_TOKEN", "connection", "unreachable"} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("runStatus(remote failure) missing %q:\n%s", want, output)
+	for _, unwanted := range []string{"TICKET_HOME", "config_file", "server_version", "authenticated", "connection"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("runStatus(remote failure) should not show %q:\n%s", unwanted, output)
 		}
 	}
 }
