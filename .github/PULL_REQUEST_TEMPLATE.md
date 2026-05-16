@@ -3,7 +3,7 @@
 Closes TK-XXX
 
 <!-- What does this PR do? One paragraph is fine. -->
-<!-- Example: "Tighten tk init so it requires a git repository, update quickstarts, and add CLI coverage for the new failure path." -->
+<!-- Example: "Tighten remote project resolution from git remotes, update quickstarts, and add CLI coverage for the new failure path." -->
 
 ## What changed
 

@@ -103,8 +103,8 @@ blocks stay executable.
 
 `scripts/testharness.sh` is a growing shell-based regression harness for direct
 CLI scripting flows. It creates an isolated temp repo plus `$TICKET_HOME`,
-bootstraps a fresh local database with `tk initdb`, binds the repo
-non-interactively with `tk project init`, and executes end-to-end scenarios
+bootstraps a fresh local database with `tk initdb`, exercises project
+resolution through the current CLI flows, and executes end-to-end scenarios
 that assert behavior with CLI exit codes and `tk ls -count` checks.
 
 Current harness scenarios cover:

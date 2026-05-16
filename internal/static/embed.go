@@ -1,6 +1,6 @@
 // Package static embeds and parses the built-in role and Workflow seed files
-// shipped with the tk binary. These are used by `tk init` to populate a
-// new database with sensible defaults.
+// shipped with the tk binary. These populate new databases with sensible
+// defaults during bootstrap.
 package static
 
 import (

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -80,47 +79,4 @@ func uniqueRemoteName(cfg config.Config, preferred string) string {
 			return candidate
 		}
 	}
-}
-
-//nolint:unused // Legacy setup helper retained until the removed interactive setup flow is fully deleted.
-func ensureNamedRemote(preferredName, rawURL string) (config.Config, string, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return config.Config{}, "", err
-	}
-	canonicalURL, err := config.CanonicalizeRemoteURL(rawURL)
-	if err != nil {
-		return config.Config{}, "", err
-	}
-	if remote, ok := cfg.RemoteByURL(canonicalURL); ok {
-		return cfg, remote.Name, nil
-	}
-	name := uniqueRemoteName(cfg, preferredName)
-	cfg, err = config.AddRemote(cfg, config.Remote{Name: name, URL: canonicalURL})
-	if err != nil {
-		return config.Config{}, "", err
-	}
-	if err := config.Save(cfg); err != nil {
-		return config.Config{}, "", err
-	}
-	return cfg, name, nil
-}
-
-//nolint:unused // Legacy setup helper retained until the removed interactive setup flow is fully deleted.
-func defaultRemoteNameForURL(rawURL string) string {
-	trimmed := strings.TrimSpace(rawURL)
-	if trimmed == "" {
-		return "remote"
-	}
-	if u, err := url.Parse(trimmed); err == nil && u.Host != "" {
-		host := strings.ToLower(u.Hostname())
-		if host != "" {
-			return host
-		}
-	}
-	base := filepath.Base(trimmed)
-	if base == "." || base == string(filepath.Separator) || base == "" {
-		return "remote"
-	}
-	return base
 }

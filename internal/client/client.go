@@ -96,7 +96,7 @@ func (c *Client) Register(ctx context.Context, username, password string) (store
 
 func (c *Client) RegisterWithParams(ctx context.Context, req RegisterRequest) (store.User, string, error) {
 	if c.mode == config.ModeLocal {
-		return store.User{}, "", errors.New("ticket register requires a configured server (run tk init and tk login)")
+		return store.User{}, "", errors.New("ticket register requires remote mode with a configured server and login")
 	}
 	var response RegisterResponse
 	err := c.doJSON(ctx, http.MethodPost, "/api/register", req, &response)
@@ -105,7 +105,7 @@ func (c *Client) RegisterWithParams(ctx context.Context, req RegisterRequest) (s
 
 func (c *Client) Login(ctx context.Context, username, password string) (AuthResponse, error) {
 	if c.mode == config.ModeLocal {
-		return AuthResponse{}, errors.New("ticket login requires a configured server (run tk init to configure one)")
+		return AuthResponse{}, errors.New("ticket login requires remote mode with a configured server")
 	}
 	var response AuthResponse
 	err := c.doJSON(ctx, http.MethodPost, "/api/login", map[string]string{
@@ -117,7 +117,7 @@ func (c *Client) Login(ctx context.Context, username, password string) (AuthResp
 
 func (c *Client) Logout(ctx context.Context) error {
 	if c.mode == config.ModeLocal {
-		return errors.New("ticket logout requires a configured server (run tk init and tk login)")
+		return errors.New("ticket logout requires remote mode with a configured server session")
 	}
 	return c.doJSON(ctx, http.MethodPost, "/api/logout", nil, nil)
 }

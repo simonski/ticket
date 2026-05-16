@@ -189,4 +189,4 @@ func TestDefaultRoleContentIsDetailed(t *testing.T) {
 }
 
 // Legacy seedDefaultRoles test removed — function was deleted.
-// Roles are now seeded from embedded static files by tk init.
+// Roles are now seeded from embedded static files during bootstrap.

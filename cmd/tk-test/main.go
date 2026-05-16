@@ -451,19 +451,16 @@ func shouldSkip(code string) bool {
 	return false
 }
 
-// containsInit checks whether a code block contains a tk init command.
+// containsInit checks whether a code block contains an initialization command.
 func containsInit(code string) bool {
 	for _, line := range strings.Split(code, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "tk init" || line == "ticket init" ||
-			line == "tk initdb" || line == "ticket initdb" ||
-			strings.HasPrefix(line, "tk init ") || strings.HasPrefix(line, "ticket init ") ||
+		if line == "tk initdb" || line == "ticket initdb" ||
 			strings.HasPrefix(line, "tk initdb ") || strings.HasPrefix(line, "ticket initdb ") {
 			return true
 		}
 		// Also match the rewritten form.
-		if strings.HasSuffix(line, "/ticket init") || strings.Contains(line, "/ticket init ") ||
-			strings.HasSuffix(line, "/tk initdb") || strings.Contains(line, "/tk initdb ") ||
+		if strings.HasSuffix(line, "/tk initdb") || strings.Contains(line, "/tk initdb ") ||
 			strings.HasSuffix(line, "/ticket initdb") || strings.Contains(line, "/ticket initdb ") {
 			return true
 		}
@@ -525,16 +522,13 @@ func rewriteInitCommands(code, replacement string) string {
 	for _, line := range strings.Split(code, "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch {
-		case trimmed == "tk init", trimmed == "ticket init", trimmed == "tk initdb", trimmed == "ticket initdb":
+		case trimmed == "tk initdb", trimmed == "ticket initdb":
 			lines = append(lines, replacement)
-		case strings.HasPrefix(trimmed, "tk init "), strings.HasPrefix(trimmed, "ticket init "),
-			strings.HasPrefix(trimmed, "tk initdb "), strings.HasPrefix(trimmed, "ticket initdb "):
+		case strings.HasPrefix(trimmed, "tk initdb "), strings.HasPrefix(trimmed, "ticket initdb "):
 			lines = append(lines, replacement)
-		case strings.HasSuffix(trimmed, "/tk init"), strings.HasSuffix(trimmed, "/ticket init"),
-			strings.HasSuffix(trimmed, "/tk initdb"), strings.HasSuffix(trimmed, "/ticket initdb"):
+		case strings.HasSuffix(trimmed, "/tk initdb"), strings.HasSuffix(trimmed, "/ticket initdb"):
 			lines = append(lines, replacement)
-		case strings.Contains(trimmed, "/tk init "), strings.Contains(trimmed, "/ticket init "),
-			strings.Contains(trimmed, "/tk initdb "), strings.Contains(trimmed, "/ticket initdb "):
+		case strings.Contains(trimmed, "/tk initdb "), strings.Contains(trimmed, "/ticket initdb "):
 			lines = append(lines, replacement)
 		default:
 			lines = append(lines, line)

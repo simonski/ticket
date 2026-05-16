@@ -647,7 +647,6 @@ The binary is named `ticket` with the alias `tk`.
 | Command | Description |
 |---------|-------------|
 | `tk initdb` | Create or repair the shared local database and bootstrap the default admin/project |
-| `tk init` | Bind the current repo or directory to a local or remote project |
 | `tk remote add NAME URL` | Register a named remote |
 | `tk remote ls` | List configured remotes |
 | `tk remote remove NAME` | Remove a named remote |
@@ -683,7 +682,7 @@ The binary is named `ticket` with the alias `tk`.
 | `tk project get <id>` | View project details |
 | `tk project update <id> -title "..."` | Update project |
 | `tk project delete <id>` | Delete project |
-| `tk project init` | Non-interactively create/bind a project and write `.ticket/config.json` in the current directory |
+| `tk project repo add <id\|prefix> <git-url>` | Associate a git repository with a project |
 | `tk project workflow <workflow-id>` | Assign an Workflow to the active project |
 | `tk project set-draft <true\|false>` | Toggle draft mode on the active project |
 
@@ -1069,7 +1068,7 @@ Indexes on: `sessions(user_id, token)`, `tickets(project_id, parent_id, assignee
 
 ### 14.5 Initialization
 
-`tk initdb` creates the database, schema, admin user, default workflow (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). `tk init` requires a git repository and writes `.ticket/config.json` at the repo root to bind that repo to a remote plus project.
+`tk initdb` creates the database, schema, admin user, default workflow (`design → develop → test → done`), a default project with prefix `TK`, and the appropriate local-remote wiring (`~/.ticket/ticket.db` for `tk initdb`, `./.ticket/ticket.db` for `tk initdb .`). Remote project resolution then uses explicit project selection, nearest-git-remote discovery, or the user's default project without a separate repo bootstrap step.
 
 ---
 

@@ -1277,7 +1277,7 @@ CREATE TABLE user_notifications (
 	`); err != nil {
 		return err
 	}
-	// Roles and Workflows are now seeded from static files by tk init (runInitCheckDefaults).
+	// Roles and Workflows are now seeded from embedded static files during bootstrap.
 	// The legacy seed functions are retained for backward compatibility with existing databases
 	// but are no longer called on new databases.
 	if err := backfillTicketWorkflowStages(ctx, db); err != nil {

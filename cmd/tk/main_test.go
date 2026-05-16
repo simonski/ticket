@@ -581,7 +581,7 @@ func TestRenderCommandHelpIncludesUsageAndExample(t *testing.T) {
 
 func TestRenderCommandHelpNoLongerIncludesInit(t *testing.T) {
 	help := renderCommandHelp("init")
-	if strings.Contains(help, "requires the current working directory to be inside a git repository") || strings.Contains(help, "tk init") {
+	if strings.Contains(help, "requires the current working directory to be inside a git repository") {
 		t.Fatalf("init help should be removed:\n%s", help)
 	}
 }

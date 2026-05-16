@@ -89,27 +89,6 @@ func readPasswordPrompt(reader *bufio.Reader, in io.Reader, out io.Writer) (stri
 	}
 }
 
-//nolint:unused // Legacy setup prompt retained until the removed interactive setup flow is fully deleted.
-func promptChoice(reader *bufio.Reader, question string, options []string) int {
-	fmt.Println(question)
-	for i, opt := range options {
-		fmt.Printf("  %d. %s\n", i+1, opt)
-	}
-	for {
-		fmt.Printf("choice [1]: ")
-		line, _ := reader.ReadString('\n')
-		line = strings.TrimSpace(line)
-		if line == "" {
-			return 0
-		}
-		var n int
-		if _, err := fmt.Sscanf(line, "%d", &n); err == nil && n >= 1 && n <= len(options) {
-			return n - 1
-		}
-		fmt.Printf("please enter a number between 1 and %d\n", len(options))
-	}
-}
-
 func promptChoiceWithDefault(reader *bufio.Reader, question string, options []string, defaultIdx int) int {
 	fmt.Println(question)
 	for i, opt := range options {

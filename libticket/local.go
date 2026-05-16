@@ -145,19 +145,19 @@ func (s *LocalService) SetDefaultPlan(ctx context.Context, slug string) error {
 }
 
 func (s *LocalService) Register(ctx context.Context, username, password string) (store.User, error) {
-	return store.User{}, errors.New("ticket register requires a configured server (run tk init and tk login)")
+	return store.User{}, errors.New("ticket register requires remote mode with a configured server and login")
 }
 
 func (s *LocalService) RegisterWithParams(ctx context.Context, params RegisterParams) (store.User, string, error) {
-	return store.User{}, "", errors.New("ticket register requires a configured server (run tk init and tk login)")
+	return store.User{}, "", errors.New("ticket register requires remote mode with a configured server and login")
 }
 
 func (s *LocalService) Login(ctx context.Context, username, password string) (store.User, string, error) {
-	return store.User{}, "", errors.New("ticket login requires a configured server (run tk init to configure one)")
+	return store.User{}, "", errors.New("ticket login requires remote mode with a configured server")
 }
 
 func (s *LocalService) Logout(ctx context.Context) error {
-	return errors.New("ticket logout requires a configured server (run tk init and tk login)")
+	return errors.New("ticket logout requires remote mode with a configured server session")
 }
 
 func (s *LocalService) Count(ctx context.Context, projectID *int64) (CountSummary, error) {

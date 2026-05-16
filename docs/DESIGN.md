@@ -346,7 +346,7 @@ Typical history events:
 
 The product must support local initialization of a SQLite database from the CLI.
 
-The bootstrap commands are `tk initdb` and `tk init`.
+The bootstrap command is `tk initdb`.
 
 `tk initdb` must:
 
@@ -374,9 +374,10 @@ Bootstrap defaults:
   - stories in each project with associated epic/task/bug/chore tickets
   - 3 example teams with sample users assigned across those teams
 
-`tk init` must bind the current repo or directory by writing `.ticket/config.json`.
-That file binds the repo to a named remote and project, while credentials
-remain under `$TICKET_HOME`.
+Remote project resolution must work without a repo-local bootstrap step by
+preferring an explicit project reference, then the nearest git remote from the
+current working tree, then the user's default project. Credentials remain under
+`$TICKET_HOME`.
 
 Snapshot portability:
 
@@ -493,7 +494,9 @@ The CLI must resolve remote server selection from the repo-local `remote` bindin
 
 The CLI must expose `tk version`, which prints the semantic version embedded into the binary at build time.
 
-`tk init` is separate from the login and registration flows: it only binds the repo to a remote/project pair and must never persist secrets into repo-local config.
+Project resolution is separate from login and registration flows: the CLI must
+derive project context from explicit project selection, git remote discovery,
+or the user's default project without persisting secrets into repo-local config.
 
 Admin-only user-management requests must be rejected by the server when the caller is authenticated but not an admin. Those requests must return HTTP 403 with an error explaining that the user is not an admin.
 
@@ -536,8 +539,7 @@ Representative commands:
 
 ```bash
 tk project new -prefix CUS -title "Customer Portal"
-tk init
-tk project init        # lower-level non-interactive helper
+tk project repo add CUS github.com/acme/customer-portal.git
 tk project ls
 tk project use CUS
 tk project get CUS
