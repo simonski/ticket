@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strconv"
 	"testing"
@@ -273,6 +274,58 @@ func TestGetProjectByPrefix(t *testing.T) {
 	}
 }
 
+func TestGetProjectByTitle(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	project, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
+		Prefix: "TTL",
+		Title:  "Title Lookup Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams() error = %v", err)
+	}
+
+	byTitle, err := GetProject(context.Background(), db, "Title Lookup Project")
+	if err != nil {
+		t.Fatalf("GetProject(title) error = %v", err)
+	}
+	if byTitle.ID != project.ID {
+		t.Fatalf("GetProject(title).ID = %d, want %d", byTitle.ID, project.ID)
+	}
+
+	byTitleLower, err := GetProject(context.Background(), db, "title lookup project")
+	if err != nil {
+		t.Fatalf("GetProject(lower title) error = %v", err)
+	}
+	if byTitleLower.ID != project.ID {
+		t.Fatalf("GetProject(lower title).ID = %d, want %d", byTitleLower.ID, project.ID)
+	}
+}
+
+func TestGetProjectByTitleReturnsAmbiguousError(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	if _, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
+		Prefix: "AMB",
+		Title:  "Duplicated Title",
+	}); err != nil {
+		t.Fatalf("CreateProjectWithParams(first) error = %v", err)
+	}
+	if _, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
+		Prefix: "AM2",
+		Title:  "Duplicated Title",
+	}); err != nil {
+		t.Fatalf("CreateProjectWithParams(second) error = %v", err)
+	}
+
+	_, err := GetProject(context.Background(), db, "Duplicated Title")
+	if !errors.Is(err, ErrProjectAmbiguous) {
+		t.Fatalf("GetProject(ambiguous title) error = %v, want %v", err, ErrProjectAmbiguous)
+	}
+}
+
 func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
@@ -304,11 +357,23 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProjectWithParams(public) error = %v", err)
 	}
+	teamProject, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
+		Prefix:     "TEM",
+		Title:      "Team Project",
+		Visibility: ProjectVisibilityTeam,
+		CreatedBy:  admin.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateProjectWithParams(team) error = %v", err)
+	}
 	if privateProject.Visibility != ProjectVisibilityPrivate {
 		t.Fatalf("privateProject.Visibility = %q, want %q", privateProject.Visibility, ProjectVisibilityPrivate)
 	}
 	if publicProject.Visibility != ProjectVisibilityPublic {
 		t.Fatalf("publicProject.Visibility = %q, want %q", publicProject.Visibility, ProjectVisibilityPublic)
+	}
+	if teamProject.Visibility != ProjectVisibilityTeam {
+		t.Fatalf("teamProject.Visibility = %q, want %q", teamProject.Visibility, ProjectVisibilityTeam)
 	}
 
 	visible, err := ListProjectsVisibleToUser(context.Background(), db, alice)
@@ -321,6 +386,9 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	for _, project := range visible {
 		if project.ID == privateProject.ID {
 			t.Fatalf("private project should not be visible without membership")
+		}
+		if project.ID == teamProject.ID {
+			t.Fatalf("team project should not be visible without membership")
 		}
 	}
 
@@ -343,6 +411,32 @@ func TestProjectVisibilityAndVisibleListing(t *testing.T) {
 	}
 	if !foundPrivate {
 		t.Fatalf("private project should be visible once membership exists")
+	}
+
+	team, err := CreateTeam(context.Background(), db, "Customer Team", nil)
+	if err != nil {
+		t.Fatalf("CreateTeam() error = %v", err)
+	}
+	if _, err := AddTeamMember(context.Background(), db, team.ID, alice.ID, TeamRoleMember, "Engineer"); err != nil {
+		t.Fatalf("AddTeamMember() error = %v", err)
+	}
+	if _, err := AddProjectTeamMember(context.Background(), db, teamProject.ID, team.ID, ProjectRoleObserver); err != nil {
+		t.Fatalf("AddProjectTeamMember() error = %v", err)
+	}
+
+	visible, err = ListProjectsVisibleToUser(context.Background(), db, alice)
+	if err != nil {
+		t.Fatalf("ListProjectsVisibleToUser(alice, team member) error = %v", err)
+	}
+	foundTeam := false
+	for _, project := range visible {
+		if project.ID == teamProject.ID {
+			foundTeam = true
+			break
+		}
+	}
+	if !foundTeam {
+		t.Fatalf("team project should be visible once team membership exists")
 	}
 }
 

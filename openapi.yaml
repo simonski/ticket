@@ -221,7 +221,7 @@ components:
           enum: [open, closed]
         visibility:
           type: string
-          enum: [public, private]
+          enum: [public, team, private]
         workflow_id:
           type: integer
           format: int64
@@ -4134,7 +4134,7 @@ paths:
                   type: string
                 visibility:
                   type: string
-                  enum: [public, private]
+                  enum: [public, team, private]
                 workflow_id:
                   type: integer
                   format: int64
@@ -4231,7 +4231,7 @@ paths:
                   enum: [open, closed]
                 visibility:
                   type: string
-                  enum: [public, private]
+                  enum: [public, team, private]
                 workflow_id:
                   type: integer
                   format: int64

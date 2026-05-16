@@ -40,7 +40,7 @@ func runProject(args []string) error {
 	case "request-access":
 		fs := flag.NewFlagSet("project request-access", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, prefix, or alias")
+		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, title, prefix, or alias")
 		message := fs.String("message", "", "request message")
 		if parseErr := fs.Parse(args[1:]); parseErr != nil {
 			return parseErr
@@ -49,7 +49,7 @@ func runProject(args []string) error {
 			joined := strings.TrimSpace(strings.Join(fs.Args(), " "))
 			if joined != "" {
 				if strings.TrimSpace(*message) != "" {
-					return errors.New("usage: tk project request-access [-project_id <id|prefix|alias>] [-message <text>] [message words]")
+					return errors.New("usage: tk project request-access [-project_id <id|title|prefix|alias>] [-message <text>] [message words]")
 				}
 				*message = joined
 			}
@@ -69,13 +69,13 @@ func runProject(args []string) error {
 	case "access-requests":
 		fs := flag.NewFlagSet("project access-requests", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, prefix, or alias")
+		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, title, prefix, or alias")
 		status := fs.String("status", "", "filter by status")
 		if parseErr := fs.Parse(args[1:]); parseErr != nil {
 			return parseErr
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: tk project access-requests [-project_id <id|prefix|alias>] [-status <pending|approved|rejected>]")
+			return errors.New("usage: tk project access-requests [-project_id <id|title|prefix|alias>] [-status <pending|approved|rejected>]")
 		}
 		if strings.TrimSpace(*projectRef) == "" {
 			return errors.New("project_id is required (set an active project or pass -project_id)")
@@ -112,7 +112,7 @@ func runProject(args []string) error {
 		action := args[0]
 		fs := flag.NewFlagSet("project "+action, flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, prefix, or alias")
+		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, title, prefix, or alias")
 		requestID := fs.Int64("request_id", 0, "project access request id")
 		message := fs.String("message", "", "optional decision message")
 		if parseErr := fs.Parse(args[1:]); parseErr != nil {
@@ -122,7 +122,7 @@ func runProject(args []string) error {
 			joined := strings.TrimSpace(strings.Join(fs.Args(), " "))
 			if joined != "" {
 				if strings.TrimSpace(*message) != "" {
-					return fmt.Errorf("usage: tk project %s [-project_id <id|prefix|alias>] -request_id <id> [-message <text>] [message words]", action)
+					return fmt.Errorf("usage: tk project %s [-project_id <id|title|prefix|alias>] -request_id <id> [-message <text>] [message words]", action)
 				}
 				*message = joined
 			}
@@ -335,7 +335,7 @@ func runProject(args []string) error {
 	case "set-draft":
 		fs := flag.NewFlagSet("project set-draft", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectID := fs.String("project_id", "", "project id, prefix, or alias (default: current project)")
+		projectID := fs.String("project_id", "", "project id, title, prefix, or alias (default: current project)")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -483,7 +483,7 @@ func runProjectRepository(cfg config.Config, svc libticket.Service, args []strin
 	}
 	fs := flag.NewFlagSet("project repo", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	projectID := fs.String("project_id", "", "project id, title, prefix, or alias")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -575,7 +575,7 @@ func runProjectAddUser(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project add-user", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	userID := fs.String("user_id", "", "user id")
-	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	projectID := fs.String("project_id", "", "project id, title, prefix, or alias")
 	role := fs.String("role", "", "project role [observer,commenter,member,admin]")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -605,7 +605,7 @@ func runProjectRemoveUser(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project remove-user", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	userID := fs.String("user_id", "", "user id")
-	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	projectID := fs.String("project_id", "", "project id, title, prefix, or alias")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -630,7 +630,7 @@ func runProjectAddTeam(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project add-team", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	teamID := fs.Int64("team_id", 0, "team id")
-	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	projectID := fs.String("project_id", "", "project id, title, prefix, or alias")
 	role := fs.String("role", "", "project role [observer,commenter,member,admin]")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -660,7 +660,7 @@ func runProjectRemoveTeam(svc libticket.Service, args []string) error {
 	fs := flag.NewFlagSet("project remove-team", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	teamID := fs.Int64("team_id", 0, "team id")
-	projectID := fs.String("project_id", "", "project id, prefix, or alias")
+	projectID := fs.String("project_id", "", "project id, title, prefix, or alias")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

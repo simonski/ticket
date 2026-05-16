@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -4401,8 +4402,8 @@ func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
 	}
 
 	createProject := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
-		"title":      "Private Team Project",
-		"visibility": "private",
+		"title":      "Team Project",
+		"visibility": "team",
 	}, adminAuth.Token)
 	if createProject.Code != http.StatusCreated {
 		t.Fatalf("create project status=%d body=%s", createProject.Code, createProject.Body.String())
@@ -4430,6 +4431,46 @@ func TestTeamAPIsAndProjectAccessViaTeam(t *testing.T) {
 	}, aliceAuth.Token)
 	if aliceCreateTicket.Code != http.StatusCreated {
 		t.Fatalf("alice create ticket via team role status=%d body=%s", aliceCreateTicket.Code, aliceCreateTicket.Body.String())
+	}
+}
+
+func TestProjectLookupByTitleAndAmbiguousTitle(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+
+	createUnique := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":      "Lookup By Title",
+		"visibility": "team",
+	}, adminToken)
+	if createUnique.Code != http.StatusCreated {
+		t.Fatalf("create unique title project status=%d body=%s", createUnique.Code, createUnique.Body.String())
+	}
+
+	getByTitle := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+url.PathEscape("Lookup By Title"), nil, adminToken)
+	if getByTitle.Code != http.StatusOK {
+		t.Fatalf("get project by title status=%d body=%s", getByTitle.Code, getByTitle.Body.String())
+	}
+
+	for _, prefix := range []string{"DTA", "DTB"} {
+		resp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+			"prefix":     prefix,
+			"title":      "Duplicate Title Lookup",
+			"visibility": "team",
+		}, adminToken)
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("create duplicate title project prefix=%s status=%d body=%s", prefix, resp.Code, resp.Body.String())
+		}
+	}
+
+	ambiguous := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+url.PathEscape("Duplicate Title Lookup"), nil, adminToken)
+	if ambiguous.Code != http.StatusBadRequest {
+		t.Fatalf("ambiguous title lookup status=%d want=%d body=%s", ambiguous.Code, http.StatusBadRequest, ambiguous.Body.String())
+	}
+	if !strings.Contains(ambiguous.Body.String(), "ambiguous") {
+		t.Fatalf("ambiguous title lookup body=%s", ambiguous.Body.String())
 	}
 }
 

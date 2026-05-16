@@ -498,6 +498,8 @@ func writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, store.ErrProjectAmbiguous):
+		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, store.ErrAdminRequired):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, store.ErrForbidden):

@@ -1625,8 +1625,9 @@
             <input id="proj-modal-title" placeholder="title" autocomplete="off" />
             <label for="proj-modal-visibility">Visibility</label>
             <select id="proj-modal-visibility">
-              <option value="private">private</option>
               <option value="public">public</option>
+              <option value="team">team</option>
+              <option value="private">private</option>
             </select>
             <label for="proj-modal-workflow">Workflow</label>
             <select id="proj-modal-workflow">
@@ -6352,7 +6353,10 @@
         renderProjectModalSelector(projModalProjectID);
         projModalPrefix.value = String(project.prefix || "").toUpperCase();
         projModalTitle.value = project.title || "";
-        projModalVisibility.value = (project.visibility || "public").toLowerCase() === "private" ? "private" : "public";
+        {
+          const visibility = String(project.visibility || "public").toLowerCase();
+          projModalVisibility.value = visibility === "private" || visibility === "team" ? visibility : "public";
+        }
         projModalDefaultDraft.value = project.default_draft ? "true" : "false";
         projModalGitRepository.value = project.git_repository || "";
         projModalDescription.value = project.description || "";

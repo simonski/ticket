@@ -127,7 +127,7 @@ func runWorkItem(args []string) error {
 	case "queue":
 		fs := flag.NewFlagSet("work-item queue", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectID := fs.String("project_id", "", "project id, prefix, or alias (default current)")
+		projectID := fs.String("project_id", "", "project id, title, prefix, or alias (default current)")
 		id := fs.String("id", "", "specific ticket id/ref")
 		dryRun := fs.Bool("dry-run", false, "preview without assignment")
 		explain := fs.Bool("explain", false, "print explanation for returned status")
@@ -216,7 +216,7 @@ func runWorkItem(args []string) error {
 	case "create":
 		fs := flag.NewFlagSet("work-item create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectID := fs.String("project_id", "", "project id, prefix, or alias (default current)")
+		projectID := fs.String("project_id", "", "project id, title, prefix, or alias (default current)")
 		title := fs.String("title", "", "title")
 		typ := fs.String("type", "task", "ticket type")
 		description := fs.String("description", "", "description")

@@ -261,7 +261,7 @@ func runStatusWithSummaryStyle(statusUnicode bool) error {
 func runCount(args []string) error {
 	fs := flag.NewFlagSet("count", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	projectRef := fs.String("project_id", "", "limit counts to a project id, prefix, or alias")
+	projectRef := fs.String("project_id", "", "limit counts to a project id, title, prefix, or alias")
 	taskType := fs.String("type", "", "filter ticket count by ticket type")
 	stage := fs.String("stage", "", "filter ticket count by stage")
 	state := fs.String("state", "", "filter ticket count by state")

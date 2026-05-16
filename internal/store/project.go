@@ -10,9 +10,11 @@ import (
 )
 
 var ErrProjectNotFound = errors.New("project not found")
+var ErrProjectAmbiguous = errors.New("project reference is ambiguous")
 
 const (
 	ProjectVisibilityPrivate = "private"
+	ProjectVisibilityTeam    = "team"
 	ProjectVisibilityPublic  = "public"
 )
 
@@ -331,10 +333,10 @@ func GetProject(ctx context.Context, db *sql.DB, rawID string) (Project, error) 
 	`, strings.ToUpper(rawID))
 	project, err := scanProject(row)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Project{}, ErrProjectNotFound
+		if !errors.Is(err, sql.ErrNoRows) {
+			return Project{}, err
 		}
-		return Project{}, err
+		return getProjectByTitle(ctx, db, rawID)
 	}
 	project.AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, project.ID)
 	if err != nil {
@@ -517,10 +519,48 @@ func normalizeProjectVisibility(visibility string) string {
 
 func validProjectVisibility(visibility string) bool {
 	switch normalizeProjectVisibility(visibility) {
-	case ProjectVisibilityPrivate, ProjectVisibilityPublic:
+	case ProjectVisibilityPrivate, ProjectVisibilityTeam, ProjectVisibilityPublic:
 		return true
 	default:
 		return false
+	}
+}
+
+func getProjectByTitle(ctx context.Context, db *sql.DB, title string) (Project, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
+		FROM projects
+		WHERE LOWER(title) = LOWER(?)
+		ORDER BY project_id
+		LIMIT 2
+	`, strings.TrimSpace(title))
+	if err != nil {
+		return Project{}, err
+	}
+	defer rows.Close()
+
+	projects := make([]Project, 0, 2)
+	for rows.Next() {
+		project, scanErr := scanProject(rows)
+		if scanErr != nil {
+			return Project{}, scanErr
+		}
+		projects = append(projects, project)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return Project{}, rowsErr
+	}
+	switch len(projects) {
+	case 0:
+		return Project{}, ErrProjectNotFound
+	case 1:
+		projects[0].AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, projects[0].ID)
+		if err != nil {
+			return Project{}, err
+		}
+		return projects[0], nil
+	default:
+		return Project{}, fmt.Errorf("%w: multiple projects share title %q; use the numeric id or prefix", ErrProjectAmbiguous, strings.TrimSpace(title))
 	}
 }
 
