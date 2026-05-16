@@ -245,6 +245,12 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	}
 	cfgPath := effectiveConfigPath()
 	ticketHome, _ := config.Home()
+	resolved, _ := currentRemoteResolution()
+	serverURL := strings.TrimSpace(cfg.Location)
+	if strings.TrimSpace(resolved.ServerURL) != "" {
+		serverURL = strings.TrimSpace(resolved.ServerURL)
+	}
+	isRemote := resolved.Mode == config.ModeRemote && serverURL != ""
 	projectSvc := svc
 	if err != nil || !authenticated {
 		projectSvc = nil
@@ -256,16 +262,20 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 	}
 	if outputJSON {
 		payload := map[string]any{
-			"location":       cfg.Location,
-			"TICKET_HOME":    statusEnvValue("TICKET_HOME", false),
+			"location":       serverURL,
 			"AGENT_ID":       statusEnvValue("AGENT_ID", false),
 			"AGENT_PASSWORD": statusEnvValue("AGENT_PASSWORD", true),
-			"config_file":    cfgPath,
 			"project_id":     projectContext.projectID,
 			"project_source": projectContext.source,
 			"username":       username,
 			"authenticated":  authenticated,
 			"connection":     map[bool]string{true: "success", false: "failure"}[err == nil],
+		}
+		if isRemote {
+			payload["TICKET_URL"] = serverURL
+		} else {
+			payload["TICKET_HOME"] = statusEnvValue("TICKET_HOME", false)
+			payload["config_file"] = cfgPath
 		}
 		if serverVersion := strings.TrimSpace(status.ServerVersion); serverVersion != "" {
 			payload["server_version"] = serverVersion
@@ -278,11 +288,17 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, statusUnicode bool) erro
 		}
 		return printJSON(payload)
 	}
-	lines := append(statusHomeLines(ticketHome), []statusLine{
+	lines := []statusLine{
 		{key: "server_version", value: valueOrDefault(strings.TrimSpace(status.ServerVersion), "(unknown)")},
 		{key: "username", value: username},
 		{key: "authenticated", value: fmt.Sprintf("%t", authenticated)},
-	}...)
+	}
+	if isRemote {
+		lines = append([]statusLine{{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET")}}, lines...)
+		printStatusBox(mergeStatusHeaderLines(summary, "", lines))
+		return err
+	}
+	lines = append(statusHomeLines(ticketHome), lines...)
 	printStatusBox(mergeStatusHeaderLines(summary, cfgPath, lines))
 	return err
 }

@@ -220,6 +220,28 @@ func TestFormatRuntimeErrorRemote503IncludesSetup(t *testing.T) {
 	}
 }
 
+func TestFormatRuntimeErrorCannotConnectUsesEnvTicketURL(t *testing.T) {
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(repoDir) error = %v", err)
+	}
+	setTestWorkingDir(t, repoDir)
+	t.Setenv("TICKET_HOME", t.TempDir())
+	t.Setenv("TICKET_URL", "http://localhost:8080")
+
+	err := formatRuntimeError(errors.New("cannot connect to http://localhost:8080"))
+	got := err.Error()
+
+	for _, want := range []string{
+		"your ticket CLI is configured for http://localhost:8080, but that server could not be reached.",
+		"Check that the server, port, and any proxy or tunnel are running.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("env remote runtime error missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestFormatRuntimeErrorRemote503FromProjectConfigOmitsServerURL(t *testing.T) {
 	homeDir := t.TempDir()
 	repoDir := filepath.Join(t.TempDir(), "repo")
@@ -1955,14 +1977,18 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"TICKET_HOME      : " + os.Getenv("TICKET_HOME"),
-		"config_file      : " + filepath.Join(os.Getenv("TICKET_HOME"), "config.json"),
+		"TICKET_URL       : " + server.URL,
 		"server_version   : 9.8.7",
 		"username         : alice",
 		"authenticated    : true",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
+		}
+	}
+	for _, unwanted := range []string{"TICKET_HOME", "config_file"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("runStatus(remote) should not show %q:\n%s", unwanted, output)
 		}
 	}
 	if strings.Contains(output, "env-pass") || strings.Contains(output, "agent-secret") {
@@ -6625,7 +6651,7 @@ func TestRunTypedNamespaceListEmptyMessages(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"ls"}, want: "No tickets available."},
+		{args: []string{"ls"}, want: "No tickets available for project \"Private\"."},
 		{args: []string{"story", "ls"}, want: "No stories available."},
 		{args: []string{"idea", "ls"}, want: "No ideas available."},
 		{args: []string{"decision", "ls"}, want: "No decisions available."},

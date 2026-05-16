@@ -641,8 +641,8 @@ func TestSaveAndClearRemoteCredentials(t *testing.T) {
 	if remote.Username != "alice" || remote.Token != "secret" {
 		t.Fatalf("remote creds = %#v, want alice/secret", remote)
 	}
-	if creds.Token != "secret" {
-		t.Fatalf("Credentials.Token = %q, want legacy token mirror", creds.Token)
+	if creds.Token != "" {
+		t.Fatalf("Credentials.Token = %q, want empty for remote-scoped credentials", creds.Token)
 	}
 
 	if err := ClearRemoteCredentials("https://tickets.example.com"); err != nil {

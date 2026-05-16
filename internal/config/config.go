@@ -355,9 +355,7 @@ func SaveRemoteCredentials(location, username, token string) error {
 		Username: strings.TrimSpace(username),
 		Token:    strings.TrimSpace(token),
 	}
-	if creds.Token == "" {
-		creds.Token = strings.TrimSpace(token)
-	}
+	creds.Token = ""
 	return SaveCredentials(creds)
 }
 
@@ -392,6 +390,7 @@ func ClearRemoteCredentials(location string) error {
 	if len(creds.Remotes) == 0 {
 		return ClearCredentials()
 	}
+	creds.Token = ""
 	return SaveCredentials(creds)
 }
 
