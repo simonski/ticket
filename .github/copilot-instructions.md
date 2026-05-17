@@ -23,6 +23,10 @@ make test-browser-full  # full browser E2E suite (Playwright)
 make test-quickstart    # executable QUICKSTART/TUTORIAL docs tests
 make test-go            # all Go tests
 make test-go-cover      # package coverage gates (cmd/tk, libticket, client, store, server, config)
+make ci-bootstrap       # install deps for the same verify/browser flow used by GitHub Actions
+make ci-verify          # validate-openapi + coverage + JS API + build-dev + lint + vulncheck
+make ci-browser         # full browser E2E suite used by GitHub Actions
+make ci                 # ci-verify + ci-browser
 ```
 
 Targeted runs:

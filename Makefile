@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint clean release release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -49,6 +49,12 @@ help:
 	@printf "  make test-todo-example Validate the seeded todo tutorial scenario.\n"
 	@printf "  make testscripts     Run the shell-based CLI harness scenarios.\n"
 	@printf "  make lint            Run golangci-lint on all packages.\n"
+	@printf "  make vulncheck       Run govulncheck on all Go packages.\n"
+	@printf "  make ci-bootstrap    Install dependencies for the full local/CI parity flow.\n"
+	@printf "  make ci-verify       Run the same verify sequence as the GitHub verify job.\n"
+	@printf "  make ci-browser      Run the same browser sequence as the GitHub browser job.\n"
+	@printf "  make ci              Run the same verify + browser flow as GitHub Actions.\n"
+	@printf "  make ci-publish      Run the same publish sequence as the GitHub publish job.\n"
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
 	@printf "Docker targets:\n\n"
@@ -70,9 +76,8 @@ help:
 	@printf "  make release-clean   Remove the ./dist directory.\n"
 	@printf "\n"
 
-build: 
-	@$(MAKE) bump-version
-	@$(MAKE) sync-openapi-version
+build:
+	@$(MAKE) release-prepare
 	@$(MAKE) build-bin
 
 build-dev:
@@ -104,6 +109,9 @@ lint:
 	golangci-lint run ./...
 	gosec ./...
 
+vulncheck:
+	govulncheck ./...
+
 setup-node:
 	npm ci
 
@@ -125,6 +133,10 @@ bump-version:
 
 sync-openapi-version:
 	@perl -0pi -e 's/^(  version: ).*/$${1}$(VERSION)/m' openapi.yaml
+
+release-prepare:
+	@$(MAKE) bump-version
+	@$(MAKE) sync-openapi-version
 
 validate-openapi:
 	@ruby -e 'require "yaml"; doc = YAML.safe_load(File.read("openapi.yaml"), permitted_classes: [], aliases: true); abort("openapi.yaml missing openapi version") unless doc.is_a?(Hash) && !doc["openapi"].to_s.empty?; info = doc["info"].is_a?(Hash) ? doc["info"] : {}; abort("openapi.yaml missing info.title") if info["title"].to_s.empty?; abort("openapi.yaml missing info.version") if info["version"].to_s.empty?'
@@ -179,6 +191,22 @@ test-api-js:
 	node --test web/site2/api.test.js
 
 test-api: test-api-js test-api-cli
+
+ci-bootstrap: ci-bootstrap-verify ci-bootstrap-browser
+
+ci-bootstrap-verify: setup-go setup-node
+
+ci-bootstrap-browser: setup-node setup-playwright
+
+ci-bootstrap-publish: setup-go
+
+ci-verify: validate-openapi test-go-cover test-api-js build-dev lint vulncheck
+
+ci-browser: test-browser-full
+
+ci: ci-verify ci-browser
+
+ci-publish: docker-push release-publish
 
 test-go-cover:
 	@export TICKET_FAST_HASH=1; set -e; \

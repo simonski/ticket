@@ -31,6 +31,10 @@ make test-go              # Run all Go tests (unit + integration)
 make test-unit            # Unit tests only (config, password, web)
 make test-integration     # Integration tests (cmd, internal/client, server, store, libticket)
 make test-go-cover        # Tests with per-package coverage thresholds
+make ci-bootstrap         # Install deps for the same verify/browser flow used by GitHub Actions
+make ci-verify            # Validate OpenAPI + coverage + JS API + build-dev + lint + vulncheck
+make ci-browser           # Full Playwright browser job used by GitHub Actions
+make ci                   # ci-verify + ci-browser
 make lint                 # Run golangci-lint on all packages
 make dev                  # Print env vars for local development mode
 ```

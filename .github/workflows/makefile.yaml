@@ -2,106 +2,101 @@ name: Makefile CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: makefile-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-
-    - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-      with:
-        go-version-file: 'go.mod'
-        cache: true
-
-    - name: Install dependencies
-      run: make setup
-
-    - name: Validate OpenAPI
-      run: make validate-openapi
-
-    - name: Run test
-      run: make test-go-cover
-
-    - name: Run build
-      run: make build
-
-    - name: Run lint
-      run: make lint
-
-    - name: Run gosec
-      run: gosec ./...
-
-    - name: Run govulncheck
-      run: govulncheck ./...
-
-  playwright:
+  verify:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-    - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-      with:
-        node-version: '26'
-        cache: 'npm'
-    - name: Run Playwright tests
-      run: make test-playwright
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.26.3"
+          cache: true
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "26"
+          cache: "npm"
+
+      - name: Bootstrap verify toolchain
+        run: make ci-bootstrap-verify
+
+      - name: Run verify flow
+        run: make ci-verify
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "26"
+          cache: "npm"
+
+      - name: Bootstrap browser toolchain
+        run: make ci-bootstrap-browser
+
+      - name: Run browser flow
+        run: make ci-browser
 
   publish:
-    needs: [build, playwright]
+    needs: [verify, browser]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # create releases and push the version-bump commit
-      packages: write   # push images to ghcr.io
+      contents: write
+      packages: write
 
     steps:
-    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      with:
-        # Use a PAT so the version-bump commit can trigger future workflows if needed.
-        # Falls back to GITHUB_TOKEN if TAP_TOKEN is not set (won't retrigger CI either way).
-        token: ${{ secrets.TAP_TOKEN || secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          token: ${{ secrets.TAP_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-    - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-      with:
-        go-version-file: 'go.mod'
-        cache: true
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.26.3"
+          cache: true
 
-    - name: Install release tools
-      run: make setup-go
+      - name: Bootstrap publish toolchain
+        run: make ci-bootstrap-publish
 
-    - name: Configure git
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    - name: Bump version
-      run: make bump-version
+      - name: Prepare release version
+        run: make release-prepare
 
-    - name: Commit and push version bump
-      run: |
-        VERSION=$(cat cmd/tk/VERSION | tr -d '[:space:]')
-        git add cmd/tk/VERSION
-        git commit -m "chore: bump version to ${VERSION} [skip ci]"
-        git push
+      - name: Commit and push release version
+        run: |
+          VERSION=$(tr -d '[:space:]' < cmd/tk/VERSION)
+          git add cmd/tk/VERSION openapi.yaml
+          git commit -m "chore: prepare release v${VERSION} [skip ci]"
+          git push
 
-    - name: Log in to GHCR
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build and push Docker image
-      run: make docker-push
-
-    - name: Create GitHub release and update Homebrew tap
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        HOMEBREW_TAP_REPO: https://x-access-token:${{ secrets.TAP_TOKEN }}@github.com/simonski/homebrew-tap.git
-      run: make release-publish
+      - name: Run publish flow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_REPO: https://x-access-token:${{ secrets.TAP_TOKEN }}@github.com/simonski/homebrew-tap.git
+        run: make ci-publish

@@ -18,6 +18,9 @@
 | `make test-browser-full` | Full browser E2E Playwright suite                | ~12s     |
 | `make test-integration` | Store + CLI/API Go suites                        | ~90s     |
 | `make test-go-cover`  | All Go tests with per-package coverage thresholds   | ~30s     |
+| `make ci-verify`      | Same verify sequence as the GitHub verify job       | varies   |
+| `make ci-browser`     | Same browser sequence as the GitHub browser job     | ~12-15s  |
+| `make ci`             | Same verify + browser flow as GitHub Actions        | varies   |
 | `make test-playwright`| Full browser tests against the web UI               | ~12s     |
 | `make test-quickstart`| Executable QUICKSTART/TUTORIAL tests (see below)    | ~6s      |
 | `make test-todo-example` | Reproducible todo tutorial seed + verification  | ~6s      |
@@ -156,6 +159,13 @@ Enforced via `make test-go-cover`:
 | `internal/store`     | 69%     |
 | `internal/server`    | 63%     |
 | `internal/config`    | 70%     |
+
+For local parity with GitHub Actions, run:
+
+```bash
+make ci-bootstrap
+make ci
+```
 
 ## Playwright browser tests
 

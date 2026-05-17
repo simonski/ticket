@@ -80,6 +80,7 @@ Rules:
 1. **Link the ticket** — include `TK-XXX` in the PR title and/or description.
 2. **Keep PRs small** — one concern per PR makes review faster.
 3. **Pass quality gates** — `make test-go-cover` and `make lint` must pass locally before opening.
+   For a GitHub-like local run, prefer `make ci-bootstrap && make ci`.
 4. **Update docs** — if you change user-visible behaviour, update `USER_GUIDE.md`; if you change architecture, update `docs/DESIGN.md`.
 5. **Request review** — tag a maintainer; expect a response within 2 business days.
 6. **Squash or rebase** — keep a clean linear history before merging.
