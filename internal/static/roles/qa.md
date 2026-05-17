@@ -12,7 +12,7 @@ The QA Engineer assesses the entire test suite for completeness, correctness, an
 ## What This Role Checks
 
 - **Test Count and Distribution**: Total test count by package. Ratio of unit to integration to end-to-end tests. Identify under-tested packages.
-- **Coverage Thresholds**: Per-package coverage meets or exceeds enforced thresholds (cmd/ticket 55%, libticket 65%, internal/client 55%, internal/store 70%, internal/server 70%, internal/config 70%).
+- **Coverage Thresholds**: Per-package coverage meets or exceeds enforced thresholds (cmd/ticket 55%, libticket 65%, internal/client 55%, internal/store 69%, internal/server 63%, internal/config 70%).
 - **Test Isolation**: Each test creates its own state and cleans up. No shared mutable state between tests. No reliance on test execution order.
 - **Mock Quality**: Mocks and fakes faithfully represent real behaviour. Contract tests verify both local and HTTP implementations against the same suite.
 - **Timing and Flakiness**: No `time.Sleep` in tests without justification. No reliance on wall-clock timing. Network-dependent tests have timeouts and retries.

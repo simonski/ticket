@@ -9,6 +9,7 @@ func TestBuildProjectForecast(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
 	ctx := context.Background()
+	adminID := testAdminID(t, db)
 
 	project, err := CreateProject(ctx, db, "Forecast Project", "", "", "")
 	if err != nil {
@@ -48,6 +49,9 @@ func TestBuildProjectForecast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(blocker) error = %v", err)
 	}
+	if _, err := SetTicketDraft(ctx, db, blocker.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(blocker=false) error = %v", err)
+	}
 	blocked, err := CreateTicket(ctx, db, TicketCreateParams{
 		ProjectID:  project.ID,
 		WorkflowID: &workflow.ID,
@@ -58,6 +62,9 @@ func TestBuildProjectForecast(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(blocked) error = %v", err)
+	}
+	if _, err := SetTicketDraft(ctx, db, blocked.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(blocked=false) error = %v", err)
 	}
 	if _, err := AddDependency(ctx, db, project.ID, blocked.ID, blocker.ID, ""); err != nil {
 		t.Fatalf("AddDependency() error = %v", err)
@@ -73,6 +80,9 @@ func TestBuildProjectForecast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket(failing) error = %v", err)
 	}
+	if _, err := SetTicketDraft(ctx, db, failing.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(failing=false) error = %v", err)
+	}
 	succeeding, err := CreateTicket(ctx, db, TicketCreateParams{
 		ProjectID:  project.ID,
 		WorkflowID: &workflow.ID,
@@ -83,6 +93,9 @@ func TestBuildProjectForecast(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket(succeeding) error = %v", err)
+	}
+	if _, err := SetTicketDraft(ctx, db, succeeding.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(succeeding=false) error = %v", err)
 	}
 	succeeding, err = UpdateTicket(ctx, db, succeeding.ID, TicketUpdateParams{
 		Title:         succeeding.Title,

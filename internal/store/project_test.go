@@ -322,7 +322,7 @@ func TestGetProjectByTitleReturnsAmbiguousError(t *testing.T) {
 		t.Fatalf("CreateProjectWithParams(first) error = %v", err)
 	}
 	if _, err := CreateProjectWithParams(context.Background(), db, ProjectCreateParams{
-		Prefix: "AM2",
+		Prefix: "AMD",
 		Title:  "Duplicated Title",
 	}); err != nil {
 		t.Fatalf("CreateProjectWithParams(second) error = %v", err)

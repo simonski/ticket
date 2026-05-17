@@ -634,7 +634,11 @@ func TestRequestTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
 	}
-	_, err = CreateTicket(context.Background(), db, TicketCreateParams{
+	adminID := testAdminID(t, db)
+	if _, err := SetTicketDraft(context.Background(), db, notReady.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(notReady=false) error = %v", err)
+	}
+	openTask, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "Open task",
@@ -643,6 +647,9 @@ func TestRequestTicket(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	if _, err := SetTicketDraft(context.Background(), db, openTask.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(openTask=false) error = %v", err)
 	}
 
 	assigned, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
@@ -749,14 +756,19 @@ func TestRequestTicketDryRun(t *testing.T) {
 	if _, err := CreateUser(context.Background(), db, "alice", "password123", "user"); err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
-	if _, err := CreateTicket(context.Background(), db, TicketCreateParams{
+	dryRunTicket, err := CreateTicket(context.Background(), db, TicketCreateParams{
 		ProjectID: project.ID,
 		Type:      "task",
 		Title:     "DryRun task",
 		State:     StateIdle,
 		CreatedBy: "",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("CreateTicket() error = %v", err)
+	}
+	adminID := testAdminID(t, db)
+	if _, err := SetTicketDraft(context.Background(), db, dryRunTicket.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(false) error = %v", err)
 	}
 	// DryRun should return AVAILABLE without actually claiming
 	preview, status, err := RequestTicket(context.Background(), db, TicketRequestParams{
@@ -2001,16 +2013,23 @@ func TestSetTicketDraftAndWorkflowProgression(t *testing.T) {
 	}
 	adminID := testAdminID(t, db)
 
-	drafted, err := SetTicketDraft(ctx, db, ticket.ID, true, "admin", adminID)
+	drafted, err := SetTicketDraft(ctx, db, ticket.ID, false, "admin", adminID)
+	if err != nil {
+		t.Fatalf("SetTicketDraft(false) error = %v", err)
+	}
+	if drafted.Draft {
+		t.Fatalf("Draft = %v, want false", drafted.Draft)
+	}
+	ready, err := SetTicketDraft(ctx, db, ticket.ID, true, "admin", adminID)
 	if err != nil {
 		t.Fatalf("SetTicketDraft(true) error = %v", err)
 	}
-	if !drafted.Draft {
-		t.Fatalf("Draft = %v, want true", drafted.Draft)
+	if !ready.Draft {
+		t.Fatalf("Draft = %v, want true", ready.Draft)
 	}
-	ready, err := SetTicketDraft(ctx, db, ticket.ID, false, "admin", adminID)
+	ready, err = SetTicketDraft(ctx, db, ticket.ID, false, "admin", adminID)
 	if err != nil {
-		t.Fatalf("SetTicketDraft(false) error = %v", err)
+		t.Fatalf("SetTicketDraft(false again) error = %v", err)
 	}
 	if ready.Draft {
 		t.Fatalf("Draft = %v, want false", ready.Draft)

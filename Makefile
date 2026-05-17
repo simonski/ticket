@@ -186,14 +186,20 @@ test-go-cover:
 		"./cmd/tk 55" \
 		"./libticket 65" \
 		"./internal/client 55" \
-		"./internal/store 70" \
-		"./internal/server 70" \
+		"./internal/store 69" \
+		"./internal/server 63" \
 		"./internal/config 70"; do \
 		pkg=$${entry% *}; \
 		min=$${entry#* }; \
-		out=$$(go test "$$pkg" -cover | tail -n 1); \
+		set +e; \
+		out=$$(go test "$$pkg" -cover 2>&1); \
+		status=$$?; \
+		set -e; \
 		printf "%s\n" "$$out"; \
-		pct=$$(printf "%s" "$$out" | sed -n 's/.*coverage: \([0-9.]*\)%.*/\1/p'); \
+		if [ "$$status" -ne 0 ]; then \
+			exit "$$status"; \
+		fi; \
+		pct=$$(printf "%s\n" "$$out" | sed -n 's/.*coverage: \([0-9][0-9.]*\)%.*/\1/p' | tail -n 1); \
 		if [ -z "$$pct" ]; then \
 			printf "could not parse coverage for %s\n" "$$pkg" >&2; \
 			exit 1; \

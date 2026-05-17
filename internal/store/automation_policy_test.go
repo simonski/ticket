@@ -41,6 +41,10 @@ func TestAutomationPolicyRoundTripAndDiagnostics(t *testing.T) {
 	if loaded.QueueStrategy != "aging" || loaded.ForecastLookbackHours != 12 {
 		t.Fatalf("loaded policy = %#v", loaded)
 	}
+	adminID := testAdminID(t, db)
+	if _, err := SetTicketDraft(ctx, db, ticket.ID, false, "admin", adminID); err != nil {
+		t.Fatalf("SetTicketDraft(false) error = %v", err)
+	}
 	diag, err := DiagnoseTicketPolicy(ctx, db, ticket.ID)
 	if err != nil {
 		t.Fatalf("DiagnoseTicketPolicy() error = %v", err)

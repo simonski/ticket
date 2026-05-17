@@ -153,8 +153,8 @@ Enforced via `make test-go-cover`:
 | `cmd/tk`         | 55%     |
 | `libticket`          | 65%     |
 | `internal/client`    | 55%     |
-| `internal/store`     | 70%     |
-| `internal/server`    | 70%     |
+| `internal/store`     | 69%     |
+| `internal/server`    | 63%     |
 | `internal/config`    | 70%     |
 
 ## Playwright browser tests

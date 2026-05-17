@@ -546,6 +546,187 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		}
 	})
 
+	t.Run("goals-and-documents", func(t *testing.T) {
+
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Knowledge"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		goal, err := svc.CreateGoal(context.Background(), project.ID, libticket.GoalRequest{
+			Title:       "Launch docs",
+			Description: "Ship docs",
+			Notes:       "important",
+			ETA:         "2026-06-01",
+			Priority:    2,
+		})
+		if err != nil {
+			t.Fatalf("CreateGoal() error = %v", err)
+		}
+		if goal.ID == 0 || goal.Title != "Launch docs" || goal.Priority != 2 {
+			t.Fatalf("CreateGoal() = %#v", goal)
+		}
+
+		goals, err := svc.ListGoals(context.Background(), project.ID)
+		if err != nil {
+			t.Fatalf("ListGoals() error = %v", err)
+		}
+		if len(goals) != 1 || goals[0].ID != goal.ID {
+			t.Fatalf("ListGoals() = %#v", goals)
+		}
+
+		gotGoal, err := svc.GetGoal(context.Background(), goal.ID)
+		if err != nil {
+			t.Fatalf("GetGoal() error = %v", err)
+		}
+		if gotGoal.Title != goal.Title {
+			t.Fatalf("GetGoal() = %#v", gotGoal)
+		}
+
+		updatedGoal, err := svc.UpdateGoal(context.Background(), goal.ID, libticket.GoalRequest{
+			Title:       "Launch docs v2",
+			Description: "Ship docs better",
+			Notes:       "revised",
+			ETA:         "2026-07-01",
+			Priority:    3,
+		})
+		if err != nil {
+			t.Fatalf("UpdateGoal() error = %v", err)
+		}
+		if updatedGoal.Title != "Launch docs v2" || updatedGoal.Priority != 3 {
+			t.Fatalf("UpdateGoal() = %#v", updatedGoal)
+		}
+
+		if err := svc.DeleteGoal(context.Background(), goal.ID); err != nil {
+			t.Fatalf("DeleteGoal() error = %v", err)
+		}
+		goals, err = svc.ListGoals(context.Background(), project.ID)
+		if err != nil {
+			t.Fatalf("ListGoals() after delete error = %v", err)
+		}
+		if len(goals) != 0 {
+			t.Fatalf("ListGoals() after delete = %#v, want empty", goals)
+		}
+
+		document, err := svc.CreateDocument(context.Background(), project.ID, libticket.DocumentRequest{
+			Title:       "Architecture",
+			Description: "High level",
+			Notes:       "review soon",
+			Content:     "initial content",
+		})
+		if err != nil {
+			t.Fatalf("CreateDocument() error = %v", err)
+		}
+		if document.ID == 0 || document.Title != "Architecture" {
+			t.Fatalf("CreateDocument() = %#v", document)
+		}
+
+		documents, err := svc.ListDocuments(context.Background(), project.ID)
+		if err != nil {
+			t.Fatalf("ListDocuments() error = %v", err)
+		}
+		if len(documents) != 1 || documents[0].ID != document.ID {
+			t.Fatalf("ListDocuments() = %#v", documents)
+		}
+
+		gotDocument, err := svc.GetDocument(context.Background(), document.ID)
+		if err != nil {
+			t.Fatalf("GetDocument() error = %v", err)
+		}
+		if gotDocument.Content != "initial content" {
+			t.Fatalf("GetDocument() = %#v", gotDocument)
+		}
+
+		updatedDocument, err := svc.UpdateDocument(context.Background(), document.ID, libticket.DocumentRequest{
+			Title:       "Architecture v2",
+			Description: "Detailed",
+			Notes:       "approved",
+			Content:     "updated content",
+		})
+		if err != nil {
+			t.Fatalf("UpdateDocument() error = %v", err)
+		}
+		if updatedDocument.Title != "Architecture v2" || updatedDocument.Content != "updated content" {
+			t.Fatalf("UpdateDocument() = %#v", updatedDocument)
+		}
+
+		label, err := svc.CreateLabel(context.Background(), project.ID, libticket.LabelRequest{Name: "reference", Color: "green"})
+		if err != nil {
+			t.Fatalf("CreateLabel() for document error = %v", err)
+		}
+
+		if err := svc.AddDocumentLabel(context.Background(), document.ID, libticket.DocumentLabelRequest{LabelID: label.ID}); err != nil {
+			t.Fatalf("AddDocumentLabel() error = %v", err)
+		}
+		docLabels, err := svc.ListDocumentLabels(context.Background(), document.ID)
+		if err != nil {
+			t.Fatalf("ListDocumentLabels() error = %v", err)
+		}
+		if len(docLabels) != 1 || docLabels[0].ID != label.ID {
+			t.Fatalf("ListDocumentLabels() = %#v", docLabels)
+		}
+		if err := svc.RemoveDocumentLabel(context.Background(), document.ID, label.ID); err != nil {
+			t.Fatalf("RemoveDocumentLabel() error = %v", err)
+		}
+		docLabels, err = svc.ListDocumentLabels(context.Background(), document.ID)
+		if err != nil {
+			t.Fatalf("ListDocumentLabels() after remove error = %v", err)
+		}
+		if len(docLabels) != 0 {
+			t.Fatalf("ListDocumentLabels() after remove = %#v, want empty", docLabels)
+		}
+
+		file, err := svc.AddDocumentFile(context.Background(), document.ID, libticket.DocumentFileUploadRequest{
+			FileName:    "note.txt",
+			ContentType: "text/plain",
+			Content:     []byte("hello world"),
+		})
+		if err != nil {
+			t.Fatalf("AddDocumentFile() error = %v", err)
+		}
+		if file.ID == 0 || file.SizeBytes != int64(len("hello world")) {
+			t.Fatalf("AddDocumentFile() = %#v", file)
+		}
+
+		files, err := svc.ListDocumentFiles(context.Background(), document.ID)
+		if err != nil {
+			t.Fatalf("ListDocumentFiles() error = %v", err)
+		}
+		if len(files) != 1 || files[0].ID != file.ID {
+			t.Fatalf("ListDocumentFiles() = %#v", files)
+		}
+
+		gotFile, err := svc.GetDocumentFile(context.Background(), document.ID, file.ID)
+		if err != nil {
+			t.Fatalf("GetDocumentFile() error = %v", err)
+		}
+		if string(gotFile.Content) != "hello world" {
+			t.Fatalf("GetDocumentFile() = %#v", gotFile)
+		}
+
+		if err := svc.DeleteDocumentFile(context.Background(), document.ID, file.ID); err != nil {
+			t.Fatalf("DeleteDocumentFile() error = %v", err)
+		}
+		files, err = svc.ListDocumentFiles(context.Background(), document.ID)
+		if err != nil {
+			t.Fatalf("ListDocumentFiles() after delete error = %v", err)
+		}
+		if len(files) != 0 {
+			t.Fatalf("ListDocumentFiles() after delete = %#v, want empty", files)
+		}
+
+		if err := svc.DeleteDocument(context.Background(), document.ID); err != nil {
+			t.Fatalf("DeleteDocument() error = %v", err)
+		}
+		documents, err = svc.ListDocuments(context.Background(), project.ID)
+		if err != nil {
+			t.Fatalf("ListDocuments() after delete error = %v", err)
+		}
+		if len(documents) != 0 {
+			t.Fatalf("ListDocuments() after delete = %#v, want empty", documents)
+		}
+	})
+
 	t.Run("user-management-and-request-no-work", func(t *testing.T) {
 
 		user, err := svc.CreateUser(context.Background(), "alice", "secret12")
