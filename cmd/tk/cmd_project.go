@@ -25,7 +25,7 @@ func runProject(args []string) error {
 		return err
 	}
 	if args[0] == "remote" {
-		return runProjectRemote(cfg, args[1:])
+		return errors.New("tk project remote has been removed; set TICKET_URL instead")
 	}
 	svc, err := resolveService(cfg)
 	if err != nil {
@@ -40,7 +40,7 @@ func runProject(args []string) error {
 	case "request-access":
 		fs := flag.NewFlagSet("project request-access", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, title, prefix, or alias")
+		projectRef := fs.String("project_id", resolveConfiguredProjectReference(cfg), "project id, title, prefix, or alias")
 		message := fs.String("message", "", "request message")
 		if parseErr := fs.Parse(args[1:]); parseErr != nil {
 			return parseErr
@@ -69,7 +69,7 @@ func runProject(args []string) error {
 	case "access-requests":
 		fs := flag.NewFlagSet("project access-requests", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, title, prefix, or alias")
+		projectRef := fs.String("project_id", resolveConfiguredProjectReference(cfg), "project id, title, prefix, or alias")
 		status := fs.String("status", "", "filter by status")
 		if parseErr := fs.Parse(args[1:]); parseErr != nil {
 			return parseErr
@@ -112,7 +112,7 @@ func runProject(args []string) error {
 		action := args[0]
 		fs := flag.NewFlagSet("project "+action, flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
-		projectRef := fs.String("project_id", strings.TrimSpace(cfg.ProjectID), "project id, title, prefix, or alias")
+		projectRef := fs.String("project_id", resolveConfiguredProjectReference(cfg), "project id, title, prefix, or alias")
 		requestID := fs.Int64("request_id", 0, "project access request id")
 		message := fs.String("message", "", "optional decision message")
 		if parseErr := fs.Parse(args[1:]); parseErr != nil {
@@ -227,11 +227,6 @@ func runProject(args []string) error {
 		if createErr != nil {
 			return createErr
 		}
-		cfg.ProjectID = project.Prefix
-		cfg.CurrentEpicID = ""
-		if saveErr := config.Save(cfg); saveErr != nil {
-			return saveErr
-		}
 		if outputJSON {
 			return printJSON(project)
 		}
@@ -254,7 +249,7 @@ func runProject(args []string) error {
 				workflowNames[wf.ID] = wf.Name
 			}
 		}
-		printProjectTable(projects, cfg.ProjectID, workflowNames)
+		printProjectTable(projects, resolveConfiguredProjectReference(cfg), workflowNames)
 		return nil
 	case "get":
 		if len(args) > 2 {
@@ -291,17 +286,7 @@ func runProject(args []string) error {
 			fmt.Printf("%s — %s\n", project.Prefix, project.Title)
 			return nil
 		}
-		project, _, err := resolveProjectContext(context.Background(), cfg, svc, args[1])
-		if err != nil {
-			return err
-		}
-		cfg.ProjectID = project.Prefix
-		cfg.CurrentEpicID = ""
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Printf("using project %s\n", project.Prefix)
-		return nil
+		return errors.New("tk project use has been removed; pass -project_id or set TICKET_PROJECT instead")
 	case "update":
 		if containsFlag(args[1:], "-id") {
 			// Parse -id from args so we don't require a current project
@@ -328,8 +313,6 @@ func runProject(args []string) error {
 			return err
 		}
 		return runProjectByID(svc, project.ID, args)
-	case "remote":
-		return runProjectRemote(cfg, args[1:])
 	case "repo", "repos", "repository", "repositories":
 		return runProjectRepository(cfg, svc, args[1:])
 	case "set-draft":
@@ -375,22 +358,13 @@ func runProject(args []string) error {
 		if err != nil {
 			return err
 		}
-		// Update config to point to the new prefix.
-		cfg.ProjectID = newPrefix
-		// Update current_epic_id if it references the old prefix.
-		if strings.HasPrefix(cfg.CurrentEpicID, oldPrefix+"-") {
-			cfg.CurrentEpicID = newPrefix + cfg.CurrentEpicID[len(oldPrefix):]
-		}
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
 		fmt.Printf("renamed %s → %s (%d tickets updated)\n", oldPrefix, newPrefix, count)
 		return nil
 	case "rm", "delete":
 		fs := flag.NewFlagSet("project rm", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		id := fs.String("id", "", "project id or prefix")
-		confirm := fs.String("confirm", "", "confirmation token from first run")
+		confirm := fs.String("confirm", "", "repeat the project prefix shown by the first run")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -406,36 +380,18 @@ func runProject(args []string) error {
 			return err
 		}
 		if strings.TrimSpace(*confirm) == "" {
-			// Phase 1: generate confirmation token
-			token, err := generateConfirmToken()
-			if err != nil {
-				return err
-			}
 			tickets, _ := svc.ListTicketsFiltered(context.Background(), project.ID, "", "", "", "", "", "", 0, true)
 			fmt.Printf("project  : %s — %s\n", project.Prefix, project.Title)
 			fmt.Printf("tickets  : %d\n", len(tickets))
 			fmt.Printf("\nThis will permanently delete the project and all associated data.\n")
 			fmt.Printf("To confirm, run:\n\n")
-			fmt.Printf("  tk project rm -id %s --confirm %s\n\n", *id, token)
-			// Store token temporarily in config
-			cfg.DeleteConfirmToken = token
-			cfg.DeleteConfirmProject = fmt.Sprintf("%d", project.ID)
-			return config.Save(cfg)
+			fmt.Printf("  tk project rm -id %s --confirm %s\n\n", *id, project.Prefix)
+			return nil
 		}
-		// Phase 2: verify token and delete
-		if *confirm != cfg.DeleteConfirmToken || fmt.Sprintf("%d", project.ID) != cfg.DeleteConfirmProject {
-			return errors.New("invalid confirmation token")
+		if strings.TrimSpace(*confirm) != project.Prefix {
+			return fmt.Errorf("invalid confirmation value: expected %s", project.Prefix)
 		}
 		if err := svc.DeleteProject(context.Background(), project.ID); err != nil {
-			return err
-		}
-		// Clear stored token and switch project if needed
-		cfg.DeleteConfirmToken = ""
-		cfg.DeleteConfirmProject = ""
-		if cfg.ProjectID == project.Prefix || cfg.ProjectID == fmt.Sprintf("%d", project.ID) {
-			cfg.ProjectID = ""
-		}
-		if err := config.Save(cfg); err != nil {
 			return err
 		}
 		fmt.Printf("deleted project %s — %s\n", project.Prefix, project.Title)
@@ -443,37 +399,6 @@ func runProject(args []string) error {
 	default:
 		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
 	}
-}
-
-func runProjectRemote(cfg config.Config, args []string) error {
-	if len(args) == 0 {
-		if strings.TrimSpace(cfg.Remote) == "" {
-			fmt.Println("(none)")
-			return nil
-		}
-		fmt.Println(cfg.Remote)
-		return nil
-	}
-	if len(args) != 1 {
-		return errors.New("usage: tk project remote <name>")
-	}
-	name := strings.TrimSpace(args[0])
-	globalCfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-	if _, ok := globalCfg.RemoteByName(name); !ok {
-		return fmt.Errorf("remote %q not found", name)
-	}
-	root, _, err := currentOrAncestorProjectRoot()
-	if err != nil {
-		return err
-	}
-	if err := config.SaveProjectConfigAt(root, config.Config{Remote: name}); err != nil {
-		return err
-	}
-	fmt.Printf("using remote %s for %s\n", name, root)
-	return nil
 }
 
 func runProjectRepository(cfg config.Config, svc libticket.Service, args []string) error {
@@ -854,7 +779,7 @@ func guardProjectClose(svc libticket.Service, projectID int64) error {
 		return errors.New("cannot close the current project when it is the only open project; create another project or switch to one first")
 	}
 	if isCurrent {
-		return errors.New("cannot close the current project; switch to another project first (tk project use <id>)")
+		return errors.New("cannot close the current project; switch to another project first with TICKET_PROJECT or -project_id")
 	}
 	return nil
 }

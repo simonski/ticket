@@ -28,7 +28,7 @@ tk whoami
 
 ```bash
 tk project create -prefix DEMO -title "Tutorial Project"
-tk project use DEMO
+export TICKET_PROJECT=DEMO
 tk epic "Release tutorial flow"
 tk add "Implement core command"
 tk bug "Fix onboarding typo"
@@ -38,7 +38,6 @@ tk ls
 ## 5. Work items and lifecycle
 
 ```bash
-tk project use DEMO
 tk summary
 tk complete -id DEMO-1
 tk ls

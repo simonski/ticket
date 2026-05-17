@@ -62,12 +62,7 @@ use_token_auth
 "$SEED_SCRIPT" >/dev/null
 
 status_json="$("$TK_BIN" -json status)"
-config_file="$(printf '%s\n' "$status_json" | sed -nE 's/.*"config_file": "([^"]+)".*/\1/p')"
-if [[ -z "$config_file" ]]; then
-	echo "could not resolve active config file from 'tk status'" >&2
-	exit 1
-fi
-manifest_file="$(dirname "$config_file")/demo-example.env"
+manifest_file="$TICKET_HOME/demo-example.env"
 if [[ ! -f "$manifest_file" ]]; then
 	echo "manifest file not found: $manifest_file" >&2
 	exit 1
@@ -76,7 +71,7 @@ fi
 # shellcheck disable=SC1090
 source "$manifest_file"
 
-"$TK_BIN" project use DEMO >/dev/null
+export TICKET_PROJECT="DEMO"
 
 assert_contains() {
 	local haystack="$1"
@@ -90,7 +85,7 @@ assert_contains() {
 }
 
 status_output="$("$TK_BIN" status)"
-assert_contains "$status_output" "project          : DEMO — demo" "status project"
+assert_contains "$status_output" "TICKET_URL" "status url"
 
 list_output="$("$TK_BIN" ls)"
 assert_contains "$list_output" "$EPIC_ID" "ticket list epic"

@@ -67,14 +67,11 @@ func setTestLocation(t *testing.T, location string) {
 		t.Fatalf("Chdir(TICKET_HOME) error = %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	cfg, _ := config.Load()
-	cfg.Location = ""
-	cfg.Remote = "test"
-	cfg.DefaultRemote = "test"
-	cfg.Remotes = []config.Remote{{Name: "test", URL: location}}
-	if err := config.Save(cfg); err != nil {
-		t.Fatal(err)
+	if location == "" {
+		t.Setenv("TICKET_URL", "")
+		return
 	}
+	t.Setenv("TICKET_URL", location)
 }
 
 func setTestWorkingDir(t *testing.T, dir string) {
@@ -1033,9 +1030,9 @@ func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 func TestRenderConfigHelpIncludesListAndDelete(t *testing.T) {
 	help := renderCommandHelp("config")
 	for _, want := range []string{
-		"tk config <set|get|ls|list|rm|delete|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key] [value]",
+		"tk config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
 		"tk config ls",
-		"current_project",
+		"Runtime client configuration now comes from environment variables",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("config help missing %q:\n%s", want, help)
@@ -1198,8 +1195,8 @@ func TestResolveCredentialsUsesFlagsAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveCredentials(defaults) error = %v", err)
 	}
-	if password != "password" {
-		t.Fatalf("resolveCredentials(default password) = %q", password)
+	if password != "" {
+		t.Fatalf("resolveCredentials(default password) = %q, want empty", password)
 	}
 	if username == "" {
 		t.Fatal("resolveCredentials(default username) returned empty username")
@@ -1213,17 +1210,17 @@ func TestResolveCredentialsUsesFlagsAndDefaults(t *testing.T) {
 		t.Fatalf("resolveCredentials(flags) = %q/%q", username, password)
 	}
 
-	// Validate fallback behavior when no explicit credentials are provided
-	setTestLocation(t, "")
+	t.Setenv("TICKET_USERNAME", "env-user")
+	t.Setenv("TICKET_PASSWORD", "env-pass")
 	username, password, err = resolveCredentials("", "", true)
 	if err != nil {
-		t.Fatalf("resolveCredentials(fallback) error = %v", err)
+		t.Fatalf("resolveCredentials(env) error = %v", err)
 	}
-	if strings.TrimSpace(username) == "" {
-		t.Fatalf("resolveCredentials(fallback) username was empty")
+	if username != "env-user" {
+		t.Fatalf("resolveCredentials(env) username = %q", username)
 	}
-	if password != "password" {
-		t.Fatalf("resolveCredentials(fallback) password = %q, want %q", password, "password")
+	if password != "env-pass" {
+		t.Fatalf("resolveCredentials(env) password = %q, want %q", password, "env-pass")
 	}
 }
 
@@ -1730,14 +1727,8 @@ func TestLoginRetryStoresCredentialsSeparatelyAndLogoutRemovesThem(t *testing.T)
 	}
 
 	configData, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
-	if err != nil {
-		t.Fatalf("ReadFile(config.json) error = %v", err)
-	}
-	if strings.Contains(string(configData), "session-token") {
+	if err == nil && strings.Contains(string(configData), "session-token") {
 		t.Fatalf("config.json should not contain session token:\n%s", string(configData))
-	}
-	if !strings.Contains(string(configData), `"default_remote": "test"`) {
-		t.Fatalf("config.json should preserve remote configuration:\n%s", string(configData))
 	}
 	credData, err := os.ReadFile(credsPath)
 	if err != nil {
@@ -1790,9 +1781,6 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"username":"alice"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tempDir, "credentials.json"), []byte(`{"token":"stored-token"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(credentials.json) error = %v", err)
-	}
 
 	var loginCalls int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1811,6 +1799,9 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	if err := config.SaveRemoteCredentials(server.URL, "alice", "stored-token"); err != nil {
+		t.Fatalf("SaveRemoteCredentials() error = %v", err)
+	}
 	setTestLocation(t, server.URL)
 
 	output := captureStdout(t, func() {
@@ -1825,11 +1816,8 @@ func TestRunLoginUsesValidStoredCredentialsFirst(t *testing.T) {
 		t.Fatalf("unexpected login calls = %d", loginCalls)
 	}
 	configData, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
-	if err != nil {
-		t.Fatalf("ReadFile(config.json) error = %v", err)
-	}
-	if !strings.Contains(string(configData), `"default_remote": "test"`) {
-		t.Fatalf("config.json should preserve remote configuration:\n%s", string(configData))
+	if err == nil && strings.Contains(string(configData), "stored-token") {
+		t.Fatalf("config.json should not contain stored tokens:\n%s", string(configData))
 	}
 }
 
@@ -2007,11 +1995,18 @@ func TestRunStatusLocalMissingDatabasePrintsHint(t *testing.T) {
 	output := captureStdout(t, func() {
 		runErr = runStatus(nil)
 	})
-	if runErr == nil || !strings.Contains(runErr.Error(), "no such file or directory") {
-		t.Fatalf("runStatus(local missing db) error = %v", runErr)
+	if runErr != nil {
+		t.Fatalf("runStatus() error = %v", runErr)
 	}
-	if !strings.Contains(output, "authenticated    : false") {
-		t.Fatalf("runStatus(local missing db) output = %q, want unauthenticated summary", output)
+	for _, want := range []string{
+		"TICKET_URL",
+		"UNSET",
+		"TICKET_USERNAME",
+		"TICKET_PASSWORD",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("runStatus() output missing %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -2059,11 +2054,7 @@ func TestRunInitDoesNotTreatAncestorTicketHomeAsProjectRoot(t *testing.T) {
 }
 
 func TestRunStatusLocalSuccess(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("TICKET_HOME", tempDir)
-	setTestWorkingDir(t, tempDir)
-	dbPath := filepath.Join(tempDir, "ticket.db")
-	testutil.CloneSeededDB(t, dbPath, "secret12")
+	setupLocalCLI(t)
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"status", "-nocolor"}); err != nil {
@@ -2071,14 +2062,15 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"TICKET_HOME      : " + tempDir,
-		"server_version   : (unknown)",
-		"username         : admin",
-		"authenticated    : true",
-		"project          : PRIV — Private",
+		"TICKET_URL",
+		"http://",
+		"TICKET_USERNAME",
+		"admin",
+		"TICKET_PASSWORD",
+		"********",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("runStatus(local) missing %q:\n%s", want, output)
+			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
 	}
 }
@@ -2126,28 +2118,15 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 		}
 	})
 
-	for _, want := range []string{
-		"project          : SUM — Summary Test",
-		"git              : https://github.com/example/summary.git",
-		"workflow",
-		"Agile",
-		"draft            : false",
-	} {
+	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD"} {
 		if !strings.Contains(statusOut, want) {
 			t.Fatalf("status output missing %q:\n%s", want, statusOut)
 		}
 	}
-	if !strings.Contains(statusOut, "TICKET_HOME      : "+os.Getenv("TICKET_HOME")) {
-		t.Fatalf("status output missing TICKET_HOME:\n%s", statusOut)
-	}
-	if !strings.Contains(statusOut, "config_file      : "+filepath.Join(repoDir, ".ticket", "config.json")) {
-		t.Fatalf("status output missing repo-local config path:\n%s", statusOut)
-	}
-	if idxProject, idxConfig := strings.Index(statusOut, "project          : SUM — Summary Test"), strings.Index(statusOut, "config_file      : "+filepath.Join(repoDir, ".ticket", "config.json")); idxProject == -1 || idxConfig == -1 || idxConfig < idxProject {
-		t.Fatalf("status output should show config file after project row:\n%s", statusOut)
-	}
-	if idxConfig, idxGit := strings.Index(statusOut, "config_file      : "+filepath.Join(repoDir, ".ticket", "config.json")), strings.Index(statusOut, "git              : https://github.com/example/summary.git"); idxConfig == -1 || idxGit == -1 || idxConfig > idxGit {
-		t.Fatalf("status output should show config file before git row:\n%s", statusOut)
+	for _, unwanted := range []string{"project          :", "config_file", "TICKET_HOME"} {
+		if strings.Contains(statusOut, unwanted) {
+			t.Fatalf("status output should stay remote-only and omit %q:\n%s", unwanted, statusOut)
+		}
 	}
 	for _, unwanted := range []string{
 		"project          :",
@@ -2171,9 +2150,6 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 		if strings.Contains(listOut, unwanted) || strings.Contains(statusOut, unwanted) {
 			t.Fatalf("output should not include legacy key %q:\nstatus:\n%s\nlist:\n%s", unwanted, statusOut, listOut)
 		}
-	}
-	if idxStatus, idxSummary := strings.Index(statusOut, "TICKET_HOME"), strings.Index(statusOut, "project          : SUM — Summary Test"); idxStatus == -1 || idxSummary == -1 || idxStatus > idxSummary {
-		t.Fatalf("status output should show setup block before summary block:\n%s", statusOut)
 	}
 	for _, output := range []string{statusOut, listOut} {
 		if strings.Contains(output, "open tickets") {
@@ -2448,7 +2424,7 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 			t.Fatalf("project list error = %v", err)
 		}
 	})
-	if !strings.Contains(listOutput, "Project A") || !strings.Contains(listOutput, "*") {
+	if !strings.Contains(listOutput, "Project A") {
 		t.Fatalf("project list output = %q", listOutput)
 	}
 
@@ -2478,10 +2454,6 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 		}
 	}
 
-	// Switch to project 1 before disabling project 2 (can't close the current project).
-	if err := run([]string{"project", "use", "1"}); err != nil {
-		t.Fatalf("project use 1 error = %v", err)
-	}
 	disableOutput := captureStdout(t, func() {
 		if err := run([]string{"project", fmt.Sprintf("%d", createdProjectID), "disable"}); err != nil {
 			t.Fatalf("project disable error = %v", err)
@@ -2491,14 +2463,6 @@ func TestRunProjectCommandsInLocalMode(t *testing.T) {
 		t.Fatalf("project disable output = %q", disableOutput)
 	}
 
-	useOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "use", "1"}); err != nil {
-			t.Fatalf("project use error = %v", err)
-		}
-	})
-	if !strings.Contains(useOutput, "using project") {
-		t.Fatalf("project use output = %q", useOutput)
-	}
 }
 
 func TestRunProjectCommandsRejectGitBranchFlag(t *testing.T) {
@@ -2831,7 +2795,7 @@ func TestRunProjectRepo(t *testing.T) {
 	}
 }
 
-func TestBindRootToRemoteProjectWritesProjectBinding(t *testing.T) {
+func TestBindRootToRemoteProjectRequiresNamedRemote(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
 
@@ -2844,18 +2808,8 @@ func TestBindRootToRemoteProjectWritesProjectBinding(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	if bindErr := bindRootToRemoteProject(root, "test", project.Prefix); bindErr != nil {
+	if bindErr := bindRootToRemoteProject(root, "test", project.Prefix); bindErr == nil || !strings.Contains(bindErr.Error(), `remote "test" not found`) {
 		t.Fatalf("bindRootToRemoteProject() error = %v", bindErr)
-	}
-
-	data, err := os.ReadFile(filepath.Join(root, ".ticket", "config.json"))
-	if err != nil {
-		t.Fatalf("ReadFile(config) error = %v", err)
-	}
-	for _, want := range []string{`"remote": "test"`, `"project_id": "` + project.Prefix + `"`} {
-		if !strings.Contains(string(data), want) {
-			t.Fatalf("project config missing %q:\n%s", want, string(data))
-		}
 	}
 	_ = svc
 }
@@ -2868,31 +2822,9 @@ func TestRunProjectRemoteBeforeInit(t *testing.T) {
 	}
 	setTestWorkingDir(t, repoDir)
 	t.Setenv("TICKET_HOME", homeDir)
-	if err := config.Save(config.Config{
-		DefaultRemote: "local",
-		Remotes: []config.Remote{
-			{Name: "local", URL: "http://localhost:8080"},
-			{Name: "prod", URL: "https://ticket.example.com"},
-		},
-	}); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
-	}
-
-	output := captureStdout(t, func() {
-		if err := run([]string{"project", "remote", "prod"}); err != nil {
-			t.Fatalf("project remote error = %v", err)
-		}
-	})
-	if !strings.Contains(output, "using remote prod") {
-		t.Fatalf("project remote output = %q", output)
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if cfg.Remote != "prod" {
-		t.Fatalf("config.Load().Remote = %q, want prod", cfg.Remote)
+	err := run([]string{"project", "remote", "prod"})
+	if err == nil || !strings.Contains(err.Error(), "has been removed") {
+		t.Fatalf("project remote error = %v", err)
 	}
 }
 
@@ -3246,10 +3178,10 @@ func TestRunTaskCommandsInLocalMode(t *testing.T) {
 	}
 }
 
-func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
+func TestRunTicketCreateDoesNotAutoParentTaskLikeTypes(t *testing.T) {
 	setupLocalCLI(t)
 
-	epicID := createLocalTask(t, []string{"epic", "Current Epic"})
+	_ = createLocalTask(t, []string{"epic", "Current Epic"})
 	taskID := createLocalTask(t, []string{"add", "Auto Parented Task"})
 	bugID := createLocalTask(t, []string{"bug", "Auto Parented Bug"})
 	choreID := createLocalTask(t, []string{"add", "-t", "chore", "Auto Parented Chore"})
@@ -3260,8 +3192,8 @@ func TestRunTicketCreateDefaultsTaskLikeTypesToCurrentEpic(t *testing.T) {
 				t.Fatalf("get error = %v", err)
 			}
 		})
-		if !hasDetailField(getOutput, "Parent", ticketLabelByID(t, epicID)) {
-			t.Fatalf("get output missing parent field:\n%s", getOutput)
+		if hasDetailLabel(getOutput, "Parent") {
+			t.Fatalf("get output should not auto-assign a parent:\n%s", getOutput)
 		}
 	}
 }
@@ -4465,14 +4397,7 @@ func TestRunDeleteSupportsCommaSeparatedPositionalIDs(t *testing.T) {
 	if err := run([]string{"rm", combined}); err != nil {
 		t.Fatalf("rm phase 1 error = %v", err)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if cfg.DeleteConfirmTicket != combined {
-		t.Fatalf("DeleteConfirmTicket = %q, want %q", cfg.DeleteConfirmTicket, combined)
-	}
-	if err := run([]string{"rm", "-id", combined, "--confirm", cfg.DeleteConfirmToken}); err != nil {
+	if err := run([]string{"rm", "-id", combined, "--confirm", combined}); err != nil {
 		t.Fatalf("rm phase 2 error = %v", err)
 	}
 	if err := run([]string{"get", "-id", firstID}); err == nil || err.Error() != "ticket not found" {
@@ -4492,11 +4417,7 @@ func TestRunDeleteSupportsCommaSeparatedIDFlag(t *testing.T) {
 	if err := run([]string{"rm", "-id", combined}); err != nil {
 		t.Fatalf("rm phase 1 error = %v", err)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if err := run([]string{"rm", "-id", combined, "--confirm", cfg.DeleteConfirmToken}); err != nil {
+	if err := run([]string{"rm", "-id", combined, "--confirm", combined}); err != nil {
 		t.Fatalf("rm phase 2 error = %v", err)
 	}
 	if err := run([]string{"get", "-id", firstID}); err == nil || err.Error() != "ticket not found" {
@@ -4730,18 +4651,6 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 		t.Fatalf("orphans output should not include epics: %q", orphansOutput)
 	}
 
-	if err := run([]string{"config", "set", "location", "http://example.test"}); err != nil {
-		t.Fatalf("config set error = %v", err)
-	}
-	configOutput := captureStdout(t, func() {
-		if err := run([]string{"config", "get", "location"}); err != nil {
-			t.Fatalf("config get error = %v", err)
-		}
-	})
-	if strings.TrimSpace(configOutput) == "" {
-		t.Fatalf("config output = %q", configOutput)
-	}
-
 	if err := run([]string{"config", "ls"}); err != nil {
 		t.Fatalf("config ls error = %v", err)
 	}
@@ -4751,26 +4660,12 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
-		"location",
-		"username",
-		"project_id",
-		"current_epic_id",
+		"registration_enabled",
+		"registration_auto_approve",
 	} {
 		if !strings.Contains(listOutput, want) {
 			t.Fatalf("config ls output missing %q:\n%s", want, listOutput)
 		}
-	}
-
-	if err := run([]string{"config", "rm", "location"}); err != nil {
-		t.Fatalf("config rm error = %v", err)
-	}
-	clearedOutput := captureStdout(t, func() {
-		if err := run([]string{"config", "get", "location"}); err != nil {
-			t.Fatalf("config get error = %v", err)
-		}
-	})
-	if strings.TrimSpace(clearedOutput) == "" {
-		t.Fatalf("config get output after delete should still resolve the active location: %q", clearedOutput)
 	}
 }
 
@@ -5382,9 +5277,14 @@ func TestRunStatusShowsProjectWorkflowAndDefaultDraft(t *testing.T) {
 			t.Fatalf("status error = %v", err)
 		}
 	})
-	for _, want := range []string{"workflow", "Custom Workflow", "draft", "true"} {
+	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
+		}
+	}
+	for _, unwanted := range []string{"workflow", "Custom Workflow", "draft", "true"} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("status output should omit project summary details like %q:\n%s", unwanted, output)
 		}
 	}
 
@@ -5397,11 +5297,14 @@ func TestRunStatusShowsProjectWorkflowAndDefaultDraft(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOutput), &payload); err != nil {
 		t.Fatalf("json.Unmarshal(status) error = %v\noutput=%s", err, jsonOutput)
 	}
-	if got := payload["project_workflow"]; got != "Custom Workflow" {
-		t.Fatalf("project_workflow = %#v, want %q", got, "Custom Workflow")
+	if got := payload["TICKET_USERNAME"]; got != "admin" {
+		t.Fatalf("TICKET_USERNAME = %#v, want %q", got, "admin")
 	}
-	if got, ok := payload["project_default_draft"].(bool); !ok || !got {
-		t.Fatalf("project_default_draft = %#v, want true", payload["project_default_draft"])
+	if _, exists := payload["project_workflow"]; exists {
+		t.Fatalf("status json should omit project_workflow: %#v", payload)
+	}
+	if _, exists := payload["project_default_draft"]; exists {
+		t.Fatalf("status json should omit project_default_draft: %#v", payload)
 	}
 }
 
@@ -5539,13 +5442,9 @@ func TestRunProjectUseAndWorkflowHelpPaths(t *testing.T) {
 		t.Fatalf("unexpected project use output:\n%s", noProjectOutput)
 	}
 
-	useOutput := captureStdout(t, func() {
-		if err := run([]string{"project", "use", "1"}); err != nil {
-			t.Fatalf("project use 1 error = %v", err)
-		}
-	})
-	if !strings.Contains(useOutput, "using project") {
-		t.Fatalf("unexpected project use set output:\n%s", useOutput)
+	useErr := run([]string{"project", "use", "1"})
+	if useErr == nil || !strings.Contains(useErr.Error(), "has been removed") {
+		t.Fatalf("project use error = %v", useErr)
 	}
 
 	currentOutput := captureStdout(t, func() {
@@ -5737,21 +5636,24 @@ func setupLocalCLI(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	t.Setenv("TICKET_HOME", globalHome)
 	t.Setenv("TICKET_USERNAME", "admin")
+	t.Setenv("TICKET_PASSWORD", "secret12")
 	dbPath := filepath.Join(globalHome, "ticket.db")
 	testutil.CloneSeededDB(t, dbPath, "secret12")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	handler, err := server.Handler(db, "test", false, nil, "", "")
+	if err != nil {
+		t.Fatalf("server.Handler() error = %v", err)
+	}
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+	t.Setenv("TICKET_URL", ts.URL)
+	setTestLocation(t, ts.URL)
 	if err := config.SaveProjectConfigAt(repoDir, config.Config{ProjectID: "1"}); err != nil {
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
-	}
-	cfg := config.Config{
-		DefaultRemote: "test",
-		Remotes:       []config.Remote{{Name: "test", URL: dbPath}},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("json.MarshalIndent(config) error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(globalHome, "config.json"), data, 0o600); err != nil {
-		t.Fatalf("WriteFile(config.json) error = %v", err)
 	}
 }
 
@@ -5880,10 +5782,12 @@ func TestHasCompleteRemoteRuntimeConfigWithToken(t *testing.T) {
 	}
 }
 
-func TestResolveServiceUsesLocalModeWhenDBPresent(t *testing.T) {
+func TestResolveServiceRequiresTicketURLWhenOnlyLocalDBPresent(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	setTestWorkingDir(t, tempDir)
+	noColorOutput = true
+	defer func() { noColorOutput = false }()
 	if err := runInitDB([]string{"-f", filepath.Join(tempDir, "ticket.db"), "-password", "secret12"}); err != nil {
 		t.Fatalf("runInitDB() error = %v", err)
 	}
@@ -5892,18 +5796,65 @@ func TestResolveServiceUsesLocalModeWhenDBPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		t.Fatalf("resolveService() error = %v", err)
+	_, err = resolveService(cfg)
+	if err == nil {
+		t.Fatal("resolveService() error = nil")
 	}
-	if _, ok := svc.(*libticket.LocalService); !ok {
-		t.Fatalf("resolveService() returned %T, want *libticket.LocalService", svc)
+	for _, want := range []string{
+		"incomplete remote authentication configuration.",
+		"attempting to connect to TICKET_URL",
+		"TICKET_URL UNSET",
+		"TICKET_USERNAME = UNSET",
+		"TICKET_PASSWORD = UNSET",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("resolveService() error missing %q:\n%v", want, err)
+		}
+	}
+}
+
+func TestResolveServiceShowsCombinedMissingPasswordError(t *testing.T) {
+	setupLocalCLI(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	t.Setenv("TICKET_URL", server.URL)
+	t.Setenv("TICKET_USERNAME", "admin")
+	t.Setenv("TICKET_PASSWORD", "")
+	noColorOutput = true
+	defer func() { noColorOutput = false }()
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	_, err = resolveService(cfg)
+	if err == nil {
+		t.Fatal("resolveService() error = nil")
+	}
+	for _, want := range []string{
+		"attempting to connect to TICKET_URL " + server.URL,
+		"TICKET_USERNAME = admin",
+		"TICKET_PASSWORD = UNSET",
+		"Run `tk login`, set TICKET_TOKEN, or set both TICKET_USERNAME and TICKET_PASSWORD.",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("resolveService() error missing %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "missing required environment variable") {
+		t.Fatalf("resolveService() error = %v", err)
 	}
 }
 
 func TestResolveServiceIgnoresRepoConfigFile(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("TICKET_HOME", homeDir)
+	noColorOutput = true
+	defer func() { noColorOutput = false }()
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.git) error = %v", err)
@@ -5916,12 +5867,18 @@ func TestResolveServiceIgnoresRepoConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		t.Fatalf("resolveService() error = %v", err)
+	_, err = resolveService(cfg)
+	if err == nil {
+		t.Fatal("resolveService() error = nil")
 	}
-	if _, ok := svc.(*libticket.HTTPService); ok {
-		t.Fatalf("resolveService() returned %T, want local service when repo config file is ignored", svc)
+	for _, want := range []string{
+		"attempting to connect to TICKET_URL UNSET",
+		"TICKET_USERNAME = UNSET",
+		"TICKET_PASSWORD = UNSET",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("resolveService() error missing %q:\n%v", want, err)
+		}
 	}
 }
 
@@ -5969,6 +5926,8 @@ func TestResolveServiceUsesStoredTokenForEnvURLWithoutPassword(t *testing.T) {
 
 func TestResolveServiceRequiresLoginForRemoteCommands(t *testing.T) {
 	setupLocalCLI(t)
+	noColorOutput = true
+	defer func() { noColorOutput = false }()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -5977,6 +5936,7 @@ func TestResolveServiceRequiresLoginForRemoteCommands(t *testing.T) {
 
 	t.Setenv("TICKET_URL", server.URL)
 	t.Setenv("TICKET_USERNAME", "")
+	t.Setenv("TICKET_PASSWORD", "")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -5986,14 +5946,23 @@ func TestResolveServiceRequiresLoginForRemoteCommands(t *testing.T) {
 	if err == nil {
 		t.Fatal("resolveService() error = nil")
 	}
-	if !strings.Contains(err.Error(), "Run `tk login`") {
-		t.Fatalf("resolveService() error = %v", err)
+	for _, want := range []string{
+		"attempting to connect to TICKET_URL " + server.URL,
+		"TICKET_USERNAME = UNSET",
+		"TICKET_PASSWORD = UNSET",
+		"Run `tk login`, set TICKET_TOKEN, or set both TICKET_USERNAME and TICKET_PASSWORD.",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("resolveService() error missing %q:\n%v", want, err)
+		}
 	}
 }
 
 func TestResolveServiceIgnoresRepoConfigPassword(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("TICKET_HOME", homeDir)
+	noColorOutput = true
+	defer func() { noColorOutput = false }()
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
 		t.Fatalf("MkdirAll(.git) error = %v", err)
@@ -6007,12 +5976,65 @@ func TestResolveServiceIgnoresRepoConfigPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	svc, err := resolveService(cfg)
-	if err != nil {
-		t.Fatalf("resolveService() error = %v", err)
+	_, err = resolveService(cfg)
+	if err == nil {
+		t.Fatal("resolveService() error = nil")
 	}
-	if _, ok := svc.(*libticket.HTTPService); ok {
-		t.Fatalf("resolveService() returned %T, want local service when repo config file is ignored", svc)
+	for _, want := range []string{
+		"attempting to connect to TICKET_URL UNSET",
+		"TICKET_USERNAME = UNSET",
+		"TICKET_PASSWORD = UNSET",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("resolveService() error missing %q:\n%v", want, err)
+		}
+	}
+}
+
+func TestResolveCurrentProjectClientMatchesCanonicalGitOriginAcrossProjectRepositories(t *testing.T) {
+	setupLocalCLI(t)
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	target := filepath.Join(t.TempDir(), "origin.git")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("MkdirAll(target) error = %v", err)
+	}
+	link := filepath.Join(t.TempDir(), "origin-link.git")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	svc := localCLIService(t)
+	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
+		Prefix:        "CAN",
+		Title:         "Canonical Repo",
+		GitRepository: "https://example.com/primary.git",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if err := svc.AddProjectGitRepository(context.Background(), project.Prefix, "file://"+target); err != nil {
+		t.Fatalf("AddProjectGitRepository() error = %v", err)
+	}
+	if err := config.SaveProjectConfigAt(repoDir, config.Config{}); err != nil {
+		t.Fatalf("SaveProjectConfigAt(clear) error = %v", err)
+	}
+
+	gitOriginByRoot.Store(repoDir, link)
+	t.Cleanup(func() { gitOriginByRoot.Delete(repoDir) })
+
+	cfg, _, resolvedProject, err := resolveCurrentProjectClient()
+	if err != nil {
+		t.Fatalf("resolveCurrentProjectClient() error = %v", err)
+	}
+	if resolvedProject.Prefix != project.Prefix {
+		t.Fatalf("resolveCurrentProjectClient().Prefix = %q, want %q", resolvedProject.Prefix, project.Prefix)
+	}
+	if cfg.ProjectID != project.Prefix {
+		t.Fatalf("resolved cfg.ProjectID = %q, want %q", cfg.ProjectID, project.Prefix)
 	}
 }
 
@@ -6053,26 +6075,14 @@ func attachWorkflowToDefaultProject(t *testing.T, stageNames ...string) libticke
 	return svc
 }
 
-// deleteTicketConfirmed performs the two-step ticket deletion: first call generates
-// the confirmation token (saved in config), second call with the token deletes the ticket.
-// Returns the error from the second (delete) call so callers can assert on it.
+// deleteTicketConfirmed performs the two-step ticket deletion using the
+// stateless confirmation value echoed by the first run.
 func deleteTicketConfirmed(t *testing.T, id string) error {
 	t.Helper()
-	// Phase 1: generate token (outputs prompt, saves token in config).
 	if err := run([]string{"rm", "-id", id}); err != nil {
 		t.Fatalf("rm phase 1 error = %v", err)
 	}
-	// Read token directly from config.
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	token := cfg.DeleteConfirmToken
-	if token == "" {
-		t.Fatal("no confirmation token in config after phase 1")
-	}
-	// Phase 2: delete with token.
-	return run([]string{"rm", "-id", id, "--confirm", token})
+	return run([]string{"rm", "-id", id, "--confirm", id})
 }
 
 func ticketLabelByID(t *testing.T, id string) string {
@@ -6094,14 +6104,6 @@ func ticketLabelByID(t *testing.T, id string) string {
 
 func clearCurrentEpicID(t *testing.T) {
 	t.Helper()
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	cfg.CurrentEpicID = ""
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
-	}
 }
 
 func svcGetTicket(t *testing.T, ref string) (store.Ticket, error) {
@@ -6287,18 +6289,21 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
-func TestRunStatusReturnsUpgradeDatabaseHintForLegacyDatabase(t *testing.T) {
+func TestRunStatusIgnoresLegacyLocalDatabaseLocation(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	legacyPath, _ := createLegacyDatabaseForCLI(t)
-	setTestLocation(t, legacyPath)
-
-	err := run([]string{"status"})
-	if err == nil {
-		t.Fatal("run(status) error = nil, want legacy database hint")
+	if err := config.Save(config.Config{Location: legacyPath}); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "run `tk upgrade-database`") {
-		t.Fatalf("run(status) error = %v, want upgrade-database hint", err)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"status"}); err != nil {
+			t.Fatalf("run(status) error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "TICKET_URL") || !strings.Contains(output, "UNSET") {
+		t.Fatalf("run(status) should ignore local DB locations and show remote fields:\n%s", output)
 	}
 }
 
@@ -6306,11 +6311,10 @@ func TestRunUpgradeDatabasePortsLegacyDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("TICKET_HOME", tempDir)
 	legacyPath, ticketID := createLegacyDatabaseForCLI(t)
-	setTestLocation(t, legacyPath)
 
 	targetPath := filepath.Join(t.TempDir(), "new_database", "ticket.db")
 	output := captureStdout(t, func() {
-		if err := run([]string{"upgrade-database", "-o", targetPath}); err != nil {
+		if err := run([]string{"-f", legacyPath, "upgrade-database", "-o", targetPath}); err != nil {
 			t.Fatalf("upgrade-database error = %v", err)
 		}
 	})
@@ -6458,31 +6462,21 @@ func TestRunBoard(t *testing.T) {
 	}
 }
 
-func TestRunEpicUseSetsCurrent(t *testing.T) {
+func TestRunEpicGetRequiresExplicitID(t *testing.T) {
 	setupLocalCLI(t)
 
 	epicID := createLocalTask(t, []string{"epic", "My Epic"})
-	epicRef := epicID
-
-	if err := run([]string{"epic", "use", epicRef}); err != nil {
-		t.Fatalf("epic use error = %v", err)
+	err := run([]string{"epic", "get"})
+	if err == nil || !strings.Contains(err.Error(), "usage: tk epic get <id>") {
+		t.Fatalf("epic get without id error = %v", err)
 	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if cfg.CurrentEpicID != epicID {
-		t.Fatalf("CurrentEpicID = %s, want %s", cfg.CurrentEpicID, epicID)
-	}
-}
-
-func TestRunEpicUseRejectsNonEpic(t *testing.T) {
-	setupLocalCLI(t)
-
-	taskID := createLocalTask(t, []string{"add", "Just a task"})
-	if err := run([]string{"epic", "use", taskID}); err == nil {
-		t.Fatal("expected error when using a non-epic ticket, got nil")
+	output := captureStdout(t, func() {
+		if runErr := run([]string{"epic", "get", epicID}); runErr != nil {
+			t.Fatalf("epic get error = %v", runErr)
+		}
+	})
+	if !hasDetailField(output, "Title", "My Epic") {
+		t.Fatalf("epic get output missing epic details:\n%s", output)
 	}
 }
 
@@ -6576,77 +6570,32 @@ func TestRunBugGetRejectsNonBug(t *testing.T) {
 	}
 }
 
-func TestRunEpicClearResetsEpicID(t *testing.T) {
+func TestRunEpicSubcommandsRemoved(t *testing.T) {
 	setupLocalCLI(t)
 
 	epicID := createLocalTask(t, []string{"epic", "Clearable Epic"})
-	if err := run([]string{"epic", "use", epicID}); err != nil {
+	err := run([]string{"epic", "use", epicID})
+	if err == nil || !strings.Contains(err.Error(), "has been removed") {
 		t.Fatalf("epic use error = %v", err)
 	}
-
-	if err := run([]string{"epic", "clear"}); err != nil {
+	err = run([]string{"epic", "clear"})
+	if err == nil || !strings.Contains(err.Error(), "has been removed") {
 		t.Fatalf("epic clear error = %v", err)
 	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	if cfg.CurrentEpicID != "" {
-		t.Fatalf("CurrentEpicID = %s after clear, want empty", cfg.CurrentEpicID)
-	}
 }
 
-func TestRunEpicListShowsActiveMarker(t *testing.T) {
+func TestRunEpicListShowsPlainRows(t *testing.T) {
 	setupLocalCLI(t)
 
-	epicID := createLocalTask(t, []string{"epic", "Listed Epic"})
-	epicRef := epicID
-
-	// Clear active epic so we can test the "no marker" state
-	clearCurrentEpicID(t)
+	_ = createLocalTask(t, []string{"epic", "Listed Epic"})
 
 	output := captureStdout(t, func() {
 		if err := run([]string{"epic", "ls"}); err != nil {
 			t.Fatalf("epic ls error = %v", err)
 		}
 	})
-	if strings.Contains(output, "*") {
-		t.Fatalf("epic ls should not show active marker before use: %s", output)
-	}
-
-	if err := run([]string{"epic", "use", epicRef}); err != nil {
-		t.Fatalf("epic use error = %v", err)
-	}
-
-	output = captureStdout(t, func() {
-		if err := run([]string{"epic", "ls"}); err != nil {
-			t.Fatalf("epic ls error = %v", err)
-		}
-	})
-	if !strings.Contains(output, "*") {
-		t.Fatalf("epic ls should show active marker after use: %s", output)
-	}
 	if !strings.Contains(output, "Listed Epic") {
 		t.Fatalf("epic ls missing epic title: %s", output)
-	}
-}
-
-func TestRunEpicGetUsesCurrentEpicWhenIDOmitted(t *testing.T) {
-	setupLocalCLI(t)
-
-	epicID := createLocalTask(t, []string{"epic", "Current Epic"})
-	if err := run([]string{"epic", "use", epicID}); err != nil {
-		t.Fatalf("epic use error = %v", err)
-	}
-
-	output := captureStdout(t, func() {
-		if err := run([]string{"epic", "get"}); err != nil {
-			t.Fatalf("epic get error = %v", err)
-		}
-	})
-	if !hasDetailField(output, "Title", "Current Epic") {
-		t.Fatalf("epic get output missing current epic details:\n%s", output)
 	}
 }
 
@@ -7414,7 +7363,12 @@ func TestRunActionBinaryAliasPreservesSystemCommands(t *testing.T) {
 			t.Fatalf("run(action status) error = %v", err)
 		}
 	})
-	if !strings.Contains(statusOut, "project") || !strings.Contains(statusOut, "server_version") {
+	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD"} {
+		if !strings.Contains(statusOut, want) {
+			t.Fatalf("action status should run remote status output missing %q:\n%s", want, statusOut)
+		}
+	}
+	if strings.Contains(statusOut, "project") || strings.Contains(statusOut, "server_version") {
 		t.Fatalf("action status should run system status output:\n%s", statusOut)
 	}
 }
@@ -7810,9 +7764,7 @@ func TestRunCountSupportsTicketFiltersAndExpectations(t *testing.T) {
 func TestRunCountSupportsPrivateProjectAlias(t *testing.T) {
 	setupLocalCLI(t)
 
-	if err := run([]string{"project", "use", "private"}); err != nil {
-		t.Fatalf("project use private error = %v", err)
-	}
+	t.Setenv("TICKET_PROJECT", "private")
 	if err := run([]string{"add", "Private Task"}); err != nil {
 		t.Fatalf("add private task error = %v", err)
 	}
@@ -9038,11 +8990,7 @@ func TestQuickstartClient(t *testing.T) {
 		t.Fatalf("project create output missing prefix:\n%s", out)
 	}
 
-	captureStdout(t, func() {
-		if err := run([]string{"project", "use", "CUS"}); err != nil {
-			t.Fatalf("project use error = %v", err)
-		}
-	})
+	t.Setenv("TICKET_PROJECT", "CUS")
 
 	// Step 2: Capture work — add, bug, epic
 	taskID := createLocalTask(t, []string{"add", "Customers can reset their password"})
@@ -9197,22 +9145,21 @@ func TestQuickstartServer(t *testing.T) {
 	if !strings.Contains(loginOut, "alice") {
 		t.Fatalf("login output missing username:\n%s", loginOut)
 	}
-	cfgAfterAlice, err := config.Load()
+	credsAfterAlice, err := config.LoadCredentials()
 	if err != nil {
-		t.Fatalf("config.Load() after alice login error = %v", err)
+		t.Fatalf("config.LoadCredentials() after alice login error = %v", err)
 	}
-	aliceToken := strings.TrimSpace(cfgAfterAlice.Token)
+	remoteCreds, ok := credsAfterAlice.Remote(ts.URL)
+	if !ok {
+		t.Fatalf("expected stored credentials for %s", ts.URL)
+	}
+	aliceToken := strings.TrimSpace(remoteCreds.Token)
 	if aliceToken == "" {
 		t.Fatal("alice token not stored after login")
 	}
 
 	if clearErr := config.ClearCredentials(); clearErr != nil {
 		t.Fatalf("ClearCredentials() before token login error = %v", clearErr)
-	}
-	cfgAfterAlice.Username = ""
-	cfgAfterAlice.Token = ""
-	if err := config.Save(cfgAfterAlice); err != nil {
-		t.Fatalf("config.Save() before token login error = %v", err)
 	}
 	tokenLoginOut := captureStdout(t, func() {
 		if runErr := run([]string{"login", "-token", aliceToken}); runErr != nil {
@@ -9227,15 +9174,6 @@ func TestQuickstartServer(t *testing.T) {
 	if clearErr := config.ClearCredentials(); clearErr != nil {
 		t.Fatalf("ClearCredentials() error = %v", clearErr)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
-	}
-	cfg.Username = ""
-	cfg.Token = ""
-	if err := config.Save(cfg); err != nil {
-		t.Fatalf("config.Save() error = %v", err)
-	}
 	captureStdout(t, func() {
 		if err := run([]string{"login", "-username", "admin", "-password", "adminpass"}); err != nil {
 			t.Fatalf("admin login error = %v", err)
@@ -9248,11 +9186,7 @@ func TestQuickstartServer(t *testing.T) {
 			t.Fatalf("project create error = %v", err)
 		}
 	}))
-	captureStdout(t, func() {
-		if err := run([]string{"project", "use", "SRV"}); err != nil {
-			t.Fatalf("project use error = %v", err)
-		}
-	})
+	t.Setenv("TICKET_PROJECT", "SRV")
 
 	// Step 5: Create tickets
 	taskOut := captureStdout(t, func() {
@@ -9367,11 +9301,7 @@ func TestRunAgentRemoteAdminFlow(t *testing.T) {
 			t.Fatalf("project create OPS error = %v", err)
 		}
 	}))
-	captureStdout(t, func() {
-		if err := run([]string{"project", "use", srvProjectID}); err != nil {
-			t.Fatalf("project use error = %v", err)
-		}
-	})
+	t.Setenv("TICKET_PROJECT", "SRV")
 
 	readyTicketID := strings.TrimSpace(captureStdout(t, func() {
 		if err := run([]string{"add", "-printid", "Agent remote admin ticket"}); err != nil {

@@ -16,6 +16,14 @@ func noEntitiesAvailable(name string) string {
 	return fmt.Sprintf("No %s available.", name)
 }
 
+func noTicketsAvailableForProject(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return noEntitiesAvailable("tickets")
+	}
+	return fmt.Sprintf("No tickets available for project %q.", title)
+}
+
 func printNoEntitiesAvailable(name string) {
 	fmt.Println(noEntitiesAvailable(name))
 }

@@ -13,15 +13,15 @@ metadata:
 
 **Before starting any significant piece of work, check the active project and relevant tickets. After completing work, update ticket state.**
 
-## Error Recovery: Missing config.json
+## Error Recovery: Missing project selection
 
-If any `tk` command fails with `no active project; use 'ticket project create' or 'ticket project use <id>' first`, this usually means `.ticket/config.json` is missing or has no `project_id` while `.ticket/ticket.db` exists. Do NOT ask the user to fix this manually. Instead, recover automatically:
+If any `tk` command needs a project and none is explicit, recover by selecting one with `TICKET_PROJECT` or `-project_id`. Do NOT ask the user to fix repo-local config files manually.
 
-1. Run `tk project list` to see what projects exist in the database.
-2. If exactly one project exists, activate it with `tk project use <prefix>`.
-3. If multiple projects exist, pick the first one and activate it with `tk project use <prefix>`.
+1. Run `tk project list` to see what projects exist.
+2. If exactly one project exists, set `TICKET_PROJECT=<prefix>` for subsequent commands.
+3. If multiple projects exist, pass `-project_id <prefix>` explicitly on the command you are running.
 4. Verify the fix worked by re-running the original command.
-5. Tell the user what you did: which project you activated and that config.json was repaired.
+5. Tell the user which project you selected.
 
 If `tk project list` returns no projects at all, ask the user to bootstrap or create a project with `tk initdb` or `tk project create`. Do not suggest any repo-local setup command.
 
@@ -179,7 +179,7 @@ tk status
 tk project ls
 
 # Set active project (used as default for subsequent commands)
-tk project use <id>
+export TICKET_PROJECT=<id>
 ```
 
 ## Viewing Work
@@ -395,7 +395,7 @@ tk clone <id>
 ```bash
 tk project ls                      # List projects (* = current)
 tk project create -title "Name"    # Create project
-tk project use <id>                # Switch active project
+export TICKET_PROJECT=<id>         # Switch active project
 tk project get <id>                # View project detail
 tk project repo add <id> <git-url> # Associate a repository with a project
 ```

@@ -128,6 +128,14 @@ func TestProjectGitRepositories(t *testing.T) {
 		t.Fatalf("GetProjectByGitRepository().ID = %d, want %d", byRepo.ID, project.ID)
 	}
 
+	byCanonicalRepo, err := GetProjectByGitRepository(context.Background(), db, "https://github.com/acme/two.git")
+	if err != nil {
+		t.Fatalf("GetProjectByGitRepository(canonical) error = %v", err)
+	}
+	if byCanonicalRepo.ID != project.ID {
+		t.Fatalf("GetProjectByGitRepository(canonical).ID = %d, want %d", byCanonicalRepo.ID, project.ID)
+	}
+
 	if err := RemoveProjectGitRepository(context.Background(), db, project.ID, "github.com/acme/one.git"); err != nil {
 		t.Fatalf("RemoveProjectGitRepository() error = %v", err)
 	}

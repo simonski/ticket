@@ -365,8 +365,6 @@ clean:
 
 install: build
 	cp ./bin/tk $$(go env GOPATH)/bin/tk
-	alias act=tk
-	alias action=tk
 
 dev:
 	# prints out the commands needed to put this repo into local ticket dev mode

@@ -1,3 +1,31 @@
+THE GOAL
+    PLANNING
+    1. create a goal
+    2. break it down and refine it in a planning session
+    keep reviewing and see a visualisation of hte work and order
+    eventually say yes
+    EXECUTION
+    it then drops into an engineering queue
+    either it appears to succeed
+    or it appears to fail
+    or there are clarifying questions
+    goto 2. 
+    VALIDATION
+    the user says yes no etc
+    either it
+    SUCCEED - integrate/merge
+    FAIL - goto 1.
+
+tk init should not exist - remove it completely -all code and references
+- there should be no need for a "local" .ticket.json 
+the git remote shouldbe enough to "find" the poject bein speciifed
+OR the user will have specified a project using -project_id or TICKET_PROJECT
+
+the error "error not a tk project" should not happen because the server should work out which porject to use
+- via a TICKET_PROJECT, -project_id, .git remote discovery, or just use the default project assined to that user (normally their own private project)
+
+A project can have multiple git repositories - ensire they have be CRUD-managed if the user is an admin of the project
+
 **given**
 
 # Terminal 1
@@ -43,6 +71,12 @@ project roles/ACL
     commenter: obsrever plus ability to add comments
 a user cannot modify a ticket of a project they do not have write access to
 
+- modify the server initdb so that the admin/password user is setup using the same flow but is an admin-level user.
+ensure the public project is made and the public team is made and that the public project is assigned to the public team
+ensure that new users by default as assigned to the public team
+ensure that new users by default have a "private" project created that is aliased as private
+
+An admin user should be able to control this auto-assigned to teams and projects and also control whether or not users automatically recieve their own private team too.  This should be in the "plan" th euser is assigned to so that each plan can describe the various "on registration" actions that should be taken.
 
 ----
 ticket.exe.xyz
@@ -71,17 +105,58 @@ Normal install is
 
     brew install simonski/tap/tk
     cd code/project1
-    tk init
-        use .ticket.json if present
-        use TICKET_URL, TICKET_USERNAME, TICKET_PASSWORD, TICKET_PROJECT if set
-        wizard will request for user to login to a server if not set
+    tk <command>
 
-        TODO: figure out terminal-end-credentials and/or auth token.
-
-        select default project (look at current location/git remote to see)
-            if none, request to create one
 
     tk register -username N -email Y
     if auto-register is set, reply success with password
 
     
+
+
+A project has a unique ID, a title and a description and 1 or more git repo origins
+
+From the CLI, The ID or title can be used in the -project_id if necessary
+From the website, the user will select from a dropdown their project so will send project_id
+
+A user cannot access a project that they are not a member of.
+
+Every user has their own "private" project.
+Every user is a member of a "public" project.
+
+Projects can be private, team or public
+
+Private is visible only to one user - the owner.
+Team is a project that is available to multiple.   Each user has a role in the project allowing them different permissions.
+Public is a project that will be visible to *any* user.
+
+
+Using the tk command will complain if the user is not logged in unless there is a TICKET_USERNAME and TICKET_PASSWORD or an access token available (via ~/.ticket/credentials.json).   The user will be prompted to login or set the env vars.  Logging in will store an access token in ~/.ticket/credentials.json which would hten be used until it expires server-side.
+
+The exception is `tk register` which will require a -username and -email then the registration will - depending on the server configuration - either auto-accept returning a password, or return waitlist, or a check yuor email, or a server not acccepting registrations right now style response.
+
+
+seeding
+
+A new command `tk seed` should be created to seed example projects, requirements and tickets.
+
+1. todolist
+    A 3-tier todo list
+        cli
+        website
+        backend
+        using openapi
+        red/green
+        drag+drop
+        user registration
+        email integration
+        admin user
+
+    Option 1: in python
+    Option 2: in go
+    Option 3: in rust
+    Option 3: in zig
+
+
+A "template" set of requirements should be seeded in an examples project.
+A template set of already broken-down tickets shoudl be seeded in an examples project.

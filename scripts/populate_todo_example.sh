@@ -26,21 +26,15 @@ fi
 
 use_token_auth
 
-if ! "$TK_BIN" project use DEMO >/dev/null 2>&1; then
+if ! "$TK_BIN" project get DEMO >/dev/null 2>&1; then
 	project_id="$("$TK_BIN" project create -prefix DEMO -title "demo" -description "Example todo application planning workspace" -git-repository https://github.com/example/todo-app -printid)"
-	"$TK_BIN" project use "$project_id" >/dev/null
 else
 	project_id="DEMO"
 fi
+export TICKET_PROJECT="DEMO"
 
-status_json="$("$TK_BIN" -json status)"
-config_file="$(printf '%s\n' "$status_json" | sed -nE 's/.*"config_file": "([^"]+)".*/\1/p')"
-db_path="$(printf '%s\n' "$status_json" | sed -nE 's/.*"db_path": "([^"]+)".*/\1/p')"
-if [[ -z "$config_file" ]]; then
-	echo "could not resolve active config file from 'tk status'" >&2
-	exit 1
-fi
-config_dir="$(dirname "$config_file")"
+config_dir="$TICKET_HOME"
+db_path=""
 manifest_file="$config_dir/demo-example.env"
 
 extract_numeric_id() {

@@ -54,6 +54,15 @@ type Config struct {
 	DeleteConfirmTicket  string `json:"delete_confirm_ticket,omitempty"`
 }
 
+type preferencesDiskConfig struct {
+	Version           int      `json:"version,omitempty"`
+	TUIDisablePersist bool     `json:"tui_disable_persist,omitempty"`
+	TUITheme          string   `json:"tui_theme,omitempty"`
+	TUIMode           string   `json:"tui_mode,omitempty"`
+	TUICursor         int      `json:"tui_cursor,omitempty"`
+	TUIExpandedEpics  []string `json:"tui_expanded_epics,omitempty"`
+}
+
 type RemoteCredentials struct {
 	Username string `json:"username,omitempty"`
 	Token    string `json:"token,omitempty"`
@@ -105,6 +114,9 @@ func ResolveURL() (Resolved, error) {
 	if HasLocationOverride() {
 		return ResolveLocation(locationOverride)
 	}
+	if envURL := envValue("TICKET_URL"); envURL != "" {
+		return ResolveLocation(envURL)
+	}
 	cfg, err := Load()
 	if err != nil {
 		return Resolved{}, err
@@ -146,11 +158,7 @@ func ResolveLocation(location string) (Resolved, error) {
 }
 
 func Load() (Config, error) {
-	globalPath, err := Path()
-	if err != nil {
-		return Config{}, err
-	}
-	globalCfg, err := loadConfigFile(globalPath)
+	globalCfg, err := loadPreferences()
 	if err != nil {
 		return Config{}, err
 	}
@@ -187,24 +195,16 @@ func Load() (Config, error) {
 		cfg.DeleteConfirmProject = projectCfg.DeleteConfirmProject
 		cfg.DeleteConfirmTicket = projectCfg.DeleteConfirmTicket
 	}
-	if strings.TrimSpace(cfg.Location) == "" && strings.TrimSpace(cfg.Remote) != "" {
-		if remote, ok := cfg.RemoteByName(cfg.Remote); ok {
-			cfg.Location = remote.URL
-		}
-	}
-	if strings.TrimSpace(cfg.Location) == "" && strings.TrimSpace(cfg.DefaultRemote) != "" {
-		if remote, ok := cfg.RemoteByName(cfg.DefaultRemote); ok {
-			cfg.Remote = remote.Name
-			cfg.Location = remote.URL
-		}
-	}
-
 	creds, err := LoadCredentials()
 	if err != nil {
 		return Config{}, err
 	}
-	if resolved, rErr := ResolveLocation(cfg.Location); rErr == nil && resolved.Mode == ModeRemote {
-		if remote, ok := creds.Remote(cfg.Location); ok {
+	credentialLocation := firstNonEmpty(envValue("TICKET_URL"), cfg.Location)
+	if envURL := envValue("TICKET_URL"); envURL != "" {
+		cfg.Location = envURL
+	}
+	if resolved, rErr := ResolveLocation(credentialLocation); rErr == nil && resolved.Mode == ModeRemote {
+		if remote, ok := creds.Remote(credentialLocation); ok {
 			if strings.TrimSpace(cfg.Username) == "" {
 				cfg.Username = remote.Username
 			}
@@ -224,63 +224,10 @@ func Load() (Config, error) {
 }
 
 func Save(cfg Config) error {
-	globalPath, err := Path()
-	if err != nil {
+	if err := savePreferences(cfg); err != nil {
 		return err
 	}
-	err = os.MkdirAll(filepath.Dir(globalPath), 0o750)
-	if err != nil {
-		return err
-	}
-
-	projectPath, hasProject, err := ProjectPath()
-	if err != nil {
-		return err
-	}
-	if hasProject {
-		projectCfg, loadErr := loadConfigFile(projectPath)
-		if loadErr != nil {
-			return loadErr
-		}
-		if strings.TrimSpace(cfg.ProjectID) != "" {
-			projectCfg.ProjectID = strings.TrimSpace(cfg.ProjectID)
-		}
-		if strings.TrimSpace(cfg.Remote) != "" {
-			projectCfg.Remote = strings.TrimSpace(cfg.Remote)
-		}
-		projectCfg.CurrentEpicID = cfg.CurrentEpicID
-		projectCfg.DeleteConfirmToken = cfg.DeleteConfirmToken
-		projectCfg.DeleteConfirmProject = cfg.DeleteConfirmProject
-		projectCfg.DeleteConfirmTicket = cfg.DeleteConfirmTicket
-		saveErr := saveProjectConfig(projectPath, projectCfg)
-		if saveErr != nil {
-			return saveErr
-		}
-	}
-
-	saved := cfg
-	saved.Token = ""
-	saved.Username = ""
-	if len(saved.Remotes) > 0 || strings.TrimSpace(saved.DefaultRemote) != "" {
-		saved.Location = ""
-		saved.Remote = ""
-	}
-	if hasProject {
-		saved.Remote = ""
-		saved.Location = ""
-		saved.CurrentEpicID = ""
-		saved.DeleteConfirmToken = ""
-		saved.DeleteConfirmProject = ""
-		saved.DeleteConfirmTicket = ""
-		saved.ProjectID = ""
-	}
-	saved.Remotes = sortUniqueRemotes(saved.Remotes)
-
-	data, err := json.MarshalIndent(saved, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(globalPath, data, 0o600)
+	return removeLegacyGlobalConfig()
 }
 
 func LoadCredentials() (Credentials, error) {
@@ -394,13 +341,13 @@ func ClearRemoteCredentials(location string) error {
 	return SaveCredentials(creds)
 }
 
-// Path returns the path to the global config file ($TICKET_HOME/config.json).
+// Path returns the path to the global preferences file ($TICKET_HOME/preferences.json).
 func Path() (string, error) {
 	home, err := Home()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "config.json"), nil
+	return filepath.Join(home, "preferences.json"), nil
 }
 
 func CredentialsPath() (string, error) {
@@ -420,7 +367,7 @@ func LocalDBPath() (string, error) {
 }
 
 // Home returns the global Ticket home directory used for credentials,
-// global config, and the central local database.
+// preferences, and the central local database.
 func Home() (string, error) {
 	if dir := envValue("TICKET_HOME"); dir != "" {
 		return dir, nil
@@ -515,6 +462,116 @@ func CanonicalizeRemoteURL(raw string) (string, error) {
 	default:
 		return raw, nil
 	}
+}
+
+func CanonicalizeGitRepository(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if looksLikeSCPGitRepository(raw) {
+		host, path, ok := splitSCPGitRepository(raw)
+		if !ok {
+			return "", fmt.Errorf("invalid git repository %q", raw)
+		}
+		return normalizeRemoteGitRepository(host, path), nil
+	}
+	if looksLikeHostPathGitRepository(raw) {
+		parts := strings.SplitN(raw, "/", 2)
+		if len(parts) == 2 {
+			return normalizeRemoteGitRepository(parts[0], parts[1]), nil
+		}
+	}
+	if u, err := url.Parse(raw); err == nil && strings.TrimSpace(u.Scheme) != "" {
+		switch strings.ToLower(u.Scheme) {
+		case "http", "https", "ssh", "git":
+			return normalizeRemoteGitRepository(remoteURLHost(u), u.Path), nil
+		case "file":
+			return canonicalizeLocalGitRepository(u.Path)
+		default:
+			return raw, nil
+		}
+	}
+	return canonicalizeLocalGitRepository(raw)
+}
+
+func normalizeRemoteGitRepository(host, path string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	path = strings.TrimSpace(path)
+	path = strings.TrimPrefix(path, "/")
+	path = strings.TrimSuffix(path, "/")
+	path = strings.TrimSuffix(path, ".git")
+	if path == "" {
+		return host
+	}
+	return host + "/" + path
+}
+
+func canonicalizeLocalGitRepository(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil
+	}
+	if !filepath.IsAbs(path) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return "", err
+		}
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil && strings.TrimSpace(resolved) != "" {
+		path = resolved
+	}
+	return "file://" + filepath.Clean(path), nil
+}
+
+func remoteURLHost(u *url.URL) string {
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	if port := strings.TrimSpace(u.Port()); port != "" {
+		return host + ":" + port
+	}
+	return host
+}
+
+func looksLikeHostPathGitRepository(raw string) bool {
+	if strings.Contains(raw, "://") || filepath.IsAbs(raw) || strings.HasPrefix(raw, ".") {
+		return false
+	}
+	if len(raw) >= 2 && raw[1] == ':' {
+		return false
+	}
+	parts := strings.SplitN(raw, "/", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	host := strings.TrimSpace(parts[0])
+	return strings.Contains(host, ".") || strings.EqualFold(host, "localhost")
+}
+
+func looksLikeSCPGitRepository(raw string) bool {
+	if strings.Contains(raw, "://") || filepath.IsAbs(raw) || strings.HasPrefix(raw, ".") {
+		return false
+	}
+	if len(raw) >= 2 && raw[1] == ':' {
+		return false
+	}
+	return strings.Contains(raw, ":") && strings.Contains(raw, "/")
+}
+
+func splitSCPGitRepository(raw string) (host, path string, ok bool) {
+	parts := strings.SplitN(raw, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	host = strings.TrimSpace(parts[0])
+	if at := strings.LastIndex(host, "@"); at >= 0 {
+		host = host[at+1:]
+	}
+	path = strings.TrimSpace(parts[1])
+	if host == "" || path == "" {
+		return "", "", false
+	}
+	return host, path, true
 }
 
 func AddRemote(cfg Config, remote Remote) (Config, error) {
@@ -762,6 +819,126 @@ func saveProjectConfig(path string, cfg Config) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+func loadPreferences() (Config, error) {
+	path, err := Path()
+	if err != nil {
+		return Config{}, err
+	}
+	if _, err := os.Stat(path); err == nil {
+		cfg, loadErr := loadConfigFile(path)
+		if loadErr != nil {
+			return Config{}, loadErr
+		}
+		return preferencesOnly(cfg), nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Config{}, err
+	}
+	return migrateLegacyPreferences()
+}
+
+func savePreferences(cfg Config) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	prefs := preferencesOnly(cfg)
+	if !hasPreferences(prefs) {
+		removeErr := os.Remove(path)
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return removeErr
+		}
+		return nil
+	}
+	mkdirErr := os.MkdirAll(filepath.Dir(path), 0o750)
+	if mkdirErr != nil {
+		return mkdirErr
+	}
+	disk := preferencesDiskConfig{
+		Version:           1,
+		TUIDisablePersist: prefs.TUIDisablePersist,
+		TUITheme:          strings.TrimSpace(prefs.TUITheme),
+		TUIMode:           strings.TrimSpace(prefs.TUIMode),
+		TUICursor:         prefs.TUICursor,
+		TUIExpandedEpics:  append([]string(nil), prefs.TUIExpandedEpics...),
+	}
+	data, err := json.MarshalIndent(disk, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+func preferencesOnly(cfg Config) Config {
+	return Config{
+		TUIDisablePersist: cfg.TUIDisablePersist,
+		TUITheme:          strings.TrimSpace(cfg.TUITheme),
+		TUIMode:           strings.TrimSpace(cfg.TUIMode),
+		TUICursor:         cfg.TUICursor,
+		TUIExpandedEpics:  append([]string(nil), cfg.TUIExpandedEpics...),
+	}
+}
+
+func hasPreferences(cfg Config) bool {
+	return cfg.TUIDisablePersist ||
+		strings.TrimSpace(cfg.TUITheme) != "" ||
+		strings.TrimSpace(cfg.TUIMode) != "" ||
+		cfg.TUICursor != 0 ||
+		len(cfg.TUIExpandedEpics) > 0
+}
+
+func migrateLegacyPreferences() (Config, error) {
+	legacyPath, err := legacyPath()
+	if err != nil {
+		return Config{}, err
+	}
+	_, statErr := os.Stat(legacyPath)
+	if errors.Is(statErr, os.ErrNotExist) {
+		return Config{}, nil
+	} else if statErr != nil {
+		return Config{}, statErr
+	}
+	legacyCfg, err := loadConfigFile(legacyPath)
+	if err != nil {
+		return Config{}, err
+	}
+	prefs := preferencesOnly(legacyCfg)
+	if err := savePreferences(prefs); err != nil {
+		return Config{}, err
+	}
+	if err := os.Remove(legacyPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return Config{}, err
+	}
+	return prefs, nil
+}
+
+func removeLegacyGlobalConfig() error {
+	path, err := legacyPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func legacyPath() (string, error) {
+	home, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "config.json"), nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 // removeInvalidFields tries removing fields from raw one at a time until the

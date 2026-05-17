@@ -83,10 +83,11 @@ func runLogin(args []string) error {
 		return errors.New("use either -password or -token, not both")
 	}
 
+	resolvedUsername := ""
 	resolvedPassword := ""
 	var err error
 	if token == "" {
-		_, resolvedPassword, err = resolveCredentials(*usernameFlag, *passwordFlag, true)
+		resolvedUsername, resolvedPassword, err = resolveCredentials(*usernameFlag, *passwordFlag, true)
 		if err != nil {
 			return err
 		}
@@ -100,7 +101,19 @@ func runLogin(args []string) error {
 	if err != nil {
 		return err
 	}
-	svc := libticket.NewHTTP(config.Config{Location: serverURL, Username: cfg.Username, Token: cfg.Token})
+	if strings.TrimSpace(cfg.Token) == "" {
+		creds, credsErr := config.LoadCredentials()
+		if credsErr != nil {
+			return credsErr
+		}
+		if remoteCreds, ok := creds.Remote(serverURL); ok && strings.TrimSpace(remoteCreds.Token) != "" {
+			if strings.TrimSpace(cfg.Username) == "" {
+				cfg.Username = strings.TrimSpace(remoteCreds.Username)
+			}
+			cfg.Token = strings.TrimSpace(remoteCreds.Token)
+		}
+	}
+	svc := libticket.NewHTTP(config.Config{Location: serverURL, Token: cfg.Token})
 
 	if token != "" {
 		tokenSvc := libticket.NewHTTP(config.Config{Location: serverURL, Token: token})
@@ -118,9 +131,6 @@ func runLogin(args []string) error {
 		status, statusErr := svc.Status(context.Background())
 		if statusErr == nil && status.Authenticated && status.User != nil {
 			cfg.Username = status.User.Username
-			if saveErr := config.Save(cfg); saveErr != nil {
-				return saveErr
-			}
 			if outputJSON {
 				return printJSON(status)
 			}
@@ -130,6 +140,9 @@ func runLogin(args []string) error {
 	}
 
 	username := resolveLoginUsername(cfg.Username, *usernameFlag)
+	if username == "" {
+		username = strings.TrimSpace(resolvedUsername)
+	}
 	password := resolveLoginPassword(*passwordFlag)
 	if password == "" {
 		password = resolvedPassword
@@ -181,11 +194,6 @@ func finishLogin(cfg config.Config, user store.User, token string) error {
 	if err != nil {
 		return err
 	}
-	cfg.Location = serverURL
-	cfg.Username = user.Username
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
 	if err := config.SaveRemoteCredentials(serverURL, user.Username, token); err != nil {
 		return err
 	}
@@ -199,10 +207,6 @@ func finishLogin(cfg config.Config, user store.User, token string) error {
 func runLogout(args []string) error {
 	if len(args) != 0 {
 		return errors.New("usage: tk logout")
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		return err
 	}
 	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	if location == "" {
@@ -232,14 +236,9 @@ func runLogout(args []string) error {
 		if clearErr := config.ClearRemoteCredentials(resolved.ServerURL); clearErr != nil {
 			return clearErr
 		}
-		cfg.Token = ""
 		return err
 	}
 	if err := config.ClearRemoteCredentials(resolved.ServerURL); err != nil {
-		return err
-	}
-	cfg.Token = ""
-	if err := config.Save(cfg); err != nil {
 		return err
 	}
 	if outputJSON {

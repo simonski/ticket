@@ -150,7 +150,7 @@ func run(args []string) error {
 	case "project":
 		return runProject(trimmedArgs[1:])
 	case "remote":
-		return runRemote(trimmedArgs[1:])
+		return errors.New("ticket remote has been removed; set TICKET_URL and use tk login for credentials")
 	case "team":
 		return runTeam(trimmedArgs[1:])
 	case "role":
@@ -309,7 +309,7 @@ func shouldRouteToActionNamespace(args []string) bool {
 	}
 	switch command {
 	case "help", "version", "upgrade", "upgrade-database", "status", "whoami",
-		"login", "logout", "register", "initdb", "server", "remote",
+		"login", "logout", "register", "initdb", "server",
 		"config", "project", "workflow", "team", "user", "role", "idea", "decision",
 		"story", "goal", "document", "label", "dep", "time", "doctor", "summary",
 		"agent", "work-item", "onboard", "skill", "docker-compose":

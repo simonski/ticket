@@ -21,7 +21,7 @@ A project has defaults for new commands
 ```bash
 tk project new -title "My Project"
 tk project ls
-tk project use <prefix>
+export TICKET_PROJECT=<prefix>
 tk project workflow <workflow_id>
 tk project set-draft true
 ```

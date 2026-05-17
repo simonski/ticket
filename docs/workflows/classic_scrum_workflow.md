@@ -24,7 +24,7 @@ tk workflow list
 ## Attach it to your project
 
 ```bash
-tk project use TODO
+export TICKET_PROJECT=TODO
 WF_ID=$(tk workflow list -json | jq -r '.[] | select(.name=="Classic Scrum Delivery") | .workflow_id')
 tk project workflow "$WF_ID"
 ```

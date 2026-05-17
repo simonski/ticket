@@ -274,9 +274,6 @@ func resolveWorkItemProjectID(ctx context.Context, cfg config.Config, svc libtic
 				}
 			}
 		}
-		if localProject, ok, localErr := resolveLocalAliasProject(ctx, cfg, ref); localErr == nil && ok {
-			return localProject.ID, nil
-		}
 		return 0, errors.New("project_id is required (set an active project or pass -project_id)")
 	}
 	return project.ID, nil

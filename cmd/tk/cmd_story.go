@@ -9,7 +9,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -172,53 +171,19 @@ func runEpic(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "get":
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
 			if len(args) > 2 {
 				return errors.New("usage: tk epic get <id>")
 			}
 			id := ""
 			if len(args) == 2 {
 				id = args[1]
-			} else if strings.TrimSpace(cfg.CurrentEpicID) != "" {
-				id = cfg.CurrentEpicID
+			}
+			if strings.TrimSpace(id) == "" {
+				return errors.New("usage: tk epic get <id>")
 			}
 			return runTypedTicketGet("epic", id)
-		case "use":
-			if len(args) != 2 {
-				return errors.New("usage: tk epic use <id>")
-			}
-			cfg, svc, _, err := resolveCurrentProjectClient()
-			if err != nil {
-				return err
-			}
-			ticketRef := normalizeBareTicketRef(cfg, svc, args[1])
-			ticket, err := svc.GetTicket(context.Background(), ticketRef)
-			if err != nil {
-				return err
-			}
-			if ticket.Type != "epic" {
-				return fmt.Errorf("ticket %s is not an epic", args[1])
-			}
-			cfg.CurrentEpicID = ticket.ID
-			if err := config.Save(cfg); err != nil {
-				return err
-			}
-			fmt.Printf("using epic %s: %s\n", ticket.ID, ticket.Title)
-			return nil
-		case "clear":
-			cfg, err := config.Load()
-			if err != nil {
-				return err
-			}
-			cfg.CurrentEpicID = ""
-			if err := config.Save(cfg); err != nil {
-				return err
-			}
-			fmt.Println("active epic cleared")
-			return nil
+		case "use", "clear":
+			return errors.New("tk epic use/clear has been removed; pass -parent explicitly when creating child tickets")
 		case "list", "ls":
 			cfg, _, project, err := resolveCurrentProjectClient()
 			if err != nil {
@@ -242,11 +207,7 @@ func runEpic(args []string) error {
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "KEY\tSTATUS\tTITLE")
 			for _, t := range epics {
-				active := " "
-				if t.ID == cfg.CurrentEpicID {
-					active = "*"
-				}
-				fmt.Fprintf(w, "%s%s\t%s\t%s\n", active, t.ID, t.Status, t.Title)
+				fmt.Fprintf(w, "%s\t%s\t%s\n", t.ID, t.Status, t.Title)
 			}
 			return w.Flush()
 		}

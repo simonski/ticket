@@ -23,7 +23,7 @@ func setupConfigTestHome(t *testing.T) string {
 func TestSaveLoadRoundTrip(t *testing.T) {
 	tempDir := setupConfigTestHome(t)
 
-	cfg := Config{Location: "http://example.test:9000"}
+	cfg := Config{Location: "http://example.test:9000", TUITheme: "night"}
 	if err := Save(cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -32,13 +32,16 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got.Location != cfg.Location {
-		t.Fatalf("Load().Location = %q, want %q", got.Location, cfg.Location)
+	if got.Location != "" {
+		t.Fatalf("Load().Location = %q, want empty because server config is not persisted", got.Location)
+	}
+	if got.TUITheme != cfg.TUITheme {
+		t.Fatalf("Load().TUITheme = %q, want %q", got.TUITheme, cfg.TUITheme)
 	}
 
-	path := filepath.Join(tempDir, "config.json")
+	path := filepath.Join(tempDir, "preferences.json")
 	if _, statErr := os.Stat(path); statErr != nil {
-		t.Fatalf("expected config file at %s: %v", path, statErr)
+		t.Fatalf("expected preferences file at %s: %v", path, statErr)
 	}
 
 	if got.Token != "" {
@@ -53,8 +56,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load(reloaded) error = %v", err)
 	}
-	if reloaded.ProjectID != "2" {
-		t.Fatalf("Load().ProjectID = %q, want 2", reloaded.ProjectID)
+	if reloaded.ProjectID != "" {
+		t.Fatalf("Load().ProjectID = %q, want empty because project selection is not persisted globally", reloaded.ProjectID)
 	}
 }
 
@@ -70,8 +73,11 @@ func TestLoadMigratesLegacyEpicID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.CurrentEpicID != "42" {
-		t.Fatalf("Load().CurrentEpicID = %q, want \"42\"", cfg.CurrentEpicID)
+	if cfg.CurrentEpicID != "" {
+		t.Fatalf("Load().CurrentEpicID = %q, want empty because legacy active epic state is discarded", cfg.CurrentEpicID)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy config.json should be removed, err = %v", err)
 	}
 }
 
@@ -88,6 +94,9 @@ func TestLoadMigratesLegacyEpicIDZero(t *testing.T) {
 	}
 	if cfg.CurrentEpicID != "" {
 		t.Fatalf("Load().CurrentEpicID = %q, want empty for legacy 0", cfg.CurrentEpicID)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy config.json should be removed, err = %v", err)
 	}
 }
 
@@ -135,8 +144,8 @@ func TestResolveURLDefaultsToLocal(t *testing.T) {
 }
 
 func TestResolveURLHTTPScheme(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"http://localhost:8080"}`), 0o600)
+	setupConfigTestHome(t)
+	t.Setenv("TICKET_URL", "http://localhost:8080")
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -151,8 +160,8 @@ func TestResolveURLHTTPScheme(t *testing.T) {
 }
 
 func TestResolveURLHTTPSScheme(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"https://tickets.example.com"}`), 0o600)
+	setupConfigTestHome(t)
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -167,8 +176,8 @@ func TestResolveURLHTTPSScheme(t *testing.T) {
 }
 
 func TestResolveURLFileScheme(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"file:///tmp/test.db"}`), 0o600)
+	setupConfigTestHome(t)
+	t.Setenv("TICKET_URL", "file:///tmp/test.db")
 
 	resolved, err := ResolveURL()
 	if err != nil {
@@ -183,8 +192,8 @@ func TestResolveURLFileScheme(t *testing.T) {
 }
 
 func TestResolveURLRejectsUnsupportedScheme(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{"location":"ftp://example.com"}`), 0o600)
+	setupConfigTestHome(t)
+	t.Setenv("TICKET_URL", "ftp://example.com")
 
 	if _, err := ResolveURL(); err == nil {
 		t.Fatal("ResolveURL() error = nil, want unsupported scheme error")
@@ -235,13 +244,8 @@ func TestResolveURLUsesProcessLocationOverrideForLocalPath(t *testing.T) {
 }
 
 func TestLoadUsesDefaultRemoteAndStoredCredentials(t *testing.T) {
-	tempDir := setupConfigTestHome(t)
-	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{
-		"default_remote":"prod",
-		"remotes":[{"name":"prod","url":"https://tickets.example.com"}]
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config.json) error = %v", err)
-	}
+	setupConfigTestHome(t)
+	t.Setenv("TICKET_URL", "https://tickets.example.com")
 	if err := SaveCredentials(Credentials{
 		Remotes: map[string]RemoteCredentials{
 			"https://tickets.example.com": {Username: "alice", Token: "stored-token"},
@@ -276,16 +280,7 @@ func TestLoadUsesProjectRemoteBinding(t *testing.T) {
 		t.Fatalf("Chdir(repoDir) error = %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	if err := os.WriteFile(filepath.Join(tempDir, "config.json"), []byte(`{
-		"default_remote":"local",
-		"remotes":[
-			{"name":"local","url":"file:///tmp/local.db"},
-			{"name":"prod","url":"https://tickets.example.com"}
-		]
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config.json) error = %v", err)
-	}
-	if err := SaveProjectConfigAt(repoDir, Config{Remote: "prod", ProjectID: "CUS"}); err != nil {
+	if err := SaveProjectConfigAt(repoDir, Config{Location: "https://tickets.example.com", ProjectID: "CUS"}); err != nil {
 		t.Fatalf("SaveProjectConfigAt() error = %v", err)
 	}
 
@@ -295,9 +290,6 @@ func TestLoadUsesProjectRemoteBinding(t *testing.T) {
 	}
 	if cfg.Location != "https://tickets.example.com" {
 		t.Fatalf("Load().Location = %q, want project remote URL", cfg.Location)
-	}
-	if cfg.Remote != "prod" {
-		t.Fatalf("Load().Remote = %q, want prod", cfg.Remote)
 	}
 	if cfg.ProjectID != "CUS" {
 		t.Fatalf("Load().ProjectID = %q, want CUS", cfg.ProjectID)
@@ -365,19 +357,13 @@ func TestCredentialsStoredSeparately(t *testing.T) {
 	if err := Save(cfg); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
+	t.Setenv("TICKET_URL", "http://example.test:9000")
 	if err := SaveCredentials(Credentials{Token: "session-token"}); err != nil {
 		t.Fatalf("SaveCredentials() error = %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
-	if err != nil {
-		t.Fatalf("ReadFile(config.json) error = %v", err)
-	}
-	if string(data) == "" {
-		t.Fatal("config.json is empty")
-	}
-	if strings.Contains(string(data), "session-token") {
-		t.Fatal("config.json should not contain session token")
+	if _, err := os.Stat(filepath.Join(tempDir, "preferences.json")); !os.IsNotExist(err) {
+		t.Fatalf("preferences.json should not be created by auth-only saves, err = %v", err)
 	}
 	if got, err := Load(); err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -479,7 +465,7 @@ func TestLoadInvalidFieldTypeIsHealedAndSaved(t *testing.T) {
 
 	// Write config where tui_cursor is an object instead of an int — invalid type.
 	configPath := filepath.Join(tempDir, "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"location":"ticket.db","tui_cursor":{"bad":"value"}}`), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{"tui_theme":"night","tui_cursor":{"bad":"value"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -488,20 +474,23 @@ func TestLoadInvalidFieldTypeIsHealedAndSaved(t *testing.T) {
 		t.Fatalf("Load() error = %v, want nil for repairable config", err)
 	}
 	// Valid field should survive; invalid field should be zeroed.
-	if cfg.Location != "ticket.db" {
-		t.Fatalf("Load().Location = %q, want %q", cfg.Location, "ticket.db")
+	if cfg.TUITheme != "night" {
+		t.Fatalf("Load().TUITheme = %q, want %q", cfg.TUITheme, "night")
 	}
 	if cfg.TUICursor != 0 {
 		t.Fatalf("Load().TUICursor = %d, want 0 after bad value stripped", cfg.TUICursor)
 	}
 
-	// The file should have been rewritten without the bad field.
-	data, err := os.ReadFile(configPath)
+	// The migrated preferences file should have been rewritten without the bad field.
+	data, err := os.ReadFile(filepath.Join(tempDir, "preferences.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(data), `"bad"`) {
-		t.Fatalf("config.json still contains bad value after healing: %s", data)
+		t.Fatalf("preferences.json still contains bad value after healing: %s", data)
+	}
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy config.json should be removed after migration, err = %v", err)
 	}
 }
 
@@ -561,6 +550,54 @@ func TestCanonicalizeRemoteURL(t *testing.T) {
 	if !strings.HasPrefix(got, "file://") || !strings.HasSuffix(got, "/ticket.db") {
 		t.Fatalf("CanonicalizeRemoteURL(relative path) = %q, want file://.../ticket.db", got)
 	}
+}
+
+func TestCanonicalizeGitRepository(t *testing.T) {
+	t.Run("canonicalizes remote forms", func(t *testing.T) {
+		tests := []struct {
+			name  string
+			input string
+			want  string
+		}{
+			{name: "host path", input: "github.com/acme/repo.git", want: "github.com/acme/repo"},
+			{name: "https", input: "https://github.com/acme/repo.git", want: "github.com/acme/repo"},
+			{name: "ssh url", input: "ssh://git@github.com/acme/repo.git/", want: "github.com/acme/repo"},
+			{name: "scp style", input: "git@github.com:acme/repo.git", want: "github.com/acme/repo"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				got, err := CanonicalizeGitRepository(tt.input)
+				if err != nil {
+					t.Fatalf("CanonicalizeGitRepository() error = %v", err)
+				}
+				if got != tt.want {
+					t.Fatalf("CanonicalizeGitRepository() = %q, want %q", got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("canonicalizes local symlinked paths", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "origin.git")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("MkdirAll(target) error = %v", err)
+		}
+		link := filepath.Join(t.TempDir(), "origin-link.git")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatalf("Symlink() error = %v", err)
+		}
+		got, err := CanonicalizeGitRepository("file://" + link)
+		if err != nil {
+			t.Fatalf("CanonicalizeGitRepository(file symlink) error = %v", err)
+		}
+		want, err := CanonicalizeGitRepository(target)
+		if err != nil {
+			t.Fatalf("CanonicalizeGitRepository(target) error = %v", err)
+		}
+		if got != want {
+			t.Fatalf("CanonicalizeGitRepository(file symlink) = %q, want %q", got, want)
+		}
+	})
 }
 
 func TestAddRemoteRejectsDuplicateNameAndURL(t *testing.T) {
@@ -669,9 +706,8 @@ func TestSaveWithProjectConfigSplitsGlobalAndProjectFields(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	if err := Save(Config{
-		DefaultRemote:        "prod",
-		Remotes:              []Remote{{Name: "prod", URL: "https://tickets.example.com"}},
-		Remote:               "prod",
+		TUITheme:             "night",
+		TUIMode:              "summary",
 		Location:             "https://tickets.example.com",
 		ProjectID:            "CUS",
 		CurrentEpicID:        "T-1",
@@ -684,20 +720,20 @@ func TestSaveWithProjectConfigSplitsGlobalAndProjectFields(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	globalData, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
+	globalData, err := os.ReadFile(filepath.Join(tempDir, "preferences.json"))
 	if err != nil {
-		t.Fatalf("ReadFile(global config) error = %v", err)
+		t.Fatalf("ReadFile(preferences) error = %v", err)
 	}
-	if strings.Contains(string(globalData), "secret") || strings.Contains(string(globalData), `"remote": "prod"`) || strings.Contains(string(globalData), `"project_id": "CUS"`) {
-		t.Fatalf("global config leaked project/auth fields: %s", string(globalData))
+	if strings.Contains(string(globalData), "secret") || strings.Contains(string(globalData), `"project_id": "CUS"`) || strings.Contains(string(globalData), "tickets.example.com") {
+		t.Fatalf("preferences leaked project/auth/server fields: %s", string(globalData))
 	}
 
 	projectData, err := os.ReadFile(filepath.Join(projectRoot, ".ticket", "config.json"))
 	if err != nil {
 		t.Fatalf("ReadFile(project config) error = %v", err)
 	}
-	if !strings.Contains(string(projectData), `"current_epic_id": "T-1"`) || !strings.Contains(string(projectData), `"delete_confirm_project": "CUS"`) {
-		t.Fatalf("project config = %s, want project-only state fields", string(projectData))
+	if strings.Contains(string(projectData), `"current_epic_id": "T-1"`) || strings.Contains(string(projectData), `"delete_confirm_project": "CUS"`) {
+		t.Fatalf("project config should not be updated by Save(): %s", string(projectData))
 	}
 	if strings.Contains(string(projectData), "secret") {
 		t.Fatalf("project config leaked token: %s", string(projectData))
@@ -760,8 +796,8 @@ func TestPathsResolveUnderTicketHome(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
-	if got, err := Path(); err != nil || got != filepath.Join(tempDir, "config.json") {
-		t.Fatalf("Path() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "config.json"))
+	if got, err := Path(); err != nil || got != filepath.Join(tempDir, "preferences.json") {
+		t.Fatalf("Path() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "preferences.json"))
 	}
 	if got, err := CredentialsPath(); err != nil || got != filepath.Join(tempDir, "credentials.json") {
 		t.Fatalf("CredentialsPath() = (%q, %v), want %q", got, err, filepath.Join(tempDir, "credentials.json"))

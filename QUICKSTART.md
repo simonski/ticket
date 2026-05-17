@@ -35,11 +35,10 @@ tk server
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=admin
 export TICKET_PASSWORD=password
-export TICKET_PROJECT=1
+export TICKET_PROJECT=private
 tk ls
 
 tk register -username alice -email alice@example.com -password secret12
-tk project use 1
 tk whoami
 ```
 
@@ -64,7 +63,7 @@ Setting state to `success` auto-advances to the next stage.
 
 ```bash
 tk project create -prefix CUS -title "Customer Portal"
-tk project use CUS
+export TICKET_PROJECT=CUS
 tk summary                            # daily overview
 tk ls                                 # list open tickets
 TASK_ID=$(tk add -printid "Fix login timeout")   # create a task

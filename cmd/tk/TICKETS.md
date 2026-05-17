@@ -12,7 +12,7 @@ tk status
 tk project ls
 
 # Set active project (used as default for subsequent commands)
-tk project use <id>
+export TICKET_PROJECT=<id>
 ```
 
 ## Viewing Work
@@ -228,7 +228,7 @@ tk clone <id>
 ```bash
 tk project ls                      # List projects (* = current)
 tk project create -title "Name"    # Create project
-tk project use <id>                # Switch active project
+export TICKET_PROJECT=<id>         # Switch active project
 tk project get <id>                # View project detail
 tk project repo ls                 # List project git repositories
 tk project repo add                # Add a git repository to a project

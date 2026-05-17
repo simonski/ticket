@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/simonski/ticket/internal/config"
 )
 
 var ErrProjectNotFound = errors.New("project not found")
@@ -375,29 +377,99 @@ func GetProjectByGitRepository(ctx context.Context, db *sql.DB, gitRepository st
 	if err := ensureProjectRepositoryTable(ctx, db); err != nil {
 		return Project{}, err
 	}
-	row := db.QueryRowContext(ctx, `
-		SELECT project_id, prefix, title, description, acceptance_criteria, dor_map, dod_map, ac_map, git_repository, notes, status, visibility, default_draft, COALESCE(created_by, ''), created_at, updated_at, workflow_id, agent_model_provider, agent_model_name, agent_model_url, agent_model_api_key
-		FROM projects
-		WHERE project_id IN (
-			SELECT project_id
-			FROM project_git_repositories
-			WHERE repository = ?
-		)
-		ORDER BY project_id
-		LIMIT 1
-	`, strings.TrimSpace(gitRepository))
-	project, err := scanProject(row)
+	canonicalRepo, err := config.CanonicalizeGitRepository(gitRepository)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Project{}, ErrProjectNotFound
+		return Project{}, err
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT p.project_id, p.prefix, p.title, p.description, p.acceptance_criteria, p.dor_map, p.dod_map, p.ac_map, p.git_repository, p.notes, p.status, p.visibility, p.default_draft, COALESCE(p.created_by, ''), p.created_at, p.updated_at, p.workflow_id, p.agent_model_provider, p.agent_model_name, p.agent_model_url, p.agent_model_api_key,
+		       r.repository
+		FROM projects p
+		JOIN project_git_repositories r ON r.project_id = p.project_id
+		ORDER BY p.project_id, r.repository
+	`)
+	if err != nil {
+		return Project{}, err
+	}
+	var matched *Project
+	for rows.Next() {
+		project, repository, scanErr := scanProjectWithRepository(rows)
+		if scanErr != nil {
+			return Project{}, scanErr
 		}
-		return Project{}, err
+		canonicalCandidate, candidateErr := config.CanonicalizeGitRepository(repository)
+		if candidateErr != nil {
+			return Project{}, candidateErr
+		}
+		if canonicalCandidate != canonicalRepo {
+			continue
+		}
+		projectCopy := project
+		matched = &projectCopy
+		break
 	}
-	project.AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, project.ID)
+	if rowsErr := rows.Err(); rowsErr != nil {
+		_ = rows.Close()
+		return Project{}, rowsErr
+	}
+	if closeErr := rows.Close(); closeErr != nil {
+		return Project{}, closeErr
+	}
+	if matched == nil {
+		return Project{}, ErrProjectNotFound
+	}
+	matched.AcceptsNewMembers, err = AcceptsNewMembers(ctx, db, matched.ID)
 	if err != nil {
 		return Project{}, err
 	}
-	return project, nil
+	return *matched, nil
+}
+
+func scanProjectWithRepository(s scanner) (Project, string, error) {
+	project, err := scanProjectWithWorkflowIDAndRepository(s)
+	if err != nil {
+		return Project{}, "", err
+	}
+	return project.project, project.repository, nil
+}
+
+type projectWithRepository struct {
+	project    Project
+	repository string
+}
+
+func scanProjectWithWorkflowIDAndRepository(s scanner) (projectWithRepository, error) {
+	var result projectWithRepository
+	var workflowID sql.NullInt64
+	var dorJSON, dodJSON, acJSON string
+	if err := s.Scan(
+		&result.project.ID, &result.project.Prefix, &result.project.Title, &result.project.Description, &result.project.AcceptanceCriteria,
+		&dorJSON, &dodJSON, &acJSON, &result.project.GitRepository, &result.project.Notes, &result.project.Status, &result.project.Visibility,
+		&result.project.DefaultDraft, &result.project.CreatedBy, &result.project.CreatedAt, &result.project.UpdatedAt, &workflowID,
+		&result.project.AgentModelProvider, &result.project.AgentModelName, &result.project.AgentModelURL, &result.project.AgentModelAPIKey,
+		&result.repository,
+	); err != nil {
+		return projectWithRepository{}, err
+	}
+	var err error
+	result.project.DORMap, err = parseGuidanceMap(dorJSON)
+	if err != nil {
+		return projectWithRepository{}, err
+	}
+	result.project.DODMap, err = parseGuidanceMap(dodJSON)
+	if err != nil {
+		return projectWithRepository{}, err
+	}
+	result.project.ACMap, err = parseGuidanceMap(acJSON)
+	if err != nil {
+		return projectWithRepository{}, err
+	}
+	result.project.ACMap = withLegacyAcceptanceCriteria(result.project.AcceptanceCriteria, result.project.ACMap)
+	if workflowID.Valid {
+		id := workflowID.Int64
+		result.project.WorkflowID = &id
+	}
+	return result, nil
 }
 
 func UpdateProject(ctx context.Context, db *sql.DB, id int64, title, description, acceptanceCriteria string) (Project, error) {

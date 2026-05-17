@@ -108,6 +108,6 @@ tk time log -id <ticket-id> -m <minutes> -note "note"
 
 ```bash
 tk project ls
-tk project use <id-or-prefix>
+export TICKET_PROJECT=<id-or-prefix>
 tk initdb
 ```

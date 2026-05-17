@@ -147,7 +147,7 @@ run git remote add origin "$repo_remote" >/dev/null
 srv_project_id="$("$TK_BIN" project create -prefix SRV -title "Server Harness" -printid)"
 ops_project_id="$("$TK_BIN" project create -prefix OPS -title "Ops Harness" -printid)"
 repo_project_id="$("$TK_BIN" project create -prefix REP -title "Repo Harness" -git-repository "$repo_remote" -printid)"
-run "$TK_BIN" project use SRV >/dev/null
+export TICKET_PROJECT="SRV"
 
 remote_ticket_id="$("$TK_BIN" add -project "$srv_project_id" "Remote agent ticket" -printid)"
 run "$TK_BIN" update -id "$remote_ticket_id" -status develop/idle >/dev/null
@@ -167,14 +167,14 @@ expect_contains "$agent_request_output" "Remote agent ticket" "remote agent requ
 expect_contains "$agent_request_output" "\"llm\": \"codex\"" "remote agent request config propagation"
 run "$TK_BIN" agent config-rm -id "$agent_id" llm >/dev/null
 
-run "$TK_BIN" project use OPS >/dev/null
+export TICKET_PROJECT="OPS"
 run "$TK_BIN" ls -count -expect_equals 0
 run "$TK_BIN" add "Ops project ticket" >/dev/null
 run "$TK_BIN" ls -count -expect_equals 1
-run "$TK_BIN" project use SRV >/dev/null
+export TICKET_PROJECT="SRV"
 run "$TK_BIN" ls -count -expect_equals 1
 run "$TK_BIN" count -project_id "$repo_project_id" -expect_equals 0
-run "$TK_BIN" config rm project_id >/dev/null
+unset TICKET_PROJECT
 run "$TK_BIN" add "Repo inferred ticket" >/dev/null
 run "$TK_BIN" count -project_id "$repo_project_id" -expect_equals 1
 run "$TK_BIN" count -project_id "$srv_project_id" -expect_equals 1
@@ -194,7 +194,7 @@ fi
 export TICKET_USERNAME="harness-user"
 export TICKET_PASSWORD="$registered_password"
 use_token_auth
-run "$TK_BIN" project use private >/dev/null
+export TICKET_PROJECT="private"
 run "$TK_BIN" count -project_id private -expect_equals 0
 run "$TK_BIN" add "Private alias ticket" >/dev/null
 run "$TK_BIN" count -project_id private -expect_equals 1

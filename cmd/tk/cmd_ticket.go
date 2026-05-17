@@ -579,11 +579,11 @@ func runList(args []string) error {
 		if outputJSON {
 			return printJSON(tickets)
 		}
-		name := "tickets"
-		if strings.TrimSpace(*taskType) != "" {
-			name = entityPlural(*taskType)
+		if strings.TrimSpace(*taskType) == "" {
+			fmt.Println(noTicketsAvailableForProject(project.Title))
+			return nil
 		}
-		printNoEntitiesAvailable(name)
+		printNoEntitiesAvailable(entityPlural(*taskType))
 		return nil
 	}
 	// Build parent key map: ticket ID → parent's key string.
@@ -2140,7 +2140,7 @@ func runDeleteTicket(args []string) error {
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	id := fs.String("id", "", "ticket id")
-	confirm := fs.String("confirm", "", "confirmation token from first run")
+	confirm := fs.String("confirm", "", "repeat the ticket id list shown by the first run")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2167,35 +2167,22 @@ func runDeleteTicket(args []string) error {
 	}
 	confirmTarget := joinDeleteConfirmTicketIDs(tickets)
 	if strings.TrimSpace(*confirm) == "" {
-		// Phase 1: generate confirmation token
-		token, err := generateConfirmToken()
-		if err != nil {
-			return err
-		}
 		for _, ticket := range tickets {
 			fmt.Printf("ticket   : %s — %s\n", ticket.ID, ticket.Title)
 			fmt.Printf("type     : %s\n", ticket.Type)
 		}
 		fmt.Printf("\nThis will permanently delete the ticket and all associated data.\n")
 		fmt.Printf("To confirm, run:\n\n")
-		fmt.Printf("  tk rm -id %s --confirm %s\n\n", confirmTarget, token)
-		cfg.DeleteConfirmToken = token
-		cfg.DeleteConfirmTicket = confirmTarget
-		return config.Save(cfg)
+		fmt.Printf("  tk rm -id %s --confirm %s\n\n", confirmTarget, confirmTarget)
+		return nil
 	}
-	// Phase 2: verify token and delete
-	if *confirm != cfg.DeleteConfirmToken || confirmTarget != cfg.DeleteConfirmTicket {
-		return errors.New("invalid confirmation token")
+	if strings.TrimSpace(*confirm) != confirmTarget {
+		return fmt.Errorf("invalid confirmation value: expected %s", confirmTarget)
 	}
 	for _, ticket := range tickets {
 		if err := svc.DeleteTicket(context.Background(), ticket.ID); err != nil {
 			return err
 		}
-	}
-	cfg.DeleteConfirmToken = ""
-	cfg.DeleteConfirmTicket = ""
-	if err := config.Save(cfg); err != nil {
-		return err
 	}
 	if outputJSON {
 		ticketIDs := make([]string, 0, len(tickets))
@@ -2645,20 +2632,6 @@ func createTicketEntity(ctx context.Context, cfg config.Config, api libticket.Se
 		project = resolvedProject
 	}
 	parentID := opts.ParentID
-	ticketType := strings.TrimSpace(strings.ToLower(opts.TicketType))
-	if parentID == nil && cfg.CurrentEpicID != "" && (ticketType == "task" || ticketType == "bug" || ticketType == "chore") {
-		epic, epicErr := api.GetTicket(ctx, cfg.CurrentEpicID)
-		if epicErr != nil {
-			return store.Ticket{}, fmt.Errorf("current epic id %s is invalid: %w", cfg.CurrentEpicID, epicErr)
-		}
-		if strings.TrimSpace(strings.ToLower(epic.Type)) != "epic" {
-			return store.Ticket{}, fmt.Errorf("current epic id %s is not an epic", cfg.CurrentEpicID)
-		}
-		if epic.ProjectID != project.ID {
-			return store.Ticket{}, fmt.Errorf("current epic id %s belongs to project %d, active project is %d", cfg.CurrentEpicID, epic.ProjectID, project.ID)
-		}
-		parentID = &epic.ID
-	}
 	ticket, err := api.CreateTicket(ctx, libticket.TicketCreateRequest{
 		ProjectID:          project.ID,
 		ParentID:           parentID,
@@ -2682,12 +2655,6 @@ func createTicketEntity(ctx context.Context, cfg config.Config, api libticket.Se
 	}
 	if err := applyTicketLabels(ctx, api, project.ID, ticket.ID, opts.Labels); err != nil {
 		return store.Ticket{}, err
-	}
-	if ticket.Type == "epic" {
-		cfg.CurrentEpicID = ticket.ID
-		if err := config.Save(cfg); err != nil {
-			return store.Ticket{}, err
-		}
 	}
 	return ticket, nil
 }

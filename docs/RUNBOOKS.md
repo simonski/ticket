@@ -44,7 +44,7 @@ curl http://localhost:8080/api/healthz
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=admin
 export TICKET_PASSWORD=<secret>
-tk project use 1
+export TICKET_PROJECT=1
 
 # 8. Create the first project
 tk project new -title "My Project" -prefix MP

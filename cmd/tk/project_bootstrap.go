@@ -13,20 +13,6 @@ import (
 
 var gitOriginByRoot sync.Map
 
-func currentOrAncestorProjectRoot() (root string, hasProject bool, err error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", false, err
-	}
-	if root, ok := config.FindTicketRoot(cwd); ok {
-		return root, true, nil
-	}
-	if gitRoot, ok := config.FindGitRoot(cwd); ok {
-		return gitRoot, false, nil
-	}
-	return cwd, false, nil
-}
-
 func detectGitOriginAt(root string) string {
 	if cached, ok := gitOriginByRoot.Load(root); ok {
 		return cached.(string)

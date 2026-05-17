@@ -677,8 +677,7 @@ The binary is named `ticket` with the alias `tk`.
 |---------|-------------|
 | `tk project list` | List projects |
 | `tk project create -prefix CUS -title "..."` | Create project |
-| `tk project use <id\|prefix>` | Set active project |
-| `tk project remote <name>` | Bind the current repo to a named remote |
+| `TICKET_PROJECT=<id\|prefix>` / `-project_id <id\|prefix>` | Set active project |
 | `tk project get <id>` | View project details |
 | `tk project update <id> -title "..."` | Update project |
 | `tk project delete <id>` | Delete project |

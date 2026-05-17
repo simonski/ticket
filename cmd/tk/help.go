@@ -29,11 +29,6 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Prints the Docker Compose file for running Ticket as a persistent server container.", "The embedded template uses the `ghcr.io/simonski/ticket:latest` image and includes a Watchtower sidecar to auto-pull tagged updates for the Ticket container.", "Use this when you want the deployment YAML written directly from the binary instead of copying it from the repository."},
 		example: "tk docker-compose > compose.yaml",
 	},
-	"remote": {
-		usage:   "tk remote <add|ls|remove> ...",
-		details: []string{"Manages named remotes in `~/.ticket/config.json`.", "Each remote has a unique name and URL; credentials for remote servers are stored separately in `~/.ticket/credentials.json`."},
-		example: "tk remote add prod https://ticket.example.com",
-	},
 	"initdb": {
 		usage:   "tk initdb [<path>] [-f <db-path>] [--force] [-password <password>] [-populate]",
 		details: []string{"Creates or ensures a SQLite database backend and bootstraps the fixed `admin` account (default `admin/password`).", "Default location is `~/.ticket/ticket.db`; use `-f` to choose a different file.", "If `--force` is supplied, any existing database file is overwritten.", "If `-populate` is supplied, example projects/stories/tickets/users/teams are also seeded."},
@@ -85,8 +80,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk logout",
 	},
 	"status": {
-		usage:   "tk status [-url <server-url>] [-f <db-path>] [-nocolor]",
-		details: []string{"Prints the current effective configuration and connectivity details.", "Mode is auto-detected: remote when `TICKET_URL` is paired with either `TICKET_TOKEN` or `TICKET_USERNAME` and `TICKET_PASSWORD`; otherwise local when `~/.ticket/ticket.db` is available.", "Output includes the active project, its current Workflow name, and whether new tickets default to draft mode."},
+		usage:   "tk status [-nocolor]",
+		details: []string{"Prints the current effective remote runtime configuration.", "Status shows `TICKET_URL`, `TICKET_USERNAME`, and `TICKET_PASSWORD`/token presence, with connectivity reflected in the URL coloring."},
 		example: "tk status",
 	},
 	"help": {
@@ -136,7 +131,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"project": {
 		usage:   "tk project <create|list|get|use|set-draft|request-access|my-access-requests|access-requests|approve-access-request|reject-access-request|workflow|add-user|remove-user|add-team|remove-team>|<id> <update|enable|disable>",
-		details: []string{"Manages projects and the active project context used by subsequent commands.", "Projects are addressed by prefix or numeric id.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project.", "`request-access` submits an access request for a gated project that accepts new members.", "`my-access-requests` lets the current user review their own pending and decided membership requests.", "`access-requests`, `approve-access-request`, and `reject-access-request` let project admins review and decide pending membership requests, optionally with a decision note."},
+		details: []string{"Manages projects.", "Projects are addressed by prefix or numeric id.", "Select a project per command with `-project_id` or set `TICKET_PROJECT`; repo git-origin matching is used when no explicit project is provided.", "Project membership supports both users and teams.", "`set-draft` controls whether new tickets default to draft mode for the project.", "`request-access` submits an access request for a gated project that accepts new members.", "`my-access-requests` lets the current user review their own pending and decided membership requests.", "`access-requests`, `approve-access-request`, and `reject-access-request` let project admins review and decide pending membership requests, optionally with a decision note."},
 		example: "tk project CUS update -title \"Customer Portal\"",
 	},
 	"team": {
@@ -282,8 +277,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk notready TK-42",
 	},
 	"delete": {
-		usage:   "tk rm|delete [-id <id[,id...]>|<id[,id...]>] [--confirm <token>]",
-		details: []string{"Deletes one or more tickets permanently.", "Deletion uses a two-step confirmation token flow.", "Fails if any target ticket still has child tickets.", "Ticket ids can be comma-separated in positional or `-id` form."},
+		usage:   "tk rm|delete [-id <id[,id...]>|<id[,id...]>] [--confirm <id[,id...]>]",
+		details: []string{"Deletes one or more tickets permanently.", "The first run prints the exact confirmation value to repeat with `--confirm`.", "Fails if any target ticket still has child tickets.", "Ticket ids can be comma-separated in positional or `-id` form."},
 		example: "tk delete TK-42",
 	},
 	"assign": {
@@ -362,8 +357,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk document create -title \"Architecture notes\" -content \"...\"",
 	},
 	"config": {
-		usage:   "tk config <set|get|ls|list|rm|delete|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key] [value]",
-		details: []string{"Config supports `set/get/ls/rm` for keys: `server`, `username`, `current_project`, `current_epic_id`.", "Registration controls are server-backed and require admin privileges."},
+		usage:   "tk config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
+		details: []string{"Only server-backed registration settings remain here.", "Runtime client configuration now comes from environment variables such as `TICKET_URL`, `TICKET_PROJECT`, and stored credentials in `~/.ticket/credentials.json`."},
 		example: "tk config ls",
 	},
 	"label": {
@@ -418,7 +413,7 @@ var helpIndex = map[string]commandHelp{
 	},
 	"epic": {
 		usage:   "tk epic \"title\" [flags]",
-		details: []string{"Shortcut for `tk add -type epic`. Accepts the same flags as `tk add`.", "Epic subcommands: `tk epic get <id>`, `tk epic use <id>`, `tk epic clear`, and `tk epic ls`."},
+		details: []string{"Shortcut for `tk add -type epic`. Accepts the same flags as `tk add`.", "Epic subcommands: `tk epic get <id>` and `tk epic ls`."},
 		example: "tk epic \"Authentication\"",
 	},
 	"note": {
@@ -536,8 +531,7 @@ func renderRootUsage() string {
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
 		{"register", "Create a user account on the server"},
-		{"remote", "Manage named remotes"},
-		{"config", "Manage local config keys"},
+		{"config", "Manage server registration settings"},
 		{"initdb", "Initialize the database"},
 		{"export", "Export entities to a JSON snapshot"},
 		{"import", "Import entities from a JSON snapshot"},
@@ -688,14 +682,12 @@ const configUsage = `Usage: tk config <command> [flags]
 Commands:
   ls, list                              List all config values
   get      <key>                        Get a config value
-  set      <key> <value>                Set a config value
-  rm       <key>                        Remove a config value
   registration-enable                   Enable user registration (server)
   registration-disable                  Disable user registration (server)
   registration-autoapprove-enable       Auto-approve new registrations
   registration-autoapprove-disable      Require admin approval for new registrations
 
-Keys: server, username, current_project, current_epic_id, registration_enabled, registration_auto_approve`
+Keys: registration_enabled, registration_auto_approve`
 
 const agentUsage = `Usage: tk agent <command> [flags]
 

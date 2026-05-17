@@ -541,7 +541,7 @@ Representative commands:
 tk project new -prefix CUS -title "Customer Portal"
 tk project repo add CUS github.com/acme/customer-portal.git
 tk project ls
-tk project use CUS
+export TICKET_PROJECT=CUS
 tk project get CUS
 tk project rename-prefix NEW
 ```
@@ -716,7 +716,7 @@ Representative command set:
 
 ```bash
 tk project new -prefix CUS -title "Customer Portal"
-tk project use CUS
+export TICKET_PROJECT=CUS
 
 tk epic "Authentication"
 tk add "Customers can reset their password."

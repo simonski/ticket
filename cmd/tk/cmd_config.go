@@ -71,31 +71,12 @@ func runConfig(args []string) error {
 		fmt.Println("registration_auto_approve=false")
 		return nil
 	case "set":
-		if len(args) != 3 {
-			return errors.New("usage: tk config set <key> <value>")
-		}
-		switch args[1] {
-		case "location":
-			cfg.Location = args[2]
-			cfg.Remote = ""
-		default:
-			return fmt.Errorf("unknown config key %q", args[1])
-		}
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Printf("%s=%s\n", args[1], args[2])
-		return nil
+		return errors.New("tk config set has been removed; use TICKET_URL, TICKET_PROJECT, and tk login instead")
 	case "get":
 		if len(args) != 2 {
 			return errors.New("usage: tk config get <key>")
 		}
 		switch args[1] {
-		case "location":
-			if cfg.Location != "" {
-				fmt.Println(cfg.Location)
-			}
-			return nil
 		case "registration_enabled":
 			svc, err := resolveService(cfg)
 			if err != nil {
@@ -125,37 +106,21 @@ func runConfig(args []string) error {
 		if len(args) != 1 {
 			return errors.New("usage: tk config ls")
 		}
-		r, _ := config.ResolveURL()
+		svc, err := resolveService(cfg)
+		if err != nil {
+			return err
+		}
+		status, err := svc.Status(context.Background())
+		if err != nil {
+			return err
+		}
 		printBoxTable("KEY\tVALUE", []string{
-			fmt.Sprintf("location\t%s", cfg.Location),
-			fmt.Sprintf("mode\t%s", r.Mode),
-			fmt.Sprintf("username\t%s", cfg.Username),
-			fmt.Sprintf("project_id\t%s", cfg.ProjectID),
-			fmt.Sprintf("current_epic_id\t%s", cfg.CurrentEpicID),
+			fmt.Sprintf("registration_enabled\t%t", status.RegistrationEnabled),
+			fmt.Sprintf("registration_auto_approve\t%t", status.RegistrationAutoApprove),
 		})
 		return nil
 	case "rm", "delete":
-		if len(args) != 2 {
-			return errors.New("usage: tk config rm|delete <key>")
-		}
-		switch args[1] {
-		case "location":
-			cfg.Location = ""
-			cfg.Remote = ""
-		case "username":
-			cfg.Username = ""
-		case "project_id":
-			cfg.ProjectID = ""
-		case "current_epic_id":
-			cfg.CurrentEpicID = ""
-		default:
-			return fmt.Errorf("unknown config key %q", args[1])
-		}
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Printf("deleted %s\n", args[1])
-		return nil
+		return errors.New("tk config rm has been removed; unset the relevant environment variable instead")
 	default:
 		fmt.Println(configUsage)
 		return fmt.Errorf("unknown config action %q", args[0])

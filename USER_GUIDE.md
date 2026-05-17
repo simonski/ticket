@@ -16,34 +16,12 @@ embedded web application, and terminal UI backed by SQLite.
 
 All project data follows the server data model and API semantics, whether you are working against a remote server or a local workspace.
 
-`tk` splits local state in two places:
+`tk` keeps client runtime state minimal:
 
-- `$TICKET_HOME` (default `~/.ticket`) stores the shared local database, global
-  config, named remotes, and remote credentials
-- `.ticket/config.json` in the current repo or directory stores non-secret
-  routing for that repo
-
-Global config keeps the remote registry and default local backend, for example:
-
-```json
-{
-  "default_remote": "local",
-  "remotes": [
-    { "name": "local", "url": "file:///Users/alice/.ticket/ticket.db" },
-    { "name": "prod", "url": "https://ticket.example.com" }
-  ]
-}
-```
-
-Repo-local `.ticket/config.json` binds the current repo to exactly one remote
-plus its active project:
-
-```json
-{
-  "remote": "prod",
-  "project_id": "CUS"
-}
-```
+- `$TICKET_HOME` (default `~/.ticket`) stores remote credentials in
+  `credentials.json`
+- command routing comes from `TICKET_URL`, `TICKET_PROJECT`, explicit
+  `-project_id`, and nearest-git-origin project matching
 
 ## Getting Started
 
@@ -236,8 +214,8 @@ tk status
 tk whoami
 ```
 
-Use `tk project use <id|prefix>` to bind the current repo before
-running normal project-scoped commands like `tk ls`, `tk add`, or `tk summary`.
+Set `TICKET_PROJECT` (or pass `-project_id`) when you want an explicit project
+for commands like `tk ls`, `tk add`, or `tk summary`.
 You can tune remote API timeout with `TICKET_TIMEOUT` (seconds, default `5`,
 minimum `1`, maximum `30`).
 
@@ -351,33 +329,15 @@ tk status
 
 `tk status` prints current effective configuration and connection/auth state.
 
-Inspect or clear local CLI config keys:
+Inspect server-backed registration settings:
 
 ```bash
 tk config ls
-tk config rm location
-tk config delete project_id
+tk config get registration_enabled
 ```
 
-Supported local keys are:
-
-- `location`
-- `project_id`
-- `current_epic_id`
-
-`location` is now mainly a compatibility key. The steady-state routing model is
-named remotes in `$TICKET_HOME/config.json` plus a repo-local `remote` binding
-in `.ticket/config.json`.
-
-In server mode it prints at least:
-
-- `mode: server`
-- `remote: <name>`
-- `location: <http(s)://server>`
-- `username: <configured username or blank>`
-- `authenticated: true|false`
-
-Then it calls the remote status endpoint and prints:
+`tk status` prints `TICKET_URL`, `TICKET_USERNAME`, and whether a password or
+token is available, then checks the remote status endpoint.
 
 - `connection: success` in green if the server responds successfully
 - `connection: failure` in red if the server cannot be contacted or returns an error
@@ -448,12 +408,12 @@ tk project list
 tk project ls
 ```
 
-`tk project list` prints the project id, prefix, title, and status, and marks the active project with `*`.
+`tk project list` prints the project id, prefix, title, and status.
 
-Select the active project for subsequent commands:
+Select the project per command with `-project_id` or by exporting `TICKET_PROJECT`:
 
 ```bash
-tk project use CUS
+export TICKET_PROJECT=CUS
 ```
 
 Rename a project's prefix (re-keys all tickets, updates all references):
@@ -464,7 +424,6 @@ tk project rename-prefix NEW
 
 This changes every ticket key in the active project (e.g. `CUS-1` → `NEW-T-1`),
 including parent references, dependencies, comments, history, and time entries.
-The config is updated automatically.
 
 ### Repository-aware project routing
 
@@ -1069,7 +1028,7 @@ tk project create -prefix ABC -title "..." -wow "Ways of working" -dor "Default 
 tk project create -prefix ABC -title "..." -dor-map "develop=Implementation ready" -ac-map "qa=Sign-off complete"
 tk project list
 tk project ls
-tk project use <prefix-or-id>
+export TICKET_PROJECT=<prefix-or-id>
 tk project
 tk project get <prefix-or-id>
 tk project repo ls -project_id <prefix-or-id>
@@ -1284,14 +1243,14 @@ You can now run as the user
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=user-username
 export TICKET_PASSWORD=user-password
-tk project use DEMO
+export TICKET_PROJECT=DEMO
 tk ls
 ```
 
 You could run as an agent to do work automatically
 
 ```bash
-tk project use DEMO
+export TICKET_PROJECT=DEMO
 export AGENT_ID=<agent-uuid>
 export AGENT_PASSWORD=agent-password
 tk agent run                  # default LLM: claude (Sonnet 4.5)
