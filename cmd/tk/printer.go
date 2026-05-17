@@ -439,6 +439,22 @@ func printSummaryField(width int, label, rawValue string) {
 	}
 }
 
+func compactTicketTitle(rawTitle string) string {
+	title := strings.ReplaceAll(strings.ReplaceAll(rawTitle, "\r\n", "\n"), "\r", "\n")
+	first, rest, found := strings.Cut(title, "\n")
+	if !found {
+		return title
+	}
+	first = strings.TrimSpace(first)
+	if first == "" {
+		if strings.TrimSpace(rest) == "" {
+			return ""
+		}
+		return "..."
+	}
+	return first + "..."
+}
+
 func printTicketChildren(children []store.Ticket) {
 	fmt.Println("Children     :")
 	var buf bytes.Buffer
@@ -446,7 +462,7 @@ func printTicketChildren(children []store.Ticket) {
 	rowColors := make([]string, 0, len(children))
 	for _, c := range children {
 		symbol := formatTicketStatusSymbol(c.Status, true)
-		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, c.ID, c.Type, c.Status, c.Title)
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", symbol, c.ID, c.Type, c.Status, compactTicketTitle(c.Title))
 		rowColors = append(rowColors, childTicketColor(c))
 	}
 	if err := w.Flush(); err != nil {
@@ -670,7 +686,9 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	var mBuf bytes.Buffer
 	mw := tabwriter.NewWriter(&mBuf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(mw, makeHeader())
-	for _, t := range tickets {
+	displayTitles := make([]string, len(tickets))
+	for i, t := range tickets {
+		displayTitles[i] = compactTicketTitle(t.Title)
 		fmt.Fprintln(mw, makeDataRow(t, titleSentinel))
 	}
 	if err := mw.Flush(); err != nil {
@@ -740,8 +758,8 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 	var buf bytes.Buffer
 	bw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(bw, makeHeader())
-	for _, t := range tickets {
-		fmt.Fprintln(bw, makeDataRow(t, padToWidth(t.Title, titleW)))
+	for i, t := range tickets {
+		fmt.Fprintln(bw, makeDataRow(t, padToWidth(displayTitles[i], titleW)))
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not flush ticket table: %v\n", err)
@@ -791,7 +809,7 @@ func printTicketTable(tickets []store.Ticket, parentKeys map[string]string, agen
 			break
 		}
 		display = append(display, displayLine{text: rawLines[i+1], status: t.Status, draft: t.Draft})
-		chunks := wrapRunes(t.Title, titleW)
+		chunks := wrapRunes(displayTitles[i], titleW)
 		for _, chunk := range chunks[1:] {
 			// Build continuation indent: tree bar continuation + spaces to title column.
 			contPfx := treeContPrefix(treePfx[t.ID])

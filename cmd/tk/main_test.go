@@ -2182,6 +2182,37 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 	}
 }
 
+func TestRunListTruncatesMultilineTicketTitles(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Rebuild according to the HARD RULES\nIf you build a shed within two metres"})
+
+	listOut := captureStdout(t, func() {
+		if err := run([]string{"ls", "-nocolor"}); err != nil {
+			t.Fatalf("list error = %v", err)
+		}
+	})
+	if !strings.Contains(listOut, "Rebuild according to the HARD RULES...") {
+		t.Fatalf("list output missing truncated multiline title:\n%s", listOut)
+	}
+	if strings.Contains(listOut, "If you build a shed within two metres") {
+		t.Fatalf("list output should not include later title lines:\n%s", listOut)
+	}
+
+	getOut := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID}); err != nil {
+			t.Fatalf("get error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"title       : Rebuild according to the HARD RULES",
+		"              If you build a shed within two metres",
+	} {
+		if !strings.Contains(getOut, want) {
+			t.Fatalf("get output missing %q:\n%s", want, getOut)
+		}
+	}
+}
+
 func TestPrintTaskDetailsIncludesAcceptanceCriteria(t *testing.T) {
 	output := captureStdout(t, func() {
 		printTicketDetails(store.Ticket{
