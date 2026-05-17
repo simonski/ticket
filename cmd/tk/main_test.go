@@ -104,7 +104,6 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"USAGE",
 		"COMMANDS",
 		"ADMIN",
-		"SHORTCUTS",
 		"SYSTEM",
 		"\x1b[38;5;117m",
 		"ticket",
@@ -116,6 +115,8 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"goal",
 		"document",
 		"config",
+		"export",
+		"import",
 		"server",
 		"version",
 		"upgrade",
@@ -155,11 +156,15 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  document",
 		"  decision",
 		"  doctor",
-		"  role",
-		"  workflow",
-		"  team",
-		"  agent",
-		"  user",
+		"  admin config",
+		"  export",
+		"  import",
+		"  upgrade-database",
+		"  admin role",
+		"  admin workflow",
+		"  admin team",
+		"  admin agent",
+		"  admin user",
 	}
 	last := -1
 	for _, item := range nounOrder {
@@ -174,7 +179,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	// Verify SYSTEM section ordering
-	systemOrder := []string{"  status", "  server", "  login", "  logout", "  register", "  config", "  initdb", "  export", "  import", "  upgrade-database", "  version", "  upgrade", "  skill", "  docker-compose", "  help"}
+	systemOrder := []string{"  status", "  summary", "  whoami", "  server", "  login", "  logout", "  register", "  initdb", "  version", "  upgrade", "  skill", "  docker-compose"}
 	last = -1
 	for _, item := range systemOrder {
 		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
@@ -185,6 +190,13 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 			t.Fatalf("root usage system commands not in expected order around %q:\n%s", item, usage)
 		}
 		last = idx
+	}
+	systemIdx := strings.Index(usage, "SYSTEM")
+	examplesIdx := strings.Index(usage, "EXAMPLES")
+	for _, unwanted := range []string{"  admin", "  help"} {
+		if idx := strings.LastIndex(usage, unwanted); idx != -1 && idx > systemIdx && idx < examplesIdx {
+			t.Fatalf("root usage SYSTEM section should not include %q:\n%s", unwanted, usage)
+		}
 	}
 
 	for _, unwanted := range []string{"ALIASES", "create,new", "del,delete"} {
@@ -1017,9 +1029,9 @@ func TestRunProjectRequestAccessRemote(t *testing.T) {
 func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 	help := renderCommandHelp("user")
 	for _, want := range []string{
-		"tk user <create|new|ls|list|rm|delete|enable|disable|notifications|read-notification|reset-password>",
+		"tk admin user <create|new|ls|list|rm|delete|enable|disable|notifications|read-notification|reset-password>",
 		"user is not an admin",
-		"tk user create -username alice -email alice@example.com",
+		"tk admin user create -username alice -email alice@example.com",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("user help missing %q:\n%s", want, help)
@@ -1027,11 +1039,11 @@ func TestRenderUserHelpIncludesAdmin403Message(t *testing.T) {
 	}
 }
 
-func TestRenderConfigHelpIncludesListAndDelete(t *testing.T) {
+func TestRenderConfigHelpIncludesAdminNamespace(t *testing.T) {
 	help := renderCommandHelp("config")
 	for _, want := range []string{
-		"tk config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
-		"tk config ls",
+		"tk admin config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
+		"tk admin config ls",
 		"Runtime client configuration now comes from environment variables",
 	} {
 		if !strings.Contains(help, want) {
@@ -1323,8 +1335,8 @@ func TestRunWhoamiWithGlobalRemoteConfigDoesNotRequireProjectBinding(t *testing.
 	if !strings.Contains(output, "username : admin") {
 		t.Fatalf("whoami output missing remote user identity:\n%s", output)
 	}
-	if !strings.Contains(output, "mode     : server") {
-		t.Fatalf("whoami output missing server mode:\n%s", output)
+	if strings.Contains(output, "CONNECTION") || strings.Contains(output, "TICKET_URL") {
+		t.Fatalf("whoami output should not include connection details:\n%s", output)
 	}
 }
 
@@ -4059,6 +4071,15 @@ func TestRunDraftAndUndraftToggleDraftFlag(t *testing.T) {
 
 	taskID := createLocalTask(t, []string{"add", "Draft Me"})
 
+	initialOutput := captureStdout(t, func() {
+		if err := run([]string{"get", "-id", taskID, "-v"}); err != nil {
+			t.Fatalf("get initial draft error = %v", err)
+		}
+	})
+	if !hasDetailField(initialOutput, "Draft", "true") {
+		t.Fatalf("new ticket should start draft=true:\n%s", initialOutput)
+	}
+
 	if err := run([]string{"draft", "-id", taskID}); err != nil {
 		t.Fatalf("draft error = %v", err)
 	}
@@ -4156,6 +4177,68 @@ func TestRunUpdateStageUsesCurrentWorkflowStages(t *testing.T) {
 	want := `invalid stage "xxxx"; valid stages: design, develop, test, done`
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("update invalid stage error = %v, want substring %q", err, want)
+	}
+}
+
+func TestRunMergeCombinesDraftTicketsAndArchivesSources(t *testing.T) {
+	setupLocalCLI(t)
+
+	targetID := createLocalTask(t, []string{"add", "-d", "first description", "-ac", "first acceptance", "Primary draft"})
+	secondID := createLocalTask(t, []string{"add", "-d", "second description", "-ac", "second acceptance", "Secondary draft"})
+	thirdID := createLocalTask(t, []string{"add", "-d", "third description", "-ac", "third acceptance", "Tertiary draft"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"merge", targetID, secondID, thirdID}); err != nil {
+			t.Fatalf("merge error = %v", err)
+		}
+	})
+	if !strings.Contains(output, "merged:") {
+		t.Fatalf("merge output missing summary:\n%s", output)
+	}
+
+	merged, err := svcGetTicket(t, targetID)
+	if err != nil {
+		t.Fatalf("GetTicket(target after merge) error = %v", err)
+	}
+	if merged.Title != "Primary draft" {
+		t.Fatalf("merged.Title = %q, want %q", merged.Title, "Primary draft")
+	}
+	if merged.Description != "first description\n----\nsecond description\n----\nthird description" {
+		t.Fatalf("merged.Description = %q", merged.Description)
+	}
+	if merged.AcceptanceCriteria != "first acceptance\n----\nsecond acceptance\n----\nthird acceptance" {
+		t.Fatalf("merged.AcceptanceCriteria = %q", merged.AcceptanceCriteria)
+	}
+	if !merged.Draft {
+		t.Fatalf("merged.Draft = %v, want true", merged.Draft)
+	}
+	if merged.Archived {
+		t.Fatalf("merged.Archived = %v, want false", merged.Archived)
+	}
+
+	for _, id := range []string{secondID, thirdID} {
+		ticket, getErr := svcGetTicket(t, id)
+		if getErr != nil {
+			t.Fatalf("GetTicket(%s after merge) error = %v", id, getErr)
+		}
+		if !ticket.Archived {
+			t.Fatalf("%s.Archived = %v, want true", id, ticket.Archived)
+		}
+	}
+}
+
+func TestRunMergeRejectsNonDraftTickets(t *testing.T) {
+	setupLocalCLI(t)
+
+	targetID := createLocalTask(t, []string{"add", "-d", "first description", "Primary draft"})
+	secondID := createLocalTask(t, []string{"add", "-d", "second description", "Not yet drafted"})
+	if err := run([]string{"undraft", secondID}); err != nil {
+		t.Fatalf("undraft source error = %v", err)
+	}
+
+	err := run([]string{"merge", targetID, secondID})
+	if err == nil || !strings.Contains(err.Error(), "only draft tickets can be merged") {
+		t.Fatalf("merge non-draft error = %v, want draft validation", err)
 	}
 }
 
@@ -4651,12 +4734,12 @@ func TestRunCountHistoryOrphansAndConfigInLocalMode(t *testing.T) {
 		t.Fatalf("orphans output should not include epics: %q", orphansOutput)
 	}
 
-	if err := run([]string{"config", "ls"}); err != nil {
-		t.Fatalf("config ls error = %v", err)
+	if err := run([]string{"admin", "config", "ls"}); err != nil {
+		t.Fatalf("admin config ls error = %v", err)
 	}
 	listOutput := captureStdout(t, func() {
-		if err := run([]string{"config", "ls"}); err != nil {
-			t.Fatalf("config ls error = %v", err)
+		if err := run([]string{"admin", "config", "ls"}); err != nil {
+			t.Fatalf("admin config ls error = %v", err)
 		}
 	})
 	for _, want := range []string{
@@ -8643,7 +8726,7 @@ func TestRunWhoamiLocalMode(t *testing.T) {
 			t.Fatalf("whoami error = %v", err)
 		}
 	})
-	for _, want := range []string{"USER", "username", "admin", "CONNECTION", "server"} {
+	for _, want := range []string{"USER", "username", "admin", "PROJECTS"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("whoami output missing %q:\n%s", want, out)
 		}
@@ -8694,9 +8777,14 @@ func TestRunSummaryLocalMode(t *testing.T) {
 			t.Fatalf("summary error = %v", err)
 		}
 	})
-	for _, want := range []string{"project", "SUM", "open tickets", "database"} {
+	for _, want := range []string{"project", "SUM", "open tickets", "config"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("summary output missing %q:\n%s", want, out)
+		}
+	}
+	for _, unwanted := range []string{"TICKET_HOME", "database"} {
+		if strings.Contains(out, unwanted) {
+			t.Fatalf("summary output should not include %q:\n%s", unwanted, out)
 		}
 	}
 }
@@ -8712,8 +8800,19 @@ func TestRunTicketNSHelp(t *testing.T) {
 			t.Fatalf("ticket help error = %v", err)
 		}
 	})
-	if !strings.Contains(out, "ticket") {
-		t.Fatalf("ticket help output missing usage info:\n%s", out)
+	for _, want := range []string{"ticket", "merge"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("ticket help output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderCommandHelpIncludesMerge(t *testing.T) {
+	help := renderCommandHelp("merge")
+	for _, want := range []string{"tk merge", "Merges draft tickets into the first ticket", "TK-1 TK-2 TK-3"} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("merge help missing %q:\n%s", want, help)
+		}
 	}
 }
 

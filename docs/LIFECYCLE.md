@@ -15,15 +15,14 @@ A project is the top-level container in which all tickets and the Workflow are s
 - Has exactly one **workflow** which describes how a ticket "progreses" through its lifecycle
 - A workflow can be exported/imported as JSON to share across projects.
 
-A project has defaults for new commands
-    draft: (bool) - if true, new tickets start in draft mode.
+A project carries workflow defaults and guidance, and new tickets start in draft
+mode until they are explicitly readied for work.
 
 ```bash
 tk project new -title "My Project"
 tk project ls
 export TICKET_PROJECT=<prefix>
 tk project workflow <workflow_id>
-tk project set-draft true
 ```
 
 ---
@@ -38,11 +37,11 @@ A workflow defines the ordered sequence of **stages** a ticket moves through, an
 - Each stage can have one or more roles assigned to it.
 
 ```bash
-tk workflow ls
-tk workflow create -name "Agile v1.0" -d "Standard agile process"
-tk workflow get -id <workflow_id>
-tk workflow export -id <workflow_id> -o workflow_agile.json
-tk workflow import -file workflow_agile.json
+tk admin workflow ls
+tk admin workflow create -name "Agile v1.0" -d "Standard agile process"
+tk admin workflow get -id <workflow_id>
+tk admin workflow export -id <workflow_id> -o workflow_agile.json
+tk admin workflow import -file workflow_agile.json
 tk project workflow <workflow_id>
 ```
 
@@ -232,11 +231,11 @@ idle ──> active ──> fail
 
 | Command | Effect |
 |---------|--------|
-| `tk workflow list` | List all Workflows |
-| `tk workflow create -name <n> -d <desc>` | Create an Workflow |
-| `tk workflow get -workflow_id <workflow_id>` | Show Workflow with stages and roles |
-| `tk workflow export -workflow_id <workflow_id> -o <file>` | Export Workflow to JSON |
-| `tk workflow import -f <file>` | Import Workflow from JSON |
+| `tk admin workflow list` | List all Workflows |
+| `tk admin workflow create -name <n> -d <desc>` | Create a Workflow |
+| `tk admin workflow get -workflow_id <workflow_id>` | Show Workflow with stages and roles |
+| `tk admin workflow export -workflow_id <workflow_id> -o <file>` | Export Workflow to JSON |
+| `tk admin workflow import -f <file>` | Import Workflow from JSON |
 
 ### Stages
 

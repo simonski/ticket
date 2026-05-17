@@ -983,6 +983,10 @@ func TestAutomationPolicyAPI(t *testing.T) {
 	}
 	var ticket store.Ticket
 	decodeResponse(t, createResp, &ticket)
+	readyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+ticket.ID+"/ready", nil, adminToken)
+	if readyResp.Code != http.StatusOK {
+		t.Fatalf("ready ticket status=%d body=%s", readyResp.Code, readyResp.Body.String())
+	}
 
 	getDefaultResp := doJSONRequest(t, handler, http.MethodGet, "/api/config/automation_policy", nil, adminToken)
 	if getDefaultResp.Code != http.StatusOK {
@@ -3042,6 +3046,12 @@ func TestProjectInterventionReportAndForecastAPI(t *testing.T) {
 	}, adminToken)
 	if queueableResp.Code != http.StatusCreated {
 		t.Fatalf("create queueable ticket status = %d body=%s", queueableResp.Code, queueableResp.Body.String())
+	}
+	var queueable store.Ticket
+	decodeResponse(t, queueableResp, &queueable)
+	queueableReadyResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/"+queueable.ID+"/ready", nil, adminToken)
+	if queueableReadyResp.Code != http.StatusOK {
+		t.Fatalf("ready queueable ticket status = %d body=%s", queueableReadyResp.Code, queueableReadyResp.Body.String())
 	}
 
 	reportResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/"+strconv.FormatInt(project.ID, 10)+"/interventions/report?escalation_hours=1", nil, adminToken)

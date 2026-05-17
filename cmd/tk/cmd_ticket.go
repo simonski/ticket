@@ -151,6 +151,8 @@ func runTicketNS(args []string) error {
 		return runRejectTicket(args[1:])
 	case "clone", "cp":
 		return runClone(args[1:])
+	case "merge":
+		return runMerge(args[1:])
 	case "delete", "rm":
 		return runDeleteTicket(args[1:])
 
@@ -204,6 +206,7 @@ Commands:
   notready -id <id>                          Mark not ready
   reject   -id <id>                           Send ticket back to the first workflow stage as draft
   clone    -id <id>                           Duplicate
+  merge    <target-id> <source-id>...        Merge draft tickets into the first ticket
   delete   -id <id>                           Soft-delete
 
   gen      -f <files> -o <output>             Generate tickets via agent`
@@ -2133,6 +2136,126 @@ func runClone(args []string) error {
 	printTicket(ticket)
 	fmt.Printf("clone_of: %s\n", ticketLabel(taskRef))
 	return nil
+}
+
+func runMerge(args []string) error {
+	const usage = "tk merge <target-id> <source-id> [<source-id> ...] [-m comment]"
+
+	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	message := fs.String("m", "", "comment to attach")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	refs := make([]string, 0, len(fs.Args()))
+	for _, arg := range fs.Args() {
+		if trimmed := strings.TrimSpace(arg); trimmed != "" {
+			refs = append(refs, trimmed)
+		}
+	}
+	if len(refs) < 2 {
+		return errors.New("usage: " + usage)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+
+	tickets := make([]store.Ticket, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		resolved := normalizeBareTicketRef(cfg, svc, ref)
+		ticket, getErr := svc.GetTicket(context.Background(), resolved)
+		if getErr != nil {
+			return getErr
+		}
+		if _, exists := seen[ticket.ID]; exists {
+			return fmt.Errorf("duplicate ticket %s", ticketLabel(ticket))
+		}
+		seen[ticket.ID] = struct{}{}
+		tickets = append(tickets, ticket)
+	}
+
+	target := tickets[0]
+	for _, ticket := range tickets {
+		if ticket.ProjectID != target.ProjectID {
+			return errors.New("all tickets must belong to the same project")
+		}
+		if !ticket.Draft {
+			return fmt.Errorf("%s is not draft; only draft tickets can be merged", ticketLabel(ticket))
+		}
+		if ticket.Archived {
+			return fmt.Errorf("%s is archived; only draft tickets can be merged", ticketLabel(ticket))
+		}
+		if ticket.Deleted {
+			return fmt.Errorf("%s is deleted; only draft tickets can be merged", ticketLabel(ticket))
+		}
+	}
+
+	updated, err := svc.UpdateTicket(context.Background(), target.ID, libticket.TicketUpdateRequest{
+		Title:              target.Title,
+		Description:        mergeTicketText(tickets, func(ticket store.Ticket) string { return ticket.Description }),
+		AcceptanceCriteria: mergeTicketText(tickets, func(ticket store.Ticket) string { return ticket.AcceptanceCriteria }),
+		DORMap:             target.DORMap,
+		DODMap:             target.DODMap,
+		ACMap:              target.ACMap,
+		GitRepository:      target.GitRepository,
+		GitBranch:          target.GitBranch,
+		ParentID:           target.ParentID,
+		Assignee:           target.Assignee,
+		Priority:           target.Priority,
+		Order:              target.Order,
+		EstimateEffort:     target.EstimateEffort,
+		EstimateComplete:   target.EstimateComplete,
+		Message:            strings.TrimSpace(*message),
+	})
+	if err != nil {
+		return err
+	}
+
+	archiveMessage := strings.TrimSpace(*message)
+	if archiveMessage == "" {
+		archiveMessage = fmt.Sprintf("merged into %s", ticketLabel(updated))
+	}
+	archived := make([]store.Ticket, 0, len(tickets)-1)
+	for _, ticket := range tickets[1:] {
+		archivedTicket, archiveErr := svc.ArchiveTicket(context.Background(), ticket.ID, archiveMessage)
+		if archiveErr != nil {
+			return archiveErr
+		}
+		archived = append(archived, archivedTicket)
+	}
+
+	if outputJSON {
+		return printJSON(map[string]any{
+			"merged_into": updated,
+			"archived":    archived,
+		})
+	}
+
+	printTicket(updated)
+	archivedLabels := make([]string, 0, len(archived))
+	for _, ticket := range archived {
+		archivedLabels = append(archivedLabels, ticketLabel(ticket))
+	}
+	fmt.Printf("merged: %s\n", strings.Join(archivedLabels, ", "))
+	return nil
+}
+
+func mergeTicketText(tickets []store.Ticket, selector func(store.Ticket) string) string {
+	parts := make([]string, 0, len(tickets))
+	for _, ticket := range tickets {
+		if value := strings.TrimSpace(selector(ticket)); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, "\n----\n")
 }
 
 func runDeleteTicket(args []string) error {

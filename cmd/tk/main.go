@@ -145,6 +145,8 @@ func run(args []string) error {
 		return runPrompt(trimmedArgs[1:])
 	case "agent":
 		return runAgent(trimmedArgs[1:])
+	case "admin":
+		return runAdmin(trimmedArgs[1:])
 	case "user":
 		return runUser(trimmedArgs[1:])
 	case "project":
@@ -246,6 +248,8 @@ func run(args []string) error {
 		return runComment(trimmedArgs[1:])
 	case "clone", "cp":
 		return runClone(trimmedArgs[1:])
+	case "merge":
+		return runMerge(trimmedArgs[1:])
 	case "close":
 		return runSetTicketClosed(trimmedArgs[1:], true)
 	case "open":
@@ -288,8 +292,6 @@ func run(args []string) error {
 		return runTypedTicketCreate("bug", trimmedArgs[1:])
 	case "epic":
 		return runEpic(trimmedArgs[1:])
-	case "config":
-		return runConfig(trimmedArgs[1:])
 	default:
 		return fmt.Errorf("no such command %q", trimmedArgs[0])
 	}

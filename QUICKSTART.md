@@ -69,6 +69,7 @@ tk ls                                 # list open tickets
 TASK_ID=$(tk add -printid "Fix login timeout")   # create a task
 tk bug "Token expires too early"      # create a bug
 tk epic "Authentication"              # create an epic
+tk undraft -id "$TASK_ID"             # new tickets start in draft
 
 tk complete -id "$TASK_ID"            # mark the created task complete
 ```

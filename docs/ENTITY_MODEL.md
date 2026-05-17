@@ -137,7 +137,7 @@ It defines:
 - the boundary of what the project is explicitly not trying to do,
 - the canonical reference links for humans and tools,
 - the default lifecycle model,
-- the default draft behaviour for new tickets.
+- the draft behaviour for new tickets (which now start in draft mode by default).
 
 ## 4.2 Core Fields
 
@@ -152,14 +152,14 @@ It defines:
 | `dor_map` | Project-level DOR map keyed by stage name plus `default` |
 | `dod_map` | Project-level DOD map keyed by stage name plus `default` |
 | `ac_map` | Project-level AC map keyed by stage name plus `default` |
-| `default_draft` | Whether new tickets start in draft mode |
+| `default_draft` | Project-level draft preference metadata; new tickets currently start in draft mode by default |
 | `default_workflow` | Required link to the Workflow used when no ticket/ancestor override exists |
 
 ## 4.3 Rules
 
 1. A project has exactly one **default Workflow**
 2. `default_workflow` is **non-null**
-3. `default_draft` applies only when creating new tickets
+3. `default_draft` is retained as project-level metadata; current ticket creation still starts new tickets in draft mode by default
 4. A project's `prefix` defines the human-facing ticket key namespace
 5. `in_scope_goals` and `out_of_scope_goals` define the product boundary for the project
 6. `reference_links` is the home for canonical supporting URLs and document links

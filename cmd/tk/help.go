@@ -70,7 +70,7 @@ var helpIndex = map[string]commandHelp{
 		example: "tk login -token tk_abc123 -url https://ticket.localhost",
 	},
 	"register": {
-		usage:   "tk register -username <name> -email <address> [-password <password>] [-url <server-url>]",
+		usage:   "tk register -username <name> -email <address> [-password <password>]",
 		details: []string{"Creates a user account on the configured server but does not log the user in.", "Both `-username` and `-email` are required.", "If `-password` is omitted, the server generates one and returns it in the response/output.", "If auto-approval is disabled, registration is accepted but the account must be approved before it can sign in."},
 		example: "tk register -username simon -email simon@example.com",
 	},
@@ -135,9 +135,9 @@ var helpIndex = map[string]commandHelp{
 		example: "tk project CUS update -title \"Customer Portal\"",
 	},
 	"team": {
-		usage:   "tk team <list|create|update|delete|add-user|remove-user|users|add-agent|remove-agent|agents>",
-		details: []string{"Manages team hierarchy, team users (member/owner + job title), and team agent assignments.", "Teams can be assigned to projects with `tk project add-team`."},
-		example: "tk team create -name \"Platform\"",
+		usage:   "tk admin team <list|create|update|delete|add-user|remove-user|users|add-agent|remove-agent|agents>",
+		details: []string{"Admin command for team hierarchy, team users (member/owner + job title), and team agent assignments.", "Teams can be assigned to projects with `tk project add-team`."},
+		example: "tk admin team create -name \"Platform\"",
 	},
 	"list": {
 		usage:   "tk list|ls [-type <type>] [-stage <stage>] [-state <state>] [-status <stage/state>] [-u <user>] [-n <limit>] [-a] [-d] [-unicode] [-plain] [-count] [-expect_equals <n>] [-expect_notequals <n>]",
@@ -281,6 +281,11 @@ var helpIndex = map[string]commandHelp{
 		details: []string{"Deletes one or more tickets permanently.", "The first run prints the exact confirmation value to repeat with `--confirm`.", "Fails if any target ticket still has child tickets.", "Ticket ids can be comma-separated in positional or `-id` form."},
 		example: "tk delete TK-42",
 	},
+	"merge": {
+		usage:   "tk merge <target-id> <source-id> [<source-id> ...]",
+		details: []string{"Merges draft tickets into the first ticket and archives the remaining tickets.", "The first ticket keeps its title. Descriptions and acceptance criteria are concatenated with `----` separators in merge order.", "All tickets must be draft tickets in the same project."},
+		example: "tk merge TK-1 TK-2 TK-3",
+	},
 	"assign": {
 		usage:   "tk assign [-id] <id> <name>",
 		details: []string{"Admin-only command that assigns a ticket to a user.", "The target user must exist and be enabled."},
@@ -332,14 +337,14 @@ var helpIndex = map[string]commandHelp{
 		example: "tk intervene TK-42 -outcome retry-stage -m \"send back for redesign\"",
 	},
 	"user": {
-		usage:   "tk user <create|new|ls|list|rm|delete|enable|disable|notifications|read-notification|reset-password>",
-		details: []string{"Admin-only user management commands plus self-service notification commands.", "If a non-admin user calls admin commands, the server returns 403 with `user is not an admin`.", "`tk user create` accepts optional `-email`; if `-password` is omitted, a password is generated and printed.", "`tk user notifications` lists your notification inbox, and `tk user read-notification` marks a notification as read."},
-		example: "tk user create -username alice -email alice@example.com",
+		usage:   "tk admin user <create|new|ls|list|rm|delete|enable|disable|notifications|read-notification|reset-password>",
+		details: []string{"Admin-only user management commands plus self-service notification commands.", "If a non-admin user calls admin commands, the server returns 403 with `user is not an admin`.", "`tk admin user create` accepts optional `-email`; if `-password` is omitted, a password is generated and printed.", "`tk user notifications` and `tk user read-notification` remain available for self-service inbox actions."},
+		example: "tk admin user create -username alice -email alice@example.com",
 	},
 	"agent": {
-		usage:   "tk agent <request|run> (agent) | <create|ls|list|update|rm|delete|enable|disable|reset-password|config-*> (admin)",
-		details: []string{"Manages API agents for autonomous ticket processing.", "Agent commands: `request` fetches work envelope; `run` continuously processes work.", "Admin commands: manage agent lifecycle, credentials, and configuration."},
-		example: "tk agent run -id <uuid>",
+		usage:   "tk agent <request|run> | tk admin agent <create|ls|list|update|rm|delete|enable|disable|reset-password|config-*>",
+		details: []string{"Manages API agents for autonomous ticket processing.", "Agent commands: `request` fetches work envelope; `run` continuously processes work.", "Admin commands live under `tk admin agent ...` for lifecycle, credentials, and configuration."},
+		example: "tk admin agent ls",
 	},
 	"story": {
 		usage:   "tk story <create|list|get|update|delete>",
@@ -357,9 +362,14 @@ var helpIndex = map[string]commandHelp{
 		example: "tk document create -title \"Architecture notes\" -content \"...\"",
 	},
 	"config": {
-		usage:   "tk config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
-		details: []string{"Only server-backed registration settings remain here.", "Runtime client configuration now comes from environment variables such as `TICKET_URL`, `TICKET_PROJECT`, and stored credentials in `~/.ticket/credentials.json`."},
-		example: "tk config ls",
+		usage:   "tk admin config <get|ls|list|registration-enable|registration-disable|registration-autoapprove-enable|registration-autoapprove-disable> [key]",
+		details: []string{"Only server-backed registration settings remain here, under the admin namespace.", "Runtime client configuration now comes from environment variables such as `TICKET_URL`, `TICKET_PROJECT`, and stored credentials in `~/.ticket/credentials.json`."},
+		example: "tk admin config ls",
+	},
+	"admin": {
+		usage:   "tk admin <config|role|workflow|team|agent|user> [flags]",
+		details: []string{"Namespace for admin-only control surfaces.", "`tk admin config` manages server-backed registration settings.", "`tk admin role`, `tk admin workflow`, `tk admin team`, `tk admin agent`, and `tk admin user` route to the corresponding admin namespaces."},
+		example: "tk admin workflow ls",
 	},
 	"label": {
 		usage:   "tk label <ls|create|rm|add|remove|show> [flags]",
@@ -372,14 +382,14 @@ var helpIndex = map[string]commandHelp{
 		example: "tk time log -id TK-1 -m 30 -note \"morning session\"",
 	},
 	"role": {
-		usage:   "tk role <ls|create|get|update|rm> [flags]",
-		details: []string{"Admin command for managing roles.", "Run `tk role help` for the full verb list."},
-		example: "tk role ls",
+		usage:   "tk admin role <ls|create|get|update|rm> [flags]",
+		details: []string{"Admin command for managing roles.", "Run `tk admin role help` for the full verb list."},
+		example: "tk admin role ls",
 	},
 	"workflow": {
-		usage:   "tk workflow <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|role-list|role-add|role-get|role-update|role-rm|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
-		details: []string{"Admin command for managing workflows and their stages.", "Use `tk workflow rm -id <id> -check` to preview references before deletion.", "Run `tk workflow help` for the full verb list."},
-		example: "tk workflow ls",
+		usage:   "tk admin workflow <ls|create|get|rm|set|unset|add-stage|remove-stage|reorder-stages|role-list|role-add|role-get|role-update|role-rm|stage-role-add|stage-role-rm|stage-role-order|export|import> [flags]",
+		details: []string{"Admin command for managing workflows and their stages.", "Use `tk admin workflow rm -id <id> -check` to preview references before deletion.", "Run `tk admin workflow help` for the full verb list."},
+		example: "tk admin workflow ls",
 	},
 	"decision": {
 		usage:   "tk decision <new|ls> [flags]",
@@ -503,26 +513,18 @@ func renderRootUsage() string {
 	b.WriteString(h + "COMMANDS" + r + "\n")
 	printCommandUsageRows(&b, commandRows, 10)
 	adminRows := [][2]string{
-		{"role", "Manage roles (ls, new, get, update, rm)"},
-		{"workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
-		{"workflow", "Alias for workflow management commands"},
-		{"team", "Manage teams (ls, new, update, rm)"},
-		{"agent", "Manage agents (ls, new, update, rm, run)"},
-		{"user", "Manage users (ls, new, rm, enable, disable)"},
+		{"admin config", "Manage server registration settings"},
+		{"export", "Export entities to a JSON snapshot"},
+		{"import", "Import entities from a JSON snapshot"},
+		{"upgrade-database", "Port an older database into a new file"},
+		{"admin role", "Manage roles (ls, new, get, update, rm)"},
+		{"admin workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
+		{"admin team", "Manage teams (ls, new, update, rm)"},
+		{"admin agent", "Manage agents (ls, new, update, rm, run)"},
+		{"admin user", "Manage users (ls, new, rm, enable, disable)"},
 	}
 	b.WriteString("\n" + h + "ADMIN" + r + "\n")
 	printCommandUsageRows(&b, adminRows, 10)
-	shortcutRows := [][2]string{
-		{"tk", "Show this usage guide"},
-		{"tk add", "Create a ticket (alias: tk ticket add)"},
-		{"tk act", "Create/manage action tickets (alias: tk action)"},
-		{"tk bug", "Create a bug (alias: tk ticket add -type bug)"},
-		{"tk epic", "Create an epic (alias: tk ticket add -type epic)"},
-		{"tk idea new", "Capture a requirement"},
-		{"tk idea ls", "List requirements"},
-	}
-	b.WriteString("\n" + h + "SHORTCUTS" + r + "\n")
-	printCommandUsageRows(&b, shortcutRows, 10)
 	systemRows := [][2]string{
 		{"status", "Show connection and authentication status"},
 		{"summary", "Daily starting-point overview"},
@@ -531,16 +533,11 @@ func renderRootUsage() string {
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
 		{"register", "Create a user account on the server"},
-		{"config", "Manage server registration settings"},
 		{"initdb", "Initialize the database"},
-		{"export", "Export entities to a JSON snapshot"},
-		{"import", "Import entities from a JSON snapshot"},
-		{"upgrade-database", "Port an older database into a new file"},
 		{"version", "Print the current version"},
 		{"upgrade", "Check for a newer version"},
 		{"skill", "Print the embedded SKILL.md template"},
 		{"docker-compose", "Print the Docker Compose deployment template"},
-		{"help", "Show command help"},
 	}
 	b.WriteString("\n" + h + "SYSTEM" + r + "\n")
 	printCommandUsageRows(&b, systemRows, 10)
@@ -677,7 +674,17 @@ Commands:
                                           Remove an agent
   agents -id <id>                         List team agents`
 
-const configUsage = `Usage: tk config <command> [flags]
+const adminUsage = `Usage: tk admin <command> [flags]
+
+Commands:
+  config                                 Manage server registration settings
+  role                                   Manage roles
+  workflow                               Manage workflows
+  team                                   Manage teams
+  agent                                  Manage agents
+  user                                   Manage users`
+
+const configUsage = `Usage: tk admin config <command> [flags]
 
 Commands:
   ls, list                              List all config values

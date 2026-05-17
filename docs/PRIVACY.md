@@ -110,7 +110,7 @@ Under GDPR (and similar legislation), users have the following rights:
 |-------|----------------|
 | **Access** (Art. 15) | Request a copy of your data from the server administrator |
 | **Rectification** (Art. 16) | Update your profile via the web UI or CLI |
-| **Erasure** (Art. 17) | Ask the administrator to run `tk user rm -username <name>` — this deletes your account, sessions, memberships, time entries, and messages, and anonymises audit trail references |
+| **Erasure** (Art. 17) | Ask the administrator to run `tk admin user rm -username <name>` — this deletes your account, sessions, memberships, time entries, and messages, and anonymises audit trail references |
 | **Portability** (Art. 20) | The administrator can run `tk export -o account-data.json` to produce a JSON snapshot; request the subset relating to your account |
 | **Restriction / Objection** (Arts. 18, 21) | Contact the server administrator |
 

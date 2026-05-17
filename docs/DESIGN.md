@@ -20,13 +20,13 @@ The system has four interfaces:
 The repository also contains a static `VERSION` file. `make build` increments the patch version before compiling the binary and copies that value into the embedded build asset used by `tk version`.
 
 `tk` now splits state between a global home and per-project routing. `$TICKET_HOME`
-(default `~/.ticket`) stores the shared local database, global config, the
-named remote registry, and remote credentials. `tk` walks up from the current
-working directory looking for `.ticket/config.json` first, then `.git`, and
-uses that root for repo-local routing. The steady-state model is:
+(default `~/.ticket`) stores the shared local database, TUI preferences, and
+remote credentials. `tk` walks up from the current working directory looking for
+`.ticket/config.json` first, then `.git`, and uses that root for repo-local
+project routing. The steady-state model is:
 
-- global `~/.ticket/config.json` stores `default_remote` plus `remotes[]`
-- repo-local `.ticket/config.json` stores `remote` plus `project_id`
+- global `~/.ticket/preferences.json` stores TUI-only state
+- repo-local `.ticket/config.json` stores `project_id`
 - `~/.ticket/credentials.json` stores credentials per canonical remote URL
 
 In remote mode the CLI also sends the nearest git `origin` URL from the current
@@ -430,11 +430,11 @@ Representative commands:
 ```bash
 tk onboard
 tk version
-tk user new -username alice -password secret
-tk user ls
-tk user rm -username alice
-tk user enable -username alice
-tk user disable -username alice
+tk admin user new -username alice -password secret
+tk admin user ls
+tk admin user rm -username alice
+tk admin user enable -username alice
+tk admin user disable -username alice
 
 # Agent Commands
 tk agent request [flags]
@@ -482,15 +482,17 @@ If `-nocolor` is set, the same output must be printed without ANSI colors.
 
 `tk count` must query the server and print aggregate counts for users and work item types. Without a project filter it must also print the project count. With `-project_id <id>` it must scope work item counts to that project.
 
-The CLI must resolve credentials from the selected remote's stored session and username first, then `-username` and `-password`, and finally default to OS `whoami` and `password` when a command permits defaults.
+The CLI must resolve credentials from a stored session first, then `-username` and `-password`, then environment variables, and finally prompt interactively when required.
 
-The CLI must resolve remote server selection from the repo-local `remote` binding first, then the global `default_remote`, with legacy raw `location` values supported only for compatibility.
+The CLI must resolve remote server selection from `TICKET_URL`, with repo-local `.ticket/config.json` used only for project routing.
 
-`tk config` must support:
+`tk admin config` must support:
 
-- `tk config ls|list` to print local config keys and values
-- `tk config rm|delete <key>` to clear a local config key
-- supported removable keys: `location`, `username`, `project_id`, `current_epic_id`
+- `tk admin config ls|list` to print server-backed registration values
+- `tk admin config get <key>` to print a single registration value
+- `tk admin config registration-enable|registration-disable`
+- `tk admin config registration-autoapprove-enable|registration-autoapprove-disable`
+- `tk admin config rm` and `tk admin config set` are removed; runtime client configuration comes from environment variables and stored credentials
 
 The CLI must expose `tk version`, which prints the semantic version embedded into the binary at build time.
 
@@ -506,9 +508,9 @@ When `tk server` starts, it should print the same colored ASCII-art `TICKET` ban
 
 Below that banner, `tk server` must print the embedded version and the resolved task database path.
 
-The CLI stores repo-local routing in `.ticket/config.json`, global defaults in
-`$TICKET_HOME/config.json`, and remote session credentials in
-`$TICKET_HOME/credentials.json`.
+The CLI stores repo-local project routing in `.ticket/config.json`, TUI
+preferences in `$TICKET_HOME/preferences.json`, and remote session credentials
+in `$TICKET_HOME/credentials.json`.
 
 `tk login` must:
 

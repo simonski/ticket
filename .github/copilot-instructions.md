@@ -56,9 +56,9 @@ make validate-openapi     # structural OpenAPI check
   - Both align through `libticket.Service` and contract tests in `libticket/contract_test.go`.
 
 - Configuration is split between global and repo-local state:
-  - Global `$TICKET_HOME` (default `~/.ticket`) stores DB, remotes registry, and credentials.
-  - Repo-local `.ticket/config.json` stores active remote + project binding.
-  - CLI resolves mode/binding by walking up from CWD.
+  - Global `$TICKET_HOME` (default `~/.ticket`) stores the SQLite DB, TUI preferences, and credentials.
+  - Repo-local `.ticket/config.json` stores project binding for the current working tree.
+  - Server selection comes from `TICKET_URL`; auth is reused from `credentials.json` or environment variables.
 
 - Lifecycle/workflow model is central:
   - Projects bind to workflows (ordered stages + stage-role ordering + optional DAG transitions).

@@ -210,20 +210,20 @@ tk project ls
 ### Check account status
 
 ```bash
-tk user ls | grep "<username>"
+tk admin user ls | grep "<username>"
 # Confirm the user exists and whether it needs re-enabling.
 ```
 
 ### Re-enable a disabled account
 
 ```bash
-tk user enable -username <username>
+tk admin user enable -username <username>
 ```
 
 ### Reset a password
 
 ```bash
-tk user reset-password -username <username> -password <new-password>
+tk admin user reset-password -username <username> -password <new-password>
 ```
 
 ### Clear IP rate limit (if triggered by brute-force protection)

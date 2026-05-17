@@ -17,14 +17,14 @@ tk role create -title "Scrum Master"
 ## Import the workflow
 
 ```bash
-tk workflow import -f docs/workflows/classic_scrum_workflow.json
-tk workflow list
+tk admin workflow import -f docs/workflows/classic_scrum_workflow.json
+tk admin workflow list
 ```
 
 ## Attach it to your project
 
 ```bash
 export TICKET_PROJECT=TODO
-WF_ID=$(tk workflow list -json | jq -r '.[] | select(.name=="Classic Scrum Delivery") | .workflow_id')
+WF_ID=$(tk admin workflow list -json | jq -r '.[] | select(.name=="Classic Scrum Delivery") | .workflow_id')
 tk project workflow "$WF_ID"
 ```

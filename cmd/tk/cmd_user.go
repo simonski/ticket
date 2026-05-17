@@ -395,10 +395,6 @@ func runWhoami(args []string) error {
 	if err != nil {
 		return err
 	}
-	resolved, err := config.ResolveURL()
-	if err != nil {
-		return err
-	}
 	svc, err := resolveService(cfg)
 	if err != nil {
 		return err
@@ -426,12 +422,6 @@ func runWhoami(args []string) error {
 	} else {
 		fmt.Printf("  username : %s\n", username)
 	}
-
-	// Connection info
-	fmt.Println()
-	fmt.Println("CONNECTION")
-	fmt.Printf("  mode     : server\n")
-	fmt.Printf("  server   : %s\n", resolved.ServerURL)
 
 	// Projects with user role
 	fmt.Println()

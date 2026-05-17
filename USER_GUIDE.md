@@ -48,12 +48,7 @@ tk initdb
 ```
 
 If `-f` is omitted, `tk initdb` creates or ensures the SQLite database at
-`$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`) and registers that
-path as the global `local` remote.
-
-If you run `tk initdb .`, Ticket creates `./.ticket/ticket.db`, registers a
-named local remote for that path, and writes repo-local `.ticket/config.json`
-so the current repo uses that database from then on.
+`$TICKET_HOME/ticket.db` (default `~/.ticket/ticket.db`).
 
 `tk initdb` creates:
 
@@ -88,9 +83,9 @@ export TICKET_PASSWORD=secret12
 export TICKET_PROJECT=public
 ```
 
-Remote mode uses OpenAPI/HTTP when `TICKET_URL`, `TICKET_USERNAME`, and
-`TICKET_PASSWORD` are set. Local mode is used when those credentials are absent
-and `~/.ticket/ticket.db` exists.
+Remote commands use OpenAPI/HTTP when `TICKET_URL` is set. Authentication comes
+from a stored session in `$TICKET_HOME/credentials.json`, from
+`TICKET_USERNAME` / `TICKET_PASSWORD`, or from `TICKET_TOKEN`.
 
 `TICKET_PROJECT` may be a numeric id, a project prefix, or the aliases
 `public` / `private`. CLI flags such as `-project_id` override `TICKET_PROJECT`.
@@ -222,7 +217,7 @@ minimum `1`, maximum `30`).
 As an admin create users:
 
 ```bash
-tk user create -username XXXX -email user@example.com
+tk admin user create -username XXXX -email user@example.com
 created user xxxxx
 password: generated-password
 ```
@@ -245,10 +240,10 @@ per-plan onboarding policy from the Projects view. Each plan can now control:
 As an admin enable/disable users:
 
 ```bash
-tk user enable -username XXXX
-tk user disable -username XXXX
-tk user ls|list
-tk user rm|delete -username XXXX
+tk admin user enable -username XXXX
+tk admin user disable -username XXXX
+tk admin user ls|list
+tk admin user rm|delete -username XXXX
 ```
 
 These commands are admin-only. If a logged-in non-admin user runs them, the server returns `403` and the CLI prints `user is not an admin`.
@@ -332,8 +327,8 @@ tk status
 Inspect server-backed registration settings:
 
 ```bash
-tk config ls
-tk config get registration_enabled
+tk admin config ls
+tk admin config get registration_enabled
 ```
 
 `tk status` prints `TICKET_URL`, `TICKET_USERNAME`, and whether a password or
@@ -363,7 +358,7 @@ Log out:
 tk logout
 ```
 
-`ticket logout` removes the matching entry from `$TICKET_HOME/credentials.json`.
+`tk logout` removes the matching entry from `$TICKET_HOME/credentials.json`.
 
 The web app uses the same account system. Once logged in, your session is shared across normal browser workflows.
 
@@ -628,6 +623,9 @@ New tickets default to not-ready. Mark a ticket as ready before it can be picked
 ```bash
 tk undraft CUS-42      # mark ready for work
 tk draft CUS-42        # mark as draft (not ready)
+
+New tickets start in draft by default. Use `tk undraft <id>` when the ticket is
+ready to be picked up for work.
 ```
 
 Only ready tickets are eligible for automatic assignment. You can still explicitly request a specific not-ready ticket by ID.
@@ -997,16 +995,16 @@ tk version
 
 tk register -username <name> -email <email> [-password <password>]
 tk status
-tk config ls
-tk config rm server
+tk admin config ls
+tk admin config registration-disable
 tk logout
 
-tk user create -username <name> [-email <email>] [-password <password>]
-tk user ls
-tk user delete -username <name>
-tk user enable -username <name>
-tk user disable -username <name>
-tk user reset-password -username <name> [-password <password>]
+tk admin user create -username <name> [-email <email>] [-password <password>]
+tk admin user ls
+tk admin user delete -username <name>
+tk admin user enable -username <name>
+tk admin user disable -username <name>
+tk admin user reset-password -username <name> [-password <password>]
 # Agent Commands
 tk agent request [flags]
 tk agent run -id <uuid>                     # remote from repo/global config; password from AGENT_PASSWORD env or prompt
@@ -1083,6 +1081,7 @@ tk attach -id <key-or-id> <parent-key-or-id>
 tk detach -id <key-or-id>
 tk undraft <key-or-id>
 tk draft <key-or-id>
+tk merge <target-key-or-id> <source-key-or-id> [<source-key-or-id>...]
 tk complete <key-or-id>
 tk reopen <key-or-id>
 tk archive -id <key-or-id>
@@ -1153,19 +1152,19 @@ with `-commit` it updates title/description/type/labels from the file.
 `tk reject -id <key-or-id>` sends a ticket back to the first stage in its current
 workflow, sets the state to `idle`, and marks it as draft.
 
-tk workflow list
-tk workflow create -name <name> [-d <description>]
-tk workflow get -id <id>
-tk workflow delete -id <id>
-tk workflow add-stage -id <workflow-id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-order <n>]
-tk workflow stage-update -stage-id <id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-ac <criteria>]
-tk workflow remove-stage -stage-id <id>
-tk workflow reorder-stages -id <workflow-id> <stage_id,stage_id,...>
-tk workflow export -id <id> [-o <file>]
-tk workflow set -ticket <ticket-id> -workflow <workflow-id>
-tk workflow stage-role-add -workflow_id <id> -stage_id <id> -role_id <id>
-tk workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>
-tk workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <id,id,...>
+tk admin workflow list
+tk admin workflow create -name <name> [-d <description>]
+tk admin workflow get -id <id>
+tk admin workflow delete -id <id>
+tk admin workflow add-stage -id <workflow-id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-order <n>]
+tk admin workflow stage-update -stage-id <id> -name <name> [-wow <text>] [-dor <text>] [-dod <text>] [-d <desc>] [-ac <criteria>]
+tk admin workflow remove-stage -stage-id <id>
+tk admin workflow reorder-stages -id <workflow-id> <stage_id,stage_id,...>
+tk admin workflow export -id <id> [-o <file>]
+tk admin workflow set -ticket <ticket-id> -workflow <workflow-id>
+tk admin workflow stage-role-add -workflow_id <id> -stage_id <id> -role_id <id>
+tk admin workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>
+tk admin workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <id,id,...>
 
 tk work-item list -id <ticket-id> [-status <active|success|fail|stopped>] [-assignee_type <human|agent>] [-limit <n>]
 tk work-item queue [-project_id <id>] [-id <ticket-id>] [-dry-run] [-explain] [-strategy <priority|order|aging>] [-preview]
@@ -1200,14 +1199,14 @@ it can be used remotely
 ### 1. an admin user
 
 ```bash
-tk user create -username admin -email admin@example.com
+tk admin user create -username admin -email admin@example.com
 password: xxxx-xxxx-xxxx-xxxxx
 ```
 
 ### 2. a human user to interact with
 
 ```bash
-tk user create -username my-username -email me@example.com
+tk admin user create -username my-username -email me@example.com
 password: xxxx-xxxx-xxxx-xxxxx
 ```
 

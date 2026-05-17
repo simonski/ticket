@@ -56,6 +56,9 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 		if ticket.ID == "" {
 			t.Fatalf("CreateTicket() = %#v", ticket)
 		}
+		if !ticket.Draft {
+			t.Fatalf("CreateTicket().Draft = %v, want true", ticket.Draft)
+		}
 
 		if _, err := svc.ReadyTicket(context.Background(), ticket.ID, ""); err != nil {
 			t.Fatalf("ReadyTicket() error = %v", err)

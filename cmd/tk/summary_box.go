@@ -121,21 +121,12 @@ func buildProjectSummaryCoreLines(svc libticket.Service, project store.Project, 
 }
 
 func buildProjectSummaryLines(svc libticket.Service, project store.Project, statusUnicode bool) []statusLine {
-	ticketHome, _ := config.Home()
-	resolved, _ := config.ResolveURL()
 	cfgPath, _ := config.Path()
-	envHome := envValue("TICKET_HOME")
 
 	lines := buildProjectSummaryCoreLines(svc, project, statusUnicode, true)
 
 	lines = append(lines, statusLine{})
-	lines = append(lines, statusLine{key: "database", value: resolved.DBPath})
 	lines = append(lines, statusLine{key: "config", value: cfgPath})
-	if envHome != "" {
-		lines = append(lines, statusLine{key: "TICKET_HOME", value: envHome})
-	} else {
-		lines = append(lines, statusLine{key: "TICKET_HOME", value: ticketHome + "  (auto-discovered)"})
-	}
 
 	return lines
 }

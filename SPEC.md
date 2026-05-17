@@ -29,7 +29,7 @@ work. It is delivered as a single Go binary that provides:
 The system operates as a client/server architecture:
 
 - **Server** — owns the SQLite database and exposes HTTP API + web UI
-- **Client** — CLI/TUI connect to the URL resolved from a named remote in `$TICKET_HOME/config.json`; repo-local `.ticket/config.json` stores the selected `remote` name and `project_id`
+- **Client** — CLI/TUI connect to the URL from `TICKET_URL`; repo-local `.ticket/config.json` stores the selected `project_id`, and `$TICKET_HOME/credentials.json` stores reusable session credentials
 
 ---
 
@@ -167,7 +167,7 @@ The primary work artifact.
 | estimate_complete | TEXT | Default empty |
 | health_score | INTEGER | Default 0 |
 | assignee | TEXT | Default empty |
-| draft | INTEGER | Boolean, default 0. When true, ticket is not ready for work. |
+| draft | INTEGER | Boolean, default 1. New tickets start as draft until explicitly readied for work. |
 | complete | INTEGER | Boolean, default 0. When true, ticket is finished (stage=done). |
 | archived | INTEGER | Boolean, default 0 |
 | role_id | INTEGER | FK → roles. Current active role within the stage. |
@@ -619,20 +619,17 @@ WebSocket endpoint for streaming LLM chat sessions. Configurable via:
 ### 11.2 Config Resolution
 
 1. Resolve `$TICKET_HOME` from the environment or default it to `~/.ticket`
-2. Load global config from `$TICKET_HOME/config.json`
+2. Read `TICKET_URL` to determine the target server
 3. Walk up from the current directory looking for the nearest `.ticket/config.json`
-4. Overlay repo-local routing from that file when present
-5. If a repo-local `remote` is set, resolve it from the global `remotes[]` registry
-6. Otherwise, if a global `default_remote` is set, resolve that
-7. Legacy raw `location` values are accepted only as a compatibility fallback
-8. If the resolved remote URL is `http://...` or `https://...` -> connect to that server
-9. If the resolved remote URL is `file://...` or a bare path -> treat it as compatibility-only legacy config
-10. If no remote can be resolved -> CLI is unconfigured until a server remote is selected
+4. Overlay repo-local `project_id` routing from that file when present
+5. Reuse any matching session from `$TICKET_HOME/credentials.json`
+6. Fall back to `TICKET_USERNAME` / `TICKET_PASSWORD` or `TICKET_TOKEN` when no stored session exists
+7. When no explicit project is supplied, send the nearest git remote URL so the server can resolve project context
 
 ### 11.3 Config Files
 
-- `.ticket/config.json` — repo-local routing (`remote`, `project_id`, local project state)
-- `$TICKET_HOME/config.json` — global defaults (`default_remote`, `remotes[]`, TUI state)
+- `.ticket/config.json` — repo-local routing (`project_id`)
+- `$TICKET_HOME/preferences.json` — TUI state only
 - `$TICKET_HOME/credentials.json` — remote auth tokens keyed by canonical remote URL
 - `$TICKET_HOME/ticket.db` — default SQLite database used by `tk server`
 
@@ -647,16 +644,11 @@ The binary is named `ticket` with the alias `tk`.
 | Command | Description |
 |---------|-------------|
 | `tk initdb` | Create or repair the shared local database and bootstrap the default admin/project |
-| `tk remote add NAME URL` | Register a named remote |
-| `tk remote ls` | List configured remotes |
-| `tk remote remove NAME` | Remove a named remote |
 | `tk server` | Start HTTP server and web UI on :8080 |
 | `tk version` | Show version |
 | `tk upgrade` | Check for newer version from GitHub |
 | `tk status` | Show connection status (mode, database, config) |
 | `tk summary` | Show project summary, active tickets, recent activity |
-| `tk export -o file.json` | Export all data to JSON snapshot |
-| `tk import -i file.json` | Restore from snapshot |
 | `tk onboard` | Print agent onboarding instructions |
 | `tk gui` / `-g` | Launch interactive TUI |
 | `tk doctor` | Run diagnostic checks |
@@ -669,7 +661,10 @@ The binary is named `ticket` with the alias `tk`.
 | `tk login -username NAME -password PASS` | Authenticate |
 | `tk logout` | Clear session |
 | `tk whoami` | Show current user |
-| `tk config` | Manage client config |
+| `tk admin config` | Manage server registration settings |
+| `tk export -o file.json` | Export all data to JSON snapshot |
+| `tk import -i file.json` | Restore from snapshot |
+| `tk upgrade-database -o file.db` | Port an older database into a fresh file |
 
 ### 12.3 Projects
 
@@ -700,6 +695,7 @@ The binary is named `ticket` with the alias `tk`.
 | `tk update -id <id> -title "..." -d "..."` | Update ticket |
 | `tk delete -id <id>` | Delete ticket |
 | `tk clone <id>` | Duplicate ticket and children |
+| `tk merge <target-id> <source-id>...` | Merge draft tickets into the first ticket and archive the rest |
 
 ### 12.5 Lifecycle
 
@@ -769,11 +765,11 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk workflow list` | List workflows |
-| `tk workflow get -id <id>` | View workflow stages |
-| `tk workflow create -name "..." -description "..."` | Create workflow |
-| `tk workflow delete -id <id>` | Delete workflow |
-| `tk workflow add-stage <workflow-id> <stage-name>` | Add stage |
+| `tk admin workflow list` | List workflows |
+| `tk admin workflow get -id <id>` | View workflow stages |
+| `tk admin workflow create -name "..." -description "..."` | Create workflow |
+| `tk admin workflow delete -id <id>` | Delete workflow |
+| `tk admin workflow add-stage <workflow-id> <stage-name>` | Add stage |
 
 ### 12.13 Requirements and Decisions
 
@@ -793,36 +789,36 @@ The binary is named `ticket` with the alias `tk`.
 
 | Command | Description |
 |---------|-------------|
-| `tk role list` / `tk role ls` | List all roles |
-| `tk role create -title "..." -description "..." -ac "..."` | Create role |
-| `tk role update -id <id> -title "..."` | Update role |
-| `tk role delete -id <id>` / `tk role rm -id <id>` | Delete role |
-| `tk workflow stage-role-add -workflow_id <id> -stage_id <id> -role_id <id>` | Assign role to stage |
-| `tk workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>` | Remove role from stage |
-| `tk workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <ids>` | Reorder roles in stage |
+| `tk admin role list` / `tk admin role ls` | List all roles |
+| `tk admin role create -title "..." -description "..." -ac "..."` | Create role |
+| `tk admin role update -id <id> -title "..."` | Update role |
+| `tk admin role delete -id <id>` / `tk admin role rm -id <id>` | Delete role |
+| `tk admin workflow stage-role-add -workflow_id <id> -stage_id <id> -role_id <id>` | Assign role to stage |
+| `tk admin workflow stage-role-rm -workflow_id <id> -stage_id <id> -role_id <id>` | Remove role from stage |
+| `tk admin workflow stage-role-order -workflow_id <id> -stage_id <id> -roles <ids>` | Reorder roles in stage |
 
 ### 12.15 Teams
 
 | Command | Description |
 |---------|-------------|
-| `tk team list` | List teams |
-| `tk team create -name "..."` | Create team |
-| `tk team get -id <id>` | View team |
-| `tk team update -id <id> -name "..."` | Update team |
-| `tk team delete -id <id>` | Delete team |
-| `tk team add-member <team-id> <user-id>` | Add member |
-| `tk team remove-member <team-id> <user-id>` | Remove member |
+| `tk admin team list` | List teams |
+| `tk admin team create -name "..."` | Create team |
+| `tk admin team get -id <id>` | View team |
+| `tk admin team update -id <id> -name "..."` | Update team |
+| `tk admin team delete -id <id>` | Delete team |
+| `tk admin team add-member <team-id> <user-id>` | Add member |
+| `tk admin team remove-member <team-id> <user-id>` | Remove member |
 
 ### 12.16 Users (Admin)
 
 | Command | Description |
 |---------|-------------|
-| `tk user list` | List users |
-| `tk user create -username <name> -password <pass>` | Create user |
-| `tk user enable <username>` | Enable user |
-| `tk user disable <username>` | Disable user |
-| `tk user reset-password <username>` | Change password |
-| `tk user delete <username>` | Delete user |
+| `tk admin user list` | List users |
+| `tk admin user create -username <name> -password <pass>` | Create user |
+| `tk admin user enable <username>` | Enable user |
+| `tk admin user disable <username>` | Disable user |
+| `tk admin user reset-password <username>` | Change password |
+| `tk admin user delete <username>` | Delete user |
 
 ### 12.17 Agents
 

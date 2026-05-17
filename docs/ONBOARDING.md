@@ -151,11 +151,11 @@ connect roles to specific stages within an Workflow.
 
 ```bash
 # Create an Workflow definition
-tk workflow create -name "Agile" -d "Standard agile process"
+tk admin workflow create -name "Agile" -d "Standard agile process"
 
 # Add stages to the Workflow
-tk workflow add-stage -id 1 -name develop
-tk workflow add-stage -id 1 -name test
+tk admin workflow add-stage -id 1 -name develop
+tk admin workflow add-stage -id 1 -name test
 
 # Create a role
 tk role create -title Engineer -d "Software engineer"
@@ -211,7 +211,7 @@ threshold will fail both locally (`make test-go-cover`) and in CI.
 | `make build` bumped the version and you wanted a stable dev binary | Use `make build-dev` for development builds |
 | Playwright tests fail because Chromium is missing | Run `make setup` once, or `make setup-playwright` if only the browser install is missing |
 | `tk` command not found | Run `make build-dev` and add `./bin` to your PATH, or copy `./bin/tk` to a directory in your PATH |
-| `tk` is talking to the wrong backend | Run `tk status` first. The CLI resolves the repo-local `remote` name through `$TICKET_HOME/config.json`. Legacy raw `location` values are compatibility-only. |
+| `tk` is talking to the wrong backend | Run `tk status` first. The CLI uses `TICKET_URL` plus stored credentials or environment variables; repo-local `.ticket/config.json` only provides project binding. |
 | API or lifecycle behavior changed but the docs/spec now disagree | Update `SPEC.md`, `openapi.yaml`, and the relevant guide in the same PR; if you are using the repo Workflow commands, run the `spec` workflow |
 | `.ticket/config.json` blocks a rebase or pull | If you do not need your local Ticket routing state, restore that file before rebasing; otherwise copy it aside first and restore it after the rebase |
 | `make test` times out | Playwright starts its own local static server automatically. If it still fails, rerun `make test-playwright` to isolate the browser step and check the printed startup error |

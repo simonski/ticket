@@ -20,7 +20,7 @@ func runConfig(args []string) error {
 	switch args[0] {
 	case "registration-enable":
 		if len(args) != 1 {
-			return errors.New("usage: tk config registration-enable")
+			return errors.New("usage: tk admin config registration-enable")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -33,7 +33,7 @@ func runConfig(args []string) error {
 		return nil
 	case "registration-disable":
 		if len(args) != 1 {
-			return errors.New("usage: tk config registration-disable")
+			return errors.New("usage: tk admin config registration-disable")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -46,7 +46,7 @@ func runConfig(args []string) error {
 		return nil
 	case "registration-autoapprove-enable":
 		if len(args) != 1 {
-			return errors.New("usage: tk config registration-autoapprove-enable")
+			return errors.New("usage: tk admin config registration-autoapprove-enable")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -59,7 +59,7 @@ func runConfig(args []string) error {
 		return nil
 	case "registration-autoapprove-disable":
 		if len(args) != 1 {
-			return errors.New("usage: tk config registration-autoapprove-disable")
+			return errors.New("usage: tk admin config registration-autoapprove-disable")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -71,10 +71,10 @@ func runConfig(args []string) error {
 		fmt.Println("registration_auto_approve=false")
 		return nil
 	case "set":
-		return errors.New("tk config set has been removed; use TICKET_URL, TICKET_PROJECT, and tk login instead")
+		return errors.New("tk admin config set has been removed; use TICKET_URL, TICKET_PROJECT, and tk login instead")
 	case "get":
 		if len(args) != 2 {
-			return errors.New("usage: tk config get <key>")
+			return errors.New("usage: tk admin config get <key>")
 		}
 		switch args[1] {
 		case "registration_enabled":
@@ -104,7 +104,7 @@ func runConfig(args []string) error {
 		}
 	case "ls", "list":
 		if len(args) != 1 {
-			return errors.New("usage: tk config ls")
+			return errors.New("usage: tk admin config ls")
 		}
 		svc, err := resolveService(cfg)
 		if err != nil {
@@ -120,9 +120,33 @@ func runConfig(args []string) error {
 		})
 		return nil
 	case "rm", "delete":
-		return errors.New("tk config rm has been removed; unset the relevant environment variable instead")
+		return errors.New("tk admin config rm has been removed; unset the relevant environment variable instead")
 	default:
 		fmt.Println(configUsage)
 		return fmt.Errorf("unknown config action %q", args[0])
+	}
+}
+
+func runAdmin(args []string) error {
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(adminUsage)
+		return nil
+	}
+	switch args[0] {
+	case "config":
+		return runConfig(args[1:])
+	case "role":
+		return runRole(args[1:])
+	case "workflow":
+		return runWorkflow(args[1:])
+	case "team":
+		return runTeam(args[1:])
+	case "agent":
+		return runAgent(args[1:])
+	case "user":
+		return runUser(args[1:])
+	default:
+		fmt.Println(adminUsage)
+		return fmt.Errorf("unknown admin command %q", args[0])
 	}
 }
