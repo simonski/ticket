@@ -116,7 +116,7 @@ setup-node:
 	npm ci
 
 setup-playwright:
-	npx playwright install chromium
+	@if ! npx playwright install --list 2>/dev/null | grep -q '/chromium-'; then npx playwright install chromium; fi
 
 bump-version:
 	@if [ ! -f "$(VERSION_FILE)" ]; then \

@@ -62,11 +62,6 @@ func setTestLocation(t *testing.T, location string) {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		t.Fatalf("MkdirAll(TICKET_HOME) error = %v", err)
 	}
-	origDir, _ := os.Getwd()
-	if err := os.Chdir(home); err != nil {
-		t.Fatalf("Chdir(TICKET_HOME) error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origDir) })
 	if location == "" {
 		t.Setenv("TICKET_URL", "")
 		return
@@ -614,16 +609,7 @@ func TestRenderCommandHelpNoLongerIncludesInit(t *testing.T) {
 
 func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 	tempDir := t.TempDir()
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if chdirErr := os.Chdir(tempDir); chdirErr != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", chdirErr)
-	}
-	defer func() {
-		_ = os.Chdir(originalWD)
-	}()
+	setTestWorkingDir(t, tempDir)
 
 	output := captureStdout(t, func() {
 		if err := runOnboard(nil); err != nil {
@@ -640,16 +626,7 @@ func TestRunOnboardPrintsEmbeddedAgentsTemplateToStdout(t *testing.T) {
 
 func TestRunSkillPrintsEmbeddedSkillTemplateToStdout(t *testing.T) {
 	tempDir := t.TempDir()
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if chdirErr := os.Chdir(tempDir); chdirErr != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", chdirErr)
-	}
-	defer func() {
-		_ = os.Chdir(originalWD)
-	}()
+	setTestWorkingDir(t, tempDir)
 
 	output := captureStdout(t, func() {
 		if err := runSkill(nil); err != nil {
@@ -1275,20 +1252,13 @@ func TestExtractDBOverridePreservesCreateFileFlag(t *testing.T) {
 
 func TestRunServerWithExplicitDBBypassesTicketHomeCheck(t *testing.T) {
 	tempDir := t.TempDir()
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", err)
-	}
-	defer func() { _ = os.Chdir(originalWD) }()
+	setTestWorkingDir(t, tempDir)
 
 	// Ensure no implicit workspace/env context is available.
 	t.Setenv("TICKET_HOME", "")
 	dbPath := filepath.Join(tempDir, "missing", "ticket.db")
 
-	err = run([]string{"server", "-f", dbPath})
+	err := run([]string{"server", "-f", dbPath})
 	if err == nil {
 		t.Fatal("run(server -f) error = nil, want failure opening explicit DB path")
 	}
@@ -1313,14 +1283,7 @@ func TestRunWhoamiWithGlobalRemoteConfigDoesNotRequireProjectBinding(t *testing.
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", err)
-	}
-	defer func() { _ = os.Chdir(originalWD) }()
+	setTestWorkingDir(t, tempDir)
 
 	t.Setenv("TICKET_HOME", t.TempDir())
 	setTestLocation(t, ts.URL)
@@ -1356,14 +1319,7 @@ func TestRunListWithoutProjectBindingDoesNotCreateLocalConfigDirs(t *testing.T) 
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	originalWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Chdir(tempDir) error = %v", err)
-	}
-	defer func() { _ = os.Chdir(originalWD) }()
+	setTestWorkingDir(t, tempDir)
 
 	t.Setenv("TICKET_HOME", t.TempDir())
 	setTestLocation(t, ts.URL)
