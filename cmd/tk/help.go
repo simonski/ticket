@@ -67,7 +67,7 @@ var helpIndex = map[string]commandHelp{
 	"login": {
 		usage:   "tk login [-username <name>] [-password <password> | -token <token>] [-url <server-url>]",
 		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password` or `-token`, then prompts.", "If prompting is needed, discovered values are used as editable defaults. Bearer tokens are preferred when you already have one."},
-		example: "tk login -token tk_abc123 -url https://ticket.localhost",
+		example: "tk login -token tk_abc123 -url https://ticket.simonski.com",
 	},
 	"register": {
 		usage:   "tk register -username <name> -email <address> [-password <password>]",

@@ -308,7 +308,7 @@ and tells the user to wait for approval or check email for next steps.
 Set environment credentials for authenticated CLI use:
 
 ```bash
-export TICKET_URL=https://ticket.localhost
+export TICKET_URL=https://ticket.simonski.com
 export TICKET_USERNAME=name
 export TICKET_PASSWORD='*******'
 ```

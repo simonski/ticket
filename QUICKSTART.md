@@ -1,5 +1,39 @@
 # Quickstart
 
+Makefile
+
+## assemble the binary into ~/go/bin
+
+```shell
+make install
+```
+
+## build docker
+
+```shell
+make docker
+```
+
+## publish to ghcr.io
+
+```shell
+make publish
+```
+
+## publish to homebrew (simonski/tap)
+
+```shell
+make homebrew
+```
+
+## deploy to ticket.exe.xyz 
+
+Note: not necessary as watchtower is checking every 30s
+
+```shell
+make deploy
+```
+
 ## Install
 
 ```bash
@@ -115,7 +149,7 @@ reading live ticket state, logging time, creating bugs, and recording decisions.
 | Variable | Purpose |
 |----------|---------|
 | `TICKET_HOME` | Override the global Ticket home directory (default `~/.ticket`) |
-| `TICKET_URL` | Base URL for the running Ticket server (defaults to `https://ticket.localhost` when unset) |
+| `TICKET_URL` | Base URL for the running Ticket server (defaults to `https://ticket.simonski.com` when unset) |
 | `TICKET_USERNAME` | Username for API authentication |
 | `TICKET_PASSWORD` | Password for API authentication |
 | `TICKET_TIMEOUT` | Remote HTTP timeout in seconds for CLI API calls (default `5`, clamped to `1..30`) |

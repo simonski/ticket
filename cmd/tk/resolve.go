@@ -16,7 +16,7 @@ import (
 	"github.com/simonski/ticket/libticket"
 )
 
-const defaultTicketURL = "https://ticket.localhost"
+const defaultTicketURL = "https://ticket.simonski.com"
 
 var runtimeProjectOverride string
 
@@ -222,7 +222,7 @@ func configuredServiceLocation(cfg config.Config) string {
 	if isTestBinary() {
 		return strings.TrimSpace(cfg.Location)
 	}
-	return ""
+	return defaultTicketURL
 }
 
 func missingRemoteAuthError(serverURL string) error {

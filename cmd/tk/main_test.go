@@ -1444,9 +1444,16 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-func TestDefaultTicketURLUsesLocalhostHTTPS(t *testing.T) {
-	if got, want := defaultTicketURL, "https://ticket.localhost"; got != want {
+func TestDefaultTicketURLUsesSimonskiDotComHTTPS(t *testing.T) {
+	if got, want := defaultTicketURL, "https://ticket.simonski.com"; got != want {
 		t.Fatalf("defaultTicketURL = %q, want %q", got, want)
+	}
+}
+
+func TestConfiguredServiceLocationUsesDefaultRemoteWhenNotTestBinary(t *testing.T) {
+	setBinaryNameForTest(t, "tk")
+	if got, want := configuredServiceLocation(config.Config{}), defaultTicketURL; got != want {
+		t.Fatalf("configuredServiceLocation() = %q, want %q", got, want)
 	}
 }
 
