@@ -47,7 +47,7 @@ Run a single test: `go test ./internal/store/ -run TestTicketLifecycle`
 
 Coverage thresholds enforced: cmd/tk 55%, libticket 65%, internal/client 55%, internal/store 69%, internal/server 63%, internal/config 70%.
 
-Docker: `make docker-build`, `make docker-up`, `make docker-down`.
+Docker: `make docker`, `make docker-up`, `make docker-down`.
 
 Playwright browser tests are in `tests/playwright/` (12 spec files). Run with `make test-playwright`.
 

@@ -1,6 +1,7 @@
 services:
   ticket:
     image: ghcr.io/simonski/ticket:latest
+    user: "${TICKET_UID:?Set TICKET_UID}:${TICKET_GID:?Set TICKET_GID}"
     labels:
       - com.centurylinklabs.watchtower.enable=true
     environment:
@@ -33,6 +34,7 @@ services:
       - "30"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /home/exedev/.docker/config.json:/config.json
     deploy:
       resources:
         limits:

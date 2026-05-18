@@ -1129,6 +1129,7 @@ docker run -p 8080:8080 tk server
 | `make test-playwright` | Playwright E2E tests |
 | `make release` | Cross-compile for all platforms |
 | `make release-publish` | Upload to GitHub releases |
+| `make homebrew` | Push the generated formula to the Homebrew tap |
 | `make install` | Build and `go install` |
 
 **Release platforms:** darwin/arm64, darwin/amd64, linux/amd64, linux/arm64

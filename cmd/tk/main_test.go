@@ -1934,12 +1934,16 @@ func TestRunStatusRemoteSuccess(t *testing.T) {
 		"alice",
 		"TICKET_PASSWORD",
 		"********",
+		"SERVER_VERSION",
+		"9.8.7",
+		"CLIENT_VERSION",
+		strings.TrimSpace(embeddedVersion),
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"TICKET_HOME", "config_file", "server_version", "authenticated", "connection", "password         : (using TICKET_TOKEN)"} {
+	for _, unwanted := range []string{"TICKET_HOME", "config_file", "authenticated", "connection", "password         : (using TICKET_TOKEN)"} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("runStatus(remote) should not show %q:\n%s", unwanted, output)
 		}
@@ -2036,6 +2040,9 @@ func TestRunStatusLocalSuccess(t *testing.T) {
 		"admin",
 		"TICKET_PASSWORD",
 		"********",
+		"SERVER_VERSION",
+		"CLIENT_VERSION",
+		strings.TrimSpace(embeddedVersion),
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("runStatus(remote) missing %q:\n%s", want, output)
@@ -2086,7 +2093,7 @@ func TestRunListShowsTicketsWithoutDetailsBanner(t *testing.T) {
 		}
 	})
 
-	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD"} {
+	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD", "SERVER_VERSION", "CLIENT_VERSION"} {
 		if !strings.Contains(statusOut, want) {
 			t.Fatalf("status output missing %q:\n%s", want, statusOut)
 		}
@@ -5347,7 +5354,7 @@ func TestRunStatusShowsProjectWorkflowAndDefaultDraft(t *testing.T) {
 			t.Fatalf("status error = %v", err)
 		}
 	})
-	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD"} {
+	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD", "SERVER_VERSION", "CLIENT_VERSION"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q:\n%s", want, output)
 		}
@@ -5369,6 +5376,12 @@ func TestRunStatusShowsProjectWorkflowAndDefaultDraft(t *testing.T) {
 	}
 	if got := payload["TICKET_USERNAME"]; got != "admin" {
 		t.Fatalf("TICKET_USERNAME = %#v, want %q", got, "admin")
+	}
+	if got := payload["CLIENT_VERSION"]; got != strings.TrimSpace(embeddedVersion) {
+		t.Fatalf("CLIENT_VERSION = %#v, want %q", got, strings.TrimSpace(embeddedVersion))
+	}
+	if got := payload["SERVER_VERSION"]; got == nil || strings.TrimSpace(fmt.Sprint(got)) == "" {
+		t.Fatalf("SERVER_VERSION missing from status json: %#v", payload)
 	}
 	if _, exists := payload["project_workflow"]; exists {
 		t.Fatalf("status json should omit project_workflow: %#v", payload)
@@ -7433,12 +7446,12 @@ func TestRunActionBinaryAliasPreservesSystemCommands(t *testing.T) {
 			t.Fatalf("run(action status) error = %v", err)
 		}
 	})
-	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD"} {
+	for _, want := range []string{"TICKET_URL", "TICKET_USERNAME", "TICKET_PASSWORD", "SERVER_VERSION", "CLIENT_VERSION"} {
 		if !strings.Contains(statusOut, want) {
 			t.Fatalf("action status should run remote status output missing %q:\n%s", want, statusOut)
 		}
 	}
-	if strings.Contains(statusOut, "project") || strings.Contains(statusOut, "server_version") {
+	if strings.Contains(statusOut, "project") {
 		t.Fatalf("action status should run system status output:\n%s", statusOut)
 	}
 }

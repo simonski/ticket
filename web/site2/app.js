@@ -125,6 +125,7 @@
             registerForm: document.getElementById("register-form"),
             registerHelp: document.getElementById("register-help"),
             loginError: document.getElementById("login-error"),
+            versionOverlay: document.getElementById("version-overlay"),
             showRegisterButton: document.getElementById("show-register-button"),
             hideRegisterButton: document.getElementById("hide-register-button"),
             appShell: document.getElementById("app-shell"),
@@ -318,6 +319,24 @@
             els.appNotice.textContent = message;
             els.appNotice.classList.add("visible");
             els.appNotice.classList.add("error");
+        }
+
+        function serverVersionFromStatus(status) {
+            if (!status || typeof status !== "object") {
+                return "";
+            }
+            return String(status.server_version || status.version || "").trim();
+        }
+
+        function setServerVersion(version, unavailable = false) {
+            if (!els.versionOverlay) {
+                return;
+            }
+            if (unavailable) {
+                els.versionOverlay.textContent = "server: offline";
+                return;
+            }
+            els.versionOverlay.textContent = version ? `server: ${version}` : "server: unknown";
         }
 
         function toNullableNumber(value) {
@@ -971,6 +990,7 @@
 
         async function loadStatus() {
             state.status = await api("/api/status");
+            setServerVersion(serverVersionFromStatus(state.status));
             const username = (state.status.user && state.status.user.username) || "user";
             els.accountMenuButton.textContent = username.charAt(0).toUpperCase();
             els.accountMenuName.textContent = username;
@@ -996,8 +1016,10 @@
         async function loadPublicStatus() {
             try {
                 state.status = await api("/api/status", { method: "GET", auth: false });
+                setServerVersion(serverVersionFromStatus(state.status));
             } catch (error) {
                 state.status = null;
+                setServerVersion("", true);
             }
             syncRegistrationUI();
         }

@@ -168,19 +168,22 @@ To run the server in Docker with a persistent SQLite volume from a repository
 checkout:
 
 ```bash
-docker compose -f deploy/compose.yaml up -d
-docker compose -f deploy/compose.yaml logs -f
+cp deploy/env.template deploy/.env
+$EDITOR deploy/.env
+docker compose --env-file deploy/.env -f deploy/compose.yaml up -d
+docker compose --env-file deploy/.env -f deploy/compose.yaml logs -f
 ```
 
 The container stores its database in the bind-mounted `./data` directory at
-`/data/ticket.db` and initialises on first boot. Set `TICKET_ADMIN_PASSWORD`
-before the first boot; the container refuses to initialise a new database
-without it.
+`/data/ticket.db` and initialises on first boot. Before the first boot, pre-own
+`./data` for the image's `ticket` user, then copy `deploy/env.template` to
+`deploy/.env` and set `TICKET_UID`, `TICKET_GID`, and `TICKET_ADMIN_PASSWORD`.
+The container refuses to initialise a new database without the admin password.
 
-On a deployed host, copy `deploy/README.md` and `deploy/compose.yaml` to the
-deployment directory as `README.md` and `compose.yaml`, then follow the minimal
-commands in that README. If you need the compose YAML directly from the Ticket
-binary, use `tk docker-compose > compose.yaml` and review it before deploying.
+On a deployed host, copy `deploy/README.md`, `deploy/compose.yaml`, and
+`deploy/env.template` to the deployment directory as `README.md`,
+`compose.yaml`, and `env.template`, then follow the minimal commands in that
+README.
 
 Immediately below the banner it prints:
 

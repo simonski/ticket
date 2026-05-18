@@ -425,6 +425,9 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	if !strings.Contains(string(body), "<title>ticket</title>") {
 		t.Fatalf("root response missing ticket frontend")
 	}
+	if !strings.Contains(string(body), `id="version-overlay"`) {
+		t.Fatalf("root response missing version overlay")
+	}
 
 	assetReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/site2.css", http.NoBody)
 	if err != nil {

@@ -119,6 +119,21 @@
             min-height: 100vh;
         }
 
+        .version-overlay {
+            position: fixed;
+            right: 0.7rem;
+            bottom: 0.55rem;
+            z-index: 35;
+            background: rgba(28, 35, 51, 0.9);
+            color: #f4f7ff;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 999px;
+            padding: 0.24rem 0.55rem;
+            font-size: 0.76rem;
+            letter-spacing: 0.02em;
+            pointer-events: none;
+        }
+
         .login-screen {
             display: grid;
             place-items: center;

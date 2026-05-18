@@ -29,16 +29,12 @@ gh repo create simonski/homebrew-tap --public --source=. --push
 
 1. In the ticket repo:
    ```bash
-   make release          # builds all platforms, generates homebrew/ticket.rb
-   make release-publish  # creates GitHub release + uploads tarballs
+   make release          # builds all platforms, creates the GitHub release, and updates the tap
    ```
 
-2. Copy the formula to the tap and push:
+2. To push the formula to the tap separately:
    ```bash
-   cp homebrew/ticket.rb ../homebrew-tap/Formula/ticket.rb
-   cd ../homebrew-tap
-   git commit -am "ticket $(cat ../ticket/cmd/tk/VERSION | tr -d '[:space:]')"
-   git push
+   make homebrew
    ```
 
 ## Users install with

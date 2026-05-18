@@ -133,11 +133,16 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 	statusCfg, username, passwordDisplay, passwordColor := remoteStatusConfig(cfg, serverURL)
 	statusErr := error(nil)
 	connected := false
+	serverVersion := ""
+	clientVersion := valueOrDefault(strings.TrimSpace(embeddedVersion), "UNSET")
 	if strings.TrimSpace(serverURL) != "" {
 		svc := libticket.NewHTTP(statusCfg)
 		status, err := svc.Status(context.Background())
 		statusErr = err
 		connected = err == nil
+		if connected {
+			serverVersion = strings.TrimSpace(status.ServerVersion)
+		}
 		if connected && status.User != nil && strings.TrimSpace(status.User.Username) != "" {
 			username = strings.TrimSpace(status.User.Username)
 		}
@@ -150,11 +155,21 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 	if strings.TrimSpace(username) != "" && strings.TrimSpace(username) != "UNSET" {
 		usernameColor = "\x1b[32m"
 	}
+	serverVersionColor := "\x1b[31m"
+	if strings.TrimSpace(serverVersion) != "" {
+		serverVersionColor = "\x1b[32m"
+	}
+	clientVersionColor := "\x1b[31m"
+	if clientVersion != "UNSET" {
+		clientVersionColor = "\x1b[32m"
+	}
 	if outputJSON {
 		payload := map[string]any{
 			"TICKET_URL":      serverURL,
 			"TICKET_USERNAME": valueOrDefault(username, "UNSET"),
 			"TICKET_PASSWORD": passwordDisplay,
+			"SERVER_VERSION":  valueOrDefault(serverVersion, "UNSET"),
+			"CLIENT_VERSION":  clientVersion,
 		}
 		return printJSON(payload)
 	}
@@ -162,6 +177,8 @@ func runRemoteStatusWithSummaryStyle(cfg config.Config, _ bool) error {
 		{key: "TICKET_URL", value: valueOrDefault(serverURL, "UNSET"), color: urlColor},
 		{key: "TICKET_USERNAME", value: valueOrDefault(username, "UNSET"), color: usernameColor},
 		{key: "TICKET_PASSWORD", value: passwordDisplay, color: passwordColor},
+		{key: "SERVER_VERSION", value: valueOrDefault(serverVersion, "UNSET"), color: serverVersionColor},
+		{key: "CLIENT_VERSION", value: clientVersion, color: clientVersionColor},
 	}
 	printStatusBox(lines)
 	return statusErr

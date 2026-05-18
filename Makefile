@@ -1,4 +1,4 @@
-.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula release-sbom release-publish release-clean docker-build docker-push publish docker-up docker-down deploy
+.PHONY: help default build build-dev build-bin build-linux caddy setup setup-go setup-node setup-playwright bump-version sync-openapi-version validate-openapi backup-db test test-fast test-all test-go test-go-race test-go-cover test-unit test-api-smoke test-cli test-contract test-store test-integration test-api test-api-js test-api-cli test-browser test-browser-smoke test-browser-full test-playwright test-quickstart test-quickstart-bin test-tk-test test-todo-example test-todo-example-bin testscripts testscripts-bin test-final-shell-bin lint vulncheck ci-bootstrap ci-bootstrap-verify ci-bootstrap-browser ci-bootstrap-publish ci ci-verify ci-browser ci-publish clean release release-prepare release-build release-checksums release-formula homebrew release-sbom release-publish release-clean docker docker-push publish docker-up docker-down deploy
 
 VERSION_FILE  := cmd/tk/VERSION
 VERSION       := $(shell cat $(VERSION_FILE) 2>/dev/null | tr -d '[:space:]')
@@ -58,13 +58,13 @@ help:
 	@printf "  make clean           Remove built binaries from ./bin.\n"
 	@printf "\n"
 	@printf "Docker targets:\n\n"
-	@printf "  make docker-build    Build the local Docker image only.\n"
+	@printf "  make docker    Build the local Docker image only.\n"
 	@printf "  make publish         Build the image and push versioned + latest tags to GHCR.\n"
-	@printf "  make docker-up       Start the service via Docker Compose.\n"
-	@printf "  make docker-down     Stop the service via Docker Compose.\n"
+	@printf "  make docker-up       Start deploy/compose.yaml using deploy/.env.\n"
+	@printf "  make docker-down     Stop deploy/compose.yaml using deploy/.env.\n"
 	@printf "\n"
 	@printf "exe.dev targets:\n\n"
-	@printf "  make deploy          Copy deploy/compose.yaml and deploy/README.md to the configured host.\n"
+	@printf "  make deploy          Copy deploy/compose.yaml, deploy/env.template, and deploy/README.md to the configured host.\n"
 	@printf "                       Set EXE_DEV_URL=user@host to choose the remote destination.\n"
 	@printf "\n"
 	@printf "Release targets:\n\n"
@@ -73,6 +73,7 @@ help:
 	@printf "  make release-build   Cross-compile binaries and pack tarballs into ./dist.\n"
 	@printf "  make release-checksums  Write SHA256 checksums for all dist tarballs.\n"
 	@printf "  make release-formula Generate homebrew/ticket.rb from the formula template.\n"
+	@printf "  make homebrew        Push the generated formula to simonski/homebrew-tap.\n"
 	@printf "  make release-clean   Remove the ./dist directory.\n"
 	@printf "\n"
 
@@ -333,10 +334,25 @@ release-formula:
 		-e "s/__DARWIN_AMD64_SHA256__/$$darwin_amd64/g" \
 		-e "s/__LINUX_AMD64_SHA256__/$$linux_amd64/g" \
 		-e "s/__LINUX_ARM64_SHA256__/$$linux_arm64/g" \
-		homebrew/ticket.rb.tmpl > homebrew/ticket.rb
+		 homebrew/ticket.rb.tmpl > homebrew/ticket.rb
 	@echo "Formula written to homebrew/ticket.rb"
 
-release-publish: release-build release-checksums release-sbom release-formula
+homebrew: release-formula
+	@echo "Updating homebrew tap..."
+	@TAP_DIR=$$(mktemp -d) && \
+		trap "rm -rf $$TAP_DIR" EXIT && \
+		git clone $(HOMEBREW_TAP_REPO) "$$TAP_DIR" && \
+		cp homebrew/ticket.rb "$$TAP_DIR/Formula/ticket.rb" && \
+		if [ -z "$$(git -C "$$TAP_DIR" status --porcelain -- Formula/ticket.rb)" ]; then \
+			echo "Homebrew tap already up to date."; \
+			exit 0; \
+		fi && \
+		git -C "$$TAP_DIR" add Formula/ticket.rb && \
+		git -C "$$TAP_DIR" commit -m "ticket $(VERSION)" && \
+		git -C "$$TAP_DIR" push
+	@echo "Homebrew tap updated."
+
+release-publish: release-build release-checksums release-sbom
 	@if gh release view v$(VERSION) --repo $(GITHUB_REPO) >/dev/null 2>&1; then \
 		echo "Release v$(VERSION) already exists; aborting."; \
 		exit 1; \
@@ -353,15 +369,7 @@ release-publish: release-build release-checksums release-sbom release-formula
 		$(DIST_DIR)/checksums.txt \
 		$(DIST_DIR)/sbom.cdx.json
 	@echo "Release v$(VERSION) published."
-	@echo "Updating homebrew tap..."
-	@TAP_DIR=$$(mktemp -d) && \
-		trap "rm -rf $$TAP_DIR" EXIT && \
-		git clone $(HOMEBREW_TAP_REPO) "$$TAP_DIR" && \
-		cp homebrew/ticket.rb "$$TAP_DIR/Formula/ticket.rb" && \
-		git -C "$$TAP_DIR" add Formula/ticket.rb && \
-		git -C "$$TAP_DIR" commit -m "ticket $(VERSION)" && \
-		git -C "$$TAP_DIR" push
-	@echo "Homebrew tap updated."
+	@$(MAKE) homebrew
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "  v$(VERSION) released"
@@ -375,10 +383,10 @@ release: release-publish
 
 # ─── docker ───────────────────────────────────────────────────────────────────
 
-docker-build:
+docker:
 	DOCKER_BUILDKIT=1 docker build -t ticket:$(VERSION) -t ticket:latest .
 
-docker-push: docker-build
+docker-push: docker
 	docker tag ticket:$(VERSION) $(GHCR_IMAGE):$(VERSION)
 	docker tag ticket:latest $(GHCR_IMAGE):latest
 	docker push $(GHCR_IMAGE):$(VERSION)
@@ -387,10 +395,10 @@ docker-push: docker-build
 publish: docker-push
 
 docker-up:
-	VERSION=$(VERSION) docker compose up -d
+	docker compose --env-file deploy/.env -f deploy/compose.yaml up -d
 
 docker-down:
-	VERSION=$(VERSION) docker compose down
+	docker compose --env-file deploy/.env -f deploy/compose.yaml down
 
 # ─── clean ────────────────────────────────────────────────────────────────────
 
@@ -416,13 +424,14 @@ deploy:
 		echo "Usage: EXE_DEV_URL=user@host make deploy"; \
 		exit 1; \
 	fi
-	@echo "compose.yaml and README.md to $(EXE_DEV_URL):~/"
-	@scp deploy/compose.yaml deploy/README.md $(EXE_DEV_URL):~/
+	@echo "compose.yaml, env.template, and README.md to $(EXE_DEV_URL):~/"
+	@scp deploy/compose.yaml deploy/env.template deploy/README.md $(EXE_DEV_URL):~/
 	@echo ""
 	@echo "✓ Deployed to $(EXE_DEV_URL):~/"
 	@echo ""
 	@echo "Next steps on remote server:"
 	@echo "  ssh $(EXE_DEV_URL)"
+	@echo "  cp ~/env.template ~/.env"
 	@echo "  cat ~/README.md"
 	@echo ""
 	@echo "This bundle uses ghcr.io/simonski/ticket:latest and a 30-second watchtower poll."

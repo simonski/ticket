@@ -24,23 +24,29 @@ describes symptoms, diagnosis steps, and resolution.
 **When to use:** First-time deployment on a new host.
 
 ```bash
-# 1. Pull the image (or build from source)
+# 1. Pull the image
 docker pull ghcr.io/simonski/ticket:latest
 
-# 2. Create the persistent data directory
+# 2. Find the runtime UID/GID used by the image
+docker run --rm --entrypoint sh ghcr.io/simonski/ticket:latest -c 'id -u ticket && id -g ticket'
+
+# 3. Create and pre-own the persistent data directory
 mkdir -p ./data
+sudo chown -R <uid>:<gid> ./data
+sudo chmod 750 ./data
 
-# 3. Set the first admin password outside source control
-export TICKET_ADMIN_PASSWORD="<secret>"
+# 4. Create .env from the deployment template and edit the values
+cp env.template .env
+$EDITOR .env
 
-# 4. Start the server
-docker compose up -d
+# 5. Start the server
+docker compose --env-file ./.env -f ./compose.yaml up -d
 
-# 5. Verify health
+# 6. Verify health
 curl http://localhost:8080/api/healthz
 # Expected: {"status":"ok","version":"0.1.x"}
 
-# 6. Configure CLI environment for the running server
+# 7. Configure CLI environment for the running server
 export TICKET_URL=http://localhost:8080
 export TICKET_USERNAME=admin
 export TICKET_PASSWORD=<secret>
@@ -51,8 +57,8 @@ tk project new -title "My Project" -prefix MP
 ```
 
 On first boot the container creates `/data/ticket.db` and bootstraps the
-`admin` account. Set `TICKET_ADMIN_PASSWORD` before the first boot and store it
-outside source control.
+`admin` account. Set `TICKET_ADMIN_PASSWORD` in `.env` before the first boot and
+store that secret outside source control.
 
 **Checklist before going live:**
 - [ ] `TICKET_ADMIN_PASSWORD` was set before the first boot and recorded in your secret store
@@ -68,13 +74,13 @@ outside source control.
 
 ```bash
 # Check exit code and recent logs
-docker compose logs --tail 50 ticket
+docker compose --env-file ./.env -f ./compose.yaml logs --tail 50 ticket
 
 # Check for OOM kill
 dmesg | grep -i "killed process"
 
 # Restart
-docker compose up -d
+docker compose --env-file ./.env -f ./compose.yaml up -d
 
 # Verify recovery
 curl http://localhost:8080/api/healthz
@@ -168,7 +174,7 @@ tk export | gzip > ticket-backup-$(date +%Y%m%d).json.gz
 
 ```bash
 # Stop the server
-docker compose stop ticket
+docker compose --env-file ./.env -f ./compose.yaml stop ticket
 
 # Restore the snapshot payload to a temporary file
 gunzip -c ticket-backup-20250718.json.gz > /tmp/ticket-restore.json
@@ -177,7 +183,7 @@ gunzip -c ticket-backup-20250718.json.gz > /tmp/ticket-restore.json
 tk import -i /tmp/ticket-restore.json
 
 # Restart
-docker compose start ticket
+docker compose --env-file ./.env -f ./compose.yaml start ticket
 
 # Verify
 curl http://localhost:8080/api/healthz
@@ -248,7 +254,7 @@ sent a heartbeat (`TouchAgent`) within the threshold.
 ### Force reaper run (restart server)
 
 ```bash
-docker compose restart ticket
+docker compose --env-file ./.env -f ./compose.yaml restart ticket
 # Reaper runs immediately on startup
 ```
 
@@ -315,7 +321,7 @@ runs migrations on every startup.
 ### Check server logs
 
 ```bash
-docker compose logs --tail 100 ticket | grep -i "websocket\|ws\|realtime"
+docker compose --env-file ./.env -f ./compose.yaml logs --tail 100 ticket | grep -i "websocket\|ws\|realtime"
 ```
 
 ### Common causes

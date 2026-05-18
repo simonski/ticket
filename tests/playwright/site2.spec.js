@@ -686,6 +686,19 @@ test("focuses the username field on first load", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => document.activeElement && document.activeElement.id)).toBe("login-username");
 });
 
+test("shows the server version on the login screen", async ({ page }) => {
+  await installSite2Mock(page, { status: { authenticated: false, server_version: "1.2.3" } });
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await expect(page.locator("#version-overlay")).toBeVisible();
+  await expect(page.locator("#version-overlay")).toHaveText("server: 1.2.3");
+});
+
 test("does not emit CSP inline-style violations after login", async ({ page }) => {
   const messages = [];
   page.on("console", (message) => messages.push(message.text()));
