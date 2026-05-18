@@ -104,8 +104,18 @@ blocks stay executable.
 
 ## Script harness
 
-`scripts/testharness.sh` is a growing shell-based regression harness for direct
-CLI scripting flows. It creates an isolated temp repo plus `$TICKET_HOME`,
+`scripts/test_shell.sh` is the canonical shell test driver. It groups the
+scripted suites under subcommands:
+
+- `harness` — CLI scripting and remote/project/agent flows
+- `todo-example` — reproducible todo seed + verification
+- `final` — both suites against one shared server
+
+The legacy wrapper scripts (`scripts/testharness.sh`,
+`scripts/verify_todo_example.sh`, `scripts/test_final_harnesses.sh`) still
+delegate to it for compatibility.
+
+The `harness` suite creates an isolated temp repo plus `$TICKET_HOME`,
 bootstraps a fresh local database with `tk initdb`, exercises project
 resolution through the current CLI flows, and executes end-to-end scenarios
 that assert behavior with CLI exit codes and `tk ls -count` checks.
@@ -128,9 +138,9 @@ make testscripts
 
 `scripts/populate_todo_example.sh` seeds a reproducible todo-app planning
 workspace (project, Workflow, epic/tasks, labels, dependencies, time entries,
-story/decision/idea). `scripts/verify_todo_example.sh` runs that seed flow in
-an isolated temp repo/home pair, then asserts key expected outputs for project
-`DEMO`.
+story/decision/idea). `scripts/test_shell.sh todo-example` runs that seed flow
+in an isolated temp repo/home pair, then asserts key expected outputs for
+project `DEMO`.
 
 Run it with:
 

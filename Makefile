@@ -267,16 +267,16 @@ test-todo-example: build-bin
 	@$(MAKE) test-todo-example-bin
 
 test-todo-example-bin:
-	./scripts/verify_todo_example.sh
+	TICKET_FAST_HASH=1 ./scripts/test_shell.sh todo-example
 
 testscripts: build-bin
 	@$(MAKE) testscripts-bin
 
 testscripts-bin:
-	TICKET_FAST_HASH=1 ./scripts/testharness.sh
+	TICKET_FAST_HASH=1 ./scripts/test_shell.sh harness
 
 test-final-shell-bin:
-	TICKET_FAST_HASH=1 ./scripts/test_final_harnesses.sh
+	TICKET_FAST_HASH=1 ./scripts/test_shell.sh final
 
 # ─── release ──────────────────────────────────────────────────────────────────
 # Produces cross-platform tarballs in ./dist, creates a GitHub release, and
