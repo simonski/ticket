@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -498,14 +497,13 @@ func TestServerVerboseLogging(t *testing.T) {
 func TestLoggingHandlerRedactsSensitiveBodiesAndCapsPayloads(t *testing.T) {
 	t.Parallel()
 	var logs strings.Builder
-	logger := slog.New(slog.NewTextHandler(&logs, nil))
 	handler := loggingHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("io.ReadAll() error = %v", err)
 		}
 		_, _ = w.Write(body)
-	}), logger)
+	}), &logs)
 
 	sensitiveReq := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"alice","password":"super-secret"}`))
 	sensitiveReq.Header.Set("Content-Type", "application/json")
@@ -524,6 +522,12 @@ func TestLoggingHandlerRedactsSensitiveBodiesAndCapsPayloads(t *testing.T) {
 	handler.ServeHTTP(normalResp, normalReq)
 
 	logOutput := logs.String()
+	if strings.Contains(logOutput, "time=") || strings.Contains(logOutput, "level=") || strings.Contains(logOutput, `msg="api request"`) {
+		t.Fatalf("expected compact request log format:\n%s", logOutput)
+	}
+	if !strings.Contains(logOutput, "INFO POST path=/api/projects status=200 duration_ms=") {
+		t.Fatalf("expected compact request line:\n%s", logOutput)
+	}
 	if !strings.Contains(logOutput, "response_body=") || !strings.Contains(logOutput, "…(truncated)") {
 		t.Fatalf("expected truncated response body log:\n%s", logOutput)
 	}

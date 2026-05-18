@@ -160,8 +160,7 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 		if logOutput == nil {
 			logOutput = os.Stderr
 		}
-		logger := slog.New(slog.NewTextHandler(logOutput, nil))
-		handler = loggingHandler(handler, logger)
+		handler = loggingHandler(handler, logOutput)
 	}
 	handler = compressionMiddleware(handler)
 	return handler, nil
@@ -528,7 +527,23 @@ func loggedBodyString(buf *bytes.Buffer, truncated bool) string {
 	return buf.String() + "…(truncated)"
 }
 
-func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
+func compactLogLine(ts time.Time, level, method, path string, status int, durationMS int64, requestID, query, requestBody, responseBody string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s %s path=%s status=%d duration_ms=%d request_id=%s", ts.Format(time.RFC3339Nano), level, method, path, status, durationMS, requestID)
+	if query != "" {
+		fmt.Fprintf(&b, " query=%q", query)
+	}
+	if requestBody != "" {
+		fmt.Fprintf(&b, " request_body=%q", requestBody)
+	}
+	if responseBody != "" {
+		fmt.Fprintf(&b, " response_body=%q", responseBody)
+	}
+	b.WriteByte('\n')
+	return b.String()
+}
+
+func loggingHandler(next http.Handler, output io.Writer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
@@ -563,26 +578,32 @@ func loggingHandler(next http.Handler, logger *slog.Logger) http.Handler {
 			lw.status = http.StatusOK
 		}
 
-		attrs := []any{
-			"request_id", requestID,
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", lw.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-		}
-		if q := r.URL.RawQuery; q != "" {
-			attrs = append(attrs, "query", q)
-		}
-		if requestBody.Len() > 0 {
-			attrs = append(attrs, "request_body", loggedBodyString(&requestBody, requestBodyTruncated))
-		}
-		if lw.body.Len() > 0 && !sensitiveEndpoint {
-			attrs = append(attrs, "response_body", loggedBodyString(&lw.body, lw.bodyTruncated))
-		}
+		level := "INFO"
 		if lw.status >= 500 {
-			logger.Error("api request", attrs...)
-		} else {
-			logger.Info("api request", attrs...)
+			level = "ERROR"
+		}
+		query := r.URL.RawQuery
+		requestBodyString := ""
+		if requestBody.Len() > 0 {
+			requestBodyString = loggedBodyString(&requestBody, requestBodyTruncated)
+		}
+		responseBodyString := ""
+		if lw.body.Len() > 0 && !sensitiveEndpoint {
+			responseBodyString = loggedBodyString(&lw.body, lw.bodyTruncated)
+		}
+		if output != nil {
+			_, _ = io.WriteString(output, compactLogLine(
+				time.Now(),
+				level,
+				r.Method,
+				r.URL.Path,
+				lw.status,
+				time.Since(start).Milliseconds(),
+				requestID,
+				query,
+				requestBodyString,
+				responseBodyString,
+			))
 		}
 	})
 }
