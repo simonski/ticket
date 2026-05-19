@@ -16,7 +16,13 @@ function installSite2Mock(page, seed = {}) {
       },
     ];
     const db = {
-      status: { username: "admin", mode: "local", version: "dev" },
+      status: { authenticated: true, mode: "local", version: "dev", user: { username: "admin", role: "admin" } },
+      configSettings: Array.isArray(mockSeed.configSettings)
+        ? mockSeed.configSettings.map((item) => ({ ...item }))
+        : [
+            { key: "chat_enabled", value: "1" },
+            { key: "registration_enabled", value: "1" },
+          ],
       nextProjectID: Number(mockSeed.nextProjectID || 2),
       projects: Array.isArray(mockSeed.projects) && mockSeed.projects.length ? mockSeed.projects : defaultProjects,
       tickets: [
@@ -155,8 +161,29 @@ function installSite2Mock(page, seed = {}) {
       if (path === "/api/status") {
         return json(db.status);
       }
+      if (path === "/api/config/settings" && method === "GET") {
+        return json(db.configSettings);
+      }
+      if (path === "/api/config/settings" && method === "POST") {
+        const item = { key: String(body.key || "").trim(), value: String(body.value || "") };
+        db.configSettings = db.configSettings.filter((entry) => entry.key !== item.key).concat([item]).sort((a, b) => a.key.localeCompare(b.key));
+        return json(item);
+      }
+      if (path.match(/^\/api\/config\/settings\/.+$/) && method === "PUT") {
+        const currentKey = decodeURIComponent(path.split("/").slice(4).join("/"));
+        const nextKey = String(body.key || currentKey).trim();
+        db.configSettings = db.configSettings.filter((entry) => entry.key !== currentKey && entry.key !== nextKey)
+          .concat([{ key: nextKey, value: String(body.value || "") }])
+          .sort((a, b) => a.key.localeCompare(b.key));
+        return json({ key: nextKey, value: String(body.value || "") });
+      }
+      if (path.match(/^\/api\/config\/settings\/.+$/) && method === "DELETE") {
+        const currentKey = decodeURIComponent(path.split("/").slice(4).join("/"));
+        db.configSettings = db.configSettings.filter((entry) => entry.key !== currentKey);
+        return new Response(null, { status: 204 });
+      }
       if (path === "/api/login" && method === "POST") {
-        return json({ token: "test-token", user: { username: body.username || "admin" } });
+        return json({ token: "test-token", user: { username: body.username || "admin", role: "admin" } });
       }
       if (path === "/api/logout" && method === "POST") {
         return json({ status: "ok" });
@@ -697,6 +724,39 @@ test("shows the server version on the login screen", async ({ page }) => {
 
   await expect(page.locator("#version-overlay")).toBeVisible();
   await expect(page.locator("#version-overlay")).toHaveText("server: 1.2.3");
+});
+
+test("admin settings view supports config key CRUD", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await page.getByRole("button", { name: "Config" }).click();
+  await expect(page.getByRole("heading", { name: "Configuration registry" })).toBeVisible();
+  await expect(page.locator("#config-settings-list")).toContainText("chat_enabled");
+
+  await page.getByRole("button", { name: "New key" }).click();
+  await page.locator("#config-setting-key").fill("feature.flag");
+  await page.locator("#config-setting-value").fill("on");
+  await page.getByRole("button", { name: "Save setting" }).click();
+  await expect(page.locator("#config-settings-list")).toContainText("feature.flag");
+
+  await page.locator("[data-config-setting-key='feature.flag']").click();
+  await page.locator("#config-setting-key").fill("feature.flag.renamed");
+  await page.locator("#config-setting-value").fill("off");
+  await page.getByRole("button", { name: "Save setting" }).click();
+  await expect(page.locator("#config-settings-list")).toContainText("feature.flag.renamed");
+
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("#config-settings-list")).not.toContainText("feature.flag.renamed");
 });
 
 test("does not emit CSP inline-style violations after login", async ({ page }) => {

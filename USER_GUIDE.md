@@ -977,6 +977,9 @@ Keyboard shortcuts in the board view:
 - admin `settings` includes global chat limits:
   - max concurrent chat agents (default `2`)
   - max chat duration in minutes (default `3`)
+- admin `settings` in site2 now also includes a Config registry view for raw
+  `app_settings` key/value CRUD, including create, edit, rename, and delete
+  operations backed by `/api/config/settings`
 - when chat capacity is full, new chat input is disabled until the server reports a free slot
 - `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role

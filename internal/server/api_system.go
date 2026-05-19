@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strings"
 
@@ -281,6 +282,87 @@ func (r *router) registerSystemHandlers() {
 				return
 			}
 			writeJSON(w, http.StatusOK, cfg)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+	mux.HandleFunc("/api/config/settings", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			settings, err := store.ListAppSettings(r.Context(), db)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, settings)
+		case http.MethodPost:
+			var payload store.AppSetting
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			payload.Key = strings.TrimSpace(payload.Key)
+			if payload.Key == "" {
+				writeError(w, http.StatusBadRequest, "config key is required")
+				return
+			}
+			if err := store.SetAppSetting(r.Context(), db, payload.Key, payload.Value); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, payload)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+	mux.HandleFunc("/api/config/settings/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := requireAdmin(db, r); err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		rawKey := strings.TrimPrefix(r.URL.Path, "/api/config/settings/")
+		key, err := url.PathUnescape(rawKey)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid config key")
+			return
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			writeError(w, http.StatusBadRequest, "config key is required")
+			return
+		}
+		switch r.Method {
+		case http.MethodPut:
+			var payload store.AppSetting
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			nextKey := strings.TrimSpace(payload.Key)
+			if nextKey == "" {
+				nextKey = key
+			}
+			if err := store.SetAppSetting(r.Context(), db, nextKey, payload.Value); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			if nextKey != key {
+				if err := store.DeleteAppSetting(r.Context(), db, key); err != nil {
+					writeStoreError(w, err)
+					return
+				}
+			}
+			writeJSON(w, http.StatusOK, store.AppSetting{Key: nextKey, Value: payload.Value})
+		case http.MethodDelete:
+			if err := store.DeleteAppSetting(r.Context(), db, key); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}

@@ -616,6 +616,28 @@
             line-height: 1.45;
         }
 
+        .config-settings-list .entity-card {
+            border-left: 3px solid rgba(255, 122, 26, 0.4);
+        }
+
+        .config-key {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.88rem;
+            letter-spacing: -0.01em;
+        }
+
+        .config-value-preview {
+            color: var(--muted);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .config-setting-value {
+            min-height: 220px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            line-height: 1.45;
+        }
+
         .entity-actions,
         .editor-actions {
             display: flex;

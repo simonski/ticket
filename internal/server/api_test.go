@@ -4638,6 +4638,105 @@ func TestRegistrationConfigAPI(t *testing.T) {
 	}
 }
 
+func TestConfigSettingsAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	listResp := doJSONRequest(t, handler, http.MethodGet, "/api/config/settings", nil, token)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list config settings status = %d body=%s", listResp.Code, listResp.Body.String())
+	}
+	var initialSettings []store.AppSetting
+	decodeResponse(t, listResp, &initialSettings)
+	if len(initialSettings) == 0 {
+		t.Fatal("expected seeded config settings")
+	}
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/config/settings", store.AppSetting{
+		Key:   "site2_theme",
+		Value: "burnt-amber",
+	}, token)
+	if createResp.Code != http.StatusOK {
+		t.Fatalf("create config setting status = %d body=%s", createResp.Code, createResp.Body.String())
+	}
+
+	updateResp := doJSONRequest(t, handler, http.MethodPut, "/api/config/settings/site2_theme", store.AppSetting{
+		Key:   "site2_palette",
+		Value: "ember-night",
+	}, token)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("rename config setting status = %d body=%s", updateResp.Code, updateResp.Body.String())
+	}
+
+	listAfterResp := doJSONRequest(t, handler, http.MethodGet, "/api/config/settings", nil, token)
+	if listAfterResp.Code != http.StatusOK {
+		t.Fatalf("list after update status = %d body=%s", listAfterResp.Code, listAfterResp.Body.String())
+	}
+	var settingsAfter []store.AppSetting
+	decodeResponse(t, listAfterResp, &settingsAfter)
+	foundRenamed := false
+	foundOld := false
+	for _, entry := range settingsAfter {
+		if entry.Key == "site2_palette" && entry.Value == "ember-night" {
+			foundRenamed = true
+		}
+		if entry.Key == "site2_theme" {
+			foundOld = true
+		}
+	}
+	if !foundRenamed {
+		t.Fatalf("renamed setting not found in %#v", settingsAfter)
+	}
+	if foundOld {
+		t.Fatalf("old config key still present in %#v", settingsAfter)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/config/settings/site2_palette", nil)
+	deleteReq.Header.Set("Authorization", "Bearer "+token)
+	deleteResp := httptest.NewRecorder()
+	handler.ServeHTTP(deleteResp, deleteReq)
+	if deleteResp.Code != http.StatusNoContent {
+		t.Fatalf("delete config setting status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+}
+
+func TestConfigSettingsAPIRejectsUnauthorizedAndForbidden(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "config-user",
+		"password": "password123",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d body=%s", registerResp.Code, registerResp.Body.String())
+	}
+	userLoginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "config-user",
+		"password": "password123",
+	}, "")
+	if userLoginResp.Code != http.StatusOK {
+		t.Fatalf("user login status = %d body=%s", userLoginResp.Code, userLoginResp.Body.String())
+	}
+	var loginPayload struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, userLoginResp, &loginPayload)
+
+	unauthorized := doJSONRequest(t, handler, http.MethodGet, "/api/config/settings", nil, "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized config settings status = %d, want %d body=%s", unauthorized.Code, http.StatusUnauthorized, unauthorized.Body.String())
+	}
+
+	forbidden := doJSONRequest(t, handler, http.MethodGet, "/api/config/settings", nil, loginPayload.Token)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("forbidden config settings status = %d, want %d body=%s", forbidden.Code, http.StatusForbidden, forbidden.Body.String())
+	}
+}
+
 func TestRegisterPendingApprovalWhenAutoApproveDisabled(t *testing.T) {
 	t.Parallel()
 	handler, db := testHandler(t)

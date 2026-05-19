@@ -91,6 +91,8 @@
             projectAgentModelConfig: { provider: "", model: "", url: "", api_key: "" },
             goalAgentModelConfig: { provider: "", model: "", url: "", api_key: "" },
             resolvedGoalAgentModelConfig: null,
+            configSettings: [],
+            selectedConfigSettingKey: "",
             selectedProviderConfigID: "",
             navOrder: [],
         };
@@ -106,6 +108,7 @@
             { view: "goals", label: "Goals", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l3 6 6 .9-4.5 4.4 1.1 6.2L12 17.8 6.4 20.5l1.1-6.2L3 9.9 9 9z\"></path></svg>" },
             { view: "tickets", label: "Board", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M4 12h16\"></path><path d=\"M4 17h10\"></path></svg>" },
             { view: "documents", label: "Documents", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
+            { view: "config", label: "Config", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
             { view: "providers", label: "Providers", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
             { view: "interventions", label: "Interventions", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
             { view: "projects", label: "Projects", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
@@ -228,6 +231,12 @@
             providerConfigRequiresURL: document.getElementById("provider-config-requires-url"),
             providerConfigAPIKey: document.getElementById("provider-config-api-key"),
             providerConfigModels: document.getElementById("provider-config-models"),
+            configSettingsSummary: document.getElementById("config-settings-summary"),
+            configSettingsList: document.getElementById("config-settings-list"),
+            configSettingForm: document.getElementById("config-setting-form"),
+            configSettingEditorTitle: document.getElementById("config-setting-editor-title"),
+            configSettingKey: document.getElementById("config-setting-key"),
+            configSettingValue: document.getElementById("config-setting-value"),
             documentFilesList: document.getElementById("document-files-list"),
             documentUploadFile: document.getElementById("document-upload-file"),
             documentUploadName: document.getElementById("document-upload-name"),
@@ -471,6 +480,10 @@
             return Boolean(state.status && state.status.user && state.status.user.role === "admin");
         }
 
+        function visibleNavItems() {
+            return NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin());
+        }
+
         function isPermissionErrorMessage(message) {
             return /forbidden|unauthorized|access denied/i.test(String(message || ""));
         }
@@ -604,7 +617,7 @@
         }
 
         function availableViewNames() {
-            return NAV_ITEMS.map((item) => item.view);
+            return visibleNavItems().map((item) => item.view);
         }
 
         function sanitizeNavOrder(order) {
@@ -648,7 +661,8 @@
         }
 
         function renderMainNav() {
-            const navByView = new Map(NAV_ITEMS.map((item) => [item.view, item]));
+            const visibleItems = visibleNavItems();
+            const navByView = new Map(visibleItems.map((item) => [item.view, item]));
             const order = sanitizeNavOrder(state.navOrder && state.navOrder.length ? state.navOrder : loadStoredNavOrder());
             state.navOrder = order;
             storeNavOrder(order);
@@ -1378,9 +1392,32 @@
             }
         }
 
+        async function loadConfigSettings() {
+            if (!isAdmin()) {
+                state.configSettings = [];
+                state.selectedConfigSettingKey = "";
+                return;
+            }
+            try {
+                const settings = await api("/api/config/settings");
+                state.configSettings = Array.isArray(settings) ? settings.map((item) => ({
+                    key: String(item.key || "").trim(),
+                    value: String(item.value || ""),
+                })).filter((item) => item.key) : [];
+                if (!state.selectedConfigSettingKey || !state.configSettings.some((item) => item.key === state.selectedConfigSettingKey)) {
+                    state.selectedConfigSettingKey = state.configSettings.length ? state.configSettings[0].key : "";
+                }
+            } catch (error) {
+                state.configSettings = [];
+                state.selectedConfigSettingKey = "";
+                throw error;
+            }
+        }
+
         async function refreshAll() {
             await loadStatus();
             await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans()]);
+            await loadConfigSettings();
             renderProjectMenu();
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
@@ -1506,6 +1543,7 @@
             renderInterventions();
             renderEditors();
             renderPlanAdminPanel();
+            renderConfigSettingsPanel();
             restoreCurrentViewScroll();
         }
 
@@ -1833,6 +1871,61 @@
             return (Array.isArray(state.systemAgentModelConfig.providers) ? state.systemAgentModelConfig.providers : [])
                 .map(normalizedProviderConfig)
                 .filter((provider) => provider.id);
+        }
+
+        function currentConfigSetting() {
+            return state.configSettings.find((item) => item.key === state.selectedConfigSettingKey) || null;
+        }
+
+        function setConfigSettingEditor(setting) {
+            const current = setting || { key: "", value: "" };
+            if (els.configSettingEditorTitle) {
+                els.configSettingEditorTitle.textContent = current.key ? ("Config editor - " + current.key) : "Config editor";
+            }
+            if (els.configSettingKey) {
+                els.configSettingKey.value = current.key || "";
+            }
+            if (els.configSettingValue) {
+                els.configSettingValue.value = current.value || "";
+            }
+            const deleteButton = document.getElementById("delete-config-setting-button");
+            if (deleteButton) {
+                deleteButton.disabled = !current.key;
+            }
+        }
+
+        function renderConfigSettingsPanel() {
+            if (!els.configSettingsList || !els.configSettingsSummary) {
+                return;
+            }
+            const admin = isAdmin();
+            const configView = document.getElementById("view-config");
+            if (configView) {
+                configView.classList.toggle("hidden", !admin);
+            }
+            if (!admin) {
+                return;
+            }
+            const settings = Array.isArray(state.configSettings) ? state.configSettings : [];
+            els.configSettingsSummary.textContent = settings.length
+                ? (String(settings.length) + " live settings available.")
+                : "No custom settings yet. Create the first key to seed app_settings.";
+            if (!state.selectedConfigSettingKey || !settings.some((item) => item.key === state.selectedConfigSettingKey)) {
+                state.selectedConfigSettingKey = settings.length ? settings[0].key : "";
+            }
+            if (!settings.length) {
+                els.configSettingsList.innerHTML = "<div class=\"empty\">No settings yet.</div>";
+                setConfigSettingEditor(null);
+                return;
+            }
+            els.configSettingsList.innerHTML = settings.map((item) => {
+                const active = item.key === state.selectedConfigSettingKey ? " active" : "";
+                const preview = item.value.length > 160 ? item.value.slice(0, 160) + "..." : item.value;
+                return "<div class=\"entity-card" + active + "\" data-config-setting-key=\"" + escapeHTML(item.key) + "\">" +
+                    "<h4 class=\"config-key\">" + escapeHTML(item.key) + "</h4>" +
+                    "<p class=\"config-value-preview\">" + escapeHTML(preview || "(empty)") + "</p></div>";
+            }).join("");
+            setConfigSettingEditor(currentConfigSetting());
         }
 
         function renderProviderConfigPanel() {
@@ -3199,6 +3292,77 @@
                 els.providerConfigSelect.addEventListener("change", () => {
                     state.selectedProviderConfigID = String(els.providerConfigSelect.value || "").trim();
                     renderProviderConfigPanel();
+                });
+            }
+            if (els.configSettingsList) {
+                els.configSettingsList.addEventListener("click", (event) => {
+                    const card = event.target.closest("[data-config-setting-key]");
+                    if (!card) {
+                        return;
+                    }
+                    state.selectedConfigSettingKey = String(card.dataset.configSettingKey || "").trim();
+                    renderConfigSettingsPanel();
+                });
+            }
+            const newConfigSettingButton = document.getElementById("new-config-setting-button");
+            if (newConfigSettingButton) {
+                newConfigSettingButton.addEventListener("click", () => {
+                    state.selectedConfigSettingKey = "";
+                    setConfigSettingEditor(null);
+                    if (els.configSettingKey) {
+                        els.configSettingKey.focus();
+                    }
+                });
+            }
+            if (els.configSettingForm) {
+                els.configSettingForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const originalKey = String(state.selectedConfigSettingKey || "").trim();
+                    const nextKey = String(els.configSettingKey ? els.configSettingKey.value : "").trim();
+                    const nextValue = String(els.configSettingValue ? els.configSettingValue.value : "");
+                    if (!nextKey) {
+                        setNotice("Configuration key is required.", true);
+                        return;
+                    }
+                    try {
+                        const path = originalKey ? ("/api/config/settings/" + encodeURIComponent(originalKey)) : "/api/config/settings";
+                        const method = originalKey ? "PUT" : "POST";
+                        await api(path, {
+                            method,
+                            body: JSON.stringify({ key: nextKey, value: nextValue }),
+                        });
+                        state.selectedConfigSettingKey = nextKey;
+                        await loadConfigSettings();
+                        renderConfigSettingsPanel();
+                        setNotice("Configuration saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+            const deleteConfigSettingButton = document.getElementById("delete-config-setting-button");
+            if (deleteConfigSettingButton) {
+                deleteConfigSettingButton.addEventListener("click", async () => {
+                    const targetKey = String(state.selectedConfigSettingKey || "").trim();
+                    if (!targetKey) {
+                        return;
+                    }
+                    try {
+                        await api("/api/config/settings/" + encodeURIComponent(targetKey), { method: "DELETE" });
+                        state.selectedConfigSettingKey = "";
+                        await loadConfigSettings();
+                        renderConfigSettingsPanel();
+                        setNotice("Configuration deleted.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+            const resetConfigSettingButton = document.getElementById("reset-config-setting-button");
+            if (resetConfigSettingButton) {
+                resetConfigSettingButton.addEventListener("click", () => {
+                    state.selectedConfigSettingKey = "";
+                    setConfigSettingEditor(null);
                 });
             }
             const newProviderConfigButton = document.getElementById("new-provider-config-button");
@@ -5033,6 +5197,9 @@
             els.accountMenuDropdown.addEventListener("click", (event) => {
                 const item = event.target.closest("[data-account-action]");
                 if (item) {
+                    if (item.dataset.accountAction === "settings" && isAdmin()) {
+                        switchView("config");
+                    }
                     closeAccountMenu();
                 }
             });

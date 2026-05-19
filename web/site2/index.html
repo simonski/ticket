@@ -352,6 +352,76 @@
                     </div>
                 </section>
 
+                <section id="view-config" class="view split">
+                    <div class="panel">
+                        <div class="panel-head panel-head-spaced">
+                            <div>
+                                <h2>Configuration registry</h2>
+                                <p class="meta">Live server-backed key/value settings for admin operators.</p>
+                            </div>
+                            <button id="new-config-setting-button" type="button" class="btn-primary">New key</button>
+                        </div>
+                        <div id="config-settings-summary" class="meta"></div>
+                        <div id="config-settings-list" class="entity-list config-settings-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2 id="config-setting-editor-title">Config editor</h2>
+                            <span class="meta">Key/value CRUD on <code>app_settings</code>.</span>
+                        </div>
+                        <form id="config-setting-form" class="stack">
+                            <div class="field">
+                                <label for="config-setting-key">Key</label>
+                                <input id="config-setting-key" placeholder="registration_enabled" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="config-setting-value">Value</label>
+                                <textarea id="config-setting-value" class="config-setting-value" placeholder="1"></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-config-setting-button" type="submit" class="btn-primary">Save setting</button>
+                                <button id="delete-config-setting-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-config-setting-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="view-config" class="view split">
+                    <div class="panel">
+                        <div class="panel-head panel-head-spaced">
+                            <div>
+                                <h2>Configuration registry</h2>
+                                <p class="meta">Live server-backed key/value settings for admin operators.</p>
+                            </div>
+                            <button id="new-config-setting-button" type="button" class="btn-primary">New key</button>
+                        </div>
+                        <div id="config-settings-summary" class="meta"></div>
+                        <div id="config-settings-list" class="entity-list config-settings-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-head">
+                            <h2 id="config-setting-editor-title">Config editor</h2>
+                            <span class="meta">Key/value CRUD on <code>app_settings</code>.</span>
+                        </div>
+                        <form id="config-setting-form" class="stack">
+                            <div class="field">
+                                <label for="config-setting-key">Key</label>
+                                <input id="config-setting-key" placeholder="registration_enabled" autocomplete="off" required>
+                            </div>
+                            <div class="field">
+                                <label for="config-setting-value">Value</label>
+                                <textarea id="config-setting-value" class="config-setting-value" placeholder="1"></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-config-setting-button" type="submit" class="btn-primary">Save setting</button>
+                                <button id="delete-config-setting-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-config-setting-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
                 <section id="view-documents" class="view split">
                     <div id="document-drop-overlay" class="document-drop-overlay" aria-hidden="true">
                         <div class="document-drop-overlay-card">

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -48,6 +49,53 @@ type AgentModelConfig struct {
 	URL       string               `json:"url"`
 	APIKey    string               `json:"api_key"`
 	Providers []AgentModelProvider `json:"providers,omitempty"`
+}
+
+type AppSetting struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func ListAppSettings(ctx context.Context, db *sql.DB) ([]AppSetting, error) {
+	rows, err := db.QueryContext(ctx, `SELECT key, value FROM app_settings ORDER BY key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	settings := make([]AppSetting, 0)
+	for rows.Next() {
+		var entry AppSetting
+		if err := rows.Scan(&entry.Key, &entry.Value); err != nil {
+			return nil, err
+		}
+		settings = append(settings, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+func SetAppSetting(ctx context.Context, db *sql.DB, key, value string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("config key is required")
+	}
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO app_settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value
+	`, key, value)
+	return err
+}
+
+func DeleteAppSetting(ctx context.Context, db *sql.DB, key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("config key is required")
+	}
+	_, err := db.ExecContext(ctx, `DELETE FROM app_settings WHERE key = ?`, key)
+	return err
 }
 
 func defaultAgentModelProviders() []AgentModelProvider {

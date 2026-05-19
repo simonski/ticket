@@ -486,7 +486,7 @@ func TestServerVerboseLogging(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if !strings.Contains(logs.String(), "method=GET") || !strings.Contains(logs.String(), "path=/api/healthz") {
+	if !strings.Contains(logs.String(), " INFO GET ") || !strings.Contains(logs.String(), "path=/api/healthz") {
 		t.Fatalf("verbose logs missing request:\n%s", logs.String())
 	}
 	if !strings.Contains(logs.String(), "status=200") {

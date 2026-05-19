@@ -6,6 +6,11 @@ GITHUB_REPO   := simonski/ticket
 GHCR_IMAGE    := ghcr.io/simonski/ticket
 DIST_DIR      := dist
 HOMEBREW_TAP_REPO := https://github.com/simonski/homebrew-tap.git
+RELEASE_DARWIN_ARM64 := $(DIST_DIR)/tk_$(VERSION)_darwin_arm64.tar.gz
+RELEASE_DARWIN_AMD64 := $(DIST_DIR)/tk_$(VERSION)_darwin_amd64.tar.gz
+RELEASE_LINUX_AMD64  := $(DIST_DIR)/tk_$(VERSION)_linux_amd64.tar.gz
+RELEASE_LINUX_ARM64  := $(DIST_DIR)/tk_$(VERSION)_linux_arm64.tar.gz
+RELEASE_TARBALLS := $(RELEASE_DARWIN_ARM64) $(RELEASE_DARWIN_AMD64) $(RELEASE_LINUX_AMD64) $(RELEASE_LINUX_ARM64)
 
 EXE_DEV_URL ?= ticket.exe.xyz
 
@@ -309,7 +314,7 @@ release-build:
 	done
 	@echo "Tarballs written to $(DIST_DIR)/"
 
-release-checksums:
+release-checksums: release-build
 	@echo "Computing SHA256 checksums..."
 	@cd $(DIST_DIR) && \
 		for f in *.tar.gz; do \
@@ -322,12 +327,22 @@ release-sbom:
 	@cyclonedx-gomod mod -json -output $(DIST_DIR)/sbom.cdx.json .
 	@echo "SBOM written to $(DIST_DIR)/sbom.cdx.json"
 
-release-formula:
+release-formula: release-checksums
 	@echo "Generating homebrew/ticket.rb for v$(VERSION)..."
-	@darwin_arm64=$$(shasum -a 256 $(DIST_DIR)/tk_$(VERSION)_darwin_arm64.tar.gz | cut -d' ' -f1); \
-	 darwin_amd64=$$(shasum -a 256 $(DIST_DIR)/tk_$(VERSION)_darwin_amd64.tar.gz | cut -d' ' -f1); \
-	 linux_amd64=$$(shasum -a 256  $(DIST_DIR)/tk_$(VERSION)_linux_amd64.tar.gz  | cut -d' ' -f1); \
-	 linux_arm64=$$(shasum -a 256  $(DIST_DIR)/tk_$(VERSION)_linux_arm64.tar.gz  | cut -d' ' -f1); \
+	@for f in $(RELEASE_TARBALLS); do \
+		if [ ! -f "$$f" ]; then \
+			echo "Missing release artifact: $$f"; \
+			exit 1; \
+		fi; \
+	done
+	@darwin_arm64=$$(awk '/ tk_$(VERSION)_darwin_arm64.tar.gz$$/{print $$1}' $(DIST_DIR)/checksums.txt); \
+	 darwin_amd64=$$(awk '/ tk_$(VERSION)_darwin_amd64.tar.gz$$/{print $$1}' $(DIST_DIR)/checksums.txt); \
+	 linux_amd64=$$(awk '/ tk_$(VERSION)_linux_amd64.tar.gz$$/{print $$1}' $(DIST_DIR)/checksums.txt); \
+	 linux_arm64=$$(awk '/ tk_$(VERSION)_linux_arm64.tar.gz$$/{print $$1}' $(DIST_DIR)/checksums.txt); \
+	 if [ -z "$$darwin_arm64" ] || [ -z "$$darwin_amd64" ] || [ -z "$$linux_amd64" ] || [ -z "$$linux_arm64" ]; then \
+		echo "Missing release checksums in $(DIST_DIR)/checksums.txt"; \
+		exit 1; \
+	 fi; \
 	 sed \
 		-e "s/__VERSION__/$(VERSION)/g" \
 		-e "s/__DARWIN_ARM64_SHA256__/$$darwin_arm64/g" \

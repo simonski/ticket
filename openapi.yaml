@@ -77,6 +77,15 @@ components:
       example:
         error: "ticket not found"
 
+    AppSetting:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+
     User:
       type: object
       example:
@@ -1687,6 +1696,106 @@ paths:
                   chat_max_duration_minutes:
                     type: integer
 
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/config/settings:
+    get:
+      tags: [Config]
+      summary: List raw application settings
+      operationId: listConfigSettings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: App settings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Config]
+      summary: Create or replace an application setting
+      operationId: createConfigSetting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppSetting'
+      responses:
+        '200':
+          description: App setting saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppSetting'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/config/settings/{key}:
+    parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Config]
+      summary: Update, replace, or rename an application setting
+      operationId: updateConfigSetting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppSetting'
+      responses:
+        '200':
+          description: App setting updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppSetting'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Config]
+      summary: Delete an application setting
+      operationId: deleteConfigSetting
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: App setting deleted
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
