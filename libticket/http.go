@@ -238,6 +238,10 @@ func (s *HTTPService) SetProjectDefaultDraft(ctx context.Context, projectID int6
 	return s.client.SetProjectDefaultDraft(ctx, projectID, draft)
 }
 
+func (s *HTTPService) FindProjectByGitRepository(ctx context.Context, repository string) (store.Project, error) {
+	return s.client.FindProjectByGitRepository(ctx, repository)
+}
+
 func (s *HTTPService) ListProjectGitRepositories(ctx context.Context, projectRef string) ([]string, error) {
 	return s.client.ListProjectGitRepositories(ctx, projectRef)
 }

@@ -152,7 +152,7 @@ func (c *Client) doJSONBasicAuth(ctx context.Context, method, path, username, pa
 		httpRequest.Header.Set("Content-Type", "application/json")
 	}
 	httpRequest.SetBasicAuth(username, password)
-	setRequestContextHeaders(httpRequest)
+	setRequestContextHeaders(httpRequest, c.gitRepository)
 
 	resp, err := c.http.Do(httpRequest)
 	if err != nil {
@@ -193,7 +193,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 		} else if token != "" {
 			httpRequest.Header.Set("Authorization", "Bearer "+token)
 		}
-		setRequestContextHeaders(httpRequest)
+		setRequestContextHeaders(httpRequest, c.gitRepository)
 		resp, err := c.http.Do(httpRequest)
 		if err != nil {
 			return nil, friendlyConnectionError(err, c.baseURL)
@@ -217,8 +217,8 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func setRequestContextHeaders(req *http.Request) {
-	if repo := nearestGitRemoteFromCWD(); repo != "" {
+func setRequestContextHeaders(req *http.Request, repo string) {
+	if repo = strings.TrimSpace(repo); repo != "" {
 		req.Header.Set("X-Ticket-Git-Repository", repo)
 	}
 }

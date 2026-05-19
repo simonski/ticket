@@ -5644,6 +5644,16 @@ func TestProjectRepositoryCRUDAPI(t *testing.T) {
 		t.Fatalf("list repositories len = %d, want 2", len(repositories))
 	}
 
+	lookupResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/by-repository?repository=github.com%2Facme%2Fsecondary.git", nil, token)
+	if lookupResp.Code != http.StatusOK {
+		t.Fatalf("lookup repository status = %d, want %d body=%s", lookupResp.Code, http.StatusOK, lookupResp.Body.String())
+	}
+	var lookupProject store.Project
+	decodeResponse(t, lookupResp, &lookupProject)
+	if lookupProject.Prefix != "REP" {
+		t.Fatalf("lookup project prefix = %q, want REP", lookupProject.Prefix)
+	}
+
 	removeResp := doJSONRequest(t, handler, http.MethodDelete, "/api/projects/REP/repositories/github.com%2Facme%2Fprimary.git", nil, token)
 	if removeResp.Code != http.StatusOK {
 		t.Fatalf("remove repository status = %d, want %d body=%s", removeResp.Code, http.StatusOK, removeResp.Body.String())
@@ -5655,6 +5665,47 @@ func TestProjectRepositoryCRUDAPI(t *testing.T) {
 	}
 	if project.Prefix != "REP" {
 		t.Fatalf("GetProjectByGitRepository().Prefix = %q, want REP", project.Prefix)
+	}
+}
+
+func TestProjectRepositoryLookupRequiresVisibleProject(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+
+	adminToken := loginAdmin(t, handler)
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/projects", map[string]any{
+		"title":          "Private Repo Project",
+		"prefix":         "PRV",
+		"git_repository": "github.com/acme/private.git",
+		"visibility":     "private",
+	}, adminToken)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, want %d body=%s", createResp.Code, http.StatusCreated, createResp.Body.String())
+	}
+
+	registerResp := doJSONRequest(t, handler, http.MethodPost, "/api/register", map[string]string{
+		"username": "reader",
+		"password": "password",
+	}, "")
+	if registerResp.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d body=%s", registerResp.Code, http.StatusCreated, registerResp.Body.String())
+	}
+	loginResp := doJSONRequest(t, handler, http.MethodPost, "/api/login", map[string]string{
+		"username": "reader",
+		"password": "password",
+	}, "")
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d body=%s", loginResp.Code, http.StatusOK, loginResp.Body.String())
+	}
+	var auth struct {
+		Token string `json:"token"`
+	}
+	decodeResponse(t, loginResp, &auth)
+
+	lookupResp := doJSONRequest(t, handler, http.MethodGet, "/api/projects/by-repository?repository=github.com%2Facme%2Fprivate.git", nil, auth.Token)
+	if lookupResp.Code != http.StatusNotFound {
+		t.Fatalf("lookup repository status = %d, want %d body=%s", lookupResp.Code, http.StatusNotFound, lookupResp.Body.String())
 	}
 }
 

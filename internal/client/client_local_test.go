@@ -775,6 +775,13 @@ func TestLocalModeClientTeamsAndMembers(t *testing.T) {
 	if len(repositories) == 0 {
 		t.Fatal("ListProjectGitRepositories() returned empty")
 	}
+	projectByRepo, err := api.FindProjectByGitRepository(context.Background(), "github.com/acme/extra.git")
+	if err != nil {
+		t.Fatalf("FindProjectByGitRepository() error = %v", err)
+	}
+	if projectByRepo.ID != 1 {
+		t.Fatalf("FindProjectByGitRepository().ID = %d, want 1", projectByRepo.ID)
+	}
 	if err := api.RemoveProjectGitRepository(context.Background(), "1", "github.com/acme/extra.git"); err != nil {
 		t.Fatalf("RemoveProjectGitRepository() error = %v", err)
 	}

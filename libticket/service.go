@@ -75,6 +75,7 @@ type ProjectService interface {
 	CreateProject(ctx context.Context, request ProjectCreateRequest) (store.Project, error)
 	ListProjects(ctx context.Context) ([]store.Project, error)
 	GetProject(ctx context.Context, id string) (store.Project, error)
+	FindProjectByGitRepository(ctx context.Context, repository string) (store.Project, error)
 	CreateProjectAccessRequest(ctx context.Context, projectRef, message string) (store.ProjectAccessRequest, error)
 	ListProjectAccessRequests(ctx context.Context, projectRef, status string) ([]store.ProjectAccessRequest, error)
 	ListMyProjectAccessRequests(ctx context.Context, status string) ([]store.ProjectAccessRequest, error)

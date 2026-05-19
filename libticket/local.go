@@ -702,6 +702,14 @@ func (s *LocalService) ListProjectGitRepositories(ctx context.Context, projectRe
 	return store.ListProjectGitRepositories(ctx, db, project.ID)
 }
 
+func (s *LocalService) FindProjectByGitRepository(ctx context.Context, repository string) (store.Project, error) {
+	db, err := s.openDB()
+	if err != nil {
+		return store.Project{}, err
+	}
+	return store.GetProjectByGitRepository(ctx, db, repository)
+}
+
 func (s *LocalService) AddProjectGitRepository(ctx context.Context, projectRef, repository string) error {
 	db, err := s.openDB()
 	if err != nil {

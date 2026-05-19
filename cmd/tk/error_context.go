@@ -132,7 +132,7 @@ func currentRemoteResolution() (config.Resolved, error) {
 	if envURL := strings.TrimSpace(os.Getenv("TICKET_URL")); envURL != "" {
 		return config.ResolveLocation(envURL)
 	}
-	cfg, err := config.Load()
+	cfg, err := loadRuntimeConfig()
 	if err != nil {
 		return config.Resolved{}, err
 	}
@@ -169,7 +169,7 @@ func currentConfiguredRemoteServer() (serverURL, source string, err error) {
 		return "", source, nil
 	}
 	var cfg config.Config
-	cfg, err = config.Load()
+	cfg, err = loadRuntimeConfig()
 	if err != nil {
 		return "", source, err
 	}

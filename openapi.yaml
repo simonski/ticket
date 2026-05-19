@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.954
+  version: 0.1.955
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -4267,6 +4267,38 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/projects/by-repository:
+    get:
+      tags: [Projects]
+      summary: Find a visible project by git repository
+      operationId: findProjectByRepository
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: repository
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Git repository URL or canonical repository identifier
+      responses:
+        '200':
+          description: Matching project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+              examples:
+                default:
+                  $ref: '#/components/examples/ProjectExample'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':

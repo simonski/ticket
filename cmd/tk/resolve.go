@@ -33,7 +33,7 @@ func currentProjectOverride() string {
 }
 
 func resolveCurrentProjectClient() (config.Config, libticket.Service, store.Project, error) {
-	cfg, err := config.Load()
+	cfg, err := loadRuntimeConfig()
 	if err != nil {
 		return config.Config{}, nil, store.Project{}, err
 	}
@@ -64,17 +64,12 @@ func resolveProjectContext(ctx context.Context, cfg config.Config, svc libticket
 		return project, ref, err
 	}
 	if repo := nearestGitRemoteFromCLI(); repo != "" {
-		projects, err := svc.ListProjects(ctx)
-		if err == nil {
-			for _, project := range projects {
-				matches, matchErr := projectMatchesGitRemote(ctx, svc, project, repo)
-				if matchErr != nil {
-					return store.Project{}, "", matchErr
-				}
-				if matches {
-					return project, project.Prefix, nil
-				}
-			}
+		project, err := svc.FindProjectByGitRepository(ctx, repo)
+		switch {
+		case err == nil:
+			return project, project.Prefix, nil
+		case !errors.Is(err, store.ErrProjectNotFound):
+			return store.Project{}, "", err
 		}
 	}
 	if project, err := svc.GetProject(ctx, "private"); err == nil {
@@ -127,36 +122,6 @@ func nearestGitRemoteFromCLI() string {
 	return ""
 }
 
-func projectMatchesGitRemote(ctx context.Context, svc libticket.Service, project store.Project, repo string) (bool, error) {
-	canonicalRepo, err := config.CanonicalizeGitRepository(repo)
-	if err != nil || canonicalRepo == "" {
-		return false, err
-	}
-	if strings.TrimSpace(project.GitRepository) != "" {
-		canonicalProjectRepo, canonicalizeErr := config.CanonicalizeGitRepository(project.GitRepository)
-		if canonicalizeErr != nil {
-			return false, canonicalizeErr
-		}
-		if canonicalProjectRepo == canonicalRepo {
-			return true, nil
-		}
-	}
-	repositories, err := svc.ListProjectGitRepositories(ctx, project.Prefix)
-	if err != nil {
-		return false, err
-	}
-	for _, repository := range repositories {
-		canonicalCandidate, canonicalizeErr := config.CanonicalizeGitRepository(repository)
-		if canonicalizeErr != nil {
-			return false, canonicalizeErr
-		}
-		if canonicalCandidate == canonicalRepo {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func resolveService(cfg config.Config) (libticket.Service, error) {
 	location := strings.TrimSpace(os.Getenv("TICKET_URL"))
 	username := strings.TrimSpace(os.Getenv("TICKET_USERNAME"))
@@ -195,14 +160,7 @@ func resolveService(cfg config.Config) (libticket.Service, error) {
 		effectiveCfg.Token = password
 		effectiveCfg.UseBasicAuth = true
 	default:
-		creds, credsErr := config.LoadCredentials()
-		if credsErr != nil {
-			return nil, credsErr
-		}
-		if remoteCreds, ok := creds.Remote(resolved.ServerURL); ok && strings.TrimSpace(remoteCreds.Token) != "" {
-			effectiveCfg.Username = ""
-			effectiveCfg.Token = remoteCreds.Token
-		} else if strings.TrimSpace(effectiveCfg.Token) != "" {
+		if strings.TrimSpace(effectiveCfg.Token) != "" {
 			effectiveCfg.Username = ""
 		}
 		if username != "" && strings.TrimSpace(effectiveCfg.Token) == "" {

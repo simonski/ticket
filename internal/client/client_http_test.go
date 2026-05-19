@@ -664,6 +664,8 @@ func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/teams/1/agents":
 			_, _ = w.Write([]byte(`[{"team_id":1,"agent_id":"a1"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/projects/by-repository":
+			_, _ = w.Write([]byte(`{"project_id":7,"prefix":"REP","title":"Repo Project"}`))
 		default:
 			t.Fatalf("unexpected route: %s %s", r.Method, r.URL.String())
 		}
@@ -686,6 +688,9 @@ func TestRemoteClientProjectMembersAndTeams(t *testing.T) {
 	}
 	if _, err := api.ListProjectGitRepositories(context.Background(), "REP"); err != nil {
 		t.Fatalf("ListProjectGitRepositories() error = %v", err)
+	}
+	if _, err := api.FindProjectByGitRepository(context.Background(), "github.com/acme/repo.git"); err != nil {
+		t.Fatalf("FindProjectByGitRepository() error = %v", err)
 	}
 	if err := api.AddProjectGitRepository(context.Background(), "REP", "github.com/acme/repo.git"); err != nil {
 		t.Fatalf("AddProjectGitRepository() error = %v", err)

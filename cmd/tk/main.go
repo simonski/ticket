@@ -53,6 +53,7 @@ func main() {
 func run(args []string) error {
 	config.ClearLocationOverride()
 	clearProjectOverride()
+	resetRuntimeConfigCache()
 	trimmedArgs, dbOverride, err := extractDBOverride(args)
 	if err != nil {
 		return err

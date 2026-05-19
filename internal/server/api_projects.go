@@ -75,6 +75,42 @@ func (r *router) registerProjectHandlers() {
 		}
 	})
 
+	mux.HandleFunc("/api/projects/by-repository", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		repository := strings.TrimSpace(r.URL.Query().Get("repository"))
+		if repository == "" {
+			writeError(w, http.StatusBadRequest, "repository is required")
+			return
+		}
+		project, err := store.GetProjectByGitRepository(r.Context(), db, repository)
+		if err != nil {
+			if errors.Is(err, store.ErrProjectNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeStoreError(w, err)
+			return
+		}
+		role, err := projectRoleForUser(r.Context(), db, project.ID, user)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		if !canReadProject(role) {
+			writeError(w, http.StatusNotFound, store.ErrProjectNotFound.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, project)
+	})
+
 	mux.HandleFunc("/api/projects/", func(w http.ResponseWriter, r *http.Request) {
 		if _, err := requireUser(db, r); err != nil {
 			writeAuthError(w, err)

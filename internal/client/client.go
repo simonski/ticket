@@ -21,13 +21,14 @@ import (
 )
 
 type Client struct {
-	baseURL     string
-	username    string
-	password    string
-	token       string
-	http        *http.Client
-	mode        string
-	localDBPath string
+	baseURL       string
+	username      string
+	password      string
+	token         string
+	gitRepository string
+	http          *http.Client
+	mode          string
+	localDBPath   string
 
 	localDBMu sync.Mutex
 	localDB   *sql.DB
@@ -49,10 +50,11 @@ func New(cfg config.Config) *Client {
 		password = strings.TrimSpace(cfg.Token)
 	}
 	return &Client{
-		baseURL:  baseURL,
-		username: username,
-		password: password,
-		token:    cfg.Token,
+		baseURL:       baseURL,
+		username:      username,
+		password:      password,
+		token:         cfg.Token,
+		gitRepository: nearestGitRemoteFromCWD(),
 		http: &http.Client{
 			Timeout:   timeout,
 			Transport: newHTTPTransport(),
@@ -972,6 +974,26 @@ func (c *Client) ListProjectGitRepositories(ctx context.Context, projectRef stri
 	return repositories, err
 }
 
+func (c *Client) FindProjectByGitRepository(ctx context.Context, repository string) (store.Project, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Project{}, err
+		}
+		return store.GetProjectByGitRepository(ctx, db, repository)
+	}
+	var project store.Project
+	err := c.doJSON(ctx, http.MethodGet, "/api/projects/by-repository?repository="+url.QueryEscape(strings.TrimSpace(repository)), nil, &project)
+	if err == nil {
+		return project, nil
+	}
+	var statusErr *HTTPStatusError
+	if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
+		return store.Project{}, store.ErrProjectNotFound
+	}
+	return store.Project{}, err
+}
+
 func (c *Client) AddProjectGitRepository(ctx context.Context, projectRef, repository string) error {
 	if c.mode == config.ModeLocal {
 		db, err := c.openLocalDB()
@@ -1872,7 +1894,7 @@ func (c *Client) RequestTicket(ctx context.Context, request TicketRequest) (Tick
 	} else if c.token != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.token)
 	}
-	setRequestContextHeaders(httpReq)
+	setRequestContextHeaders(httpReq, c.gitRepository)
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -2784,7 +2806,7 @@ func (c *Client) GetDocumentFile(ctx context.Context, documentID, fileID int64) 
 	} else if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
-	setRequestContextHeaders(req)
+	setRequestContextHeaders(req, c.gitRepository)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return store.DocumentFile{}, friendlyConnectionError(err, c.baseURL)
