@@ -565,6 +565,29 @@ func printCommandUsageRows(b *strings.Builder, rows [][2]string, commandWidth in
 	}
 }
 
+func renderNamespaceUsage(title, usage string, rows [][2]string) string {
+	var b strings.Builder
+	b.WriteString(title)
+	b.WriteString("\n")
+	b.WriteString("USAGE\n")
+	b.WriteString("  ")
+	b.WriteString(usage)
+	b.WriteString("\n\n")
+	b.WriteString("COMMANDS\n")
+	printCommandUsageRows(&b, rows, namespaceCommandWidth(rows))
+	return strings.TrimSpace(b.String())
+}
+
+func namespaceCommandWidth(rows [][2]string) int {
+	width := 0
+	for _, row := range rows {
+		if len(row[0]) > width {
+			width = len(row[0])
+		}
+	}
+	return width
+}
+
 // ---------------------------------------------------------------------------
 // Per-namespace help text — consistent format across all nouns
 // ---------------------------------------------------------------------------
@@ -593,27 +616,26 @@ Commands:
   total    -id <ticket-id>                              Sum total time
   delete   -id <entry-id>                               Delete an entry`
 
-const projectUsage = `Usage: tk project <command> [flags]
-
-Commands:
-  ls                                  List all projects
-  new      -title <name>              Create a project
-  get      <id>                       Show project details
-  use      [<id>]                     Switch active project (or show current)
-  request-access [-project_id <id>]   Request access to a project
-  my-access-requests                  List your project access requests
-  access-requests [-project_id <id>]  List project access requests
-  approve-access-request              Approve a project access request
-  reject-access-request               Reject a project access request
-  rm       [-id] <id> [-confirm tok]  Delete a project (two-step)
-  rename-prefix <new-prefix>          Rename prefix and re-key all tickets
-  set-draft [-project_id <id>] <true|false>  Set project default draft mode
-  workflow     <id>                          Set workflow on current project (use 0 to clear)
-  repo         <ls|add|rm>                  Manage project git repositories
-  add-user                            Add a user to a project
-  remove-user                         Remove a user from a project
-  add-team                            Add a team to a project
-  remove-team                         Remove a team from a project`
+var projectUsage = renderNamespaceUsage("PROJECT", "tk project <command> [flags]", [][2]string{
+	{"ls", "List all projects"},
+	{"new -title <name>", "Create a project"},
+	{"get <id>", "Show project details"},
+	{"use [<id>]", "Switch active project (or show current)"},
+	{"request-access [-project_id <id>]", "Request access to a project"},
+	{"my-access-requests", "List your project access requests"},
+	{"access-requests [-project_id <id>]", "List project access requests"},
+	{"approve-access-request", "Approve a project access request"},
+	{"reject-access-request", "Reject a project access request"},
+	{"rm [-id] <id> [-confirm tok]", "Delete a project (two-step)"},
+	{"rename-prefix <new-prefix>", "Rename prefix and re-key all tickets"},
+	{"set-draft [-project_id <id>] <true|false>", "Set project default draft mode"},
+	{"workflow <id>", "Set workflow on current project (use 0 to clear)"},
+	{"repo <ls|add|rm>", "Manage project git repositories"},
+	{"add-user", "Add a user to a project"},
+	{"remove-user", "Remove a user from a project"},
+	{"add-team", "Add a team to a project"},
+	{"remove-team", "Remove a team from a project"},
+})
 
 const roleUsage = `Usage: tk role <command> [flags]
 
@@ -674,15 +696,14 @@ Commands:
                                           Remove an agent
   agents -id <id>                         List team agents`
 
-const adminUsage = `Usage: tk admin <command> [flags]
-
-Commands:
-  config                                 Manage server registration settings
-  role                                   Manage roles
-  workflow                               Manage workflows
-  team                                   Manage teams
-  agent                                  Manage agents
-  user                                   Manage users`
+var adminUsage = renderNamespaceUsage("ADMIN", "tk admin <command> [flags]", [][2]string{
+	{"config", "Manage server registration settings"},
+	{"role", "Manage roles"},
+	{"workflow", "Manage workflows"},
+	{"team", "Manage teams"},
+	{"agent", "Manage agents"},
+	{"user", "Manage users"},
+})
 
 const configUsage = `Usage: tk admin config <command> [flags]
 

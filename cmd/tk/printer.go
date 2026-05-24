@@ -85,6 +85,78 @@ func printProject(project store.Project) {
 	}
 }
 
+func printProjectSummary(project store.Project, repositories []string, workflowName string) {
+	if outputJSON {
+		if err := printJSON(project); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not print project JSON: %v\n", err)
+		}
+		return
+	}
+	rows := []string{
+		fmt.Sprintf("TITLE\t%s", project.Title),
+		fmt.Sprintf("PROJECT_ID\t%d", project.ID),
+		fmt.Sprintf("PREFIX\t%s", project.Prefix),
+		fmt.Sprintf("STATUS\t%s", valueOrDash(project.Status)),
+		fmt.Sprintf("VISIBILITY\t%s", valueOrDash(project.Visibility)),
+		fmt.Sprintf("ACCEPTS_NEW_MEMBERS\t%t", project.AcceptsNewMembers),
+		fmt.Sprintf("DEFAULT_DRAFT\t%t", project.DefaultDraft),
+		fmt.Sprintf("GIT_REPOSITORY\t%s", valueOrDash(project.GitRepository)),
+	}
+	if len(repositories) > 0 {
+		rows = append(rows, fmt.Sprintf("REPOSITORIES\t%s", strings.Join(repositories, ", ")))
+	}
+	if project.WorkflowID != nil {
+		workflowValue := strconv.FormatInt(*project.WorkflowID, 10)
+		if strings.TrimSpace(workflowName) != "" {
+			workflowValue = fmt.Sprintf("%s (%d)", workflowName, *project.WorkflowID)
+		}
+		rows = append(rows, fmt.Sprintf("WORKFLOW\t%s", workflowValue))
+	}
+	if strings.TrimSpace(project.CreatedBy) != "" {
+		rows = append(rows, fmt.Sprintf("CREATED_BY\t%s", project.CreatedBy))
+	}
+	if strings.TrimSpace(project.CreatedAt) != "" {
+		rows = append(rows, fmt.Sprintf("CREATED_AT\t%s", project.CreatedAt))
+	}
+	if strings.TrimSpace(project.UpdatedAt) != "" {
+		rows = append(rows, fmt.Sprintf("UPDATED_AT\t%s", project.UpdatedAt))
+	}
+	if strings.TrimSpace(project.Description) != "" {
+		rows = append(rows,
+			fmt.Sprintf("WOW\t%s", project.Description),
+			fmt.Sprintf("DESCRIPTION\t%s", project.Description),
+		)
+	}
+	if strings.TrimSpace(project.AcceptanceCriteria) != "" {
+		rows = append(rows,
+			fmt.Sprintf("AC\t%s", project.AcceptanceCriteria),
+			fmt.Sprintf("ACCEPTANCE_CRITERIA\t%s", project.AcceptanceCriteria),
+		)
+	}
+	appendGuidanceRows(&rows, "DOR_MAP", project.DORMap)
+	appendGuidanceRows(&rows, "DOD_MAP", project.DODMap)
+	appendGuidanceRows(&rows, "AC_MAP", project.ACMap)
+	if strings.TrimSpace(project.Notes) != "" {
+		rows = append(rows,
+			fmt.Sprintf("DOD\t%s", project.Notes),
+			fmt.Sprintf("NOTES\t%s", project.Notes),
+		)
+	}
+	if strings.TrimSpace(project.AgentModelProvider) != "" {
+		rows = append(rows, fmt.Sprintf("AGENT_MODEL_PROVIDER\t%s", project.AgentModelProvider))
+	}
+	if strings.TrimSpace(project.AgentModelName) != "" {
+		rows = append(rows, fmt.Sprintf("AGENT_MODEL_NAME\t%s", project.AgentModelName))
+	}
+	if strings.TrimSpace(project.AgentModelURL) != "" {
+		rows = append(rows, fmt.Sprintf("AGENT_MODEL_URL\t%s", project.AgentModelURL))
+	}
+	if strings.TrimSpace(project.AgentModelAPIKey) != "" {
+		rows = append(rows, fmt.Sprintf("AGENT_MODEL_API_KEY\t%s", project.AgentModelAPIKey))
+	}
+	printBoxTable("FIELD\tVALUE", rows)
+}
+
 func printProjectTable(projects []store.Project, currentProjectID string, workflowNames map[int64]string) {
 	if len(projects) == 0 {
 		printNoEntitiesAvailable("projects")
@@ -248,6 +320,28 @@ func printAlignedGuidanceMap(width int, prefix string, m store.GuidanceMap) {
 	for _, key := range keys {
 		fmt.Printf("%-*s : %s\n", width, fmt.Sprintf("%s[%s]", prefix, key), m[key])
 	}
+}
+
+func appendGuidanceRows(rows *[]string, prefix string, m store.GuidanceMap) {
+	if len(m) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		*rows = append(*rows, fmt.Sprintf("%s[%s]\t%s", prefix, key, m[key]))
+	}
+}
+
+func valueOrDash(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-"
+	}
+	return value
 }
 
 func printRequestContext(resp libticket.TicketRequestResponse) {

@@ -271,10 +271,11 @@ func runProject(args []string) error {
 				return err
 			}
 		}
-		if outputJSON {
-			return printJSON(project)
+		repositories, workflowName, err := loadProjectSummaryDetails(svc, project)
+		if err != nil {
+			return err
 		}
-		printProject(project)
+		printProjectSummary(project, repositories, workflowName)
 		return nil
 	case "use", "default":
 		if len(args) < 2 {
@@ -620,10 +621,11 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 		if err != nil {
 			return err
 		}
-		if outputJSON {
-			return printJSON(project)
+		repositories, workflowName, err := loadProjectSummaryDetails(svc, project)
+		if err != nil {
+			return err
 		}
-		printProject(project)
+		printProjectSummary(project, repositories, workflowName)
 		return nil
 	}
 	switch args[0] {
@@ -751,6 +753,21 @@ func runProjectByID(svc libticket.Service, projectID int64, args []string) error
 	default:
 		return fmt.Errorf("unknown project command %q; see: ticket project help", args[0])
 	}
+}
+
+func loadProjectSummaryDetails(svc libticket.Service, project store.Project) (repositories []string, workflowName string, err error) {
+	repositories, err = svc.ListProjectGitRepositories(context.Background(), project.Prefix)
+	if err != nil {
+		return nil, "", err
+	}
+	if project.WorkflowID != nil {
+		workflow, workflowErr := svc.GetWorkflow(context.Background(), *project.WorkflowID)
+		if workflowErr != nil {
+			return nil, "", workflowErr
+		}
+		workflowName = workflow.Name
+	}
+	return repositories, workflowName, nil
 }
 
 // guardProjectClose returns an error if closing the given project is not allowed.

@@ -747,6 +747,8 @@ func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
 		}
 	})
 	for _, want := range []string{
+		"PROJECT",
+		"COMMANDS",
 		"set-draft [-project_id <id>] <true|false>",
 		"request-access [-project_id <id>]",
 		"my-access-requests",
@@ -756,6 +758,26 @@ func TestRenderProjectHelpIncludesSetDraft(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("project usage missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunAdminHelpUsesFormattedNamespaceUsage(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"admin", "help"}); err != nil {
+			t.Fatalf("admin help error = %v", err)
+		}
+	})
+	for _, want := range []string{
+		"ADMIN",
+		"COMMANDS",
+		"tk admin <command> [flags]",
+		"config",
+		"workflow",
+		"user",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("admin usage missing %q:\n%s", want, output)
 		}
 	}
 }
@@ -2494,6 +2516,14 @@ func TestRunProjectGetShowsGuidanceMaps(t *testing.T) {
 	setupLocalCLI(t)
 	svc := localCLIService(t)
 
+	workflow, err := svc.CreateWorkflow(context.Background(), libticket.WorkflowRequest{
+		Name:        "Guidance Workflow",
+		Description: "workflow for project summary",
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkflow() error = %v", err)
+	}
+
 	project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{
 		Prefix:             "MAP",
 		Title:              "Guidance Project",
@@ -2501,9 +2531,16 @@ func TestRunProjectGetShowsGuidanceMaps(t *testing.T) {
 		DORMap:             store.GuidanceMap{"default": "project default dor", "develop": "project develop dor"},
 		DODMap:             store.GuidanceMap{"default": "project default dod"},
 		ACMap:              store.GuidanceMap{"qa": "project qa ac"},
+		GitRepository:      "github.com/example/guidance.git",
+		Visibility:         store.ProjectVisibilityTeam,
+		AcceptsNewMembers:  true,
+		WorkflowID:         &workflow.ID,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if err := svc.AddProjectGitRepository(context.Background(), project.Prefix, "github.com/example/guidance-secondary.git"); err != nil {
+		t.Fatalf("AddProjectGitRepository() error = %v", err)
 	}
 
 	output := captureStdout(t, func() {
@@ -2513,11 +2550,28 @@ func TestRunProjectGetShowsGuidanceMaps(t *testing.T) {
 	})
 
 	for _, want := range []string{
-		"dor_map[default]: project default dor",
-		"dor_map[develop]: project develop dor",
-		"dod_map[default]: project default dod",
-		"ac_map[default]: legacy project ac",
-		"ac_map[qa]: project qa ac",
+		"FIELD",
+		"TITLE",
+		"Guidance Project",
+		"VISIBILITY",
+		"team",
+		"ACCEPTS_NEW_MEMBERS",
+		"GIT_REPOSITORY",
+		"github.com/example/guidance.git",
+		"REPOSITORIES",
+		"github.com/example/guidance-secondary.git, github.com/example/guidance.git",
+		"WORKFLOW",
+		"Guidance Workflow",
+		"DOR_MAP[default]",
+		"project default dor",
+		"DOR_MAP[develop]",
+		"project develop dor",
+		"DOD_MAP[default]",
+		"project default dod",
+		"AC_MAP[default]",
+		"legacy project ac",
+		"AC_MAP[qa]",
+		"project qa ac",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("project get output missing %q:\n%s", want, output)
@@ -2549,7 +2603,7 @@ func TestRunProjectGetUsesCurrentProjectWhenIDOmitted(t *testing.T) {
 			t.Fatalf("project get error = %v", err)
 		}
 	})
-	for _, want := range []string{"project: Current Project", "prefix: CUR"} {
+	for _, want := range []string{"TITLE", "Current Project", "PREFIX", "CUR"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("project get output missing %q:\n%s", want, output)
 		}
@@ -2595,7 +2649,7 @@ func TestRunProjectGetFallsBackToMostRecentProjectWhenCurrentUnset(t *testing.T)
 			t.Fatalf("project get error = %v", err)
 		}
 	})
-	for _, want := range []string{"project: Newest Project", fmt.Sprintf("project_id: %d", project.ID), "prefix: NEW"} {
+	for _, want := range []string{"TITLE", "Newest Project", "PROJECT_ID", fmt.Sprintf("%d", project.ID), "PREFIX", "NEW"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("project get output missing %q:\n%s", want, output)
 		}
