@@ -498,9 +498,74 @@ function installSite2Mock(page, seed = {}) {
       if (path === "/api/workflows" && method === "GET") {
         return json(db.workflows.map(({ stages, ...workflow }) => workflow));
       }
+      if (path === "/api/workflows" && method === "POST") {
+        const workflow = {
+          workflow_id: db.workflows.reduce((max, item) => Math.max(max, Number(item.workflow_id || 0)), 0) + 1,
+          name: body.name || "",
+          description: body.description || "",
+          approval_policy: body.approval_policy || "single_role",
+          progression_mode: body.progression_mode || "linear",
+          stages: [],
+        };
+        db.workflows.push(workflow);
+        return json(workflow, 201);
+      }
       if (path.match(/^\/api\/workflows\/\d+$/) && method === "GET") {
         const id = Number(last(path.split("/")));
         return json(db.workflows.find((item) => item.workflow_id === id));
+      }
+      if (path.match(/^\/api\/workflows\/\d+$/) && method === "PUT") {
+        const id = Number(last(path.split("/")));
+        const workflow = db.workflows.find((item) => item.workflow_id === id);
+        if (!workflow) {
+          return json({ error: "not found" }, 404);
+        }
+        workflow.name = body.name || workflow.name;
+        workflow.description = body.description || "";
+        workflow.approval_policy = body.approval_policy || "single_role";
+        workflow.progression_mode = body.progression_mode || "linear";
+        return json(workflow);
+      }
+      if (path.match(/^\/api\/workflows\/\d+\/stages$/) && method === "POST") {
+        const workflowID = Number(path.split("/")[3]);
+        const workflow = db.workflows.find((item) => item.workflow_id === workflowID);
+        const nextStageID = workflow.stages.reduce((max, stage) => Math.max(max, Number(stage.workflow_stage_id || 0)), 0) + 1;
+        const stage = {
+          workflow_stage_id: nextStageID,
+          workflow_id: workflowID,
+          stage_name: body.stage_name || "",
+          description: body.wow || "",
+          definition_of_ready: body.dor || "",
+          definition_of_done: body.dod || "",
+          roles: [],
+          next_stage_ids: [],
+          sort_order: Number(body.sort_order || workflow.stages.length),
+        };
+        workflow.stages.push(stage);
+        return json(stage, 201);
+      }
+      if (path.match(/^\/api\/workflows\/stages\/\d+$/) && method === "PUT") {
+        const stageID = Number(path.split("/")[4]);
+        const workflow = db.workflows.find((item) => item.stages.some((stage) => stage.workflow_stage_id === stageID));
+        const stage = workflow?.stages.find((item) => item.workflow_stage_id === stageID);
+        if (!stage) {
+          return json({ error: "not found" }, 404);
+        }
+        stage.stage_name = body.stage_name || stage.stage_name;
+        stage.description = body.wow || "";
+        stage.definition_of_ready = body.dor || "";
+        stage.definition_of_done = body.dod || "";
+        return json(stage);
+      }
+      if (path.match(/^\/api\/workflows\/stages\/\d+\/transitions$/) && method === "PUT") {
+        const stageID = Number(path.split("/")[4]);
+        const workflow = db.workflows.find((item) => item.stages.some((stage) => stage.workflow_stage_id === stageID));
+        const stage = workflow?.stages.find((item) => item.workflow_stage_id === stageID);
+        if (!stage) {
+          return json({ error: "not found" }, 404);
+        }
+        stage.next_stage_ids = Array.isArray(body.to_stage_ids) ? body.to_stage_ids.map(Number) : [];
+        return json(stage);
       }
       if (path === "/api/roles" && method === "GET") {
         return json(db.roles);
@@ -695,6 +760,14 @@ function installSite2Mock(page, seed = {}) {
         });
         return json({ status: "reordered" });
       }
+      if (path.match(/^\/api\/workflows\/stages\/roles\/\d+\/\d+\/\d+$/) && method === "DELETE") {
+        const parts = path.split("/");
+        const workflow = db.workflows.find((item) => item.workflow_id === Number(parts[5]));
+        const stage = workflow.stages.find((item) => item.workflow_stage_id === Number(parts[6]));
+        const roleID = Number(parts[7]);
+        stage.roles = (stage.roles || []).filter((item) => Number(item.role_id) !== roleID);
+        return json({ status: "removed" });
+      }
 
       return json({ error: `Unhandled ${method} ${path}` }, 500);
     };
@@ -755,7 +828,9 @@ test("admin settings view supports config key CRUD", async ({ page }) => {
   await page.getByRole("button", { name: "Save setting" }).click();
   await expect(page.locator("#config-settings-list")).toContainText("feature.flag.renamed");
 
+  await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
   await page.getByRole("button", { name: "Delete" }).click();
+  await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
   await expect(page.locator("#config-settings-list")).not.toContainText("feature.flag.renamed");
 });
 
@@ -1154,10 +1229,70 @@ test("reorders board stages through the Workflow reorder endpoint", async ({ pag
   expect(requests.length).toBeGreaterThan(0);
 });
 
+test("adds a stage from the workflows board", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.locator("#new-stage-name").fill("review");
+  await page.locator("#new-stage-wow").fill("Peer review before QA");
+  await page.locator("#save-stage-button").click();
+
+  await expect(page.locator('#stage-grid [data-stage-title]').last()).toContainText("review");
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/1/stages"));
+  expect(requests.at(-1)).toEqual(expect.objectContaining({
+    method: "POST",
+    path: "/api/workflows/1/stages",
+    body: expect.objectContaining({
+      stage_name: "review",
+      wow: "Peer review before QA",
+      sort_order: 4,
+    }),
+  }));
+});
+
+test("reorders stages inside the workflows board", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.dragAndDrop('[data-stage-id="11"]', '[data-stage-id="13"]');
+
+  await expect.poll(async () => page.evaluate(() => (
+    Array.from(document.querySelectorAll("#stage-grid [data-stage-id]"))
+      .map((item) => Number(item.dataset.stageId))
+  ))).toEqual([12, 11, 13, 14]);
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/1/reorder"));
+  expect(requests.at(-1)?.body?.stage_ids).toEqual([12, 11, 13, 14]);
+});
+
+test("reorders stages inside the workflows board with lane buttons", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.locator('[data-move-stage="12"][data-move-direction="left"]').click();
+
+  await expect.poll(async () => page.evaluate(() => (
+    Array.from(document.querySelectorAll("#stage-grid [data-stage-id]"))
+      .map((item) => Number(item.dataset.stageId))
+  ))).toEqual([12, 11, 13, 14]);
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/1/reorder"));
+  expect(requests.at(-1)?.body?.stage_ids).toEqual([12, 11, 13, 14]);
+});
+
+test("workflow settings autosave changes", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.locator("#workflow-settings summary").click();
+  await page.locator("#workflow-description").fill("Ship safer changes");
+  await page.locator('label[for="workflow-approval-policy-all"]').click();
+
+  await expect.poll(async () => page.evaluate(() => window.__site2Requests.filter((request) => request.method === "PUT" && request.path === "/api/workflows/1"))).toHaveLength(1);
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.method === "PUT" && request.path === "/api/workflows/1"));
+  expect(requests.at(-1)?.body).toEqual(expect.objectContaining({
+    description: "Ship safer changes",
+    approval_policy: "all_roles",
+  }));
+});
+
 test("adds a role inside the Workflow editor using the existing stage-role API", async ({ page }) => {
   await page.getByRole("button", { name: "Workflows" }).click();
-  await expect(page.locator("#stage-grid")).toContainText("backlog");
-  await expect(page.locator("#workflow-role-bank")).toContainText("Engineer");
+  await expect(page.locator('[data-stage-title="11"]')).toContainText("backlog");
   await page.locator('[data-add-role-select="12"]').selectOption("6");
   await page.locator('[data-add-role="12"]').click();
 
@@ -1167,6 +1302,51 @@ test("adds a role inside the Workflow editor using the existing stage-role API",
       expect.objectContaining({ method: "POST", path: "/api/workflows/stages/roles/1/12", body: { role_id: 6 } }),
     ]),
   );
+});
+
+test("reorders roles inside a workflow lane", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.locator('[data-add-role-select="11"]').selectOption("6");
+  await page.locator('[data-add-role="11"]').click();
+  await expect(page.locator('.workflow-role-card[data-stage-id="11"][data-role-id="6"]')).toBeVisible();
+
+  await page.dragAndDrop(
+    '.workflow-role-card[data-stage-id="11"][data-role-id="6"]',
+    '.workflow-role-card[data-stage-id="11"][data-role-id="5"]',
+  );
+
+  await expect.poll(async () => page.evaluate(() => (
+    Array.from(document.querySelectorAll('.workflow-role-card[data-stage-id="11"]'))
+      .map((item) => Number(item.dataset.roleId))
+  ))).toEqual([6, 5]);
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/stages/roles/1/11"));
+  expect(requests.at(-1)).toEqual(expect.objectContaining({
+    method: "PUT",
+    body: { role_ids: [6, 5] },
+  }));
+});
+
+test("renames a stage from the workflow lane title", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.evaluate(() => {
+    window._origUiPrompt = window.uiPrompt;
+    window.uiPrompt = async () => "intake";
+  });
+  await page.locator('[data-rename-stage="11"]').click();
+  await page.evaluate(() => {
+    if (window._origUiPrompt) {
+      window.uiPrompt = window._origUiPrompt;
+    }
+  });
+
+  await expect(page.locator('[data-stage-title="11"]')).toContainText("intake");
+
+  const requests = await page.evaluate(() => window.__site2Requests.filter((request) => request.path === "/api/workflows/stages/11"));
+  expect(requests.at(-1)).toEqual(expect.objectContaining({
+    method: "PUT",
+    body: expect.objectContaining({ stage_name: "intake" }),
+  }));
 });
 
 test("adds a comment from the ticket modal using the ticket comments endpoint", async ({ page }) => {
@@ -1238,7 +1418,9 @@ test("creates, updates, uploads, and deletes documents from the Documents view",
   await page.getByRole("button", { name: "Upload file" }).click();
   await expect(page.locator("#document-files-list")).toContainText("sop.txt");
 
+  await page.evaluate(() => { window._origUiConfirm = window.uiConfirm; window.uiConfirm = async () => true; });
   await page.getByRole("button", { name: "Delete document" }).click();
+  await page.evaluate(() => { if (window._origUiConfirm) window.uiConfirm = window._origUiConfirm; });
   await expect(page.locator("#document-list")).not.toContainText("Incident SOP v2");
 
   const requests = await page.evaluate(() => window.__site2Requests);

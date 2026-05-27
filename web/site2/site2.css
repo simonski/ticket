@@ -71,6 +71,39 @@
             color: #942b18;
         }
 
+        .icon-button-danger {
+            min-width: 40px;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+
+        .icon-trash {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.85;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
         .btn-ghost {
             background: rgba(255, 255, 255, 0.55);
             border: 1px solid var(--line);
@@ -668,7 +701,8 @@
 
         .lane.drag-target,
         .stage-card.drag-target,
-        .role-chip.drag-target {
+        .role-chip.drag-target,
+        .workflow-role-card.drag-target {
             border-color: rgba(255, 122, 26, 0.45);
             box-shadow: 0 0 0 2px rgba(255, 122, 26, 0.14);
         }
@@ -709,29 +743,463 @@
             cursor: grab;
         }
 
-        .role-bank {
+        .workflow-board-head {
+            margin-bottom: 12px;
+        }
+
+        .workflow-compact-controls {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 10px;
             flex-wrap: wrap;
+        }
+
+        .workflow-compact-select {
+            min-width: 220px;
+        }
+
+        .workflow-list-hidden {
+            display: none;
+        }
+
+        .workflow-settings-panel {
+            margin-bottom: 18px;
+            border: 1px solid rgba(29, 24, 20, 0.08);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.58);
             padding: 12px;
-            border-radius: 14px;
-            border: 1px dashed var(--line);
-            background: rgba(8, 16, 29, 0.6);
+        }
+
+        .workflow-settings-panel summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .workflow-settings-panel summary > * {
+            pointer-events: none;
+        }
+
+        .workflow-settings-panel summary::after {
+            content: "▸";
+            color: var(--muted);
+            font-size: 14px;
+            transition: transform 0.18s ease;
+        }
+
+        .workflow-settings-panel summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .workflow-settings-panel[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .workflow-settings-panel[open] summary {
+            margin-bottom: 12px;
+        }
+
+        .workflow-settings-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .workflow-choice-field {
+            padding: 0;
+            margin: 0;
+            border: 0;
+            min-width: 0;
+        }
+
+        .workflow-choice-field legend {
+            padding: 0;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .workflow-choice-group {
+            display: grid;
+            gap: 10px;
+        }
+
+        .workflow-choice-card {
+            display: grid;
+            gap: 4px;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        }
+
+        .workflow-choice-card:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255, 122, 26, 0.28);
+        }
+
+        .workflow-choice-card input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .workflow-choice-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .workflow-choice-copy {
+            font-size: 12px;
+            line-height: 1.45;
+            color: var(--muted);
+        }
+
+        .workflow-choice-card:has(input:checked) {
+            border-color: rgba(255, 122, 26, 0.55);
+            background: rgba(255, 244, 233, 0.95);
+            box-shadow: inset 0 0 0 1px rgba(255, 122, 26, 0.16);
+        }
+
+        .workflow-choice-card:has(input:focus-visible) {
+            outline: 2px solid rgba(255, 122, 26, 0.35);
+            outline-offset: 2px;
+        }
+
+        .workflow-stage-footer {
+            display: grid;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .workflow-stage-footer .entity-actions {
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .workflow-stage-board {
+            display: flex;
+            gap: 14px;
+            align-items: start;
+            overflow-x: auto;
+            padding-bottom: 10px;
         }
 
         .stage-grid {
             display: grid;
-            gap: 10px;
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(280px, 320px);
+            gap: 12px;
+            align-items: start;
+            flex: 0 0 auto;
         }
 
         .stage-card {
             display: grid;
             gap: 12px;
             cursor: grab;
+            min-height: 100%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 247, 239, 0.9));
+            box-shadow: 0 18px 28px rgba(53, 37, 24, 0.08);
+        }
+
+        .workflow-stage-lane {
+            width: 320px;
+            min-height: 420px;
+            align-content: start;
+            flex: 0 0 auto;
+        }
+
+        .stage-card-top,
+        .stage-create-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .stage-card-heading {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .stage-card-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .stage-card-move-button {
+            min-width: 34px;
+            padding: 8px 10px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .workflow-stage-title-wrap {
+            min-width: 0;
+        }
+
+        .stage-card-title-button {
+            width: 100%;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            text-align: left;
+            color: var(--text);
+        }
+
+        .stage-card-title-button:hover {
+            transform: none;
+        }
+
+        .stage-card-order {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: rgba(255, 122, 26, 0.12);
+            color: #8c3d00;
+            font-size: 12px;
+            font-weight: 700;
+            flex: 0 0 auto;
+        }
+
+        .stage-card-title {
+            width: 100%;
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .stage-card-title-button:focus-visible {
+            outline: none;
+        }
+
+        .stage-card-title-button:focus-visible .stage-card-title {
+            box-shadow: inset 0 -2px 0 rgba(255, 122, 26, 0.35);
+        }
+
+        .stage-card-summary-grid {
+            display: grid;
+            gap: 8px;
+        }
+
+        .stage-card-panel {
+            border-radius: 10px;
+            padding: 10px;
+            background: rgba(245, 238, 228, 0.9);
+            border: 1px solid rgba(29, 24, 20, 0.08);
+        }
+
+        .stage-card-panel span {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .stage-card-panel strong {
+            display: block;
+            font-size: 13px;
+            line-height: 1.45;
+            color: var(--text);
+        }
+
+        .stage-card-dropzone {
+            min-height: 120px;
+            padding: 8px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.75);
+            border: 1px dashed rgba(29, 24, 20, 0.12);
+        }
+
+        .workflow-role-list {
+            display: grid;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .workflow-role-card {
+            position: relative;
+            border: 1px solid rgba(29, 24, 20, 0.08);
+            background: rgba(255, 255, 255, 0.96);
+        }
+
+        .workflow-role-card strong {
+            font-size: 14px;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""])::after {
+            content: attr(data-role-description);
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 12px);
+            transform: translate(-50%, 6px);
+            width: max-content;
+            max-width: min(240px, calc(100vw - 48px));
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(22, 18, 15, 0.94);
+            color: #fffaf4;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: normal;
+            text-align: left;
+            box-shadow: 0 16px 34px rgba(22, 18, 15, 0.24);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            z-index: 6;
+            transition: opacity 0.18s ease 0.45s, transform 0.18s ease 0.45s, visibility 0s linear 0.45s;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""])::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 6px);
+            transform: translateX(-50%);
+            border-width: 6px 6px 0 6px;
+            border-style: solid;
+            border-color: rgba(22, 18, 15, 0.94) transparent transparent transparent;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            z-index: 6;
+            transition: opacity 0.18s ease 0.45s, visibility 0s linear 0.45s;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):hover::after,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):hover::before,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):focus-within::after,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):focus-within::before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):hover::after,
+        .workflow-role-card[data-role-description]:not([data-role-description=""]):focus-within::after {
+            transform: translate(-50%, 0);
+        }
+
+        .workflow-role-empty {
+            min-height: 102px;
+            display: grid;
+            place-items: center;
+            padding: 12px;
+        }
+
+        .stage-card-add-role {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: end;
+        }
+
+        .stage-card-add-role .select-shell {
+            min-width: 0;
+        }
+
+        .stage-card-section {
+            border-top: 1px solid rgba(29, 24, 20, 0.08);
+            padding-top: 10px;
+        }
+
+        .stage-card-section summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            gap: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .stage-card-section summary > * {
+            pointer-events: none;
+        }
+
+        .stage-card-section-title {
+            flex: 1 1 auto;
+        }
+
+        .stage-card-section summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .stage-card-section summary::after {
+            content: "▸";
+            color: var(--muted);
+            font-size: 14px;
+            transition: transform 0.18s ease;
+        }
+
+        .stage-card-section[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .stage-card-section[open] summary {
+            margin-bottom: 10px;
+        }
+
+        .stage-card-section-body {
+            display: grid;
+            gap: 10px;
+        }
+
+        .stage-card-actions {
+            margin-top: 12px;
+        }
+
+        .stage-create-card {
+            cursor: default;
+            border-style: dashed;
+            border-width: 1px;
+            background: linear-gradient(180deg, rgba(255, 252, 248, 0.98), rgba(250, 240, 226, 0.94));
+            width: 320px;
+            min-height: 420px;
+            flex: 0 0 auto;
+        }
+
+        .stage-create-card .field textarea {
+            min-height: 74px;
         }
 
         .stage-card .field textarea {
             min-height: 84px;
+        }
+
+        .stage-card.is-dragging {
+            opacity: 0.55;
+        }
+
+        .stage-create-card.drag-target {
+            border-color: rgba(255, 122, 26, 0.45);
+            box-shadow: 0 0 0 2px rgba(255, 122, 26, 0.14);
         }
 
         .empty {
@@ -795,6 +1263,43 @@
         .history-item-system {
             background: rgba(245, 244, 240, 0.92);
             border-color: rgba(29, 24, 20, 0.18);
+        }
+
+        .dialog-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 70;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: rgba(22, 18, 15, 0.38);
+            backdrop-filter: blur(6px);
+        }
+
+        .dialog {
+            width: min(420px, 100%);
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: rgba(255, 250, 244, 0.98);
+            box-shadow: 0 24px 60px rgba(29, 24, 20, 0.26);
+            padding: 20px;
+        }
+
+        .dialog-message {
+            margin: 0 0 16px;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .dialog-input-wrap {
+            margin-bottom: 16px;
+        }
+
+        .dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .goal-chat-status {
@@ -942,6 +1447,21 @@
                 height: auto;
             }
 
+            .workflow-stage-board {
+                flex-direction: column;
+                overflow-x: visible;
+            }
+
+            .workflow-compact-controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .workflow-stage-lane,
+            .stage-create-card {
+                width: 100%;
+            }
+
             .board {
                 grid-template-columns: repeat(2, minmax(240px, 1fr));
             }
@@ -956,6 +1476,17 @@
 
             .agent-harness-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .stage-grid {
+                grid-auto-flow: row;
+                grid-auto-columns: unset;
+                width: 100%;
+            }
+
+            .workflow-compact-select {
+                min-width: 0;
+                flex: 1 1 220px;
             }
 
             .notice {

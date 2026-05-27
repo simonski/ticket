@@ -718,103 +718,111 @@
                     </div>
                 </section>
 
-                <section id="view-workflows" class="view split">
+                <section id="view-workflows" class="view">
                     <div class="panel">
-                        <div class="panel-head">
-                            <h2>Workflows</h2>
-                            <button id="new-workflow-button" type="button" class="btn-primary">New Workflow</button>
-                        </div>
-                        <div id="workflow-list" class="entity-list"></div>
-                    </div>
-                    <div class="panel">
-                        <div class="panel-head">
+                        <div class="panel-head workflow-board-head">
                             <div>
-                                <h2 id="workflow-editor-title">Workflow editor</h2>
-                                <p class="meta">Reorder stages and roles with drag/drop. Stage updates are saved inline.</p>
+                                <h2 id="workflow-editor-title">Workflow board</h2>
+                            </div>
+                            <div class="workflow-compact-controls">
+                                <div class="select-shell workflow-compact-select">
+                                    <select id="workflow-select" aria-label="Select workflow"></select>
+                                </div>
+                                <button id="new-workflow-button" type="button" class="btn-primary">New Workflow</button>
                             </div>
                         </div>
-                        <form id="workflow-form" class="stack">
-                            <div class="row">
-                                <div class="field">
-                                    <label for="workflow-name">Name</label>
-                                    <input id="workflow-name" required>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label for="workflow-description">Description</label>
-                                <textarea id="workflow-description"></textarea>
-                            </div>
-                            <div class="row">
-                                <div class="field">
-                                    <label for="workflow-approval-policy">Approval policy</label>
-                                    <select id="workflow-approval-policy">
-                                        <option value="single_role">single_role</option>
-                                        <option value="all_roles">all_roles</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="workflow-progression-mode">Progression mode</label>
-                                    <select id="workflow-progression-mode">
-                                        <option value="linear">linear</option>
-                                        <option value="stage_only">stage_only</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="editor-actions">
-                                <button id="save-workflow-button" type="submit" class="btn-primary">Save Workflow</button>
-                                <button id="delete-workflow-button" type="button" class="btn-danger">Delete</button>
-                                <button id="reset-workflow-button" type="button" class="btn-ghost">Clear</button>
-                            </div>
-                        </form>
+                        <div id="workflow-list" class="workflow-list-hidden" hidden></div>
 
-                        <div class="panel-head panel-head-spaced">
-                            <h3>Stages</h3>
-                            <span class="meta">Drag whole cards to reorder the flow.</span>
-                        </div>
-                        <div class="entity-actions" style="margin-bottom:8px;">
-                            <button id="validate-workflow-button" type="button">Validate graph</button>
-                            <button id="auto-chain-transitions-button" type="button">Auto-chain transitions</button>
-                            <button id="save-all-stages-button" type="button">Save all stages</button>
-                        </div>
-                        <div id="workflow-validation-summary" class="meta" style="margin-bottom: 8px;"></div>
-                        <div class="field">
-                            <label>Roles</label>
-                            <div id="workflow-role-bank" class="role-bank"></div>
-                        </div>
-                        <div id="stage-grid" class="stage-grid"></div>
+                        <details id="workflow-settings" class="workflow-settings-panel">
+                            <summary><span class="workflow-settings-summary-title">Workflow settings</span></summary>
+                            <form id="workflow-form" class="stack">
+                                <div class="row">
+                                    <div class="field">
+                                        <label for="workflow-name">Name</label>
+                                        <input id="workflow-name" required>
+                                    </div>
+                                </div>
+                                <div class="field">
+                                    <label for="workflow-description">Description</label>
+                                    <textarea id="workflow-description"></textarea>
+                                </div>
+                                <div class="workflow-settings-grid">
+                                    <fieldset class="field workflow-choice-field">
+                                        <legend>Approval policy</legend>
+                                        <div class="workflow-choice-group" role="radiogroup" aria-label="Approval policy">
+                                            <label class="workflow-choice-card" for="workflow-approval-policy-single">
+                                                <input id="workflow-approval-policy-single" type="radio" name="workflow-approval-policy" value="single_role" checked>
+                                                <span class="workflow-choice-title">Single role</span>
+                                                <span class="workflow-choice-copy">One role can complete the stage and move work onward.</span>
+                                            </label>
+                                            <label class="workflow-choice-card" for="workflow-approval-policy-all">
+                                                <input id="workflow-approval-policy-all" type="radio" name="workflow-approval-policy" value="all_roles">
+                                                <span class="workflow-choice-title">All roles</span>
+                                                <span class="workflow-choice-copy">Every assigned role must complete before the stage is approved.</span>
+                                            </label>
+                                        </div>
+                                    </fieldset>
+                                    <fieldset class="field workflow-choice-field">
+                                        <legend>Progression mode</legend>
+                                        <div class="workflow-choice-group" role="radiogroup" aria-label="Progression mode">
+                                            <label class="workflow-choice-card" for="workflow-progression-mode-linear">
+                                                <input id="workflow-progression-mode-linear" type="radio" name="workflow-progression-mode" value="linear" checked>
+                                                <span class="workflow-choice-title">Linear</span>
+                                                <span class="workflow-choice-copy">Move through the workflow in a fixed ordered sequence.</span>
+                                            </label>
+                                            <label class="workflow-choice-card" for="workflow-progression-mode-stage-only">
+                                                <input id="workflow-progression-mode-stage-only" type="radio" name="workflow-progression-mode" value="stage_only">
+                                                <span class="workflow-choice-title">Stage only</span>
+                                                <span class="workflow-choice-copy">Focus on stage transitions without role-by-role progression.</span>
+                                            </label>
+                                        </div>
+                                    </fieldset>
+                                </div>
+                                <div class="editor-actions">
+                                    <button id="delete-workflow-button" type="button" class="btn-danger">Delete</button>
+                                </div>
+                            </form>
+                        </details>
 
-                        <div class="panel-head panel-head-spaced">
-                            <h3>Add stage</h3>
-                        </div>
-                        <form id="new-stage-form" class="stack">
-                            <div class="row">
+                        <div class="workflow-stage-board">
+                            <div id="stage-grid" class="stage-grid"></div>
+                            <form id="new-stage-form" class="stage-card stage-create-card stack" data-stage-drop-end="true">
+                                <div class="stage-create-top">
+                                    <div>
+                                        <p class="stage-card-kicker">Add stage</p>
+                                        <h4>New lane</h4>
+                                    </div>
+                                    <span class="chip">append</span>
+                                </div>
                                 <div class="field">
                                     <label for="new-stage-name">Stage name</label>
-                                    <input id="new-stage-name" required>
+                                    <input id="new-stage-name" required placeholder="review">
                                 </div>
-                                <div class="field">
-                                    <label for="new-stage-sort-order">Sort order</label>
-                                    <input id="new-stage-sort-order" type="number" value="0">
-                                </div>
-                            </div>
-                            <div class="row">
                                 <div class="field">
                                     <label for="new-stage-wow">Ways of working</label>
-                                    <textarea id="new-stage-wow"></textarea>
+                                    <textarea id="new-stage-wow" placeholder="How work moves in this stage"></textarea>
                                 </div>
                                 <div class="field">
                                     <label for="new-stage-dor">Definition of ready</label>
-                                    <textarea id="new-stage-dor"></textarea>
+                                    <textarea id="new-stage-dor" placeholder="What must be true before work enters"></textarea>
                                 </div>
                                 <div class="field">
                                     <label for="new-stage-dod">Definition of done</label>
-                                    <textarea id="new-stage-dod"></textarea>
+                                    <textarea id="new-stage-dod" placeholder="What marks the stage as complete"></textarea>
                                 </div>
+                                <div class="editor-actions">
+                                    <button id="save-stage-button" type="submit" class="btn-primary">Add stage</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="workflow-stage-footer">
+                            <div id="workflow-validation-summary" class="meta"></div>
+                            <div class="entity-actions">
+                                <button id="validate-workflow-button" type="button">Validate graph</button>
+                                <button id="auto-chain-transitions-button" type="button">Auto-chain transitions</button>
+                                <button id="save-all-stages-button" type="button">Save all stages</button>
                             </div>
-                            <div class="editor-actions">
-                                <button id="save-stage-button" type="submit" class="btn-primary">Add stage</button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </section>
 
@@ -1078,6 +1086,19 @@
                     </div>
                 </div>
             </form>
+        </div>
+    </div>
+    <div id="dialog-overlay" class="dialog-overlay hidden">
+        <div id="dialog-box" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-message">
+            <p id="dialog-message" class="dialog-message"></p>
+            <div id="dialog-input-wrap" class="field hidden">
+                <label for="dialog-input" class="sr-only">Dialog input</label>
+                <input id="dialog-input" type="text">
+            </div>
+            <div class="dialog-actions">
+                <button id="dialog-cancel" type="button" class="btn-ghost">Cancel</button>
+                <button id="dialog-ok" type="button" class="btn-primary">OK</button>
+            </div>
         </div>
     </div>
     <div id="version-overlay" class="version-overlay">server: unknown</div>

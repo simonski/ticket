@@ -172,6 +172,8 @@
             goalList: document.getElementById("goal-list"),
             documentList: document.getElementById("document-list"),
             workflowList: document.getElementById("workflow-list"),
+            workflowSelect: document.getElementById("workflow-select"),
+            workflowSettings: document.getElementById("workflow-settings"),
             roleList: document.getElementById("role-list"),
             agentList: document.getElementById("agent-list"),
             teamList: document.getElementById("team-list"),
@@ -242,7 +244,20 @@
             documentUploadName: document.getElementById("document-upload-name"),
             documentsView: document.getElementById("view-documents"),
             documentDropOverlay: document.getElementById("document-drop-overlay"),
+            dialogOverlay: document.getElementById("dialog-overlay"),
+            dialogBox: document.getElementById("dialog-box"),
+            dialogMessage: document.getElementById("dialog-message"),
+            dialogInputWrap: document.getElementById("dialog-input-wrap"),
+            dialogInput: document.getElementById("dialog-input"),
+            dialogOK: document.getElementById("dialog-ok"),
+            dialogCancel: document.getElementById("dialog-cancel"),
         };
+        const TRASH_ICON_SVG = "<svg class=\"icon-trash\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16\"></path><path d=\"M9 7V5h6v2\"></path><path d=\"M10 11v6\"></path><path d=\"M14 11v6\"></path><path d=\"M7 7l1 12h8l1-12\"></path></svg>";
+        let dialogResolve = null;
+        let dialogState = null;
+        let workflowAutosaveTimer = null;
+        let workflowAutosaveInFlight = false;
+        let workflowAutosaveQueued = false;
 
         function emptyProject() {
             return {
@@ -805,6 +820,105 @@
                 .replace(/'/g, "&#39;");
         }
 
+        function closeDialog(result) {
+            if (els.dialogOverlay) {
+                els.dialogOverlay.classList.add("hidden");
+            }
+            const resolver = dialogResolve;
+            const settings = dialogState;
+            dialogResolve = null;
+            dialogState = null;
+            if (els.dialogInputWrap) {
+                els.dialogInputWrap.classList.add("hidden");
+            }
+            if (els.dialogInput) {
+                els.dialogInput.value = "";
+            }
+            if (resolver) {
+                if (settings && settings.input) {
+                    resolver(result === true && els.dialogInput ? els.dialogInput.value : null);
+                    return;
+                }
+                resolver(Boolean(result));
+            }
+        }
+
+        function openDialog(message, options) {
+            if (!els.dialogOverlay || !els.dialogMessage || !els.dialogOK || !els.dialogCancel) {
+                if (options && options.input) {
+                    const nextValue = window.prompt(String(message || ""), String(options.inputValue || ""));
+                    return Promise.resolve(nextValue === null ? null : String(nextValue));
+                }
+                return Promise.resolve(options && options.confirm === false ? true : window.confirm(String(message || "")));
+            }
+            if (dialogResolve) {
+                closeDialog(false);
+            }
+            const settings = Object.assign({ confirm: true, okText: "OK", cancelText: "Cancel", input: false, inputValue: "" }, options || {});
+            dialogState = settings;
+            els.dialogMessage.textContent = String(message || "");
+            els.dialogOK.textContent = settings.okText;
+            els.dialogCancel.textContent = settings.cancelText;
+            els.dialogCancel.classList.toggle("hidden", settings.confirm === false);
+            if (els.dialogInputWrap && els.dialogInput) {
+                els.dialogInputWrap.classList.toggle("hidden", !settings.input);
+                els.dialogInput.value = settings.input ? String(settings.inputValue || "") : "";
+            }
+            els.dialogOverlay.classList.remove("hidden");
+            setTimeout(() => {
+                if (settings.input && els.dialogInput) {
+                    els.dialogInput.focus();
+                    els.dialogInput.select();
+                    return;
+                }
+                els.dialogOK.focus();
+            }, 0);
+            return new Promise((resolve) => {
+                dialogResolve = resolve;
+            });
+        }
+
+        function uiAlert(message) {
+            return openDialog(message, { confirm: false, okText: "OK" });
+        }
+
+        function uiConfirm(message, okText) {
+            return openDialog(message, { confirm: true, okText: okText || "OK", cancelText: "Cancel" });
+        }
+
+        function uiPrompt(message, inputValue, okText) {
+            return openDialog(message, {
+                confirm: true,
+                okText: okText || "Save",
+                cancelText: "Cancel",
+                input: true,
+                inputValue: inputValue || "",
+            });
+        }
+
+        function decorateDeleteButtons(root) {
+            const scope = root || document;
+            scope.querySelectorAll("button.btn-danger").forEach((button) => {
+                if (button.dataset.deleteIconApplied === "true") {
+                    return;
+                }
+                const label = String(button.getAttribute("aria-label") || button.textContent || "").trim().replace(/\s+/g, " ");
+                if (!label || !/delete/i.test(label)) {
+                    return;
+                }
+                button.dataset.deleteIconApplied = "true";
+                button.setAttribute("aria-label", label);
+                button.setAttribute("title", label);
+                button.classList.add("icon-button-danger");
+                button.innerHTML = TRASH_ICON_SVG + "<span class=\"sr-only\">" + escapeHTML(label) + "</span>";
+            });
+        }
+
+        window.closeDialog = closeDialog;
+        window.uiAlert = uiAlert;
+        window.uiConfirm = uiConfirm;
+        window.uiPrompt = uiPrompt;
+
         function arrayBufferToBase64(buffer) {
             const bytes = new Uint8Array(buffer || new ArrayBuffer(0));
             let binary = "";
@@ -838,6 +952,89 @@
 
         function getCurrentWorkflow() {
             return state.workflows.find((item) => item.id === state.selectedWorkflowID) || null;
+        }
+
+        function normalizedStageName(name) {
+            return String(name || "").trim().toLowerCase();
+        }
+
+        function readWorkflowSettingRadio(name) {
+            const input = document.querySelector("input[name=\"" + name + "\"]:checked");
+            return input ? String(input.value || "") : "";
+        }
+
+        function buildWorkflowPayloadFromForm() {
+            return {
+                name: document.getElementById("workflow-name").value.trim(),
+                description: document.getElementById("workflow-description").value.trim(),
+                approval_policy: readWorkflowSettingRadio("workflow-approval-policy") || "single_role",
+                progression_mode: readWorkflowSettingRadio("workflow-progression-mode") || "linear",
+            };
+        }
+
+        function syncWorkflowDraftFromForm() {
+            const current = state.selectedWorkflowDraft || emptyWorkflow();
+            state.selectedWorkflowDraft = Object.assign({}, current, buildWorkflowPayloadFromForm());
+        }
+
+        async function persistWorkflowSettings() {
+            syncWorkflowDraftFromForm();
+            const draft = state.selectedWorkflowDraft || emptyWorkflow();
+            if (!draft.name) {
+                return;
+            }
+            if (workflowAutosaveInFlight) {
+                workflowAutosaveQueued = true;
+                return;
+            }
+            workflowAutosaveInFlight = true;
+            try {
+                const workflow = normalizeWorkflow(draft.id
+                    ? await api("/api/workflows/" + draft.id, { method: "PUT", body: JSON.stringify(buildWorkflowPayloadFromForm()) })
+                    : await api("/api/workflows", { method: "POST", body: JSON.stringify(buildWorkflowPayloadFromForm()) }));
+                state.selectedWorkflowID = workflow.id;
+                await Promise.all([loadWorkflows(), loadProjects(), loadRoles()]);
+                state.selectedWorkflowDraft = Object.assign({}, getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : workflow, state.selectedWorkflowDraft, { id: workflow.id });
+                renderAll();
+            } catch (error) {
+                setNotice(error.message, true);
+            } finally {
+                workflowAutosaveInFlight = false;
+                if (workflowAutosaveQueued) {
+                    workflowAutosaveQueued = false;
+                    persistWorkflowSettings();
+                }
+            }
+        }
+
+        function scheduleWorkflowAutosave() {
+            syncWorkflowDraftFromForm();
+            if (workflowAutosaveTimer) {
+                clearTimeout(workflowAutosaveTimer);
+            }
+            workflowAutosaveTimer = setTimeout(() => {
+                workflowAutosaveTimer = null;
+                persistWorkflowSettings();
+            }, 350);
+        }
+
+        function cancelWorkflowAutosave() {
+            if (workflowAutosaveTimer) {
+                clearTimeout(workflowAutosaveTimer);
+                workflowAutosaveTimer = null;
+            }
+            workflowAutosaveQueued = false;
+        }
+
+        function workflowHasDuplicateStageName(workflow, stageName, excludeStageID) {
+            if (!workflow || !Array.isArray(workflow.stages)) {
+                return false;
+            }
+            const target = normalizedStageName(stageName);
+            if (!target) {
+                return false;
+            }
+            return workflow.stages.some((stage) => Number(stage.id) !== Number(excludeStageID) && normalizedStageName(stage.name) === target);
         }
 
         function getCurrentRole() {
@@ -1544,6 +1741,7 @@
             renderEditors();
             renderPlanAdminPanel();
             renderConfigSettingsPanel();
+            decorateDeleteButtons(document);
             restoreCurrentViewScroll();
         }
 
@@ -2159,11 +2357,95 @@
             els.goalChatLog.scrollTop = els.goalChatLog.scrollHeight;
         }
 
+        function summarizeStageCopy(value, fallback) {
+            const text = String(value || "").trim();
+            if (!text) {
+                return fallback;
+            }
+            return text.length > 120 ? text.slice(0, 117) + "..." : text;
+        }
+
+        async function persistWorkflowStageOrder(workflowID, orderedStageIDs) {
+            await api("/api/workflows/" + workflowID + "/reorder", {
+                method: "PUT",
+                body: JSON.stringify({ stage_ids: orderedStageIDs }),
+            });
+            await loadWorkflows();
+            renderAll();
+        }
+
+        function renderWorkflowStageCard(stage, workflow, index) {
+            const roleCardsHTML = (stage.roles || []).map((role) => {
+                const fullRole = state.roles.find((item) => item.id === role.id);
+                const label = fullRole ? fullRole.title : role.title || ("role " + role.id);
+                const description = (fullRole && fullRole.description) || role.description || "";
+                return "<article class=\"ticket-card workflow-role-card\" draggable=\"true\" data-stage-id=\"" + stage.id + "\" data-role-id=\"" + role.id + "\" data-role-description=\"" + escapeHTML(description) + "\">" +
+                    "<div class=\"panel-head panel-head-tight\">" +
+                    "<strong>" + escapeHTML(label) + "</strong>" +
+                    "</div>" +
+                    "</article>";
+            }).join("");
+            const addRoleOptions = state.roles
+                .filter((role) => !(stage.roles || []).some((current) => current.id === role.id))
+                .map((role) => optionHTML(role.id, role.title, false))
+                .join("");
+            const moveLeftDisabled = index === 0 ? " disabled" : "";
+            const moveRightDisabled = index === workflow.stages.length - 1 ? " disabled" : "";
+
+            return "<article class=\"lane workflow-stage-lane stage-card\" draggable=\"true\" data-stage-id=\"" + stage.id + "\">" +
+                "<div class=\"lane-head stage-card-top\">" +
+                "<div class=\"stage-card-heading\">" +
+                "<div class=\"stage-card-order\">" + String(index + 1) + "</div>" +
+                "<div class=\"workflow-stage-title-wrap\">" +
+                "<button type=\"button\" class=\"stage-card-title-button\" data-rename-stage=\"" + stage.id + "\" data-stage-title=\"" + stage.id + "\" aria-label=\"Rename stage " + escapeHTML(stage.name) + "\">" +
+                "<h4 class=\"stage-card-title\">" + escapeHTML(stage.name) + "</h4>" +
+                "</button>" +
+                "</div>" +
+                "</div>" +
+                "<div class=\"stage-card-controls\">" +
+                "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"left\" aria-label=\"Move stage left\"" + moveLeftDisabled + ">&lt;</button>" +
+                "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"right\" aria-label=\"Move stage right\"" + moveRightDisabled + ">&gt;</button>" +
+                "<button type=\"button\" class=\"btn-danger\" data-delete-stage=\"" + stage.id + "\">Delete</button>" +
+                "</div>" +
+                "</div>" +
+                "<details class=\"stage-card-section\">" +
+                "<summary><span class=\"stage-card-section-title\">Config</span></summary>" +
+                "<div class=\"stage-card-section-body stack\">" +
+                "<div class=\"field\"><label>Ways of working</label><textarea data-stage-wow=\"" + stage.id + "\">" + escapeHTML(stage.wow || stage.description || "") + "</textarea></div>" +
+                "<div class=\"field\"><label>Definition of ready</label><textarea data-stage-dor=\"" + stage.id + "\">" + escapeHTML(stage.dor || "") + "</textarea></div>" +
+                "<div class=\"field\"><label>Definition of done</label><textarea data-stage-dod=\"" + stage.id + "\">" + escapeHTML(stage.dod || "") + "</textarea></div>" +
+                "<div class=\"field\"><label>Transitions (next stages)</label><select multiple data-stage-next=\"" + stage.id + "\">" +
+                workflow.stages
+                    .filter((candidate) => Number(candidate.id) !== Number(stage.id))
+                    .map((candidate) => optionHTML(candidate.id, candidate.name || candidate.stage_name || ("stage " + candidate.id), (stage.next_stage_ids || []).some((nextID) => Number(nextID) === Number(candidate.id))))
+                    .join("") +
+                "</select></div>" +
+                "<div class=\"entity-actions stage-card-actions\"><button type=\"button\" class=\"btn-primary\" data-save-stage=\"" + stage.id + "\">Save stage</button></div>" +
+                "</div>" +
+                "</details>" +
+                "<details class=\"stage-card-section\" open>" +
+                "<summary><span class=\"stage-card-section-title\">Roles</span></summary>" +
+                "<div class=\"stage-card-section-body\">" +
+                "<div class=\"field\"><div class=\"workflow-role-list stage-card-dropzone\" data-stage-role-row=\"" + stage.id + "\">" + (roleCardsHTML || "<div class=\"empty workflow-role-empty\">Drop roles here</div>") + "</div></div>" +
+                "<div class=\"stage-card-add-role\">" +
+                "<div class=\"field\"><label>Add role</label><div class=\"select-shell\"><select data-add-role-select=\"" + stage.id + "\">" + optionHTML("", "Choose role", true) + addRoleOptions + "</select></div></div>" +
+                "<button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button>" +
+                "</div>" +
+                "</div>" +
+                "</details>" +
+                "</article>";
+        }
+
         function renderWorkflows() {
-            const roleBankHTML = state.roles.length
-                ? state.roles.map((role) => "<span class=\"role-chip\" draggable=\"true\" data-role-bank-id=\"" + role.id + "\">" + escapeHTML(role.title) + "</span>").join("")
-                : "<span class=\"meta\">No roles yet.</span>";
-            setInnerHTMLIfChanged(els.workflowRoleBank, roleBankHTML);
+            if (els.workflowSelect) {
+                const workflowSelectHTML = [
+                    optionHTML("", state.selectedWorkflowID ? "Select workflow" : "New workflow draft", !state.selectedWorkflowID),
+                ].concat(
+                    state.workflows.map((workflow) => optionHTML(workflow.id, workflow.name, workflow.id === state.selectedWorkflowID)),
+                ).join("");
+                setInnerHTMLIfChanged(els.workflowSelect, workflowSelectHTML);
+                els.workflowSelect.disabled = !state.workflows.length && !state.selectedWorkflowID;
+            }
 
             if (!state.workflows.length) {
                 setInnerHTMLIfChanged(els.workflowList, "<div class=\"empty\">No Workflows yet.</div>");
@@ -2187,41 +2469,8 @@
                 return;
             }
 
-            const stageGridHTML = workflow.stages.map((stage) => {
-                const roleNames = (stage.roles || []).map((role) => {
-                    const fullRole = state.roles.find((item) => item.id === role.id);
-                    const label = fullRole ? fullRole.title : role.title || ("role " + role.id);
-                    return "<span class=\"role-chip\" draggable=\"true\" data-stage-id=\"" + stage.id + "\" data-role-id=\"" + role.id + "\">" + escapeHTML(label) + "</span>";
-                }).join("");
-                const addRoleOptions = state.roles
-                    .filter((role) => !(stage.roles || []).some((current) => current.id === role.id))
-                    .map((role) => optionHTML(role.id, role.title, false))
-                    .join("");
-                return "<div class=\"stage-card\" draggable=\"true\" data-stage-id=\"" + stage.id + "\">" +
-                    "<div class=\"panel-head\"><div><h4>" + escapeHTML(stage.name) + "</h4><small>Drag to reorder</small></div>" +
-                    "<button type=\"button\" class=\"btn-danger\" data-delete-stage=\"" + stage.id + "\">Delete</button></div>" +
-                    "<div class=\"row\">" +
-                    "<div class=\"field\"><label>Stage name</label><input data-stage-name=\"" + stage.id + "\" value=\"" + escapeHTML(stage.name) + "\"></div>" +
-                    "<div class=\"field\"><label>Ways of working</label><textarea data-stage-wow=\"" + stage.id + "\">" + escapeHTML(stage.wow || stage.description || "") + "</textarea></div>" +
-                    "</div>" +
-                    "<div class=\"row\">" +
-                    "<div class=\"field\"><label>Definition of ready</label><textarea data-stage-dor=\"" + stage.id + "\">" + escapeHTML(stage.dor || "") + "</textarea></div>" +
-                    "<div class=\"field\"><label>Definition of done</label><textarea data-stage-dod=\"" + stage.id + "\">" + escapeHTML(stage.dod || "") + "</textarea></div>" +
-                    "</div>" +
-                    "<div class=\"entity-actions\"><button type=\"button\" class=\"btn-primary\" data-save-stage=\"" + stage.id + "\">Save stage</button></div>" +
-                    "<div class=\"field\"><label>Roles in stage</label><div class=\"role-chip-row\" data-stage-role-row=\"" + stage.id + "\">" + (roleNames || "<span class=\"meta\">No roles</span>") + "</div></div>" +
-                    "<div class=\"row\">" +
-                    "<div class=\"field\"><label>Add role</label><select data-add-role-select=\"" + stage.id + "\">" + optionHTML("", "Choose role", true) + addRoleOptions + "</select></div>" +
-                    "<div class=\"field field-align-end\"><button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button></div>" +
-                    "</div>" +
-                    "<div class=\"field\"><label>Transitions (next stages)</label><select multiple data-stage-next=\"" + stage.id + "\">" +
-                    workflow.stages
-                        .filter((candidate) => Number(candidate.id) !== Number(stage.id))
-                        .map((candidate) => optionHTML(candidate.id, candidate.name || candidate.stage_name || ("stage " + candidate.id), (stage.next_stage_ids || []).some((nextID) => Number(nextID) === Number(candidate.id))))
-                        .join("") +
-                    "</select></div>" +
-                    "</div>";
-            }).join("");
+            const stageGridHTML = workflow.stages.map((stage, index) => renderWorkflowStageCard(stage, workflow, index)).join("");
+            setInnerHTMLIfChanged(els.stageGrid, stageGridHTML);
         }
 
         function renderRoles() {
@@ -2435,7 +2684,6 @@
                     "</div>" +
                     "</div>";
             }).join("");
-            setInnerHTMLIfChanged(els.stageGrid, stageGridHTML);
         }
 
         function renderTicketCard(ticket) {
@@ -2630,12 +2878,26 @@
 
         function renderWorkflowEditor() {
             const workflow = state.selectedWorkflowDraft || emptyWorkflow();
-            document.getElementById("workflow-editor-title").textContent = workflow.id ? "Workflow: " + workflow.name : "Workflow editor";
+            document.getElementById("workflow-editor-title").textContent = workflow.id ? "Workflow board: " + workflow.name : "Workflow board";
             document.getElementById("workflow-name").value = workflow.name || "";
             document.getElementById("workflow-description").value = workflow.description || "";
-            document.getElementById("workflow-approval-policy").value = workflow.approval_policy || "single_role";
-            document.getElementById("workflow-progression-mode").value = workflow.progression_mode || "linear";
+            const approval = document.querySelector("input[name=\"workflow-approval-policy\"][value=\"" + (workflow.approval_policy || "single_role") + "\"]");
+            const progression = document.querySelector("input[name=\"workflow-progression-mode\"][value=\"" + (workflow.progression_mode || "linear") + "\"]");
+            if (approval) {
+                approval.checked = true;
+            }
+            if (progression) {
+                progression.checked = true;
+            }
             document.getElementById("delete-workflow-button").disabled = !workflow.id;
+            document.getElementById("new-stage-name").disabled = !workflow.id;
+            document.getElementById("new-stage-wow").disabled = !workflow.id;
+            document.getElementById("new-stage-dor").disabled = !workflow.id;
+            document.getElementById("new-stage-dod").disabled = !workflow.id;
+            document.getElementById("save-stage-button").disabled = !workflow.id;
+            if (els.workflowSettings && !workflow.id) {
+                els.workflowSettings.open = true;
+            }
             const validation = workflow.id ? state.workflowValidation[String(workflow.id)] : null;
             if (els.workflowValidationSummary) {
                 if (!workflow.id) {
@@ -2944,6 +3206,10 @@
             document.getElementById("delete-project-button").addEventListener("click", async () => {
                 const draft = state.selectedProjectDraft;
                 if (!draft.id) {
+                    return;
+                }
+                const confirmed = await uiConfirm("Delete project " + (draft.title ? "\"" + draft.title + "\"" : "#" + draft.id) + "?", "Delete");
+                if (!confirmed) {
                     return;
                 }
                 try {
@@ -3347,6 +3613,10 @@
                     if (!targetKey) {
                         return;
                     }
+                    const confirmed = await uiConfirm("Delete configuration setting \"" + targetKey + "\"?", "Delete");
+                    if (!confirmed) {
+                        return;
+                    }
                     try {
                         await api("/api/config/settings/" + encodeURIComponent(targetKey), { method: "DELETE" });
                         state.selectedConfigSettingKey = "";
@@ -3425,6 +3695,10 @@
                 deleteProviderConfigButton.addEventListener("click", async () => {
                     const targetID = String(state.selectedProviderConfigID || "").trim();
                     if (!targetID) {
+                        return;
+                    }
+                    const confirmed = await uiConfirm("Delete provider configuration \"" + targetID + "\"?", "Delete");
+                    if (!confirmed) {
                         return;
                     }
                     const providers = providerConfigs().filter((provider) => provider.id !== targetID);
@@ -3610,6 +3884,10 @@
                 if (!draft.id) {
                     return;
                 }
+                const confirmed = await uiConfirm("Delete goal " + (draft.title ? "\"" + draft.title + "\"" : "#" + draft.id) + "?", "Delete");
+                if (!confirmed) {
+                    return;
+                }
                 try {
                     await api("/api/goals/" + draft.id, { method: "DELETE" });
                     state.selectedGoalID = null;
@@ -3793,6 +4071,10 @@
                 if (!draft.id) {
                     return;
                 }
+                const confirmed = await uiConfirm("Delete document " + (draft.title ? "\"" + draft.title + "\"" : "#" + draft.id) + "?", "Delete");
+                if (!confirmed) {
+                    return;
+                }
                 try {
                     await api("/api/documents/" + draft.id, { method: "DELETE" });
                     state.selectedDocumentID = null;
@@ -3933,6 +4215,11 @@
                 if (!draft.id || !fileID) {
                     return;
                 }
+                const file = state.documentFiles.find((item) => Number(item.id) === fileID);
+                const confirmed = await uiConfirm("Delete file " + ((file && file.file_name) ? "\"" + file.file_name + "\"" : "#" + fileID) + "?", "Delete");
+                if (!confirmed) {
+                    return;
+                }
                 try {
                     await api("/api/documents/" + draft.id + "/files/" + fileID, { method: "DELETE" });
                     await loadDocumentFiles(draft.id);
@@ -3955,37 +4242,36 @@
                 loadWorkflowValidation(state.selectedWorkflowID).then(renderAll).catch(() => renderAll());
             });
 
+            if (els.workflowSelect) {
+                els.workflowSelect.addEventListener("change", () => {
+                    cancelWorkflowAutosave();
+                    const nextID = Number(els.workflowSelect.value || 0);
+                    state.selectedWorkflowID = nextID || null;
+                    state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
+                    if (!state.selectedWorkflowID) {
+                        renderAll();
+                        return;
+                    }
+                    loadWorkflowValidation(state.selectedWorkflowID).then(renderAll).catch(() => renderAll());
+                });
+            }
+
             document.getElementById("new-workflow-button").addEventListener("click", () => {
+                cancelWorkflowAutosave();
                 state.selectedWorkflowID = null;
                 state.selectedWorkflowDraft = emptyWorkflow();
                 renderEditors();
-            });
-
-            document.getElementById("reset-workflow-button").addEventListener("click", () => {
-                state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
-                renderEditors();
+                renderWorkflows();
             });
 
             document.getElementById("workflow-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
-                const draft = state.selectedWorkflowDraft;
-                const payload = {
-                    name: document.getElementById("workflow-name").value.trim(),
-                    description: document.getElementById("workflow-description").value.trim(),
-                    approval_policy: document.getElementById("workflow-approval-policy").value,
-                    progression_mode: document.getElementById("workflow-progression-mode").value,
-                };
-                try {
-                    const workflow = normalizeWorkflow(draft.id
-                        ? await api("/api/workflows/" + draft.id, { method: "PUT", body: JSON.stringify(payload) })
-                        : await api("/api/workflows", { method: "POST", body: JSON.stringify(payload) }));
-                    state.selectedWorkflowID = workflow.id;
-                    await Promise.all([loadWorkflows(), loadProjects(), loadRoles()]);
-                    renderAll();
-                    setNotice("Workflow saved.");
-                } catch (error) {
-                    setNotice(error.message, true);
-                }
+                await persistWorkflowSettings();
+            });
+            document.getElementById("workflow-name").addEventListener("input", scheduleWorkflowAutosave);
+            document.getElementById("workflow-description").addEventListener("input", scheduleWorkflowAutosave);
+            document.querySelectorAll("input[name=\"workflow-approval-policy\"], input[name=\"workflow-progression-mode\"]").forEach((input) => {
+                input.addEventListener("change", scheduleWorkflowAutosave);
             });
 
             document.getElementById("delete-workflow-button").addEventListener("click", async () => {
@@ -3993,8 +4279,13 @@
                 if (!draft.id) {
                     return;
                 }
+                const confirmed = await uiConfirm("Delete workflow " + (draft.name ? "\"" + draft.name + "\"" : "#" + draft.id) + "?", "Delete");
+                if (!confirmed) {
+                    return;
+                }
                 try {
                     await api("/api/workflows/" + draft.id, { method: "DELETE" });
+                    cancelWorkflowAutosave();
                     state.selectedWorkflowID = null;
                     state.selectedWorkflowDraft = emptyWorkflow();
                     await Promise.all([loadWorkflows(), loadProjects(), loadRoles()]);
@@ -4064,18 +4355,27 @@
                 event.preventDefault();
                 const workflow = getCurrentWorkflow();
                 if (!workflow) {
-                    setNotice("Select an Workflow first.", true);
+                    setNotice("Select a workflow first.", true);
+                    return;
+                }
+                const stageName = document.getElementById("new-stage-name").value.trim();
+                if (!stageName) {
+                    setNotice("Stage name is required.", true);
+                    return;
+                }
+                if (workflowHasDuplicateStageName(workflow, stageName)) {
+                    setNotice("Stage names must be unique within a workflow.", true);
                     return;
                 }
                 try {
                     await api("/api/workflows/" + workflow.id + "/stages", {
                         method: "POST",
                         body: JSON.stringify({
-                            stage_name: document.getElementById("new-stage-name").value.trim(),
+                            stage_name: stageName,
                             wow: document.getElementById("new-stage-wow").value.trim(),
                             dor: document.getElementById("new-stage-dor").value.trim(),
                             dod: document.getElementById("new-stage-dod").value.trim(),
-                            sort_order: Number(document.getElementById("new-stage-sort-order").value || 0),
+                            sort_order: Array.isArray(workflow.stages) ? workflow.stages.length : 0,
                         }),
                     });
                     document.getElementById("new-stage-form").reset();
@@ -4088,6 +4388,73 @@
             });
 
             els.stageGrid.addEventListener("click", async (event) => {
+                const renameButton = event.target.closest("[data-rename-stage]");
+                if (renameButton) {
+                    const stageID = Number(renameButton.dataset.renameStage);
+                    const workflow = getCurrentWorkflow();
+                    const stage = workflow && Array.isArray(workflow.stages)
+                        ? workflow.stages.find((item) => Number(item.id) === stageID)
+                        : null;
+                    if (!workflow || !stage) {
+                        return;
+                    }
+                    const nextName = await uiPrompt("Rename stage", stage.name || "", "Rename");
+                    if (nextName === null) {
+                        return;
+                    }
+                    const trimmedName = String(nextName || "").trim();
+                    if (!trimmedName) {
+                        setNotice("Stage name is required.", true);
+                        return;
+                    }
+                    if (workflowHasDuplicateStageName(workflow, trimmedName, stageID)) {
+                        setNotice("Stage names must be unique within a workflow.", true);
+                        return;
+                    }
+                    if (trimmedName === String(stage.name || "").trim()) {
+                        return;
+                    }
+                    try {
+                        await api("/api/workflows/stages/" + stageID, {
+                            method: "PUT",
+                            body: JSON.stringify({
+                                stage_name: trimmedName,
+                                wow: stage.wow || stage.description || "",
+                                dor: stage.dor || "",
+                                dod: stage.dod || "",
+                            }),
+                        });
+                        await loadWorkflows();
+                        renderAll();
+                        setNotice("Stage renamed.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                    return;
+                }
+                const moveButton = event.target.closest("[data-move-stage]");
+                if (moveButton) {
+                    const stageID = Number(moveButton.dataset.moveStage);
+                    const direction = moveButton.dataset.moveDirection;
+                    const workflow = getCurrentWorkflow();
+                    if (!workflow || !Array.isArray(workflow.stages) || workflow.stages.length < 2) {
+                        return;
+                    }
+                    const ordered = workflow.stages.map((stage) => Number(stage.id));
+                    const currentIndex = ordered.indexOf(stageID);
+                    const targetIndex = direction === "left" ? currentIndex - 1 : currentIndex + 1;
+                    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
+                        return;
+                    }
+                    ordered.splice(currentIndex, 1);
+                    ordered.splice(targetIndex, 0, stageID);
+                    try {
+                        await persistWorkflowStageOrder(workflow.id, ordered);
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                    return;
+                }
                 const saveButton = event.target.closest("[data-save-stage]");
                 if (saveButton) {
                     const stageID = Number(saveButton.dataset.saveStage);
@@ -4097,6 +4464,14 @@
                 const deleteButton = event.target.closest("[data-delete-stage]");
                 if (deleteButton) {
                     const stageID = Number(deleteButton.dataset.deleteStage);
+                    const workflow = getCurrentWorkflow();
+                    const stage = workflow && Array.isArray(workflow.stages)
+                        ? workflow.stages.find((item) => Number(item.id) === stageID)
+                        : null;
+                    const confirmed = await uiConfirm("Delete stage " + ((stage && stage.name) ? "\"" + stage.name + "\"" : "#" + stageID) + "?", "Delete");
+                    if (!confirmed) {
+                        return;
+                    }
                     try {
                         await api("/api/workflows/stages/" + stageID, { method: "DELETE" });
                         await loadWorkflows();
@@ -4149,7 +4524,7 @@
                 await api("/api/workflows/stages/" + stageID, {
                     method: "PUT",
                     body: JSON.stringify({
-                        stage_name: document.querySelector("[data-stage-name=\"" + stageID + "\"]").value.trim(),
+                        stage_name: (getCurrentWorkflow() && getCurrentWorkflow().stages.find((stage) => Number(stage.id) === Number(stageID)) || {}).name || "",
                         wow: document.querySelector("[data-stage-wow=\"" + stageID + "\"]").value.trim(),
                         dor: document.querySelector("[data-stage-dor=\"" + stageID + "\"]").value.trim(),
                         dod: document.querySelector("[data-stage-dod=\"" + stageID + "\"]").value.trim(),
@@ -4217,6 +4592,10 @@
             document.getElementById("delete-role-button").addEventListener("click", async () => {
                 const draft = state.selectedRoleDraft;
                 if (!draft.id) {
+                    return;
+                }
+                const confirmed = await uiConfirm("Delete role " + (draft.title ? "\"" + draft.title + "\"" : "#" + draft.id) + "?", "Delete");
+                if (!confirmed) {
                     return;
                 }
                 try {
@@ -4297,6 +4676,10 @@
                 if (!agent) {
                     return;
                 }
+                const confirmed = await uiConfirm("Delete agent " + (agent.id ? "\"" + agent.id + "\"" : "") + "?", "Delete");
+                if (!confirmed) {
+                    return;
+                }
                 try {
                     await api("/api/agents/" + agent.id, { method: "DELETE" });
                     state.selectedAgentID = null;
@@ -4354,6 +4737,10 @@
             document.getElementById("delete-team-button").addEventListener("click", async () => {
                 const draft = state.selectedTeamDraft;
                 if (!draft.id) {
+                    return;
+                }
+                const confirmed = await uiConfirm("Delete team " + (draft.name ? "\"" + draft.name + "\"" : "#" + draft.id) + "?", "Delete");
+                if (!confirmed) {
                     return;
                 }
                 try {
@@ -4519,6 +4906,10 @@
             document.getElementById("delete-ticket-button").addEventListener("click", async () => {
                 if (!state.activeTicket || !state.activeTicket.id) {
                     closeTicketModal();
+                    return;
+                }
+                const confirmed = await uiConfirm("Delete ticket " + (state.activeTicket.title ? "\"" + state.activeTicket.title + "\"" : "#" + state.activeTicket.id) + "?", "Delete");
+                if (!confirmed) {
                     return;
                 }
                 try {
@@ -4721,6 +5112,11 @@
             if (!state.activeTicket || !state.activeTicket.id) {
                 return;
             }
+            const label = state.ticketLabels.find((item) => String(item.label_id || item.id) === String(labelID));
+            const confirmed = await uiConfirm("Remove label " + ((label && label.name) ? "\"" + label.name + "\"" : "#" + labelID) + " from this ticket?", "Remove");
+            if (!confirmed) {
+                return;
+            }
             try {
                 await api("/api/tickets/" + state.activeTicket.id + "/labels/" + labelID, { method: "DELETE" });
                 await loadTicketLabels(state.activeTicket.id);
@@ -4779,6 +5175,10 @@
 
         async function removeTicketDependency(dependsOn) {
             if (!state.activeTicket || !state.activeTicket.id) {
+                return;
+            }
+            const confirmed = await uiConfirm("Remove dependency on " + String(dependsOn) + "?", "Remove");
+            if (!confirmed) {
                 return;
             }
             try {
@@ -5053,18 +5453,60 @@
         }
 
         function bindStageDragAndDrop() {
-            els.workflowRoleBank.addEventListener("dragstart", (event) => {
-                const role = event.target.closest("[data-role-bank-id]");
-                if (!role) {
-                    return;
+            const stageCreateForm = document.getElementById("new-stage-form");
+
+            function clearStageDragTargets() {
+                document.querySelectorAll("[data-stage-role-row]").forEach((row) => row.classList.remove("drag-target"));
+                document.querySelectorAll(".workflow-role-card").forEach((card) => card.classList.remove("drag-target"));
+                document.querySelectorAll(".stage-card").forEach((card) => {
+                    card.classList.remove("drag-target");
+                    card.classList.remove("is-dragging");
+                });
+                if (stageCreateForm) {
+                    stageCreateForm.classList.remove("drag-target");
                 }
-                state.drag = {
-                    type: "stage-role",
-                    stageID: null,
-                    roleID: Number(role.dataset.roleBankId),
-                };
-                event.dataTransfer.effectAllowed = "move";
-            });
+            }
+
+            function stageRoleIDs(stage) {
+                return (stage && Array.isArray(stage.roles) ? stage.roles : [])
+                    .map((role) => Number(role.id))
+                    .filter((roleID) => !Number.isNaN(roleID) && roleID > 0);
+            }
+
+            function insertRoleID(roleIDs, roleID, beforeRoleID) {
+                const ordered = roleIDs.filter((currentID) => Number(currentID) !== Number(roleID));
+                const insertIndex = beforeRoleID ? ordered.indexOf(Number(beforeRoleID)) : -1;
+                ordered.splice(insertIndex >= 0 ? insertIndex : ordered.length, 0, Number(roleID));
+                return ordered;
+            }
+
+            async function persistStageRoleOrder(workflowID, stageID, roleIDs) {
+                await api("/api/workflows/stages/roles/" + workflowID + "/" + stageID, {
+                    method: "PUT",
+                    body: JSON.stringify({ role_ids: roleIDs }),
+                });
+            }
+
+            if (els.workflowRoleBank) {
+                els.workflowRoleBank.addEventListener("dragstart", (event) => {
+                    const role = event.target.closest("[data-role-bank-id]");
+                    if (!role) {
+                        return;
+                    }
+                    state.drag = {
+                        type: "stage-role",
+                        stageID: null,
+                        roleID: Number(role.dataset.roleBankId),
+                    };
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", "stage-role");
+                });
+
+                els.workflowRoleBank.addEventListener("dragend", () => {
+                    clearStageDragTargets();
+                    state.drag = null;
+                });
+            }
 
             els.stageGrid.addEventListener("dragstart", (event) => {
                 const role = event.target.closest("[data-role-id]");
@@ -5075,6 +5517,7 @@
                         roleID: Number(role.dataset.roleId),
                     };
                     event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", "stage-role");
                     return;
                 }
                 const stage = event.target.closest("[data-stage-id]");
@@ -5083,26 +5526,51 @@
                 }
                 state.drag = { type: "stage", stageID: Number(stage.dataset.stageId) };
                 event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", "stage");
+                stage.classList.add("is-dragging");
+            });
+
+            els.stageGrid.addEventListener("dragend", () => {
+                clearStageDragTargets();
+                state.drag = null;
             });
 
             els.stageGrid.addEventListener("dragover", (event) => {
                 if (!state.drag) {
                     return;
                 }
+                const roleCard = event.target.closest(".workflow-role-card");
                 const roleRow = event.target.closest("[data-stage-role-row]");
                 const stageCard = event.target.closest(".stage-card");
+                if (state.drag.type === "stage-role" && roleCard) {
+                    event.preventDefault();
+                    clearStageDragTargets();
+                    roleCard.classList.add("drag-target");
+                    return;
+                }
                 if (state.drag.type === "stage-role" && roleRow) {
                     event.preventDefault();
-                    document.querySelectorAll("[data-stage-role-row]").forEach((row) => row.classList.remove("drag-target"));
+                    clearStageDragTargets();
                     roleRow.classList.add("drag-target");
                     return;
                 }
                 if (state.drag.type === "stage" && stageCard) {
                     event.preventDefault();
-                    document.querySelectorAll(".stage-card").forEach((card) => card.classList.remove("drag-target"));
+                    clearStageDragTargets();
                     stageCard.classList.add("drag-target");
                 }
             });
+
+            if (stageCreateForm) {
+                stageCreateForm.addEventListener("dragover", (event) => {
+                    if (!state.drag || state.drag.type !== "stage") {
+                        return;
+                    }
+                    event.preventDefault();
+                    clearStageDragTargets();
+                    stageCreateForm.classList.add("drag-target");
+                });
+            }
 
             els.stageGrid.addEventListener("drop", async (event) => {
                 if (!state.drag) {
@@ -5111,19 +5579,27 @@
                 const workflow = getCurrentWorkflow();
                 if (!workflow) {
                     state.drag = null;
+                    clearStageDragTargets();
                     return;
                 }
                 if (state.drag.type === "stage-role") {
+                    const targetRoleCard = event.target.closest(".workflow-role-card");
                     const roleRow = event.target.closest("[data-stage-role-row]");
-                    if (!roleRow) {
+                    if (!roleRow && !targetRoleCard) {
                         state.drag = null;
+                        clearStageDragTargets();
                         return;
                     }
                     event.preventDefault();
-                    roleRow.classList.remove("drag-target");
-                    const targetStageID = Number(roleRow.dataset.stageRoleRow);
-                    const stage = workflow.stages.find((item) => item.id === targetStageID);
-                    if (!stage) {
+                    clearStageDragTargets();
+                    const targetStageID = targetRoleCard ? Number(targetRoleCard.dataset.stageId) : Number(roleRow.dataset.stageRoleRow);
+                    const targetRoleID = targetRoleCard ? Number(targetRoleCard.dataset.roleId) : null;
+                    if (targetRoleID && Number(targetRoleID) === Number(state.drag.roleID) && Number(targetStageID) === Number(state.drag.stageID)) {
+                        state.drag = null;
+                        return;
+                    }
+                    const targetStage = workflow.stages.find((item) => item.id === targetStageID);
+                    if (!targetStage) {
                         state.drag = null;
                         return;
                     }
@@ -5131,15 +5607,19 @@
                         if (state.drag.stageID && state.drag.stageID !== targetStageID) {
                             await api("/api/workflows/stages/roles/" + workflow.id + "/" + state.drag.stageID + "/" + state.drag.roleID, { method: "DELETE" });
                             await api("/api/workflows/stages/roles/" + workflow.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
+                            const orderedRoleIDs = insertRoleID(stageRoleIDs(targetStage), state.drag.roleID, targetRoleID);
+                            if (orderedRoleIDs.length > 1 || targetRoleID) {
+                                await persistStageRoleOrder(workflow.id, targetStageID, orderedRoleIDs);
+                            }
                         } else if (!state.drag.stageID) {
                             await api("/api/workflows/stages/roles/" + workflow.id + "/" + targetStageID, { method: "POST", body: JSON.stringify({ role_id: state.drag.roleID }) });
+                            const orderedRoleIDs = insertRoleID(stageRoleIDs(targetStage), state.drag.roleID, targetRoleID);
+                            if (orderedRoleIDs.length > 1 || targetRoleID) {
+                                await persistStageRoleOrder(workflow.id, targetStageID, orderedRoleIDs);
+                            }
                         } else {
-                            const roleIDs = (stage.roles || []).map((role) => role.id).filter((roleID) => roleID !== state.drag.roleID);
-                            roleIDs.push(state.drag.roleID);
-                            await api("/api/workflows/stages/roles/" + workflow.id + "/" + targetStageID, {
-                                method: "PUT",
-                                body: JSON.stringify({ role_ids: roleIDs }),
-                            });
+                            const orderedRoleIDs = insertRoleID(stageRoleIDs(targetStage), state.drag.roleID, targetRoleID);
+                            await persistStageRoleOrder(workflow.id, targetStageID, orderedRoleIDs);
                         }
                         await loadWorkflows();
                         renderAll();
@@ -5153,27 +5633,49 @@
                 const targetStage = event.target.closest(".stage-card");
                 if (!targetStage) {
                     state.drag = null;
+                    clearStageDragTargets();
                     return;
                 }
                 event.preventDefault();
-                targetStage.classList.remove("drag-target");
+                clearStageDragTargets();
                 const ordered = Array.from(els.stageGrid.querySelectorAll(".stage-card"))
                     .map((card) => Number(card.dataset.stageId))
                     .filter((stageID) => stageID !== state.drag.stageID);
                 const targetIndex = ordered.indexOf(Number(targetStage.dataset.stageId));
                 ordered.splice(targetIndex >= 0 ? targetIndex : ordered.length, 0, state.drag.stageID);
                 try {
-                    await api("/api/workflows/" + workflow.id + "/reorder", {
-                        method: "PUT",
-                        body: JSON.stringify({ stage_ids: ordered }),
-                    });
-                    await loadWorkflows();
-                    renderAll();
+                    await persistWorkflowStageOrder(workflow.id, ordered);
                 } catch (error) {
                     setNotice(error.message, true);
                 }
                 state.drag = null;
             });
+
+            if (stageCreateForm) {
+                stageCreateForm.addEventListener("drop", async (event) => {
+                    if (!state.drag || state.drag.type !== "stage") {
+                        return;
+                    }
+                    const workflow = getCurrentWorkflow();
+                    if (!workflow) {
+                        state.drag = null;
+                        clearStageDragTargets();
+                        return;
+                    }
+                    event.preventDefault();
+                    clearStageDragTargets();
+                    const ordered = Array.from(els.stageGrid.querySelectorAll(".stage-card"))
+                        .map((card) => Number(card.dataset.stageId))
+                        .filter((stageID) => stageID !== state.drag.stageID);
+                    ordered.push(state.drag.stageID);
+                    try {
+                        await persistWorkflowStageOrder(workflow.id, ordered);
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                    state.drag = null;
+                });
+            }
         }
 
         function bindMiscHandlers() {
@@ -5242,6 +5744,32 @@
         bindTeamsHandlers();
         bindTicketsHandlers();
         bindMiscHandlers();
+        if (els.dialogOK) {
+            els.dialogOK.addEventListener("click", () => closeDialog(true));
+        }
+        if (els.dialogCancel) {
+            els.dialogCancel.addEventListener("click", () => closeDialog(false));
+        }
+        if (els.dialogInput) {
+            els.dialogInput.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    closeDialog(true);
+                }
+            });
+        }
+        if (els.dialogOverlay) {
+            els.dialogOverlay.addEventListener("click", (event) => {
+                if (event.target === els.dialogOverlay) {
+                    closeDialog(false);
+                }
+            });
+        }
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && els.dialogOverlay && !els.dialogOverlay.classList.contains("hidden")) {
+                closeDialog(false);
+            }
+        });
         els.loginForm.addEventListener("submit", handleLogin);
         els.registerForm.addEventListener("submit", handleRegister);
         els.showRegisterButton.addEventListener("click", showRegisterForm);
