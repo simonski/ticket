@@ -280,6 +280,35 @@ func TestPlanAdminAPI(t *testing.T) {
 		t.Fatalf("create plan user status = %d body=%s", createUserResp.Code, createUserResp.Body.String())
 	}
 
+	createPlanResp := doJSONRequest(t, handler, http.MethodPost, "/api/plans", map[string]any{
+		"slug":                    "temp",
+		"name":                    "Temporary",
+		"description":             "Short-lived plan",
+		"max_projects":            2,
+		"max_private_projects":    1,
+		"max_tickets":             10,
+		"max_tickets_per_project": 5,
+		"max_team_memberships":    2,
+		"max_api_calls_per_day":   100,
+		"default_project_alias":   "public",
+		"registration_actions": map[string]any{
+			"auto_assign_public_team":     false,
+			"auto_create_private_project": false,
+			"auto_create_private_team":    false,
+		},
+	}, adminToken)
+	if createPlanResp.Code != http.StatusCreated {
+		t.Fatalf("create temp plan status = %d body=%s", createPlanResp.Code, createPlanResp.Body.String())
+	}
+	deletePlanResp := doJSONRequest(t, handler, http.MethodDelete, "/api/plans/temp", nil, adminToken)
+	if deletePlanResp.Code != http.StatusNoContent {
+		t.Fatalf("delete temp plan status = %d body=%s", deletePlanResp.Code, deletePlanResp.Body.String())
+	}
+	missingDeletedPlanResp := doJSONRequest(t, handler, http.MethodGet, "/api/plans/temp", nil, adminToken)
+	if missingDeletedPlanResp.Code != http.StatusNotFound {
+		t.Fatalf("deleted temp plan should be missing: status = %d body=%s", missingDeletedPlanResp.Code, missingDeletedPlanResp.Body.String())
+	}
+
 	var createdPlanID int64
 	if err := db.QueryRow(`SELECT plan_id FROM users WHERE username = ?`, "planuser").Scan(&createdPlanID); err != nil {
 		t.Fatalf("query created user plan_id error = %v", err)

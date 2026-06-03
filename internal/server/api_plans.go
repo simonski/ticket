@@ -143,6 +143,16 @@ func (r *router) registerPlanHandlers() {
 				return
 			}
 			writeJSON(w, http.StatusOK, updated)
+		case http.MethodDelete:
+			if err := store.DeletePlan(r.Context(), db, plan.ID); err != nil {
+				if errors.Is(err, store.ErrPlanNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}

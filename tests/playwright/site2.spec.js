@@ -16,7 +16,14 @@ function installSite2Mock(page, seed = {}) {
       },
     ];
     const db = {
-      status: { authenticated: true, mode: "local", version: "dev", user: { username: "admin", role: "admin" } },
+      status: Object.assign({
+        authenticated: false,
+        mode: "local",
+        version: "dev",
+        user: null,
+        registration_enabled: true,
+        registration_auto_approve: true,
+      }, mockSeed.status || {}),
       configSettings: Array.isArray(mockSeed.configSettings)
         ? mockSeed.configSettings.map((item) => ({ ...item }))
         : [
@@ -63,10 +70,10 @@ function installSite2Mock(page, seed = {}) {
           name: "Delivery",
           description: "Default flow",
           stages: [
-            { workflow_stage_id: 11, workflow_id: 1, stage_name: "backlog", description: "", definition_of_ready: "", definition_of_done: "", roles: [{ role_id: 5, title: "Engineer" }] },
-            { workflow_stage_id: 12, workflow_id: 1, stage_name: "todo", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
-            { workflow_stage_id: 13, workflow_id: 1, stage_name: "doing", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
-            { workflow_stage_id: 14, workflow_id: 1, stage_name: "done", description: "", definition_of_ready: "", definition_of_done: "", roles: [] },
+            { workflow_stage_id: 11, workflow_id: 1, stage_name: "backlog", description: "", definition_of_ready: "", definition_of_done: "", roles: [{ role_id: 5, title: "Engineer" }], next_stage_ids: [12] },
+            { workflow_stage_id: 12, workflow_id: 1, stage_name: "todo", description: "", definition_of_ready: "", definition_of_done: "", roles: [], next_stage_ids: [11, 13, 14] },
+            { workflow_stage_id: 13, workflow_id: 1, stage_name: "doing", description: "", definition_of_ready: "", definition_of_done: "", roles: [], next_stage_ids: [14] },
+            { workflow_stage_id: 14, workflow_id: 1, stage_name: "done", description: "", definition_of_ready: "", definition_of_done: "", roles: [], next_stage_ids: [] },
           ],
         },
       ],
@@ -74,6 +81,52 @@ function installSite2Mock(page, seed = {}) {
         { role_id: 5, title: "Engineer", description: "Build", acceptance_criteria: "", workflow_id: 1 },
         { role_id: 6, title: "QA", description: "Verify", acceptance_criteria: "", workflow_id: 1 },
       ],
+      nextPlanID: Number(mockSeed.nextPlanID || 3),
+      plans: Array.isArray(mockSeed.plans) && mockSeed.plans.length
+        ? mockSeed.plans.map((plan) => ({ ...plan, registration_actions: { ...(plan.registration_actions || {}) } }))
+        : [
+            {
+              plan_id: 1,
+              slug: "starter",
+              name: "Starter",
+              description: "Entry plan",
+              max_projects: 1,
+              max_private_projects: 1,
+              max_tickets: 100,
+              max_tickets_per_project: 100,
+              max_team_memberships: 10,
+              max_api_calls_per_day: 1000,
+              default_project_alias: "public",
+              registration_actions: {
+                auto_assign_public_team: true,
+                auto_create_private_project: false,
+                auto_create_private_team: false,
+                teams: [],
+                projects: [],
+              },
+            },
+            {
+              plan_id: 2,
+              slug: "pro",
+              name: "Pro",
+              description: "Higher limits",
+              max_projects: 10,
+              max_private_projects: 5,
+              max_tickets: 2000,
+              max_tickets_per_project: 500,
+              max_team_memberships: 50,
+              max_api_calls_per_day: 20000,
+              default_project_alias: "private",
+              registration_actions: {
+                auto_assign_public_team: true,
+                auto_create_private_project: true,
+                auto_create_private_team: true,
+                teams: [],
+                projects: [],
+              },
+            },
+          ],
+      defaultPlanSlug: String(mockSeed.defaultPlanSlug || "starter"),
       agents: [{ user_id: "agent-1", enabled: true }],
       teams: [{ team_id: 21, name: "Platform", parent_team_id: null }],
       nextGoalID: Number(mockSeed.nextGoalID || 2),
@@ -164,6 +217,67 @@ function installSite2Mock(page, seed = {}) {
       if (path === "/api/config/settings" && method === "GET") {
         return json(db.configSettings);
       }
+      if (path === "/api/config/registration" && method === "POST") {
+        db.status.registration_enabled = Boolean(body.enabled);
+        db.status.registration_auto_approve = Boolean(body.auto_approve);
+        return json({
+          enabled: db.status.registration_enabled,
+          auto_approve: db.status.registration_auto_approve,
+        });
+      }
+      if (path === "/api/plans" && method === "GET") {
+        if (window.sessionStorage.getItem("site2.failPlansOnBoot") === "1") {
+          return json({ error: "plans unavailable" }, 500);
+        }
+        return json(db.plans);
+      }
+      if (path === "/api/plans/default" && method === "GET") {
+        return json(db.plans.find((plan) => plan.slug === db.defaultPlanSlug) || null);
+      }
+      if (path === "/api/plans/default" && method === "POST") {
+        db.defaultPlanSlug = String(body.slug || "");
+        return json(db.plans.find((plan) => plan.slug === db.defaultPlanSlug) || null);
+      }
+      if (path === "/api/plans" && method === "POST") {
+        const plan = {
+          plan_id: db.nextPlanID++,
+          ...body,
+          registration_actions: {
+            auto_assign_public_team: Boolean(body.registration_actions?.auto_assign_public_team),
+            auto_create_private_project: Boolean(body.registration_actions?.auto_create_private_project),
+            auto_create_private_team: Boolean(body.registration_actions?.auto_create_private_team),
+            teams: Array.isArray(body.registration_actions?.teams) ? body.registration_actions.teams : [],
+            projects: Array.isArray(body.registration_actions?.projects) ? body.registration_actions.projects : [],
+          },
+        };
+        db.plans.push(plan);
+        return json(plan, 201);
+      }
+      if (path.match(/^\/api\/plans\/[^/]+$/) && method === "PUT") {
+        const ref = decodeURIComponent(path.split("/")[3]);
+        const plan = db.plans.find((item) => item.slug === ref);
+        if (!plan) {
+          return json({ error: "not found" }, 404);
+        }
+        Object.assign(plan, body, {
+          registration_actions: {
+            auto_assign_public_team: Boolean(body.registration_actions?.auto_assign_public_team),
+            auto_create_private_project: Boolean(body.registration_actions?.auto_create_private_project),
+            auto_create_private_team: Boolean(body.registration_actions?.auto_create_private_team),
+            teams: Array.isArray(body.registration_actions?.teams) ? body.registration_actions.teams : [],
+            projects: Array.isArray(body.registration_actions?.projects) ? body.registration_actions.projects : [],
+          },
+        });
+        return json(plan);
+      }
+      if (path.match(/^\/api\/plans\/[^/]+$/) && method === "DELETE") {
+        const ref = decodeURIComponent(path.split("/")[3]);
+        db.plans = db.plans.filter((item) => item.slug !== ref);
+        if (db.defaultPlanSlug === ref) {
+          db.defaultPlanSlug = db.plans[0]?.slug || "";
+        }
+        return new Response(null, { status: 204 });
+      }
       if (path === "/api/config/settings" && method === "POST") {
         const item = { key: String(body.key || "").trim(), value: String(body.value || "") };
         db.configSettings = db.configSettings.filter((entry) => entry.key !== item.key).concat([item]).sort((a, b) => a.key.localeCompare(b.key));
@@ -183,9 +297,13 @@ function installSite2Mock(page, seed = {}) {
         return new Response(null, { status: 204 });
       }
       if (path === "/api/login" && method === "POST") {
+        db.status.authenticated = true;
+        db.status.user = { username: body.username || "admin", role: "admin" };
         return json({ token: "test-token", user: { username: body.username || "admin", role: "admin" } });
       }
       if (path === "/api/logout" && method === "POST") {
+        db.status.authenticated = false;
+        db.status.user = null;
         return json({ status: "ok" });
       }
       if (path === "/api/projects" && method === "GET") {
@@ -799,6 +917,19 @@ test("shows the server version on the login screen", async ({ page }) => {
   await expect(page.locator("#version-overlay")).toHaveText("server: 1.2.3");
 });
 
+test("login and register forms do not fall back to raw auth endpoint posts", async ({ page }) => {
+  await installSite2Mock(page, { status: { authenticated: false } });
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await expect(page.locator("#login-form")).not.toHaveAttribute("action", /\/api\/login$/);
+  await expect(page.locator("#register-form")).not.toHaveAttribute("action", /\/api\/register$/);
+});
+
 test("admin settings view supports config key CRUD", async ({ page }) => {
   await installSite2Mock(page);
   await page.goto("/site2/");
@@ -903,6 +1034,54 @@ test("continues to board when goals API returns null", async ({ page }) => {
   await page.locator("#login-password").fill("secret");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+});
+
+test("refresh restores the app from the server session when client auth storage is missing", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+
+  await page.evaluate(() => {
+    sessionStorage.removeItem("site2.auth");
+    window.location.reload();
+  });
+
+  await expect(page.locator("#app-shell")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+});
+
+test("refresh keeps the app shell visible when a non-auth boot request fails", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.goto("/site2/");
+  await page.evaluate(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.reload();
+  });
+
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+
+  await page.evaluate(() => {
+    sessionStorage.setItem("site2.failPlansOnBoot", "1");
+    window.location.reload();
+  });
+
+  await expect(page.locator("#app-shell")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#login-screen")).toHaveClass(/hidden/);
+  await expect(page.locator("#app-notice")).toContainText("plans unavailable");
 });
 
 test("goal refine -> decomposition reorder -> ready flow works in site2", async ({ page }) => {
@@ -1218,8 +1397,42 @@ test("moves a ticket across the board with drag and drop", async ({ page }) => {
   expect(requests.some((request) => request.body.stage === "done")).toBeTruthy();
 });
 
-test("shows predicted next work entries on the board", async ({ page }) => {
-  await expect(page.locator("#predicted-work-list")).toContainText("No forecastable tickets.");
+test("creates, updates, and deletes plans from the plans panel", async ({ page }) => {
+  await page.getByRole("button", { name: "Plans" }).click();
+
+  await expect(page.locator("#plan-list")).toContainText("Starter");
+
+  await page.getByRole("button", { name: "New plan" }).click();
+  await page.locator("#plan-slug").fill("enterprise");
+  await page.locator("#plan-name").fill("Enterprise");
+  await page.locator("#plan-description").fill("Expanded limits");
+  await page.locator("#plan-max-projects").fill("25");
+  await page.locator("#plan-auto-create-private-project").selectOption("true");
+  await page.locator("#plan-form").getByRole("button", { name: "Save plan" }).click();
+
+  await expect(page.locator("#plan-list")).toContainText("Enterprise");
+
+  await page.locator('[data-plan-slug="enterprise"]').click();
+  await page.locator("#plan-name").fill("Enterprise Plus");
+  await page.locator("#plan-form").getByRole("button", { name: "Save plan" }).click();
+
+  await expect(page.locator("#plan-list")).toContainText("Enterprise Plus");
+
+  await page.locator("#default-plan-select").selectOption("enterprise");
+  await page.getByRole("button", { name: "Save onboarding policy" }).click();
+
+  await page.getByRole("button", { name: "Delete plan" }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+
+  await expect(page.locator("#plan-list")).not.toContainText("Enterprise Plus");
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(expect.arrayContaining([
+    expect.objectContaining({ method: "POST", path: "/api/plans", body: expect.objectContaining({ slug: "enterprise", name: "Enterprise" }) }),
+    expect.objectContaining({ method: "PUT", path: "/api/plans/enterprise", body: expect.objectContaining({ name: "Enterprise Plus" }) }),
+    expect.objectContaining({ method: "POST", path: "/api/plans/default", body: expect.objectContaining({ slug: "enterprise" }) }),
+    expect.objectContaining({ method: "DELETE", path: "/api/plans/enterprise" }),
+  ]));
 });
 
 test("reorders board stages through the Workflow reorder endpoint", async ({ page }) => {
@@ -1288,6 +1501,66 @@ test("workflow settings autosave changes", async ({ page }) => {
     description: "Ship safer changes",
     approval_policy: "all_roles",
   }));
+});
+
+test("renders the workflow graph as compact titled nodes and still allows stage creation", async ({ page }) => {
+  await page.getByRole("button", { name: "Workflows" }).click();
+  await page.evaluate(() => {
+    const board = document.querySelector('#workflow-stage-board');
+    if (board) {
+      board.scrollLeft = 9999;
+    }
+  });
+  await page.getByRole("button", { name: "Graph" }).click();
+
+  await expect(page.locator('[data-workflow-graph-viewport]')).toBeVisible();
+  await expect(page.locator('[data-workflow-graph-edge]')).toHaveCount(4);
+  await expect(page.locator('[data-workflow-graph-edge][data-edge-direction="both"]')).toHaveCount(1);
+  await expect(page.locator('.workflow-graph-node')).toHaveCount(4);
+  await expect(page.locator('.workflow-graph-node-button')).toHaveCount(4);
+  await expect(page.locator('.workflow-graph-node-button')).toContainText(["backlog", "todo", "doing", "done"]);
+  const graphGeometry = await page.evaluate(() => {
+    const viewport = document.querySelector('[data-workflow-graph-viewport]');
+    const viewportRect = viewport.getBoundingClientRect();
+    const nodes = Array.from(document.querySelectorAll('.workflow-graph-node')).map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        text: node.textContent.trim(),
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        visible: rect.right > viewportRect.left && rect.left < viewportRect.right && rect.bottom > viewportRect.top && rect.top < viewportRect.bottom,
+      };
+    });
+    const overlaps = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const overlap = !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+        if (overlap) {
+          overlaps.push([a.text, b.text]);
+        }
+      }
+    }
+    return { nodes, overlaps };
+  });
+  expect(graphGeometry.nodes.every((node) => node.visible)).toBe(true);
+  expect(graphGeometry.overlaps).toEqual([]);
+  await expect(page.locator('.workflow-graph-node')).not.toContainText("Add role");
+  await expect(page.locator('.workflow-graph-node')).not.toContainText("Save stage");
+
+  await page.locator("#new-stage-name").fill("review");
+  await page.locator("#save-stage-button").click();
+  await expect(page.locator('.workflow-graph-node')).toHaveCount(5);
+
+  const requests = await page.evaluate(() => window.__site2Requests);
+  expect(requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ method: "POST", path: "/api/workflows/1/stages", body: expect.objectContaining({ stage_name: "review" }) }),
+    ]),
+  );
 });
 
 test("adds a role inside the Workflow editor using the existing stage-role API", async ({ page }) => {

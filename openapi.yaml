@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.956
+  version: 0.1.983
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -2487,6 +2487,29 @@ paths:
                 $ref: '#/components/schemas/Plan'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Users]
+      summary: Delete a plan by id or slug
+      operationId: deletePlan
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: plan_ref
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Plan deleted
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':

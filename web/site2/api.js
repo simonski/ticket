@@ -93,7 +93,10 @@
                 }
             }
             if (!response.ok) {
-                throw new Error(toErrorMessage(response, body));
+                const error = new Error(toErrorMessage(response, body));
+                error.status = response.status;
+                error.responseBody = body;
+                throw error;
             }
             return body;
         }
@@ -155,8 +158,16 @@
             return post("/api/plans/default", { slug: slug });
         }
 
+        function createPlan(payload) {
+            return post("/api/plans", payload);
+        }
+
         function updatePlan(planRef, payload) {
             return put("/api/plans/" + encodeURIComponent(planRef), payload);
+        }
+
+        function deletePlan(planRef) {
+            return del("/api/plans/" + encodeURIComponent(planRef));
         }
 
         function listProjectAccessRequests(projectRef, status) {
@@ -265,7 +276,9 @@
             listPlans: listPlans,
             getDefaultPlan: getDefaultPlan,
             setDefaultPlan: setDefaultPlan,
+            createPlan: createPlan,
             updatePlan: updatePlan,
+            deletePlan: deletePlan,
             listProjectAccessRequests: listProjectAccessRequests,
             createProjectAccessRequest: createProjectAccessRequest,
             listMyProjectAccessRequests: listMyProjectAccessRequests,

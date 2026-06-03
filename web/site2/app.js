@@ -9,7 +9,8 @@
             status: null,
             plans: [],
             defaultPlan: null,
-            planAdminEditSlug: "",
+            selectedPlanSlug: "",
+            selectedPlanDraft: null,
             projects: [],
             projectAccessRequests: [],
             projectAccessReviewEnabled: false,
@@ -24,9 +25,6 @@
             interventionReport: null,
             interventionTrends: [],
             interventionDrilldown: null,
-            projectForecast: [],
-            forecastCalibration: null,
-            forecastBacktest: null,
             workflowValidation: {},
             workflows: [],
             roles: [],
@@ -58,6 +56,8 @@
             },
             selectedWorkflowID: null,
             selectedWorkflowDraft: emptyWorkflow(),
+            workflowStageViewMode: "board",
+            workflowGraphNeedsReset: false,
             selectedRoleID: null,
             selectedRoleDraft: emptyRole(),
             selectedAgentID: null,
@@ -110,7 +110,8 @@
             { view: "documents", label: "Documents", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 3h7l5 5v13H7z\"></path><path d=\"M14 3v5h5\"></path><path d=\"M9 13h8\"></path><path d=\"M9 17h8\"></path></svg>" },
             { view: "config", label: "Config", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v4\"></path><path d=\"M12 17v4\"></path><path d=\"M4.9 6.3l2.8 2\"></path><path d=\"M16.3 15.7l2.8 2\"></path><path d=\"M3 12h4\"></path><path d=\"M17 12h4\"></path><path d=\"M4.9 17.7l2.8-2\"></path><path d=\"M16.3 8.3l2.8-2\"></path><circle cx=\"12\" cy=\"12\" r=\"3.5\"></circle></svg>" },
             { view: "providers", label: "Providers", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2l3 3-3 3-3-3z\"></path><path d=\"M4 11l3-3 3 3-3 3z\"></path><path d=\"M20 11l-3-3-3 3 3 3z\"></path><path d=\"M12 20l-3-3 3-3 3 3z\"></path></svg>" },
-            { view: "interventions", label: "Interventions", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
+            { view: "plans", label: "Plans", adminOnly: true, icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 4h12v16H6z\"></path><path d=\"M9 8h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 16h4\"></path></svg>" },
+            { view: "interventions", label: "Mailbox", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4v8\"></path><path d=\"M12 16h.01\"></path><circle cx=\"12\" cy=\"12\" r=\"9\"></circle></svg>" },
             { view: "projects", label: "Projects", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 7h18\"></path><path d=\"M6 7v10\"></path><path d=\"M12 7v10\"></path><path d=\"M18 7v10\"></path><path d=\"M3 17h18\"></path></svg>" },
             { view: "workflows", label: "Workflows", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 6h14\"></path><path d=\"M5 12h9\"></path><path d=\"M5 18h14\"></path><path d=\"M17 10l2 2-2 2\"></path></svg>" },
             { view: "roles", label: "Roles", icon: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 8a3 3 0 1 0 0.001 0\"></path><path d=\"M17 16a3 3 0 1 0 0.001 0\"></path><path d=\"M9.5 10.5l5 3\"></path></svg>" },
@@ -140,15 +141,24 @@
             mainNav: document.getElementById("main-nav"),
             planAdminPanel: document.getElementById("plan-admin-panel"),
             defaultPlanSelect: document.getElementById("default-plan-select"),
-            planAdminEditSelect: document.getElementById("plan-admin-edit-select"),
-            planAdminAliasSelect: document.getElementById("plan-admin-alias-select"),
-            planAdminPublicTeamSelect: document.getElementById("plan-admin-public-team-select"),
-            planAdminPrivateProjectSelect: document.getElementById("plan-admin-private-project-select"),
-            planAdminPrivateTeamSelect: document.getElementById("plan-admin-private-team-select"),
             registrationEnabledSelect: document.getElementById("registration-enabled-select"),
             registrationAutoApproveSelect: document.getElementById("registration-auto-approve-select"),
             savePlanAdminButton: document.getElementById("save-plan-admin-button"),
-            planAdminList: document.getElementById("plan-admin-list"),
+            planList: document.getElementById("plan-list"),
+            planEditorTitle: document.getElementById("plan-editor-title"),
+            planSlug: document.getElementById("plan-slug"),
+            planName: document.getElementById("plan-name"),
+            planDescription: document.getElementById("plan-description"),
+            planMaxProjects: document.getElementById("plan-max-projects"),
+            planMaxPrivateProjects: document.getElementById("plan-max-private-projects"),
+            planMaxTickets: document.getElementById("plan-max-tickets"),
+            planMaxTicketsPerProject: document.getElementById("plan-max-tickets-per-project"),
+            planMaxTeamMemberships: document.getElementById("plan-max-team-memberships"),
+            planMaxAPICallsPerDay: document.getElementById("plan-max-api-calls-per-day"),
+            planDefaultProjectAlias: document.getElementById("plan-default-project-alias"),
+            planAutoAssignPublicTeam: document.getElementById("plan-auto-assign-public-team"),
+            planAutoCreatePrivateProject: document.getElementById("plan-auto-create-private-project"),
+            planAutoCreatePrivateTeam: document.getElementById("plan-auto-create-private-team"),
             projectAccessRequestsPanel: document.getElementById("project-access-requests-panel"),
             projectAccessRequestsSummary: document.getElementById("project-access-requests-summary"),
             projectAccessRequestsList: document.getElementById("project-access-requests-list"),
@@ -174,6 +184,9 @@
             workflowList: document.getElementById("workflow-list"),
             workflowSelect: document.getElementById("workflow-select"),
             workflowSettings: document.getElementById("workflow-settings"),
+            workflowStageBoard: document.getElementById("workflow-stage-board"),
+            workflowViewBoardButton: document.getElementById("workflow-view-board"),
+            workflowViewGraphButton: document.getElementById("workflow-view-graph"),
             roleList: document.getElementById("role-list"),
             agentList: document.getElementById("agent-list"),
             teamList: document.getElementById("team-list"),
@@ -185,8 +198,6 @@
             interventionSort: document.getElementById("intervention-sort"),
             interventionTrendsSummary: document.getElementById("intervention-trends-summary"),
             interventionReportSummary: document.getElementById("intervention-report-summary"),
-            predictedWorkList: document.getElementById("predicted-work-list"),
-            forecastCalibrationSummary: document.getElementById("forecast-calibration-summary"),
             stageGrid: document.getElementById("stage-grid"),
             workflowRoleBank: document.getElementById("workflow-role-bank"),
             workflowValidationSummary: document.getElementById("workflow-validation-summary"),
@@ -258,6 +269,10 @@
         let workflowAutosaveTimer = null;
         let workflowAutosaveInFlight = false;
         let workflowAutosaveQueued = false;
+        const WORKFLOW_GRAPH_NODE_WIDTH = 184;
+        const WORKFLOW_GRAPH_NODE_HEIGHT = 60;
+        const WORKFLOW_GRAPH_COLUMN_GAP = 248;
+        const WORKFLOW_GRAPH_ROW_GAP = 132;
 
         function emptyProject() {
             return {
@@ -276,6 +291,29 @@
 
         function emptyWorkflow() {
             return { id: null, name: "", description: "", approval_policy: "single_role", progression_mode: "linear" };
+        }
+
+        function emptyPlan() {
+            return {
+                plan_id: null,
+                slug: "",
+                name: "",
+                description: "",
+                max_projects: 1,
+                max_private_projects: 1,
+                max_tickets: 100,
+                max_tickets_per_project: 100,
+                max_team_memberships: 10,
+                max_api_calls_per_day: 1000,
+                default_project_alias: "public",
+                registration_actions: {
+                    auto_assign_public_team: false,
+                    auto_create_private_project: false,
+                    auto_create_private_team: false,
+                    teams: [],
+                    projects: [],
+                },
+            };
         }
 
         function emptyGoal(projectID) {
@@ -371,6 +409,31 @@
             return Object.assign({}, role, {
                 id: role.id !== undefined ? role.id : role.role_id,
                 workflow_id: toNullableNumber(role.workflow_id),
+            });
+        }
+
+        function normalizePlan(plan) {
+            const item = plan || {};
+            const actions = item.registration_actions || {};
+            return Object.assign({}, emptyPlan(), item, {
+                plan_id: item.plan_id !== undefined ? item.plan_id : item.id,
+                slug: String(item.slug || "").trim(),
+                name: String(item.name || "").trim(),
+                description: String(item.description || ""),
+                max_projects: Number(item.max_projects || 0),
+                max_private_projects: Number(item.max_private_projects || 0),
+                max_tickets: Number(item.max_tickets || 0),
+                max_tickets_per_project: Number(item.max_tickets_per_project || 0),
+                max_team_memberships: Number(item.max_team_memberships || 0),
+                max_api_calls_per_day: Number(item.max_api_calls_per_day || 0),
+                default_project_alias: String(item.default_project_alias || "public"),
+                registration_actions: {
+                    auto_assign_public_team: Boolean(actions.auto_assign_public_team),
+                    auto_create_private_project: Boolean(actions.auto_create_private_project),
+                    auto_create_private_team: Boolean(actions.auto_create_private_team),
+                    teams: Array.isArray(actions.teams) ? actions.teams : [],
+                    projects: Array.isArray(actions.projects) ? actions.projects : [],
+                },
             });
         }
 
@@ -795,6 +858,17 @@
             });
         }
 
+        function isAuthError(error) {
+            return Boolean(error && (Number(error.status) === 401 || Number(error.status) === 403 || error.isAuthError));
+        }
+
+        function authError(message) {
+            const error = new Error(message || "unauthorized");
+            error.status = 401;
+            error.isAuthError = true;
+            return error;
+        }
+
         function normalizeBool(value) {
             return value === true || value === "true";
         }
@@ -1201,6 +1275,9 @@
 
         async function loadStatus() {
             state.status = await api("/api/status");
+            if (state.auth && state.status && state.status.authenticated === false) {
+                throw authError("session expired");
+            }
             setServerVersion(serverVersionFromStatus(state.status));
             const username = (state.status.user && state.status.user.username) || "user";
             els.accountMenuButton.textContent = username.charAt(0).toUpperCase();
@@ -1211,23 +1288,31 @@
             if (!isAdmin()) {
                 state.plans = [];
                 state.defaultPlan = null;
+                state.selectedPlanSlug = "";
+                state.selectedPlanDraft = emptyPlan();
                 return;
             }
             const [plans, defaultPlan] = await Promise.all([
                 apiClient.listPlans(),
                 apiClient.getDefaultPlan(),
             ]);
-            state.plans = Array.isArray(plans) ? plans : [];
-            state.defaultPlan = defaultPlan || null;
-            const selectedSlug = state.planAdminEditSlug;
+            state.plans = Array.isArray(plans) ? plans.map(normalizePlan) : [];
+            state.defaultPlan = defaultPlan ? normalizePlan(defaultPlan) : null;
+            const selectedSlug = state.selectedPlanSlug;
             const fallbackSlug = (state.defaultPlan && state.defaultPlan.slug) || (state.plans[0] && state.plans[0].slug) || "";
-            state.planAdminEditSlug = state.plans.some((plan) => plan.slug === selectedSlug) ? selectedSlug : fallbackSlug;
+            state.selectedPlanSlug = state.plans.some((plan) => plan.slug === selectedSlug) ? selectedSlug : fallbackSlug;
+            state.selectedPlanDraft = getCurrentPlan() ? structuredClone(getCurrentPlan()) : emptyPlan();
         }
 
         async function loadPublicStatus() {
             try {
                 state.status = await api("/api/status", { method: "GET", auth: false });
                 setServerVersion(serverVersionFromStatus(state.status));
+                if (state.status && state.status.user) {
+                    const username = state.status.user.username || "user";
+                    els.accountMenuButton.textContent = username.charAt(0).toUpperCase();
+                    els.accountMenuName.textContent = username;
+                }
             } catch (error) {
                 state.status = null;
                 setServerVersion("", true);
@@ -1363,29 +1448,20 @@
                 state.interventionReport = null;
                 state.interventionTrends = [];
                 state.interventionDrilldown = null;
-                state.projectForecast = [];
-                state.forecastCalibration = null;
-                state.forecastBacktest = null;
                 return;
             }
-            const [tickets, interventions, interventionReport, interventionTrends, interventionDrilldown, projectForecast, forecastCalibration, forecastBacktest] = await Promise.all([
+            const [tickets, interventions, interventionReport, interventionTrends, interventionDrilldown] = await Promise.all([
                 api("/api/projects/" + state.selectedProjectID + "/tickets"),
                 api("/api/projects/" + state.selectedProjectID + "/interventions"),
                 apiWithFallback("/api/projects/" + state.selectedProjectID + "/interventions/report", null),
                 apiWithFallback("/api/projects/" + state.selectedProjectID + "/interventions/trends?days=7", []),
                 apiWithFallback("/api/projects/" + state.selectedProjectID + "/interventions/drilldown?escalation_hours=24", null),
-                apiWithFallback("/api/projects/" + state.selectedProjectID + "/forecast?limit=100", []),
-                apiWithFallback("/api/projects/" + state.selectedProjectID + "/forecast/calibration?lookback_hours=1", null),
-                apiWithFallback("/api/projects/" + state.selectedProjectID + "/forecast/backtest?window_hours=24", null),
             ]);
             state.tickets = Array.isArray(tickets) ? tickets.map(normalizeTicket) : [];
             state.interventions = Array.isArray(interventions) ? interventions.map(normalizeTicket) : [];
             state.interventionReport = interventionReport;
             state.interventionTrends = Array.isArray(interventionTrends) ? interventionTrends : [];
             state.interventionDrilldown = interventionDrilldown;
-            state.projectForecast = Array.isArray(projectForecast) ? projectForecast : [];
-            state.forecastCalibration = forecastCalibration;
-            state.forecastBacktest = forecastBacktest;
             const [dependencyEntries, interventionDetailEntries] = await Promise.all([
                 Promise.all(state.tickets.map(async (ticket) => {
                     try {
@@ -1736,10 +1812,9 @@
             renderAgents();
             renderTeams();
             renderTicketBoard();
-            renderPredictedNextWork();
             renderInterventions();
             renderEditors();
-            renderPlanAdminPanel();
+            renderPlans();
             renderConfigSettingsPanel();
             decorateDeleteButtons(document);
             restoreCurrentViewScroll();
@@ -1763,66 +1838,96 @@
             }).join("");
         }
 
-        function renderPlanAdminPanel() {
+        function renderPlans() {
             if (!els.planAdminPanel) {
                 return;
             }
             const admin = isAdmin();
             els.planAdminPanel.classList.toggle("hidden", !admin);
             if (!admin) {
+                if (els.planList) {
+                    els.planList.innerHTML = "<div class=\"empty\">Plans are only visible to admins.</div>";
+                }
                 return;
             }
             const plans = Array.isArray(state.plans) ? state.plans : [];
             const defaultSlug = state.defaultPlan && state.defaultPlan.slug ? state.defaultPlan.slug : "";
-            const editSlug = plans.some((plan) => plan.slug === state.planAdminEditSlug)
-                ? state.planAdminEditSlug
+            const selectedSlug = plans.some((plan) => plan.slug === state.selectedPlanSlug)
+                ? state.selectedPlanSlug
                 : (defaultSlug || (plans[0] && plans[0].slug) || "");
-            state.planAdminEditSlug = editSlug;
-            els.defaultPlanSelect.innerHTML = plans.map((plan) => {
-                const selected = plan.slug === defaultSlug ? " selected" : "";
-                return "<option value=\"" + escapeHTML(plan.slug) + "\"" + selected + ">" + escapeHTML(plan.name || plan.slug) + "</option>";
-            }).join("");
-            if (els.planAdminEditSelect) {
-                els.planAdminEditSelect.innerHTML = plans.map((plan) => {
-                    const selected = plan.slug === editSlug ? " selected" : "";
+            state.selectedPlanSlug = selectedSlug;
+            if (els.defaultPlanSelect) {
+                els.defaultPlanSelect.innerHTML = plans.map((plan) => {
+                    const selected = plan.slug === defaultSlug ? " selected" : "";
                     return "<option value=\"" + escapeHTML(plan.slug) + "\"" + selected + ">" + escapeHTML(plan.name || plan.slug) + "</option>";
                 }).join("");
             }
-            els.registrationEnabledSelect.value = String(!(state.status && state.status.registration_enabled === false));
-            els.registrationAutoApproveSelect.value = String(!(state.status && state.status.registration_auto_approve === false));
-            const editablePlan = plans.find((plan) => plan.slug === editSlug) || null;
-            if (editablePlan && els.planAdminAliasSelect) {
-                const actions = editablePlan.registration_actions || {};
-                els.planAdminAliasSelect.value = editablePlan.default_project_alias || "public";
-                els.planAdminPublicTeamSelect.value = String(Boolean(actions.auto_assign_public_team));
-                els.planAdminPrivateProjectSelect.value = String(Boolean(actions.auto_create_private_project));
-                els.planAdminPrivateTeamSelect.value = String(Boolean(actions.auto_create_private_team));
+            if (els.registrationEnabledSelect) {
+                els.registrationEnabledSelect.value = String(!(state.status && state.status.registration_enabled === false));
+            }
+            if (els.registrationAutoApproveSelect) {
+                els.registrationAutoApproveSelect.value = String(!(state.status && state.status.registration_auto_approve === false));
             }
             if (!plans.length) {
-                els.planAdminList.innerHTML = "<div class=\"empty\">No plans available.</div>";
+                if (els.planList) {
+                    els.planList.innerHTML = "<div class=\"empty\">No plans available.</div>";
+                }
+                state.selectedPlanDraft = state.selectedPlanDraft && !state.selectedPlanDraft.plan_id ? state.selectedPlanDraft : emptyPlan();
+                renderPlanEditor();
                 return;
             }
-            els.planAdminList.innerHTML = plans.map((plan) => {
-                const actions = plan.registration_actions || {};
-                const badges = [
-                    plan.slug === defaultSlug ? "default plan" : "",
-                    plan.slug === editSlug ? "editing" : "",
-                    "projects " + String(plan.max_projects),
-                    "private " + String(plan.max_private_projects),
-                    "tickets/project " + String(plan.max_tickets_per_project),
-                    "default " + String(plan.default_project_alias || ""),
-                    actions.auto_assign_public_team ? "public team" : "",
-                    actions.auto_create_private_project ? "private project" : "",
-                    actions.auto_create_private_team ? "private team" : "",
-                    Array.isArray(actions.teams) && actions.teams.length ? "extra teams " + String(actions.teams.length) : "",
-                    Array.isArray(actions.projects) && actions.projects.length ? "extra projects " + String(actions.projects.length) : "",
-                ].filter(Boolean).map((label) => "<span class=\"chip\">" + escapeHTML(label) + "</span>").join("");
-                const active = plan.slug === editSlug ? " active" : "";
-                return "<div class=\"entity-card" + active + "\">" +
-                    "<h4>" + escapeHTML(plan.name || plan.slug) + " <small>(" + escapeHTML(plan.slug) + ")</small></h4>" +
-                    "<p>" + escapeHTML(plan.description || "No description") + "</p>" +
-                    "<div class=\"tag-row tag-row-spaced\">" + badges + "</div></div>";
-            }).join("");
+            if (!state.selectedPlanDraft || (state.selectedPlanDraft.plan_id && state.selectedPlanDraft.slug !== selectedSlug)) {
+                state.selectedPlanDraft = getCurrentPlan() ? structuredClone(getCurrentPlan()) : emptyPlan();
+            }
+            if (els.planList) {
+                els.planList.innerHTML = plans.map((plan) => {
+                    const actions = plan.registration_actions || {};
+                    const badges = [
+                        plan.slug === defaultSlug ? "default" : "",
+                        "projects " + String(plan.max_projects),
+                        "private " + String(plan.max_private_projects),
+                        "tickets/project " + String(plan.max_tickets_per_project),
+                        actions.auto_assign_public_team ? "public team" : "",
+                        actions.auto_create_private_project ? "private project" : "",
+                        actions.auto_create_private_team ? "private team" : "",
+                    ].filter(Boolean).map((label) => "<span class=\"chip\">" + escapeHTML(label) + "</span>").join("");
+                    const active = plan.slug === selectedSlug ? " active" : "";
+                    return "<div class=\"entity-card" + active + "\" data-plan-slug=\"" + escapeHTML(plan.slug) + "\">" +
+                        "<h4>" + escapeHTML(plan.name || plan.slug) + " <small>(" + escapeHTML(plan.slug) + ")</small></h4>" +
+                        "<p>" + escapeHTML(plan.description || "No description") + "</p>" +
+                        "<div class=\"tag-row tag-row-spaced\">" + badges + "</div>" +
+                        "</div>";
+                }).join("");
+            }
+            renderPlanEditor();
+        }
+
+        function renderPlanEditor() {
+            if (!els.planSlug) {
+                return;
+            }
+            const plan = state.selectedPlanDraft || emptyPlan();
+            const actions = plan.registration_actions || {};
+            if (els.planEditorTitle) {
+                els.planEditorTitle.textContent = plan.plan_id ? ("Plan: " + (plan.name || plan.slug)) : "Plan editor";
+            }
+            els.planSlug.value = plan.slug || "";
+            els.planName.value = plan.name || "";
+            els.planDescription.value = plan.description || "";
+            els.planMaxProjects.value = String(plan.max_projects || 0);
+            els.planMaxPrivateProjects.value = String(plan.max_private_projects || 0);
+            els.planMaxTickets.value = String(plan.max_tickets || 0);
+            els.planMaxTicketsPerProject.value = String(plan.max_tickets_per_project || 0);
+            els.planMaxTeamMemberships.value = String(plan.max_team_memberships || 0);
+            els.planMaxAPICallsPerDay.value = String(plan.max_api_calls_per_day || 0);
+            els.planDefaultProjectAlias.value = plan.default_project_alias || "public";
+            els.planAutoAssignPublicTeam.value = String(Boolean(actions.auto_assign_public_team));
+            els.planAutoCreatePrivateProject.value = String(Boolean(actions.auto_create_private_project));
+            els.planAutoCreatePrivateTeam.value = String(Boolean(actions.auto_create_private_team));
+            const deleteButton = document.getElementById("delete-plan-button");
+            if (deleteButton) {
+                deleteButton.disabled = !plan.plan_id;
+            }
         }
 
         function renderGoals() {
@@ -2073,6 +2178,10 @@
 
         function currentConfigSetting() {
             return state.configSettings.find((item) => item.key === state.selectedConfigSettingKey) || null;
+        }
+
+        function getCurrentPlan() {
+            return state.plans.find((plan) => plan.slug === state.selectedPlanSlug) || null;
         }
 
         function setConfigSettingEditor(setting) {
@@ -2374,7 +2483,26 @@
             renderAll();
         }
 
-        function renderWorkflowStageCard(stage, workflow, index) {
+        function renderWorkflowViewToggle() {
+            if (els.workflowViewBoardButton) {
+                const active = state.workflowStageViewMode === "board";
+                els.workflowViewBoardButton.setAttribute("aria-pressed", active ? "true" : "false");
+                els.workflowViewBoardButton.classList.toggle("active", active);
+            }
+            if (els.workflowViewGraphButton) {
+                const active = state.workflowStageViewMode === "graph";
+                els.workflowViewGraphButton.setAttribute("aria-pressed", active ? "true" : "false");
+                els.workflowViewGraphButton.classList.toggle("active", active);
+            }
+            if (els.workflowStageBoard) {
+                els.workflowStageBoard.classList.toggle("graph-mode", state.workflowStageViewMode === "graph");
+            }
+            if (els.stageGrid) {
+                els.stageGrid.classList.toggle("stage-grid-graph", state.workflowStageViewMode === "graph");
+            }
+        }
+
+        function renderWorkflowStageSections(stage, workflow) {
             const roleCardsHTML = (stage.roles || []).map((role) => {
                 const fullRole = state.roles.find((item) => item.id === role.id);
                 const label = fullRole ? fullRole.title : role.title || ("role " + role.id);
@@ -2389,26 +2517,7 @@
                 .filter((role) => !(stage.roles || []).some((current) => current.id === role.id))
                 .map((role) => optionHTML(role.id, role.title, false))
                 .join("");
-            const moveLeftDisabled = index === 0 ? " disabled" : "";
-            const moveRightDisabled = index === workflow.stages.length - 1 ? " disabled" : "";
-
-            return "<article class=\"lane workflow-stage-lane stage-card\" draggable=\"true\" data-stage-id=\"" + stage.id + "\">" +
-                "<div class=\"lane-head stage-card-top\">" +
-                "<div class=\"stage-card-heading\">" +
-                "<div class=\"stage-card-order\">" + String(index + 1) + "</div>" +
-                "<div class=\"workflow-stage-title-wrap\">" +
-                "<button type=\"button\" class=\"stage-card-title-button\" data-rename-stage=\"" + stage.id + "\" data-stage-title=\"" + stage.id + "\" aria-label=\"Rename stage " + escapeHTML(stage.name) + "\">" +
-                "<h4 class=\"stage-card-title\">" + escapeHTML(stage.name) + "</h4>" +
-                "</button>" +
-                "</div>" +
-                "</div>" +
-                "<div class=\"stage-card-controls\">" +
-                "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"left\" aria-label=\"Move stage left\"" + moveLeftDisabled + ">&lt;</button>" +
-                "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"right\" aria-label=\"Move stage right\"" + moveRightDisabled + ">&gt;</button>" +
-                "<button type=\"button\" class=\"btn-danger\" data-delete-stage=\"" + stage.id + "\">Delete</button>" +
-                "</div>" +
-                "</div>" +
-                "<details class=\"stage-card-section\">" +
+            return "<details class=\"stage-card-section\">" +
                 "<summary><span class=\"stage-card-section-title\">Config</span></summary>" +
                 "<div class=\"stage-card-section-body stack\">" +
                 "<div class=\"field\"><label>Ways of working</label><textarea data-stage-wow=\"" + stage.id + "\">" + escapeHTML(stage.wow || stage.description || "") + "</textarea></div>" +
@@ -2432,11 +2541,192 @@
                 "<button type=\"button\" data-add-role=\"" + stage.id + "\">Add role</button>" +
                 "</div>" +
                 "</div>" +
-                "</details>" +
+                "</details>";
+        }
+
+        function renderWorkflowStageCard(stage, workflow, index) {
+            const moveLeftDisabled = index === 0 ? " disabled" : "";
+            const moveRightDisabled = index === workflow.stages.length - 1 ? " disabled" : "";
+            return "<article class=\"lane workflow-stage-lane stage-card\" draggable=\"true\" data-stage-id=\"" + stage.id + "\">" +
+                "<div class=\"lane-head stage-card-top\">" +
+                "<div class=\"stage-card-heading\">" +
+                "<div class=\"stage-card-order\">" + String(index + 1) + "</div>" +
+                "<div class=\"workflow-stage-title-wrap\">" +
+                "<button type=\"button\" class=\"stage-card-title-button\" data-rename-stage=\"" + stage.id + "\" data-stage-title=\"" + stage.id + "\" aria-label=\"Rename stage " + escapeHTML(stage.name) + "\">" +
+                "<h4 class=\"stage-card-title\">" + escapeHTML(stage.name) + "</h4>" +
+                "</button>" +
+                "</div>" +
+                "</div>" +
+                "<div class=\"stage-card-controls\">" +
+                "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"left\" aria-label=\"Move stage left\"" + moveLeftDisabled + ">&lt;</button>" +
+                "<button type=\"button\" class=\"stage-card-move-button\" data-move-stage=\"" + stage.id + "\" data-move-direction=\"right\" aria-label=\"Move stage right\"" + moveRightDisabled + ">&gt;</button>" +
+                "<button type=\"button\" class=\"btn-danger\" data-delete-stage=\"" + stage.id + "\">Delete</button>" +
+                "</div>" +
+                "</div>" +
+                renderWorkflowStageSections(stage, workflow) +
                 "</article>";
         }
 
+        function buildWorkflowGraphLayout(workflow) {
+            const layoutByID = {};
+            const orderIndexByID = new Map(workflow.stages.map((stage, index) => [Number(stage.id), index]));
+            const depthByID = new Map(workflow.stages.map((stage) => [Number(stage.id), 0]));
+
+            workflow.stages.forEach((stage) => {
+                const stageID = Number(stage.id);
+                const stageDepth = depthByID.get(stageID) || 0;
+                (stage.next_stage_ids || []).forEach((nextID) => {
+                    const targetID = Number(nextID);
+                    if (!orderIndexByID.has(targetID)) {
+                        return;
+                    }
+                    if ((orderIndexByID.get(targetID) || 0) <= (orderIndexByID.get(stageID) || 0)) {
+                        return;
+                    }
+                    depthByID.set(targetID, Math.max(depthByID.get(targetID) || 0, stageDepth + 1));
+                });
+            });
+
+            const orderedNodes = [];
+            workflow.stages.forEach((stage) => {
+                const stageID = Number(stage.id);
+                const index = orderIndexByID.get(stageID) || 0;
+                const depth = depthByID.get(stageID) || 0;
+                const rowIndex = index;
+                const x = depth * WORKFLOW_GRAPH_COLUMN_GAP;
+                const y = rowIndex * WORKFLOW_GRAPH_ROW_GAP;
+                const layout = { id: stageID, index, depth, rowIndex, x, y };
+                layoutByID[String(stage.id)] = layout;
+                orderedNodes.push(layout);
+            });
+
+            const maxDepth = orderedNodes.reduce((max, node) => Math.max(max, node.depth), 0);
+            const maxRow = orderedNodes.reduce((max, node) => Math.max(max, node.rowIndex), 0);
+            const paddingX = 92;
+            const paddingY = 80;
+            const width = Math.max(720, paddingX * 2 + maxDepth * WORKFLOW_GRAPH_COLUMN_GAP + WORKFLOW_GRAPH_NODE_WIDTH);
+            const height = Math.max(420, paddingY * 2 + maxRow * WORKFLOW_GRAPH_ROW_GAP + WORKFLOW_GRAPH_NODE_HEIGHT);
+            orderedNodes.forEach((layout) => {
+                layout.x += paddingX;
+                layout.y += paddingY;
+            });
+            return { layoutByID, orderedNodes, width, height };
+        }
+
+        function buildWorkflowGraphEdges(workflow, layoutByID) {
+            const directed = [];
+            workflow.stages.forEach((stage) => {
+                (stage.next_stage_ids || []).forEach((nextID) => {
+                    if (layoutByID[String(nextID)]) {
+                        directed.push({ from: Number(stage.id), to: Number(nextID) });
+                    }
+                });
+            });
+            const edgeSet = new Set(directed.map((edge) => edge.from + ":" + edge.to));
+            const handled = new Set();
+            const edges = [];
+            directed.forEach((edge) => {
+                const key = edge.from + ":" + edge.to;
+                if (handled.has(key)) {
+                    return;
+                }
+                const reverseKey = edge.to + ":" + edge.from;
+                if (edgeSet.has(reverseKey)) {
+                    const fromLayout = layoutByID[String(edge.from)];
+                    const toLayout = layoutByID[String(edge.to)];
+                    const ordered = fromLayout.x <= toLayout.x
+                        ? { from: edge.from, to: edge.to }
+                        : { from: edge.to, to: edge.from };
+                    edges.push({ from: ordered.from, to: ordered.to, direction: "both" });
+                    handled.add(key);
+                    handled.add(reverseKey);
+                    return;
+                }
+                edges.push({ from: edge.from, to: edge.to, direction: "forward" });
+                handled.add(key);
+            });
+            return edges;
+        }
+
+        function describeWorkflowGraphEdge(edge, layoutByID) {
+            const from = layoutByID[String(edge.from)];
+            const to = layoutByID[String(edge.to)];
+            if (!from || !to) {
+                return "";
+            }
+            const startX = from.x + WORKFLOW_GRAPH_NODE_WIDTH / 2;
+            const startY = from.y + WORKFLOW_GRAPH_NODE_HEIGHT / 2;
+            const endX = to.x + WORKFLOW_GRAPH_NODE_WIDTH / 2;
+            const endY = to.y + WORKFLOW_GRAPH_NODE_HEIGHT / 2;
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const hopCount = Math.max(1, Math.abs(from.index - to.index));
+            const liftBase = Math.min(200, 30 + hopCount * 18);
+            const sameBand = Math.abs(dy) < 50;
+            const lift = sameBand
+                ? ((from.rowIndex % 2 === 0 ? -1 : 1) * liftBase)
+                : (dy > 0 ? -1 : 1) * Math.min(160, 22 + Math.abs(dy) * 0.22);
+            const controlX1 = startX + dx * 0.32;
+            const controlY1 = startY + lift;
+            const controlX2 = endX - dx * 0.32;
+            const controlY2 = endY + lift;
+            return "M " + startX + " " + startY + " C " + controlX1 + " " + controlY1 + ", " + controlX2 + " " + controlY2 + ", " + endX + " " + endY;
+        }
+
+        function renderWorkflowGraphNode(stage, layout) {
+            return "<div class=\"workflow-graph-node\" data-graph-node-id=\"" + stage.id + "\" style=\"left:" + layout.x + "px; top:" + layout.y + "px;\">" +
+                "<button type=\"button\" class=\"workflow-graph-node-button\" data-rename-stage=\"" + stage.id + "\" data-stage-title=\"" + stage.id + "\" aria-label=\"Rename stage " + escapeHTML(stage.name) + "\">" +
+                "<span class=\"workflow-graph-node-title\">" + escapeHTML(stage.name) + "</span>" +
+                "</button>" +
+                "</div>";
+        }
+
+        function renderWorkflowGraph(workflow) {
+            const layout = buildWorkflowGraphLayout(workflow);
+            const edges = buildWorkflowGraphEdges(workflow, layout.layoutByID);
+            const edgeMarkup = edges.map((edge) => {
+                const path = describeWorkflowGraphEdge(edge, layout.layoutByID);
+                const markers = edge.direction === "both"
+                    ? " marker-start=\"url(#workflow-graph-arrow)\" marker-end=\"url(#workflow-graph-arrow)\""
+                    : " marker-end=\"url(#workflow-graph-arrow)\"";
+                return "<path class=\"workflow-graph-edge workflow-graph-edge-" + edge.direction + "\" data-workflow-graph-edge data-edge-direction=\"" + edge.direction + "\" d=\"" + path + "\"" + markers + "></path>";
+            }).join("");
+            const nodeMarkup = workflow.stages.map((stage) => renderWorkflowGraphNode(stage, layout.layoutByID[String(stage.id)])).join("");
+            return "<div class=\"workflow-graph-viewport\" data-workflow-graph-viewport=\"true\">" +
+                "<div class=\"workflow-graph-frame\">" +
+                "<div class=\"workflow-graph-surface\" style=\"width:" + layout.width + "px; height:" + layout.height + "px;\">" +
+                "<svg class=\"workflow-graph-links\" viewBox=\"0 0 " + layout.width + " " + layout.height + "\" preserveAspectRatio=\"xMinYMin meet\" aria-label=\"Workflow graph\">" +
+                "<defs>" +
+                "<marker id=\"workflow-graph-arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto-start-reverse\">" +
+                "<path d=\"M 0 0 L 10 5 L 0 10 z\" fill=\"rgba(255, 122, 26, 0.92)\"></path>" +
+                "</marker>" +
+                "</defs>" +
+                edgeMarkup +
+                "</svg>" +
+                nodeMarkup +
+                "</div>" +
+                "</div>" +
+                "</div>";
+        }
+
+        function resetWorkflowGraphViewportIfNeeded() {
+            if (state.workflowStageViewMode !== "graph" || !state.workflowGraphNeedsReset) {
+                return;
+            }
+            if (els.workflowStageBoard) {
+                els.workflowStageBoard.scrollLeft = 0;
+                els.workflowStageBoard.scrollTop = 0;
+            }
+            const viewport = document.querySelector("[data-workflow-graph-viewport]");
+            if (viewport) {
+                viewport.scrollLeft = 0;
+                viewport.scrollTop = 0;
+            }
+            state.workflowGraphNeedsReset = false;
+        }
+
         function renderWorkflows() {
+            renderWorkflowViewToggle();
             if (els.workflowSelect) {
                 const workflowSelectHTML = [
                     optionHTML("", state.selectedWorkflowID ? "Select workflow" : "New workflow draft", !state.selectedWorkflowID),
@@ -2469,8 +2759,11 @@
                 return;
             }
 
-            const stageGridHTML = workflow.stages.map((stage, index) => renderWorkflowStageCard(stage, workflow, index)).join("");
+            const stageGridHTML = state.workflowStageViewMode === "graph"
+                ? renderWorkflowGraph(workflow)
+                : workflow.stages.map((stage, index) => renderWorkflowStageCard(stage, workflow, index)).join("");
             setInnerHTMLIfChanged(els.stageGrid, stageGridHTML);
+            resetWorkflowGraphViewportIfNeeded();
         }
 
         function renderRoles() {
@@ -3153,56 +3446,6 @@
                 }
             });
 
-            if (els.savePlanAdminButton) {
-                els.savePlanAdminButton.addEventListener("click", async () => {
-                    try {
-                        await apiClient.setRegistrationPolicy(
-                            normalizeBool(els.registrationEnabledSelect.value),
-                            normalizeBool(els.registrationAutoApproveSelect.value),
-                        );
-                        if (els.defaultPlanSelect.value) {
-                            await apiClient.setDefaultPlan(els.defaultPlanSelect.value);
-                        }
-                        const planRef = els.planAdminEditSelect ? els.planAdminEditSelect.value : "";
-                        const selectedPlan = Array.isArray(state.plans) ? state.plans.find((plan) => plan.slug === planRef) : null;
-                        if (planRef && selectedPlan) {
-                            const actions = selectedPlan.registration_actions || {};
-                            await apiClient.updatePlan(planRef, {
-                                slug: selectedPlan.slug,
-                                name: selectedPlan.name || "",
-                                description: selectedPlan.description || "",
-                                max_projects: selectedPlan.max_projects || 0,
-                                max_private_projects: selectedPlan.max_private_projects || 0,
-                                max_tickets: selectedPlan.max_tickets || 0,
-                                max_tickets_per_project: selectedPlan.max_tickets_per_project || 0,
-                                max_team_memberships: selectedPlan.max_team_memberships || 0,
-                                max_api_calls_per_day: selectedPlan.max_api_calls_per_day || 0,
-                                default_project_alias: els.planAdminAliasSelect ? els.planAdminAliasSelect.value : (selectedPlan.default_project_alias || ""),
-                                registration_actions: {
-                                    auto_assign_public_team: normalizeBool(els.planAdminPublicTeamSelect && els.planAdminPublicTeamSelect.value),
-                                    auto_create_private_project: normalizeBool(els.planAdminPrivateProjectSelect && els.planAdminPrivateProjectSelect.value),
-                                    auto_create_private_team: normalizeBool(els.planAdminPrivateTeamSelect && els.planAdminPrivateTeamSelect.value),
-                                    teams: Array.isArray(actions.teams) ? actions.teams : [],
-                                    projects: Array.isArray(actions.projects) ? actions.projects : [],
-                                },
-                            });
-                        }
-                        await Promise.all([loadStatus(), loadPlans()]);
-                        syncRegistrationUI();
-                        renderPlanAdminPanel();
-                        setNotice("Onboarding policy saved.");
-                    } catch (error) {
-                        setNotice(error.message, true);
-                    }
-                });
-            }
-            if (els.planAdminEditSelect) {
-                els.planAdminEditSelect.addEventListener("change", () => {
-                    state.planAdminEditSlug = els.planAdminEditSelect.value || "";
-                    renderPlanAdminPanel();
-                });
-            }
-
             document.getElementById("delete-project-button").addEventListener("click", async () => {
                 const draft = state.selectedProjectDraft;
                 if (!draft.id) {
@@ -3299,6 +3542,131 @@
                         await loadMyNotifications();
                         renderMyNotificationsPanel();
                         setNotice("Notification marked as read.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+        }
+
+        function buildPlanPayloadFromForm() {
+            return {
+                slug: (els.planSlug.value || "").trim(),
+                name: (els.planName.value || "").trim(),
+                description: (els.planDescription.value || "").trim(),
+                max_projects: Number(els.planMaxProjects.value || 0),
+                max_private_projects: Number(els.planMaxPrivateProjects.value || 0),
+                max_tickets: Number(els.planMaxTickets.value || 0),
+                max_tickets_per_project: Number(els.planMaxTicketsPerProject.value || 0),
+                max_team_memberships: Number(els.planMaxTeamMemberships.value || 0),
+                max_api_calls_per_day: Number(els.planMaxAPICallsPerDay.value || 0),
+                default_project_alias: els.planDefaultProjectAlias.value || "public",
+                registration_actions: {
+                    auto_assign_public_team: normalizeBool(els.planAutoAssignPublicTeam.value),
+                    auto_create_private_project: normalizeBool(els.planAutoCreatePrivateProject.value),
+                    auto_create_private_team: normalizeBool(els.planAutoCreatePrivateTeam.value),
+                    teams: Array.isArray(state.selectedPlanDraft && state.selectedPlanDraft.registration_actions && state.selectedPlanDraft.registration_actions.teams)
+                        ? state.selectedPlanDraft.registration_actions.teams
+                        : [],
+                    projects: Array.isArray(state.selectedPlanDraft && state.selectedPlanDraft.registration_actions && state.selectedPlanDraft.registration_actions.projects)
+                        ? state.selectedPlanDraft.registration_actions.projects
+                        : [],
+                },
+            };
+        }
+
+        function bindPlanHandlers() {
+            if (els.planList) {
+                els.planList.addEventListener("click", (event) => {
+                    const card = event.target.closest("[data-plan-slug]");
+                    if (!card) {
+                        return;
+                    }
+                    state.selectedPlanSlug = card.dataset.planSlug || "";
+                    state.selectedPlanDraft = getCurrentPlan() ? structuredClone(getCurrentPlan()) : emptyPlan();
+                    renderPlans();
+                });
+            }
+
+            const newPlanButton = document.getElementById("new-plan-button");
+            if (newPlanButton) {
+                newPlanButton.addEventListener("click", () => {
+                    state.selectedPlanSlug = "";
+                    state.selectedPlanDraft = emptyPlan();
+                    renderPlanEditor();
+                    renderPlans();
+                });
+            }
+
+            if (els.savePlanAdminButton) {
+                els.savePlanAdminButton.addEventListener("click", async () => {
+                    try {
+                        await apiClient.setRegistrationPolicy(
+                            normalizeBool(els.registrationEnabledSelect.value),
+                            normalizeBool(els.registrationAutoApproveSelect.value),
+                        );
+                        if (els.defaultPlanSelect.value) {
+                            await apiClient.setDefaultPlan(els.defaultPlanSelect.value);
+                        }
+                        await Promise.all([loadStatus(), loadPlans()]);
+                        syncRegistrationUI();
+                        renderPlans();
+                        setNotice("Onboarding policy saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const resetPlanButton = document.getElementById("reset-plan-button");
+            if (resetPlanButton) {
+                resetPlanButton.addEventListener("click", () => {
+                    state.selectedPlanDraft = getCurrentPlan() ? structuredClone(getCurrentPlan()) : emptyPlan();
+                    renderPlanEditor();
+                });
+            }
+
+            const planForm = document.getElementById("plan-form");
+            if (planForm) {
+                planForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const payload = buildPlanPayloadFromForm();
+                    if (!payload.slug || !payload.name) {
+                        setNotice("Plan slug and name are required.", true);
+                        return;
+                    }
+                    try {
+                        const existing = state.selectedPlanDraft && state.selectedPlanDraft.plan_id ? state.selectedPlanDraft : null;
+                        const saved = normalizePlan(existing
+                            ? await apiClient.updatePlan(existing.slug, payload)
+                            : await apiClient.createPlan(payload));
+                        await loadPlans();
+                        state.selectedPlanSlug = saved.slug;
+                        state.selectedPlanDraft = getCurrentPlan() ? structuredClone(getCurrentPlan()) : saved;
+                        renderPlans();
+                        setNotice("Plan saved.");
+                    } catch (error) {
+                        setNotice(error.message, true);
+                    }
+                });
+            }
+
+            const deletePlanButton = document.getElementById("delete-plan-button");
+            if (deletePlanButton) {
+                deletePlanButton.addEventListener("click", async () => {
+                    const plan = state.selectedPlanDraft;
+                    if (!plan || !plan.plan_id) {
+                        return;
+                    }
+                    const confirmed = await uiConfirm("Delete plan " + (plan.name ? "\"" + plan.name + "\"" : "\"" + plan.slug + "\"") + "?", "Delete");
+                    if (!confirmed) {
+                        return;
+                    }
+                    try {
+                        await apiClient.deletePlan(plan.slug);
+                        await loadPlans();
+                        renderPlans();
+                        setNotice("Plan deleted.");
                     } catch (error) {
                         setNotice(error.message, true);
                     }
@@ -4248,6 +4616,7 @@
                     const nextID = Number(els.workflowSelect.value || 0);
                     state.selectedWorkflowID = nextID || null;
                     state.selectedWorkflowDraft = getCurrentWorkflow() ? structuredClone(getCurrentWorkflow()) : emptyWorkflow();
+                    state.workflowGraphNeedsReset = state.workflowStageViewMode === "graph";
                     if (!state.selectedWorkflowID) {
                         renderAll();
                         return;
@@ -4263,6 +4632,21 @@
                 renderEditors();
                 renderWorkflows();
             });
+
+            if (els.workflowViewBoardButton) {
+                els.workflowViewBoardButton.addEventListener("click", () => {
+                    state.workflowStageViewMode = "board";
+                    state.workflowGraphNeedsReset = false;
+                    renderWorkflows();
+                });
+            }
+            if (els.workflowViewGraphButton) {
+                els.workflowViewGraphButton.addEventListener("click", () => {
+                    state.workflowStageViewMode = "graph";
+                    state.workflowGraphNeedsReset = true;
+                    renderWorkflows();
+                });
+            }
 
             document.getElementById("workflow-form").addEventListener("submit", async (event) => {
                 event.preventDefault();
@@ -4504,6 +4888,7 @@
             });
 
             bindStageDragAndDrop();
+            bindWorkflowGraphPan();
         }
 
         async function loadWorkflowValidation(workflowID, force) {
@@ -5452,6 +5837,54 @@
             });
         }
 
+        function bindWorkflowGraphPan() {
+            let panState = null;
+
+            function stopPan(pointerID) {
+                if (!panState || (pointerID !== undefined && panState.pointerID !== pointerID)) {
+                    return;
+                }
+                panState.viewport.classList.remove("is-panning");
+                panState = null;
+            }
+
+            els.stageGrid.addEventListener("pointerdown", (event) => {
+                const viewport = event.target.closest("[data-workflow-graph-viewport]");
+                if (!viewport || state.workflowStageViewMode !== "graph" || event.button !== 0) {
+                    return;
+                }
+                if (event.target.closest(".workflow-graph-node, button, input, textarea, select, label, summary")) {
+                    return;
+                }
+                panState = {
+                    pointerID: event.pointerId,
+                    viewport,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    scrollLeft: viewport.scrollLeft,
+                    scrollTop: viewport.scrollTop,
+                };
+                viewport.classList.add("is-panning");
+                viewport.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            });
+
+            els.stageGrid.addEventListener("pointermove", (event) => {
+                if (!panState || event.pointerId !== panState.pointerID) {
+                    return;
+                }
+                panState.viewport.scrollLeft = panState.scrollLeft - (event.clientX - panState.startX);
+                panState.viewport.scrollTop = panState.scrollTop - (event.clientY - panState.startY);
+            });
+
+            els.stageGrid.addEventListener("pointerup", (event) => {
+                stopPan(event.pointerId);
+            });
+            els.stageGrid.addEventListener("pointercancel", (event) => {
+                stopPan(event.pointerId);
+            });
+        }
+
         function bindStageDragAndDrop() {
             const stageCreateForm = document.getElementById("new-stage-form");
 
@@ -5521,7 +5954,7 @@
                     return;
                 }
                 const stage = event.target.closest("[data-stage-id]");
-                if (!stage) {
+                if (!stage || state.workflowStageViewMode !== "board") {
                     return;
                 }
                 state.drag = { type: "stage", stageID: Number(stage.dataset.stageId) };
@@ -5555,6 +5988,9 @@
                     return;
                 }
                 if (state.drag.type === "stage" && stageCard) {
+                    if (state.workflowStageViewMode !== "board") {
+                        return;
+                    }
                     event.preventDefault();
                     clearStageDragTargets();
                     stageCard.classList.add("drag-target");
@@ -5631,6 +6067,11 @@
                 }
 
                 const targetStage = event.target.closest(".stage-card");
+                if (state.workflowStageViewMode !== "board") {
+                    state.drag = null;
+                    clearStageDragTargets();
+                    return;
+                }
                 if (!targetStage) {
                     state.drag = null;
                     clearStageDragTargets();
@@ -5732,10 +6173,15 @@
             });
         }
 
+        els.loginForm.addEventListener("submit", handleLogin);
+        els.registerForm.addEventListener("submit", handleRegister);
+        els.showRegisterButton.addEventListener("click", showRegisterForm);
+        els.hideRegisterButton.addEventListener("click", showLoginForm);
         state.navOrder = loadStoredNavOrder();
         renderMainNav();
         bindViewNavigation();
         bindProjectHandlers();
+        bindPlanHandlers();
         bindGoalsHandlers();
         bindDocumentsHandlers();
         bindWorkflowHandlers();
@@ -5770,10 +6216,6 @@
                 closeDialog(false);
             }
         });
-        els.loginForm.addEventListener("submit", handleLogin);
-        els.registerForm.addEventListener("submit", handleRegister);
-        els.showRegisterButton.addEventListener("click", showRegisterForm);
-        els.hideRegisterButton.addEventListener("click", showLoginForm);
         state.viewScrollByPanel = loadStoredViewScrollByPanel();
         state.currentView = loadStoredSelectedView() || state.currentView;
         switchView(state.currentView, { restoreScroll: false });
@@ -5783,6 +6225,35 @@
             const auth = loadStoredAuth();
             if (!auth) {
                 await loadPublicStatus();
+                if (state.status && state.status.authenticated) {
+                    state.auth = {
+                        username: (state.status.user && state.status.user.username) || "",
+                        token: "",
+                    };
+                    apiClient.setToken("");
+                    document.getElementById("login-username").value = state.auth.username;
+                    showAuthenticatedShell();
+                    try {
+                        await refreshAll();
+                        connectLiveUpdates();
+                    } catch (error) {
+                        disconnectLiveUpdates();
+                        if (state.goalChatSocket) {
+                            state.goalChatSocket.close();
+                            state.goalChatSocket = null;
+                        }
+                        if (isAuthError(error)) {
+                            state.auth = null;
+                            clearStoredAuth();
+                            els.loginError.textContent = error.message;
+                            showLoginScreen();
+                            return;
+                        }
+                        setNotice(error.message, true);
+                        showAuthenticatedShell();
+                    }
+                    return;
+                }
                 showLoginScreen();
                 return;
             }
@@ -5799,10 +6270,15 @@
                     state.goalChatSocket.close();
                     state.goalChatSocket = null;
                 }
-                state.auth = null;
-                clearStoredAuth();
-                els.loginError.textContent = error.message;
-                showLoginScreen();
+                if (isAuthError(error)) {
+                    state.auth = null;
+                    clearStoredAuth();
+                    els.loginError.textContent = error.message;
+                    showLoginScreen();
+                    return;
+                }
+                setNotice(error.message, true);
+                showAuthenticatedShell();
             }
         }());
 

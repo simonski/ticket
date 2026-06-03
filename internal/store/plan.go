@@ -319,6 +319,36 @@ func UpdatePlan(ctx context.Context, db *sql.DB, id int64, params PlanUpdatePara
 	return GetPlanByID(ctx, db, id)
 }
 
+func DeletePlan(ctx context.Context, db *sql.DB, id int64) error {
+	current, err := GetPlanByID(ctx, db, id)
+	if err != nil {
+		return err
+	}
+	defaultPlan, err := DefaultPlan(ctx, db)
+	if err == nil && defaultPlan.ID == current.ID {
+		return errors.New("default plan cannot be deleted")
+	}
+	var assignedUsers int
+	if queryErr := db.QueryRowContext(ctx, `SELECT COUNT(1) FROM users WHERE plan_id = ?`, id).Scan(&assignedUsers); queryErr != nil {
+		return queryErr
+	}
+	if assignedUsers > 0 {
+		return fmt.Errorf("plan is assigned to %d user(s)", assignedUsers)
+	}
+	result, err := db.ExecContext(ctx, `DELETE FROM plans WHERE plan_id = ?`, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrPlanNotFound
+	}
+	return nil
+}
+
 func AssignUserPlan(ctx context.Context, db *sql.DB, userID string, planID int64) error {
 	if _, err := GetPlanByID(ctx, db, planID); err != nil {
 		return err

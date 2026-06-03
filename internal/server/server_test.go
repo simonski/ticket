@@ -427,6 +427,15 @@ func TestServerServesNamedEmbeddedSite(t *testing.T) {
 	if !strings.Contains(string(body), `id="version-overlay"`) {
 		t.Fatalf("root response missing version overlay")
 	}
+	if !strings.Contains(string(body), `href="/site2.css"`) {
+		t.Fatalf("root response missing absolute site2 stylesheet path")
+	}
+	if !strings.Contains(string(body), `src="/api.js"`) {
+		t.Fatalf("root response missing absolute api.js path")
+	}
+	if !strings.Contains(string(body), `src="/app.js"`) {
+		t.Fatalf("root response missing absolute app.js path")
+	}
 
 	assetReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/site2.css", http.NoBody)
 	if err != nil {

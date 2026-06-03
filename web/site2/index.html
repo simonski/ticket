@@ -4,11 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ticket</title>
-    <link rel="stylesheet" href="site2.css">
+    <link rel="stylesheet" href="/site2.css">
 </head>
 <body>
     <div id="login-screen" class="screen login-screen">
-        <form id="login-form" class="login-card" method="post" action="/api/login">
+        <form id="login-form" class="login-card">
             <h1>ticket</h1>
             <div class="stack">
                 <div class="field">
@@ -26,7 +26,7 @@
                 <div id="login-error" class="meta"></div>
             </div>
         </form>
-        <form id="register-form" class="login-card hidden" method="post" action="/api/register">
+        <form id="register-form" class="login-card hidden">
             <h1>ticket</h1>
             <div class="stack">
                 <div class="field">
@@ -102,12 +102,6 @@
                             </div>
                         </div>
                         <div id="ticket-board" class="board"></div>
-                        <div class="panel panel-padded" style="margin-top: 16px;">
-                            <h3>Predicted next work</h3>
-                            <p class="meta">Projected next phase/role transitions from the current workflow graph.</p>
-                            <div id="forecast-calibration-summary" class="meta"></div>
-                            <div id="predicted-work-list" class="history-list" role="status" aria-live="polite"></div>
-                        </div>
                     </div>
                 </section>
 
@@ -590,74 +584,6 @@
                                 <button id="reset-project-button" type="button" class="btn-ghost">Clear</button>
                             </div>
                         </form>
-                        <div id="plan-admin-panel" class="panel panel-padded hidden" style="margin-top: 16px;">
-                            <div class="panel-head">
-                                <div>
-                                    <h3>Onboarding policy</h3>
-                                    <p class="meta">Default plan and registration behavior for new users.</p>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="field">
-                                    <label for="default-plan-select">Default plan</label>
-                                    <select id="default-plan-select"></select>
-                                </div>
-                                <div class="field">
-                                    <label for="registration-enabled-select">Registration</label>
-                                    <select id="registration-enabled-select">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="registration-auto-approve-select">Auto-approve</label>
-                                    <select id="registration-auto-approve-select">
-                                        <option value="true">enabled</option>
-                                        <option value="false">manual approval</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="field">
-                                    <label for="plan-admin-edit-select">Plan policy</label>
-                                    <select id="plan-admin-edit-select"></select>
-                                </div>
-                                <div class="field">
-                                    <label for="plan-admin-alias-select">Default project alias</label>
-                                    <select id="plan-admin-alias-select">
-                                        <option value="public">public</option>
-                                        <option value="private">private</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="plan-admin-public-team-select">Auto-assign public team</label>
-                                    <select id="plan-admin-public-team-select">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="field">
-                                    <label for="plan-admin-private-project-select">Auto-create private project</label>
-                                    <select id="plan-admin-private-project-select">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label for="plan-admin-private-team-select">Auto-create private team</label>
-                                    <select id="plan-admin-private-team-select">
-                                        <option value="true">enabled</option>
-                                        <option value="false">disabled</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="editor-actions">
-                                <button id="save-plan-admin-button" type="button">Save onboarding policy</button>
-                            </div>
-                            <div id="plan-admin-list" class="entity-list" style="margin-top: 12px;"></div>
-                        </div>
                         <div id="project-access-requests-panel" class="panel panel-padded hidden" style="margin-top: 16px;">
                             <div class="panel-head">
                                 <div>
@@ -718,6 +644,139 @@
                     </div>
                 </section>
 
+                <section id="view-plans" class="view split">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>Plans</h2>
+                                <p class="meta">Manage limits, onboarding actions, and the default registration plan.</p>
+                            </div>
+                            <button id="new-plan-button" type="button" class="btn-primary">New plan</button>
+                        </div>
+                        <div id="plan-list" class="entity-list"></div>
+                    </div>
+                    <div class="panel">
+                        <div id="plan-admin-panel" class="panel panel-padded" style="margin-bottom: 16px;">
+                            <div class="panel-head">
+                                <div>
+                                    <h3>Onboarding policy</h3>
+                                    <p class="meta">Default plan and registration behavior for new users.</p>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="default-plan-select">Default plan</label>
+                                    <select id="default-plan-select"></select>
+                                </div>
+                                <div class="field">
+                                    <label for="registration-enabled-select">Registration</label>
+                                    <select id="registration-enabled-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="registration-auto-approve-select">Auto-approve</label>
+                                    <select id="registration-auto-approve-select">
+                                        <option value="true">enabled</option>
+                                        <option value="false">manual approval</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-plan-admin-button" type="button">Save onboarding policy</button>
+                            </div>
+                        </div>
+                        <div class="panel-head">
+                            <div>
+                                <h2 id="plan-editor-title">Plan editor</h2>
+                                <span class="meta">Create and tune quotas plus automatic membership/project actions.</span>
+                            </div>
+                        </div>
+                        <form id="plan-form" class="stack">
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-slug">Slug</label>
+                                    <input id="plan-slug" required>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-name">Name</label>
+                                    <input id="plan-name" required>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="plan-description">Description</label>
+                                <textarea id="plan-description"></textarea>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-max-projects">Max projects</label>
+                                    <input id="plan-max-projects" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-private-projects">Max private projects</label>
+                                    <input id="plan-max-private-projects" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-tickets">Max tickets</label>
+                                    <input id="plan-max-tickets" type="number" min="0">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-max-tickets-per-project">Max tickets per project</label>
+                                    <input id="plan-max-tickets-per-project" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-team-memberships">Max team memberships</label>
+                                    <input id="plan-max-team-memberships" type="number" min="0">
+                                </div>
+                                <div class="field">
+                                    <label for="plan-max-api-calls-per-day">Max API calls/day</label>
+                                    <input id="plan-max-api-calls-per-day" type="number" min="0">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-default-project-alias">Default project alias</label>
+                                    <select id="plan-default-project-alias">
+                                        <option value="public">public</option>
+                                        <option value="private">private</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-auto-assign-public-team">Auto-assign public team</label>
+                                    <select id="plan-auto-assign-public-team">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="plan-auto-create-private-project">Auto-create private project</label>
+                                    <select id="plan-auto-create-private-project">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="field">
+                                    <label for="plan-auto-create-private-team">Auto-create private team</label>
+                                    <select id="plan-auto-create-private-team">
+                                        <option value="true">enabled</option>
+                                        <option value="false">disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="editor-actions">
+                                <button id="save-plan-button" type="submit" class="btn-primary">Save plan</button>
+                                <button id="delete-plan-button" type="button" class="btn-danger">Delete</button>
+                                <button id="reset-plan-button" type="button" class="btn-ghost">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
                 <section id="view-workflows" class="view">
                     <div class="panel">
                         <div class="panel-head workflow-board-head">
@@ -727,6 +786,10 @@
                             <div class="workflow-compact-controls">
                                 <div class="select-shell workflow-compact-select">
                                     <select id="workflow-select" aria-label="Select workflow"></select>
+                                </div>
+                                <div class="workflow-view-toggle" role="group" aria-label="Workflow layout">
+                                    <button id="workflow-view-board" type="button" class="workflow-view-button" aria-pressed="true">Board</button>
+                                    <button id="workflow-view-graph" type="button" class="workflow-view-button" aria-pressed="false">Graph</button>
                                 </div>
                                 <button id="new-workflow-button" type="button" class="btn-primary">New Workflow</button>
                             </div>
@@ -784,7 +847,7 @@
                             </form>
                         </details>
 
-                        <div class="workflow-stage-board">
+                        <div id="workflow-stage-board" class="workflow-stage-board">
                             <div id="stage-grid" class="stage-grid"></div>
                             <form id="new-stage-form" class="stage-card stage-create-card stack" data-stage-drop-end="true">
                                 <div class="stage-create-top">
@@ -1102,7 +1165,7 @@
         </div>
     </div>
     <div id="version-overlay" class="version-overlay">server: unknown</div>
-    <script src="api.js"></script>
-    <script src="app.js"></script>
+    <script src="/api.js"></script>
+    <script src="/app.js"></script>
 </body>
 </html>
