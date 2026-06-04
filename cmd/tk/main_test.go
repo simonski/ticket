@@ -9609,11 +9609,14 @@ func TestRunTicketCloseAndOpen(t *testing.T) {
 	taskID := createLocalTask(t, []string{"add", "Closable task"})
 
 	// Close the ticket
-	captureStdout(t, func() {
+	closeOut := captureStdout(t, func() {
 		if err := run([]string{"close", taskID}); err != nil {
 			t.Fatalf("close error = %v", err)
 		}
 	})
+	if !strings.Contains(closeOut, "closed") {
+		t.Fatalf("close output should contain 'closed', got:\n%s", closeOut)
+	}
 
 	// Verify it is closed (get should show closed)
 	getOut := captureStdout(t, func() {
@@ -9626,11 +9629,14 @@ func TestRunTicketCloseAndOpen(t *testing.T) {
 	}
 
 	// Re-open the ticket
-	captureStdout(t, func() {
+	openOut := captureStdout(t, func() {
 		if err := run([]string{"open", taskID}); err != nil {
 			t.Fatalf("open error = %v", err)
 		}
 	})
+	if !strings.Contains(openOut, "opened") {
+		t.Fatalf("open output should contain 'opened', got:\n%s", openOut)
+	}
 
 	getOut2 := captureStdout(t, func() {
 		if err := run([]string{"get", "-id", taskID, "-v"}); err != nil {

@@ -212,7 +212,11 @@ func runSetTicketClosed(args []string, closed bool) error {
 	if outputJSON {
 		return printJSON(updated)
 	}
-	printTicket(updated)
+	if closed {
+		fmt.Printf("%s closed\n", updated.ID)
+	} else {
+		fmt.Printf("%s opened\n", updated.ID)
+	}
 	return nil
 }
 
