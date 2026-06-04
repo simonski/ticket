@@ -204,6 +204,8 @@ func (r *router) registerAuthHandlers() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 	})
 
+	r.registerPasskeyHandlers()
+
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")

@@ -181,6 +181,10 @@ function installSite2Mock(page, seed = {}) {
           },
         ],
       },
+      passkeys: Array.isArray(mockSeed.passkeys)
+        ? mockSeed.passkeys.map((credential) => ({ ...credential }))
+        : [],
+      nextPasskeyIndex: Number(mockSeed.nextPasskeyIndex || 2),
     };
 
     window.__site2Requests = [];
@@ -298,8 +302,126 @@ function installSite2Mock(page, seed = {}) {
       }
       if (path === "/api/login" && method === "POST") {
         db.status.authenticated = true;
-        db.status.user = { username: body.username || "admin", role: "admin" };
-        return json({ token: "test-token", user: { username: body.username || "admin", role: "admin" } });
+        db.status.user = { username: body.username || "admin", role: "admin", email: "admin@example.com" };
+        return json({ token: "test-token", user: { username: body.username || "admin", role: "admin", email: "admin@example.com" } });
+      }
+      if (path === "/api/users/me/passkeys" && method === "GET") {
+        return json(db.passkeys);
+      }
+      if (path.match(/^\/api\/users\/me\/passkeys\/.+$/) && method === "PUT") {
+        const credentialID = decodeURIComponent(path.split("/").slice(5).join("/"));
+        const credential = db.passkeys.find((item) => item.credential_id === credentialID);
+        if (!credential) {
+          return json({ error: "passkey not found" }, 404);
+        }
+        credential.name = String(body.name || "");
+        credential.updated_at = "now";
+        return json(credential);
+      }
+      if (path.match(/^\/api\/users\/me\/passkeys\/.+$/) && method === "DELETE") {
+        const credentialID = decodeURIComponent(path.split("/").slice(5).join("/"));
+        const before = db.passkeys.length;
+        db.passkeys = db.passkeys.filter((item) => item.credential_id !== credentialID);
+        if (db.passkeys.length === before) {
+          return json({ error: "passkey not found" }, 404);
+        }
+        return json({ status: "deleted" });
+      }
+      if (path === "/api/auth/passkey/login/start" && method === "POST") {
+        db.passkeyLogin = {
+          code: "passkey-1",
+          username: body.username || "admin",
+          finished: false,
+        };
+        return json({
+          verification_url: window.location.origin + "/passkey?code=passkey-1",
+          code: "passkey-1",
+          expires_at: "2099-01-01T00:00:00Z",
+        });
+      }
+      if (path === "/api/auth/passkey/register/start" && method === "POST") {
+        const code = `passkey-register-${db.nextPasskeyIndex}`;
+        db.passkeyRegistration = {
+          code,
+          name: String(body.name || ""),
+        };
+        return json({
+          verification_url: window.location.origin + `/passkey?code=${encodeURIComponent(code)}`,
+          code,
+          expires_at: "2099-01-01T00:00:00Z",
+        });
+      }
+      if (path === "/api/auth/passkey/challenge" && method === "GET") {
+        const code = url.searchParams.get("code");
+        if (db.passkeyLogin && code === db.passkeyLogin.code) {
+          return json({
+            kind: "login",
+            public_key: {
+              challenge: "Y2hhbGxlbmdl",
+              rpId: window.location.hostname,
+              timeout: 60000,
+              userVerification: "required",
+              allowCredentials: [
+                { id: "Y3JlZC0x", type: "public-key" },
+              ],
+            },
+          });
+        }
+        if (db.passkeyRegistration && code === db.passkeyRegistration.code) {
+          return json({
+            kind: "registration",
+            public_key: {
+              challenge: "Y3JlYXRlLWNoYWxsZW5nZQ",
+              rp: { name: "Ticket", id: window.location.hostname },
+              user: {
+                id: "YWRtaW4",
+                name: "admin",
+                displayName: "admin",
+              },
+              pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+              timeout: 60000,
+              attestation: "none",
+            },
+          });
+        }
+        return json({ error: "not found" }, 404);
+      }
+      if (path === "/api/auth/passkey/finish" && method === "POST") {
+        const code = url.searchParams.get("code");
+        if (db.passkeyLogin && code === db.passkeyLogin.code) {
+          db.passkeyLogin.finished = true;
+          db.passkeyLogin.assertion = body;
+          return json({ status: "ok" });
+        }
+        if (db.passkeyRegistration && code === db.passkeyRegistration.code) {
+          const credentialID = body.id || `cred-${db.nextPasskeyIndex}`;
+          db.passkeys.push({
+            credential_id: credentialID,
+            name: db.passkeyRegistration.name || `Passkey ${db.nextPasskeyIndex}`,
+            created_at: "now",
+            updated_at: "now",
+            last_used_at: "",
+          });
+          db.nextPasskeyIndex += 1;
+          db.passkeyRegistration = null;
+          return json({ status: "ok" });
+        }
+        return json({ error: "not found" }, 404);
+      }
+      if (path === "/api/auth/passkey/poll" && method === "POST") {
+        if (!db.passkeyLogin || body.code !== db.passkeyLogin.code) {
+          return json({ error: "not found" }, 404);
+        }
+        if (!db.passkeyLogin.finished) {
+          return json({ status: "pending" }, 202);
+        }
+        db.status.authenticated = true;
+        db.status.user = { username: db.passkeyLogin.username, role: "admin", email: "admin@example.com" };
+        return json({
+          status: "complete",
+          token: "passkey-token",
+          user: { username: db.passkeyLogin.username, role: "admin", email: "admin@example.com" },
+        });
       }
       if (path === "/api/logout" && method === "POST") {
         db.status.authenticated = false;
@@ -1010,6 +1132,107 @@ test("logs in without leaking credentials into URL query parameters", async ({ p
     username: "admin",
     password: "secret",
   }));
+});
+
+test("passkey login signs in from the website without posting a password", async ({ page }) => {
+  await installSite2Mock(page);
+  await page.addInitScript(() => {
+    window.PublicKeyCredential = window.PublicKeyCredential || function PublicKeyCredential() {};
+    window.PublicKeyCredential.parseRequestOptionsFromJSON = (value) => value;
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: {
+        get: async () => ({
+          id: "cred-1",
+          rawId: Uint8Array.from([99, 114, 101, 100, 45, 49]).buffer,
+          type: "public-key",
+          authenticatorAttachment: "platform",
+          response: {
+            clientDataJSON: Uint8Array.from([1, 2, 3]).buffer,
+            authenticatorData: Uint8Array.from([4, 5, 6]).buffer,
+            signature: Uint8Array.from([7, 8, 9]).buffer,
+          },
+          getClientExtensionResults: () => ({}),
+        }),
+      },
+    });
+  });
+  await page.goto("/site2/");
+
+  await page.locator("#login-username").fill("admin");
+  await page.getByRole("button", { name: "Use passkey" }).click();
+
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+  const requests = await page.evaluate(() => window.__site2Requests || []);
+  expect(requests.find((request) => request.path === "/api/login")).toBeFalsy();
+  expect(requests.find((request) => request.path === "/api/auth/passkey/login/start")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/auth/passkey/challenge")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/auth/passkey/finish")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/auth/passkey/poll")).toBeTruthy();
+});
+
+test("profile/settings modal manages website passkeys", async ({ page }) => {
+  await installSite2Mock(page, {
+    passkeys: [
+      { credential_id: "cred-old", name: "Laptop", created_at: "now", updated_at: "now", last_used_at: "" },
+    ],
+  });
+  await page.addInitScript(() => {
+    window.PublicKeyCredential = window.PublicKeyCredential || function PublicKeyCredential() {};
+    window.PublicKeyCredential.parseCreationOptionsFromJSON = (value) => value;
+    Object.defineProperty(navigator, "credentials", {
+      configurable: true,
+      value: {
+        create: async () => ({
+          id: "cred-new",
+          rawId: Uint8Array.from([99, 114, 101, 100, 45, 110, 101, 119]).buffer,
+          type: "public-key",
+          authenticatorAttachment: "platform",
+          response: {
+            clientDataJSON: Uint8Array.from([1, 2, 3]).buffer,
+            attestationObject: Uint8Array.from([4, 5, 6]).buffer,
+          },
+          getClientExtensionResults: () => ({}),
+        }),
+      },
+    });
+  });
+  await page.goto("/site2/");
+  await page.locator("#login-username").fill("admin");
+  await page.locator("#login-password").fill("secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Board" })).toBeVisible();
+
+  await page.locator("#account-menu-button").click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Account settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open app settings" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.locator("#account-menu-button").click();
+  await page.getByRole("button", { name: "Profile" }).click();
+  await expect(page.getByRole("heading", { name: "Profile & security" })).toBeVisible();
+  await expect(page.locator("#account-passkey-list")).toContainText("Laptop");
+
+  await page.locator("[data-passkey-id='cred-old'] [data-passkey-action='rename']").click();
+  await page.locator("#dialog-input").fill("Desk key");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator("#account-passkey-list")).toContainText("Desk key");
+
+  await page.locator("#account-passkey-name").fill("Phone");
+  await page.getByRole("button", { name: "Enroll passkey" }).click();
+  await expect(page.locator("#account-passkey-list")).toContainText("Phone");
+
+  await page.locator("[data-passkey-id='cred-old'] [data-passkey-action='delete']").click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("#account-passkey-list")).not.toContainText("Desk key");
+
+  const requests = await page.evaluate(() => window.__site2Requests || []);
+  expect(requests.find((request) => request.path === "/api/users/me/passkeys" && request.method === "GET")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/users/me/passkeys/cred-old" && request.method === "PUT")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/users/me/passkeys/cred-old" && request.method === "DELETE")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/auth/passkey/register/start")).toBeTruthy();
+  expect(requests.find((request) => request.path === "/api/auth/passkey/finish")).toBeTruthy();
 });
 
 test("continues to board when goals API returns null", async ({ page }) => {

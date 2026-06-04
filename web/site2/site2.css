@@ -1384,6 +1384,52 @@
             gap: 18px;
         }
 
+        .account-modal-card {
+            width: min(100%, 760px);
+        }
+
+        .account-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .account-modal-header h2,
+        .account-panel h3 {
+            margin: 0;
+        }
+
+        .account-modal-body {
+            display: grid;
+            gap: 18px;
+        }
+
+        .account-panel {
+            display: grid;
+            gap: 14px;
+        }
+
+        .account-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .account-passkey-create {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .account-passkey-create button {
+            white-space: nowrap;
+        }
+
         .history-list {
             display: grid;
             gap: 10px;

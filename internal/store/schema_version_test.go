@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -132,7 +133,7 @@ func TestOpenRejectsPreviousSchemaVersionWithUpgradeGuidance(t *testing.T) {
 	}
 	for _, want := range []string{
 		"schema version 5",
-		"schema version 6",
+		fmt.Sprintf("schema version %d", CurrentSchemaVersion),
 		"upgrade-database -o new_database/ticket.db",
 	} {
 		if !strings.Contains(err.Error(), want) {

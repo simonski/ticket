@@ -320,6 +320,23 @@ it. If no stored token is available, remote commands fail fast and tell the
 user to run `tk login` or set `TICKET_URL` plus `TICKET_USERNAME` /
 `TICKET_PASSWORD` (or `TICKET_TOKEN`).
 
+Passkey login uses a browser-assisted flow:
+
+```bash
+tk user passkey enroll -name "My laptop"
+tk login --passkey -username name
+```
+
+`tk user passkey enroll` requires an existing remote login session and opens the
+browser to register a passkey against the current account. `tk login --passkey`
+then starts a short-lived verification URL/code, opens the browser, and stores
+the resulting bearer token in `$TICKET_HOME/credentials.json` once the passkey
+check completes.
+
+In site2, signed-in users can also manage passkeys from the top-right account
+menu via **Profile** or **Settings**: enroll a new passkey, rename an existing
+one, or revoke one they no longer trust.
+
 Check the current mode and connection state:
 
 ```bash
@@ -1004,6 +1021,9 @@ Keyboard shortcuts in the board view:
 - admin `settings` in site2 now also includes a Config registry view for raw
   `app_settings` key/value CRUD, including create, edit, rename, and delete
   operations backed by `/api/config/settings`
+- the top-right site2 account menu now opens a profile/settings dialog with
+  passkey CRUD: list enrolled passkeys, enroll a new one in-browser, rename
+  labels, and delete revoked credentials
 - when chat capacity is full, new chat input is disabled until the server reports a free slot
 - `/api/status` includes `chat_max_connections`, `chat_max_duration_minutes`, and `chat_running_processes`
 - Story dialog includes `Analyse` which decomposes a story into epics and tasks using the `StoryReview` role
@@ -1026,11 +1046,13 @@ tk server -v
 tk version
 
 tk register -username <name> -email <email> [-password <password>]
+tk login [-username <name>] [-password <password> | -token <token> | --passkey]
 tk status
 tk admin config ls
 tk admin config registration-disable
 tk logout
 
+tk user passkey enroll [-name <label>]
 tk admin user create -username <name> [-email <email>] [-password <password>]
 tk admin user ls
 tk admin user delete -username <name>

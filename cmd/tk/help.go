@@ -65,8 +65,8 @@ var helpIndex = map[string]commandHelp{
 		example: "tk -f old_ticket/ticket.db upgrade-database -o new_database/ticket.db",
 	},
 	"login": {
-		usage:   "tk login [-username <name>] [-password <password> | -token <token>] [-url <server-url>]",
-		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password` or `-token`, then prompts.", "If prompting is needed, discovered values are used as editable defaults. Bearer tokens are preferred when you already have one."},
+		usage:   "tk login [-username <name>] [-password <password> | -token <token> | --passkey] [-url <server-url>]",
+		details: []string{"Logs into the configured server and stores the session token in `~/.ticket/credentials.json`.", "Login resolution order: stored credentials, then username in credentials, then `-username` / `-password`, `-token`, or `--passkey`, then prompts.", "`--passkey` starts a browser-assisted passkey flow for the resolved username. Enroll a passkey first with `tk user passkey enroll`."},
 		example: "tk login -token tk_abc123 -url https://ticket.simonski.com",
 	},
 	"register": {
@@ -774,8 +774,15 @@ Commands:
   disable -id <id>                        Disable a user
   notifications [-status <state>]         List your notifications
   read-notification -id <notification-id> Mark a notification as read
+  passkey enroll [-name <label>]          Enroll a browser passkey for the current user
   reset-password -username <u> [-password]
                                            Reset password and invalidate sessions`
+
+// #nosec G101 -- usage text references passkeys; it does not embed credentials.
+const userPasskeyUsage = `Usage: tk user passkey <command> [flags]
+
+Commands:
+  enroll [-name <label>]                  Enroll a new passkey for the current user`
 
 const storyUsage = `Usage: tk story <command> [flags]
 

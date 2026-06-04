@@ -21,6 +21,7 @@
                 </div>
                 <div class="row">
                     <button class="btn-primary" type="submit">Sign in</button>
+                    <button id="login-passkey-button" type="button">Use passkey</button>
                     <button id="show-register-button" type="button" class="hidden">Create account</button>
                 </div>
                 <div id="login-error" class="meta"></div>
@@ -1001,6 +1002,42 @@
                 </section>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <div id="account-modal" class="modal">
+        <div class="modal-card account-modal-card">
+            <div class="account-modal-header">
+                <div>
+                    <h2 id="account-modal-title">Profile &amp; security</h2>
+                    <p id="account-modal-summary" class="subtitle">Manage your sign-in methods from the top-right account menu.</p>
+                </div>
+                <button id="close-account-modal" type="button" class="btn-ghost">Close</button>
+            </div>
+            <div class="account-modal-body">
+                <section class="account-panel">
+                    <h3>Profile</h3>
+                    <div id="account-profile-details" class="history-list"></div>
+                </section>
+                <section class="account-panel">
+                    <div class="account-panel-header">
+                        <div>
+                            <h3>Passkeys</h3>
+                            <p class="meta">Enroll, rename, and revoke passkeys for website and CLI sign-in.</p>
+                        </div>
+                        <button id="account-open-config-button" type="button" class="btn-ghost hidden">Open app settings</button>
+                    </div>
+                    <div class="account-passkey-create">
+                        <div class="field">
+                            <label for="account-passkey-name">New passkey label</label>
+                            <input id="account-passkey-name" type="text" placeholder="MacBook Pro">
+                        </div>
+                        <button id="account-passkey-enroll-button" type="button">Enroll passkey</button>
+                    </div>
+                    <div id="account-passkey-status" class="meta"></div>
+                    <div id="account-passkey-list" class="history-list"></div>
+                </section>
+            </div>
         </div>
     </div>
 

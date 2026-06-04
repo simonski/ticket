@@ -33,6 +33,26 @@ type AuthResponse struct {
 	User  store.User `json:"user"`
 }
 
+type PasskeyLoginStartRequest struct {
+	Username string `json:"username"`
+}
+
+type PasskeyRegistrationStartRequest struct {
+	Name string `json:"name,omitempty"`
+}
+
+type PasskeyStartResponse struct {
+	VerificationURL string `json:"verification_url"`
+	Code            string `json:"code"`
+	ExpiresAt       string `json:"expires_at"`
+}
+
+type PasskeyPollResponse struct {
+	Status string      `json:"status"`
+	Token  string      `json:"token,omitempty"`
+	User   *store.User `json:"user,omitempty"`
+}
+
 type StatusResponse struct {
 	Status                  string      `json:"status"`
 	Authenticated           bool        `json:"authenticated"`

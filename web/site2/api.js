@@ -27,6 +27,19 @@
         return fallback;
     }
 
+    function readCookie(name) {
+        if (typeof document === "undefined" || !document || typeof document.cookie !== "string") {
+            return "";
+        }
+        const escaped = String(name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const match = document.cookie.match(new RegExp("(?:^|;\\s*)" + escaped + "=([^;]*)"));
+        return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    function getCsrfToken() {
+        return readCookie("__Host-_csrf") || readCookie("_csrf");
+    }
+
     function createClient(options) {
         const opts = options || {};
         const fetchImpl = opts.fetch || (typeof fetch === "function" ? fetch.bind(globalThis) : null);
@@ -54,6 +67,10 @@
             const headers = Object.assign({}, extraHeaders || {});
             if (includeJSON && !headers["Content-Type"]) {
                 headers["Content-Type"] = "application/json";
+            }
+            const csrf = getCsrfToken();
+            if (csrf && !headers["X-CSRF-Token"]) {
+                headers["X-CSRF-Token"] = csrf;
             }
             if (includeAuth && token) {
                 headers.Authorization = "Bearer " + token;
@@ -129,6 +146,58 @@
                 body: JSON.stringify({ username: username, password: password }),
                 auth: false,
             });
+        }
+
+        async function startPasskeyLogin(username) {
+            return request("/api/auth/passkey/login/start", {
+                method: "POST",
+                body: JSON.stringify({ username: username }),
+                auth: false,
+            });
+        }
+
+        function getPasskeyChallenge(code) {
+            return request("/api/auth/passkey/challenge?code=" + encodeURIComponent(String(code || "")), {
+                method: "GET",
+                auth: false,
+            });
+        }
+
+        async function finishPasskeyFlow(code, credential) {
+            return request("/api/auth/passkey/finish?code=" + encodeURIComponent(String(code || "")), {
+                method: "POST",
+                body: JSON.stringify(credential || {}),
+                auth: false,
+            });
+        }
+
+        async function pollPasskey(code) {
+            return request("/api/auth/passkey/poll", {
+                method: "POST",
+                body: JSON.stringify({ code: String(code || "") }),
+                auth: false,
+            });
+        }
+
+        async function startPasskeyRegistration(name) {
+            return request("/api/auth/passkey/register/start", {
+                method: "POST",
+                body: JSON.stringify({ name: String(name || "") }),
+            });
+        }
+
+        function listMyPasskeys() {
+            return get("/api/users/me/passkeys");
+        }
+
+        function renameMyPasskey(credentialID, name) {
+            return put("/api/users/me/passkeys/" + encodeURIComponent(credentialID), {
+                name: String(name || ""),
+            });
+        }
+
+        function deleteMyPasskey(credentialID) {
+            return del("/api/users/me/passkeys/" + encodeURIComponent(credentialID));
         }
 
         async function register(username, password, email) {
@@ -272,6 +341,14 @@
             put: put,
             del: del,
             login: login,
+            startPasskeyLogin: startPasskeyLogin,
+            startPasskeyRegistration: startPasskeyRegistration,
+            getPasskeyChallenge: getPasskeyChallenge,
+            finishPasskeyFlow: finishPasskeyFlow,
+            pollPasskey: pollPasskey,
+            listMyPasskeys: listMyPasskeys,
+            renameMyPasskey: renameMyPasskey,
+            deleteMyPasskey: deleteMyPasskey,
             register: register,
             listPlans: listPlans,
             getDefaultPlan: getDefaultPlan,

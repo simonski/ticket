@@ -3,6 +3,13 @@
         const apiWithFallback = apiClient.requestWithFallback;
         const state = {
             auth: null,
+            passkeys: [],
+            passkeyError: "",
+            passkeyBusy: false,
+            passkeyStatus: "",
+            passkeyStatusError: false,
+            accountModalOpen: false,
+            accountModalSource: "profile",
             currentView: "tickets",
             viewScrollByPanel: {},
             scrollPersistenceReady: false,
@@ -126,9 +133,20 @@
         const els = {
             loginScreen: document.getElementById("login-screen"),
             loginForm: document.getElementById("login-form"),
+            loginPasskeyButton: document.getElementById("login-passkey-button"),
             registerForm: document.getElementById("register-form"),
             registerHelp: document.getElementById("register-help"),
             loginError: document.getElementById("login-error"),
+            accountModal: document.getElementById("account-modal"),
+            accountModalTitle: document.getElementById("account-modal-title"),
+            accountModalSummary: document.getElementById("account-modal-summary"),
+            accountProfileDetails: document.getElementById("account-profile-details"),
+            accountPasskeyList: document.getElementById("account-passkey-list"),
+            accountPasskeyStatus: document.getElementById("account-passkey-status"),
+            accountPasskeyName: document.getElementById("account-passkey-name"),
+            accountPasskeyEnrollButton: document.getElementById("account-passkey-enroll-button"),
+            accountOpenConfigButton: document.getElementById("account-open-config-button"),
+            closeAccountModal: document.getElementById("close-account-modal"),
             versionOverlay: document.getElementById("version-overlay"),
             showRegisterButton: document.getElementById("show-register-button"),
             hideRegisterButton: document.getElementById("hide-register-button"),
@@ -662,6 +680,16 @@
             });
         }
 
+        function normalizePasskeyCredential(credential) {
+            return Object.assign({}, credential, {
+                id: credential.id || credential.credential_id,
+                name: String(credential.name || "").trim(),
+                created_at: String(credential.created_at || ""),
+                updated_at: String(credential.updated_at || ""),
+                last_used_at: String(credential.last_used_at || ""),
+            });
+        }
+
         function storeAuth(auth) {
             sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
             apiClient.setToken(auth && auth.token ? auth.token : "");
@@ -872,6 +900,162 @@
             error.status = 401;
             error.isAuthError = true;
             return error;
+        }
+
+        function browserSupportsPasskeys() {
+            return typeof window.PublicKeyCredential !== "undefined"
+                && Boolean(navigator.credentials)
+                && typeof navigator.credentials.get === "function";
+        }
+
+        function browserSupportsPasskeyEnrollment() {
+            return typeof window.PublicKeyCredential !== "undefined"
+                && Boolean(navigator.credentials)
+                && typeof navigator.credentials.create === "function";
+        }
+
+        function decodeBase64URL(value) {
+            const base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+            const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+            const raw = window.atob(padded);
+            const bytes = new Uint8Array(raw.length);
+            for (let index = 0; index < raw.length; index += 1) {
+                bytes[index] = raw.charCodeAt(index);
+            }
+            return bytes;
+        }
+
+        function encodeBase64URL(buffer) {
+            const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer || []);
+            let raw = "";
+            for (let index = 0; index < bytes.length; index += 1) {
+                raw += String.fromCharCode(bytes[index]);
+            }
+            return window.btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+        }
+
+        function normalizePasskeyRequestOptions(options) {
+            if (window.PublicKeyCredential && typeof window.PublicKeyCredential.parseRequestOptionsFromJSON === "function") {
+                return window.PublicKeyCredential.parseRequestOptionsFromJSON(options);
+            }
+            const normalized = typeof structuredClone === "function"
+                ? structuredClone(options)
+                : JSON.parse(JSON.stringify(options || {}));
+            normalized.challenge = decodeBase64URL(normalized.challenge);
+            if (Array.isArray(normalized.allowCredentials)) {
+                normalized.allowCredentials = normalized.allowCredentials.map((item) => ({
+                    ...item,
+                    id: decodeBase64URL(item.id),
+                }));
+            }
+            return normalized;
+        }
+
+        function normalizePasskeyCreationOptions(options) {
+            if (window.PublicKeyCredential && typeof window.PublicKeyCredential.parseCreationOptionsFromJSON === "function") {
+                return window.PublicKeyCredential.parseCreationOptionsFromJSON(options);
+            }
+            const normalized = typeof structuredClone === "function"
+                ? structuredClone(options)
+                : JSON.parse(JSON.stringify(options || {}));
+            normalized.challenge = decodeBase64URL(normalized.challenge);
+            if (normalized.user && normalized.user.id) {
+                normalized.user.id = decodeBase64URL(normalized.user.id);
+            }
+            if (Array.isArray(normalized.excludeCredentials)) {
+                normalized.excludeCredentials = normalized.excludeCredentials.map((item) => ({
+                    ...item,
+                    id: decodeBase64URL(item.id),
+                }));
+            }
+            return normalized;
+        }
+
+        function serializePasskeyCredential(assertion) {
+            if (!assertion || !assertion.response) {
+                throw new Error("passkey assertion did not return a credential");
+            }
+            const response = assertion.response;
+            const payload = {
+                id: assertion.id,
+                rawId: encodeBase64URL(assertion.rawId),
+                type: assertion.type,
+                response: {
+                    clientDataJSON: encodeBase64URL(response.clientDataJSON),
+                },
+            };
+            if (response.authenticatorData) {
+                payload.response.authenticatorData = encodeBase64URL(response.authenticatorData);
+            }
+            if (response.signature) {
+                payload.response.signature = encodeBase64URL(response.signature);
+            }
+            if (response.attestationObject) {
+                payload.response.attestationObject = encodeBase64URL(response.attestationObject);
+            }
+            if (response.userHandle) {
+                payload.response.userHandle = encodeBase64URL(response.userHandle);
+            }
+            if (typeof response.getTransports === "function") {
+                payload.response.transports = response.getTransports();
+            }
+            if (assertion.authenticatorAttachment) {
+                payload.authenticatorAttachment = assertion.authenticatorAttachment;
+            }
+            if (typeof assertion.getClientExtensionResults === "function") {
+                payload.clientExtensionResults = assertion.getClientExtensionResults();
+            }
+            return payload;
+        }
+
+        function delay(ms) {
+            return new Promise((resolve) => window.setTimeout(resolve, ms));
+        }
+
+        function setPasskeyStatus(message, isError) {
+            state.passkeyStatus = String(message || "");
+            state.passkeyStatusError = Boolean(isError);
+        }
+
+        async function finalizeAuthenticatedSession(auth) {
+            state.auth = auth;
+            await refreshAll();
+            storeAuth(auth);
+            showAuthenticatedShell();
+            connectLiveUpdates();
+        }
+
+        function resetAuthFailure(message) {
+            state.auth = null;
+            clearStoredAuth();
+            els.loginError.textContent = message;
+        }
+
+        async function completePasskeyLogin(username) {
+            const start = await apiClient.startPasskeyLogin(username);
+            const challenge = await apiClient.getPasskeyChallenge(start.code);
+            if (!challenge || challenge.kind !== "login") {
+                throw new Error("passkey login challenge was not available");
+            }
+            const assertion = await navigator.credentials.get({
+                publicKey: normalizePasskeyRequestOptions(challenge.public_key),
+            });
+            await apiClient.finishPasskeyFlow(start.code, serializePasskeyCredential(assertion));
+            let result = null;
+            for (let attempt = 0; attempt < 5; attempt += 1) {
+                result = await apiClient.pollPasskey(start.code);
+                if (result && result.status === "complete") {
+                    break;
+                }
+                await delay(150);
+            }
+            if (!result || result.status !== "complete" || !result.token) {
+                throw new Error("passkey login did not complete");
+            }
+            return {
+                username: (result.user && result.user.username) || username,
+                token: result.token,
+            };
         }
 
         function normalizeBool(value) {
@@ -1700,9 +1884,25 @@
             }
         }
 
+        async function loadPasskeys() {
+            if (!state.auth) {
+                state.passkeys = [];
+                state.passkeyError = "";
+                return;
+            }
+            try {
+                const passkeys = await apiClient.listMyPasskeys();
+                state.passkeys = Array.isArray(passkeys) ? passkeys.map(normalizePasskeyCredential) : [];
+                state.passkeyError = "";
+            } catch (error) {
+                state.passkeys = [];
+                state.passkeyError = error.message;
+            }
+        }
+
         async function refreshAll() {
             await loadStatus();
-            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans()]);
+            await Promise.all([loadSystemAgentModelConfig(), loadWorkflows(), loadRoles(), loadProjects(), loadAgents(), loadTeams(), loadPlans(), loadPasskeys()]);
             await loadConfigSettings();
             renderProjectMenu();
             populateWorkflowSelects();
@@ -1739,6 +1939,9 @@
         function syncRegistrationUI() {
             const enabled = Boolean(state.status && state.status.registration_enabled);
             els.showRegisterButton.classList.toggle("hidden", !enabled);
+            if (els.loginPasskeyButton) {
+                els.loginPasskeyButton.classList.toggle("hidden", !browserSupportsPasskeys());
+            }
             if (els.registerHelp) {
                 els.registerHelp.textContent = state.status && state.status.registration_auto_approve === false
                     ? "Leave password blank to let the server generate one. New accounts require admin approval before sign-in."
@@ -1754,6 +1957,10 @@
             state.scrollPersistenceReady = false;
             els.appShell.classList.add("hidden");
             els.loginScreen.classList.remove("hidden");
+            if (els.accountModal) {
+                els.accountModal.classList.remove("open");
+            }
+            state.accountModalOpen = false;
             syncRegistrationUI();
             showLoginForm();
         }
@@ -1814,6 +2021,7 @@
         function renderAll() {
             renderMainNav();
             renderProjectMenu();
+            renderAccountModal();
             populateWorkflowSelects();
             populateTicketTypeAndStageSelects();
             populateTeamParentSelect();
@@ -1831,6 +2039,72 @@
             renderConfigSettingsPanel();
             decorateDeleteButtons(document);
             restoreCurrentViewScroll();
+        }
+
+        function renderAccountModal() {
+            if (!els.accountModal) {
+                return;
+            }
+            els.accountModal.classList.toggle("open", Boolean(state.accountModalOpen));
+            if (els.accountModalTitle) {
+                els.accountModalTitle.textContent = state.accountModalSource === "settings" ? "Account settings" : "Profile & security";
+            }
+            if (els.accountModalSummary) {
+                els.accountModalSummary.textContent = isAdmin()
+                    ? "Manage your passkeys here. Admin application settings stay available from this dialog too."
+                    : "Manage your passkeys for website and CLI sign-in.";
+            }
+            if (els.accountOpenConfigButton) {
+                els.accountOpenConfigButton.classList.toggle("hidden", !isAdmin());
+            }
+            if (els.accountProfileDetails) {
+                const user = (state.status && state.status.user) || {};
+                const rows = [
+                    { label: "Username", value: user.username || state.auth && state.auth.username || "user" },
+                    { label: "Role", value: user.role || "user" },
+                ];
+                if (user.email) {
+                    rows.push({ label: "Email", value: user.email });
+                }
+                if (user.display_name) {
+                    rows.push({ label: "Display name", value: user.display_name });
+                }
+                els.accountProfileDetails.innerHTML = rows.map((row) => (
+                    "<div class=\"history-item\"><strong>" + escapeHTML(row.label) + "</strong><div class=\"meta\">" + escapeHTML(row.value) + "</div></div>"
+                )).join("");
+            }
+            if (els.accountPasskeyEnrollButton) {
+                const disabled = state.passkeyBusy || !browserSupportsPasskeyEnrollment();
+                els.accountPasskeyEnrollButton.disabled = disabled;
+                els.accountPasskeyEnrollButton.textContent = state.passkeyBusy ? "Working…" : "Enroll passkey";
+            }
+            if (els.accountPasskeyStatus) {
+                const message = state.passkeyError || state.passkeyStatus || (browserSupportsPasskeyEnrollment() ? "" : "This browser does not support passkey enrollment.");
+                els.accountPasskeyStatus.textContent = message;
+                els.accountPasskeyStatus.classList.toggle("error", Boolean(message) && (state.passkeyError || state.passkeyStatusError || !browserSupportsPasskeyEnrollment()));
+            }
+            if (els.accountPasskeyList) {
+                if (state.passkeyError) {
+                    els.accountPasskeyList.innerHTML = "<div class=\"empty\">" + escapeHTML(state.passkeyError) + "</div>";
+                    return;
+                }
+                if (!state.passkeys.length) {
+                    els.accountPasskeyList.innerHTML = "<div class=\"empty\">No passkeys enrolled yet.</div>";
+                    return;
+                }
+                els.accountPasskeyList.innerHTML = state.passkeys.map((credential) => (
+                    "<div class=\"history-item\" data-passkey-id=\"" + escapeHTML(credential.id) + "\">" +
+                        "<div><strong>" + escapeHTML(credential.name || "Unnamed passkey") + "</strong></div>" +
+                        "<div class=\"meta\">created " + escapeHTML(credential.created_at || "unknown") +
+                            (credential.last_used_at ? " · last used " + escapeHTML(credential.last_used_at) : "") +
+                        "</div>" +
+                        "<div class=\"entity-actions\">" +
+                            "<button type=\"button\" class=\"btn-ghost\" data-passkey-action=\"rename\" data-passkey-id=\"" + escapeHTML(credential.id) + "\"" + (state.passkeyBusy ? " disabled" : "") + ">Rename</button>" +
+                            "<button type=\"button\" class=\"btn-danger\" data-passkey-action=\"delete\" data-passkey-id=\"" + escapeHTML(credential.id) + "\"" + (state.passkeyBusy ? " disabled" : "") + ">Delete</button>" +
+                        "</div>" +
+                    "</div>"
+                )).join("");
+            }
         }
 
         function renderProjects() {
@@ -3351,20 +3625,127 @@
             const password = String(formData.get("password") || "");
             try {
                 const authBody = await apiClient.login(username, password);
-                const auth = {
+                await finalizeAuthenticatedSession({
                     username: (authBody.user && authBody.user.username) || username,
                     token: authBody.token,
-                };
-                state.auth = auth;
-                await refreshAll();
-                storeAuth(auth);
-                showAuthenticatedShell();
-                connectLiveUpdates();
+                });
             } catch (error) {
-                state.auth = null;
-                clearStoredAuth();
-                els.loginError.textContent = error.message;
+                resetAuthFailure(error.message);
             }
+        }
+
+        async function handlePasskeyLogin() {
+            const username = String(document.getElementById("login-username").value || "").trim();
+            if (!username) {
+                els.loginError.textContent = "Enter your username before using a passkey.";
+                focusLoginUsername();
+                return;
+            }
+            if (!browserSupportsPasskeys()) {
+                els.loginError.textContent = "This browser does not support passkey sign-in.";
+                return;
+            }
+            try {
+                els.loginError.textContent = "";
+                const auth = await completePasskeyLogin(username);
+                await finalizeAuthenticatedSession(auth);
+            } catch (error) {
+                resetAuthFailure(error.message);
+            }
+        }
+
+        async function handlePasskeyEnrollment() {
+            if (!browserSupportsPasskeyEnrollment()) {
+                setPasskeyStatus("This browser does not support passkey enrollment.", true);
+                renderAccountModal();
+                return;
+            }
+            const label = String(els.accountPasskeyName && els.accountPasskeyName.value || "").trim();
+            state.passkeyBusy = true;
+            setPasskeyStatus("", false);
+            renderAccountModal();
+            try {
+                const start = await apiClient.startPasskeyRegistration(label);
+                const challenge = await apiClient.getPasskeyChallenge(start.code);
+                if (!challenge || challenge.kind !== "registration") {
+                    throw new Error("passkey enrollment challenge was not available");
+                }
+                const credential = await navigator.credentials.create({
+                    publicKey: normalizePasskeyCreationOptions(challenge.public_key),
+                });
+                await apiClient.finishPasskeyFlow(start.code, serializePasskeyCredential(credential));
+                await loadPasskeys();
+                if (els.accountPasskeyName) {
+                    els.accountPasskeyName.value = "";
+                }
+                setPasskeyStatus("Passkey enrolled.", false);
+            } catch (error) {
+                setPasskeyStatus(error.message, true);
+            } finally {
+                state.passkeyBusy = false;
+                renderAccountModal();
+            }
+        }
+
+        async function handlePasskeyRename(credentialID) {
+            const current = state.passkeys.find((item) => item.id === credentialID);
+            const nextName = await uiPrompt("Rename passkey", current && current.name ? current.name : "", "Save");
+            if (nextName === null) {
+                return;
+            }
+            const name = String(nextName || "").trim();
+            if (!name) {
+                await uiAlert("Passkey name is required.");
+                return;
+            }
+            state.passkeyBusy = true;
+            setPasskeyStatus("", false);
+            renderAccountModal();
+            try {
+                await apiClient.renameMyPasskey(credentialID, name);
+                await loadPasskeys();
+                setPasskeyStatus("Passkey renamed.", false);
+            } catch (error) {
+                setPasskeyStatus(error.message, true);
+            } finally {
+                state.passkeyBusy = false;
+                renderAccountModal();
+            }
+        }
+
+        async function handlePasskeyDelete(credentialID) {
+            const current = state.passkeys.find((item) => item.id === credentialID);
+            const confirmed = await uiConfirm("Delete passkey " + (current && current.name ? "\"" + current.name + "\"" : "\"" + credentialID + "\"") + "?", "Delete");
+            if (!confirmed) {
+                return;
+            }
+            state.passkeyBusy = true;
+            setPasskeyStatus("", false);
+            renderAccountModal();
+            try {
+                await apiClient.deleteMyPasskey(credentialID);
+                await loadPasskeys();
+                setPasskeyStatus("Passkey deleted.", false);
+            } catch (error) {
+                setPasskeyStatus(error.message, true);
+            } finally {
+                state.passkeyBusy = false;
+                renderAccountModal();
+            }
+        }
+
+        async function openAccountModal(source) {
+            state.accountModalSource = source || "profile";
+            state.accountModalOpen = true;
+            setPasskeyStatus("", false);
+            renderAccountModal();
+            await loadPasskeys();
+            renderAccountModal();
+        }
+
+        function closeAccountModal() {
+            state.accountModalOpen = false;
+            renderAccountModal();
         }
 
         async function handleRegister(event) {
@@ -6180,12 +6561,61 @@
             els.accountMenuDropdown.addEventListener("click", (event) => {
                 const item = event.target.closest("[data-account-action]");
                 if (item) {
-                    if (item.dataset.accountAction === "settings" && isAdmin()) {
-                        switchView("config");
-                    }
+                    openAccountModal(item.dataset.accountAction).catch((error) => {
+                        setPasskeyStatus(error.message, true);
+                        renderAccountModal();
+                    });
                     closeAccountMenu();
                 }
             });
+
+            if (els.closeAccountModal) {
+                els.closeAccountModal.addEventListener("click", closeAccountModal);
+            }
+            if (els.accountModal) {
+                els.accountModal.addEventListener("click", (event) => {
+                    if (event.target === els.accountModal) {
+                        closeAccountModal();
+                        return;
+                    }
+                    const button = event.target.closest("[data-passkey-action]");
+                    if (!button || state.passkeyBusy) {
+                        return;
+                    }
+                    const credentialID = String(button.dataset.passkeyId || "");
+                    if (!credentialID) {
+                        return;
+                    }
+                    if (button.dataset.passkeyAction === "rename") {
+                        handlePasskeyRename(credentialID).catch((error) => {
+                            setPasskeyStatus(error.message, true);
+                            renderAccountModal();
+                        });
+                        return;
+                    }
+                    if (button.dataset.passkeyAction === "delete") {
+                        handlePasskeyDelete(credentialID).catch((error) => {
+                            setPasskeyStatus(error.message, true);
+                            renderAccountModal();
+                        });
+                    }
+                });
+            }
+            if (els.accountPasskeyEnrollButton) {
+                els.accountPasskeyEnrollButton.addEventListener("click", () => {
+                    handlePasskeyEnrollment().catch((error) => {
+                        setPasskeyStatus(error.message, true);
+                        state.passkeyBusy = false;
+                        renderAccountModal();
+                    });
+                });
+            }
+            if (els.accountOpenConfigButton) {
+                els.accountOpenConfigButton.addEventListener("click", () => {
+                    closeAccountModal();
+                    switchView("config");
+                });
+            }
 
             document.addEventListener("click", (event) => {
                 if (!event.target.closest(".account-menu")) {
@@ -6207,6 +6637,9 @@
                     state.goalChatSocket = null;
                 }
                 state.auth = null;
+                state.passkeys = [];
+                state.passkeyError = "";
+                setPasskeyStatus("", false);
                 clearStoredAuth();
                 showLoginScreen();
                 els.loginForm.reset();
@@ -6214,6 +6647,9 @@
         }
 
         els.loginForm.addEventListener("submit", handleLogin);
+        if (els.loginPasskeyButton) {
+            els.loginPasskeyButton.addEventListener("click", handlePasskeyLogin);
+        }
         els.registerForm.addEventListener("submit", handleRegister);
         els.showRegisterButton.addEventListener("click", showRegisterForm);
         els.hideRegisterButton.addEventListener("click", showLoginForm);

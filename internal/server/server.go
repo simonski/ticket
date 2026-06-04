@@ -130,6 +130,10 @@ func (s *Server) runRetentionPurge(db *sql.DB, verbose bool) {
 }
 
 func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string) (http.Handler, error) {
+	return handlerWithPasskeyFactory(db, version, verbose, output, staticPath, siteName, defaultPasskeyServiceFactory)
+}
+
+func handlerWithPasskeyFactory(db *sql.DB, version string, verbose bool, output io.Writer, staticPath, siteName string, passkeys passkeyServiceFactory) (http.Handler, error) {
 	var staticFS fs.FS
 	if staticPath != "" {
 		staticFS = os.DirFS(staticPath)
@@ -143,7 +147,7 @@ func Handler(db *sql.DB, version string, verbose bool, output io.Writer, staticP
 
 	mux := http.NewServeMux()
 	live := newLiveHub()
-	registerAPI(mux, db, version, live, verbose, output)
+	registerAPI(mux, db, version, live, verbose, output, passkeys)
 
 	fileServer := staticCacheHeadersMiddleware(http.FileServer(http.FS(staticFS)))
 	mux.Handle("/", spaHandler(fileServer, staticFS))

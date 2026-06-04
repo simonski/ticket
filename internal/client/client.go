@@ -123,6 +123,33 @@ func (c *Client) Login(ctx context.Context, username, password string) (AuthResp
 	return response, err
 }
 
+func (c *Client) StartPasskeyLogin(ctx context.Context, req PasskeyLoginStartRequest) (PasskeyStartResponse, error) {
+	if c.mode == config.ModeLocal {
+		return PasskeyStartResponse{}, errors.New("ticket passkey login requires remote mode with a configured server")
+	}
+	var response PasskeyStartResponse
+	err := c.doJSON(ctx, http.MethodPost, "/api/auth/passkey/login/start", req, &response)
+	return response, err
+}
+
+func (c *Client) StartPasskeyRegistration(ctx context.Context, req PasskeyRegistrationStartRequest) (PasskeyStartResponse, error) {
+	if c.mode == config.ModeLocal {
+		return PasskeyStartResponse{}, errors.New("ticket passkey enrollment requires remote mode with a configured server")
+	}
+	var response PasskeyStartResponse
+	err := c.doJSON(ctx, http.MethodPost, "/api/auth/passkey/register/start", req, &response)
+	return response, err
+}
+
+func (c *Client) PollPasskey(ctx context.Context, code string) (PasskeyPollResponse, error) {
+	if c.mode == config.ModeLocal {
+		return PasskeyPollResponse{}, errors.New("ticket passkey polling requires remote mode with a configured server")
+	}
+	var response PasskeyPollResponse
+	err := c.doJSON(ctx, http.MethodPost, "/api/auth/passkey/poll", map[string]string{"code": strings.TrimSpace(code)}, &response)
+	return response, err
+}
+
 func (c *Client) Logout(ctx context.Context) error {
 	if c.mode == config.ModeLocal {
 		return errors.New("ticket logout requires remote mode with a configured server session")

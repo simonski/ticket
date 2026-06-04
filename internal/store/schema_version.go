@@ -14,7 +14,7 @@ import (
 
 const (
 	LegacySchemaVersion  = 1
-	CurrentSchemaVersion = 6
+	CurrentSchemaVersion = 7
 	schemaMetaTable      = "schema_meta"
 	schemaVersionKey     = "schema_version"
 )

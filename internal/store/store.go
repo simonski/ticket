@@ -237,6 +237,34 @@ CREATE TABLE IF NOT EXISTS sessions (
 	FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
 
+CREATE TABLE IF NOT EXISTS passkey_credentials (
+	credential_id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL,
+	name TEXT NOT NULL DEFAULT '',
+	credential_json TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	last_used_at TEXT,
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS passkey_flows (
+	flow_code TEXT PRIMARY KEY,
+	purpose TEXT NOT NULL,
+	user_id TEXT NOT NULL,
+	credential_name TEXT NOT NULL DEFAULT '',
+	session_json TEXT NOT NULL,
+	options_json TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'pending',
+	token TEXT NOT NULL DEFAULT '',
+	error_message TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	expires_at TEXT NOT NULL,
+	completed_at TEXT,
+	consumed_at TEXT,
+	FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
+
 CREATE TABLE IF NOT EXISTS roles (
 	role_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	workflow_id INTEGER,
@@ -701,6 +729,9 @@ CREATE TABLE IF NOT EXISTS user_notifications (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user_id ON passkey_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_passkey_flows_user_id ON passkey_flows(user_id);
+CREATE INDEX IF NOT EXISTS idx_passkey_flows_expires_at ON passkey_flows(expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_stories_project_id ON stories(project_id);
 

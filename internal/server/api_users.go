@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
@@ -160,6 +161,24 @@ func (r *router) registerUserHandlers() {
 				writeJSON(w, http.StatusOK, notifications)
 				return
 			}
+			if len(parts) == 2 && parts[0] == "me" && parts[1] == "passkeys" {
+				user, err := requireUser(db, r)
+				if err != nil {
+					writeAuthError(w, err)
+					return
+				}
+				credentials, err := store.ListPasskeyCredentials(r.Context(), db, user.ID)
+				if err != nil {
+					writeStoreError(w, err)
+					return
+				}
+				response := make([]passkeyCredentialResponse, 0, len(credentials))
+				for _, credential := range credentials {
+					response = append(response, newPasskeyCredentialResponse(credential))
+				}
+				writeJSON(w, http.StatusOK, response)
+				return
+			}
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
@@ -201,6 +220,52 @@ func (r *router) registerUserHandlers() {
 			return
 		}
 
+		if r.Method == http.MethodPut && len(parts) == 3 && parts[0] == "me" && parts[1] == "passkeys" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			credentialID, err := url.PathUnescape(strings.TrimSpace(parts[2]))
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid credential id")
+				return
+			}
+			var payload struct {
+				Name string `json:"name"`
+			}
+			if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+				writeError(w, http.StatusBadRequest, "invalid json body")
+				return
+			}
+			name := strings.TrimSpace(payload.Name)
+			if name == "" {
+				writeError(w, http.StatusBadRequest, "passkey name is required")
+				return
+			}
+			if renameErr := store.RenamePasskeyCredential(r.Context(), db, user.ID, credentialID, name); renameErr != nil {
+				if errors.Is(renameErr, store.ErrPasskeyNotFound) {
+					writeError(w, http.StatusNotFound, renameErr.Error())
+					return
+				}
+				writeStoreError(w, renameErr)
+				return
+			}
+			credentials, err := store.ListPasskeyCredentials(r.Context(), db, user.ID)
+			if err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			for _, credential := range credentials {
+				if credential.CredentialID == credentialID {
+					writeJSON(w, http.StatusOK, newPasskeyCredentialResponse(credential))
+					return
+				}
+			}
+			writeError(w, http.StatusNotFound, store.ErrPasskeyNotFound.Error())
+			return
+		}
+
 		if r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "me" && parts[1] == "notifications" && parts[3] == "read" {
 			user, err := requireUser(db, r)
 			if err != nil {
@@ -232,6 +297,29 @@ func (r *router) registerUserHandlers() {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+			return
+		}
+
+		if r.Method == http.MethodDelete && len(parts) == 3 && parts[0] == "me" && parts[1] == "passkeys" {
+			user, err := requireUser(db, r)
+			if err != nil {
+				writeAuthError(w, err)
+				return
+			}
+			credentialID, err := url.PathUnescape(strings.TrimSpace(parts[2]))
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid credential id")
+				return
+			}
+			if err := store.DeletePasskeyCredential(r.Context(), db, user.ID, credentialID); err != nil {
+				if errors.Is(err, store.ErrPasskeyNotFound) {
+					writeError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				writeStoreError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 			return
 		}
 

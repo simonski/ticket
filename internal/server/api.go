@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, verbose bool, output io.Writer) {
+func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, verbose bool, output io.Writer, passkeys passkeyServiceFactory) {
 	authLimiter := newRateLimiter(10, 1*time.Minute)
 	var chatLog func(string)
 	if verbose {
@@ -42,6 +42,7 @@ func registerAPI(mux *http.ServeMux, db *sql.DB, version string, live *liveHub, 
 		notify:      notify,
 		authLimiter: authLimiter,
 		chatLog:     chatLog,
+		passkeys:    passkeys,
 	}
 	r.registerAuthHandlers()
 	r.registerSystemHandlers()

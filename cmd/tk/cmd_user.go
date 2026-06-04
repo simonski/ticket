@@ -74,6 +74,7 @@ func runLogin(args []string) error {
 	usernameFlag := fs.String("username", "", "username")
 	passwordFlag := fs.String("password", "", "password")
 	tokenFlag := fs.String("token", "", "bearer token")
+	passkeyFlag := fs.Bool("passkey", false, "use browser-assisted passkey login")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -82,11 +83,14 @@ func runLogin(args []string) error {
 	if token != "" && strings.TrimSpace(*passwordFlag) != "" {
 		return errors.New("use either -password or -token, not both")
 	}
+	if *passkeyFlag && (token != "" || strings.TrimSpace(*passwordFlag) != "") {
+		return errors.New("use either -password, -token, or --passkey")
+	}
 
 	resolvedUsername := ""
 	resolvedPassword := ""
 	var err error
-	if token == "" {
+	if token == "" && !*passkeyFlag {
 		resolvedUsername, resolvedPassword, err = resolveCredentials(*usernameFlag, *passwordFlag, true)
 		if err != nil {
 			return err
@@ -112,6 +116,9 @@ func runLogin(args []string) error {
 			}
 			cfg.Token = strings.TrimSpace(remoteCreds.Token)
 		}
+	}
+	if *passkeyFlag {
+		return runPasskeyLogin(cfg, serverURL, *usernameFlag)
 	}
 	svc := libticket.NewHTTP(config.Config{Location: serverURL, Token: cfg.Token})
 
@@ -475,6 +482,8 @@ func runUser(args []string) error {
 	}
 
 	switch args[0] {
+	case "passkey":
+		return runUserPasskey(args[1:])
 	case "create", "new":
 		fs := flag.NewFlagSet("user create", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)

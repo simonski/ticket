@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Ticket API
-  version: 0.1.993
+  version: 0.1.1001
   description: |
     RESTful API for the Ticket project and issue management system.
     All endpoints are under `/api/`. Authentication uses Bearer tokens
@@ -1148,6 +1148,65 @@ components:
         user:
           $ref: '#/components/schemas/User'
 
+    PasskeyStartResponse:
+      type: object
+      required: [verification_url, code, expires_at]
+      properties:
+        verification_url:
+          type: string
+          format: uri
+        code:
+          type: string
+        expires_at:
+          type: string
+
+    PasskeyChallengeResponse:
+      type: object
+      required: [kind, public_key]
+      properties:
+        kind:
+          type: string
+          enum: [login, registration]
+        public_key:
+          type: object
+          additionalProperties: true
+          description: PublicKeyCredential request or creation options for the browser ceremony.
+
+    PasskeyPollResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, complete]
+        token:
+          type: string
+          description: Present when a login flow completes.
+        user:
+          $ref: '#/components/schemas/User'
+
+    PasskeyCredential:
+      type: object
+      required: [credential_id, name, created_at, updated_at]
+      properties:
+        credential_id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        last_used_at:
+          type: string
+
+    PasskeyCredentialRenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
     AgentWorkResponse:
       type: object
       properties:
@@ -1592,6 +1651,187 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /api/auth/passkey/login/start:
+    post:
+      tags: [Auth]
+      summary: Start a browser-assisted passkey login
+      operationId: startPasskeyLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username:
+                  type: string
+      responses:
+        '200':
+          description: Verification URL and device code created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyStartResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: No passkeys are enrolled for the requested user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+  /api/auth/passkey/register/start:
+    post:
+      tags: [Auth]
+      summary: Start authenticated passkey enrollment
+      operationId: startPasskeyRegistration
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Optional user-visible label stored with the credential.
+      responses:
+        '200':
+          description: Verification URL and device code created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyStartResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/auth/passkey/challenge:
+    get:
+      tags: [Auth]
+      summary: Get the pending passkey browser challenge
+      operationId: getPasskeyChallenge
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Browser challenge payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyChallengeResponse'
+        '404':
+          description: Passkey flow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Passkey flow expired or already consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/auth/passkey/finish:
+    post:
+      tags: [Auth]
+      summary: Finish a browser-assisted passkey ceremony
+      operationId: finishPasskeyFlow
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: Serialized PublicKeyCredential produced by the browser.
+      responses:
+        '200':
+          description: Ceremony finished successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Passkey flow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Passkey flow expired or already consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limited
+  /api/auth/passkey/poll:
+    post:
+      tags: [Auth]
+      summary: Poll a pending passkey flow
+      operationId: pollPasskeyFlow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        '200':
+          description: Flow completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyPollResponse'
+        '202':
+          description: Flow is still pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyPollResponse'
+        '404':
+          description: Passkey flow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Passkey flow expired or already consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   # ── Configuration ───────────────────────────────────────────────────
   /api/config/registration:
     post:
@@ -1917,6 +2157,91 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/me/passkeys:
+    get:
+      tags: [Users]
+      summary: List the authenticated user's enrolled passkeys
+      operationId: listMyPasskeys
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Passkey metadata for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PasskeyCredential'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/users/me/passkeys/{credential_id}:
+    put:
+      tags: [Users]
+      summary: Rename one of the authenticated user's passkeys
+      operationId: renameMyPasskey
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyCredentialRenameRequest'
+      responses:
+        '200':
+          description: Updated passkey metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasskeyCredential'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Users]
+      summary: Delete one of the authenticated user's passkeys
+      operationId: deleteMyPasskey
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Passkey deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':

@@ -38,6 +38,34 @@ test("request includes auth header when token is set", async () => {
     assert.equal(captured.options.headers.Authorization, "Bearer secret-token");
 });
 
+test("request includes csrf header from host cookie when present", async () => {
+    let captured;
+    globalThis.document = { cookie: "__Host-_csrf=host-token; other=1" };
+    const client = createClient({
+        fetch: async (url, options) => {
+            captured = { url, options };
+            return jsonResponse(200, { ok: true });
+        },
+    });
+    await client.post("/api/logout", {});
+    assert.equal(captured.options.headers["X-CSRF-Token"], "host-token");
+    delete globalThis.document;
+});
+
+test("request falls back to legacy csrf cookie when present", async () => {
+    let captured;
+    globalThis.document = { cookie: "_csrf=legacy-token; other=1" };
+    const client = createClient({
+        fetch: async (url, options) => {
+            captured = { url, options };
+            return jsonResponse(200, { ok: true });
+        },
+    });
+    await client.post("/api/logout", {});
+    assert.equal(captured.options.headers["X-CSRF-Token"], "legacy-token");
+    delete globalThis.document;
+});
+
 test("login does not send auth header", async () => {
     let captured;
     const client = createClient({
@@ -49,6 +77,62 @@ test("login does not send auth header", async () => {
     await client.login("user", "pass");
     assert.equal(captured.url, "/api/login");
     assert.equal(captured.options.headers.Authorization, undefined);
+});
+
+test("startPasskeyLogin does not send auth header", async () => {
+    let captured;
+    const client = createClient({
+        fetch: async (url, options) => {
+            captured = { url, options };
+            return jsonResponse(200, { code: "abc123" });
+        },
+    });
+    await client.startPasskeyLogin("alice");
+    assert.equal(captured.url, "/api/auth/passkey/login/start");
+    assert.equal(captured.options.headers.Authorization, undefined);
+    assert.deepEqual(JSON.parse(captured.options.body), { username: "alice" });
+});
+
+test("passkey helpers encode challenge and finish payload paths", async () => {
+    const calls = [];
+    const client = createClient({
+        fetch: async (url, options) => {
+            calls.push({ url, options });
+            return jsonResponse(200, { status: "complete", token: "abc" });
+        },
+    });
+    await client.getPasskeyChallenge("code 1");
+    await client.finishPasskeyFlow("code 1", { id: "cred" });
+    await client.pollPasskey("code 1");
+    assert.equal(calls[0].url, "/api/auth/passkey/challenge?code=code%201");
+    assert.equal(calls[0].options.method, "GET");
+    assert.equal(calls[1].url, "/api/auth/passkey/finish?code=code%201");
+    assert.deepEqual(JSON.parse(calls[1].options.body), { id: "cred" });
+    assert.equal(calls[2].url, "/api/auth/passkey/poll");
+    assert.deepEqual(JSON.parse(calls[2].options.body), { code: "code 1" });
+});
+
+test("passkey management methods use authenticated user passkey paths", async () => {
+    const calls = [];
+    const client = createClient({
+        fetch: async (url, options) => {
+            calls.push({ url, options });
+            return jsonResponse(200, { ok: true });
+        },
+    });
+    client.setToken("secret-token");
+    await client.startPasskeyRegistration("Laptop");
+    await client.listMyPasskeys();
+    await client.renameMyPasskey("cred/1", "Desk key");
+    await client.deleteMyPasskey("cred/1");
+    assert.equal(calls[0].url, "/api/auth/passkey/register/start");
+    assert.equal(calls[0].options.headers.Authorization, "Bearer secret-token");
+    assert.deepEqual(JSON.parse(calls[0].options.body), { name: "Laptop" });
+    assert.equal(calls[1].url, "/api/users/me/passkeys");
+    assert.equal(calls[2].url, "/api/users/me/passkeys/cred%2F1");
+    assert.deepEqual(JSON.parse(calls[2].options.body), { name: "Desk key" });
+    assert.equal(calls[3].url, "/api/users/me/passkeys/cred%2F1");
+    assert.equal(calls[3].options.method, "DELETE");
 });
 
 test("register does not send auth header and omits empty optional fields", async () => {
