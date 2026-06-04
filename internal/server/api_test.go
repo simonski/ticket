@@ -17,6 +17,7 @@ import (
 
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/internal/testutil"
+	"github.com/simonski/ticket/internal/ticketmarkdown"
 )
 
 func TestAuthAndAdminAPI(t *testing.T) {
@@ -5707,6 +5708,89 @@ func TestUpdateParentTicketTitleWithoutLifecycleChangeAPI(t *testing.T) {
 	}
 	if updated.Stage != parent.Stage || updated.State != parent.State || updated.Status != parent.Status {
 		t.Fatalf("updated lifecycle = %s/%s (%s), want %s/%s (%s)", updated.Stage, updated.State, updated.Status, parent.Stage, parent.State, parent.Status)
+	}
+}
+
+func TestImportTicketMarkdownAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets", map[string]any{
+		"project_id":          1,
+		"type":                "task",
+		"title":               "Before title",
+		"description":         "Before description",
+		"acceptance_criteria": "Before AC",
+	}, token)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("create ticket status = %d, want %d body=%s", createResp.Code, http.StatusCreated, createResp.Body.String())
+	}
+	var created store.Ticket
+	decodeResponse(t, createResp, &created)
+
+	content := ticketmarkdown.Render(created)
+	content = strings.Replace(content, "type: task", "type: bug", 1)
+	content = strings.Replace(content, "Before title", "After title", 1)
+	content = strings.Replace(content, "Before description", "After description", 1)
+	content = strings.Replace(content, "Before AC", "After AC", 1)
+
+	importResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/import-markdown", map[string]any{
+		"content": content,
+	}, token)
+	if importResp.Code != http.StatusOK {
+		t.Fatalf("import ticket markdown status = %d, want %d body=%s", importResp.Code, http.StatusOK, importResp.Body.String())
+	}
+	var updated store.Ticket
+	decodeResponse(t, importResp, &updated)
+	if updated.Type != "bug" || updated.Title != "After title" || updated.Description != "After description" || updated.AcceptanceCriteria != "After AC" {
+		t.Fatalf("updated ticket = %#v", updated)
+	}
+}
+
+func TestImportTicketMarkdownRejectsUnsupportedSectionAPI(t *testing.T) {
+	t.Parallel()
+	handler, db := testHandler(t)
+	defer db.Close()
+	token := loginAdmin(t, handler)
+
+	badContent := strings.Join([]string{
+		ticketmarkdown.Header,
+		"id: TK-999",
+		"type: task",
+		"",
+		"## title",
+		"```text",
+		"Bad import",
+		"```",
+		"",
+		"## description",
+		"```markdown",
+		"Body",
+		"```",
+		"",
+		"## acceptance criteria",
+		"```markdown",
+		"AC",
+		"```",
+		"",
+		"## labels",
+		"```text",
+		"api",
+		"```",
+	}, "\n")
+
+	importResp := doJSONRequest(t, handler, http.MethodPost, "/api/tickets/import-markdown", map[string]any{
+		"content": badContent,
+	}, token)
+	if importResp.Code != http.StatusBadRequest {
+		t.Fatalf("import ticket markdown status = %d, want %d body=%s", importResp.Code, http.StatusBadRequest, importResp.Body.String())
+	}
+	var payload map[string]string
+	decodeResponse(t, importResp, &payload)
+	if !strings.Contains(payload["error"], `unsupported section "labels"`) {
+		t.Fatalf("import ticket markdown error = %q", payload["error"])
 	}
 }
 

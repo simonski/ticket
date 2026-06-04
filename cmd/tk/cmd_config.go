@@ -135,6 +135,10 @@ func runAdmin(args []string) error {
 	switch args[0] {
 	case "config":
 		return runConfig(args[1:])
+	case "export":
+		return runExportSnapshot(args[1:])
+	case "import":
+		return runImportSnapshot(args[1:])
 	case "role":
 		return runRole(args[1:])
 	case "workflow":

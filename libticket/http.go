@@ -346,6 +346,10 @@ func (s *HTTPService) UpdateTicket(ctx context.Context, id string, request Ticke
 	return s.client.UpdateTicket(ctx, id, client.TicketUpdateRequest(request))
 }
 
+func (s *HTTPService) ImportTicketMarkdown(ctx context.Context, request TicketMarkdownImportRequest) (store.Ticket, error) {
+	return s.client.ImportTicketMarkdown(ctx, client.TicketMarkdownImportRequest(request))
+}
+
 func (s *HTTPService) CloseTicket(ctx context.Context, id, message string) (store.Ticket, error) {
 	return s.client.CloseTicket(ctx, id, message)
 }

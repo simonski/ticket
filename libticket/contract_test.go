@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/ticketmarkdown"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -316,6 +317,42 @@ func RunServiceContractTests(t *testing.T, factory Factory, opts ContractOptions
 			State:       "idle",
 		}); err == nil {
 			t.Fatal("UpdateTicket(reopen) error = nil, want closed ticket error")
+		}
+	})
+
+	t.Run("ticket-markdown-import", func(t *testing.T) {
+		project, err := svc.CreateProject(context.Background(), libticket.ProjectCreateRequest{Title: "Markdown Import"})
+		if err != nil {
+			t.Fatalf("CreateProject() error = %v", err)
+		}
+
+		ticket, err := svc.CreateTicket(context.Background(), libticket.TicketCreateRequest{
+			ProjectID:          project.ID,
+			Type:               "task",
+			Title:              "Before title",
+			Description:        "Before description",
+			AcceptanceCriteria: "Before AC",
+		})
+		if err != nil {
+			t.Fatalf("CreateTicket() error = %v", err)
+		}
+		beforeStatus := ticket.Status
+
+		content := ticketmarkdown.Render(ticket)
+		content = strings.Replace(content, "type: task", "type: bug", 1)
+		content = strings.Replace(content, "Before title", "After title", 1)
+		content = strings.Replace(content, "Before description", "After description", 1)
+		content = strings.Replace(content, "Before AC", "After AC", 1)
+
+		updated, err := svc.ImportTicketMarkdown(context.Background(), libticket.TicketMarkdownImportRequest{Content: content})
+		if err != nil {
+			t.Fatalf("ImportTicketMarkdown() error = %v", err)
+		}
+		if updated.Type != "bug" || updated.Title != "After title" || updated.Description != "After description" || updated.AcceptanceCriteria != "After AC" {
+			t.Fatalf("ImportTicketMarkdown() = %#v", updated)
+		}
+		if updated.Status != beforeStatus {
+			t.Fatalf("ImportTicketMarkdown().Status = %q, want %q", updated.Status, beforeStatus)
 		}
 	})
 

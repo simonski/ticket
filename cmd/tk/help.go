@@ -35,14 +35,14 @@ var helpIndex = map[string]commandHelp{
 		example: "tk initdb . --force -password secret -populate",
 	},
 	"export": {
-		usage:   "tk export [-o <snapshot-file>]",
-		details: []string{"Server-side maintenance command. Exports all persisted entities to a JSON snapshot file.", "Snapshot includes `schema_version`, export timestamp, table columns, and row values with ids preserved."},
-		example: "tk export -o ./ticket-snapshot.json",
+		usage:   "tk export [-id] <ticket-id> [-o <file>]",
+		details: []string{"Exports one existing ticket to a deterministic round-trip markdown document.", "Use `-o` to write the markdown to a file; otherwise it prints to stdout.", "Snapshot maintenance now lives under `tk admin export`."},
+		example: "tk export TK-42 -o ticket.md",
 	},
 	"import": {
-		usage:   "tk import -i <snapshot-file>",
-		details: []string{"Server-side maintenance command. Replaces current database contents from a JSON snapshot file.", "Import preserves ids for all entities and validates foreign-key integrity after load."},
-		example: "tk import -i ./ticket-snapshot.json",
+		usage:   "tk import [-f] <file>",
+		details: []string{"Imports one exported ticket markdown document and updates the referenced ticket.", "Accepts either a positional file path or `-f <file>`.", "Snapshot maintenance now lives under `tk admin import`."},
+		example: "tk import ticket.md",
 	},
 	"server": {
 		usage:   "tk server [-f <db-path>] [-p <port>] [-addr <host:port>] [-site <name>] [-v]",
@@ -518,8 +518,8 @@ func renderRootUsage() string {
 	printCommandUsageRows(&b, commandRows, 10)
 	adminRows := [][2]string{
 		{"admin config", "Manage server registration settings"},
-		{"export", "Export entities to a JSON snapshot"},
-		{"import", "Import entities from a JSON snapshot"},
+		{"admin export", "Export entities to a JSON snapshot"},
+		{"admin import", "Import entities from a JSON snapshot"},
 		{"upgrade-database", "Port an older database into a new file"},
 		{"admin role", "Manage roles (ls, new, get, update, rm)"},
 		{"admin workflow", "Manage workflows (ls, new, get, rm, set, unset)"},
@@ -533,6 +533,8 @@ func renderRootUsage() string {
 		{"status", "Show connection and authentication status"},
 		{"summary", "Daily starting-point overview"},
 		{"whoami", "Print current username"},
+		{"export", "Export one ticket to round-trip markdown"},
+		{"import", "Import one ticket from round-trip markdown"},
 		{"server", "Start the API server and web UI"},
 		{"login", "Log into the server"},
 		{"logout", "Clear the local session"},
@@ -704,6 +706,8 @@ Commands:
 
 var adminUsage = renderNamespaceUsage("ADMIN", "tk admin <command> [flags]", [][2]string{
 	{"config", "Manage server registration settings"},
+	{"export", "Export entities to a JSON snapshot"},
+	{"import", "Import entities from a JSON snapshot"},
 	{"role", "Manage roles"},
 	{"workflow", "Manage workflows"},
 	{"team", "Manage teams"},

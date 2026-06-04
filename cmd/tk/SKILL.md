@@ -7,7 +7,7 @@ metadata:
 
 # tk Skill
 
-Use `tk` as the source of truth for ticket status, lifecycle, and context.
+Use `tk` as the source of truth for ticket status, lifecycle, and context.  This is a binary that is on the $PATH.  It is already authenticated to talk to the server, so you can just run `tk` commands in your terminal or execute them as part of coding sessions.
 
 ## Core rule
 
@@ -15,15 +15,20 @@ Always read ticket state from `tk` before acting using `tk get N` and `tk prompt
 
 ## Trigger phrase behavior
 
+When the user says **"refine ticket N"** or **"refine N", read the ticket using `tk get N` and perform a refinement operation where yuo are updating the story to have title, description, acceptance criteria and any other relevant missing or unclear information tidied up, such that you can say " this ticket is unambiguous and ready to work on".  If you cannot refine the ticket to that state, then comment on the ticket with what is missing or unclear and ask for human input."
+
 When the user says **"work on ticket N"** or **"ticket N", "work on N" **, do this flow:
 
-1. `tk get N`
-2. `tk prompt N`
-3. Begin implementation work for that ticket
+1. `tk get N`.   Verify the ticket is in a state where work can begin (e.g. not already done, not blocked on dependencies, etc).  If it is not ready, comment on the ticket with what is missing or blocking and ask for human input.
+
+2. `tk prompt N`.   Retrieve the "entire" prompt meaning the project SDLC and associated information.  
+
+3. Begin implementation work for that ticket.
   tk state N idle|active|success|fail|design|develop|test|done> [-m comment]
   tk stage N idle|active|success|fail|design|develop|test|done> [-m comment]
-
 When you have completed the work and believe it is successful
+
+Note: use the ticket to expain which branch to work in on git.  If there is no indication in the ticket, then use the SDLC rules, making use of the ticket ID as part of the branch, e.g. feature/TK-42
 
 4. tk success N
 

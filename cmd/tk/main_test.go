@@ -27,6 +27,7 @@ import (
 	"github.com/simonski/ticket/internal/server"
 	"github.com/simonski/ticket/internal/store"
 	"github.com/simonski/ticket/internal/testutil"
+	"github.com/simonski/ticket/internal/ticketmarkdown"
 	"github.com/simonski/ticket/libticket"
 )
 
@@ -169,8 +170,8 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 		"  decision",
 		"  doctor",
 		"  admin config",
-		"  export",
-		"  import",
+		"  admin export",
+		"  admin import",
 		"  upgrade-database",
 		"  admin role",
 		"  admin workflow",
@@ -191,7 +192,7 @@ func TestRenderRootUsageShowsMainCommandsOnly(t *testing.T) {
 	}
 
 	// Verify SYSTEM section ordering
-	systemOrder := []string{"  status", "  summary", "  whoami", "  server", "  login", "  logout", "  register", "  initdb", "  version", "  upgrade", "  skill", "  docker-compose"}
+	systemOrder := []string{"  status", "  summary", "  whoami", "  export", "  import", "  server", "  login", "  logout", "  register", "  initdb", "  version", "  upgrade", "  skill", "  docker-compose"}
 	last = -1
 	for _, item := range systemOrder {
 		idx := strings.LastIndex(usage, item) // use LastIndex to match SYSTEM section not NAMESPACES
@@ -404,31 +405,21 @@ func TestFormatRuntimeErrorLeavesNonConnectivityErrorsUnchanged(t *testing.T) {
 	}
 }
 
-func TestRunExportImportSnapshotRoundTripPreservesTicketID(t *testing.T) {
+func TestRunAdminExportImportSnapshotCommands(t *testing.T) {
 	setupLocalCLI(t)
 
-	ticketID := createLocalTask(t, []string{"add", "-d", "snapshot export/import ticket", "Snapshot Ticket"})
+	createLocalTask(t, []string{"add", "-d", "snapshot export/import ticket", "Snapshot Ticket"})
 	snapshotFile := filepath.Join(t.TempDir(), "snapshot.json")
 
-	err := run([]string{"export", "-o", snapshotFile})
-	if err == nil || !strings.Contains(err.Error(), "removed from client mode") {
-		t.Fatalf("run(export) error = %v, want client-mode removal message", err)
+	if err := run([]string{"admin", "export", "-o", snapshotFile}); err != nil {
+		t.Fatalf("run(admin export) error = %v", err)
+	}
+	if _, err := os.Stat(snapshotFile); err != nil {
+		t.Fatalf("snapshot file missing after export: %v", err)
 	}
 
-	if err := deleteTicketConfirmed(t, ticketID); err != nil {
-		t.Fatalf("run(rm) error = %v", err)
-	}
-	if err := run([]string{"get", "-id", ticketID}); err == nil || err.Error() != "ticket not found" {
-		t.Fatalf("run(get deleted) error = %v, want ticket not found", err)
-	}
-
-	err = run([]string{"import", "-i", snapshotFile})
-	if err == nil || !strings.Contains(err.Error(), "removed from client mode") {
-		t.Fatalf("run(import) error = %v, want client-mode removal message", err)
-	}
-
-	if err := run([]string{"get", "-id", ticketID}); err == nil || err.Error() != "ticket not found" {
-		t.Fatalf("run(get after removed import) error = %v, want ticket not found", err)
+	if err := run([]string{"admin", "import", "-i", snapshotFile}); err != nil {
+		t.Fatalf("run(admin import) error = %v", err)
 	}
 }
 
@@ -1306,6 +1297,17 @@ func TestExtractDBOverridePreservesCreateFileFlag(t *testing.T) {
 	}
 	if got := strings.Join(args, " "); got != "update -f tickets.txt" {
 		t.Fatalf("extractDBOverride(update) args = %q", got)
+	}
+
+	args, override, err = extractDBOverride([]string{"import", "-f", "ticket.md"})
+	if err != nil {
+		t.Fatalf("extractDBOverride(import) error = %v", err)
+	}
+	if override != "" {
+		t.Fatalf("extractDBOverride(import) override = %q, want empty", override)
+	}
+	if got := strings.Join(args, " "); got != "import -f ticket.md" {
+		t.Fatalf("extractDBOverride(import) args = %q", got)
 	}
 }
 
@@ -3984,6 +3986,127 @@ func TestRunUpdateFromFileRequiresID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing id") {
 		t.Fatalf("error = %v, want missing id", err)
+	}
+}
+
+func TestRunExportWritesMarkdownDocument(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "-d", "Line 1\n```\nLine 3", "-ac", "- check 1\n- check 2", "Markdown Export"})
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"export", taskID}); err != nil {
+			t.Fatalf("export error = %v", err)
+		}
+	})
+
+	for _, want := range []string{
+		ticketmarkdown.Header,
+		"id: " + taskID,
+		"type: task",
+		"## title",
+		"## description",
+		"## acceptance criteria",
+		"````markdown",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("export output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestRunImportUpdatesSupportedFieldsOnly(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "-d", "Before description", "-ac", "Before AC", "Before title"})
+	svc := localCLIService(t)
+	before, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket(before) error = %v", err)
+	}
+
+	filePath := filepath.Join(t.TempDir(), "ticket.md")
+	if err := run([]string{"export", taskID, "-o", filePath}); err != nil {
+		t.Fatalf("export -o error = %v", err)
+	}
+	contentBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	content := string(contentBytes)
+	content = strings.Replace(content, "type: task", "type: bug", 1)
+	content = strings.Replace(content, "Before title", "After title", 1)
+	content = strings.Replace(content, "Before description", "After description", 1)
+	content = strings.Replace(content, "Before AC", "After AC", 1)
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	importOutput := captureStdout(t, func() {
+		if err := run([]string{"import", filePath}); err != nil {
+			t.Fatalf("import error = %v", err)
+		}
+	})
+	if !strings.Contains(importOutput, taskID+" updated (") {
+		t.Fatalf("import output missing summary:\n%s", importOutput)
+	}
+
+	after, err := svc.GetTicket(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("GetTicket(after) error = %v", err)
+	}
+	if after.Type != "bug" || after.Title != "After title" || after.Description != "After description" || after.AcceptanceCriteria != "After AC" {
+		t.Fatalf("ticket after import = %#v", after)
+	}
+	var beforeParent, afterParent string
+	if before.ParentID != nil {
+		beforeParent = *before.ParentID
+	}
+	if after.ParentID != nil {
+		afterParent = *after.ParentID
+	}
+	if after.Status != before.Status || after.Assignee != before.Assignee || after.Priority != before.Priority || afterParent != beforeParent {
+		t.Fatalf("import changed out-of-scope fields: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestRunImportRejectsUnsupportedSection(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Unsupported Section"})
+	filePath := filepath.Join(t.TempDir(), "ticket.md")
+	if err := run([]string{"export", taskID, "-o", filePath}); err != nil {
+		t.Fatalf("export -o error = %v", err)
+	}
+	contentBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	content := string(contentBytes) + "\n\n## labels\n```text\napi\n```\n"
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	err = run([]string{"import", filePath})
+	if err == nil {
+		t.Fatal("import error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), `unsupported section "labels"`) {
+		t.Fatalf("import error = %v", err)
+	}
+}
+
+func TestRunUpdateFromFileRejectsTicketMarkdownExport(t *testing.T) {
+	setupLocalCLI(t)
+	taskID := createLocalTask(t, []string{"add", "Batch parser guard"})
+	filePath := filepath.Join(t.TempDir(), "ticket.md")
+	if err := run([]string{"export", taskID, "-o", filePath}); err != nil {
+		t.Fatalf("export -o error = %v", err)
+	}
+
+	err := run([]string{"update", "-f", filePath, "-commit"})
+	if err == nil {
+		t.Fatal("update -f on ticket markdown export = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "use `tk import") {
+		t.Fatalf("update -f error = %v", err)
 	}
 }
 

@@ -10,12 +10,87 @@ import (
 	"strings"
 
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/ticketmarkdown"
 )
 
 func (r *router) registerTicketHandlers() {
 	db := r.db
 	mux := r.mux
 	notify := r.notify
+
+	mux.HandleFunc("/api/tickets/import-markdown", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		user, err := requireUser(db, r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
+		var payload ticketMarkdownImportRequest
+		if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+			writeError(w, http.StatusBadRequest, "invalid json body")
+			return
+		}
+		doc, parseErr := ticketmarkdown.Parse(payload.Content)
+		if parseErr != nil {
+			writeError(w, http.StatusBadRequest, parseErr.Error())
+			return
+		}
+		currentTicket, err := store.GetTicket(r.Context(), db, doc.ID)
+		if err != nil {
+			if errors.Is(err, store.ErrTicketNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		role, err := projectRoleForUser(r.Context(), db, currentTicket.ProjectID, user)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !canWriteProject(role) {
+			writeAuthError(w, store.ErrForbidden)
+			return
+		}
+		ticket, err := store.UpdateTicket(r.Context(), db, currentTicket.ID, store.TicketUpdateParams{
+			Title:              doc.Title,
+			Description:        doc.Description,
+			AcceptanceCriteria: doc.AcceptanceCriteria,
+			DORMap:             currentTicket.DORMap,
+			DODMap:             currentTicket.DODMap,
+			ACMap:              currentTicket.ACMap,
+			GitRepository:      currentTicket.GitRepository,
+			GitBranch:          currentTicket.GitBranch,
+			ParentID:           currentTicket.ParentID,
+			Assignee:           currentTicket.Assignee,
+			Priority:           currentTicket.Priority,
+			Order:              currentTicket.Order,
+			EstimateEffort:     currentTicket.EstimateEffort,
+			EstimateComplete:   currentTicket.EstimateComplete,
+			Type:               doc.Type,
+			UpdatedBy:          user.ID,
+			ActorUsername:      user.Username,
+			ActorRole:          user.Role,
+		})
+		if err != nil {
+			if errors.Is(err, store.ErrTicketNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, store.ErrAdminRequired) || errors.Is(err, store.ErrForbidden) {
+				writeAuthError(w, err)
+				return
+			}
+			writeStoreError(w, err)
+			return
+		}
+		notify("ticket_updated", ticket.ProjectID, ticket.ID)
+		writeJSON(w, http.StatusOK, ticket)
+	})
 
 	handleTicketsCollection := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

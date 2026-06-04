@@ -129,12 +129,12 @@ tk project repo add -project_id CUS github.com/acme/customer-portal.git
 tk project repo rm -project_id CUS github.com/acme/customer-portal.git
 ```
 
-Snapshot export/import are removed from client mode. Run these as server-side
-maintenance operations instead:
+Snapshot export/import remain server-side maintenance operations and now live under
+`tk admin ...`:
 
 ```bash
-tk export -o ./ticket-snapshot.json   # server-side maintenance
-tk import -i ./ticket-snapshot.json   # server-side maintenance
+tk admin export -o ./ticket-snapshot.json   # server-side maintenance
+tk admin import -i ./ticket-snapshot.json   # server-side maintenance
 ```
 
 Snapshot files are JSON and include a `schema_version`; imports replace existing
@@ -1017,8 +1017,10 @@ Security notes:
 ## Command Reference
 
 ```bash
-tk export -o ./ticket-snapshot.json
-tk import -i ./ticket-snapshot.json
+tk export TK-42 -o ./ticket.md
+tk import ./ticket.md
+tk admin export -o ./ticket-snapshot.json
+tk admin import -i ./ticket-snapshot.json
 tk upgrade-database -o ./new_database/ticket.db
 tk server -v
 tk version
@@ -1149,6 +1151,11 @@ tk new -f tickets.txt                    # preview file intent only (no writes)
 tk new -f tickets.txt -commit            # create/update from file and write back ids
 tk update -f tickets.txt                 # preview file update intent only
 tk update -f tickets.txt -commit         # apply file updates (id: required per entry)
+tk export TK-12                          # write one ticket as round-trip markdown to stdout
+tk export TK-12 -o ticket.md             # write one ticket as round-trip markdown to a file
+tk import ticket.md                      # import one exported markdown ticket
+tk admin export -o snapshot.json         # server-side maintenance snapshot export
+tk admin import -i snapshot.json         # server-side maintenance snapshot import
 
 When you pass `-stage`, the value must be one of the stages in the ticket's current
 workflow. If it is invalid, `tk update` prints the valid stages for that ticket.
@@ -1178,6 +1185,37 @@ is rewritten with `id:` filled in for created tickets.
 `tk update -f` requires `id:` for every entry. Without `-commit` it previews only
 with the same tip message;
 with `-commit` it updates title/description/type/labels from the file.
+
+Single-ticket markdown export/import uses a distinct round-trip format and command
+pair so it does not conflict with the batch ticket file syntax:
+
+````text
+<!-- tk:ticket-markdown/v1 -->
+id: TK-12
+type: task
+
+## title
+```text
+Refine markdown import flow
+```
+
+## description
+```markdown
+Edit this block in your editor.
+```
+
+## acceptance criteria
+```markdown
+- round-trip safely
+```
+````
+
+`tk export` always emits `title`, `description`, and `acceptance criteria`
+sections, even when description or acceptance criteria are empty. `tk import`
+accepts only this single-ticket format, updates only `type`, `title`,
+`description`, and `acceptance criteria`, and rejects unsupported sections or
+metadata with a clear error. If you try to feed an exported single-ticket markdown
+file to `tk update -f`, the CLI now directs you to `tk import`.
 
 `tk reject -id <key-or-id>` sends a ticket back to the first stage in its current
 workflow, sets the state to `idle`, and marks it as draft.

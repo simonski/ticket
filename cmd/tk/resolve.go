@@ -322,9 +322,17 @@ func extractDBOverride(args []string) (out []string, override string, err error)
 	}
 	if len(args) > 0 {
 		switch args[0] {
-		case "add", "create", "new", "update":
+		case "add", "create", "new", "update", "import":
 			// Ticket commands support -f for batch file input.
 			return args, "", nil
+		case "ticket":
+			if len(args) > 1 {
+				switch args[1] {
+				case "add", "create", "new", "update", "import":
+					// Ticket namespace subcommands support -f for file input.
+					return args, "", nil
+				}
+			}
 		}
 	}
 	for i := 0; i < len(args); i++ {

@@ -212,6 +212,10 @@ type TicketUpdateRequest struct {
 	Type               string            `json:"type,omitempty"`
 }
 
+type TicketMarkdownImportRequest struct {
+	Content string `json:"content"`
+}
+
 type TicketHealthRequest struct {
 	Score int `json:"score"`
 }

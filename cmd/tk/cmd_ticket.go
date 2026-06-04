@@ -12,6 +12,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/ticketmarkdown"
 	"github.com/simonski/ticket/internal/tui"
 	"github.com/simonski/ticket/libticket"
 )
@@ -264,6 +265,96 @@ Commands:
   delete   -id <id>                           Soft-delete
 
   gen      -f <files> -o <output>             Generate tickets via agent`
+
+func runTicketExport(args []string) error {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append([]string{"-id", args[0]}, args[1:]...)
+	}
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	id := fs.String("id", "", "ticket id")
+	outputPath := fs.String("o", "", "write markdown to file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	idVal, rest, err := resolveIDFlag(*id, fs.Args())
+	if err != nil || len(rest) != 0 {
+		return errors.New("usage: tk export [-id] <id> [-o <file>]")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	ticketRef := normalizeBareTicketRef(cfg, svc, idVal)
+	ticket, err := svc.GetTicket(context.Background(), ticketRef)
+	if err != nil {
+		return err
+	}
+	content := ticketmarkdown.Render(ticket)
+	if outputJSON {
+		return printJSON(map[string]string{
+			"ticket_id": ticket.ID,
+			"content":   content,
+		})
+	}
+	if strings.TrimSpace(*outputPath) == "" {
+		fmt.Print(content)
+		return nil
+	}
+	if err := os.WriteFile(strings.TrimSpace(*outputPath), []byte(content), 0o600); err != nil {
+		return fmt.Errorf("cannot write %s: %w", strings.TrimSpace(*outputPath), err)
+	}
+	fmt.Printf("%s exported to %s\n", ticket.ID, strings.TrimSpace(*outputPath))
+	return nil
+}
+
+func runTicketImport(args []string) error {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		args = append([]string{"-f", args[0]}, args[1:]...)
+	}
+	fs := flag.NewFlagSet("import", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	filePath := fs.String("f", "", "import markdown from file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*filePath) == "" || fs.NArg() != 0 {
+		return errors.New("usage: tk import [-f] <file>")
+	}
+	data, err := os.ReadFile(strings.TrimSpace(*filePath)) // #nosec G304 -- user-specified import path
+	if err != nil {
+		return fmt.Errorf("cannot read %s: %w", strings.TrimSpace(*filePath), err)
+	}
+	doc, err := ticketmarkdown.Parse(string(data))
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	svc, err := resolveService(cfg)
+	if err != nil {
+		return err
+	}
+	current, err := svc.GetTicket(context.Background(), normalizeBareTicketRef(cfg, svc, doc.ID))
+	if err != nil {
+		return err
+	}
+	updated, err := svc.ImportTicketMarkdown(context.Background(), libticket.TicketMarkdownImportRequest{Content: string(data)})
+	if err != nil {
+		return err
+	}
+	if outputJSON {
+		return printJSON(updated)
+	}
+	printUpdateSummary(updated, current, svc)
+	return nil
+}
 
 func runTicketGen(args []string) error {
 	fs := flag.NewFlagSet("ticket", flag.ContinueOnError)
@@ -1399,6 +1490,9 @@ func runUpdateFromFile(filePath string, commit bool, message string) error {
 	data, readErr := os.ReadFile(filePath) // #nosec G304 -- user-specified file path for ticket update
 	if readErr != nil {
 		return fmt.Errorf("cannot read %s: %w", filePath, readErr)
+	}
+	if ticketmarkdown.LooksLikeDocument(string(data)) {
+		return fmt.Errorf("cannot parse %s: this file is a single-ticket markdown export; use `tk import %s`", filePath, filePath)
 	}
 	entries, parseErr := parseTicketBatchFile(string(data), "")
 	if parseErr != nil {

@@ -127,9 +127,9 @@ func run(args []string) error {
 	case "server":
 		return runServer(trimmedArgs[1:])
 	case "export":
-		return errors.New("ticket export has been removed from client mode; run server-side maintenance commands instead")
+		return runTicketExport(trimmedArgs[1:])
 	case "import":
-		return errors.New("ticket import has been removed from client mode; run server-side maintenance commands instead")
+		return runTicketImport(trimmedArgs[1:])
 	case "version":
 		return runVersion(trimmedArgs[1:])
 	case "upgrade":

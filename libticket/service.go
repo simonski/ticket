@@ -148,6 +148,7 @@ type TicketService interface {
 	ListTickets(ctx context.Context, projectID int64) ([]store.Ticket, error)
 	ListTicketsFiltered(ctx context.Context, projectID int64, taskType, stage, state, status, search, assignee string, limit int, includeArchived bool) ([]store.Ticket, error)
 	UpdateTicket(ctx context.Context, id string, request TicketUpdateRequest) (store.Ticket, error)
+	ImportTicketMarkdown(ctx context.Context, request TicketMarkdownImportRequest) (store.Ticket, error)
 	CloseTicket(ctx context.Context, id string, message string) (store.Ticket, error)
 	OpenTicket(ctx context.Context, id string, message string) (store.Ticket, error)
 	CompleteTicket(ctx context.Context, id string, message string) (store.Ticket, error)

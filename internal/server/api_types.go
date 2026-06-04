@@ -230,6 +230,10 @@ type ticketRequest struct {
 	Message            string            `json:"message,omitempty"`
 }
 
+type ticketMarkdownImportRequest struct {
+	Content string `json:"content"`
+}
+
 type messageRequest struct {
 	Message string `json:"message,omitempty"`
 }

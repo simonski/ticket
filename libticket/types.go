@@ -179,6 +179,10 @@ type TicketUpdateRequest struct {
 	Type               string            `json:"type,omitempty"`
 }
 
+type TicketMarkdownImportRequest struct {
+	Content string `json:"content"`
+}
+
 type CommentCreateRequest struct {
 	Comment string `json:"comment"`
 }

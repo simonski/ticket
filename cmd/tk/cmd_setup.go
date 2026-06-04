@@ -418,7 +418,7 @@ func runExportSnapshot(args []string) error {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return errors.New("usage: tk export [-o <snapshot-file>]")
+		return errors.New("usage: tk admin export [-o <snapshot-file>]")
 	}
 	path := strings.TrimSpace(*outputPath)
 	if path == "" {
@@ -457,11 +457,11 @@ func runImportSnapshot(args []string) error {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return errors.New("usage: tk import -i <snapshot-file>")
+		return errors.New("usage: tk admin import -i <snapshot-file>")
 	}
 	path := strings.TrimSpace(*inputPath)
 	if path == "" {
-		return errors.New("usage: tk import -i <snapshot-file>")
+		return errors.New("usage: tk admin import -i <snapshot-file>")
 	}
 	raw, err := os.ReadFile(path) // #nosec G304 -- path is a CLI flag provided by the operator, not untrusted input
 	if err != nil {

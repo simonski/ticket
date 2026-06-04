@@ -18,6 +18,7 @@ import (
 
 	"github.com/simonski/ticket/internal/config"
 	"github.com/simonski/ticket/internal/store"
+	"github.com/simonski/ticket/internal/ticketmarkdown"
 )
 
 type Client struct {
@@ -1467,6 +1468,50 @@ func (c *Client) UpdateTicket(ctx context.Context, id string, request TicketUpda
 	}
 	var ticket store.Ticket
 	err := c.doJSON(ctx, http.MethodPut, "/api/tickets/"+url.PathEscape(id), request, &ticket)
+	return ticket, err
+}
+
+func (c *Client) ImportTicketMarkdown(ctx context.Context, request TicketMarkdownImportRequest) (store.Ticket, error) {
+	if c.mode == config.ModeLocal {
+		db, err := c.openLocalDB()
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		user, err := c.localUser(ctx, db)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		doc, err := ticketmarkdown.Parse(request.Content)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		current, err := store.GetTicket(ctx, db, doc.ID)
+		if err != nil {
+			return store.Ticket{}, err
+		}
+		return store.UpdateTicket(ctx, db, current.ID, store.TicketUpdateParams{
+			Title:              doc.Title,
+			Description:        doc.Description,
+			AcceptanceCriteria: doc.AcceptanceCriteria,
+			DORMap:             current.DORMap,
+			DODMap:             current.DODMap,
+			ACMap:              current.ACMap,
+			GitRepository:      current.GitRepository,
+			GitBranch:          current.GitBranch,
+			ParentID:           current.ParentID,
+			Assignee:           current.Assignee,
+			Priority:           current.Priority,
+			Order:              current.Order,
+			EstimateEffort:     current.EstimateEffort,
+			EstimateComplete:   current.EstimateComplete,
+			Type:               doc.Type,
+			UpdatedBy:          user.ID,
+			ActorUsername:      user.Username,
+			ActorRole:          "admin",
+		})
+	}
+	var ticket store.Ticket
+	err := c.doJSON(ctx, http.MethodPost, "/api/tickets/import-markdown", request, &ticket)
 	return ticket, err
 }
 
